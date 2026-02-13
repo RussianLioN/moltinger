@@ -1,0 +1,86 @@
+{
+  "name": "claude-code-orchestrator-kit",
+  "version": "1.4.20",
+  "description": "Professional automation and orchestration system for Claude Code with 39 AI agents, 37 skills, 18 slash commands, 7 MCP configurations, quality gates, and inline orchestration workflows",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node postinstall.js",
+    "setup": "bash switch-mcp.sh",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "ai-agents",
+    "agents",
+    "orchestration",
+    "automation",
+    "workflow",
+    "mcp",
+    "model-context-protocol",
+    "skills",
+    "inline-orchestration",
+    "supabase",
+    "code-quality",
+    "code-review",
+    "health-monitoring",
+    "devtools",
+    "productivity",
+    "ci-cd",
+    "devops",
+    "quality-gates",
+    "bug-detection",
+    "security-scanning",
+    "dependency-management",
+    "dead-code",
+    "speckit",
+    "prompt-engineering",
+    "llm"
+  ],
+  "author": {
+    "name": "Igor Maslennikov",
+    "email": "maslennikov-ig@users.noreply.github.com",
+    "url": "https://github.com/maslennikov-ig"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maslennikov-ig/claude-code-orchestrator-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/maslennikov-ig/claude-code-orchestrator-kit/issues"
+  },
+  "homepage": "https://aidevteam.ru/",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "files": [
+    ".claude/",
+    "mcp/",
+    "docs/",
+    ".github/",
+    "switch-mcp.sh",
+    "CLAUDE.md",
+    "README.md",
+    "LICENSE",
+    ".env.example",
+    ".gitignore",
+    "postinstall.js",
+    "index.js"
+  ],
+  "bin": {
+    "claude-orchestrator": "./switch-mcp.sh"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

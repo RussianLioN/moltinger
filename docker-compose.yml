@@ -1,0 +1,15 @@
+services:
+  moltis:
+    image: ghcr.io/moltis-org/moltis:latest
+    container_name: moltis
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "13131:13131"
+      - "13132:13132"
+    volumes:
+      - ./config:/home/moltis/.config/moltis
+      - ./data:/home/moltis/.moltis
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - MOLTIS_HOST=0.0.0.0

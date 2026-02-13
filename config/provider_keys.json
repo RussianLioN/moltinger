@@ -1,0 +1,7 @@
+{
+  "ollama": {
+    "apiKey": "ollama",
+    "baseUrl": "http://host.docker.internal:11434/v1",
+    "model": "ollama::glm-5:cloud"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "models": [
+    {
+      "model_id": "llama-3.2-1b-q4_k_m",
+      "gpu_layers": 0,
+      "backend": "GGUF"
+    }
+  ]
+}
