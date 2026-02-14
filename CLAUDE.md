@@ -232,3 +232,10 @@ Run `/beads-init` to set up Beads in this project.
 See `.claude/docs/beads-quickstart.md` for full reference.
 
 ---
+
+## Active Technologies
+- Bash scripts, YAML (Docker Compose), TOML (Moltis config) (001-moltis-docker-deploy)
+- Docker bind mounts (001-moltis-docker-deploy)
+
+## Recent Changes
+- 001-moltis-docker-deploy: Added Bash scripts, YAML (Docker Compose), TOML (Moltis config)

@@ -6,8 +6,10 @@
 # Data directories
 data/
 
-# Beads local
-.beads/
+# Beads local (but track issues.jsonl for sync)
+.beads/*
+!.beads/issues.jsonl
+!.beads/config.yaml
 
 # IDE
 .idea/
