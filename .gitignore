@@ -6,6 +6,9 @@
 # Data directories
 data/
 
+# Moltis sensitive files
+config/provider_keys.json
+
 # Beads local (but track issues.jsonl for sync)
 .beads/*
 !.beads/issues.jsonl

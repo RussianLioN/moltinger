@@ -45,9 +45,9 @@
 
 **Purpose**: Create project structure and base configuration
 
-- [ ] T001 Create project directory structure: `config/`, `data/`, `scripts/`
-- [ ] T002 Create `.env.example` file with required environment variables
-- [ ] T003 [P] Update `.gitignore` to exclude sensitive files (.env, data/, config/provider_keys.json)
+- [X] T001 Create project directory structure: `config/`, `data/`, `scripts/`
+- [X] T002 Create `.env.example` file with required environment variables
+- [X] T003 [P] Update `.gitignore` to exclude sensitive files (.env, data/, config/provider_keys.json)
 
 **Artifacts**:
 - `config/` directory
