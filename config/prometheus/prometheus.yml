@@ -1,0 +1,79 @@
+# Prometheus Configuration for Moltis
+# https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    environment: 'production'
+    service: 'moltis'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load alerting rules
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+# Scrape configurations
+scrape_configs:
+  # ========================================================================
+  # PROMETHEUS SELF-MONITORING
+  # ========================================================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+
+  # ========================================================================
+  # MOLTIS APPLICATION
+  # ========================================================================
+  - job_name: 'moltis'
+    static_configs:
+      - targets: ['moltis:13131']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # ========================================================================
+  # CADVISOR - Container Metrics
+  # ========================================================================
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    metric_relabel_configs:
+      # Keep only relevant container metrics
+      - source_labels: [__name__]
+        regex: 'container_(cpu|memory|network|fs|last_seen).*'
+        action: keep
+
+  # ========================================================================
+  # WATCHTOWER
+  # ========================================================================
+  - job_name: 'watchtower'
+    static_configs:
+      - targets: ['watchtower:8080']
+    scrape_interval: 60s
+
+  # ========================================================================
+  # NODE EXPORTER (if installed)
+  # ========================================================================
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # ========================================================================
+  # TRAEFIK (external monitoring)
+  # ========================================================================
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8080']
+    metrics_path: /metrics
+    scrape_interval: 30s

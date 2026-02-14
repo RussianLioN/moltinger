@@ -1,0 +1,169 @@
+# AlertManager Configuration for Moltis
+# https://prometheus.io/docs/alerting/latest/configuration/
+
+global:
+  # SMTP configuration for email alerts
+  smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+  smtp_from: '${SMTP_FROM}'
+  smtp_auth_username: '${SMTP_USER}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+  # Slack configuration
+  slack_api_url: '${SLACK_WEBHOOK}'
+
+# Templates
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Inhibition rules
+inhibit_rules:
+  # If critical is firing, suppress warning
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['alertname', 'service']
+
+  # If instance is down, suppress other alerts for that instance
+  - source_matchers:
+      - alertname="MoltisDown"
+    target_matchers:
+      - service="moltis"
+    equal: ['instance']
+
+# Route tree
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'service', 'severity']
+
+  # Wait time before sending initial notification
+  group_wait: 30s
+
+  # Wait time before sending updated notification
+  group_interval: 5m
+
+  # Wait time before resending notification
+  repeat_interval: 4h
+
+  # Child routes
+  routes:
+    # Critical alerts - immediate notification
+    - matchers:
+        - severity="critical"
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+      continue: true
+
+    # Warning alerts - less urgent
+    - matchers:
+        - severity="warning"
+      receiver: 'warning-alerts'
+      group_wait: 5m
+      group_interval: 10m
+      repeat_interval: 4h
+
+    # Moltis-specific alerts
+    - matchers:
+        - service="moltis"
+      receiver: 'moltis-team'
+      routes:
+        - matchers:
+            - alertname="MoltisDown"
+          receiver: 'moltis-critical'
+          group_wait: 10s
+
+    # Backup alerts
+    - matchers:
+        - alertname=~"Backup.*"
+      receiver: 'backup-alerts'
+
+    # Container alerts
+    - matchers:
+        - alertname=~"Container.*"
+      receiver: 'container-alerts'
+
+# Receivers
+receivers:
+  # Default receiver
+  - name: 'default-receiver'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+
+  # Critical alerts
+  - name: 'critical-alerts'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - channel: '#alerts-critical'
+        send_resolved: true
+        title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          *Details:*
+          {{ range .Labels.SortedPairs }}  *{{ .Name }}:* {{ .Value }}
+          {{ end }}
+          {{ end }}
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+  # Warning alerts
+  - name: 'warning-alerts'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[WARNING] {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - channel: '#alerts-warning'
+        send_resolved: true
+        title: 'WARNING: {{ .GroupLabels.alertname }}'
+        color: 'warning'
+
+  # Moltis team
+  - name: 'moltis-team'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+    slack_configs:
+      - channel: '#moltis-alerts'
+        send_resolved: true
+
+  # Moltis critical (pagerduty/ops can be added here)
+  - name: 'moltis-critical'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[URGENT] Moltis Down'
+    slack_configs:
+      - channel: '#moltis-alerts'
+        send_resolved: true
+        title: 'URGENT: Moltis Service Issue'
+        color: 'danger'
+
+  # Backup alerts
+  - name: 'backup-alerts'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+
+  # Container alerts
+  - name: 'container-alerts'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+    slack_configs:
+      - channel: '#infra-alerts'
+        send_resolved: true

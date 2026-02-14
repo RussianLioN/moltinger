@@ -1,0 +1,31 @@
+# Moltis Cron Jobs
+# Install with: sudo cp config/cron/moltis-cron /etc/cron.d/moltis
+# Or add to crontab: crontab -e
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+
+# ========================================================================
+# BACKUP SCHEDULE
+# ========================================================================
+# Daily backup at 2:00 AM
+0 2 * * * root /opt/moltinger/scripts/backup-moltis-enhanced.sh backup >> /var/log/moltis/backup.log 2>&1
+
+# Weekly full backup (Sunday at 3:00 AM)
+0 3 * * 0 root /opt/moltinger/scripts/backup-moltis-enhanced.sh backup >> /var/log/moltis/backup.log 2>&1
+
+# ========================================================================
+# MAINTENANCE
+# ========================================================================
+# Rotate logs weekly
+0 4 * * 0 root find /var/log/moltis -name "*.log" -mtime +30 -delete
+
+# Clean Docker resources weekly (keeps last 4 versions)
+0 5 * * 0 root docker image prune -af --filter "until=168h" >> /var/log/moltis/maintenance.log 2>&1
+
+# ========================================================================
+# HEALTH CHECK
+# ========================================================================
+# Log health status every 15 minutes
+*/15 * * * * root curl -sf http://localhost:13131/health > /dev/null && echo "$(date) OK" >> /var/log/moltis/health.log || echo "$(date) FAILED" >> /var/log/moltis/health.log

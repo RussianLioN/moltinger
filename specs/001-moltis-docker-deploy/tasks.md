@@ -3,9 +3,11 @@
 **Input**: Design documents from `/specs/001-moltis-docker-deploy/`
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, quickstart.md ✅
 
+**Architecture**: GitOps 2.0 with Push-based CI/CD via GitHub Actions SSH
+
 **Tests**: Manual verification via health checks and UI access (no automated tests for infrastructure)
 
-**Organization**: Tasks grouped by user story to enable independent implementation and testing.
+**Organization**: Tasks grouped by phase for GitOps deployment workflow.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -435,10 +437,164 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 14
 
 ---
 
+## Phase 16: GitOps CI/CD Infrastructure (NEW - Expert Consultation)
+
+**Purpose**: Implement GitOps 2.0 architecture with push-based CI/CD
+
+**Triggers**:
+- Push to `main` → Auto-deploy
+- Tag `v*` → Deploy specific version
+- Manual workflow_dispatch → User-selected version
+
+- [X] G001 Create `.github/workflows/deploy.yml` with SSH deployment
+- [X] G002 Add preflight job for validation and version determination
+- [X] G003 Add backup job for pre-deployment backup
+- [X] G004 Add deploy job with health check verification
+- [X] G005 Add rollback job for emergency restoration
+- [X] G006 Add verify job with smoke tests
+- [ ] G007 Configure GitHub Secret: `SSH_PRIVATE_KEY`
+- [ ] G008 Configure GitHub Environment: `production`
+
+**Checkpoint**: CI/CD pipeline ready for deployment
+
+**Artifacts**:
+- `.github/workflows/deploy.yml`
+
+---
+
+## Phase 17: Production Infrastructure (NEW - Expert Consultation)
+
+**Purpose**: Production-ready infrastructure with monitoring
+
+- [X] P001 Create `docker-compose.prod.yml` with resource limits and monitoring
+- [X] P002 Add Prometheus configuration in `config/prometheus/prometheus.yml`
+- [X] P003 Add AlertManager configuration in `config/alertmanager/alertmanager.yml`
+- [X] P004 Add alert rules in `config/prometheus/alert-rules.yml`
+- [X] P005 Create `scripts/deploy.sh` with blue-green deployment
+- [X] P006 Create `scripts/health-monitor.sh` for self-healing
+- [X] P007 Create `scripts/backup-moltis-enhanced.sh` with encryption and S3
+- [X] P008 Create `Makefile` for management commands
+- [X] P009 Create systemd service file in `config/systemd/`
+- [X] P010 Create cron configuration in `config/cron/`
+
+**Checkpoint**: Production infrastructure complete
+
+**Artifacts**:
+- `docker-compose.prod.yml`
+- `config/prometheus/`
+- `config/alertmanager/`
+- `scripts/deploy.sh`
+- `scripts/health-monitor.sh`
+- `Makefile`
+
+---
+
+## Phase 18: Server Deployment (GitOps)
+
+**Purpose**: Deploy to ainetic.tech using GitOps workflow
+
+**Prerequisites**:
+- SSH key deployed to server
+- Server has SSH access to GitHub
+- Traefik already running on server
+
+- [ ] S001 Clone repository on server: `git clone https://github.com/RussianLioN/moltinger.git /opt/moltinger`
+- [ ] S002 Setup environment: `cp .env.example .env && nano .env`
+- [ ] S003 Add secrets to .env (MOLTIS_PASSWORD, GLM_API_KEY)
+- [ ] S004 Run `make setup` to create networks and secrets
+- [ ] S005 Run `make deploy` for initial deployment
+- [ ] S006 Verify health: `curl https://ainetic.tech/health`
+- [ ] S007 Install systemd service: `sudo cp config/systemd/*.service /etc/systemd/system/`
+- [ ] S008 Install cron jobs: `sudo cp config/cron/* /etc/cron.d/`
+- [ ] S009 Configure GitHub Secret: `SSH_PRIVATE_KEY` (from local machine)
+- [ ] S010 Trigger CI/CD: `git push origin main`
+
+**Checkpoint**: Production deployment complete with CI/CD
+
+**Artifacts**:
+- Running Moltis on ainetic.tech
+- CI/CD pipeline activated
+
+---
+
+## Phase 19: Documentation & Handoff
+
+**Purpose**: Complete documentation for operations
+
+- [X] D001 Create `docs/architecture/gitops-architecture.md`
+- [X] D002 Create `docs/deployment-strategy.md`
+- [X] D003 Create `docs/INFRASTRUCTURE.md`
+- [ ] D004 Update `README.md` with deployment instructions
+- [ ] D005 Create runbook for common operations
+- [ ] D006 Create PR and merge to main
+
+**Checkpoint**: Documentation complete
+
+---
+
+## Updated Dependencies & Execution Order
+
+### Phase Dependencies (GitOps Enhanced)
+
+```
+Phase 1 (Setup) → Phase 2 (Foundational)
+       ↓
+Phase 16 (GitOps CI/CD) + Phase 17 (Production Infra)  [PARALLEL]
+       ↓
+Phase 3-14 (Feature Phases - already complete)
+       ↓
+Phase 18 (Server Deployment)
+       ↓
+Phase 19 (Documentation)
+```
+
+### Critical Path (GitOps)
+
+```
+Phase 1 → Phase 2 → Phase 16 → Phase 17 → Phase 18 → Phase 19
+                                    ↓
+                            [Push to main triggers CI/CD]
+```
+
+---
+
+## Updated Implementation Strategy
+
+### GitOps Workflow (Recommended)
+
+1. **Local Development**: All changes in feature branches
+2. **Push to Main**: Triggers GitHub Actions deployment
+3. **Automatic Deployment**: SSH to ainetic.tech, backup, deploy, verify
+4. **Rollback**: One-click via GitHub Actions UI or CLI
+
+### Deployment Commands
+
+```bash
+# Initial setup (one-time on server)
+make setup
+make deploy
+
+# Daily operations
+make status
+make logs LOGS_OPTS="-f"
+make health-check
+
+# Rollback
+make restore FILE=/var/backups/moltis/daily/backup.tar.gz
+# OR via GitHub Actions: workflow_dispatch(rollback=true)
+
+# CI/CD triggered automatically on push to main
+git push origin main
+```
+
+---
+
 ## Notes
 
-- Infrastructure project: MAIN executor for all tasks
-- No automated tests: manual verification via health checks
-- Security warning on Docker socket mount documented
-- All configuration via environment variables (no hardcoded credentials)
-- Commit after each completed phase
+- **GitOps 2.0**: Push-based deployment via GitHub Actions SSH
+- **Self-healing**: health-monitor.sh daemon with auto-restart
+- **Backup**: Enhanced with encryption, S3 offsite, 30/12/12 retention
+- **Monitoring**: Prometheus + AlertManager with 20+ alert rules
+- **Security warning**: Docker socket mount = root access on host
+- **All secrets**: Managed via .env on server + GitHub Secrets for CI/CD
+- **Commit after each completed phase**

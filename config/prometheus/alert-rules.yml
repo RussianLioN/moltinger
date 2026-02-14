@@ -1,0 +1,213 @@
+# Moltis Alerting Rules
+# https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+
+groups:
+  # ========================================================================
+  # MOLTIS APPLICATION ALERTS
+  # ========================================================================
+  - name: moltis_app
+    rules:
+      # Instance down
+      - alert: MoltisDown
+        expr: up{job="moltis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: moltis
+        annotations:
+          summary: "Moltis instance is down"
+          description: "Moltis has been unreachable for more than 1 minute."
+
+      # High error rate
+      - alert: MoltisHighErrorRate
+        expr: |
+          rate(moltis_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "High error rate detected"
+          description: "Moltis is experiencing high error rate ({{ $value }} errors/sec)."
+
+      # Slow response time
+      - alert: MoltisSlowResponses
+        expr: |
+          histogram_quantile(0.95, rate(moltis_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "Slow response times detected"
+          description: "95th percentile response time is above 2s ({{ $value }}s)."
+
+      # Agent timeout
+      - alert: MoltisAgentTimeouts
+        expr: |
+          rate(moltis_agent_timeouts_total[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "Agent timeouts increasing"
+          description: "Agent timeout rate is elevated ({{ $value }}/sec)."
+
+  # ========================================================================
+  # CONTAINER RESOURCE ALERTS
+  # ========================================================================
+  - name: container_resources
+    rules:
+      # High memory usage
+      - alert: ContainerHighMemory
+        expr: |
+          (container_memory_usage_bytes{name="moltis"} / container_spec_memory_limit_bytes{name="moltis"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "Container memory usage high"
+          description: "Moltis container is using >90% of memory limit."
+
+      # Memory approaching limit
+      - alert: ContainerMemoryApproachingLimit
+        expr: |
+          (container_memory_usage_bytes{name="moltis"} / container_spec_memory_limit_bytes{name="moltis"}) > 0.8
+        for: 10m
+        labels:
+          severity: info
+          service: moltis
+        annotations:
+          summary: "Container memory usage elevated"
+          description: "Moltis container memory usage is at {{ $value | humanizePercentage }}."
+
+      # High CPU usage
+      - alert: ContainerHighCPU
+        expr: |
+          rate(container_cpu_usage_seconds_total{name="moltis"}[5m]) > 3
+        for: 10m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "Container CPU usage high"
+          description: "Moltis container is using high CPU ({{ $value }} cores)."
+
+      # Container restart loop
+      - alert: ContainerRestartLoop
+        expr: |
+          increase(container_restart_count{name="moltis"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: critical
+          service: moltis
+        annotations:
+          summary: "Container restart loop detected"
+          description: "Moltis container has restarted {{ $value }} times in the last hour."
+
+  # ========================================================================
+  # SYSTEM RESOURCE ALERTS
+  # ========================================================================
+  - name: system_resources
+    rules:
+      # Disk space
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/var/lib/docker"} / node_filesystem_size_bytes{mountpoint="/var/lib/docker"}) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space low"
+          description: "Docker filesystem has less than 15% free space."
+
+      - alert: DiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/var/lib/docker"} / node_filesystem_size_bytes{mountpoint="/var/lib/docker"}) < 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space critical"
+          description: "Docker filesystem has less than 5% free space. Immediate action required."
+
+      # System memory
+      - alert: SystemMemoryHigh
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "System memory usage high"
+          description: "System memory usage is above 90%."
+
+  # ========================================================================
+  # BACKUP ALERTS
+  # ========================================================================
+  - name: backups
+    rules:
+      # Backup too old
+      - alert: BackupTooOld
+        expr: |
+          time() - moltis_last_backup_timestamp_seconds > 86400 * 2
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backup is too old"
+          description: "Last successful backup was more than 2 days ago."
+
+      # Backup failed
+      - alert: BackupFailed
+        expr: |
+          moltis_backup_failures_total > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup failed"
+          description: "Moltis backup has failed. Check backup logs."
+
+  # ========================================================================
+  # LLM PROVIDER ALERTS
+  # ========================================================================
+  - name: llm_providers
+    rules:
+      # API rate limit
+      - alert: LLMRateLimitHit
+        expr: |
+          rate(moltis_llm_rate_limit_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "LLM rate limit hit"
+          description: "LLM provider rate limit is being hit frequently."
+
+      # API latency high
+      - alert: LLMLatencyHigh
+        expr: |
+          histogram_quantile(0.95, rate(moltis_llm_request_duration_seconds_bucket[5m])) > 30
+        for: 10m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "LLM API latency high"
+          description: "95th percentile LLM API latency is above 30s."
+
+      # Provider failures
+      - alert: LLMProviderFailures
+        expr: |
+          rate(moltis_llm_errors_total[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "LLM provider errors"
+          description: "LLM provider is returning errors ({{ $value }}/sec)."
