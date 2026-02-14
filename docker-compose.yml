@@ -1,15 +1,72 @@
+# Moltis Docker Deployment Configuration
+# https://docs.moltis.org/docker.html
+
 services:
   moltis:
     image: ghcr.io/moltis-org/moltis:latest
     container_name: moltis
     restart: unless-stopped
     privileged: true
+
     ports:
-      - "13131:13131"
-      - "13132:13132"
+      - "13131:13131"  # HTTP/WebSocket gateway
+      - "13132:13132"  # HTTP redirect / CA download
+
     volumes:
+      # Configuration files
       - ./config:/home/moltis/.config/moltis
+      # Persistent data (sessions, memory, logs)
       - ./data:/home/moltis/.moltis
+      # Docker socket for sandbox execution (WARNING: root access)
       - /var/run/docker.sock:/var/run/docker.sock
+
     environment:
+      # Network configuration
       - MOLTIS_HOST=0.0.0.0
+      # TLS disabled - handled by Traefik reverse proxy
+      - MOLTIS_NO_TLS=true
+      # Force remote connection treatment (required for reverse proxy)
+      - MOLTIS_BEHIND_PROXY=true
+      # Authentication password (from .env file)
+      - MOLTIS_PASSWORD=${MOLTIS_PASSWORD}
+
+    # Docker healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13131/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Traefik labels for reverse proxy (Phase 4)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.moltis.rule=Host(`ainetic.tech`)"
+      - "traefik.http.routers.moltis.entrypoints=websecure"
+      - "traefik.http.routers.moltis.tls.certresolver=letsencrypt"
+      - "traefik.http.services.moltis.loadbalancer.server.port=13131"
+      # Watchtower auto-update label
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Watchtower - Automatic container updates
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      # Clean up old images after update
+      - WATCHTOWER_CLEANUP=true
+      # Check for updates every 24 hours
+      - WATCHTOWER_POLL_INTERVAL=86400
+      # Only update containers with watchtower label
+      - WATCHTOWER_LABEL_ENABLE=true
+
+# Connect to existing Traefik network
+# networks:
+#   default:
+#     external:
+#       name: traefik_proxy

@@ -64,10 +64,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Create `docker-compose.yml` with Moltis service definition (no Traefik labels yet)
-- [ ] T005 [P] Add volume mounts for config and data directories
-- [ ] T006 [P] Add environment variables: MOLTIS_HOST, MOLTIS_NO_TLS, MOLTIS_BEHIND_PROXY
-- [ ] T007 [P] Add Docker healthcheck using `/health` endpoint
+- [X] T004 Create `docker-compose.yml` with Moltis service definition (no Traefik labels yet)
+- [X] T005 [P] Add volume mounts for config and data directories
+- [X] T006 [P] Add environment variables: MOLTIS_HOST, MOLTIS_NO_TLS, MOLTIS_BEHIND_PROXY
+- [X] T007 [P] Add Docker healthcheck using `/health` endpoint
 
 **Checkpoint**: Base container can start and respond to health check
 
@@ -87,9 +87,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Configure Moltis image in docker-compose.yml: `ghcr.io/moltis-org/moltis:latest`
-- [ ] T009 [US1] Set container name and restart policy: `restart: unless-stopped`
-- [ ] T010 [US1] Expose port 13131 for HTTP/WebSocket gateway
+- [X] T008 [US1] Configure Moltis image in docker-compose.yml: `ghcr.io/moltis-org/moltis:latest`
+- [X] T009 [US1] Set container name and restart policy: `restart: unless-stopped`
+- [X] T010 [US1] Expose port 13131 for HTTP/WebSocket gateway
 - [ ] T011 [US1] Verify container starts successfully with `docker compose up -d`
 - [ ] T012 [US1] Test health check endpoint: `curl http://localhost:13131/health`
 
@@ -111,13 +111,13 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Add Traefik labels to Moltis service in docker-compose.yml
-- [ ] T014 [US2] Configure Traefik router rule: `Host(\`ainetic.tech\`)`
-- [ ] T015 [US2] Configure Traefik entrypoint: `websecure`
-- [ ] T016 [US2] Configure TLS certResolver: `letsencrypt`
-- [ ] T017 [US2] Configure Traefik service port: `13131`
+- [X] T013 [US2] Add Traefik labels to Moltis service in docker-compose.yml
+- [X] T014 [US2] Configure Traefik router rule: `Host(\`ainetic.tech\`)`
+- [X] T015 [US2] Configure Traefik entrypoint: `websecure`
+- [X] T016 [US2] Configure TLS certResolver: `letsencrypt`
+- [X] T017 [US2] Configure Traefik service port: `13131`
 - [ ] T018 [US2] Add WebSocket support headers in Traefik config
-- [ ] T019 [US2] Set `MOLTIS_BEHIND_PROXY=true` environment variable
+- [X] T019 [US2] Set `MOLTIS_BEHIND_PROXY=true` environment variable
 - [ ] T020 [US2] Test remote access via `https://ainetic.tech`
 
 **Checkpoint**: Remote access works with valid TLS certificate
@@ -210,8 +210,8 @@
 
 ### Implementation for User Story 6
 
-- [ ] T034 [US6] Add Docker healthcheck to docker-compose.yml
-- [ ] T035 [US6] Configure healthcheck interval: 30s, timeout: 10s, retries: 3
+- [X] T034 [US6] Add Docker healthcheck to docker-compose.yml
+- [X] T035 [US6] Configure healthcheck interval: 30s, timeout: 10s, retries: 3
 - [ ] T036 [US6] Test healthcheck: `docker inspect moltis | grep Health`
 
 **Checkpoint**: Health monitoring configured
@@ -323,9 +323,9 @@
 
 ### Implementation
 
-- [ ] T048 Add Watchtower service to docker-compose.yml
-- [ ] T049 Configure Watchtower environment: CLEANUP, POLL_INTERVAL=86400
-- [ ] T050 Add Watchtower label to Moltis service
+- [X] T048 Add Watchtower service to docker-compose.yml
+- [X] T049 Configure Watchtower environment: CLEANUP, POLL_INTERVAL=86400
+- [X] T050 Add Watchtower label to Moltis service
 - [ ] T051 Test Watchtower: `docker compose exec watchtower /watchtower --run-once`
 
 **Checkpoint**: Auto-updates configured
