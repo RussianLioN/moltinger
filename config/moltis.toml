@@ -111,6 +111,15 @@ offered = [
 # base_url = "https://api.openai.com/v1"     # API endpoint (change for Azure, etc.)
 # alias = "openai"
 
+# ── GLM (Zhipu AI) - OpenAI-compatible ────────────────────────
+# Coding-focused LLM from Zhipu AI
+[providers.glm-coding]
+enabled = true
+api_key = "${GLM_API_KEY}"                    # Set GLM_API_KEY in .env file
+model = "glm-4-plus"                          # or glm-4-flash, glm-4-air
+base_url = "https://api.z.ai/api/coding/paas/v4"
+alias = "glm-coding"
+
 # ── Google Gemini ─────────────────────────────────────────────
 # [providers.gemini]
 # enabled = true

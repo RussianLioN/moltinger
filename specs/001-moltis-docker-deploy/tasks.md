@@ -138,9 +138,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Add `MOLTIS_PASSWORD` to `.env.example`
-- [ ] T022 [US3] Configure MOLTIS_PASSWORD in docker-compose.yml environment
-- [ ] T023 [US3] Document authentication flow in quickstart.md (already done)
+- [X] T021 [US3] Add `MOLTIS_PASSWORD` to `.env.example`
+- [X] T022 [US3] Configure MOLTIS_PASSWORD in docker-compose.yml environment
+- [X] T023 [US3] Document authentication flow in quickstart.md (already done)
 - [ ] T024 [US3] Test login with correct password
 - [ ] T025 [US3] Test rate limiting (5 failed attempts → 429 error)
 
@@ -163,9 +163,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T026 [US4] Verify config volume mount: `./config:/home/moltis/.config/moltis`
-- [ ] T027 [US4] Verify data volume mount: `./data:/home/moltis/.moltis`
-- [ ] T028 [US4] Set volume permissions: `chown -R 1000:1000 config data`
+- [X] T026 [US4] Verify config volume mount: `./config:/home/moltis/.config/moltis`
+- [X] T027 [US4] Verify data volume mount: `./data:/home/moltis/.moltis`
+- [X] T028 [US4] Set volume permissions: `chown -R 1000:1000 config data`
 - [ ] T029 [US4] Test persistence: create session, restart, verify
 
 **Checkpoint**: Data persists across container restarts
@@ -185,9 +185,9 @@
 
 ### Implementation for User Story 5
 
-- [ ] T030 [US5] Add Docker socket mount: `/var/run/docker.sock:/var/run/docker.sock`
-- [ ] T031 [US5] Add privileged mode (required for Docker socket access)
-- [ ] T032 [US5] Configure sandbox in config/moltis.toml with resource limits
+- [X] T030 [US5] Add Docker socket mount: `/var/run/docker.sock:/var/run/docker.sock`
+- [X] T031 [US5] Add privileged mode (required for Docker socket access)
+- [X] T032 [US5] Configure sandbox in config/moltis.toml with resource limits
 - [ ] T033 [US5] Test sandbox execution with simple command
 
 **⚠️ Security Warning**: Docker socket mount = root access on host
@@ -231,8 +231,8 @@
 
 ### Implementation for User Story 7
 
-- [ ] T037 [US7] Document API key creation in quickstart.md
-- [ ] T038 [US7] Add API key scopes table to quickstart.md
+- [X] T037 [US7] Document API key creation in quickstart.md
+- [X] T038 [US7] Add API key scopes table to quickstart.md
 - [ ] T039 [US7] Test API key authentication
 
 **Note**: API keys managed through Web UI, no code changes needed
@@ -254,8 +254,8 @@
 
 ### Implementation for User Story 8
 
-- [ ] T040 [US8] Document passkey registration in quickstart.md
-- [ ] T041 [US8] Document supported authenticators (YubiKey, Touch ID, Windows Hello)
+- [X] T040 [US8] Document passkey registration in quickstart.md
+- [X] T041 [US8] Document supported authenticators (YubiKey, Touch ID, Windows Hello)
 
 **Note**: Passkeys managed through Web UI, no code changes needed
 
@@ -276,8 +276,8 @@
 
 ### Implementation for User Story 9
 
-- [ ] T042 [US9] Add telemetry configuration example to config/moltis.toml
-- [ ] T043 [US9] Document OTLP endpoint configuration in quickstart.md
+- [X] T042 [US9] Add telemetry configuration example to config/moltis.toml
+- [X] T043 [US9] Document OTLP endpoint configuration in quickstart.md
 
 **Note**: Optional feature, depends on external OTLP collector
 
@@ -300,8 +300,8 @@
 
 ### Implementation
 
-- [ ] T044 [P] Copy backup script to scripts/ directory
-- [ ] T045 Configure backup directories in script: CONFIG_DIR, DATA_DIR
+- [X] T044 [P] Copy backup script to scripts/ directory
+- [X] T045 Configure backup directories in script: CONFIG_DIR, DATA_DIR
 - [ ] T046 [P] Create cron job for daily backup at 3 AM
 - [ ] T047 Test backup and restore process
 
@@ -346,9 +346,9 @@
 
 ### Implementation
 
-- [ ] T052 [P] Create config/moltis.toml with GLM provider settings
-- [ ] T053 Add GLM base_url: `https://api.z.ai/api/coding/paas/v4`
-- [ ] T054 Add GLM_API_KEY to .env.example
+- [X] T052 [P] Create config/moltis.toml with GLM provider settings
+- [X] T053 Add GLM base_url: `https://api.z.ai/api/coding/paas/v4`
+- [X] T054 Add GLM_API_KEY to .env.example
 - [ ] T055 Test GLM provider in Web UI
 
 **Checkpoint**: GLM provider working
