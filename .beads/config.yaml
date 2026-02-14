@@ -139,4 +139,3 @@ molecule-bonds:
 #   git status → git add → bd sync → git commit → bd sync → git push
 #   Work is NOT done until pushed!
 
-sync-branch: "beads-sync"
