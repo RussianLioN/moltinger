@@ -1,3 +1,10 @@
+---
+name: session-summarizer
+description: Maintains SESSION_SUMMARY.md with current session progress and context. Updates status, history, and next steps.
+model: sonnet
+color: green
+---
+
 # Session Summarizer Agent
 
 ## Purpose

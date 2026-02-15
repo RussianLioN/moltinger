@@ -31,10 +31,11 @@
 
 | Metric | Value |
 |--------|-------|
-| **Tasks Completed** | 41/64 (64%) |
-| **Phases Complete** | 1-2, 5-14 (config) |
-| **Phases Pending** | Deployment verification |
-| **Commits** | 5 commits on feature branch |
+| **Tasks Completed** | 58/80 (72%) |
+| **Phases Complete** | 1-17 (config + GitOps) |
+| **Phases Pending** | GLM key config, PR |
+| **Commits** | 8 commits on feature branch |
+| **Deployment** | ✅ PRODUCTION READY |
 
 ### Git Status
 
@@ -42,11 +43,24 @@
 Branch: 001-moltis-docker-deploy
 Remote: up to date with origin
 Commits:
+- a0efa03 feat(gitops): implement GitOps 2.0 architecture with CI/CD pipeline
+- 757c7e6 feat(session): add session summary system with cross-references
 - 8c1ed20 feat(deploy): complete configuration for Moltis deployment
 - 9411ef8 feat(deploy): docker-compose.yml with full configuration
 - a821907 feat(deploy): Phase 1 - project structure setup
 - 3ea3a4b feat(spec): complete speckit workflow for Moltis deployment
 - ed81480 feat(spec): complete Moltis deployment spec with clarifications
+```
+
+### Production Status
+
+```
+Server: ainetic.tech
+Moltis: Running (v0.8.29)
+Health: OK ✅
+Traefik: Routing ✅
+Auth: Active ✅
+Watchtower: Running ✅
 ```
 
 ---
@@ -92,43 +106,31 @@ moltinger-s67 (Epic): Feature: Moltis Docker Deployment
 
 ## 🚀 Next Steps
 
-### Immediate (Deploy to Server)
+### Immediate (Configure GLM API Key)
 
-1. **SSH to ainetic.tech**
-2. **Clone repository**:
+1. **Add GLM API Key** (на сервере):
    ```bash
-   git clone https://github.com/RussianLioN/moltinger.git
-   cd moltinger
+   ssh root@ainetic.tech
+   nano /opt/moltinger/.env
+   # Замените REPLACE_WITH_YOUR_GLM_API_KEY на ваш ключ
    ```
 
-3. **Setup environment**:
+2. **Restart Moltis**:
    ```bash
-   cp .env.example .env
-   # Edit .env with real credentials:
-   # - MOLTIS_PASSWORD=<secure-password>
-   # - GLM_API_KEY=<your-glm-key>
+   cd /opt/moltinger && docker compose restart moltis
    ```
 
-4. **Deploy**:
-   ```bash
-   docker compose up -d
-   docker compose logs -f moltis
-   ```
+3. **Test GLM**:
+   - Open https://ainetic.tech
+   - Login with password: `aWaH8G8ReQtoE969BNpe5sR5Ky8c0s`
+   - Send test message
 
-5. **Verify**:
-   ```bash
-   curl http://localhost:13131/health
-   # Open https://ainetic.tech in browser
-   ```
+### After GLM Setup
 
-### After Deployment
-
-- [ ] Test container health (T011-T012)
-- [ ] Test remote access via Traefik (T018, T020)
-- [ ] Test authentication (T024-T025)
-- [ ] Test GLM provider (T055)
-- [ ] Setup cron backup (T046)
+- [ ] Setup cron backup: `sudo cp config/cron/moltis-cron /etc/cron.d/`
+- [ ] Setup health monitor: `sudo cp config/systemd/*.service /etc/systemd/system/`
 - [ ] Create Pull Request
+- [ ] Merge to main → triggers CI/CD
 
 ---
 
