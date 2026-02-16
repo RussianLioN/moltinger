@@ -1,0 +1,38 @@
+[Unit]
+Description=Moltis Health Monitor
+Documentation=https://docs.moltis.org/health-monitor
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=docker
+ExecStart=/opt/moltinger/scripts/health-monitor.sh
+Restart=always
+RestartSec=30
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Environment
+Environment="HEALTH_CHECK_INTERVAL=60"
+Environment="MAX_RESTARTS=3"
+Environment="ALERT_WEBHOOK="
+Environment="ALERT_EMAIL="
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=moltis-health
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=256M
+CPUQuota=10%
+
+# Security
+NoNewPrivileges=false
+# Required for Docker socket access
+
+[Install]
+WantedBy=multi-user.target

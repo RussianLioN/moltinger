@@ -1,0 +1,506 @@
+# Moltis Deployment Workflow
+# Passwordless SSH deployment to ainetic.tech via Traefik
+
+name: Deploy Moltis
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      version:
+        description: 'Moltis image version (e.g., latest, v1.0.0)'
+        required: false
+        default: 'latest'
+        type: string
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Server configuration
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+  BACKUP_PATH: /var/backups/moltis
+
+  # Container configuration
+  MOLTIS_IMAGE: ghcr.io/moltis-org/moltis
+  CONTAINER_NAME: moltis
+
+jobs:
+  # ===========================================
+  # Pre-flight checks and validation
+  # ===========================================
+  preflight:
+    name: Pre-flight Checks
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_deploy: ${{ steps.validate.outputs.should_deploy }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="latest"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "::notice::Deploying Moltis version: $VERSION"
+
+      - name: Validate deployment prerequisites
+        id: validate
+        run: |
+          # Check if this is a rollback
+          if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "::notice::Rollback requested, skipping preflight"
+            exit 0
+          fi
+
+          echo "should_deploy=true" >> $GITHUB_OUTPUT
+
+          # Validate SSH key is available
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "::error::SSH_PRIVATE_KEY secret not configured"
+            exit 1
+          fi
+
+          echo "::notice::All preflight checks passed"
+
+  # ===========================================
+  # Backup current state before deployment
+  # ===========================================
+  backup:
+    name: Backup Current State
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.should_deploy == 'true' && github.event.inputs.rollback != 'true'
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create pre-deployment backup
+        id: backup
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            BACKUP_DIR="${{ env.BACKUP_PATH }}"
+            CONFIG_DIR="${{ env.DEPLOY_PATH }}/config"
+            DATA_DIR="${{ env.DEPLOY_PATH }}/data"
+
+            mkdir -p "$BACKUP_DIR"
+
+            # Get current image version for backup metadata
+            CURRENT_IMAGE=$(docker inspect moltis --format='{{.Config.Image}}' 2>/dev/null || echo "unknown")
+
+            # Create backup
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            BACKUP_FILE="$BACKUP_DIR/pre_deploy_$TIMESTAMP.tar.gz"
+
+            if [ -d "$CONFIG_DIR" ] && [ -d "$DATA_DIR" ]; then
+              tar -czf "$BACKUP_FILE" \
+                -C "$(dirname $CONFIG_DIR)" "$(basename $CONFIG_DIR)" \
+                -C "$(dirname $DATA_DIR)" "$(basename $DATA_DIR)" \
+                2>/dev/null || true
+
+              # Save image version metadata
+              echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
+
+              echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
+            else
+              echo "::warning::Config or data directories not found, skipping backup"
+            fi
+
+            # Rotate old backups (keep last 10)
+            cd "$BACKUP_DIR"
+            ls -t pre_deploy_*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+          EOF
+
+          echo "backup_timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+  # ===========================================
+  # Deploy Moltis container
+  # ===========================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [preflight, backup]
+    if: always() && needs.preflight.outputs.should_deploy == 'true'
+    environment:
+      name: production
+      url: https://ainetic.tech
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Pull new image
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          echo "::group::Pulling Moltis image $VERSION"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+            docker pull ${{ env.MOLTIS_IMAGE }}:$VERSION
+          EOF
+          echo "::endgroup::"
+
+      - name: Update docker-compose.yml with version
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          echo "::group::Updating docker-compose.yml"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+            cd ${{ env.DEPLOY_PATH }}
+            sed -i "s|image: ${{ env.MOLTIS_IMAGE }}:.*|image: ${{ env.MOLTIS_IMAGE }}:$VERSION|" docker-compose.yml
+            echo "Updated to version: $VERSION"
+          EOF
+          echo "::endgroup::"
+
+      - name: Deploy container
+        id: deploy
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          echo "::group::Deploying Moltis $VERSION"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Pull latest image
+            docker compose pull moltis
+
+            # Stop container gracefully
+            echo "Stopping current container..."
+            docker compose stop moltis || true
+
+            # Start new container
+            echo "Starting new container..."
+            docker compose up -d moltis
+
+            # Remove old images
+            docker image prune -f
+
+            echo "Deployment completed"
+          EOF
+          echo "::endgroup::"
+
+      - name: Wait for health check
+        id: health
+        timeout-minutes: 3
+        run: |
+          echo "::group::Waiting for health check"
+
+          MAX_RETRIES=30
+          RETRY_INTERVAL=5
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+              "docker inspect --format='{{.State.Health.Status}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'not_found'")
+
+            echo "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES: $HEALTH"
+
+            if [ "$HEALTH" = "healthy" ]; then
+              echo "::notice::Container is healthy!"
+              echo "status=healthy" >> $GITHUB_OUTPUT
+              exit 0
+            elif [ "$HEALTH" = "not_found" ]; then
+              echo "::error::Container not found!"
+              echo "status=not_found" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            sleep $RETRY_INTERVAL
+          done
+
+          echo "::error::Health check timeout after $MAX_RETRIES attempts"
+          echo "status=unhealthy" >> $GITHUB_OUTPUT
+          exit 1
+
+          echo "::endgroup::"
+
+      - name: Verify external access
+        if: success()
+        run: |
+          echo "::group::Verifying external access"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            # Check Traefik routing
+            curl -sf https://ainetic.tech/health -o /dev/null && \
+              echo "::notice::External access verified via Traefik" || \
+              echo "::warning::External access check failed"
+          EOF
+          echo "::endgroup::"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          STATUS="${{ steps.health.outputs.status }}"
+
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | https://ainetic.tech |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # Rollback procedure
+  # ===========================================
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: github.event.inputs.rollback == 'true'
+    environment:
+      name: production
+      url: https://ainetic.tech
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Find last backup
+        id: backup
+        run: |
+          echo "::group::Finding last backup"
+          BACKUP_INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            BACKUP_DIR="${{ env.BACKUP_PATH }}"
+            LATEST=$(ls -t $BACKUP_DIR/pre_deploy_*.tar.gz 2>/dev/null | head -1)
+
+            if [ -z "$LATEST" ]; then
+              echo "ERROR: No backup found"
+              exit 1
+            fi
+
+            VERSION=$(cat "${LATEST}.version" 2>/dev/null || echo "unknown")
+            echo "backup_file=$LATEST"
+            echo "backup_version=$VERSION"
+          EOF
+          )
+
+          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep "backup_file=" | cut -d= -f2)
+          BACKUP_VERSION=$(echo "$BACKUP_INFO" | grep "backup_version=" | cut -d= -f2)
+
+          if [ -z "$BACKUP_FILE" ]; then
+            echo "::error::No backup found for rollback"
+            exit 1
+          fi
+
+          echo "backup_file=$BACKUP_FILE" >> $GITHUB_OUTPUT
+          echo "backup_version=$BACKUP_VERSION" >> $GITHUB_OUTPUT
+          echo "::notice::Found backup: $BACKUP_FILE (version: $BACKUP_VERSION)"
+          echo "::endgroup::"
+
+      - name: Restore backup
+        run: |
+          BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
+          BACKUP_VERSION="${{ steps.backup.outputs.backup_version }}"
+
+          echo "::group::Restoring backup"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+            set -e
+
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Stop container
+            docker compose stop moltis || true
+
+            # Restore data
+            tar -xzf $BACKUP_FILE -C /
+
+            # Restore image version if known
+            if [ "$BACKUP_VERSION" != "unknown" ]; then
+              sed -i "s|image: ${{ env.MOLTIS_IMAGE }}:.*|image: $BACKUP_VERSION|" docker-compose.yml
+              docker pull $BACKUP_VERSION
+            fi
+
+            # Start container
+            docker compose up -d moltis
+
+            echo "Rollback completed to version: $BACKUP_VERSION"
+          EOF
+          echo "::endgroup::"
+
+      - name: Wait for health check
+        timeout-minutes: 3
+        run: |
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+              "docker inspect --format='{{.State.Health.Status}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'not_found'")
+
+            if [ "$HEALTH" = "healthy" ]; then
+              echo "::notice::Rollback successful - container is healthy!"
+              exit 0
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            sleep 5
+          done
+
+          echo "::error::Rollback health check failed"
+          exit 1
+
+      - name: Rollback summary
+        if: always()
+        run: |
+          echo "## Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backup | \`${{ steps.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ steps.backup.outputs.backup_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # Post-deployment verification
+  # ===========================================
+  verify:
+    name: Post-deployment Verification
+    runs-on: ubuntu-latest
+    needs: [deploy, rollback]
+    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success')
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run smoke tests
+        id: smoke
+        run: |
+          echo "::group::Running smoke tests"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            # Test 1: Container is running
+            echo "Test 1: Container running..."
+            docker ps --filter "name=moltis" --filter "status=running" | grep -q moltis
+
+            # Test 2: Health endpoint responds
+            echo "Test 2: Health endpoint..."
+            curl -sf http://localhost:13131/health > /dev/null
+
+            # Test 3: Traefik routing works
+            echo "Test 3: Traefik routing..."
+            curl -sf https://ainetic.tech/health > /dev/null
+
+            # Test 4: WebSocket endpoint available
+            echo "Test 4: WebSocket endpoint..."
+            curl -sf -I https://ainetic.tech/ | grep -q "200\|301\|302"
+
+            echo "All smoke tests passed!"
+          EOF
+          echo "::endgroup::"
+
+      - name: Get deployment info
+        id: info
+        run: |
+          INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            IMAGE=$(docker inspect --format='{{.Config.Image}}' moltis)
+            CREATED=$(docker inspect --format='{{.Created}}' moltis)
+            UPTIME=$(docker inspect --format='{{.State.StartedAt}}' moltis)
+
+            echo "image=$IMAGE"
+            echo "created=$CREATED"
+            echo "uptime=$UPTIME"
+          EOF
+          )
+
+          echo "image=$(echo "$INFO" | grep "^image=" | cut -d= -f2)" >> $GITHUB_OUTPUT
+
+      - name: Verification summary
+        run: |
+          echo "## Verification Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All smoke tests passed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Container Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ steps.info.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://ainetic.tech" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health**: https://ainetic.tech/health" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # Notify on failure
+  # ===========================================
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, rollback]
+    if: failure()
+
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "::warning::Deployment failed! Check the logs for details."
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The deployment to production has failed. Please check the logs above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Rollback Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to Actions tab" >> $GITHUB_STEP_SUMMARY
+          echo "2. Select 'Deploy Moltis' workflow" >> $GITHUB_STEP_SUMMARY
+          echo "3. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+          echo "4. Check 'Rollback to previous version'" >> $GITHUB_STEP_SUMMARY
+          echo "5. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY

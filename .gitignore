@@ -6,8 +6,13 @@
 # Data directories
 data/
 
-# Beads local
-.beads/
+# Moltis sensitive files
+config/provider_keys.json
+
+# Beads local (but track issues.jsonl for sync)
+.beads/*
+!.beads/issues.jsonl
+!.beads/config.yaml
 
 # IDE
 .idea/
