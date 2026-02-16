@@ -152,6 +152,24 @@ Pipeline syncs to server
 
 **See MEMORY.md for incident details and lessons learned.**
 
+### Secrets Management
+
+**All secrets must go through GitHub Secrets, never hardcoded or manually copied.**
+
+See `docs/SECRETS-MANAGEMENT.md` for:
+- Allowed vs forbidden patterns
+- How to add new secrets
+- Audit checklist
+
+**Quick reference:**
+```bash
+# Add secret
+gh secret set SECRET_NAME --repo owner/repo
+
+# List secrets
+gh secret list --repo owner/repo
+```
+
 
 ## Main Pattern: You Are The Orchestrator
 
