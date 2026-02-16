@@ -82,9 +82,15 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.moltis.rule=Host(`${MOLTIS_DOMAIN:-ainetic.tech}`)"
+      # Route on /moltis path prefix (higher priority than n8n)
+      - "traefik.http.routers.moltis.rule=Host(`${MOLTIS_DOMAIN:-ainetic.tech}`) && PathPrefix(`/moltis`)"
       - "traefik.http.routers.moltis.entrypoints=websecure"
       - "traefik.http.routers.moltis.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.moltis.middlewares=moltis-stripprefix"
+      - "traefik.http.routers.moltis.priority=100"
+      # Strip /moltis prefix before forwarding to Moltis
+      - "traefik.http.middlewares.moltis-stripprefix.stripprefix.prefixes=/moltis"
+      # Service
       - "traefik.http.services.moltis.loadbalancer.server.port=13131"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.interval=30s"
@@ -95,7 +101,7 @@ services:
       - "prometheus.io/path=/metrics"
 
     networks:
-      - traefik_proxy
+      - ainetic_net
       - monitoring
 
   # ========================================================================
@@ -274,7 +280,7 @@ volumes:
 # NETWORKS
 # ========================================================================
 networks:
-  traefik_proxy:
+  ainetic_net:
     external: true
   monitoring:
     driver: bridge
