@@ -39,6 +39,90 @@ bd sync               # Sync with git
 - If push fails, resolve and retry until it succeeds
 
 
+## GitOps Principles (MANDATORY)
+
+### ⛔ ABSOLUTE PROHIBITIONS
+
+**NEVER do these things - they violate GitOps and break audit trails:**
+
+1. **NEVER use `scp`/`ssh` directly to modify production servers**
+   ```
+   ❌ scp file.yml root@server:/path/
+   ❌ ssh root@server "sed -i ..."
+   ```
+   All changes MUST go through CI/CD pipeline. If pipeline is broken, FIX THE PIPELINE first.
+
+2. **NEVER use `sed` to partially update config files in pipelines**
+   ```yaml
+   ❌ sed -i "s|image: ...:.*|image: ...:$VERSION|" docker-compose.yml
+   ```
+   This causes **configuration drift** - server state ≠ git state.
+
+3. **NEVER make manual changes on production servers**
+   - No direct docker commands
+   - No manual file edits
+   - No workaround scripts
+
+### ✅ REQUIRED GitOps Patterns
+
+**1. Sync ENTIRE files from git to server:**
+```yaml
+# In CI/CD pipeline:
+- name: Sync configuration files
+  run: |
+    scp docker-compose.yml $SSH_USER@$SSH_HOST:$DEPLOY_PATH/docker-compose.yml
+```
+
+**2. Validate configuration before deploy:**
+```yaml
+- name: Validate configuration
+  run: |
+    ssh $SSH_USER@$SSH_HOST "docker compose config --quiet"
+```
+
+**3. Verify configuration matches git in smoke tests:**
+```yaml
+- name: Verify GitOps compliance
+  run: |
+    ssh $SSH_USER@$SSH_HOST << 'EOF'
+      grep -q "expected_label" docker-compose.yml || exit 1
+    EOF
+```
+
+### GitOps Decision Tree
+
+```
+Need to change server config?
+         │
+         ▼
+    Is change in git?
+         │
+    ┌────┴────┐
+    NO        YES
+    │         │
+    ▼         ▼
+Add to git   Push to trigger
+first        CI/CD pipeline
+    │
+    ▼
+Push triggers pipeline
+    │
+    ▼
+Pipeline syncs to server
+```
+
+### Why GitOps Matters
+
+| Principle | Benefit |
+|-----------|---------|
+| Git = Single Source of Truth | No configuration drift |
+| All changes through pipeline | Audit trail |
+| Automated validation | Catch errors early |
+| Rollback via git revert | Reliable recovery |
+
+**See MEMORY.md for incident details and lessons learned.**
+
+
 ## Main Pattern: You Are The Orchestrator
 
 This is the DEFAULT pattern used in 95% of cases for feature development, bug fixes, refactoring, and general coding tasks.

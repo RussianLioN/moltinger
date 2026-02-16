@@ -120,13 +120,14 @@ jobs:
             BACKUP_DIR="${{ env.BACKUP_PATH }}"
             CONFIG_DIR="${{ env.DEPLOY_PATH }}/config"
             DATA_DIR="${{ env.DEPLOY_PATH }}/data"
+            COMPOSE_FILE="${{ env.DEPLOY_PATH }}/docker-compose.yml"
 
             mkdir -p "$BACKUP_DIR"
 
             # Get current image version for backup metadata
             CURRENT_IMAGE=$(docker inspect moltis --format='{{.Config.Image}}' 2>/dev/null || echo "unknown")
 
-            # Create backup
+            # Create backup (includes docker-compose.yml for full rollback)
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
             BACKUP_FILE="$BACKUP_DIR/pre_deploy_$TIMESTAMP.tar.gz"
 
@@ -135,6 +136,11 @@ jobs:
                 -C "$(dirname $CONFIG_DIR)" "$(basename $CONFIG_DIR)" \
                 -C "$(dirname $DATA_DIR)" "$(basename $DATA_DIR)" \
                 2>/dev/null || true
+
+              # Backup docker-compose.yml separately (for GitOps rollback)
+              if [ -f "$COMPOSE_FILE" ]; then
+                cp "$COMPOSE_FILE" "$BACKUP_FILE.compose"
+              fi
 
               # Save image version metadata
               echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
@@ -147,6 +153,7 @@ jobs:
             # Rotate old backups (keep last 10)
             cd "$BACKUP_DIR"
             ls -t pre_deploy_*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+            ls -t pre_deploy_*.compose 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
           EOF
 
           echo "backup_timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
@@ -177,6 +184,25 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      # ===========================================
+      # GitOps Step 1: Sync ALL configuration files
+      # ===========================================
+      # CRITICAL: We sync the ENTIRE docker-compose.yml, not just the version.
+      # This ensures: labels, networks, volumes, environment - all match git.
+      # NEVER use 'sed' to update only part of the file (causes config drift).
+      # ===========================================
+      - name: Sync configuration files (GitOps)
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          echo "::group::Syncing configuration files to server"
+
+          # Sync docker-compose.yml from git to server
+          # This ensures ALL configuration (labels, networks, volumes) matches git
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
+
+          echo "Configuration synced successfully"
+          echo "::endgroup::"
+
       - name: Pull new image
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
@@ -186,14 +212,26 @@ jobs:
           EOF
           echo "::endgroup::"
 
-      - name: Update docker-compose.yml with version
+      # ===========================================
+      # GitOps Step 2: Validate configuration before deploy
+      # ===========================================
+      - name: Validate configuration (GitOps)
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
-          echo "::group::Updating docker-compose.yml"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+          echo "::group::Validating docker-compose configuration"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
             cd ${{ env.DEPLOY_PATH }}
-            sed -i "s|image: ${{ env.MOLTIS_IMAGE }}:.*|image: ${{ env.MOLTIS_IMAGE }}:$VERSION|" docker-compose.yml
-            echo "Updated to version: $VERSION"
+
+            # Validate docker-compose.yml syntax
+            docker compose config --quiet
+
+            # Verify the file matches expected structure
+            if ! grep -q "traefik.enable=true" docker-compose.yml; then
+              echo "::error::Traefik labels missing in docker-compose.yml"
+              exit 1
+            fi
+
+            echo "Configuration validation passed"
           EOF
           echo "::endgroup::"
 
@@ -348,7 +386,7 @@ jobs:
           BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
           BACKUP_VERSION="${{ steps.backup.outputs.backup_version }}"
 
-          echo "::group::Restoring backup"
+          echo "::group::Restoring backup (GitOps)"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
             set -e
 
@@ -357,12 +395,17 @@ jobs:
             # Stop container
             docker compose stop moltis || true
 
-            # Restore data
+            # Restore data (config + data directories)
             tar -xzf $BACKUP_FILE -C /
 
-            # Restore image version if known
+            # Restore docker-compose.yml from backup (GitOps: exact config restore)
+            if [ -f "${BACKUP_FILE}.compose" ]; then
+              cp "${BACKUP_FILE}.compose" docker-compose.yml
+              echo "Restored docker-compose.yml from backup"
+            fi
+
+            # Pull the backed-up image version if known
             if [ "$BACKUP_VERSION" != "unknown" ]; then
-              sed -i "s|image: ${{ env.MOLTIS_IMAGE }}:.*|image: $BACKUP_VERSION|" docker-compose.yml
               docker pull $BACKUP_VERSION
             fi
 
@@ -458,6 +501,19 @@ jobs:
               echo "Main endpoint OK (HTTP $HTTP_CODE)"
             else
               echo "Main endpoint: HTTP $HTTP_CODE (non-critical - Traefik middleware may cause delays)"
+            fi
+
+            # Test 5: GitOps - verify docker-compose.yml has correct Traefik labels
+            echo "Test 5: GitOps configuration check..."
+            cd ${{ env.DEPLOY_PATH }}
+            if grep -q 'traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)' docker-compose.yml; then
+              echo "GitOps: Traefik Host rule correct (moltis.ainetic.tech)"
+            else
+              echo "::error::GitOps violation: Traefik Host rule mismatch in docker-compose.yml"
+              echo "Expected: Host(\`moltis.ainetic.tech\`)"
+              echo "Found in file:"
+              grep "traefik.http.routers.moltis.rule" docker-compose.yml || echo "(not found)"
+              exit 1
             fi
 
             echo "All smoke tests passed!"
