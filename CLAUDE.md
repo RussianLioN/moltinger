@@ -41,16 +41,16 @@ bd sync               # Sync with git
 
 ## GitOps Principles (MANDATORY)
 
-### ⛔ ABSOLUTE PROHIBITIONS
+### ⛔ ABSOLUTE PROHIBITIONS (Manual Bypass)
 
 **NEVER do these things - they violate GitOps and break audit trails:**
 
-1. **NEVER use `scp`/`ssh` directly to modify production servers**
+1. **NEVER use `scp`/`ssh` FROM YOUR LOCAL MACHINE to modify production**
    ```
-   ❌ scp file.yml root@server:/path/
-   ❌ ssh root@server "sed -i ..."
+   ❌ scp file.yml root@server:/path/           # From laptop
+   ❌ ssh root@server "sed -i ..."              # Manual command
    ```
-   All changes MUST go through CI/CD pipeline. If pipeline is broken, FIX THE PIPELINE first.
+   Problem: No audit trail, bypasses CI/CD protections.
 
 2. **NEVER use `sed` to partially update config files in pipelines**
    ```yaml
@@ -62,6 +62,36 @@ bd sync               # Sync with git
    - No direct docker commands
    - No manual file edits
    - No workaround scripts
+
+### ✅ ACCEPTABLE GitOps Patterns
+
+**1. Push-based GitOps-lite (scp/rsync FROM CI/CD):**
+```yaml
+# In GitHub Actions - ACCEPTABLE ✅
+- uses: actions/checkout@v4      # Get file from git
+- run: scp docker-compose.yml $SSH_USER@$SSH_HOST:$DEPLOY_PATH/
+```
+Why OK:
+- CI/CD provides audit trail (commit SHA, who triggered, logs)
+- File content comes from verified git checkout
+- Rollback via git revert
+
+**2. Pull-based GitOps (git pull on server):**
+```yaml
+# Trigger server to pull - ACCEPTABLE ✅
+- run: ssh server "cd /app && git pull && docker compose up -d"
+```
+Why OK:
+- Git is source of truth
+- Audit in git history
+
+### 🎯 PREFERRED (Full GitOps 2.0)
+
+For complex production systems:
+- Kubernetes + ArgoCD/Flux
+- Continuous reconciliation loop
+- Automatic drift detection
+- Requires infrastructure investment
 
 ### ✅ REQUIRED GitOps Patterns
 

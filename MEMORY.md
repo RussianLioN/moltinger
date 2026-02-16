@@ -27,23 +27,32 @@ scp docker-compose.yml $SSH_USER@$SSH_HOST:$DEPLOY_PATH/docker-compose.yml
 
 ### Mandatory GitOps Rules
 
-1. **NEVER use `scp`/`ssh` directly for production changes**
-   - All changes MUST go through CI/CD pipeline
-   - If pipeline is broken, FIX THE PIPELINE first
+1. **NEVER use `scp`/`ssh` FROM LOCAL MACHINE to production**
+   - Manual changes bypass CI/CD = no audit trail
+   - If you need to change something → commit → push → let CI/CD deploy
 
-2. **NEVER use `sed` to partially update config files**
-   - Sync entire files from git
-   - Use `scp`/`rsync` in pipeline, not `sed`
+2. **`scp`/`rsync` FROM CI/CD PIPELINE is ACCEPTABLE (GitOps-lite)**
+   - CI/CD provides audit trail (who, what, when)
+   - File content comes from `git checkout`
+   - This is push-based GitOps, acceptable for simple projects
 
-3. **ALWAYS validate configuration before deploy**
+3. **For full GitOps 2.0, consider:**
+   - Kubernetes + ArgoCD/Flux (pull-based with reconciliation)
+   - Requires more infrastructure, not needed for simple Docker hosts
+
+4. **NEVER use `sed` to partially update config files**
+   - Sync entire files from git (scp/rsync)
+   - Or use environment variables for dynamic values
+
+5. **ALWAYS validate configuration before deploy**
    - `docker compose config --quiet`
    - Check required labels/keys exist
 
-4. **ALWAYS backup config files for rollback**
+6. **ALWAYS backup config files for rollback**
    - Include `docker-compose.yml` in backup
    - Restore exact config on rollback
 
-5. **ALWAYS test configuration matches git**
+7. **ALWAYS test configuration matches git**
    - Smoke tests should verify Traefik labels
    - Fail if config drift detected
 
