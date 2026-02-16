@@ -7,6 +7,8 @@ services:
     container_name: moltis
     restart: unless-stopped
     privileged: true
+    networks:
+      - ainetic_net
 
     ports:
       - "13131:13131"  # HTTP/WebSocket gateway
@@ -65,8 +67,7 @@ services:
       # Only update containers with watchtower label
       - WATCHTOWER_LABEL_ENABLE=true
 
-# Connect to existing Traefik network
-# networks:
-#   default:
-#     external:
-#       name: traefik_proxy
+# Connect to existing Traefik network (CRITICAL for routing)
+networks:
+  ainetic_net:
+    external: true
