@@ -9,7 +9,7 @@
 
 **Проект**: Moltinger - AI-ассистент Moltis в Docker на сервере ainetic.tech
 **Репозиторий**: https://github.com/RussianLioN/moltinger
-**Ветка**: `main` (feature merged)
+**Ветка**: `main`
 **Issue Tracker**: Beads (prefix: `molt`)
 
 ### Технологический стек
@@ -22,21 +22,19 @@
 | **LLM Provider** | GLM (Zhipu AI) via api.z.ai |
 | **Auto-updates** | Watchtower |
 | **CI/CD** | GitHub Actions |
-| **Issue Tracking** | Beads |
+| **Network** | ainetic_net (shared with n8n, Traefik) |
 
 ---
 
 ## 📊 Current Status
 
-### Completion Progress
+### Production Endpoints
 
-| Metric | Value |
-|--------|-------|
-| **Tasks Completed** | 80/80 (100%) |
-| **Phases Complete** | All phases ✅ |
-| **Commits** | 12+ commits on main |
-| **Deployment** | ✅ PRODUCTION LIVE |
-| **CI/CD** | ✅ WORKING |
+| Сервис | URL | Статус |
+|--------|-----|--------|
+| **Moltis** | https://ainetic.tech/moltis | ✅ Работает |
+| **n8n** | https://ainetic.tech | ✅ Работает (восстановлен) |
+| **Health** | https://ainetic.tech/moltis/health | ✅ HTTP 200 |
 
 ### Git Status
 
@@ -44,191 +42,130 @@
 Branch: main
 Remote: up to date with origin
 Recent Commits:
+- c108e08 fix(traefik): move Moltis to /moltis path to restore n8n
+- d3dac5f docs: update SESSION_SUMMARY - GitOps 2.0 complete
 - 982c8cd fix(ci): make root path test non-blocking in smoke tests
-- fded5d5 fix(ci): accept 504/timeout for root path in smoke tests
-- 75493c4 fix(ci): smoke tests now accept 401 as valid (auth enabled)
-- 5a167c1 feat: complete Moltis GitOps 2.0 deployment to production
-- a3538ab docs: update SESSION_SUMMARY with production deployment status
-- a0efa03 feat(gitops): implement GitOps 2.0 architecture with CI/CD pipeline
 ```
 
-### Production Status
+### Container Status
 
 ```
-Server: ainetic.tech
-Moltis: Running (v0.8.35) ✅
-Health: OK ✅
-Traefik: Routing ✅
-Auth: Active (401 for unauthenticated) ✅
-Watchtower: Running ✅
-CI/CD: Working ✅
+Moltis: v0.8.35, healthy, on ainetic_net
+Watchtower: Running, auto-updates enabled
+Network: ainetic_net (shared with Traefik, n8n)
 ```
 
 ---
 
 ## 📁 Key Files
 
-### Configuration Files
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `docker-compose.prod.yml` | Moltis + Watchtower + Traefik + Monitoring | ✅ Live |
-| `config/moltis.toml` | GLM provider, sandbox, identity | ✅ Live |
-| `scripts/deploy.sh` | Deployment automation | ✅ Working |
-| `scripts/backup-moltis-enhanced.sh` | Backup automation | ✅ Ready |
-| `.github/workflows/deploy.yml` | CI/CD pipeline | ✅ Working |
-| `Makefile` | Common commands | ✅ Ready |
-
-### Documentation
-
 | File | Purpose |
 |------|---------|
-| `specs/001-moltis-docker-deploy/spec.md` | Feature specification |
-| `specs/001-moltis-docker-deploy/plan.md` | Implementation plan |
-| `specs/001-moltis-docker-deploy/tasks.md` | Task tracking |
-| `docs/reports/moltis-deployment-research.md` | Full research |
+| `docker-compose.yml` | Simple deployment config |
+| `docker-compose.prod.yml` | Production config with monitoring |
+| `.github/workflows/deploy.yml` | CI/CD pipeline |
+| `config/moltis.toml` | Moltis configuration (GLM provider) |
+| `scripts/deploy.sh` | Deployment automation |
 
 ---
 
-## 🔄 Beads Issues
+## 🚀 User Testing Plan
 
-```
-moltinger-s67 (Epic): Feature: Moltis Docker Deployment
-├── moltinger-s67.1: Phase 0: Planning ✅
-├── moltinger-s67.2: Phase 1-2: Setup & Foundation ✅
-├── moltinger-s67.3: Phase 3-5: MVP (Container + Traefik + Auth) ✅
-├── moltinger-s67.4: Phase 6-8: Core Features ✅
-├── moltinger-s67.5: Phase 9-14: Extended Features + GLM + Backup ✅
-└── moltinger-s67.6: Phase 15: Polish & Documentation ✅
+### Шаг 1: Проверка Moltis (5 минут)
 
-Status: ALL COMPLETE ✅
+1. Открыть https://ainetic.tech/moltis
+2. Авторизоваться с паролем: `aWaH8G8ReQtoE969BNpe5sR5Ky8c0s`
+3. Создать новую сессию
+4. Отправить тестовое сообщение
+5. Проверить что GLM отвечает
+
+### Шаг 2: Проверка n8n (2 минуты)
+
+1. Открыть https://ainetic.tech
+2. Убедиться что n8n интерфейс загружается
+3. Проверить существующие workflows работают
+
+### Шаг 3: Проверка Health Endpoint (1 минута)
+
+```bash
+curl -s https://ainetic.tech/moltis/health
+# Ожидается: {"status":"ok","version":"0.8.35",...}
 ```
 
 ---
 
-## 🚀 GitOps 2.0 Architecture
+## 📋 Backlog Items
 
-### CI/CD Pipeline
-
-```
-Push to main → GitHub Actions → SSH Deploy → Health Check → Smoke Tests
-                                    ↓
-                              ainetic.tech
-```
-
-### GitHub Secrets (Configured)
-
-| Secret | Purpose |
-|--------|---------|
-| `SSH_PRIVATE_KEY` | Deploy key for ainetic.tech |
-| `MOLTIS_PASSWORD` | Authentication password |
-| `GLM_API_KEY` | LLM API key |
-
-### Workflow Triggers
-
-- **Push to main**: Auto-deploy to production
-- **workflow_dispatch**: Manual deploy with version selection
-- **Rollback**: One-click rollback to previous version
+| ID | Название | Приоритет | Статус |
+|----|----------|-----------|--------|
+| 002 | Moltis + n8n Integration | Low | Backlog |
 
 ---
 
-## 📋 Key Decisions Made
+## 🔧 Recent Fixes
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Secrets Storage | GitHub Secrets | Secure, CI/CD-friendly |
-| Deploy Method | SSH + Docker Compose | Simple, reliable |
-| SSH Key | Passphraseless ed25519 | CI/CD compatibility |
-| Smoke Tests | /health only (non-blocking root) | Traefik middleware delays |
-| Health Endpoint | Accept 401 as OK | Auth is active |
+### 2026-02-16: Traefik Routing Fix
+
+**Проблема**: Moltis захватил корневой путь ainetic.tech, сломав n8n
+
+**Решение**:
+- Переместил Moltis на `/moltis` path prefix
+- Добавил stripprefix middleware
+- Подключил к ainetic_net (общая сеть с Traefik)
+- Установил priority=100 (выше чем у n8n)
+
+**Commit**: `c108e08 fix(traefik): move Moltis to /moltis path to restore n8n`
 
 ---
 
 ## ⚠️ Important Notes
 
-### Security Configuration
-
-1. **Deploy Key**: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN8ZRXVUNoJplJjua/ZOpxwW51+wSBdi/5y4SaP76NyK moltinger-ci-deploy`
-2. **Sensitive Files** (gitignored):
-   - `.env` - contains passwords and API keys
-   - `data/` - sessions and memory
-   - `secrets/` - Docker secrets
-
-### Architecture
+### Traefik Configuration
 
 ```
-Internet (HTTPS)
-    ↓
-Traefik (TLS termination, shared with other services)
-    ↓
-Moltis Container (port 13131)
-    ↓
-GLM API (api.z.ai)
+Moltis Router:
+- Rule: Host(`ainetic.tech`) && PathPrefix(`/moltis`)
+- Priority: 100
+- Middleware: moltis-stripprefix (removes /moltis prefix)
+
+n8n Router:
+- Rule: Host(`ainetic.tech`)
+- Priority: 10
 ```
 
----
+### Network Architecture
 
-## 📝 Session History
-
-### 2026-02-16 (GitOps 2.0 Completion)
-
-**Completed**:
-- ✅ Setup GitHub Secrets (SSH_PRIVATE_KEY, MOLTIS_PASSWORD, GLM_API_KEY)
-- ✅ Generate passphraseless deploy key for CI/CD
-- ✅ Add deploy key to server authorized_keys
-- ✅ Create and merge PR #1 to main
-- ✅ Fix SSH passphrase error in CI/CD
-- ✅ Fix smoke tests for auth-enabled endpoints
-- ✅ Fix root path timeout (Traefik middleware)
-- ✅ CI/CD pipeline fully working
-
-**Commits**: 4+
-**Status**: Production Live
-
-### 2026-02-15 (Initial Setup)
-
-**Completed**:
-- ✅ Research Moltis documentation (32KB report)
-- ✅ Create specification (513 lines, 9 user stories)
-- ✅ Setup project structure
-- ✅ Configure docker-compose.yml
-- ✅ Add GLM provider config
-- ✅ Setup backup script
-- ✅ Implement GitOps 2.0 architecture
-
----
-
-## 🔗 Quick Links
-
-- **Spec**: `specs/001-moltis-docker-deploy/spec.md`
-- **Plan**: `specs/001-moltis-docker-deploy/plan.md`
-- **Tasks**: `specs/001-moltis-docker-deploy/tasks.md`
-- **CI/CD**: `.github/workflows/deploy.yml`
-- **Deploy Script**: `scripts/deploy.sh`
-- **Beads Config**: `.beads/config.yaml`
+```
+ainetic_net (172.18.0.x)
+├── Traefik (reverse proxy)
+├── n8n (workflow automation)
+├── Moltis (AI assistant) ← /moltis path
+├── Grafana
+├── Prometheus
+└── ... other services
+```
 
 ---
 
 ## 📞 Commands Reference
 
 ```bash
-# Deploy manually
-make deploy
-
-# Check status
-make status
-
-# View logs
-make logs LOGS_OPTS=-f
-
-# Rollback
-gh workflow run deploy.yml -f rollback=true
+# Check Moltis health
+curl -s https://ainetic.tech/moltis/health
 
 # SSH to server
 ssh root@ainetic.tech
+
+# View logs
 docker logs moltis -f
+
+# Restart Moltis
+cd /opt/moltinger && docker compose restart moltis
+
+# Trigger CI/CD manually
+gh workflow run deploy.yml
 ```
 
 ---
 
-*Last updated: 2026-02-16 | Session: GitOps 2.0 Complete - Production Live*
+*Last updated: 2026-02-16 | Session: Traefik Routing Fix*
