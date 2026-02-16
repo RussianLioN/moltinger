@@ -96,20 +96,20 @@ offered = [
 #   "kimi-code"
 
 # ── Anthropic (Claude) ────────────────────────────────────────
-# [providers.anthropic]
-# enabled = true
-# api_key = "sk-ant-..."                      # Or set ANTHROPIC_API_KEY env var
-# model = "claude-sonnet-4-20250514"          # Default model
-# base_url = "https://api.anthropic.com"     # API endpoint
-# alias = "anthropic"                         # Custom name for metrics
+[providers.anthropic]
+enabled = false                     # Set to true and add API key to enable
+api_key = "${ANTHROPIC_API_KEY}"    # Or set ANTHROPIC_API_KEY env var
+model = "claude-sonnet-4-20250514"  # Default model
+base_url = "https://api.anthropic.com"
+alias = "anthropic"
 
 # ── OpenAI ────────────────────────────────────────────────────
-# [providers.openai]
-# enabled = true
-# api_key = "sk-..."                          # Or set OPENAI_API_KEY env var
-# model = "gpt-4o"                            # Default model
-# base_url = "https://api.openai.com/v1"     # API endpoint (change for Azure, etc.)
-# alias = "openai"
+[providers.openai]
+enabled = false                     # Set to true and add API key to enable
+api_key = "${OPENAI_API_KEY}"       # Or set OPENAI_API_KEY env var
+model = "gpt-4o"                    # Default model
+base_url = "https://api.openai.com/v1"
+alias = "openai"
 
 # ── GLM (Zhipu AI) - OpenAI-compatible ────────────────────────
 # Coding-focused LLM from Zhipu AI
@@ -127,12 +127,12 @@ alias = "glm-coding"
 # model = "gemini-2.0-flash"
 # alias = "gemini"
 
-# ── Groq ──────────────────────────────────────────────────────
-# [providers.groq]
-# enabled = true
-# api_key = "..."                             # Or set GROQ_API_KEY env var
-# model = "llama-3.3-70b-versatile"
-# alias = "groq"
+# ── Groq (Fast inference, free tier) ─────────────────────────────
+[providers.groq]
+enabled = false                     # Set to true and add API key to enable
+api_key = "${GROQ_API_KEY}"         # Or set GROQ_API_KEY env var
+model = "llama-3.3-70b-versatile"
+alias = "groq"
 
 # ── DeepSeek ──────────────────────────────────────────────────
 # [providers.deepseek]
@@ -216,7 +216,7 @@ allowlist = []                    # Command patterns to allow (when security_lev
 # Commands run inside isolated containers for security.
 
 [tools.exec.sandbox]
-mode = "off"                      # Which commands to sandbox:
+mode = "all"                      # Which commands to sandbox:
                                   #   "off"      - No sandboxing (commands run on host)
                                   #   "non-main" - Sandbox all except main session
                                   #   "all"      - Sandbox everything (recommended)
@@ -235,6 +235,12 @@ backend = "auto"                  # Container backend:
 no_network = true                 # Disable network access in sandbox (recommended)
 # image = "custom-image:tag"      # Custom Docker image (default: auto-built)
 # container_prefix = "moltis"     # Prefix for container names
+
+# Resource limits for sandbox containers
+[tools.exec.sandbox.resource_limits]
+memory_limit = "512M"             # Memory limit (e.g., "512M", "1G", "2G")
+cpu_quota = 0.5                   # CPU quota as fraction (0.5 = half a core)
+pids_max = 100                    # Maximum number of processes
 
 # Packages installed in sandbox containers via apt-get.
 # This list is used to build the sandbox image. Customize as needed.
@@ -336,6 +342,7 @@ max_results = 5                   # Number of results to return (1-10)
 timeout_seconds = 30              # HTTP request timeout
 cache_ttl_minutes = 15            # Cache results for this many minutes (0 = no cache)
 # api_key = "..."                 # Brave API key (or set BRAVE_API_KEY env var)
+api_key = "${BRAVE_API_KEY}"      # Get from: https://brave.com/search/api/
 
 # Perplexity-specific settings (when provider = "perplexity")
 [tools.web.search.perplexity]
@@ -489,8 +496,8 @@ fallback_models = []              # Ordered list of fallback models
 
 [voice.tts]
 enabled = true                   # Enable text-to-speech
-provider = "elevenlabs"           # Active TTS provider
-providers = ["elevenlabs"]        # UI allowlist (empty = show all TTS providers)
+provider = "piper"                # Active TTS provider (FREE, local)
+providers = ["piper", "coqui", "elevenlabs"]  # UI allowlist (empty = show all TTS providers)
 
 [memory.qmd.collections]
 # All available TTS providers:
@@ -498,10 +505,11 @@ providers = ["elevenlabs"]        # UI allowlist (empty = show all TTS providers
 
 [voice.stt]
 enabled = true                   # Enable speech-to-text
-provider = "elevenlabs-stt"              # Active STT provider
+provider = "whisper"              # Active STT provider (FREE, local, excellent Russian)
 providers = [
+    "whisper",
+    "groq",
     "mistral",
-    "elevenlabs",
 ] # UI allowlist (empty = show all STT providers)
 # All available STT providers:
 #   "whisper", "groq", "deepgram", "google", "mistral",
@@ -555,18 +563,27 @@ session_export = false
 [channels]
 
 [voice.tts.elevenlabs]
-api_key = "71c37e69c6f7503fb6480d7b38558e6a0a146a7b5e748b3f0493f5565539549f"
+api_key = "${ELEVENLABS_API_KEY}"
 
 [voice.tts.openai]
 
 [voice.tts.google]
 
 [voice.tts.piper]
+# Piper runs locally, no API key needed
+# Russian models: ru_RU-irina-medium, ru_RU-dmitri-medium
+model = "ru_RU-irina-medium"      # Russian female voice
+noise_scale = 0.667               # Voice variation (0.0-1.0)
+length_scale = 1.0                # Speech speed
 
 [voice.tts.coqui]
 endpoint = "http://localhost:5002"
 
 [voice.stt.whisper]
+# Whisper runs locally via whisper.cpp, no API key needed
+model = "large-v3"                # Model size: tiny, base, small, medium, large-v3
+language = "ru"                   # Russian language
+initial_prompt = ""               # Optional context hint
 
 [voice.stt.groq]
 
@@ -578,7 +595,7 @@ smart_format = false
 [voice.stt.mistral]
 
 [voice.stt.elevenlabs]
-api_key = "71c37e69c6f7503fb6480d7b38558e6a0a146a7b5e748b3f0493f5565539549f"
+api_key = "${ELEVENLABS_API_KEY}"
 
 [voice.stt.voxtral_local]
 endpoint = "http://localhost:8000"
