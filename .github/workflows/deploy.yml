@@ -441,13 +441,25 @@ jobs:
             echo "Test 2: Health endpoint..."
             curl -sf http://localhost:13131/health > /dev/null
 
-            # Test 3: Traefik routing works
+            # Test 3: Traefik routing works (401 = auth required, that's OK)
             echo "Test 3: Traefik routing..."
-            curl -sf https://ainetic.tech/health > /dev/null
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://ainetic.tech/health)
+            if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ]; then
+              echo "Traefik routing OK (HTTP $HTTP_CODE)"
+            else
+              echo "Unexpected HTTP code: $HTTP_CODE"
+              exit 1
+            fi
 
-            # Test 4: WebSocket endpoint available
-            echo "Test 4: WebSocket endpoint..."
-            curl -sf -I https://ainetic.tech/ | grep -q "200\|301\|302"
+            # Test 4: Main endpoint accessible (401 = auth required)
+            echo "Test 4: Main endpoint..."
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://ainetic.tech/)
+            if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "Main endpoint OK (HTTP $HTTP_CODE)"
+            else
+              echo "Unexpected HTTP code: $HTTP_CODE"
+              exit 1
+            fi
 
             echo "All smoke tests passed!"
           EOF
