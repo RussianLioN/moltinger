@@ -161,7 +161,7 @@ jobs:
     if: always() && needs.preflight.outputs.should_deploy == 'true'
     environment:
       name: production
-      url: https://ainetic.tech
+      url: https://moltis.ainetic.tech
 
     steps:
       - name: Checkout code
@@ -266,9 +266,9 @@ jobs:
         run: |
           echo "::group::Verifying external access"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            # Check Traefik routing to /moltis
-            curl -sf https://ainetic.tech/moltis/health -o /dev/null && \
-              echo "::notice::External access verified via Traefik (/moltis)" || \
+            # Check Traefik routing
+            curl -sf https://moltis.ainetic.tech/health -o /dev/null && \
+              echo "::notice::External access verified via Traefik" || \
               echo "::warning::External access check failed"
           EOF
           echo "::endgroup::"
@@ -286,7 +286,7 @@ jobs:
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL | https://ainetic.tech/moltis |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
   # Rollback procedure
@@ -298,7 +298,7 @@ jobs:
     if: github.event.inputs.rollback == 'true'
     environment:
       name: production
-      url: https://ainetic.tech
+      url: https://moltis.ainetic.tech
 
     steps:
       - name: Setup SSH
@@ -441,9 +441,9 @@ jobs:
             echo "Test 2: Health endpoint..."
             curl -sf http://localhost:13131/health > /dev/null
 
-            # Test 3: Traefik routing via /moltis path
-            echo "Test 3: Traefik routing (/moltis/health)..."
-            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://ainetic.tech/moltis/health)
+            # Test 3: Traefik routing works (401 = auth required, that's OK)
+            echo "Test 3: Traefik routing..."
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://moltis.ainetic.tech/health)
             if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ]; then
               echo "Traefik routing OK (HTTP $HTTP_CODE)"
             else
@@ -451,13 +451,13 @@ jobs:
               exit 1
             fi
 
-            # Test 4: n8n still works at root (non-blocking)
-            echo "Test 4: n8n root path..."
-            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 https://ainetic.tech/ 2>/dev/null) || true
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
-              echo "n8n root OK (HTTP $HTTP_CODE)"
+            # Test 4: Main endpoint (non-blocking - Traefik middleware may cause delays)
+            echo "Test 4: Main endpoint..."
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 https://moltis.ainetic.tech/ 2>/dev/null) || true
+            if [ -n "$HTTP_CODE" ] && { [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "303" ]; }; then
+              echo "Main endpoint OK (HTTP $HTTP_CODE)"
             else
-              echo "n8n root: HTTP $HTTP_CODE (non-critical)"
+              echo "Main endpoint: HTTP $HTTP_CODE (non-critical - Traefik middleware may cause delays)"
             fi
 
             echo "All smoke tests passed!"
@@ -488,8 +488,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Container Info" >> $GITHUB_STEP_SUMMARY
           echo "- **Image**: \`${{ steps.info.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL**: https://ainetic.tech" >> $GITHUB_STEP_SUMMARY
-          echo "- **Health**: https://ainetic.tech/health" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://moltis.ainetic.tech" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health**: https://moltis.ainetic.tech/health" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
   # Notify on failure
