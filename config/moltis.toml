@@ -334,15 +334,18 @@ deny = []                         # Tools to always deny (e.g., ["browser"])
 # profile = "default"             # Named policy profile
 
 # ── Web Search ────────────────────────────────────────────────────────────────
+# NOTE: Built-in providers (Brave, Perplexity) require credit card.
+# Using Tavily via MCP server instead (1,000 free requests/month, no card).
+# See [mcp.servers.tavily] configuration below.
 
 [tools.web.search]
-enabled = true                    # Enable web search tool
+enabled = false                   # Disabled: using Tavily MCP server instead
 provider = "brave"                # Search provider: "brave" or "perplexity"
 max_results = 5                   # Number of results to return (1-10)
 timeout_seconds = 30              # HTTP request timeout
 cache_ttl_minutes = 15            # Cache results for this many minutes (0 = no cache)
 # api_key = "..."                 # Brave API key (or set BRAVE_API_KEY env var)
-api_key = "${BRAVE_API_KEY}"      # Get from: https://brave.com/search/api/
+# api_key = "${BRAVE_API_KEY}"    # Requires credit card now - NOT FREE
 
 # Perplexity-specific settings (when provider = "perplexity")
 [tools.web.search.perplexity]
@@ -443,6 +446,15 @@ auto_load = []                    # Skills to always load without explicit activ
 # transport = "sse"
 # url = "http://localhost:8080/sse"
 # enabled = true
+
+# ── Tavily Web Search (FREE: 1,000 requests/month, no credit card) ────────────
+# Get API key: https://tavily.com (sign up with email only)
+# Replaces built-in Brave search which now requires credit card.
+[mcp.servers.tavily]
+command = "uvx"
+args = ["mcp-server-tavily"]
+env = { TAVILY_API_KEY = "${TAVILY_API_KEY}" }
+enabled = true
 
 # ══════════════════════════════════════════════════════════════════════════════
 # METRICS

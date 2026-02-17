@@ -123,13 +123,19 @@ Push to main → GitHub Actions → SSH Deploy → Health Check → Smoke Tests
 | `SSH_PRIVATE_KEY` | ✅ EXISTS | Deploy key for ainetic.tech |
 | `MOLTIS_PASSWORD` | ✅ EXISTS | Authentication password |
 | `GLM_API_KEY` | ✅ EXISTS | LLM API key (Zhipu AI) |
-| `BRAVE_API_KEY` | ❌ NEEDED | Web Search |
-| `ELEVENLABS_API_KEY` | ❌ NEEDED | Voice fallback (optional) |
+| `TAVILY_API_KEY` | ❌ NEEDED | Web Search (FREE, no card) |
+| `ELEVENLABS_API_KEY` | ❌ Optional | Voice fallback |
 | `ANTHROPIC_API_KEY` | ❌ Optional | Alternative LLM |
 | `OPENAI_API_KEY` | ❌ Optional | Alternative LLM |
 | `GROQ_API_KEY` | ❌ Optional | STT fallback |
+| ~~`BRAVE_API_KEY`~~ | ⛔ NOT NEEDED | Requires credit card |
 
-**Action Required**: Add `BRAVE_API_KEY` via `gh secret set BRAVE_API_KEY`
+**Action Required**: Add `TAVILY_API_KEY` via:
+```bash
+gh secret set TAVILY_API_KEY --repo RussianLioN/moltinger
+```
+
+**Get Tavily Key**: https://tavily.com (email signup, no card)
 
 **Policy**: See `docs/SECRETS-MANAGEMENT.md` for secrets workflow
 
