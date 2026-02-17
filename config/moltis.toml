@@ -443,10 +443,11 @@ auto_load = []                    # Skills to always load without explicit activ
 
 # ── Tavily Web Search (FREE: 1,000 requests/month, no credit card) ────────────
 # Get API key: https://tavily.com (sign up with email only)
+# Docs: https://docs.tavily.com/documentation/mcp
 # Replaces built-in Brave search which now requires credit card.
 [mcp.servers.tavily]
 command = "npx"
-args = ["-y", "mcp-server-tavily"]
+args = ["-y", "tavily-mcp@0.1.3"]
 env = { TAVILY_API_KEY = "${TAVILY_API_KEY}" }
 enabled = true
 
