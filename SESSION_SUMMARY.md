@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-02-16
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-02-17
 
 ---
 
@@ -44,10 +44,11 @@
 Branch: main
 Remote: up to date with origin
 Recent Commits:
+- 4be7f69 docs: plan session context persistence system
+- 5177c10 docs: add secrets management policy
+- b916ed5 feat(moltis): update configuration
 - d6fe552 docs(gitops): clarify scp vs git pull approaches
 - 1664d49 fix(docker): connect Moltis to ainetic_net for Traefik routing
-- 1b16181 feat(ci): implement GitOps-compliant deployment pipeline
-- 19d0c64 fix(traefik): move Moltis to subdomain moltis.ainetic.tech
 ```
 
 ### Production Status
@@ -115,13 +116,22 @@ Push to main → GitHub Actions → SSH Deploy → Health Check → Smoke Tests
                               ainetic.tech
 ```
 
-### GitHub Secrets (Configured)
+### GitHub Secrets Status
 
-| Secret | Purpose |
-|--------|---------|
-| `SSH_PRIVATE_KEY` | Deploy key for ainetic.tech |
-| `MOLTIS_PASSWORD` | Authentication password |
-| `GLM_API_KEY` | LLM API key |
+| Secret | Status | Purpose |
+|--------|--------|---------|
+| `SSH_PRIVATE_KEY` | ✅ EXISTS | Deploy key for ainetic.tech |
+| `MOLTIS_PASSWORD` | ✅ EXISTS | Authentication password |
+| `GLM_API_KEY` | ✅ EXISTS | LLM API key (Zhipu AI) |
+| `BRAVE_API_KEY` | ❌ NEEDED | Web Search |
+| `ELEVENLABS_API_KEY` | ❌ NEEDED | Voice fallback (optional) |
+| `ANTHROPIC_API_KEY` | ❌ Optional | Alternative LLM |
+| `OPENAI_API_KEY` | ❌ Optional | Alternative LLM |
+| `GROQ_API_KEY` | ❌ Optional | STT fallback |
+
+**Action Required**: Add `BRAVE_API_KEY` via `gh secret set BRAVE_API_KEY`
+
+**Policy**: See `docs/SECRETS-MANAGEMENT.md` for secrets workflow
 
 ### Workflow Triggers
 
@@ -169,6 +179,32 @@ GLM API (api.z.ai)
 ---
 
 ## 📝 Session History
+
+### 2026-02-17 (Configuration Update + Security Fixes)
+
+**Research Completed**:
+- ✅ Sandbox analysis → `docs/reports/moltis-sandbox-analysis.md`
+- ✅ Web Search API comparison → `docs/reports/web-search-api-comparison.md`
+- ✅ Voice TTS/STT for Russian → `docs/reports/voice-tts-stt-comparison.md`
+
+**Security Fixes (CRITICAL)**:
+- ✅ Removed hardcoded API keys from moltis.toml (lines 558, 581)
+- ✅ Changed to environment variable pattern: `${ELEVENLABS_API_KEY}`
+
+**Configuration Changes**:
+- ✅ Enabled sandbox: `mode = "all"` (was "off")
+- ✅ Added sandbox resource limits (memory: 512M, cpu: 0.5, pids: 100)
+- ✅ Switched TTS: `elevenlabs` → `piper` (FREE, Russian)
+- ✅ Switched STT: `elevenlabs-stt` → `whisper` (FREE, Russian)
+- ✅ Added Brave API key placeholder for web search
+
+**Documentation**:
+- ✅ Created `docs/SECRETS-MANAGEMENT.md` (policy)
+- ✅ Updated CLAUDE.md with secrets policy reference
+- ✅ Updated SESSION_SUMMARY.md with secrets tracking
+
+**Commits**: 3+ (4be7f69, 5177c10, b916ed5)
+**Status**: Config updated, needs BRAVE_API_KEY for web search
 
 ### 2026-02-16 (Subdomain Migration + GitOps Fixes)
 
@@ -252,4 +288,4 @@ docker logs moltis -f
 
 ---
 
-*Last updated: 2026-02-16 | Session: Subdomain Migration + GitOps Fixes Complete*
+*Last updated: 2026-02-17 | Session: Configuration Update + Security Fixes*

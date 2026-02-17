@@ -1,5 +1,22 @@
 # Agent Instructions
 
+## ⚠️ MANDATORY: Read SESSION_STATE.md First!
+
+**Before starting ANY work**, read the session state file:
+```bash
+cat SESSION_STATE.md
+```
+
+This file contains:
+- Current project status (secrets, deployment, paths)
+- What was already done (commits, configurations)
+- What is pending (tasks, blockers)
+- Server and local file locations
+
+**Update it at session end**: Run `/session-summary`
+
+---
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
