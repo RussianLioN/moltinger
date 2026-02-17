@@ -200,7 +200,12 @@ jobs:
           # This ensures ALL configuration (labels, networks, volumes) matches git
           scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
 
-          echo "Configuration synced successfully"
+          # Sync config directory (moltis.toml, mcp-servers.json, etc.)
+          # This ensures MCP servers and all Moltis settings match git
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
+          scp -r config/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/
+
+          echo "Configuration synced successfully (docker-compose.yml + config/)"
           echo "::endgroup::"
 
       - name: Pull new image
