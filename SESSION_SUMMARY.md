@@ -124,13 +124,22 @@ Push to main → GitHub Actions → SSH Deploy → Health Check → Smoke Tests
 | `MOLTIS_PASSWORD` | ✅ EXISTS | Authentication password |
 | `GLM_API_KEY` | ✅ EXISTS | LLM API key (Zhipu AI) |
 | `TAVILY_API_KEY` | ✅ EXISTS | Web Search (FREE, no card) |
+| `TELEGRAM_BOT_TOKEN` | ❌ NEEDED | Telegram bot integration |
+| `TELEGRAM_ALLOWED_USERS` | ❌ Optional | Allowed Telegram user IDs |
 | `ELEVENLABS_API_KEY` | ❌ Optional | Voice fallback |
 | `ANTHROPIC_API_KEY` | ❌ Optional | Alternative LLM |
 | `OPENAI_API_KEY` | ❌ Optional | Alternative LLM |
 | `GROQ_API_KEY` | ❌ Optional | STT fallback |
 | ~~`BRAVE_API_KEY`~~ | ⛔ NOT NEEDED | Requires credit card |
 
-**All required secrets configured!** ✅
+**Action Required for Telegram**:
+```bash
+# 1. Create bot via @BotFather in Telegram, get token
+# 2. Get your Telegram user ID via @userinfobot
+# 3. Add secrets:
+gh secret set TELEGRAM_BOT_TOKEN --repo RussianLioN/moltinger
+gh secret set TELEGRAM_ALLOWED_USERS --repo RussianLioN/moltinger
+```
 
 **Policy**: See `docs/SECRETS-MANAGEMENT.md` for secrets workflow
 

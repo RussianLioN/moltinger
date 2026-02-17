@@ -361,6 +361,14 @@ readability = true                # Use readability extraction for HTML (cleaner
 
 [channels.telegram]
 
+# ── Telegram Bot Configuration ────────────────────────────────────────────────
+# Create bot via @BotFather, get token
+# Get user ID via @userinfobot
+[channels.telegram.moltis-bot]
+token = "${TELEGRAM_BOT_TOKEN}"
+# allowed_users = [123456789]      # Set via TELEGRAM_ALLOWED_USERS or hardcode
+# Empty = all users allowed (not recommended for production)
+
 # ── Browser Automation ────────────────────────────────────────────────────────
 # Full browser control via Chrome DevTools Protocol (CDP).
 # Use for JavaScript-heavy sites, form filling, screenshots.
