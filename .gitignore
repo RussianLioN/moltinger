@@ -6,6 +6,9 @@
 # Data directories
 data/
 
+# Docker secrets (never commit!)
+secrets/
+
 # Moltis sensitive files
 config/provider_keys.json
 

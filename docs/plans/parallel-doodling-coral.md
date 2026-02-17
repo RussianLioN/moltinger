@@ -27,11 +27,11 @@
 **Changes**:
 ```diff
 # Line 558
-- api_key = "71c37e69c6f7503fb6480d7b38558e6a0a146a7b5e748b3f0493f5565539549f"
+- api_key = "REDACTED"  # Was hardcoded key
 + api_key = "${ELEVENLABS_API_KEY}"
 
 # Line 581
-- api_key = "71c37e69c6f7503fb6480d7b38558e6a0a146a7b5e748b3f0493f5565539549f"
+- api_key = "REDACTED"  # Was hardcoded key
 + api_key = "${ELEVENLABS_API_KEY}"
 ```
 
