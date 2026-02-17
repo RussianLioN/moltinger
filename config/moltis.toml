@@ -169,12 +169,8 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.2", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.2", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# GLM models via Z.ai Coding Plan - strict whitelist
-allowed_models = [
-    "zai::glm-5",
-    "zai::glm-4.7",
-    "zai::glm-4.5-air",
-]
+# Strict whitelist for Z.ai models only
+allowed_models = ["zai::glm-5", "zai::glm-4.7", "zai::glm-4.5-air"]
 priority_models = []
 
 # ══════════════════════════════════════════════════════════════════════════════
