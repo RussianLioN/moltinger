@@ -82,12 +82,7 @@ timezone = "Europe/Moscow"
 
 [providers]
 offered = [
-    "local-llm",
-    "github-copilot",
-    "openai",
-    "anthropic",
-    "ollama",
-    "moonshot",
+    "openai",  # GLM-5 via Z.ai Coding Plan
 ] # Providers shown in onboarding/picker UI ([] = show all)
 # All available providers:
 #   "anthropic", "openai", "gemini", "groq", "xai", "deepseek",
