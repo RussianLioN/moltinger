@@ -25,6 +25,7 @@ services:
     environment:
       # Network configuration
       - MOLTIS_HOST=0.0.0.0
+      - MOLTIS_PORT=13131
       # TLS disabled - handled by Traefik reverse proxy
       - MOLTIS_NO_TLS=true
       # Force remote connection treatment (required for reverse proxy)
