@@ -12,8 +12,8 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 [server]
-bind = "127.0.0.1"                # Address to bind to ("0.0.0.0" for all interfaces)
-port = 38415                           # Port number (auto-generated for this installation)
+bind = "0.0.0.0"                  # Address to bind to (Docker: must be 0.0.0.0 for external access)
+port = 13131                      # Port number (must match docker-compose.yml mapping)
 http_request_logs = false              # Enable verbose Axum HTTP request/response logs (debugging)
 ws_request_logs = false                # Enable WebSocket RPC request/response logs (debugging)
 update_repository_url = "https://github.com/moltis-org/moltis"    # GitHub repo used for update checks (comment out to disable)
