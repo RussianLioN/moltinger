@@ -45,12 +45,16 @@
 ```
 Branch: main
 Remote: up to date with origin
-Recent Commits:
-- 2507d4e fix(telegram): enable Telegram integration
-- 063a53e chore: sync beads issues
-- af08cdc fix(moltis): correct server bind and port for Docker deployment
-- 41945e0 security: remove exposed API keys from git
-- f83c5e3 docs: update session summary with pending issues
+Recent Commits (GLM-5 Configuration):
+- 1374fc5 fix(moltis): update allowed_models with exact zai::model IDs
+- a46921f fix(moltis): rename provider alias to 'zai', add explicit models whitelist
+- 4c972d8 fix(moltis): use exact model IDs in allowed_models to filter out gpt-4o
+- b40ed89 config(moltis): remove local-llm from offered list, keep only openai (GLM)
+- 3b8e0da config(moltis): finalize allowed_models to 3 GLM models only
+- de86084 fix(moltis): use only API-discoverable GLM models
+- 8d2450c fix(moltis): restore glm-4.7-flash to allowed_models
+- 63e1b7f fix(moltis): replace unavailable glm-4.7-flash with glm-4.6
+- 1ecbaa2 fix(moltis): configure GLM-5 via OpenAI-compatible provider
 ```
 
 ### Production Status
@@ -60,10 +64,12 @@ Server: ainetic.tech
 Moltis: Running ✅
 URL: https://moltis.ainetic.tech (subdomain)
 Health: OK ✅ (HTTP 200)
-UI: WORKING ✅ (redirects to /login)
+UI: WORKING ✅
 Traefik: Routing via ainetic_net ✅
-Auth: Active (303 → /login) ✅
-Telegram: Enabled ✅ (awaiting user test)
+Auth: Active ✅
+Telegram: WORKING ✅
+LLM Provider: zai (GLM-5 via Z.ai Coding Plan) ✅
+Models: 5 available (glm-5, glm-4.7, glm-4.6, glm-4.5, glm-4.5-air)
 Watchtower: Running ✅
 CI/CD: Working (GitOps-compliant sync) ✅
 ```
@@ -197,6 +203,40 @@ GLM API (api.z.ai)
 ---
 
 ## 📝 Session History
+
+### 2026-02-17 (GLM-5 LLM Configuration Fix)
+
+**Problem**: LLM models not working in Moltis (Web UI and Telegram silent)
+
+**Root Cause Analysis**:
+- `[providers.glm-coding]` - NOT a valid Moltis provider!
+- Moltis only recognizes: anthropic, openai, gemini, groq, xai, deepseek, mistral, openrouter, cerebras, minimax, moonshot, venice, ollama, local-llm, openai-codex, github-copilot, kimi-code
+
+**Solution**:
+- ✅ Use `[providers.openai]` with custom `base_url` for Z.ai Coding Plan
+- ✅ Endpoint: `https://api.z.ai/api/coding/paas/v4` (Coding Plan specific)
+- ✅ Model: `glm-5` (Pro subscription)
+- ✅ Alias: `zai` (clean provider name)
+- ✅ Added `GLM_API_KEY` to docker-compose.yml environment
+
+**Research Sources**:
+- Z.ai Official Docs: https://docs.z.ai/api-reference/introduction
+- API Discovery: `curl https://api.z.ai/api/coding/paas/v4/models`
+- Rate Limits: https://z.ai/manage-apikey/rate-limits
+
+**Model Filtering Attempts**:
+- `allowed_models` with patterns: fuzzy match, not strict whitelist
+- `models = [...]` in provider: ignored by Moltis
+- `offered` provider list: works for hiding providers
+- **Result**: 5 models visible (Moltis limitation - no strict whitelist)
+
+**Known Limitations**:
+- `glm-4.7-flash` NOT available via API (only Z.ai web interface)
+- `gpt-4o` and `local-llm` removed from offered list
+- Moltis `allowed_models` is fuzzy filter, not strict whitelist
+
+**Commits**: 10
+**Status**: Web UI ✅, Telegram ✅, LLM Working ✅
 
 ### 2026-02-17 (Health Check + Critical Fixes)
 
@@ -348,10 +388,10 @@ curl -I https://moltis.ainetic.tech/health
 
 ## 🎯 Next Steps
 
-1. **User Test**: Verify UI works in browser (https://moltis.ainetic.tech)
-2. **User Test**: Test Telegram bot responds to messages
+1. **Moltis Feature Request**: Request strict model whitelist in Moltis (allowed_models should be exact match)
+2. **Known Issue**: Emoji rendering broken in Moltis frontend (font issue)
 3. **Backlog**: Implement SearXNG self-hosted web search (moltinger-6ql)
 
 ---
 
-*Last updated: 2026-02-17 | Session: Health Check + Critical Fixes*
+*Last updated: 2026-02-17 | Session: GLM-5 LLM Configuration Fix*
