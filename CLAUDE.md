@@ -29,6 +29,27 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## ⚠️ Pre-Integration Checklist (MANDATORY)
+
+**Before adding ANY external dependency/integration**, complete ALL steps:
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║           PRE-INTEGRATION CHECKLIST (MANDATORY)              ║
+╠══════════════════════════════════════════════════════════════╣
+║ 1. [ ] Find official documentation URL                        ║
+║ 2. [ ] Read installation section completely                   ║
+║ 3. [ ] Verify: npm view <package> || pip show <package>       ║
+║ 4. [ ] Pin version: package@1.2.3 (not @latest)               ║
+║ 5. [ ] Add docs URL to config comment                         ║
+║ 6. [ ] Validate config syntax before commit                   ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Why?** See `docs/LESSONS-LEARNED.md` for incident analysis.
+
+**On ERROR**: Check `docs/LESSONS-LEARNED.md` first for similar patterns.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
