@@ -103,22 +103,21 @@ model = "claude-sonnet-4-20250514"  # Default model
 base_url = "https://api.anthropic.com"
 alias = "anthropic"
 
-# ── OpenAI ────────────────────────────────────────────────────
+# ── OpenAI / GLM-5 via Z.ai Coding Plan ───────────────────────────────────────
+# Using Z.ai Coding Plan (Pro subscription) through OpenAI-compatible API
+# Docs: https://docs.z.ai/api-reference/introduction
+# Coding Plan endpoint: https://api.z.ai/api/coding/paas/v4
 [providers.openai]
-enabled = false                     # Set to true and add API key to enable
-api_key = "${OPENAI_API_KEY}"       # Or set OPENAI_API_KEY env var
-model = "gpt-4o"                    # Default model
-base_url = "https://api.openai.com/v1"
-alias = "openai"
-
-# ── GLM (Zhipu AI) - OpenAI-compatible ────────────────────────
-# Coding-focused LLM from Zhipu AI
-[providers.glm-coding]
 enabled = true
-api_key = "${GLM_API_KEY}"                    # Set GLM_API_KEY in .env file
-model = "glm-4-plus"                          # or glm-4-flash, glm-4-air
-base_url = "https://api.z.ai/api/coding/paas/v4"
-alias = "glm-coding"
+api_key = "${GLM_API_KEY}"                          # Use GLM_API_KEY from .env
+model = "glm-5"                                     # Pro subscription supports glm-5!
+base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
+alias = "glm-5-zai"
+
+# ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
+# This section is NOT a valid Moltis provider! Use [providers.openai] instead.
+[providers.glm-coding]
+enabled = false
 
 # ── Google Gemini ─────────────────────────────────────────────
 # [providers.gemini]
