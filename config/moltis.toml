@@ -360,14 +360,14 @@ max_redirects = 3                 # Maximum HTTP redirects to follow
 readability = true                # Use readability extraction for HTML (cleaner output)
 
 [channels.telegram]
+enabled = true                    # Enable Telegram integration
 
 # ── Telegram Bot Configuration ────────────────────────────────────────────────
 # Create bot via @BotFather, get token
 # Get user ID via @userinfobot
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
-# allowed_users = [123456789]      # Set via TELEGRAM_ALLOWED_USERS or hardcode
-# Empty = all users allowed (not recommended for production)
+allowed_users = []                # Empty = all users (set via TELEGRAM_ALLOWED_USERS env)
 
 # ── Browser Automation ────────────────────────────────────────────────────────
 # Full browser control via Chrome DevTools Protocol (CDP).
