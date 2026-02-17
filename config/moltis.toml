@@ -105,9 +105,10 @@ alias = "anthropic"
 [providers.openai]
 enabled = true
 api_key = "${GLM_API_KEY}"                          # Use GLM_API_KEY from .env
-model = "glm-5"                                     # Pro subscription supports glm-5!
+model = "glm-5"                                     # Default model
 base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
-alias = "glm-5-zai"
+alias = "zai"
+models = ["glm-5", "glm-4.7", "glm-4.5-air"]        # Explicit model whitelist
 
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
@@ -168,11 +169,11 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.2", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.2", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# GLM models via Z.ai Coding Plan - EXACT model IDs to filter out gpt-4o and local-llm
+# GLM models via Z.ai Coding Plan - strict whitelist
 allowed_models = [
-    "glm-5-zai::glm-5",        # GLM-5 (exact ID)
-    "glm-5-zai::glm-4.7",      # GLM-4.7 (exact ID)
-    "glm-5-zai::glm-4.5-air",  # GLM-4.5 Air (exact ID)
+    "zai::glm-5",
+    "zai::glm-4.7",
+    "zai::glm-4.5-air",
 ]
 priority_models = []
 
