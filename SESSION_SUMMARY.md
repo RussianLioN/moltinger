@@ -199,15 +199,27 @@ GLM API (api.z.ai)
 - ✅ Added sandbox resource limits (memory: 512M, cpu: 0.5, pids: 100)
 - ✅ Switched TTS: `elevenlabs` → `piper` (FREE, Russian)
 - ✅ Switched STT: `elevenlabs-stt` → `whisper` (FREE, Russian)
-- ✅ Added Brave API key placeholder for web search
+- ✅ Tavily MCP via SSE transport (remote server)
+- ✅ Telegram bot configured
+
+**CI/CD Fixes**:
+- ✅ Added config/ sync to deploy workflow
+- ✅ Added .env generation from GitHub Secrets
+- ✅ Fixed TOML duplicate section error
 
 **Documentation**:
 - ✅ Created `docs/SECRETS-MANAGEMENT.md` (policy)
-- ✅ Updated CLAUDE.md with secrets policy reference
+- ✅ Created `docs/LESSONS-LEARNED.md` (incident analysis)
+- ✅ Added Pre-Integration Checklist to CLAUDE.md
 - ✅ Updated SESSION_SUMMARY.md with secrets tracking
 
-**Commits**: 3+ (4be7f69, 5177c10, b916ed5)
-**Status**: Config updated, needs BRAVE_API_KEY for web search
+**Pending Issues** (Tasks #9, #10, #11):
+- ❌ Moltis web UI: черный экран
+- ❌ Telegram bot: не отвечает на сообщения
+- 📋 Plan: `/health-bugs`, `/health-security` после компрессии
+
+**Commits**: 12+ (см. git log)
+**Status**: Services running, UI needs debugging
 
 ### 2026-02-16 (Subdomain Migration + GitOps Fixes)
 
