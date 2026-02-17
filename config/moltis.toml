@@ -173,17 +173,12 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.2", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.2", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# recent + popular patterns: "gpt 5.2", "sonnet 4.5", "gemini 3", "kimi-k2.5", "minimax m2.1", "glm 4.7"
-# value-focused patterns: "haiku", "mini", "nano", "flash", "kimi-k2.5", "minimax m2.1", "glm 4.7"
+# Filtered to GLM-5 models only (Pro subscription via Z.ai Coding Plan)
 allowed_models = [
-    "gpt 5.2",
-    "sonnet 4.5",
-    "haiku",
-    "mini",
-    "flash",
-    "kimi-k2.5",
-    "minimax m2.1",
-    "glm 4.7",
+    "glm-5",          # Latest GLM-5 model
+    "glm 4.7",        # GLM-4.7 (pattern matching: glm-5-zai::glm-4.7)
+    "glm 4.7-flash",  # GLM-4.7 Flash (fast variant)
+    "glm 4.5-air",    # GLM-4.5 Air (lightweight)
 ]
 priority_models = []
 
