@@ -3,6 +3,12 @@
 
 name: Deploy Moltis
 
+# Prevent parallel deployments - queue them instead
+# Expert: CI/CD Architect | Issue: moltinger-9q3
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   push:
     branches:
