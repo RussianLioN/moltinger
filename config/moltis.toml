@@ -174,12 +174,12 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
 # priority_models = ["claude-opus-4-5", "gpt-5.2", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.2", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
 # Filtered to GLM-5 models only (Pro subscription via Z.ai Coding Plan)
-# Available: glm-5, glm-4.7, glm-4.6, glm-4.5, glm-4.5-air (NO glm-4.7-flash in Coding Plan!)
+# Rate limits: https://z.ai/manage-apikey/rate-limits
 allowed_models = [
-    "glm-5",        # Latest GLM-5 model
-    "glm 4.7",      # GLM-4.7
-    "glm 4.6",      # GLM-4.6 (replaces unavailable glm-4.7-flash)
-    "glm 4.5-air",  # GLM-4.5 Air (lightweight)
+    "glm-5",          # GLM-5 (concurrency: 3)
+    "glm 4.7",        # GLM-4.7 (concurrency: 5)
+    "glm 4.7-flash",  # GLM-4.7-Flash (concurrency: 1)
+    "glm 4.5-air",    # GLM-4.5 Air (concurrency: 10)
 ]
 priority_models = []
 
