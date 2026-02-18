@@ -68,6 +68,7 @@ UI: WORKING ✅
 Traefik: Routing via ainetic_net ✅
 Auth: Active ✅
 Telegram: WORKING ✅
+  Bot: @moltinger_bot
 LLM Provider: zai (GLM-5 via Z.ai Coding Plan) ✅
 Models: 5 available (glm-5, glm-4.7, glm-4.6, glm-4.5, glm-4.5-air)
 Watchtower: Running ✅

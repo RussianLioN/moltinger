@@ -1,260 +1,574 @@
-# CRITICAL: GLM-5 LLM Configuration Fix
+# Moltinger → AI Agent Factory: План трансформации
 
 **Date**: 2026-02-17
 **Status**: Ready for Approval
-**Priority**: P0 - BLOCKING ALL FUNCTIONALITY
-**Model**: glm-5 (Pro subscription via Coding Plan endpoint)
+**Priority**: P0 - Стратегический pivot проекта
+**MVP Goal**: Moltinger знает концепцию ASC и помогает создавать документацию агентов
 
 ---
 
 ## Context
 
-**Проблема**: НИ ОДНА LLM модель не работает в Moltis. Это блокирует:
-- ❌ Web UI чат (не отвечает)
-- ❌ Telegram бот (не отвечает)
+### Проблема
+Moltinger сейчас — это DevOps-ассистент для Docker deployment. Но реальная задача — **фабрика по производству AI агентов** на основе концепции ASC AI Fabrique.
 
-**Корневая причина**: `[providers.glm-coding]` - это НЕ существующий провайдер в Moltis!
+### Решение
+Научить Moltinger (Moltis на сервере ainetic.tech) работать как AI Agent Factory:
+1. Знать концепцию ASC (7 метаблоков, 3 фазы, 62 термина)
+2. Формировать спецификации агентов
+3. Генеририровать презентации по агентам
+4. Валидировать архитектуру по ASC принципам
 
-**Исследование**:
-1. Прочитана официальная документация Z.ai: https://docs.z.ai/api-reference/introduction
-2. Прочитана конфигурация Moltis: `config/moltis.toml` (строки 80-220)
-3. Проверен список доступных провайдеров Moltis (строки 92-96)
+### ⚠️ Важно: Навыки добавляются в MOLTIS, не в Claude Code!
 
 ---
 
-## Critical Finding
+## Архитектура Moltis для обучения
 
-### ⚠️ Концептуальные ошибки в первоначальном анализе
+### Механизмы добавления знаний в Moltinger:
 
-| Моя ошибка | Правильное понимание |
-|------------|---------------------|
-| "Endpoint неправильный" | ❌ **НЕВЕРНО!** Coding Plan использует `/api/coding/paas/v4` |
-| "Модель glm-4-plus для Coding Plan" | ❌ **НЕВЕРНО!** Pro подписка использует `glm-5` |
-| "Надо менять endpoint" | ❌ Endpoint был **ПРАВИЛЬНЫМ** |
+| Механизм | Файл/Директория | Назначение |
+|----------|-----------------|------------|
+| **Soul Prompt** | `config/moltis.toml` → `[identity]` | Основное поведение и роль |
+| **Skills** | `~/.config/moltis/skills/` или `./skills/` | Reusable prompt templates |
+| **Memory (RAG)** | `~/.moltis/memory/` + watch_dirs | База знаний для поиска |
+| **MCP Servers** | `config/moltis.toml` → `[mcp]` | Инструменты |
 
-### ✅ Что действительно неверно
+---
 
-| Параметр | Текущее | Проблема |
-|----------|---------|----------|
-| Provider section | `[providers.glm-coding]` | "glm" НЕ в списке провайдеров Moltis! |
-| enabled | `true` | Moltis игнорирует несуществующий провайдер |
-| model | `glm-4-plus` | Должно быть `glm-5` (Pro подписка) |
+## Architecture Overview
 
-### Z.ai Coding Plan (подписка пользователя - Pro):
-
-**Endpoint**: `https://api.z.ai/api/coding/paas/v4` ✅ **БЫЛ ПРАВИЛЬНЫМ!**
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    api_key="your-Z.AI-api-key",
-    base_url="https://api.z.ai/api/coding/paas/v4"  # Coding Plan endpoint!
-)
-
-completion = client.chat.completions.create(
-    model="glm-5",  # ← Pro подписка поддерживает glm-5!
-    messages=[...]
-)
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MOLTIS SERVER                         │
+│              (ainetic.tech:13131)                        │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           SOUL PROMPT (Agent Factory)           │    │
+│  │  config/moltis.toml → [identity]                │    │
+│  └─────────────────────────────────────────────────┘    │
+│                          │                               │
+│         ┌────────────────┼────────────────┐             │
+│         ▼                ▼                ▼             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │    SKILLS   │  │   MEMORY    │  │ MCP TOOLS   │     │
+│  │  ./skills/  │  │ ~/.moltis/  │  │ filesystem  │     │
+│  │             │  │   memory/   │  │ github      │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘     │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│              ASC AI Fabrique Knowledge                   │
+│  (Глоссарий 62 термина, 7 метаблоков, 3 фазы)           │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Moltis поддерживает OpenAI-совместимые провайдеры:
-
-Секция `[providers.openai]` с кастомным `base_url` позволяет использовать любой OpenAI-совместимый API.
-
 ---
 
-## Tasks
+## Phase 1: Soul Prompt (Agent Factory Identity)
 
-### Task 1: CRITICAL - Fix GLM Provider Configuration
+**Цель**: Moltinger понимает свою роль как AI Agent Factory
+**Время**: 30 минут
 
-**File**: `config/moltis.toml`
-**Lines**: 106-121
+### Task 1.1: Обновить Soul Prompt в Moltis
 
-**Current (BROKEN)**:
+**Файл на сервере**: `/opt/moltinger/config/moltis.toml`
+**Секция**: `[identity]` (строки ~49-72)
+
+**Заменить текущий soul prompt на**:
+
 ```toml
-# ── OpenAI ────────────────────────────────────────────────────
-[providers.openai]
-enabled = false                     # Set to true and add API key to enable
-api_key = "${OPENAI_API_KEY}"       # Or set OPENAI_API_KEY env var
-model = "gpt-4o"                    # Default model
-base_url = "https://api.openai.com/v1"
-alias = "openai"
+[identity]
+name = "Молтингер"
+emoji = "🤖"
+vibe = "technical"
+soul = """
+Ты - Молтингер, AI Agent Factory - фабрика по производству AI агентов.
 
-# ── GLM (Zhipu AI) - OpenAI-compatible ────────────────────────
-# Coding-focused LLM from Zhipu AI
-[providers.glm-coding]
-enabled = true
-api_key = "${GLM_API_KEY}"                    # Set GLM_API_KEY in .env file
-model = "glm-4-plus"                          # or glm-4-flash, glm-4-air
-base_url = "https://api.z.ai/api/coding/paas/v4"
-alias = "glm-coding"
+## Контекст
+- Пользователь: Сергей (timezone Europe/Moscow)
+- Миссия: Создание AI агентов по методологии ASC AI Fabrique
+
+## Экспертиза ASC
+Ты знаешь концепцию ASC (Agentric Swarm Coding):
+- 7 семенных метаблоков для разработки агентов
+- 3 фазы развития: MVP0 → Масштабирование → Автономная работа
+- Рекурсивная самоприменимость системы
+
+## Роль
+- Архитектор AI агентов
+- Генератор спецификаций агентов
+- Создатель презентаций по агентам
+- Валидатор архитектуры по ASC принципам
+
+## Workflow создания агента
+1. Собрать требования (цель, метрики успеха, ограничения)
+2. Сформировать спецификацию (spec.md)
+3. Спроектировать архитектуру (architecture.md)
+4. Сгенерировать презентацию (presentation.md)
+5. Валидировать по чеклисту ASC
+
+## Поведение
+- Язык: русский
+- Стиль: технически точно, структурировано
+- Формат: [OK]/[WARN]/[ERR] для статусов
+- При запросе создания агента: Всегда начинай с понимания требований
+"""
 ```
 
-**Fixed**:
-```toml
-# ── OpenAI / GLM-5 via Z.ai Coding Plan ───────────────────────────────────────
-# Using Z.ai Coding Plan (Pro subscription) through OpenAI-compatible API
-# Docs: https://docs.z.ai/api-reference/introduction
-# Coding Plan endpoint: https://api.z.ai/api/coding/paas/v4
-[providers.openai]
-enabled = true
-api_key = "${GLM_API_KEY}"                          # Use GLM_API_KEY from .env
-model = "glm-5"                                     # Pro subscription supports glm-5!
-base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint (CORRECT!)
-alias = "glm-5-zai"
+### Task 1.2: Deploy на сервер
 
-# ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
-# This section is NOT a valid Moltis provider! Use [providers.openai] instead.
-[providers.glm-coding]
-enabled = false
-```
-
----
-
-### Task 2: Update .env.example
-
-**File**: `.env.example`
-
-**Add comment**:
 ```bash
-# GLM-5 through Z.ai (OpenAI-compatible)
-# Get API key at: https://open.bigmodel.cn/
-GLM_API_KEY=your-zhipu-api-key-here
+# Локально: обновить config/moltis.toml
+git add config/moltis.toml
+git commit -m "feat(moltis): transform to AI Agent Factory (soul prompt)"
+git push origin main
+
+# Автоматический deploy через GitHub Actions
+# Или вручную:
+ssh root@ainetic.tech "cd /opt/moltinger && docker compose restart moltis"
 ```
 
 ---
 
-### Task 3: Update docker-compose.yml (if needed)
+## Phase 2: Knowledge Base (Memory/RAG)
 
-**File**: `docker-compose.yml`
+**Цель**: Moltinger имеет доступ к знаниям ASC
+**Время**: 1-2 часа
 
-Ensure `GLM_API_KEY` is passed:
-```yaml
-environment:
-  - GLM_API_KEY=${GLM_API_KEY}
+### Task 2.1: Создать базу знаний ASC на сервере
+
+**Директория на сервере**: `/opt/moltinger/knowledge/asc/`
+
 ```
+/opt/moltinger/knowledge/asc/
+├── GLOSSARY.md           # 62 термина ASC
+├── METABLOCKS.md         # 7 семенных метаблоков (полное описание)
+├── PHASES.md             # 3 фазы развития
+├── AGENT_TEMPLATE.md     # Шаблон спецификации агента
+└── PRESENTATION_TEMPLATE.md  # Шаблон презентации
+```
+
+**Источник для копирования**:
+- `/Users/rl/coding/ASC-AI-agent-fabrique/docs/asc-roadmap/GLOSSARY.md`
+- `/Users/rl/coding/ASC-AI-agent-fabrique/docs/asc-roadmap/meta_block_registry.md`
+- `/Users/rl/coding/ASC-AI-agent-fabrique/docs/asc-roadmap/strategic_roadmap.md`
+
+### Task 2.2: Настроить Memory watch_dirs
+
+**Файл**: `config/moltis.toml`
+
+```toml
+[memory]
+llm_reranking = false
+session_export = false
+provider = "ollama"
+model = "nomic-embed-text"
+base_url = "http://localhost:11434/v1"
+
+# Добавить директорию с знаниями ASC для RAG
+watch_dirs = [
+  "~/.moltis/memory",
+  "/opt/moltinger/knowledge/asc",    # ← Добавить
+]
+```
+
+### Task 2.3: Альтернатива - Filesystem MCP
+
+Если Memory/RAG сложно настроить, использовать MCP filesystem:
+
+```toml
+[mcp.servers.asc-knowledge]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/opt/moltinger/knowledge/asc"]
+enabled = true
+```
+
+---
+
+## Phase 3: Skills для Moltis
+
+**Цель**: Moltinger имеет специализированные skills для работы с агентами
+**Время**: 2-3 часа
+
+### Task 3.1: Создать skill "agent-spec-generator"
+
+**Директория на сервере**: `/opt/moltinger/skills/agent-spec-generator/SKILL.md`
+
+```markdown
+---
+name: agent-spec-generator
+description: Генерирует спецификацию AI агента по методологии ASC
+---
+
+# Agent Spec Generator
+
+## Активация
+Используй этот skill когда пользователь просит создать нового агента.
+
+## Workflow
+
+1. **Сбор требований**
+   Спроси пользователя:
+   - Какую задачу будет решать агент?
+   - Кто пользователи агента?
+   - Как измерить успех?
+
+2. **Маппинг на метаблоки**
+   Определи какие из 7 метаблоков ASC применимы:
+   - RESEARCH_FRAMEWORK_PATTERN
+   - ARCHITECTURE_PATTERN
+   - DEVELOPMENT_PATTERN
+   - TESTING_PATTERN
+   - ENVIRONMENT_SETUP_PATTERN
+   - POC_DEFENSE_PATTERN
+   - AGENT_DEVELOPMENT_PATTERN
+
+3. **Генерация спецификации**
+   Создай документ по шаблону:
+
+## Шаблон спецификации
+
+```markdown
+# Agent Specification: [NAME]
+
+## Overview
+- **Name**: [название]
+- **Version**: 0.1.0
+- **Purpose**: [цель]
+- **Owner**: Сергей
+
+## Goals & Success Metrics
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| [метрика] | [цель] | [как измерить] |
+
+## Metablock Mapping
+| Metablock | Usage | Priority |
+|-----------|-------|----------|
+| [блок] | [как используется] | P1/P2/P3 |
+
+## Capabilities
+- [возможность 1]
+- [возможность 2]
+
+## Inputs & Outputs
+### Inputs
+- [входные данные]
+
+### Outputs
+- [выходные данные]
+
+## Implementation Phases
+### Phase 1 (MVP0 - 4 недели)
+- [ ] [задача]
+
+### Phase 2 (Scaling - 3-6 месяцев)
+- [ ] [задача]
+
+### Phase 3 (Autonomous)
+- [ ] [задача]
+```
+```
+
+### Task 3.2: Создать skill "agent-presentation-generator"
+
+**Директория на сервере**: `/opt/moltinger/skills/agent-presentation-generator/SKILL.md`
+
+```markdown
+---
+name: agent-presentation-generator
+description: Генерирует презентацию по агенту в формате Marp/Markdown
+---
+
+# Agent Presentation Generator
+
+## Активация
+Используй этот skill когда пользователь просит создать презентацию по агенту.
+
+## Workflow
+
+1. Прочитай спецификацию агента
+2. Извлеки ключевую информацию
+3. Сгенерируй slides в формате Marp
+
+## Шаблон презентации (Marp)
+
+```markdown
+---
+marp: true
+theme: default
+paginate: true
+---
+
+# [Agent Name]
+## AI Agent for [Purpose]
+
+**Moltinger AI Agent Factory**
+
+---
+
+## Problem Statement
+
+- Проблема 1
+- Проблема 2
+- Текущие ограничения
+
+---
+
+## Solution
+
+**[Agent Name]** - [one-line description]
+
+Ключевые возможности:
+- Возможность 1
+- Возможность 2
+- Возможность 3
+
+---
+
+## Architecture Overview
+
+```
+[Диаграмма архитектуры]
+```
+
+---
+
+## Metablocks Used
+
+| Block | Purpose |
+|-------|---------|
+| RESEARCH_FRAMEWORK | Исследование |
+| ARCHITECTURE | Проектирование |
+| DEVELOPMENT | Реализация |
+
+---
+
+## Success Metrics
+
+| Metric | Target | Status |
+|--------|--------|--------|
+| [метрика] | [цель] | 🔄 |
+
+---
+
+## Roadmap
+
+- **Week 1-4**: MVP0
+- **Month 2-6**: Scaling
+- **Month 7+**: Autonomous
+
+---
+
+## Investment Required
+
+- **Timeline**: X недель
+- **Resources**: [команда]
+- **Dependencies**: [зависимости]
+
+---
+
+## Next Steps
+
+1. [Действие 1]
+2. [Действие 2]
+3. [Действие 3]
+
+---
+
+# Questions?
+
+**Contact**: Сергей
+**Project**: ASC AI Fabrique
+```
+```
+
+### Task 3.3: Настроить search_paths для skills
+
+**Файл**: `config/moltis.toml`
+
+```toml
+[skills]
+enabled = true
+search_paths = ["/opt/moltinger/skills"]    # ← Добавить
+auto_load = ["agent-spec-generator", "agent-presentation-generator"]
+```
+
+---
+
+## Phase 4: Verification
+
+**Цель**: Убедиться что Moltinger работает как Agent Factory
+**Время**: 30 минут
+
+### Test Scenarios
+
+| # | Запрос к Moltinger | Ожидаемый результат |
+|---|-------------------|---------------------|
+| 1 | "Привет, представься" | "Я - Молтингер, AI Agent Factory..." |
+| 2 | "Что такое метаблок?" | Объяснение концепции из знаний ASC |
+| 3 | "Создай агента для X" | Спецификация по шаблону ASC |
+| 4 | "Сгенерируй презентацию для агента Y" | Marp slides |
+
+### Verification Checklist
+
+```
+[ ] Soul prompt обновлён (Agent Factory identity)
+[ ] Knowledge base создана (/opt/moltinger/knowledge/asc/)
+[ ] Memory watch_dirs настроен ИЛИ filesystem MCP
+[ ] Skills созданы (/opt/moltinger/skills/)
+[ ] search_paths в moltis.toml указывает на skills
+[ ] Moltis перезапущен (docker compose restart)
+[ ] Тест 1: "Представься" → Agent Factory identity
+[ ] Тест 2: "Что такое ASC?" → знает концепцию
+[ ] Тест 3: "Создай агента" → генерирует spec
+```
+
+---
+
+## Files to Create/Modify
+
+### На сервере (ainetic.tech)
+
+| Файл | Действие | Приоритет |
+|------|----------|-----------|
+| `/opt/moltinger/config/moltis.toml` | Обновить soul prompt | P0 |
+| `/opt/moltinger/config/moltis.toml` | Добавить skills.search_paths | P0 |
+| `/opt/moltinger/config/moltis.toml` | Добавить memory.watch_dirs | P1 |
+| `/opt/moltinger/knowledge/asc/GLOSSARY.md` | Создать (из ASC проекта) | P0 |
+| `/opt/moltinger/knowledge/asc/METABLOCKS.md` | Создать | P0 |
+| `/opt/moltinger/skills/agent-spec-generator/SKILL.md` | Создать | P1 |
+| `/opt/moltinger/skills/agent-presentation-generator/SKILL.md` | Создать | P1 |
+
+### В репозитории (для GitOps deploy)
+
+| Файл | Действие |
+|------|----------|
+| `config/moltis.toml` | Обновить soul + skills config |
+| `knowledge/asc/GLOSSARY.md` | Создать |
+| `knowledge/asc/METABLOCKS.md` | Создать |
+| `skills/agent-spec-generator/SKILL.md` | Создать |
+| `skills/agent-presentation-generator/SKILL.md` | Создать |
 
 ---
 
 ## Execution Order
 
 ```
-1. Task 1 (Fix GLM config) ───► 2. Task 2 (Update .env.example)
-                                        │
-                                        ▼
-                               3. Task 3 (Verify docker-compose)
-                                        │
-                                        ▼
-                               4. Deploy & Test
+Phase 1 (30 мин)
+├── 1.1 Обновить soul prompt в config/moltis.toml
+├── 1.2 Git commit + push (триггер deploy)
+└── 1.3 Verify: https://moltis.ainetic.tech "Представься"
+        │
+        ▼
+Phase 2 (1-2 часа)
+├── 2.1 Создать knowledge/asc/ директорию
+├── 2.2 Скопировать GLOSSARY.md из ASC проекта
+├── 2.3 Скопировать METABLOCKS.md из ASC проекта
+├── 2.4 Настроить memory.watch_dirs ИЛИ filesystem MCP
+└── 2.5 Deploy + Verify: "Что такое метаблок?"
+        │
+        ▼
+Phase 3 (2-3 часа)
+├── 3.1 Создать skills/agent-spec-generator/
+├── 3.2 Создать skills/agent-presentation-generator/
+├── 3.3 Настроить skills.search_paths
+└── 3.4 Deploy + Verify: "Создай агента для X"
+        │
+        ▼
+Phase 4 (30 мин)
+└── Full verification + документация
 ```
 
 ---
 
-## Files to Modify
+## MVP Prioritization
 
-| File | Lines | Priority | Change |
-|------|-------|----------|--------|
-| `config/moltis.toml` | 106-121 | P0 | Replace GLM config with OpenAI-compatible |
-| `.env.example` | All | P1 | Add GLM_API_KEY comment |
-| `docker-compose.yml` | 39 | P2 | Verify GLM_API_KEY env var |
+### Must Have (Phase 1-2)
+- [x] Soul prompt → Agent Factory identity
+- [ ] Knowledge base: GLOSSARY + METABLOCKS
+- [ ] Memory или filesystem доступ к знаниям
+
+### Should Have (Phase 3)
+- [ ] agent-spec-generator skill
+- [ ] agent-presentation-generator skill
+
+### Nice to Have (Future)
+- MCP GitHub для работы с репозиториями
+- Automation slash commands
+- Memory entities для ASC
 
 ---
 
-## Verification
+## Risks & Mitigation
 
-### Local Verification
-```bash
-# 1. Check config syntax (TOML valid)
-cat config/moltis.toml | grep -A5 '\[providers.openai\]'
+| Риск | Митигация |
+|------|-----------|
+| Memory/RAG требует Ollama | Использовать filesystem MCP как fallback |
+| GLM-5 не справится с генерацией | Использовать более мощную модель для критичных задач |
+| Skills не загружаются | Проверить search_paths и права доступа |
+| Знания устаревают | Хранить в Git, обновлять через CI/CD |
 
-# 2. Verify glm-coding section is DISABLED
-grep -A1 '\[providers.glm-coding\]' config/moltis.toml | grep 'enabled = false'
+---
 
-# 3. Verify OpenAI section has Coding Plan endpoint
-grep 'base_url = "https://api.z.ai/api/coding/paas/v4"' config/moltis.toml
+## Success Criteria
 
-# 4. Verify model is glm-5 (Pro subscription)
-grep 'model = "glm-5"' config/moltis.toml
+| Критерий | Как проверить |
+|----------|---------------|
+| Moltinger знает ASC | Запрос: "Что такое метаблок?" → корректный ответ |
+| Генерирует спецификации | Запрос: "Создай агента для X" → spec.md |
+| Генерирует презентации | Запрос: "Презентация для агента Y" → Marp slides |
+| Понимает свою роль | Запрос: "Представься" → "AI Agent Factory" |
+
+---
+
+## Связанные артефакты
+
+| Артефакт | Назначение |
+|----------|------------|
+| [agent-factory-lifecycle.md](./agent-factory-lifecycle.md) | **Полный lifecycle создания агента** - от спецификации до передачи в продакшен, включая независимую валидацию, UAT, Docker пакетирование |
+
+---
+
+## Summary
+
+**Что делаем**: Учит Moltinger (Moltis) работать как AI Agent Factory
+
+**Как (механизмы Moltis)**:
+1. **Soul Prompt** → определяет роль и поведение
+2. **Knowledge Base** →Memory/watch_dirs или filesystem MCP
+3. **Skills** → reusable templates для spec и presentation
+4. **Deploy** → через GitOps (push → GitHub Actions → server)
+
+**MVP (Phase 1-2, ~2 часа)**:
+- Soul prompt обновлён
+- Knowledge base (GLOSSARY + METABLOCKS) доступна
+- Moltinger отвечает на вопросы по ASC
+
+**Результат**: Moltinger — AI Agent Factory, готовый помогать в создании агентов
+
+---
+
+## Полный Lifecycle создания агента
+
+```
+Phase 1: Требования (Spec)        → spec.md
+    ↓
+Phase 2: Архитектура (Design)     → architecture.md
+    ↓
+Phase 3: Создание (Code)          → src/, config/
+    ↓
+Phase 3.5: НЕЗАВИСИМАЯ ВАЛИДАЦИЯ  → validation-report.md (Agent-Validator)
+    ↓ [PASS]
+Phase 4: Тестирование + UAT       → uat-report.md (Business Users)
+    ↓ [UAT PASS]
+Phase 5: Docker Пакетирование      → Dockerfile, docker-compose.yml
+    ↓
+Phase 6: Передача команде          → Full package
 ```
 
-### Remote Verification (after deploy)
-```bash
-# SSH to server
-ssh root@ainetic.tech
-
-# Check container health
-docker logs moltis --tail 50 | grep -i "provider\|llm\|error"
-
-# Test GLM-5 response (inside container)
-docker exec moltis curl -s http://localhost:13131/health
-
-# Check UI
-curl -I https://moltis.ainetic.tech/health
-```
-
-### Functional Test
-1. Open https://moltis.ainetic.tech in browser
-2. Send test message: "Привет, представься"
-3. Verify GLM-5 responds correctly
-4. Test Telegram bot
-
----
-
-## Rollback
-
-```bash
-# Backup before changes
-cp config/moltis.toml config/moltis.toml.backup-glm-fix
-
-# Restore if needed
-cp config/moltis.toml.backup-glm-fix config/moltis.toml
-docker compose restart moltis
-```
-
----
-
-## Research Sources
-
-1. **Z.ai Official Documentation**: https://docs.z.ai/api-reference/introduction
-   - General endpoint: `https://api.z.ai/api/paas/v4/`
-   - **Coding Plan endpoint**: `https://api.z.ai/api/coding/paas/v4` (for user's subscription)
-   - **Model**: `glm-5` (ALL examples in docs use glm-5!)
-   - Auth: Bearer token
-
-2. **Moltis Configuration**: `config/moltis.toml` lines 80-166
-   - Available providers: anthropic, openai, gemini, groq, xai, deepseek, mistral, openrouter, cerebras, minimax, moonshot, venice, ollama, local-llm, openai-codex, github-copilot, kimi-code
-   - **GLM is NOT in this list** - must use `[providers.openai]` with custom `base_url`
-
-3. **Previous Session Findings**: `.tmp/current/moltis-runtime-diagnosis.md`
-   - Root cause analysis of black screen and Telegram issues
-
----
-
-## Why This Fix Works
-
-1. **Moltis recognizes `[providers.openai]`** as a valid provider
-2. **`base_url` parameter** allows using any OpenAI-compatible API
-3. **Z.ai Coding Plan API is OpenAI-compatible** at `https://api.z.ai/api/coding/paas/v4`
-4. **Same `api_key`** - just move from `[providers.glm-coding]` to `[providers.openai]`
-5. **Correct model** - `glm-5` for Pro subscription (as shown in all Z.ai docs examples)
-6. **Same endpoint** - `/api/coding/paas/v4` (Coding Plan specific)
-
----
-
-## Alternative Approaches (NOT RECOMMENDED)
-
-### Option B: OpenRouter Gateway
-Use OpenRouter to access GLM models:
-```toml
-[providers.openrouter]
-enabled = true
-api_key = "${OPENROUTER_API_KEY}"
-model = "zhipu/glm-4-plus"  # Through OpenRouter
-base_url = "https://openrouter.ai/api/v1"
-```
-**Cons**: Extra latency, another dependency, costs
-
-### Option C: Switch to OpenClaw
-Complete rewrite to use OpenClaw instead of Moltis.
-**Cons**: Major project rework, lost work
+**Детали в**: [agent-factory-lifecycle.md](./agent-factory-lifecycle.md)

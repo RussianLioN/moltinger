@@ -408,9 +408,9 @@ sandbox_image = "browserless/chrome"
 
 [skills]
 enabled = true                    # Enable skills system
-search_paths = []                 # Additional directories to search for skills
+search_paths = ["/server/skills"] # Additional directories to search for skills
                                   # Default locations: ~/.config/moltis/skills/, ./skills/
-auto_load = []                    # Skills to always load without explicit activation
+auto_load = ["telegram-learner"]  # Skills to always load without explicit activation
                                   # Example: ["code-review", "commit"]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -568,6 +568,12 @@ session_export = false
 # base_url = "http://localhost:11434/v1"  # API endpoint for embeddings
 # model = "nomic-embed-text"      # Embedding model name
 # api_key = "..."                 # API key (optional for local endpoints like Ollama)
+
+# Knowledge base directories for RAG (semantic search)
+# watch_dirs = [
+#   "~/.moltis/memory",           # Default memory location
+#   "/server/knowledge",          # Project knowledge base
+# ]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CHANNELS
