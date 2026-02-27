@@ -351,6 +351,79 @@ UAT CHECKLIST:
 
 ---
 
+---
+
+## Incident #002: GitOps Violation - scp Upload (2026-02-27)
+
+**Ситуация**:
+Claude Code загрузил скрипт на сервер через `scp` вместо git push.
+
+```bash
+# ❌ НЕПРАВИЛЬНО (сделано):
+scp /tmp/test-moltis-api.sh root@ainetic.tech:/opt/moltinger/scripts/
+
+# ✅ ПРАВИЛЬНО (надо было):
+mv /tmp/test-moltis-api.sh scripts/
+git add scripts/test-moltis-api.sh
+git commit -m "feat: add Moltis API test script"
+git push  # → CI/CD деплоит на сервер
+```
+
+**Почему это нарушение**:
+- Нет audit trail (кто, когда, зачем)
+- Bypass CI/CD validation
+- Server state ≠ git state (configuration drift)
+- Невозможен автоматический rollback
+
+**Root Cause**:
+Claude Code "забыл" о GitOps принципах в момент реализации.
+
+**Prevention (внедрено)**:
+1. Добавить в MEMORY.md явное напоминание
+2. Перед любой командой ssh/scp — проверять: "Это в git?"
+
+---
+
+### Pre-Flight Check для ssh/scp
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PRE-FLIGHT CHECK                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Хочу выполнить: ssh/scp команду                            │
+│                     │                                        │
+│                     ▼                                        │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Вопрос: Файл уже в git?                              │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                     │                                        │
+│         ┌───────────┴───────────┐                          │
+│         ▼                       ▼                          │
+│        ДА                      НЕТ                          │
+│         │                       │                          │
+│         ▼                       ▼                          │
+│  Push → CI/CD            Сначала git add/commit            │
+│  (автодеплой)            Потом push → CI/CD                │
+│                                                             │
+│  ⛔ НИКОГДА: scp/ssh для изменения файлов                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Разрешённые ssh операции
+
+| Действие | Разрешено? | Почему |
+|----------|------------|--------|
+| `ssh server "docker logs"` | ✅ Да | Read-only, не меняет state |
+| `ssh server "cat file"` | ✅ Да | Read-only |
+| `ssh server "rm file"` | ❌ НЕТ | Меняет state → через git |
+| `scp file server:/path/` | ❌ НЕТ | Меняет state → через git |
+| `ssh server "git pull"` | ✅ Да | GitOps-compliant |
+
+---
+
 *Document created: 2026-02-17*
-*Last updated: 2026-02-17*
+*Last updated: 2026-02-27*
 *Incident resolved: ✅ Tavily MCP working*
+*New incident added: ⚠️ GitOps violation documented*
