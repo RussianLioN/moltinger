@@ -364,6 +364,16 @@ This project runs with sandbox mode enabled. The sandbox isolates Bash commands 
 3. **NEVER** attempt to read blocked files (`.env`, `secrets/`, `provider_keys.json`) — they are denied by policy
 4. For file deletion, use safe scripts or request confirmation — `rm -rf` is blocked
 
+*Sandbox Workarounds*:
+- **Heredoc blocked**: Shell heredoc (`<<'EOF'`) creates temp files in blocked system directories
+- **Solution**: Use file-based approach for multi-line content:
+  ```bash
+  # Write to allowed temp directory
+  echo "commit message" > /tmp/claude/msg.txt
+  # Use -F flag to read from file
+  git commit -F /tmp/claude/msg.txt
+  ```
+
 *Verification*: Run `/config` to confirm sandbox and permission settings are active.
 
 **MCP Configuration**:
