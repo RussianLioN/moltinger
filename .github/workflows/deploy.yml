@@ -211,7 +211,12 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
           scp -r config/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/
 
-          echo "Configuration synced successfully (docker-compose.yml + config/)"
+          # Sync scripts directory (GitOps compliance - incident #002)
+          # All server scripts must come from git, not manual scp
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
+          scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
+
+          echo "Configuration synced successfully (docker-compose.yml + config/ + scripts/)"
           echo "::endgroup::"
 
       # ===========================================
