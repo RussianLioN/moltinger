@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-02-27
+
+### Added
+- **ci**: add scripts/ to GitOps sync (P0-3) + workflow edit permission (c74ce8e)
+- **security**: add GitOps enforcement - P0 recommendations (1133cd6)
+- **permissions**: add Context7 MCP to allowlist (b9c8db7)
+- **scripts**: add Moltis API test script + GitOps lessons (7e1ccfb)
+- **security**: enable sandbox mode with Zero Trust permissions (27041d2)
+- **moltis**: add self-learning infrastructure (022ea93)
+- **config**: add system prompt (soul) for GLM-5 (moltinger-z7k) (a0f13ee)
+
+### Fixed
+- **sandbox**: allow ssh for automated testing (86783ee)
+- **sandbox**: allow git push for automated scripts (cd3c38c)
+- **sandbox**: allow .env.example and templates in deny list (8626692)
+- **settings**: merge duplicate 'ask' keys in permissions (b9ed51d)
+- **ci**: add concurrency control to prevent parallel deploys (moltinger-9q3) (66c559d)
+
+### Other
+- create unified GitOps & Infrastructure roadmap (bc9933d)
+- update docs (bb871d2)
+- **sandbox**: add heredoc workaround instructions (1b2da3b)
+
 ## [1.6.0] - 2026-02-17
 
 ### Security

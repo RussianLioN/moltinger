@@ -2,6 +2,32 @@
 
 User-facing release notes for all versions.
 
+## v1.7.0
+
+_Released on 2026-02-27_
+
+### ✨ New Features
+
+- **CI/CD**: Add scripts/ to GitOps sync (P0-3) + workflow edit permission
+- **Security**: Add GitOps enforcement - P0 recommendations
+- **permissions**: Add Context7 MCP to allowlist
+- **scripts**: Add Moltis API test script + GitOps lessons
+- **Security**: Enable sandbox mode with Zero Trust permissions
+- **moltis**: Add self-learning infrastructure
+- **config**: Add system prompt (soul) for GLM-5 (moltinger-z7k)
+
+### 🐛 Bug Fixes
+
+- **sandbox**: Allow ssh for automated testing
+- **sandbox**: Allow git push for automated scripts
+- **sandbox**: Allow .env.example and templates in deny list
+- **settings**: Merge duplicate 'ask' keys in permissions
+- **CI/CD**: Add concurrency control to prevent parallel deploys (moltinger-9q3)
+
+---
+
+_This release was automatically generated from 15 commits._
+
 ## v1.6.0
 
 _Released on 2026-02-17_
