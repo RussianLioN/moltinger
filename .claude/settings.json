@@ -2,5 +2,33 @@
   "plansDirectory": "./docs/plans",
   "env": {
     "ENABLE_TOOL_SEARCH": "auto:5"
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": ["docker", "git"]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(npm run lint)",
+      "Bash(npm run test)",
+      "Bash(bd *)",
+      "WebFetch",
+      "Read"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(docker build *)"
+    ],
+    "deny": [
+      "Read(./.env*)",
+      "Read(./secrets/**)",
+      "Read(./config/credentials.json)",
+      "Read(./config/provider_keys.json)",
+      "Bash(rm -rf *)",
+      "Edit(./.github/workflows/**)"
+    ]
   }
 }

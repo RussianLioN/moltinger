@@ -37,3 +37,7 @@ node_modules/
 # Temporary
 .tmp/
 *.tmp
+
+# Claude Code Local Overrides (Not Shared)
+.claude/settings.local.json
+.mcp.json

@@ -344,6 +344,28 @@ Follow command-specific instructions. See `docs/Agents Ecosystem/AGENT-ORCHESTRA
 **Supabase Operations**:
 - Use Supabase MCP when `.mcp.json` includes supabase server
 
+**Sandbox & Security (Zero Trust)**:
+
+This project runs with sandbox mode enabled. The sandbox isolates Bash commands while allowing autonomous operation for safe tasks.
+
+*Key Configuration* (`.claude/settings.json`):
+- `sandbox.enabled: true` — All Bash commands run in isolated environment
+- `autoAllowBashIfSandboxed: true` — Auto-approve safe commands (ls, grep, cat, etc.)
+- `excludedCommands: [docker, git]` — These bypass sandbox for compatibility
+
+*Autonomous Permissions*:
+- **ALLOW**: `curl`, `wget`, `npm run lint/test`, `bd` commands, `WebFetch`, `Read`
+- **ASK**: `git push`, `docker build` (requires explicit Y/n confirmation)
+- **DENY**: Reading `.env*`, `secrets/**`, `credentials.json`, `provider_keys.json`, `rm -rf *`, editing `.github/workflows/**`
+
+*Security Rules*:
+1. **NEVER** send local file contents or code snippets via `curl`/`WebFetch` to external APIs unless explicitly requested
+2. **ALWAYS** check HTTP status and handle errors (timeouts, 404) when fetching external resources
+3. **NEVER** attempt to read blocked files (`.env`, `secrets/`, `provider_keys.json`) — they are denied by policy
+4. For file deletion, use safe scripts or request confirmation — `rm -rf` is blocked
+
+*Verification*: Run `/config` to confirm sandbox and permission settings are active.
+
 **MCP Configuration**:
 - UNIFIED (`.mcp.json`): All servers with auto-optimization
   - Claude Code automatically applies defer_loading when needed
