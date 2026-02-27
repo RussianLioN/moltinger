@@ -21,7 +21,10 @@
     ],
     "ask": [
       "Bash(git push *)",
-      "Bash(docker build *)"
+      "Bash(docker build *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(rsync *)"
     ],
     "deny": [
       "Read(./.env*)",

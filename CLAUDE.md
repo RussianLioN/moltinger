@@ -364,6 +364,32 @@ This project runs with sandbox mode enabled. The sandbox isolates Bash commands 
 3. **NEVER** attempt to read blocked files (`.env`, `secrets/`, `provider_keys.json`) — they are denied by policy
 4. For file deletion, use safe scripts or request confirmation — `rm -rf` is blocked
 
+*SSH/SCP Blocking Rule (GitOps Compliance)*:
+
+⛔ **MANDATORY PRE-EXECUTION CHECK** before ANY ssh/scp command:
+
+```
+BEFORE ssh/scp → ASK YOURSELF:
+│
+├── Is this a READ operation?
+│   ├── ssh server "cat file" → ✅ ALLOW (read-only)
+│   ├── ssh server "docker logs" → ✅ ALLOW (read-only)
+│   └── ssh server "ls -la" → ✅ ALLOW (read-only)
+│
+├── Is this a WRITE operation?
+│   ├── scp file server:/path/ → ❌ BLOCK
+│   ├── ssh server "echo > file" → ❌ BLOCK
+│   ├── ssh server "rm file" → ❌ BLOCK
+│   └── rsync file server:/path/ → ❌ BLOCK
+│
+└── IF WRITE → STOP and use GitOps instead:
+    1. Add file to git repo
+    2. git commit + push
+    3. Let CI/CD deploy to server
+```
+
+**Violation Consequence**: Configuration drift, no audit trail, no rollback capability.
+
 *Sandbox Workarounds*:
 - **Heredoc blocked**: Shell heredoc (`<<'EOF'`) creates temp files in blocked system directories
 - **Solution**: Use file-based approach for multi-line content:
