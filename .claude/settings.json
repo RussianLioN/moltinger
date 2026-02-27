@@ -6,7 +6,7 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
-    "excludedCommands": ["docker", "git"]
+    "excludedCommands": ["docker", "git", "ssh", "scp", "rsync"]
   },
   "permissions": {
     "allow": [
@@ -24,7 +24,8 @@
       "Bash(docker build *)",
       "Bash(ssh *)",
       "Bash(scp *)",
-      "Bash(rsync *)"
+      "Bash(rsync *)",
+      "Edit(./.github/workflows/**)"
     ],
     "deny": [
       "Read(./.env*)",
@@ -32,9 +33,6 @@
       "Read(./config/credentials.json)",
       "Read(./config/provider_keys.json)",
       "Bash(rm -rf *)"
-    ],
-    "ask": [
-      "Edit(./.github/workflows/**)"
     ]
   }
 }

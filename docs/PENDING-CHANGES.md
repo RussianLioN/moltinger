@@ -41,7 +41,8 @@
 |---|----------|--------|
 | P0-1 | ssh/scp в ASK list (settings.json) | ✅ DONE |
 | P0-2 | Blocking rule в CLAUDE.md | ✅ DONE |
-| P0-3 | scripts/ в CI/CD sync | ⏳ PENDING (защита .github/) |
+| P0-3 | scripts/ в CI/CD sync | ✅ DONE (commit c74ce8e) |
+| P0-4 | Fix duplicate `ask` key in settings.json | ✅ DONE (this commit) |
 
 ---
 
