@@ -16,7 +16,8 @@
       "Bash(npm run test)",
       "Bash(bd *)",
       "WebFetch",
-      "Read"
+      "Read",
+      "mcp__context7__*"
     ],
     "ask": [
       "Bash(git push *)",
