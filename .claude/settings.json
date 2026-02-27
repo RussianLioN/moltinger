@@ -15,13 +15,13 @@
       "Bash(npm run lint)",
       "Bash(npm run test)",
       "Bash(bd *)",
+      "Bash(ssh *)",
       "WebFetch",
       "Read",
       "mcp__context7__*"
     ],
     "ask": [
       "Bash(docker build *)",
-      "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(rsync *)",
       "Edit(./.github/workflows/**)"
