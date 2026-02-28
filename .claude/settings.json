@@ -22,8 +22,18 @@
           "/Users/rl/.npm/_logs",
           "/Users/rl/.claude/debug",
           "/Users/rl/.beads",
+          "/Users/rl/.beads/",
+          "/Users/rl/.beads/**",
           ".",
           "/private/tmp/claude-501/"
+        ]
+      },
+      "read": {
+        "allowOnly": [
+          "/Users/rl/.beads",
+          "/Users/rl/.beads/",
+          "/Users/rl/.beads/**",
+          "."
         ]
       }
     }
