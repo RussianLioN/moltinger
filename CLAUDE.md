@@ -364,6 +364,13 @@ This project runs with sandbox mode enabled. The sandbox isolates Bash commands 
 3. **NEVER** attempt to read blocked files (`.env`, `secrets/`, `provider_keys.json`) — they are denied by policy
 4. For file deletion, use safe scripts or request confirmation — `rm -rf` is blocked
 
+*File Operation Safety (Incident 2026-02-28)*:
+1. **NEVER delete a file without reading it first** — if sandbox blocks reading, ASK USER
+2. **NEVER exceed scope of user request** — answer exactly what was asked
+3. **ALWAYS check file usage before deletion**: `grep -r "filename" . --include="*.toml"`
+4. **ALWAYS ask when uncertain** — sandbox blocking = uncertainty = ASK USER
+5. **File Deletion Protocol**: Read → Check usage → Ask user → Backup → Delete
+
 *SSH/SCP Blocking Rule (GitOps Compliance)*:
 
 ⛔ **MANDATORY PRE-EXECUTION CHECK** before ANY ssh/scp command:

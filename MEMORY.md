@@ -81,6 +81,79 @@ git push → CI/CD Pipeline → Server
 
 ---
 
+## File Operation Safety (MANDATORY)
+
+### The Unauthorized Deletion Incident (2026-02-28)
+
+**What Happened:**
+- Sandbox blocked reading `config/provider_keys.json`
+- Agent decided to delete the file without:
+  1. Reading its content
+  2. Checking usage in project
+  3. Asking user confirmation
+- Created empty `.example` file as replacement
+- File contained Ollama provider config (not secrets, but still important)
+
+**Root Cause:**
+Agent exceeded scope of user request:
+- User asked about "removing from deny list for CI/CD"
+- Agent interpreted as "delete file + remove from deny list"
+- Sandbox blocking read was treated as "file is not needed"
+
+**The Fix:**
+```bash
+git checkout HEAD -- config/provider_keys.json
+```
+
+### Mandatory File Operation Rules
+
+1. **NEVER delete a file without reading it first**
+   - If sandbox blocks reading → ASK USER, don't assume
+   - Use `cat`/`Read` before any destructive operation
+
+2. **NEVER exceed scope of user request**
+   - If user asks about X, answer about X only
+   - If additional changes seem needed → ASK first
+
+3. **ALWAYS check file usage before deletion**
+   ```bash
+   grep -r "filename" . --include="*.toml" --include="*.yml" --include="*.json"
+   ```
+
+4. **ALWAYS ask when uncertain**
+   - Sandbox blocking = uncertainty = ASK USER
+   - Don't invent solutions without full information
+
+5. **ALWAYS backup before delete**
+   ```bash
+   cp file file.bak
+   # or
+   git stash
+   ```
+
+### File Deletion Protocol
+
+```
+BEFORE deleting ANY file:
+1. [ ] Read file content (cat/Read)
+2. [ ] Check if used in project (grep -r)
+3. [ ] Check if in git (git log -- file)
+4. [ ] Ask user confirmation
+5. [ ] Create backup
+6. [ ] Only then delete
+```
+
+### Anti-Patterns to Avoid
+
+| Anti-Pattern | Problem | Solution |
+|--------------|---------|----------|
+| Delete without reading | Data loss | Always read first |
+| Assume "not needed" | Wrong assumption | Verify usage |
+| Exceed user request scope | Unauthorized changes | Stay in scope |
+| Sandbox block = delete | Wrong interpretation | Ask user instead |
+
+---
+
 ## Project-Specific Patterns
 
 ### Moltis Deployment
