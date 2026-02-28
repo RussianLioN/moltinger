@@ -24,7 +24,7 @@ env:
 
 jobs:
   # ===========================================
-  # Gate 1: Pre-flight Validation
+  # Gate 1: Pre-flight Validation (P2-6)
   # ===========================================
   preflight:
     name: Pre-flight Validation
@@ -32,6 +32,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       all_passed: ${{ steps.summary.outputs.all_passed }}
+      preflight_status: ${{ steps.preflight_local.outputs.status }}
 
     steps:
       - name: Checkout code
@@ -61,6 +62,26 @@ jobs:
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "::notice::Target version validated: $VERSION"
+
+      - name: Run local preflight checks
+        id: preflight_local
+        run: |
+          echo "::group::Local Pre-flight Validation (P2-6)"
+          chmod +x scripts/preflight-check.sh
+
+          # Run preflight checks in JSON mode for parsing
+          if ./scripts/preflight-check.sh --json --strict > /tmp/preflight-result.json 2>&1; then
+            echo "status=pass" >> $GITHUB_OUTPUT
+            echo "::notice::All local preflight checks passed ✅"
+            cat /tmp/preflight-result.json | jq .
+          else
+            EXIT_CODE=$?
+            echo "status=fail" >> $GITHUB_OUTPUT
+            echo "::error::Local preflight checks failed (exit: $EXIT_CODE)"
+            cat /tmp/preflight-result.json | jq . || cat /tmp/preflight-result.json
+            exit 4
+          fi
+          echo "::endgroup::"
 
   # ===========================================
   # Gate 2: GitOps Compliance Check

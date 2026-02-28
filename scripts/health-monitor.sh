@@ -1,6 +1,7 @@
 #!/bin/bash
 # Moltis Self-Healing Health Monitor
 # Monitors container health and triggers recovery actions
+# Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
 
 set -euo pipefail
 
@@ -14,19 +15,51 @@ MAX_RESTARTS=3
 RESTART_WINDOW=300  # 5 minutes
 HEALTH_CHECK_INTERVAL=60
 
-# Ensure log directory exists
-mkdir -p "$LOG_DIR"
+# Output format flags
+OUTPUT_JSON=false
+NO_COLOR=false
+RUN_ONCE=false
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Ensure log directory exists (with fallback for non-root)
+if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+    LOG_DIR="/tmp/moltis"
+    LOG_FILE="$LOG_DIR/health-monitor.log"
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+fi
+
+# Disable colors if requested or if output is not a terminal
+disable_colors() {
+    if [[ "$NO_COLOR" == "true" || "$OUTPUT_JSON" == "true" || ! -t 1 ]]; then
+        RED=''
+        GREEN=''
+        YELLOW=''
+        NC=''
+    fi
+}
 
 # Logging functions
 log() {
     local level="$1"
     shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" | tee -a "$LOG_FILE"
+    if [[ "$OUTPUT_JSON" != "true" ]]; then
+        echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] ${NC}$*${NC}" | tee -a "$LOG_FILE"
+    fi
 }
 
 log_info() { log "INFO" "$@"; }
-log_warn() { log "WARN" "$@"; }
-log_error() { log "ERROR" "$@"; }
+log_warn() { log "WARN" "${YELLOW}$*${NC}"; }
+log_error() { log "ERROR" "${RED}$*${NC}"; }
+
+# Get ISO8601 timestamp
+get_timestamp() {
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
 
 # Alerting function
 send_alert() {
@@ -208,8 +241,124 @@ check_memory() {
     return 0
 }
 
+# Get container uptime in seconds
+get_container_uptime() {
+    local container="$1"
+    local started_at
+    started_at=$(docker inspect --format='{{.State.StartedAt}}' "$container" 2>/dev/null | tr -d '\n' || echo "")
+
+    if [[ -z "$started_at" ]]; then
+        echo "0"
+        return
+    fi
+
+    # Parse ISO timestamp and calculate uptime
+    local started_epoch
+    started_epoch=$(date -d "$started_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${started_at%%.*}" +%s 2>/dev/null || echo "0")
+
+    if [[ "$started_epoch" == "0" ]]; then
+        echo "0"
+    else
+        echo $(( $(date +%s) - started_epoch ))
+    fi
+}
+
+# Output health status in JSON format
+output_health_json() {
+    local overall_status="healthy"
+    declare -a services_json
+    declare -a alerts_json
+
+    # Check moltis container (strip newlines for clean JSON)
+    local moltis_health
+    moltis_health=$(docker inspect --format='{{.State.Health.Status}}' moltis 2>/dev/null | tr -d '\n\r' || echo "unknown")
+    local moltis_uptime
+    moltis_uptime=$(get_container_uptime "moltis")
+
+    if [[ "$moltis_health" != "healthy" ]]; then
+        overall_status="unhealthy"
+    fi
+
+    services_json+=("{\"name\":\"moltis\",\"status\":\"$moltis_health\",\"uptime_seconds\":$moltis_uptime,\"health_endpoint\":\"http://localhost:13131/health\"}")
+
+    # Check watchtower container if exists
+    if docker ps --format '{{.Names}}' | grep -q '^watchtower$'; then
+        local watchtower_health="healthy"  # watchtower doesn't have health checks
+        local watchtower_uptime
+        watchtower_uptime=$(get_container_uptime "watchtower")
+        services_json+=("{\"name\":\"watchtower\",\"status\":\"$watchtower_health\",\"uptime_seconds\":$watchtower_uptime}")
+    fi
+
+    # Build JSON output
+    local services_array
+    services_array=$(printf '%s\n' "${services_json[@]}" | jq -s '.')
+    local alerts_array="[]"
+
+    jq -n \
+        --arg status "$overall_status" \
+        --arg timestamp "$(get_timestamp)" \
+        --argjson services "$services_array" \
+        --argjson alerts "$alerts_array" \
+        '{
+            status: $status,
+            timestamp: $timestamp,
+            services: $services,
+            alerts: $alerts
+        }'
+}
+
+# Single health check (for --once mode)
+run_single_check() {
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        output_health_json
+    else
+        echo "=== Health Check: $(date) ==="
+        echo ""
+
+        # Check moltis
+        local moltis_health
+        moltis_health=$(docker inspect --format='{{.State.Health.Status}}' moltis 2>/dev/null || echo "unknown")
+        local moltis_uptime
+        moltis_uptime=$(get_container_uptime "moltis")
+
+        echo "Moltis:"
+        echo "  Status: $moltis_health"
+        echo "  Uptime: ${moltis_uptime}s"
+        echo "  Health: http://localhost:13131/health"
+
+        # HTTP check
+        if check_http_health "http://localhost:13131/health"; then
+            echo "  HTTP: OK"
+        else
+            echo "  HTTP: FAILED"
+        fi
+        echo ""
+
+        # Check watchtower
+        if docker ps --format '{{.Names}}' | grep -q '^watchtower$'; then
+            local watchtower_uptime
+            watchtower_uptime=$(get_container_uptime "watchtower")
+            echo "Watchtower:"
+            echo "  Status: running"
+            echo "  Uptime: ${watchtower_uptime}s"
+            echo ""
+        fi
+
+        # System resources
+        echo "System:"
+        check_disk_space 90 && echo "  Disk: OK" || echo "  Disk: WARNING"
+        check_memory 90 && echo "  Memory: OK" || echo "  Memory: WARNING"
+    fi
+}
+
 # Main monitoring loop
 main() {
+    # Handle --once mode
+    if [[ "$RUN_ONCE" == "true" ]]; then
+        run_single_check
+        exit 0
+    fi
+
     log_info "Starting Moltis health monitor"
     log_info "Check interval: ${HEALTH_CHECK_INTERVAL}s"
     log_info "Max restarts: ${MAX_RESTARTS} per ${RESTART_WINDOW}s window"
@@ -249,6 +398,69 @@ main() {
         sleep "$HEALTH_CHECK_INTERVAL"
     done
 }
+
+# Show help
+show_help() {
+    cat << EOF
+Moltis Self-Healing Health Monitor
+
+Usage:
+    $0 [OPTIONS]
+
+Options:
+    --json          Output in JSON format (for CI/AI parsing)
+    --no-color      Disable colored output
+    --once          Check once and exit (no monitoring loop)
+    --interval SEC  Check interval in seconds (default: 60)
+    -h, --help      Show this help message
+
+Exit Codes:
+    0 - All checks passed
+    1 - Health check failed
+
+Examples:
+    $0                    # Start monitoring loop
+    $0 --once             # Single health check
+    $0 --once --json      # Single check with JSON output
+
+Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            OUTPUT_JSON=true
+            NO_COLOR=true
+            shift
+            ;;
+        --no-color)
+            NO_COLOR=true
+            shift
+            ;;
+        --once)
+            RUN_ONCE=true
+            shift
+            ;;
+        --interval)
+            HEALTH_CHECK_INTERVAL="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# Apply color settings
+disable_colors
 
 # Signal handlers
 cleanup() {

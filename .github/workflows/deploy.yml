@@ -162,7 +162,7 @@ jobs:
           echo "> Note: Drift will be auto-corrected during deployment" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
-  # Pre-flight checks and validation
+  # Pre-flight checks and validation (P2-6)
   # ===========================================
   preflight:
     name: Pre-flight Checks
@@ -170,6 +170,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       should_deploy: ${{ steps.validate.outputs.should_deploy }}
+      preflight_passed: ${{ steps.preflight.outputs.passed }}
 
     steps:
       - name: Checkout code
@@ -207,6 +208,26 @@ jobs:
           fi
 
           echo "::notice::All preflight checks passed"
+
+      - name: Run preflight validation script
+        id: preflight
+        if: steps.validate.outputs.should_deploy == 'true'
+        run: |
+          echo "::group::Pre-flight Validation (P2-6)"
+          chmod +x scripts/preflight-check.sh
+
+          # Run preflight checks in JSON mode for parsing
+          if ./scripts/preflight-check.sh --json --strict > /tmp/preflight-result.json 2>&1; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "::notice::All preflight checks passed ✅"
+            cat /tmp/preflight-result.json | jq .
+          else
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "::error::Preflight checks failed"
+            cat /tmp/preflight-result.json | jq .
+            exit 4
+          fi
+          echo "::endgroup::"
 
       - name: Validate scripts manifest (IaC)
         run: |

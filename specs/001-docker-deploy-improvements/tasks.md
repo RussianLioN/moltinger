@@ -89,7 +89,8 @@
   → Writes to /var/lib/node_exporter/textfile_dir/moltis_backup.prom
 - [X] T013 [US1] Create backup status file at end of backup in `/var/lib/moltis/backup-status.json`
   → JSON status file with backup_id, timestamp, size, checksum
-- [ ] T014 [US1] Update Makefile with `backup-enable` and `backup-disable` targets
+- [X] T014 [US1] Update Makefile with `backup-enable` and `backup-disable` targets
+  → Artifacts: [Makefile](Makefile) - backup-enable, backup-disable, backup-status targets
 
 **Checkpoint**: Automated daily backups functional, S3 upload working
 
@@ -136,8 +137,10 @@
   → Artifacts: [docker-compose.yml](docker-compose.yml) - watchtower:v1.7.1
 - [X] T025 [P] [US3] Pin Watchtower image version in `docker-compose.prod.yml`
   → Artifacts: [docker-compose.prod.yml](docker-compose.prod.yml) - watchtower:v1.7.1
-- [ ] T026 [US3] Document version update process in `docs/version-update.md`
-- [ ] T027 [US3] Add Makefile target `version-check` to list current versions
+- [X] T026 [US3] Document version update process in `docs/version-update.md`
+  → Artifacts: [version-update.md](docs/version-update.md) - 165 lines of documentation
+- [X] T027 [US3] Add Makefile target `version-check` to list current versions
+  → Artifacts: [Makefile](Makefile) - version-check target
 
 **Checkpoint**: All images pinned, predictable deployments
 
@@ -172,9 +175,12 @@
 
 ### Implementation for User Story 5
 
-- [ ] T032 [P] [US5] Add --json flag to deploy.sh in `scripts/deploy.sh`
-- [ ] T033 [P] [US5] Add --no-color flag to deploy.sh in `scripts/deploy.sh`
-- [ ] T034 [P] [US5] Add --json flag to health-monitor.sh in `scripts/health-monitor.sh`
+- [X] T032 [P] [US5] Add --json flag to deploy.sh in `scripts/deploy.sh`
+  → Artifacts: [deploy.sh](scripts/deploy.sh) - JSON output for deploy/rollback/status
+- [X] T033 [P] [US5] Add --no-color flag to deploy.sh in `scripts/deploy.sh`
+  → Artifacts: [deploy.sh](scripts/deploy.sh) - --no-color for CI/CD logs
+- [X] T034 [P] [US5] Add --json flag to health-monitor.sh in `scripts/health-monitor.sh`
+  → Artifacts: [health-monitor.sh](scripts/health-monitor.sh) - JSON health status
 - [ ] T035 [US5] Create JSON output format documentation in `docs/json-output.md`
 
 **Checkpoint**: All scripts support structured output
@@ -189,10 +195,14 @@
 
 ### Implementation for User Story 6
 
-- [ ] T036 [US6] Implement preflight-check.sh with secrets validation in `scripts/preflight-check.sh`
-- [ ] T037 [US6] Add --json output support to preflight-check.sh
-- [ ] T038 [US6] Add preflight job to deploy.yml workflow in `.github/workflows/deploy.yml`
-- [ ] T039 [US6] Add preflight job to uat-gate.yml workflow in `.github/workflows/uat-gate.yml`
+- [X] T036 [US6] Implement preflight-check.sh with secrets validation in `scripts/preflight-check.sh`
+  → Created in Phase 1 - validates secrets, Docker, compose syntax, disk space
+- [X] T037 [US6] Add --json output support to preflight-check.sh
+  → Already has --json and --strict flags
+- [X] T038 [US6] Add preflight job to deploy.yml workflow in `.github/workflows/deploy.yml`
+  → Artifacts: [deploy.yml](.github/workflows/deploy.yml) - preflight validation step
+- [X] T039 [US6] Add preflight job to uat-gate.yml workflow in `.github/workflows/uat-gate.yml`
+  → Artifacts: [uat-gate.yml](.github/workflows/uat-gate.yml) - preflight validation step
 
 **Checkpoint**: Fail-fast on missing secrets
 
@@ -206,10 +216,14 @@
 
 ### Implementation for User Story 7
 
-- [ ] T040 [P] [US7] Create x-common-env anchor in docker-compose.yml
-- [ ] T041 [P] [US7] Create x-healthcheck anchor in docker-compose.yml
-- [ ] T042 [P] [US7] Create x-logging anchor in docker-compose.yml
-- [ ] T043 [US7] Update docker-compose.prod.yml to use anchors with overrides
+- [X] T040 [P] [US7] Create x-common-env anchor in docker-compose.yml
+  → Done in Phase 2 - x-common-env with MOLTIS_HOST, MOLTIS_NO_TLS, MOLTIS_BEHIND_PROXY
+- [X] T041 [P] [US7] Create x-healthcheck anchor in docker-compose.yml
+  → Done in Phase 2 - x-healthcheck with curl health check
+- [X] T042 [P] [US7] Create x-logging anchor in docker-compose.yml
+  → Done in Phase 2 - x-logging with json-file driver
+- [X] T043 [US7] Update docker-compose.prod.yml to use anchors with overrides
+  → Already uses anchors - verified consistency
 - [ ] T044 [US7] Document unified structure in `docs/compose-structure.md`
 
 **Checkpoint**: Unified configuration across environments

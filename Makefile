@@ -4,6 +4,7 @@
 .PHONY: help deploy stop start restart status logs backup restore health-check
 .PHONY: monitoring-up monitoring-down prometheus alertmanager grafana
 .PHONY: secrets generate-key setup clean
+.PHONY: backup-enable backup-disable backup-status version-check
 
 # Default target
 help:
@@ -20,6 +21,9 @@ help:
 	@echo "Backup & Recovery:"
 	@echo "  backup          - Create backup"
 	@echo "  backup-list     - List available backups"
+	@echo "  backup-enable   - Enable systemd backup timer"
+	@echo "  backup-disable  - Disable systemd backup timer"
+	@echo "  backup-status   - Show backup timer status"
 	@echo "  restore FILE    - Restore from backup file"
 	@echo "  generate-key    - Generate encryption key"
 	@echo ""
@@ -38,6 +42,9 @@ help:
 	@echo "Health:"
 	@echo "  health-check    - Run health check"
 	@echo "  health-monitor  - Start health monitor daemon"
+	@echo ""
+	@echo "Version:"
+	@echo "  version-check   - Show current Docker image versions"
 
 # ========================================================================
 # DEPLOYMENT
@@ -71,6 +78,21 @@ backup:
 backup-list:
 	@./scripts/backup-moltis-enhanced.sh list
 
+backup-enable: ## Enable systemd backup timer
+	sudo cp systemd/moltis-backup.timer /etc/systemd/system/
+	sudo cp systemd/moltis-backup.service /etc/systemd/system/
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now moltis-backup.timer
+	@echo "Backup timer enabled (daily at 02:00)"
+
+backup-disable: ## Disable systemd backup timer
+	sudo systemctl disable --now moltis-backup.timer
+	@echo "Backup timer disabled"
+
+backup-status: ## Show backup timer status
+	systemctl list-timers moltis-backup.timer
+	systemctl status moltis-backup.service
+
 restore:
 	@if [ -z "$(FILE)" ]; then \
 		echo "Usage: make restore FILE=/path/to/backup.tar.gz"; \
@@ -80,6 +102,16 @@ restore:
 
 generate-key:
 	@./scripts/backup-moltis-enhanced.sh generate-key
+
+# ========================================================================
+# VERSION MANAGEMENT
+# ========================================================================
+
+version-check: ## Show current Docker image versions
+	@echo "Moltis version:"
+	@grep -E 'image:.*moltis' docker-compose.yml docker-compose.prod.yml | head -2
+	@echo "\nWatchtower version:"
+	@grep -E 'image:.*watchtower' docker-compose.yml docker-compose.prod.yml | head -2
 
 # ========================================================================
 # MONITORING

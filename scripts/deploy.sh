@@ -1,7 +1,8 @@
 #!/bin/bash
 # Moltis Deployment Script
-# Version: 2.1
+# Version: 2.2
 # Features: Blue-green deployment, health checks, rollback, notifications, GitOps guards
+# Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
 
 set -euo pipefail
 
@@ -27,16 +28,38 @@ HEALTH_CHECK_TIMEOUT=300
 HEALTH_CHECK_INTERVAL=10
 ROLLBACK_ENABLED=true
 
-# Colors for output
+# Output format flags
+OUTPUT_JSON=false
+NO_COLOR=false
+
+# Colors for output (will be disabled if --no-color or OUTPUT_JSON)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# JSON output state
+declare -a JSON_ERRORS
+declare -a JSON_SERVICES
+DEPLOY_START_TIME=0
+DEPLOY_ACTION=""
+DEPLOY_IMAGE=""
+
 # ========================================================================
 # UTILITY FUNCTIONS
 # ========================================================================
+
+# Disable colors if requested or if output is not a terminal
+disable_colors() {
+    if [[ "$NO_COLOR" == "true" || "$OUTPUT_JSON" == "true" || ! -t 1 ]]; then
+        RED=''
+        GREEN=''
+        YELLOW=''
+        BLUE=''
+        NC=''
+    fi
+}
 
 log() {
     local level="$1"
@@ -44,6 +67,11 @@ log() {
     local message="$*"
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    # Skip colored output if JSON mode
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        return
+    fi
 
     case "$level" in
         INFO)  echo -e "${BLUE}[$timestamp] [INFO]${NC} $message" ;;
@@ -55,8 +83,61 @@ log() {
 
 log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
-log_error() { log "ERROR" "$@"; }
+log_error() { log "ERROR" "$@"; JSON_ERRORS+=("$1"); }
 log_success() { log "SUCCESS" "$@"; }
+
+# JSON output functions
+get_timestamp() {
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+output_json_result() {
+    local status="$1"
+    local action="$2"
+    local health="$3"
+    local duration_ms=0
+
+    if [[ $DEPLOY_START_TIME -gt 0 ]]; then
+        duration_ms=$(( ($(date +%s) - DEPLOY_START_TIME) * 1000 ))
+    fi
+
+    # Build services array
+    local services_json="[]"
+    if [[ ${#JSON_SERVICES[@]} -gt 0 ]]; then
+        services_json=$(printf '%s\n' "${JSON_SERVICES[@]}" | jq -s '.')
+    fi
+
+    # Build errors array
+    local errors_json="[]"
+    if [[ ${#JSON_ERRORS[@]} -gt 0 ]]; then
+        errors_json=$(printf '%s\n' "${JSON_ERRORS[@]}" | jq -R '{code: "DEPLOY_ERROR", message: .}' | jq -s '.')
+    fi
+
+    # Build details object
+    local details="{}"
+    if [[ -n "$DEPLOY_IMAGE" ]]; then
+        details=$(jq -n \
+            --arg image "$DEPLOY_IMAGE" \
+            --argjson duration "$duration_ms" \
+            --arg health "$health" \
+            --argjson services "$services_json" \
+            '{image: $image, duration_ms: $duration, health: $health, services: $services}')
+    fi
+
+    jq -n \
+        --arg status "$status" \
+        --arg timestamp "$(get_timestamp)" \
+        --arg action "$action" \
+        --argjson details "$details" \
+        --argjson errors "$errors_json" \
+        '{
+            status: $status,
+            timestamp: $timestamp,
+            action: $action,
+            details: $details,
+            errors: $errors
+        }'
+}
 
 # Check prerequisites
 check_prerequisites() {
@@ -273,6 +354,8 @@ send_notification() {
 
 cmd_deploy() {
     local environment="${1:-production}"
+    DEPLOY_ACTION="deploy"
+    DEPLOY_START_TIME=$(date +%s)
 
     # GitOps Guard: Check and confirm before deployment
     if type gitops_guard_deploy &>/dev/null; then
@@ -290,21 +373,38 @@ cmd_deploy() {
     deploy_containers
 
     if verify_deployment; then
+        DEPLOY_IMAGE=$(get_current_version)
+        JSON_SERVICES+=('"moltis"')
+        JSON_SERVICES+=('"watchtower"')
+
         log_success "=========================================="
         log_success "Deployment completed successfully!"
         log_success "=========================================="
         send_notification "success" "Deployment completed successfully"
+
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            output_json_result "success" "deploy" "healthy"
+        fi
     else
         log_error "Deployment verification failed!"
+        local health_status="unhealthy"
         if [[ "$ROLLBACK_ENABLED" == "true" ]]; then
             rollback
+            health_status="rolled_back"
             send_notification "failure" "Deployment failed, rolled back"
+        fi
+
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            output_json_result "failure" "deploy" "$health_status"
         fi
         exit 1
     fi
 }
 
 cmd_rollback() {
+    DEPLOY_ACTION="rollback"
+    DEPLOY_START_TIME=$(date +%s)
+
     log_info "=========================================="
     log_info "Starting Rollback"
     log_info "=========================================="
@@ -312,35 +412,82 @@ cmd_rollback() {
     rollback
 
     if verify_deployment; then
+        DEPLOY_IMAGE=$(get_current_version)
+        JSON_SERVICES+=('"moltis"')
+
         log_success "Rollback completed successfully!"
         send_notification "warning" "Deployment rolled back"
+
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            output_json_result "success" "rollback" "healthy"
+        fi
     else
         log_error "Rollback verification failed!"
+
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            output_json_result "failure" "rollback" "unhealthy"
+        fi
         exit 1
     fi
 }
 
 cmd_status() {
-    log_info "Deployment Status"
-    echo ""
+    DEPLOY_ACTION="status"
 
-    echo "Container Status:"
-    docker ps -a --filter "name=moltis" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-    echo ""
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        local health="unknown"
+        local image=""
+        local uptime=0
 
-    echo "Health Status:"
-    docker inspect moltis --format='Health: {{.State.Health.Status}}' 2>/dev/null || echo "Not available"
-    echo ""
+        # Get container health (strip newlines)
+        health=$(docker inspect --format='{{.State.Health.Status}}' moltis 2>/dev/null | tr -d '\n' || echo "not_found")
+        image=$(docker inspect --format='{{.Config.Image}}' moltis 2>/dev/null | tr -d '\n' || echo "")
 
-    echo "Image:"
-    echo "  Current: $(get_current_version)"
-    if [[ -f "$PROJECT_ROOT/.last-deployed-image" ]]; then
-        echo "  Previous: $(cat "$PROJECT_ROOT/.last-deployed-image")"
+        # Get uptime in seconds
+        local started_at
+        started_at=$(docker inspect --format='{{.State.StartedAt}}' moltis 2>/dev/null | tr -d '\n' || echo "")
+        if [[ -n "$started_at" ]]; then
+            local started_epoch
+            started_epoch=$(date -d "$started_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${started_at%%.*}" +%s 2>/dev/null || echo "0")
+            uptime=$(( $(date +%s) - started_epoch ))
+        fi
+
+        # Build services array
+        local services_json="[]"
+        services_json=$(jq -n \
+            --arg name "moltis" \
+            --arg status "$health" \
+            --argjson uptime "$uptime" \
+            '[{name: $name, status: $status, uptime_seconds: $uptime}]')
+
+        jq -n \
+            --arg status "$health" \
+            --arg timestamp "$(get_timestamp)" \
+            --argjson services "$services_json" \
+            --arg image "$image" \
+            '{status: $status, timestamp: $timestamp, services: $services, image: $image}'
+    else
+        log_info "Deployment Status"
+        echo ""
+
+        echo "Container Status:"
+        docker ps -a --filter "name=moltis" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo ""
+
+        echo "Health Status:"
+        docker inspect moltis --format='Health: {{.State.Health.Status}}' 2>/dev/null || echo "Not available"
+        echo ""
+
+        echo "Image:"
+        echo "  Current: $(get_current_version)"
+        if [[ -f "$PROJECT_ROOT/.last-deployed-image" ]]; then
+            echo "  Previous: $(cat "$PROJECT_ROOT/.last-deployed-image")"
+        fi
+        echo ""
+
+        echo "Recent Deploys:"
+        ls -lt /var/backups/moltis/daily/*.tar.gz* 2>/dev/null | head -5 || echo "  No backups found"
     fi
-    echo ""
-
-    echo "Recent Deploys:"
-    ls -lt /var/backups/moltis/daily/*.tar.gz* 2>/dev/null | head -5 || echo "  No backups found"
 }
 
 cmd_stop() {
@@ -383,7 +530,12 @@ cmd_logs() {
 show_usage() {
     echo "Moltis Deployment Script"
     echo ""
-    echo "Usage: $0 <command> [options]"
+    echo "Usage: $0 [OPTIONS] COMMAND"
+    echo ""
+    echo "Options:"
+    echo "  --json          Output in JSON format (for CI/AI parsing)"
+    echo "  --no-color      Disable colored output"
+    echo "  -h, --help      Show this help message"
     echo ""
     echo "Commands:"
     echo "  deploy [env]   - Deploy to environment (default: production)"
@@ -394,13 +546,49 @@ show_usage() {
     echo "  restart        - Restart services"
     echo "  logs [-f]      - Show logs (follow with -f)"
     echo ""
+    echo "Exit Codes:"
+    echo "  0 - Success"
+    echo "  1 - General error"
+    echo "  2 - Configuration error"
+    echo "  3 - Health check failed"
+    echo "  4 - Pre-flight validation failed"
+    echo "  5 - Rollback triggered"
+    echo ""
     echo "Environment Variables:"
     echo "  SLACK_WEBHOOK        - Slack webhook for notifications"
     echo "  HEALTH_CHECK_TIMEOUT - Health check timeout in seconds"
     echo "  ROLLBACK_ENABLED     - Enable automatic rollback (true/false)"
+    echo ""
+    echo "Contract: specs/001-docker-deploy-improvements/contracts/scripts.md"
 }
 
 main() {
+    # Parse global options first
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --json)
+                OUTPUT_JSON=true
+                NO_COLOR=true
+                shift
+                ;;
+            --no-color)
+                NO_COLOR=true
+                shift
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                # Not a global option, treat as command
+                break
+                ;;
+        esac
+    done
+
+    # Apply color settings
+    disable_colors
+
     local command="${1:-help}"
     shift || true
 
