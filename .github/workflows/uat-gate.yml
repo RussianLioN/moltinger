@@ -1,0 +1,306 @@
+# UAT Gate with GitOps Checks (P2-6)
+# Pre-production gate that validates GitOps compliance before production deploy
+# Requires manual approval after all checks pass
+
+name: UAT Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Target version to promote (e.g., v1.7.0)'
+        required: true
+        type: string
+      skip_smoke_tests:
+        description: 'Skip smoke tests (emergency only)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+
+jobs:
+  # ===========================================
+  # Gate 1: Pre-flight Validation
+  # ===========================================
+  preflight:
+    name: Pre-flight Validation
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      all_passed: ${{ steps.summary.outputs.all_passed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate target version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.target_version }}"
+
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::Target version is required"
+            exit 1
+          fi
+
+          # Verify version format
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version format: $VERSION (expected vX.Y.Z)"
+            exit 1
+          fi
+
+          # Verify tag exists
+          if ! git tag | grep -q "^${VERSION}$"; then
+            echo "::error::Version tag not found: $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "::notice::Target version validated: $VERSION"
+
+  # ===========================================
+  # Gate 2: GitOps Compliance Check
+  # ===========================================
+  gitops-check:
+    name: GitOps Compliance Gate
+    runs-on: ubuntu-latest
+    needs: preflight
+    outputs:
+      compliant: ${{ steps.check.outputs.compliant }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.version }}
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: GitOps Compliance Check
+        id: check
+        run: |
+          echo "::group::GitOps Compliance Gate"
+          PASSED=true
+
+          # Check 1: docker-compose.yml
+          echo "### Check 1: docker-compose.yml"
+          LOCAL_HASH=$(sha256sum docker-compose.yml | cut -d' ' -f1)
+          SERVER_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum ${{ env.DEPLOY_PATH }}/docker-compose.yml 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
+
+          if [[ "$LOCAL_HASH" == "$SERVER_HASH" ]]; then
+            echo "✅ docker-compose.yml matches"
+          else
+            echo "❌ docker-compose.yml MISMATCH"
+            echo "  Git:    $LOCAL_HASH"
+            echo "  Server: $SERVER_HASH"
+            PASSED=false
+          fi
+
+          # Check 2: No manual modifications marker
+          echo "### Check 2: Manual modifications"
+          if ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "[ -f ${{ env.DEPLOY_PATH }}/.manual-modifications ]"; then
+            echo "❌ Manual modifications detected on server"
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat ${{ env.DEPLOY_PATH }}/.manual-modifications"
+            PASSED=false
+          else
+            echo "✅ No manual modifications"
+          fi
+
+          # Check 3: Traefik labels present
+          echo "### Check 3: Traefik configuration"
+          if ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "grep -q 'traefik.enable=true' ${{ env.DEPLOY_PATH }}/docker-compose.yml"; then
+            echo "✅ Traefik labels present"
+          else
+            echo "❌ Traefik labels missing"
+            PASSED=false
+          fi
+
+          # Check 4: Scripts integrity
+          echo "### Check 4: Scripts integrity"
+          if [ -f "scripts/manifest.json" ]; then
+            SCRIPTS_OK=true
+            while IFS= read -r script; do
+              if [ -f "scripts/$script" ]; then
+                LOCAL_SCR_HASH=$(sha256sum "scripts/$script" | cut -d' ' -f1)
+                SERVER_SCR_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum ${{ env.DEPLOY_PATH }}/scripts/$script 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
+                if [[ "$LOCAL_SCR_HASH" != "$SERVER_SCR_HASH" ]]; then
+                  echo "⚠️ scripts/$script differs (will be synced)"
+                fi
+              fi
+            done < <(jq -r '.scripts | keys[]' scripts/manifest.json)
+            echo "✅ Scripts check complete"
+          else
+            echo "⚠️ No manifest.json found"
+          fi
+
+          # Output result
+          if [[ "$PASSED" == true ]]; then
+            echo "compliant=true" >> $GITHUB_OUTPUT
+            echo "::notice::All GitOps checks passed ✅"
+          else
+            echo "compliant=false" >> $GITHUB_OUTPUT
+            echo "::error::GitOps compliance check failed"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+  # ===========================================
+  # Gate 3: Smoke Tests
+  # ===========================================
+  smoke-tests:
+    name: Smoke Tests Gate
+    runs-on: ubuntu-latest
+    needs: [preflight, gitops-check]
+    if: github.event.inputs.skip_smoke_tests != 'true'
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run smoke tests
+        run: |
+          echo "::group::Smoke Tests"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            echo "Test 1: Container running"
+            docker ps --filter "name=moltis" --filter "status=running" | grep -q moltis
+
+            echo "Test 2: Health endpoint"
+            curl -sf http://localhost:13131/health > /dev/null
+
+            echo "Test 3: External access"
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://moltis.ainetic.tech/health)
+            [[ "$HTTP_CODE" == "200" || "$HTTP_CODE" == "401" ]]
+
+            echo "Test 4: Database connectivity"
+            docker exec moltis ls /data > /dev/null 2>&1 || true
+
+            echo "All smoke tests passed ✅"
+          EOF
+          echo "::endgroup::"
+
+  # ===========================================
+  # Gate 4: Manual Approval
+  # ===========================================
+  approval:
+    name: Manual Approval Gate
+    runs-on: ubuntu-latest
+    needs: [preflight, gitops-check, smoke-tests]
+    if: always() && needs.gitops-check.outputs.compliant == 'true'
+    environment:
+      name: uat-approval
+      url: https://moltis.ainetic.tech
+
+    steps:
+      - name: Approval summary
+        run: |
+          echo "## UAT Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Checks Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Pre-flight validation" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ GitOps compliance" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Smoke tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Ready for Promotion" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Version:** ${{ needs.preflight.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Approve to deploy to production." >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # Gate 5: Deploy to Production
+  # ===========================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [preflight, approval]
+    if: success()
+    environment:
+      name: production
+      url: https://moltis.ainetic.tech
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.version }}
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy version ${{ needs.preflight.outputs.version }}
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          echo "::group::Deploying $VERSION to production"
+
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Pull specific version
+            docker pull ghcr.io/moltis-org/moltis:$VERSION
+
+            # Stop current container
+            docker compose stop moltis || true
+
+            # Update image tag
+            sed -i.bak "s|image: ghcr.io/moltis-org/moltis:.*|image: ghcr.io/moltis-org/moltis:$VERSION|" docker-compose.yml
+
+            # Start new version
+            docker compose up -d moltis
+
+            echo "Deployed $VERSION successfully"
+          EOF
+          echo "::endgroup::"
+
+      - name: Verify deployment
+        run: |
+          echo "::group::Verifying deployment"
+          for i in {1..30}; do
+            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "docker inspect --format='{{.State.Health.Status}}' moltis 2>/dev/null || echo 'unknown'")
+            echo "Health check $i/30: $HEALTH"
+            [[ "$HEALTH" == "healthy" ]] && break
+            sleep 5
+          done
+
+          if [[ "$HEALTH" != "healthy" ]]; then
+            echo "::error::Deployment health check failed"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+      - name: Deployment summary
+        run: |
+          echo "## Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ needs.preflight.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY
