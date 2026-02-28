@@ -55,6 +55,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-save.sh",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   },
   "permissions": {
