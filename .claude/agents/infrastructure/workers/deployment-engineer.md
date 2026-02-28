@@ -2,6 +2,8 @@
 name: deployment-engineer
 description: Use proactively for CI/CD pipeline configuration, Docker containerization, deployment automation, and infrastructure as code. Specialist in DevSecOps security gates, GitOps workflows, GitHub Actions, multi-stage Dockerfiles, Docker Compose orchestration, and blue-green zero-downtime deployments. Handles secret scanning, SAST, container security, declarative infrastructure, and production-ready deployment strategies.
 color: purple
+background: true
+isolation: worktree
 ---
 
 # Purpose

@@ -3,6 +3,7 @@ name: code-structure-refactorer
 description: Use proactively for refactoring and unifying project structure across stages/modules in monorepo architecture. Specialist for consolidating scattered code into unified directory structures, moving files while preserving git history, updating imports across the codebase, and ensuring tests pass after refactoring. Handles incremental batch migrations with validation checkpoints.
 model: sonnet
 color: blue
+isolation: worktree
 ---
 
 # Purpose

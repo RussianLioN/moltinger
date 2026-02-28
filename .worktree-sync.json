@@ -1,0 +1,13 @@
+{
+  "sync": {
+    "files": [
+      ".env.example",
+      ".mcp.json"
+    ],
+    "directories": [
+      ".claude"
+    ],
+    "patterns": []
+  },
+  "description": "Files to sync when creating worktrees. .env files with secrets are NOT synced for security."
+}

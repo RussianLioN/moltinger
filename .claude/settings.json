@@ -1,12 +1,26 @@
 {
   "plansDirectory": "./docs/plans",
   "env": {
-    "ENABLE_TOOL_SEARCH": "auto:5"
+    "ENABLE_TOOL_SEARCH": "auto:5",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "excludedCommands": ["docker", "git", "ssh", "scp", "rsync"]
+  },
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/worktree-setup.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   },
   "permissions": {
     "allow": [
