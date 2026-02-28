@@ -3,7 +3,7 @@
 # GitOps-compliant: Non-blocking, adds metadata only
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
-SESSION_FILE="$PROJECT_ROOT/SESSION_STATE.md"
+SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
 
 # Create log directory if needed
@@ -18,9 +18,9 @@ DATE=$(date +%Y-%m-%d)
 COMMIT_MSG=$(head -1 "$PROJECT_ROOT/.git/COMMIT_EDITMSG" 2>/dev/null || echo "commit")
 COMMIT_SHORT=$(echo "$COMMIT_MSG" | head -c 60)
 
-# Skip if SESSION_STATE.md is in this commit (avoid loop)
-if git diff --cached --name-only | grep -q "SESSION_STATE.md"; then
-    echo "📝 SESSION_STATE.md in commit, skipping pre-commit update"
+# Skip if SESSION_SUMMARY.md is in this commit (avoid loop)
+if git diff --cached --name-only | grep -q "SESSION_SUMMARY.md"; then
+    echo "📝 SESSION_SUMMARY.md in commit, skipping pre-commit update"
     exit 0
 fi
 

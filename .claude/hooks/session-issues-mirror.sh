@@ -6,7 +6,7 @@
 set -e
 
 PROJECT_ROOT="/Users/rl/coding/moltinger"
-SESSION_FILE="$PROJECT_ROOT/SESSION_STATE.md"
+SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 REPO="RussianLioN/moltinger"
 
 # Check if gh is authenticated
@@ -15,9 +15,9 @@ if ! gh auth status &>/dev/null; then
     exit 0
 fi
 
-# Check if SESSION_STATE.md exists
+# Check if SESSION_SUMMARY.md exists
 if [ ! -f "$SESSION_FILE" ]; then
-    echo "⚠️  SESSION_STATE.md not found. Skipping Issues mirror."
+    echo "⚠️  SESSION_SUMMARY.md not found. Skipping Issues mirror."
     exit 0
 fi
 
@@ -35,10 +35,10 @@ EXISTING_ISSUE=$(gh issue list --repo "$REPO" \
 
 # Prepare issue body with header
 ISSUE_BODY=$(cat <<EOF
-> 🔄 **Auto-mirror from SESSION_STATE.md** | $(date +%H:%M:%S)
+> 🔄 **Auto-mirror from SESSION_SUMMARY.md** | $(date +%H:%M:%S)
 >
 > **GitOps Note**: This is a read-only mirror. Git = Single Source of Truth.
-> Edit SESSION_STATE.md to update, then run \`/session-summary\`.
+> Edit SESSION_SUMMARY.md to update, then run \`/session-summary\`.
 
 ---
 

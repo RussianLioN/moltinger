@@ -1,14 +1,14 @@
 #!/bin/bash
 # PreCommit Hook: Incremental Session State Update
-# Updates SESSION_STATE.md with commit info before each commit
+# Updates SESSION_SUMMARY.md with commit info before each commit
 # GitOps-compliant: Only adds metadata, doesn't block commits
 
 set -e
 
 PROJECT_ROOT="/Users/rl/coding/moltinger"
-SESSION_FILE="$PROJECT_ROOT/SESSION_STATE.md"
+SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 
-# Skip if SESSION_STATE.md doesn't exist
+# Skip if SESSION_SUMMARY.md doesn't exist
 if [ ! -f "$SESSION_FILE" ]; then
     exit 0
 fi
@@ -24,9 +24,9 @@ CURRENT_BRANCH=$(git branch --show-current)
 TIMESTAMP=$(date +%H:%M:%S)
 DATE=$(date +%Y-%m-%d)
 
-# Check if SESSION_STATE.md is being committed
-if git diff --cached --name-only | grep -q "SESSION_STATE.md"; then
-    # SESSION_STATE.md is part of this commit, skip update to avoid loop
+# Check if SESSION_SUMMARY.md is being committed
+if git diff --cached --name-only | grep -q "SESSION_SUMMARY.md"; then
+    # SESSION_SUMMARY.md is part of this commit, skip update to avoid loop
     exit 0
 fi
 
