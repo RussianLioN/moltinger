@@ -22,14 +22,6 @@
       "provides": ["backup", "restore", "verify", "list"],
       "cron": "0 2 * * *"
     },
-    "backup-moltis.sh": {
-      "version": "1.0.0",
-      "description": "Simple backup script (legacy)",
-      "entrypoint": false,
-      "requires": ["tar"],
-      "deprecated": true,
-      "replaced_by": "backup-moltis-enhanced.sh"
-    },
     "health-monitor.sh": {
       "version": "1.0.0",
       "description": "Health monitoring and alerting",
@@ -100,6 +92,7 @@
     "target_path": "/opt/moltinger/scripts",
     "permissions": "755",
     "owner": "root",
-    "sync_command": "scp -r scripts/* server:/opt/moltinger/scripts/"
+    "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
+    "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
   }
 }

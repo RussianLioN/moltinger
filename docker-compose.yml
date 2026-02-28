@@ -1,11 +1,34 @@
 # Moltis Docker Deployment Configuration
 # https://docs.moltis.org/docker.html
+#
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║                        SECURITY NOTICE                                    ║
+# ╠═══════════════════════════════════════════════════════════════════════════╣
+# ║ This container runs with elevated privileges:                             ║
+# ║                                                                           ║
+# ║ 1. privileged: true                                                       ║
+# ║    - Required for: Moltis sandbox execution (Docker-in-Docker)            ║
+# ║    - Enables: container creation within Moltis for code execution         ║
+# ║    - Risk: Near-host-level access if container compromised                ║
+# ║                                                                           ║
+# ║ 2. /var/run/docker.sock mount                                             ║
+# ║    - Required for: Sandbox container management                           ║
+# ║    - Enables: Creating/managing isolated execution containers             ║
+# ║    - Risk: Full Docker daemon access if compromised                       ║
+# ║                                                                           ║
+# ║ MITIGATION: This is intentional for Moltis's core functionality.          ║
+# ║ - Container runs on isolated VM, not shared infrastructure                ║
+# ║ - Network restricted via Traefik with authentication                      ║
+# ║ - Regular security audits recommended                                     ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
 
 services:
   moltis:
     image: ghcr.io/moltis-org/moltis:latest
     container_name: moltis
     restart: unless-stopped
+    # SECURITY: privileged mode required for Docker-in-Docker sandbox execution
+    # See SECURITY NOTICE above for details
     privileged: true
     networks:
       - ainetic_net
