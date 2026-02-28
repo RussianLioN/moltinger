@@ -7,7 +7,26 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
-    "excludedCommands": ["docker", "git", "ssh", "scp", "rsync"]
+    "excludedCommands": ["docker", "git", "ssh", "scp", "rsync"],
+    "filesystem": {
+      "write": {
+        "allowOnly": [
+          "/dev/stdout",
+          "/dev/stderr",
+          "/dev/null",
+          "/dev/tty",
+          "/dev/dtracehelper",
+          "/dev/autofs_nowait",
+          "/tmp/claude",
+          "/private/tmp/claude",
+          "/Users/rl/.npm/_logs",
+          "/Users/rl/.claude/debug",
+          "/Users/rl/.beads",
+          ".",
+          "/private/tmp/claude-501/"
+        ]
+      }
+    }
   },
   "hooks": {
     "WorktreeCreate": [
