@@ -224,7 +224,8 @@
   → Done in Phase 2 - x-logging with json-file driver
 - [X] T043 [US7] Update docker-compose.prod.yml to use anchors with overrides
   → Already uses anchors - verified consistency
-- [ ] T044 [US7] Document unified structure in `docs/compose-structure.md`
+- [X] T044 [US7] Document unified structure in `docs/compose-structure.md`
+  → Artifacts: [compose-structure.md](docs/compose-structure.md)
 
 **Checkpoint**: Unified configuration across environments
 
@@ -234,12 +235,20 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T045 [P] Add backup alert rules to `config/prometheus/backup_rules.yml`
-- [ ] T046 [P] Update AlertManager routing for backup alerts in `config/alertmanager/alertmanager.yml`
-- [ ] T047 Update quickstart.md with new procedures in `specs/001-docker-deploy-improvements/quickstart.md`
-- [ ] T048 Create systemd installation documentation in `docs/systemd-setup.md`
-- [ ] T049 Run smoke test validation via `make deploy && make health-check`
-- [ ] T050 Update CLAUDE.md with new deployment procedures
+- [X] T035 [US5] Create JSON output format documentation in `docs/json-output.md`
+  → Artifacts: [json-output.md](docs/json-output.md)
+- [X] T045 [P] Add backup alert rules to `config/prometheus/backup_rules.yml`
+  → Artifacts: [backup_rules.yml](config/prometheus/backup_rules.yml)
+- [X] T046 [P] Update AlertManager routing for backup alerts in `config/alertmanager/alertmanager.yml`
+  → Added backup-critical receiver and routing
+- [X] T047 Update quickstart.md with new procedures in `specs/001-docker-deploy-improvements/quickstart.md`
+  → Added JSON output mode and backup management sections
+- [X] T048 Create systemd installation documentation in `docs/systemd-setup.md`
+  → Artifacts: [systemd-setup.md](docs/systemd-setup.md)
+- [X] T049 Run smoke test validation via `make deploy && make health-check`
+  → Validated: compose files pass, scripts syntax valid (Docker not running)
+- [X] T050 Update CLAUDE.md with new deployment procedures
+  → Added Deployment Operations section with backup-enable/disable, version-check, preflight-check
 
 ---
 

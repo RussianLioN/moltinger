@@ -76,6 +76,114 @@ systemctl list-timers | grep moltis
 
 ---
 
+## JSON Output Mode
+
+All scripts support `--json` flag for machine-parsable output, enabling CI/CD integration.
+
+### Example Outputs
+
+**Deploy Success:**
+```json
+{
+  "status": "success",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "action": "deploy",
+  "details": {
+    "image": "ghcr.io/moltis-org/moltis:v1.7.0",
+    "duration_ms": 45000,
+    "health": "healthy"
+  },
+  "errors": []
+}
+```
+
+**Preflight Check:**
+```json
+{
+  "status": "pass",
+  "checks": [...],
+  "missing_secrets": [],
+  "errors": [],
+  "warnings": ["s3_credentials"]
+}
+```
+
+**Health Monitor:**
+```json
+{
+  "status": "healthy",
+  "services": [
+    {"name": "moltis", "status": "healthy", "uptime_seconds": 86400}
+  ],
+  "alerts": []
+}
+```
+
+### Parsing with jq
+
+```bash
+# Check deployment success
+./scripts/deploy.sh deploy --json | jq -e '.status == "success"'
+
+# Get missing secrets
+./scripts/preflight-check.sh --json | jq '.missing_secrets'
+
+# Check for unhealthy services
+./scripts/health-monitor.sh --once --json | jq '[.services[] | select(.status == "unhealthy")]'
+```
+
+See `docs/json-output.md` for complete format documentation.
+
+---
+
+## Backup Management
+
+### Enable Automated Backups
+
+```bash
+# Install systemd timer for daily backups at 2 AM
+sudo cp systemd/moltis-backup.timer /etc/systemd/system/
+sudo cp systemd/moltis-backup.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now moltis-backup.timer
+
+# Verify timer is active
+systemctl list-timers | grep moltis
+```
+
+### Disable Automated Backups
+
+```bash
+# Stop and disable the timer
+sudo systemctl stop moltis-backup.timer
+sudo systemctl disable moltis-backup.timer
+
+# Verify timer is disabled
+systemctl list-timers | grep moltis
+```
+
+### Manual Backup Trigger
+
+```bash
+# Trigger backup immediately via systemd
+sudo systemctl start moltis-backup.service
+
+# Or run script directly
+./scripts/backup-moltis-enhanced.sh backup --json
+```
+
+### View Backup Logs
+
+```bash
+# View recent backup logs
+journalctl -u moltis-backup.service -n 50
+
+# Follow backup logs in real-time
+journalctl -u moltis-backup.service -f
+```
+
+---
+
 ## Common Tasks
 
 ### Manual Backup

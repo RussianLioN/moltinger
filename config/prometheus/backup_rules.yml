@@ -1,0 +1,117 @@
+# Moltis Backup Alerting Rules
+# https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+#
+# These rules monitor backup health and alert on failures or missing backups.
+# Metrics are exposed by backup-moltis-enhanced.sh via the node exporter textfile collector.
+
+groups:
+  - name: moltis_backup
+    rules:
+      # ========================================================================
+      # BACKUP FAILURE - Critical
+      # ========================================================================
+      - alert: BackupFailed
+        expr: moltis_backup_status{status="failed"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: moltis
+        annotations:
+          summary: "Moltis backup failed"
+          description: "The last backup attempt failed. Check backup logs: journalctl -u moltis-backup.service"
+
+      # ========================================================================
+      # BACKUP MISSING - Warning
+      # ========================================================================
+      - alert: BackupMissing
+        expr: time() - moltis_backup_last_success_timestamp > 86400
+        for: 1h
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "No backup in 24 hours"
+          description: "No successful backup has been recorded in over 24 hours. Last backup was {{ $value | humanizeDuration }} ago."
+
+      # ========================================================================
+      # BACKUP STORAGE NEARLY FULL - Critical
+      # ========================================================================
+      - alert: BackupStorageFull
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/var/backups"} / node_filesystem_size_bytes{mountpoint="/var/backups"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: moltis
+        annotations:
+          summary: "Backup storage nearly full"
+          description: "Backup filesystem has less than 10% free space. Immediate cleanup required."
+
+      # ========================================================================
+      # BACKUP RESTORE FAILED - Critical
+      # ========================================================================
+      - alert: BackupRestoreFailed
+        expr: moltis_backup_restore_status{status="failed"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: moltis
+        annotations:
+          summary: "Backup restore failed"
+          description: "A backup restore operation failed. Verify backup integrity and check logs."
+
+      # ========================================================================
+      # BACKUP DURATION HIGH - Warning
+      # ========================================================================
+      - alert: BackupDurationHigh
+        expr: moltis_backup_duration_seconds > 600
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "Backup taking too long"
+          description: "Backup has been running for over 10 minutes ({{ $value | humanizeDuration }}). This may indicate performance issues."
+
+      # ========================================================================
+      # BACKUP SIZE UNUSUAL - Warning
+      # ========================================================================
+      - alert: BackupSizeUnusual
+        expr: |
+          abs(
+            (moltis_backup_size_bytes - on() group_left avg_over_time(moltis_backup_size_bytes[7d]))
+            / avg_over_time(moltis_backup_size_bytes[7d])
+          ) > 0.5
+        for: 0m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "Backup size significantly different from average"
+          description: "Backup size is {{ $value | humanizePercentage }} different from the 7-day average. This may indicate data loss or unexpected data growth."
+
+      # ========================================================================
+      # S3 UPLOAD FAILED - Warning
+      # ========================================================================
+      - alert: BackupS3UploadFailed
+        expr: moltis_backup_s3_upload_status{status="failed"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+        annotations:
+          summary: "S3 backup upload failed"
+          description: "Backup was created but S3 upload failed. Backup exists locally only. Check S3 credentials and connectivity."
+
+      # ========================================================================
+      # ENCRYPTION KEY ROTATION NEEDED - Info
+      # ========================================================================
+      - alert: BackupEncryptionKeyAge
+        expr: time() - moltis_backup_encryption_key_created_timestamp > 7776000  # 90 days
+        for: 24h
+        labels:
+          severity: info
+          service: moltis
+        annotations:
+          summary: "Backup encryption key is over 90 days old"
+          description: "Consider rotating the backup encryption key for improved security."

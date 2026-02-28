@@ -468,6 +468,101 @@ See `.claude/docs/beads-quickstart.md` for full reference.
 
 ---
 
+## Deployment Operations
+
+### Quick Reference
+
+```bash
+# Deploy stack
+make deploy                           # Or: ./scripts/deploy.sh deploy
+
+# Pre-flight validation
+./scripts/preflight-check.sh          # Human-readable
+./scripts/preflight-check.sh --json   # CI/CD parsable
+
+# Health check
+./scripts/health-monitor.sh --once --json
+
+# Version check
+make version-check
+```
+
+### Backup Management
+
+```bash
+# Enable automated backups (systemd timer)
+make backup-enable
+# Or manually:
+sudo systemctl enable --now moltis-backup.timer
+
+# Disable automated backups
+make backup-disable
+# Or manually:
+sudo systemctl disable --now moltis-backup.timer
+
+# Check backup timer status
+make backup-status
+# Or manually:
+systemctl status moltis-backup.timer
+
+# Manual backup trigger
+make backup
+# Or:
+./scripts/backup-moltis-enhanced.sh backup --json
+
+# View backup logs
+journalctl -u moltis-backup.service -f
+```
+
+### JSON Output Mode
+
+All deployment scripts support `--json` flag for CI/CD integration:
+
+```bash
+# Deploy with JSON output
+./scripts/deploy.sh deploy --json
+
+# Check result
+echo $?  # 0 = success
+
+# Parse with jq
+./scripts/preflight-check.sh --json | jq '.missing_secrets'
+./scripts/health-monitor.sh --once --json | jq '.services[] | select(.status == "unhealthy")'
+```
+
+**Common JSON Fields:**
+- `status`: `success`, `failure`, `pass`, `fail`, `healthy`, `unhealthy`
+- `timestamp`: ISO 8601 timestamp
+- `errors[]`: Array of error objects
+- `details`: Action-specific information
+
+See `docs/json-output.md` for complete format documentation.
+
+### Pre-flight Validation
+
+Run before any deployment to verify environment:
+
+```bash
+# Standard validation (errors only)
+./scripts/preflight-check.sh
+
+# Strict mode (fail on warnings too)
+./scripts/preflight-check.sh --strict
+
+# JSON output for CI/CD
+./scripts/preflight-check.sh --json
+```
+
+**Checks performed:**
+- `secrets_exist` - All required secrets present
+- `docker_available` - Docker daemon running
+- `compose_valid` - docker-compose.yml syntax
+- `network_exists` - Required networks exist
+- `s3_credentials` - S3 credentials configured (warning)
+- `disk_space` - Sufficient disk space (warning)
+
+---
+
 ## Active Technologies
 - Bash scripts, YAML (Docker Compose), TOML (Moltis config) (001-moltis-docker-deploy)
 - Docker bind mounts (001-moltis-docker-deploy)

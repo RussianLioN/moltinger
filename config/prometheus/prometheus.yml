@@ -18,6 +18,7 @@ alerting:
 # Load alerting rules
 rule_files:
   - /etc/prometheus/alert-rules.yml
+  - /etc/prometheus/backup_rules.yml
 
 # Scrape configurations
 scrape_configs:
