@@ -1,0 +1,31 @@
+#!/bin/bash
+# Pre-commit: Session state incremental update
+# GitOps-compliant: Non-blocking, adds metadata only
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+SESSION_FILE="$PROJECT_ROOT/SESSION_STATE.md"
+LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
+
+# Create log directory if needed
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Get commit info
+BRANCH=$(git branch --show-current)
+TIMESTAMP=$(date +%H:%M:%S)
+DATE=$(date +%Y-%m-%d)
+
+# Get commit message from COMMIT_EDITMSG
+COMMIT_MSG=$(head -1 "$PROJECT_ROOT/.git/COMMIT_EDITMSG" 2>/dev/null || echo "commit")
+COMMIT_SHORT=$(echo "$COMMIT_MSG" | head -c 60)
+
+# Skip if SESSION_STATE.md is in this commit (avoid loop)
+if git diff --cached --name-only | grep -q "SESSION_STATE.md"; then
+    echo "📝 SESSION_STATE.md in commit, skipping pre-commit update"
+    exit 0
+fi
+
+# Log the commit (for /session-summary to process later)
+echo "- [$DATE $TIMESTAMP] [$BRANCH] $COMMIT_SHORT" >> "$LOG_FILE"
+
+echo "📝 Pre-commit logged: $COMMIT_SHORT"
+exit 0
