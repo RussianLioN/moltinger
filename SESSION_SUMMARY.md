@@ -146,6 +146,34 @@ GitOps Compliance: Enforced ✅
 
 ---
 
+### 2026-02-28 (продолжение 2): Session Automation Framework
+
+**Завершено**:
+
+#### Consilium: Session State Persistence
+- ✅ Запущен консилиум 6 экспертов для анализа session state automation
+- ✅ Эксперты единогласно рекомендовали Hook-Based Auto-Save
+- ✅ GitOps Specialist: Issues ≠ Files (git = source of truth)
+
+#### Session Automation Implementation
+- ✅ **Stop Hook** — `.claude/hooks/session-save.sh` (auto-backup)
+- ✅ **Issues Mirror** — `.claude/hooks/session-issues-mirror.sh` (visibility)
+- ✅ **Pre-Commit** — `.githooks/pre-commit` (incremental logging)
+- ✅ **Setup Script** — `scripts/setup-git-hooks.sh` (git config)
+
+#### Bug Fix
+- ✅ Исправлен `SESSION_STATE.md` → `SESSION_SUMMARY.md` во всех hook-скриптах
+
+**Коммиты сессии**:
+- `7246333` — feat(ci): add scripts/ to GitOps sync (from 001-docker-deploy-improvements)
+- `f8dab74` — feat(session): complete session automation framework
+- `9d89adb` — fix(hooks): use correct SESSION_SUMMARY.md filename
+- `23c40f4` — chore(release): v1.8.0
+
+**Release v1.8.0**: 33 commits (17 features,7 bug fixes, 9 other changes)
+
+---
+
 ### 2026-02-28 (продолжение): P4 Tasks
 
 **Завершено**:
