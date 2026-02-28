@@ -1,14 +1,23 @@
 #!/bin/bash
 # Moltis Deployment Script
-# Version: 2.0
-# Features: Blue-green deployment, health checks, rollback, notifications
+# Version: 2.1
+# Features: Blue-green deployment, health checks, rollback, notifications, GitOps guards
 
 set -euo pipefail
 
 # ========================================================================
-# CONFIGURATION
+# GITOPS GUARDS (P1-3)
 # ========================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source GitOps guards library
+if [[ -f "$SCRIPT_DIR/gitops-guards.sh" ]]; then
+    source "$SCRIPT_DIR/gitops-guards.sh"
+fi
+
+# ========================================================================
+# CONFIGURATION
+# ========================================================================
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.prod.yml"
 ENV_FILE="$PROJECT_ROOT/.env"
@@ -263,6 +272,11 @@ send_notification() {
 
 cmd_deploy() {
     local environment="${1:-production}"
+
+    # GitOps Guard: Check and confirm before deployment
+    if type gitops_guard_deploy &>/dev/null; then
+        gitops_guard_deploy "deploy.sh"
+    fi
 
     log_info "=========================================="
     log_info "Starting Moltis Deployment"

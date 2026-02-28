@@ -1,14 +1,23 @@
 #!/bin/bash
 # Moltis Enterprise Backup Script with Disaster Recovery
-# Version: 2.0
-# Features: Encryption, offsite backup, integrity verification, point-in-time recovery
+# Version: 2.1
+# Features: Encryption, offsite backup, integrity verification, point-in-time recovery, GitOps guards
 
 set -euo pipefail
 
 # ========================================================================
-# CONFIGURATION
+# GITOPS GUARDS (P1-3)
 # ========================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source GitOps guards library
+if [[ -f "$SCRIPT_DIR/gitops-guards.sh" ]]; then
+    source "$SCRIPT_DIR/gitops-guards.sh"
+fi
+
+# ========================================================================
+# CONFIGURATION
+# ========================================================================
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONFIG_FILE="${BACKUP_CONFIG:-$PROJECT_ROOT/config/backup.conf}"
 
