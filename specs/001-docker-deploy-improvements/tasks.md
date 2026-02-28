@@ -105,8 +105,10 @@
   → Artifacts: [tavily_api_key.txt.example](secrets/tavily_api_key.txt.example)
 - [X] T017 [P] [US2] Create template for GLM_API_KEY secret at `secrets/glm_api_key.txt.example`
   → Artifacts: [glm_api_key.txt.example](secrets/glm_api_key.txt.example)
-- [ ] T018 [US2] Update docker-compose.yml to use secrets section for all API keys
-- [ ] T019 [US2] Update docker-compose.prod.yml to use secrets section for all API keys
+- [X] T018 [US2] Update docker-compose.yml to use secrets section for all API keys
+  → Artifacts: [docker-compose.yml](docker-compose.yml) - Added secrets section with *_FILE environment variables
+- [X] T019 [US2] Update docker-compose.prod.yml to use secrets section for all API keys
+  → Artifacts: [docker-compose.prod.yml](docker-compose.prod.yml) - Extended secrets section with all API keys
 - [ ] T020 [US2] Update Moltis service to read secrets from `/run/secrets/` paths
 - [ ] T021 [US2] Update GitHub Actions deploy.yml to create secret files from GitHub Secrets
 
