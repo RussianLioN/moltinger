@@ -140,6 +140,60 @@ gitops_check_drift() {
     return 0
 }
 
+# Check for sed anti-patterns in workflow files (GitOps compliance)
+# Returns 0 if compliant, 1 if sed patterns found
+gitops_check_workflow_sed() {
+    local workflows_dir="${1:-.github/workflows}"
+    local violations_found=false
+
+    echo -e "${BLUE}[GitOps] Checking workflow files for sed anti-patterns...${NC}"
+
+    if [[ ! -d "$workflows_dir" ]]; then
+        echo -e "${YELLOW}[GitOps] Workflows directory not found: $workflows_dir${NC}"
+        return 0
+    fi
+
+    # Patterns that indicate sed anti-pattern violations
+    # These modify files on the server instead of syncing from git
+    local sed_patterns=(
+        'sed -i.*docker-compose'
+        'sed -i.*\.yml'
+        'sed -i.*\.yaml'
+        'sed -i.*\.toml'
+        'sed -i.*\.json'
+        'sed -i.*\.env'
+    )
+
+    for workflow in "$workflows_dir"/*.yml "$workflows_dir"/*.yaml; do
+        if [[ ! -f "$workflow" ]]; then
+            continue
+        fi
+
+        for pattern in "${sed_patterns[@]}"; do
+            if grep -qE "$pattern" "$workflow" 2>/dev/null; then
+                echo -e "${RED}[GitOps] VIOLATION: sed anti-pattern found in $workflow${NC}"
+                echo "  Pattern: $pattern"
+                echo "  Line: $(grep -nE "$pattern" "$workflow" | head -1)"
+                echo ""
+                echo "  ${YELLOW}GitOps-compliant alternative:${NC}"
+                echo "  Instead of: sed -i 's|image:.*|image:repo/app:\$VERSION|' file.yml"
+                echo "  Use: scp file.yml \$SSH_USER@\$SSH_HOST:\$DEPLOY_PATH/file.yml"
+                violations_found=true
+            fi
+        done
+    done
+
+    if [[ "$violations_found" == true ]]; then
+        echo ""
+        echo -e "${RED}[GitOps] sed anti-patterns cause configuration drift!${NC}"
+        echo -e "${RED}All config changes must sync ENTIRE files from git.${NC}"
+        return 1
+    fi
+
+    echo -e "${GREEN}[GitOps] No sed anti-patterns found in workflows ✓${NC}"
+    return 0
+}
+
 # Create marker file to indicate manual modifications
 gitops_mark_manual() {
     local file_path="$1"

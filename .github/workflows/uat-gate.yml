@@ -254,6 +254,33 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      # ===========================================
+      # GitOps Step 1: Sync configuration files from git
+      # ===========================================
+      # CRITICAL: We sync the ENTIRE docker-compose.yml, not just the version.
+      # This ensures: labels, networks, volumes, environment - all match git.
+      # NEVER use 'sed' to update only part of the file (causes config drift).
+      # ===========================================
+      - name: Sync configuration files (GitOps)
+        run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
+          echo "::group::Syncing configuration files to server"
+
+          # Sync docker-compose.yml from git to server
+          # This ensures ALL configuration (labels, networks, volumes) matches git
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
+
+          # Sync config directory (moltis.toml, mcp-servers.json, etc.)
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
+          scp -r config/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/ 2>/dev/null || echo "No config files to sync"
+
+          # Sync scripts directory (GitOps compliance)
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
+          scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
+
+          echo "Configuration synced successfully (docker-compose.yml + config/ + scripts/)"
+          echo "::endgroup::"
+
       - name: Deploy version ${{ needs.preflight.outputs.version }}
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
@@ -266,13 +293,13 @@ jobs:
             # Pull specific version
             docker pull ghcr.io/moltis-org/moltis:$VERSION
 
+            # Validate configuration before deploy (GitOps)
+            docker compose config --quiet
+
             # Stop current container
             docker compose stop moltis || true
 
-            # Update image tag
-            sed -i.bak "s|image: ghcr.io/moltis-org/moltis:.*|image: ghcr.io/moltis-org/moltis:$VERSION|" docker-compose.yml
-
-            # Start new version
+            # Start new version (uses synced docker-compose.yml from git)
             docker compose up -d moltis
 
             echo "Deployed $VERSION successfully"

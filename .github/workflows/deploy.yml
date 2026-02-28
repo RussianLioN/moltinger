@@ -666,6 +666,35 @@ jobs:
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY
 
+      # ===========================================
+      # GitOps Step 3: Record deployed git SHA
+      # ===========================================
+      # Stores the git commit SHA on the server for audit trail
+      # This enables verification that deployed config matches git
+      # ===========================================
+      - name: Record deployed git SHA (GitOps audit)
+        if: success()
+        run: |
+          echo "::group::Recording deployed git SHA"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Record the git commit SHA that was deployed
+            # This enables audit trail and drift detection
+            git log -1 --format="%H" > .deployed-sha 2>/dev/null || echo "${{ github.sha }}" > .deployed-sha
+
+            # Also record deployment metadata
+            cat > .deployment-info << INFO
+          deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          git_sha=$(cat .deployed-sha)
+          workflow_run=${{ github.run_id }}
+          version=${{ needs.preflight.outputs.version }}
+          INFO
+
+            echo "Git SHA recorded: $(cat .deployed-sha)"
+          EOF
+          echo "::endgroup::"
+
   # ===========================================
   # Rollback procedure
   # ===========================================

@@ -81,10 +81,14 @@
   → Artifacts: [moltis-backup.timer](systemd/moltis-backup.timer)
 - [X] T009 [P] [US1] Create systemd service unit at `systemd/moltis-backup.service`
   → Artifacts: [moltis-backup.service](systemd/moltis-backup.service)
-- [ ] T010 [US1] Update backup script to support --json flag in `scripts/backup-moltis-enhanced.sh`
-- [ ] T011 [US1] Add S3 upload retry logic to backup script in `scripts/backup-moltis-enhanced.sh`
-- [ ] T012 [US1] Add backup metrics export for Prometheus in `scripts/backup-moltis-enhanced.sh`
-- [ ] T013 [US1] Create backup status file at end of backup in `/var/lib/moltis/backup-status.json`
+- [X] T010 [US1] Update backup script to support --json flag in `scripts/backup-moltis-enhanced.sh`
+  → Artifacts: [backup-moltis-enhanced.sh](scripts/backup-moltis-enhanced.sh) - JSON output with status/details/errors
+- [X] T011 [US1] Add S3 upload retry logic to backup script in `scripts/backup-moltis-enhanced.sh`
+  → 3 retries with exponential backoff (1s, 2s, 4s)
+- [X] T012 [US1] Add backup metrics export for Prometheus in `scripts/backup-moltis-enhanced.sh`
+  → Writes to /var/lib/node_exporter/textfile_dir/moltis_backup.prom
+- [X] T013 [US1] Create backup status file at end of backup in `/var/lib/moltis/backup-status.json`
+  → JSON status file with backup_id, timestamp, size, checksum
 - [ ] T014 [US1] Update Makefile with `backup-enable` and `backup-disable` targets
 
 **Checkpoint**: Automated daily backups functional, S3 upload working
@@ -147,10 +151,14 @@
 
 ### Implementation for User Story 4
 
-- [ ] T028 [US4] Identify sed command location in `.github/workflows/uat-gate.yml`
-- [ ] T029 [US4] Replace sed with full file scp pattern in `.github/workflows/uat-gate.yml`
-- [ ] T030 [US4] Add git SHA verification step to deploy workflow in `.github/workflows/deploy.yml`
-- [ ] T031 [US4] Update gitops-guards.sh to verify no sed patterns in workflows
+- [X] T028 [US4] Identify sed command location in `.github/workflows/uat-gate.yml`
+  → Found at line 273, replaced with GitOps-compliant scp
+- [X] T029 [US4] Replace sed with full file scp pattern in `.github/workflows/uat-gate.yml`
+  → Artifacts: [uat-gate.yml](.github/workflows/uat-gate.yml) - scp docker-compose.yml + config/ + scripts/
+- [X] T030 [US4] Add git SHA verification step to deploy workflow in `.github/workflows/deploy.yml`
+  → Artifacts: [deploy.yml](.github/workflows/deploy.yml) - .deployed-sha and .deployment-info files
+- [X] T031 [US4] Update gitops-guards.sh to verify no sed patterns in workflows
+  → Artifacts: [gitops-guards.sh](scripts/gitops-guards.sh) - gitops_check_workflow_sed() function
 
 **Checkpoint**: 100% GitOps compliance achieved
 
