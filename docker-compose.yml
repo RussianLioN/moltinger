@@ -22,6 +22,31 @@
 # ║ - Regular security audits recommended                                     ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 
+# ============================================================================
+# YAML ANCHORS - Reusable configuration blocks
+# ============================================================================
+x-common-env: &common-env
+  # Network configuration
+  MOLTIS_HOST: 0.0.0.0
+  MOLTIS_NO_TLS: true
+  MOLTIS_BEHIND_PROXY: true
+
+x-healthcheck: &healthcheck
+  test: ["CMD", "curl", "-f", "http://localhost:13131/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 10s
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# ============================================================================
+# SERVICES
+# ============================================================================
 services:
   moltis:
     image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}
@@ -46,30 +71,23 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
     environment:
-      # Network configuration
-      - MOLTIS_HOST=0.0.0.0
-      - MOLTIS_PORT=13131
-      # TLS disabled - handled by Traefik reverse proxy
-      - MOLTIS_NO_TLS=true
-      # Force remote connection treatment (required for reverse proxy)
-      - MOLTIS_BEHIND_PROXY=true
+      <<: *common-env
+      MOLTIS_PORT: 13131
       # Authentication password (from .env file)
-      - MOLTIS_PASSWORD=${MOLTIS_PASSWORD}
+      MOLTIS_PASSWORD: ${MOLTIS_PASSWORD}
       # Telegram bot configuration
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS}
       # Tavily API for MCP server
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
       # GLM-5 API key for Z.ai Coding Plan (OpenAI-compatible)
-      - GLM_API_KEY=${GLM_API_KEY}
+      GLM_API_KEY: ${GLM_API_KEY}
 
-    # Docker healthcheck
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:13131/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      <<: *healthcheck
+
+    logging:
+      <<: *logging
 
     # Traefik labels for reverse proxy (Phase 4)
     labels:
@@ -92,11 +110,14 @@ services:
 
     environment:
       # Clean up old images after update
-      - WATCHTOWER_CLEANUP=true
+      WATCHTOWER_CLEANUP: "true"
       # Check for updates every 24 hours
-      - WATCHTOWER_POLL_INTERVAL=86400
+      WATCHTOWER_POLL_INTERVAL: "86400"
       # Only update containers with watchtower label
-      - WATCHTOWER_LABEL_ENABLE=true
+      WATCHTOWER_LABEL_ENABLE: "true"
+
+    logging:
+      <<: *logging
 
 # Connect to existing Traefik network (CRITICAL for routing)
 networks:
