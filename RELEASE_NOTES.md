@@ -2,6 +2,44 @@
 
 User-facing release notes for all versions.
 
+## v1.8.0
+
+_Released on 2026-02-28_
+
+### ✨ New Features
+
+- **deploy**: Complete Phase 10 - polish and cross-cutting concerns
+- **deploy**: Complete P1 tasks and implement P2 JSON output modes
+- **session**: Complete session automation framework
+- **deploy**: Implement GitOps compliance and backup script enhancements
+- **hooks**: Add session auto-save on Stop hook
+- **deploy**: Implement P1 user stories - systemd, secrets templates, version pinning
+- **deploy**: Complete Phase 1-2 of docker-deploy-improvements
+- Add        2 agent(s), update docs
+- **CI/CD**: Add pre-deployment tests and backup verification cron
+- **AI Agents**: Add consilium expert panel for parallel discussions
+- **uat**: Add UAT gate with GitOps checks (P2-6)
+- **metrics**: Add GitOps SLO and metrics collection (P2-5)
+- **iac**: Add manifest-based scripts management (P2-4)
+- **scripts**: Add GitOps guards to server scripts (P1-3)
+- **CI/CD**: Add GitOps drift detection cron job (P1-2)
+- **CI/CD**: Add GitOps compliance check job (P1-1)
+- **AI Agents**: Add worktree isolation to bug-fixer
+
+### 🐛 Bug Fixes
+
+- **hooks**: Use correct SESSION_SUMMARY.md filename
+- **scripts**: Convert CRLF to LF line endings in shell scripts
+- **sandbox**: Add SSH agent paths and git push to permissions (moltinger-session)
+- **sandbox**: Add read permissions for ~/.beads directory
+- **health**: Resolve MEDIUM priority bugs (moltinger-71r, moltinger-lxb)
+- **health**: Resolve HIGH priority bugs from health check (moltinger-wisp-u7e)
+- **sandbox**: Add ~/.beads to write allow list for daemon
+
+---
+
+_This release was automatically generated from 33 commits._
+
 ## v1.7.0
 
 _Released on 2026-02-27_

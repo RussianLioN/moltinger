@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-02-28
+
+### Added
+- **deploy**: complete Phase 10 - polish and cross-cutting concerns (80764d8)
+- **deploy**: complete P1 tasks and implement P2 JSON output modes (e606064)
+- **session**: complete session automation framework (f8dab74)
+- **deploy**: implement GitOps compliance and backup script enhancements (609ee42)
+- **hooks**: add session auto-save on Stop hook (7246333)
+- **deploy**: implement P1 user stories - systemd, secrets templates, version pinning (062bb61)
+- **deploy**: complete Phase 1-2 of docker-deploy-improvements (72de559)
+- add        2 agent(s), update docs (cc52210)
+- **ci**: add pre-deployment tests and backup verification cron (2aaa763)
+- **agents**: add consilium expert panel for parallel discussions (768564e)
+- **uat**: add UAT gate with GitOps checks (P2-6) (62a08ac)
+- **metrics**: add GitOps SLO and metrics collection (P2-5) (61cd539)
+- **iac**: add manifest-based scripts management (P2-4) (70b24d5)
+- **scripts**: add GitOps guards to server scripts (P1-3) (688efee)
+- **ci**: add GitOps drift detection cron job (P1-2) (dac5a33)
+- **ci**: add GitOps compliance check job (P1-1) (fddfc17)
+- **agents**: add worktree isolation to bug-fixer (406edef)
+
+### Fixed
+- **hooks**: use correct SESSION_SUMMARY.md filename (9d89adb)
+- **scripts**: convert CRLF to LF line endings in shell scripts (ca54dd1)
+- **sandbox**: add SSH agent paths and git push to permissions (moltinger-session) (6fd4f13)
+- **sandbox**: add read permissions for ~/.beads directory (15c8ee6)
+- **health**: resolve MEDIUM priority bugs (moltinger-71r, moltinger-lxb) (ef5cbfc)
+- **health**: resolve HIGH priority bugs from health check (moltinger-wisp-u7e) (39a7f76)
+- **sandbox**: add ~/.beads to write allow list for daemon (83cff41)
+
+### Other
+- sync linter changes and beads (09b4745)
+- add P4 backlog priorities and update SESSION_SUMMARY (4dcca50)
+- sync beads (04a1136)
+- sync beads (final) (77c740c)
+- sync beads issues (78c411a)
+- update SESSION_SUMMARY with P4 tasks completion (5bca102)
+- update SESSION_SUMMARY with GitOps framework progress (afb1e60)
+- update Claude Code config and agents (b8c9bc4)
+- **incident**: add file deletion safety rules (2026-02-28) (2b8ef8c)
+
 ## [1.7.0] - 2026-02-27
 
 ### Added
