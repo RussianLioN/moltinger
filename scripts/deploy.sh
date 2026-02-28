@@ -192,8 +192,9 @@ rollback() {
         docker rm moltis 2>/dev/null || true
 
         cd "$PROJECT_ROOT"
-        # Update image in compose and restart
-        sed -i.bak "s|image: ghcr.io/moltis-org/moltis:.*|image: $last_image|" "$COMPOSE_FILE"
+        # GitOps-compliant: Use environment variable instead of sed -i
+        # (moltinger-eml: sed -i causes configuration drift)
+        export MOLTIS_VERSION="$last_image"
         docker compose -f "$COMPOSE_FILE" up -d moltis
     else
         log_error "No previous image found for rollback"

@@ -246,6 +246,95 @@ jobs:
           echo "::endgroup::"
 
   # ===========================================
+  # Pre-deployment Tests (moltinger-kpt)
+  # ===========================================
+  # Runs validation tests before deployment
+  # Deploy is blocked if tests fail
+  # ===========================================
+  test:
+    name: Pre-deployment Tests
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    if: needs.preflight.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck yamllint
+
+      - name: Shellcheck - Bash scripts
+        run: |
+          echo "::group::Shellcheck analysis"
+          FAILED=0
+
+          # Run shellcheck on all bash scripts
+          for script in scripts/*.sh; do
+            if [ -f "$script" ]; then
+              echo "Checking: $script"
+              if ! shellcheck -x -s bash "$script"; then
+                FAILED=$((FAILED + 1))
+              fi
+            fi
+          done
+
+          if [ $FAILED -gt 0 ]; then
+            echo "::error::$FAILED script(s) failed shellcheck"
+            exit 1
+          fi
+
+          echo "::notice::All scripts passed shellcheck ✅"
+          echo "::endgroup::"
+
+      - name: Yamllint - Docker Compose
+        run: |
+          echo "::group::YAML lint validation"
+
+          if [ -f "docker-compose.yml" ]; then
+            yamllint -d "{extends: relaxed, rules: {line-length: {max: 150}}}" docker-compose.yml
+            echo "::notice::docker-compose.yml passed yamllint ✅"
+          fi
+
+          if [ -f "docker-compose.prod.yml" ]; then
+            yamllint -d "{extends: relaxed, rules: {line-length: {max: 150}}}" docker-compose.prod.yml
+            echo "::notice::docker-compose.prod.yml passed yamllint ✅"
+          fi
+
+          echo "::endgroup::"
+
+      - name: Validate docker-compose syntax
+        run: |
+          echo "::group::Docker Compose validation"
+
+          # Install docker-compose for validation
+          sudo apt-get install -y -qq docker-compose
+
+          # Validate compose file syntax (without pulling images)
+          if docker-compose config --quiet 2>/dev/null; then
+            echo "::notice::docker-compose.yml syntax valid ✅"
+          else
+            echo "::error::docker-compose.yml has syntax errors"
+            docker-compose config
+            exit 1
+          fi
+
+          echo "::endgroup::"
+
+      - name: Test summary
+        if: always()
+        run: |
+          echo "## Pre-deployment Tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Shellcheck | ${{ job.status == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Yamllint | ${{ job.status == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Compose | ${{ job.status == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
   # Backup current state before deployment
   # ===========================================
   backup:
@@ -320,8 +409,8 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [preflight, backup]
-    if: always() && needs.preflight.outputs.should_deploy == 'true'
+    needs: [preflight, backup, test]
+    if: always() && needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success'
     environment:
       name: production
       url: https://moltis.ainetic.tech
@@ -367,6 +456,50 @@ jobs:
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
 
           echo "Configuration synced successfully (docker-compose.yml + config/ + scripts/)"
+          echo "::endgroup::"
+
+      # ===========================================
+      # GitOps Step 1.4: Install Cron Jobs (moltinger-hdn)
+      # ===========================================
+      # Installs system cron jobs from scripts/cron.d/
+      # All cron configurations must come from git (GitOps compliance)
+      # ===========================================
+      - name: Install cron jobs
+        run: |
+          echo "::group::Installing cron jobs from scripts/cron.d/"
+
+          # Check if cron.d directory exists in repo
+          if [ -d "scripts/cron.d" ] && [ "$(ls -A scripts/cron.d/ 2>/dev/null)" ]; then
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'CRONEOF'
+              # Create cron.d directory if not exists
+              mkdir -p /opt/moltinger/scripts/cron.d
+
+              # Install each cron file
+              for cron_file in /opt/moltinger/scripts/cron.d/*; do
+                if [ -f "$cron_file" ]; then
+                  cron_name=$(basename "$cron_file")
+                  echo "Installing cron: $cron_name"
+
+                  # Copy to system cron.d with correct permissions
+                  cp "$cron_file" "/etc/cron.d/$cron_name"
+                  chmod 644 "/etc/cron.d/$cron_name"
+                  chown root:root "/etc/cron.d/$cron_name"
+                fi
+              done
+
+              # Verify cron service is running
+              if command -v systemctl &>/dev/null; then
+                systemctl reload cron 2>/dev/null || systemctl restart cron 2>/dev/null || true
+              fi
+
+              echo "Cron jobs installed successfully"
+          CRONEOF
+
+            echo "::notice::Cron jobs installed from GitOps"
+          else
+            echo "::notice::No cron jobs to install (scripts/cron.d/ empty or missing)"
+          fi
+
           echo "::endgroup::"
 
       # ===========================================

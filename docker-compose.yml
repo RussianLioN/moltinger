@@ -24,7 +24,7 @@
 
 services:
   moltis:
-    image: ghcr.io/moltis-org/moltis:latest
+    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}
     container_name: moltis
     restart: unless-stopped
     # SECURITY: privileged mode required for Docker-in-Docker sandbox execution

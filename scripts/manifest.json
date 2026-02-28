@@ -94,5 +94,15 @@
     "owner": "root",
     "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
     "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
+  },
+  "cron_jobs": {
+    "moltis-backup-verify": {
+      "source": "cron.d/moltis-backup-verify",
+      "target": "/etc/cron.d/moltis-backup-verify",
+      "schedule": "0 0 * * 0",
+      "description": "Weekly backup integrity verification (Sunday 03:00 MSK)",
+      "command": "/opt/moltinger/scripts/backup-moltis-enhanced.sh verify",
+      "issue": "moltinger-hdn"
+    }
   }
 }
