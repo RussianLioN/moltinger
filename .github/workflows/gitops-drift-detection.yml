@@ -1,0 +1,160 @@
+# GitOps Drift Detection (P1 - Incident #002)
+# Runs periodically to detect configuration drift on server
+# Alerts if manual modifications detected
+
+name: GitOps Drift Detection
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+
+jobs:
+  drift-check:
+    name: Check Configuration Drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Detect drift
+        id: drift
+        run: |
+          echo "::group::Drift Detection"
+          DRIFT_FILES=""
+          DRIFT_FOUND=false
+
+          # Function to check file drift
+          check_drift() {
+            local LOCAL_FILE="$1"
+            local REMOTE_FILE="$2"
+            local DESCRIPTION="$3"
+
+            if [ -f "$LOCAL_FILE" ]; then
+              LOCAL_HASH=$(sha256sum "$LOCAL_FILE" | cut -d' ' -f1)
+              REMOTE_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum $REMOTE_FILE 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
+
+              if [ "$REMOTE_HASH" = "NOT_FOUND" ]; then
+                echo "📋 $DESCRIPTION not on server"
+              elif [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+                echo "⚠️ $DESCRIPTION DRIFT"
+                echo "  Git:    $LOCAL_HASH"
+                echo "  Server: $REMOTE_HASH"
+                DRIFT_FILES="$DRIFT_FILES$DESCRIPTION\n"
+                DRIFT_FOUND=true
+              else
+                echo "✅ $DESCRIPTION"
+              fi
+            fi
+          }
+
+          echo "=== Checking configuration files ==="
+
+          # Check docker-compose.yml
+          check_drift "docker-compose.yml" "${{ env.DEPLOY_PATH }}/docker-compose.yml" "docker-compose.yml"
+
+          # Check config files
+          check_drift "config/moltis.toml" "${{ env.DEPLOY_PATH }}/config/moltis.toml" "moltis.toml"
+
+          if [ -f "config/mcp-servers.json" ]; then
+            check_drift "config/mcp-servers.json" "${{ env.DEPLOY_PATH }}/config/mcp-servers.json" "mcp-servers.json"
+          fi
+
+          # Check scripts
+          if [ -d "scripts" ] && [ "$(ls -A scripts 2>/dev/null)" ]; then
+            for SCRIPT in scripts/*; do
+              if [ -f "$SCRIPT" ]; then
+                SCRIPT_NAME=$(basename "$SCRIPT")
+                check_drift "$SCRIPT" "${{ env.DEPLOY_PATH }}/scripts/$SCRIPT_NAME" "scripts/$SCRIPT_NAME"
+              fi
+            done
+          fi
+
+          # Output results
+          echo "drift_found=$DRIFT_FOUND" >> $GITHUB_OUTPUT
+          echo "drift_files<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DRIFT_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          if [ "$DRIFT_FOUND" = true ]; then
+            echo "::error::GitOps drift detected! Manual server modifications found."
+          else
+            echo "::notice::All configuration files match git ✅"
+          fi
+          echo "::endgroup::"
+
+      - name: Create issue on drift
+        if: steps.drift.outputs.drift_found == 'true'
+        run: |
+          DRIFT_FILES="${{ steps.drift.outputs.drift_files }}"
+          ISSUE_BODY="## GitOps Drift Detected
+
+          The following files on the server do not match git:
+
+          \`\`\`
+          $DRIFT_FILES
+          \`\`\`
+
+          ### Action Required
+          1. Investigate the source of drift (manual changes?)
+          2. Either commit server changes to git, or redeploy to sync
+
+          ### How to Fix
+          \`\`\`bash
+          # Option 1: Redeploy from git (recommended)
+          gh workflow run deploy.yml
+
+          # Option 2: If server changes are intentional, commit them
+          ssh root@ainetic.tech \"cat $DEPLOY_PATH/docker-compose.yml\" > docker-compose.yml
+          git add . && git commit -m \"chore: sync server config\" && git push
+          \`\`\`
+
+          ---
+          *Detected by GitOps Drift Detection workflow*
+          *Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)*
+          "
+
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "🔍 GitOps Drift Detected - $(date -u +%Y-%m-%d)" \
+            --body "$ISSUE_BODY" \
+            --label "gitops,drift,automation"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## GitOps Drift Detection Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Drift Found | \`${{ steps.drift.outputs.drift_found }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.drift.outputs.drift_found }}" = "true" ]; then
+            echo "### Files with Drift" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.drift.outputs.drift_files }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **All files compliant**" >> $GITHUB_STEP_SUMMARY
+          fi
