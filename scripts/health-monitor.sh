@@ -180,9 +180,11 @@ check_disk_space() {
         log_warn "Disk usage at ${usage}% (threshold: ${threshold}%)"
         send_alert "Disk Space Warning" "Disk usage at ${usage}%"
 
-        # Auto cleanup
-        log_info "Running Docker cleanup"
-        docker system prune -af --volumes 2>/dev/null || true
+        # Auto cleanup (SAFE: without --volumes to preserve data)
+        log_info "Running Docker cleanup (images only, volumes preserved)"
+        docker system prune -af 2>/dev/null || true
+        # NOTE: Intentionally NOT using --volumes to prevent data loss
+        # If volume cleanup needed, run manually: docker volume prune
 
         return 1
     fi

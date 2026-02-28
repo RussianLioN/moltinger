@@ -103,6 +103,15 @@ jobs:
       - name: Create issue on drift
         if: steps.drift.outputs.drift_found == 'true'
         run: |
+          # Check for existing open drift issue to prevent duplicates
+          EXISTING=$(gh issue list --repo ${{ github.repository }} --label drift --state open --limit 1 --json number 2>/dev/null || echo "[]")
+
+          if [ "$EXISTING" != "[]" ] && [ -n "$EXISTING" ]; then
+            echo "::warning::Open drift issue already exists. Skipping issue creation."
+            echo "Existing issue: $EXISTING"
+            exit 0
+          fi
+
           DRIFT_FILES="${{ steps.drift.outputs.drift_files }}"
           ISSUE_BODY="## GitOps Drift Detected
 
