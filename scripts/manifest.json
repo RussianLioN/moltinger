@@ -69,6 +69,19 @@
       "requires": ["jq", "sha256sum"],
       "provides": ["verify", "validate"],
       "ci": true
+    },
+    "gitops-metrics.sh": {
+      "version": "1.0.0",
+      "description": "Collect and report GitOps compliance metrics",
+      "entrypoint": true,
+      "requires": ["sha256sum"],
+      "provides": ["metrics", "slo", "report"],
+      "slos": {
+        "compliance_target": 95,
+        "deploy_success_target": 99,
+        "drift_detection_sla_minutes": 360
+      },
+      "cron": "0 * * * *"
     }
   },
   "dependencies": {

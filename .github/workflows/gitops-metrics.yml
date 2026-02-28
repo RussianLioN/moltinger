@@ -1,0 +1,183 @@
+# GitOps Metrics Collection (P2-5)
+# Collects and reports GitOps compliance metrics on schedule
+
+name: GitOps Metrics
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+  METRICS_DIR: /var/log/gitops-metrics
+
+jobs:
+  collect-metrics:
+    name: Collect GitOps Metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Collect metrics from server
+        id: metrics
+        run: |
+          echo "::group::Collecting GitOps metrics"
+
+          # Initialize metrics directory
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
+
+          # Calculate compliance metrics
+          METRICS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
+            set -e
+
+            DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
+            METRICS_DIR="${{ env.METRICS_DIR }}"
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+            # Count tracked files
+            TRACKED=0
+            COMPLIANT=0
+
+            # Check docker-compose.yml
+            if [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+              ((TRACKED++))
+              if grep -q "traefik.enable=true" "$DEPLOY_PATH/docker-compose.yml"; then
+                ((COMPLIANT++))
+              fi
+            fi
+
+            # Check config files exist
+            for f in "$DEPLOY_PATH/config"/*; do
+              [ -f "$f" ] && ((TRACKED++)) && ((COMPLIANT++))
+            done
+
+            # Check scripts exist
+            for f in "$DEPLOY_PATH/scripts"/*.sh; do
+              [ -f "$f" ] && ((TRACKED++)) && ((COMPLIANT++))
+            done
+
+            # Calculate compliance percentage
+            if [ $TRACKED -eq 0 ]; then
+              COMPLIANCE_PCT=100
+            else
+              COMPLIANCE_PCT=$(( (COMPLIANT * 100) / TRACKED ))
+            fi
+
+            # Check last deployment time
+            LAST_DEPLOY=$(stat -c %Y "$DEPLOY_PATH/docker-compose.yml" 2>/dev/null || stat -f %m "$DEPLOY_PATH/docker-compose.yml" 2>/dev/null || echo 0)
+            NOW=$(date +%s)
+            DEPLOY_AGE_MINUTES=$(( (NOW - LAST_DEPLOY) / 60 ))
+
+            # Output JSON
+            cat <<EOF
+            {
+              "timestamp": "$TIMESTAMP",
+              "tracked_files": $TRACKED,
+              "compliant_files": $COMPLIANT,
+              "compliance_percentage": $COMPLIANCE_PCT,
+              "last_deploy_age_minutes": $DEPLOY_AGE_MINUTES,
+              "slos": {
+                "compliance_target": 95,
+                "compliance_met": $([[ $COMPLIANCE_PCT -ge 95 ]] && echo "true" || echo "false")
+              }
+            }
+            EOF
+          ENDSSH
+          )
+
+          echo "$METRICS" > /tmp/gitops-metrics.json
+          echo "metrics<<EOF" >> $GITHUB_OUTPUT
+          echo "$METRICS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Extract key metrics for GitHub Actions
+          COMPLIANCE=$(echo "$METRICS" | jq -r '.compliance_percentage')
+          TRACKED=$(echo "$METRICS" | jq -r '.tracked_files')
+
+          echo "compliance=$COMPLIANCE" >> $GITHUB_OUTPUT
+          echo "tracked_files=$TRACKED" >> $GITHUB_OUTPUT
+
+          echo "::endgroup::"
+
+      - name: Check SLO compliance
+        run: |
+          COMPLIANCE="${{ steps.metrics.outputs.compliance }}"
+
+          echo "## GitOps SLO Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| SLO | Target | Current | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$COMPLIANCE" -ge 95 ]; then
+            echo "| Compliance | 95% | ${COMPLIANCE}% | ✅ MET |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Compliance | 95% | ${COMPLIANCE}% | ❌ BREACH |" >> $GITHUB_STEP_SUMMARY
+            echo "::warning::GitOps compliance below target: ${COMPLIANCE}% < 95%"
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tracked Files:** ${{ steps.metrics.outputs.tracked_files }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload metrics artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitops-metrics
+          path: /tmp/gitops-metrics.json
+          retention-days: 30
+
+  # Create issue on SLO breach
+  alert-on-breach:
+    name: Alert on SLO Breach
+    runs-on: ubuntu-latest
+    needs: collect-metrics
+    if: needs.collect-metrics.outputs.compliance < 95
+
+    steps:
+      - name: Create SLO breach issue
+        run: |
+          ISSUE_BODY="## GitOps SLO Breach Detected
+
+          The GitOps compliance rate has fallen below the 95% target.
+
+          **Current Compliance:** \`${{ needs.collect-metrics.outputs.compliance }}%\`
+          **Target:** 95%
+
+          ### Immediate Actions
+          1. Check the drift detection workflow for details
+          2. Redeploy from CI/CD to sync configuration
+          3. Investigate any manual server modifications
+
+          ### How to Fix
+          \`\`\`bash
+          # Trigger redeployment
+          gh workflow run deploy.yml
+          \`\`\`
+
+          ---
+          *Alert generated by GitOps Metrics workflow*
+          *Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)*
+          "
+
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "🚨 GitOps SLO Breach - Compliance at ${{ needs.collect-metrics.outputs.compliance }}%" \
+            --body "$ISSUE_BODY" \
+            --label "gitops,slo-breach,alert" || true
+        env:
+          GH_TOKEN: ${{ github.token }}
