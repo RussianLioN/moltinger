@@ -139,10 +139,33 @@ GitOps Compliance: Enforced ✅
 - `83cff41` — fix(sandbox): add ~/.beads to write allow list
 
 **В работе**:
-- 🔄 Bug health check (`/health-bugs`) — wisp: `moltinger-wisp-u7e`
+- ✅ Bug health check завершён — все найденные баги исправлены
 
 **Нерешённые**:
 - ❌ Moltis API аутентификация для автоматического тестирования Telegram бота
+
+---
+
+### 2026-02-28 (продолжение): P4 Tasks
+
+**Завершено**:
+
+#### P4 - Backlog tasks
+- ✅ **moltinger-hdn** — Backup verification cron (еженедельная проверка integrity)
+- ✅ **moltinger-kpt** — Pre-deployment tests (shellcheck, yamllint, compose validation)
+- ✅ **moltinger-eml** — Replace sed -i with MOLTIS_VERSION env var (GitOps compliant)
+- ✅ **moltinger-wisp-u7e** — Healthcheck epic закрыт (все баги исправлены)
+
+**Новые файлы**:
+- `scripts/cron.d/moltis-backup-verify` — Cron конфигурация
+
+**Изменения в CI/CD**:
+- Добавлен `test` job в deploy.yml (shellcheck, yamllint, docker-compose validation)
+- Deploy теперь зависит от успешного прохождения тестов
+- Добавлен шаг установки cron jobs из scripts/cron.d/
+
+**Коммит**:
+- `2aaa763` — feat(ci): add pre-deployment tests and backup verification cron
 
 ---
 
@@ -214,14 +237,17 @@ scripts/scripts-verify.sh         # Validate scripts
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                 CI/CD PIPELINE                              │
-│  gitops-compliance → backup → deploy → verify              │
+│                 CI/CD PIPELINE (Updated 2026-02-28)         │
+│  gitops-compliance → preflight → test → backup → deploy    │
+│                              ↑                              │
+│                    Deploy blocked on test failure           │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │              SCHEDULED WORKFLOWS                            │
 │  • Drift Detection (каждые 6ч) → Issue on drift            │
 │  • Metrics Collection (каждый час) → SLO tracking          │
+│  • Backup Verification (каждое воскресенье 03:00 MSK)      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -229,7 +255,8 @@ scripts/scripts-verify.sh         # Validate scripts
 - Compliance Rate: ≥95%
 - Deployment Success: ≥99%
 - Drift Detection SLA: 6 hours
+- Backup Verification: Weekly
 
 ---
 
-*Last updated: 2026-02-28 | Session: GitOps Compliance Framework*
+*Last updated: 2026-02-28 | Session: P4 Tasks & CI/CD Improvements*
