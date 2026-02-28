@@ -208,6 +208,43 @@ jobs:
 
           echo "::notice::All preflight checks passed"
 
+      - name: Validate scripts manifest (IaC)
+        run: |
+          echo "::group::Scripts Manifest Validation"
+          if [ -f "scripts/manifest.json" ]; then
+            # Install jq if not available
+            if ! command -v jq &>/dev/null; then
+              sudo apt-get update -qq && sudo apt-get install -y -qq jq
+            fi
+
+            # Validate manifest syntax
+            if ! jq empty scripts/manifest.json 2>/dev/null; then
+              echo "::error::scripts/manifest.json is not valid JSON"
+              exit 1
+            fi
+
+            # Check all scripts in manifest exist
+            MISSING=0
+            while IFS= read -r script; do
+              if [ ! -f "scripts/$script" ]; then
+                echo "::error::Script missing: $script (in manifest but not in repo)"
+                MISSING=$((MISSING + 1))
+              fi
+            done < <(jq -r '.scripts | keys[]' scripts/manifest.json)
+
+            if [ $MISSING -gt 0 ]; then
+              exit 1
+            fi
+
+            # Summary
+            TOTAL=$(jq -r '.scripts | length' scripts/manifest.json)
+            ENTRYPOINTS=$(jq -r '[.scripts[] | select(.entrypoint == true)] | length' scripts/manifest.json)
+            echo "::notice::Scripts validated: $TOTAL total, $ENTRYPOINTS entrypoints"
+          else
+            echo "::warning::scripts/manifest.json not found (IaC validation skipped)"
+          fi
+          echo "::endgroup::"
+
   # ===========================================
   # Backup current state before deployment
   # ===========================================

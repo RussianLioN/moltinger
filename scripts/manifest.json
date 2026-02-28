@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "moltinger-scripts",
+  "version": "1.0.0",
+  "description": "Server automation scripts for Moltinger project",
+  "maintainer": "DevOps Team",
+  "repository": "https://github.com/RussianLioN/moltinger",
+  "scripts": {
+    "deploy.sh": {
+      "version": "2.1.0",
+      "description": "Blue-green deployment with health checks, rollback, notifications",
+      "entrypoint": true,
+      "requires": ["docker", "docker-compose"],
+      "provides": ["deploy", "rollback", "status", "start", "stop", "restart", "logs"],
+      "gitops": true
+    },
+    "backup-moltis-enhanced.sh": {
+      "version": "2.1.0",
+      "description": "Enterprise backup with encryption, offsite backup, integrity verification",
+      "entrypoint": true,
+      "requires": ["docker", "tar", "gpg"],
+      "provides": ["backup", "restore", "verify", "list"],
+      "cron": "0 2 * * *"
+    },
+    "backup-moltis.sh": {
+      "version": "1.0.0",
+      "description": "Simple backup script (legacy)",
+      "entrypoint": false,
+      "requires": ["tar"],
+      "deprecated": true,
+      "replaced_by": "backup-moltis-enhanced.sh"
+    },
+    "health-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Health monitoring and alerting",
+      "entrypoint": true,
+      "requires": ["curl", "docker"],
+      "provides": ["check", "watch", "alert"],
+      "cron": "*/5 * * * *"
+    },
+    "test-moltis-api.sh": {
+      "version": "1.0.0",
+      "description": "Moltis HTTP API testing script",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["test-api"],
+      "env_vars": ["MOLTIS_URL", "MOLTIS_PASSWORD"]
+    },
+    "gitops-guards.sh": {
+      "version": "1.0.0",
+      "description": "GitOps compliance guard functions library",
+      "entrypoint": false,
+      "type": "library",
+      "exports": [
+        "gitops_is_ci",
+        "gitops_confirm_manual",
+        "gitops_log_action",
+        "gitops_verify_file",
+        "gitops_check_drift",
+        "gitops_mark_manual",
+        "gitops_guard_deploy",
+        "gitops_guard_config"
+      ]
+    },
+    "scripts-verify.sh": {
+      "version": "1.0.0",
+      "description": "Validate scripts manifest and verify integrity",
+      "entrypoint": true,
+      "requires": ["jq", "sha256sum"],
+      "provides": ["verify", "validate"],
+      "ci": true
+    }
+  },
+  "dependencies": {
+    "system": {
+      "docker": ">=20.10",
+      "docker-compose": ">=2.0"
+    },
+    "packages": {
+      "curl": "any",
+      "jq": "any",
+      "tar": "any",
+      "gpg": "optional"
+    }
+  },
+  "deploy": {
+    "target_path": "/opt/moltinger/scripts",
+    "permissions": "755",
+    "owner": "root",
+    "sync_command": "scp -r scripts/* server:/opt/moltinger/scripts/"
+  }
+}
