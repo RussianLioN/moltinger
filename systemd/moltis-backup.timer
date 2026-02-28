@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Moltis Backup Timer
+Documentation=specs/001-docker-deploy-improvements/spec.md
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

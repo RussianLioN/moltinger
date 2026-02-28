@@ -49,7 +49,7 @@ x-logging: &logging
 # ============================================================================
 services:
   moltis:
-    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}
+    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v1.7.0}
     container_name: moltis
     restart: unless-stopped
     # SECURITY: privileged mode required for Docker-in-Docker sandbox execution
@@ -101,7 +101,7 @@ services:
 
   # Watchtower - Automatic container updates
   watchtower:
-    image: containrrr/watchtower:latest
+    image: containrrr/watchtower:v1.7.1
     container_name: watchtower
     restart: unless-stopped
 

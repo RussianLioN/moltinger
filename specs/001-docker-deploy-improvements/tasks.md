@@ -77,8 +77,10 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create systemd timer unit at `systemd/moltis-backup.timer`
-- [ ] T009 [P] [US1] Create systemd service unit at `systemd/moltis-backup.service`
+- [X] T008 [P] [US1] Create systemd timer unit at `systemd/moltis-backup.timer`
+  → Artifacts: [moltis-backup.timer](systemd/moltis-backup.timer)
+- [X] T009 [P] [US1] Create systemd service unit at `systemd/moltis-backup.service`
+  → Artifacts: [moltis-backup.service](systemd/moltis-backup.service)
 - [ ] T010 [US1] Update backup script to support --json flag in `scripts/backup-moltis-enhanced.sh`
 - [ ] T011 [US1] Add S3 upload retry logic to backup script in `scripts/backup-moltis-enhanced.sh`
 - [ ] T012 [US1] Add backup metrics export for Prometheus in `scripts/backup-moltis-enhanced.sh`
@@ -97,9 +99,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T015 [P] [US2] Create template for TELEGRAM_BOT_TOKEN secret at `secrets/telegram_bot_token.txt.example`
-- [ ] T016 [P] [US2] Create template for TAVILY_API_KEY secret at `secrets/tavily_api_key.txt.example`
-- [ ] T017 [P] [US2] Create template for GLM_API_KEY secret at `secrets/glm_api_key.txt.example`
+- [X] T015 [P] [US2] Create template for TELEGRAM_BOT_TOKEN secret at `secrets/telegram_bot_token.txt.example`
+  → Artifacts: [telegram_bot_token.txt.example](secrets/telegram_bot_token.txt.example)
+- [X] T016 [P] [US2] Create template for TAVILY_API_KEY secret at `secrets/tavily_api_key.txt.example`
+  → Artifacts: [tavily_api_key.txt.example](secrets/tavily_api_key.txt.example)
+- [X] T017 [P] [US2] Create template for GLM_API_KEY secret at `secrets/glm_api_key.txt.example`
+  → Artifacts: [glm_api_key.txt.example](secrets/glm_api_key.txt.example)
 - [ ] T018 [US2] Update docker-compose.yml to use secrets section for all API keys
 - [ ] T019 [US2] Update docker-compose.prod.yml to use secrets section for all API keys
 - [ ] T020 [US2] Update Moltis service to read secrets from `/run/secrets/` paths
@@ -117,10 +122,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T022 [P] [US3] Pin Moltis image version in `docker-compose.yml` (change `:latest` to `:v1.7.0`)
-- [ ] T023 [P] [US3] Pin Moltis image version in `docker-compose.prod.yml`
-- [ ] T024 [P] [US3] Pin Watchtower image version in `docker-compose.yml`
-- [ ] T025 [P] [US3] Pin Watchtower image version in `docker-compose.prod.yml`
+- [X] T022 [P] [US3] Pin Moltis image version in `docker-compose.yml` (change `:latest` to `:v1.7.0`)
+  → Artifacts: [docker-compose.yml](docker-compose.yml) - moltis:v1.7.0
+- [X] T023 [P] [US3] Pin Moltis image version in `docker-compose.prod.yml`
+  → Artifacts: [docker-compose.prod.yml](docker-compose.prod.yml) - moltis:v1.7.0
+- [X] T024 [P] [US3] Pin Watchtower image version in `docker-compose.yml`
+  → Artifacts: [docker-compose.yml](docker-compose.yml) - watchtower:v1.7.1
+- [X] T025 [P] [US3] Pin Watchtower image version in `docker-compose.prod.yml`
+  → Artifacts: [docker-compose.prod.yml](docker-compose.prod.yml) - watchtower:v1.7.1
 - [ ] T026 [US3] Document version update process in `docs/version-update.md`
 - [ ] T027 [US3] Add Makefile target `version-check` to list current versions
 

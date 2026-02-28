@@ -1,0 +1,16 @@
+[Unit]
+Description=Moltis Backup Service
+Documentation=specs/001-docker-deploy-improvements/spec.md
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/bin/backup-moltis-enhanced.sh backup --json
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
