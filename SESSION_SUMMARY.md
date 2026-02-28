@@ -225,6 +225,19 @@ scripts/scripts-verify.sh         # Validate scripts
 2. **Moltis API аутентификация** — исследовать WebSocket API или Traefik конфигурацию
 3. Протестировать skill telegram-learner на канале @tsingular
 4. Создать навык самообновления инструкции
+5. **P4 Backlog** — приоритизированный список в `docs/P4-BACKLOG-PRIORITIES.md`
+
+### P4 Priority Tasks (Recommended Order)
+
+| # | Task | Priority | Why |
+|---|------|----------|-----|
+| 1 | `moltinger-xh7` | CRITICAL | Fallback LLM - без него Moltis не работает при падении GLM |
+| 2 | `moltinger-sjx` | HIGH | S3 Offsite Backup - disaster recovery |
+| 3 | `moltinger-r8r` | MEDIUM | Traefik Rate Limiting - защита от abuse |
+| 4 | `moltinger-j22` | MEDIUM | AlertManager Receivers - уведомления |
+| 5 | `moltinger-eb0` | MEDIUM | Grafana Dashboard - визуализация |
+
+> Детали в: `docs/P4-BACKLOG-PRIORITIES.md`
 
 ---
 
