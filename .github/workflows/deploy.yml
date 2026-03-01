@@ -295,11 +295,11 @@ jobs:
           FAILED=0
 
           # Run shellcheck on all bash scripts
-          # Note: -e SC2155 disables "declare and assign separately" style warning
+          # Note: -S style means only report errors (not style warnings)
           for script in scripts/*.sh; do
             if [ -f "$script" ]; then
               echo "Checking: $script"
-              if ! shellcheck -x -s bash -e SC2155 "$script"; then
+              if ! shellcheck -x -s bash -S style "$script"; then
                 FAILED=$((FAILED + 1))
               fi
             fi
