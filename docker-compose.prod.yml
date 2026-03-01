@@ -261,6 +261,64 @@ services:
     networks:
       - monitoring
 
+  # ========================================================================
+  # OLLAMA - Fallback LLM Sidecar
+  # ========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-fallback
+    restart: unless-stopped
+
+    ports:
+      - "11434:11434"
+
+    volumes:
+      - ollama-data:/root/.ollama
+
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_ORIGINS: "*"
+      # API key for cloud models (optional)
+      OLLAMA_API_KEY_FILE: /run/secrets/ollama_api_key
+
+    secrets:
+      - ollama_api_key
+
+    # Resource limits for LLM inference
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      <<: *logging
+      options:
+        labels: "service=ollama,environment=production"
+
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=11434"
+      - "prometheus.io/path=/metrics"
+
+    networks:
+      - monitoring
+
 # ========================================================================
 # SECRETS - Secure credential management
 # ========================================================================
@@ -273,6 +331,8 @@ secrets:
     file: ./secrets/tavily_api_key.txt
   glm_api_key:
     file: ./secrets/glm_api_key.txt
+  ollama_api_key:
+    file: ./secrets/ollama_api_key.txt
 
 # ========================================================================
 # VOLUMES
@@ -284,6 +344,8 @@ volumes:
       type: none
       o: bind
       device: ./data
+  ollama-data:
+    driver: local
   prometheus-data:
   alertmanager-data:
 

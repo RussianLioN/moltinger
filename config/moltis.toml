@@ -35,7 +35,11 @@ enabled = true                    # Enable HTTPS (recommended)
 auto_generate = true              # Auto-generate local CA and server certificate
 
 [providers.ollama]
-enabled = false                   # Disabled - using GLM (cloud provider)
+enabled = true                    # Fallback LLM provider via Ollama sidecar
+base_url = "http://ollama:11434"  # Docker service name
+model = "gemini-3-flash-preview:cloud"  # Cloud model via Ollama
+alias = "ollama"
+api_key = "${OLLAMA_API_KEY}"     # API key for Ollama cloud models
 # http_redirect_port = 18790      # Optional override (default: server.port + 1)
 # cert_path = "/path/to/cert.pem"     # Custom certificate file (overrides auto-gen)
 # key_path = "/path/to/key.pem"       # Custom private key file
@@ -186,9 +190,13 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.2", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.2", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# Z.ai models + Gemini fallback for rate limit resilience
-allowed_models = ["zai::glm-5", "zai::glm-4.7", "zai::glm-4.5-air", "gemini::gemini-2.0-flash-exp"]
-priority_models = ["zai::glm-5"]  # Prefer Z.ai, fallback to Gemini
+# Z.ai models + Ollama fallback + Gemini fallback for rate limit resilience
+allowed_models = [
+    "zai::glm-5", "zai::glm-4.7", "zai::glm-4.5-air",  # Primary: Z.ai GLM
+    "ollama::gemini-3-flash-preview:cloud",             # Fallback 1: Ollama
+    "gemini::gemini-2.0-flash-exp"                      # Fallback 2: Google Gemini
+]
+priority_models = ["zai::glm-5"]  # Prefer Z.ai, then fallback chain
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TOOLS
@@ -500,8 +508,12 @@ timezone = "local"                # Timezone: "local" or IANA name like "Europe/
 
 [failover]
 enabled = true                    # Enable automatic failover
-fallback_models = ["gemini::gemini-2.0-flash-exp"]  # Fallback to Gemini when Z.ai rate limited
-                                  # Chain: glm-5 → gemini-2.0-flash-exp
+# Fallback chain: Z.ai GLM-5 → Ollama Gemini → Google Gemini
+fallback_models = [
+    "ollama::gemini-3-flash-preview:cloud",  # Primary fallback: Ollama sidecar
+    "gemini::gemini-2.0-flash-exp"           # Secondary fallback: Google Gemini direct
+]
+# Chain: glm-5 → ollama-gemini → google-gemini
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VOICE
