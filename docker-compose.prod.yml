@@ -5,8 +5,8 @@
 x-common-env: &common-env
   # Network configuration
   MOLTIS_HOST: 0.0.0.0
-  MOLTIS_NO_TLS: true
-  MOLTIS_BEHIND_PROXY: true
+  MOLTIS_NO_TLS: "true"
+  MOLTIS_BEHIND_PROXY: "true"
 
 x-healthcheck: &healthcheck
   test: ["CMD", "curl", "-f", "http://localhost:13131/health"]
@@ -55,7 +55,7 @@ services:
       MOLTIS_PASSWORD_FILE: /run/secrets/moltis_password
       # Telegram bot configuration
       TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram_bot_token
-      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
       # Tavily API for MCP server
       TAVILY_API_KEY_FILE: /run/secrets/tavily_api_key
       # GLM-5 API key for Z.ai Coding Plan (OpenAI-compatible)
