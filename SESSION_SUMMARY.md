@@ -42,7 +42,8 @@ GitOps Compliance: Enforced ✅
 
 ### Версия
 
-**Current Release**: v1.7.0
+**Current Release**: v1.8.0
+**Feature Complete**: 001-docker-deploy-improvements (2026-03-01)
 
 ---
 
@@ -103,6 +104,34 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-01: Docker Deployment Improvements - Feature Complete
+
+**Завершено**:
+
+#### Epic moltinger-6ys Closed
+- ✅ Все 10 фаз реализованы
+- ✅ Phase 0: Planning - executors assigned
+- ✅ Phase 1: Setup - directories created
+- ✅ Phase 2: Foundational - YAML anchors, compose validation
+- ✅ Phase 3 (US1): Automated Backup - systemd timer, S3 support, JSON output
+- ✅ Phase 4 (US2): Secrets Management - Docker secrets, preflight validation
+- ✅ Phase 5 (US3): Reproducible Deployments - pinned versions
+- ✅ Phase 6 (US4): GitOps Compliance - no sed, full file sync
+- ✅ Phase 7 (US5-US7): P2 Enhancements - JSON output, unified config
+- ✅ Phase 8: Polish - docs, alerts, quickstart
+
+**Коммиты сессии**:
+- `789fba8` — chore(beads): close Docker Deployment Improvements epic
+
+**Оставшиеся задачи (P4 Backlog)**:
+- moltinger-xh7: Fallback LLM provider (CRITICAL)
+- moltinger-sjx: S3 Offsite Backup
+- moltinger-r8r: Traefik Rate Limiting
+- moltinger-j22: AlertManager Receivers
+- moltinger-eb0: Grafana Dashboard
+
+---
 
 ### 2026-02-28: GitOps Compliance Framework (P0/P1/P2)
 
@@ -249,11 +278,11 @@ scripts/scripts-verify.sh         # Validate scripts
 
 ## 🎯 Next Steps
 
-1. ~~Решить вопрос безопасного взаимодействия с Telegram~~ → GitOps framework готов
-2. **Moltis API аутентификация** — исследовать WebSocket API или Traefik конфигурацию
-3. Протестировать skill telegram-learner на канале @tsingular
-4. Создать навык самообновления инструкции
-5. **P4 Backlog** — приоритизированный список в `docs/P4-BACKLOG-PRIORITIES.md`
+1. **P4 Backlog** — 9 задач готовы к работе (см. `bd ready`)
+2. **moltinger-xh7** — CRITICAL: Fallback LLM provider
+3. **moltinger-sjx** — HIGH: S3 Offsite Backup
+4. Протестировать skill telegram-learner на канале @tsingular
+5. Создать навык самообновления инструкции
 
 ### P4 Priority Tasks (Recommended Order)
 
