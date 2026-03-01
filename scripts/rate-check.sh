@@ -174,8 +174,8 @@ alarm_mode() {
             # Метод 2: tput bel (альтернатива)
             tput bel 2>/dev/null
 
-            # Метод 3: Запись в файл для внешнего мониторинга
-            echo "$(date '+%Y-%m-%d %H:%M:%S') RATE_LIMIT $count errors" >> /tmp/claude-rate-alert.log
+            # Метод 3: Запись в файл для внешнего мониторинга (в разрешённой директории)
+            echo "$(date '+%Y-%m-%d %H:%M:%S') RATE_LIMIT $count errors" >> "$HOME/.claude/rate-alert.log"
 
             # Метод 4: Звуковое уведомление (macOS, может не работать в sandbox)
             if command -v say &> /dev/null; then
