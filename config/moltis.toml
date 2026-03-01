@@ -195,7 +195,7 @@ priority_models = ["zai::glm-5"]  # Prefer Z.ai, fallback to Gemini
 # ══════════════════════════════════════════════════════════════════════════════
 
 [tools]
-agent_timeout_secs = 120          # Max seconds for an agent run (reduced for faster fallback)
+agent_timeout_secs = 30           # Max seconds for an agent run (30s for fast failover on rate limits)
 max_tool_result_bytes = 50000     # Max bytes per tool result before truncation (50KB)
 
 # ── Command Execution ─────────────────────────────────────────────────────────
