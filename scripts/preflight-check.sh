@@ -52,11 +52,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Results storage
-declare -a CHECKS
-declare -a ERRORS
-declare -a WARNINGS
-declare -a MISSING_SECRETS
+# Results storage (initialize as empty arrays to avoid unbound variable issues)
+CHECKS=()
+ERRORS=()
+WARNINGS=()
+MISSING_SECRETS=()
 
 # Helper functions
 log_info() {
