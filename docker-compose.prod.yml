@@ -278,11 +278,8 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0
       OLLAMA_ORIGINS: "*"
-      # API key for cloud models (optional)
-      OLLAMA_API_KEY_FILE: /run/secrets/ollama_api_key
-
-    secrets:
-      - ollama_api_key
+      # API key for cloud models (from .env, GitOps-compliant)
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
 
     # Resource limits for LLM inference
     deploy:
@@ -331,8 +328,7 @@ secrets:
     file: ./secrets/tavily_api_key.txt
   glm_api_key:
     file: ./secrets/glm_api_key.txt
-  ollama_api_key:
-    file: ./secrets/ollama_api_key.txt
+  # OLLAMA_API_KEY uses environment variable (GitOps-compliant via CI/CD .env)
 
 # ========================================================================
 # VOLUMES

@@ -544,6 +544,9 @@ jobs:
           # LLM Provider - GLM (Zhipu AI)
           GLM_API_KEY=${{ secrets.GLM_API_KEY }}
 
+          # LLM Fallback - Ollama Cloud (optional, for cloud models)
+          OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}
+
           # Web Search - Tavily
           TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
 
