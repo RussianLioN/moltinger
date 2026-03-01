@@ -53,7 +53,8 @@ get_429_count() {
                 ((count++)) || true
             fi
         fi
-    done < <(grep -h "429.*Rate limit" $recent_files 2>/dev/null | tail -50)
+    # Z.ai rate limit patterns: HTTP 429 OR code:"1302" (Z.ai specific)
+    done < <(grep -hE '(429.*Rate limit|"code":"1302")' $recent_files 2>/dev/null | tail -50)
 
     echo "$count"
 }
@@ -75,7 +76,7 @@ get_last_429() {
         return
     fi
 
-    local last=$(grep -h "429.*Rate limit" $recent_files 2>/dev/null | tail -1)
+    local last=$(grep -hE '(429.*Rate limit|"code":"1302")' $recent_files 2>/dev/null | tail -1)
     if [[ -n "$last" ]]; then
         # Извлекаем время
         local time=$(echo "$last" | grep -oE "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}")
