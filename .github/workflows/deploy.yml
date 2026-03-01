@@ -576,7 +576,20 @@ jobs:
           VERSION="${{ needs.preflight.outputs.version }}"
           echo "::group::Pulling Moltis image $VERSION"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
-            docker pull ${{ env.MOLTIS_IMAGE }}:$VERSION
+            # Try to pull the image, but don't fail if it doesn't exist remotely
+            # (image may already exist locally from previous builds)
+            if docker pull ${{ env.MOLTIS_IMAGE }}:$VERSION 2>/dev/null; then
+              echo "Image pulled successfully"
+            else
+              echo "::warning::Could not pull image ${{ env.MOLTIS_IMAGE }}:$VERSION - using existing local image if available"
+              # Check if image exists locally
+              if docker images ${{ env.MOLTIS_IMAGE }}:$VERSION --format "{{.ID}}" | grep -q .; then
+                echo "Using existing local image"
+              else
+                echo "::error::Image not found locally or remotely"
+                exit 1
+              fi
+            fi
           EOF
           echo "::endgroup::"
 
