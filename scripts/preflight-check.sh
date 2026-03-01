@@ -459,7 +459,7 @@ main() {
     # In CI mode, only check configuration files (secrets are in GitHub Secrets)
     if [[ "$CI_MODE" == "true" ]]; then
         if [[ "$OUTPUT_JSON" == "false" ]]; then
-            echo "Running in CI mode - skipping Docker/runtime checks"
+            echo "Running in CI mode - skipping Docker/runtime checks" >&2
         fi
         check_compose_valid
         check_ollama_config
