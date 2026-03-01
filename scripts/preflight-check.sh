@@ -37,6 +37,7 @@ REQUIRED_SECRETS=(
 # Optional secrets (warnings only)
 OPTIONAL_SECRETS=(
     "smtp_password"
+    "ollama_api_key"  # Optional - only needed for Ollama Cloud models
 )
 
 # Output format
@@ -187,6 +188,109 @@ check_disk_space() {
     fi
 }
 
+# ========================================================================
+# LLM FAILOVER CHECKS (Fallback LLM Feature)
+# ========================================================================
+
+check_ollama_config() {
+    local moltis_config="$PROJECT_ROOT/config/moltis.toml"
+    local ollama_enabled=false
+    local ollama_base_url=""
+    local ollama_model=""
+    local failover_enabled=false
+
+    # Check if moltis.toml exists
+    if [[ ! -f "$moltis_config" ]]; then
+        add_check "ollama_config" "fail" "moltis.toml not found" "error"
+        return
+    fi
+
+    # Parse Ollama configuration from moltis.toml
+    # Using grep and sed for TOML parsing (basic but works for our use case)
+    if grep -q '^\[providers\.ollama\]' "$moltis_config"; then
+        ollama_enabled=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'enabled' | sed 's/.*=.*\(true\|false\).*/\1/' | head -1)
+        ollama_base_url=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'base_url' | sed 's/.*=.*"\([^"]*\)".*/\1/' | head -1)
+        ollama_model=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'model' | sed 's/.*=.*"\([^"]*\)".*/\1/' | head -1)
+    fi
+
+    # Check failover configuration
+    if grep -q '^\[failover\]' "$moltis_config"; then
+        failover_enabled=$(grep -A5 '^\[failover\]' "$moltis_config" | grep 'enabled' | sed 's/.*=.*\(true\|false\).*/\1/' | head -1)
+    fi
+
+    # Validate configuration
+    if [[ "$ollama_enabled" == "true" ]]; then
+        # Check base URL
+        if [[ -n "$ollama_base_url" ]]; then
+            add_check "ollama_base_url" "pass" "Ollama base URL configured: $ollama_base_url" "warning"
+        else
+            add_check "ollama_base_url" "fail" "Ollama enabled but base_url not set" "error"
+        fi
+
+        # Check model
+        if [[ -n "$ollama_model" ]]; then
+            add_check "ollama_model" "pass" "Ollama model configured: $ollama_model" "warning"
+        else
+            add_check "ollama_model" "fail" "Ollama enabled but model not set" "error"
+        fi
+
+        # Check if OLLAMA_API_KEY is needed (cloud models)
+        if [[ "$ollama_model" == *":cloud"* ]]; then
+            local ollama_key_file="$SECRETS_DIR/ollama_api_key.txt"
+            if [[ -f "$ollama_key_file" ]] && [[ -s "$ollama_key_file" ]]; then
+                # Check if it's not the placeholder
+                if grep -q "PLACEHOLDER" "$ollama_key_file" 2>/dev/null; then
+                    add_check "ollama_api_key" "fail" "Ollama API key is placeholder - replace with actual key" "warning"
+                else
+                    add_check "ollama_api_key" "pass" "Ollama API key configured for cloud model" "warning"
+                fi
+            else
+                add_check "ollama_api_key" "fail" "Ollama cloud model requires ollama_api_key secret" "warning"
+            fi
+        fi
+
+        # Check failover is enabled
+        if [[ "$failover_enabled" == "true" ]]; then
+            add_check "failover_config" "pass" "Failover is enabled in moltis.toml" "warning"
+        else
+            add_check "failover_config" "warning" "Ollama configured but failover not enabled" "warning"
+        fi
+    else
+        add_check "ollama_config" "pass" "Ollama provider not enabled (optional)" "warning"
+    fi
+}
+
+check_ollama_secret() {
+    local ollama_key_file="$SECRETS_DIR/ollama_api_key.txt"
+
+    if [[ -f "$ollama_key_file" ]]; then
+        # Check file is not empty
+        if [[ -s "$ollama_key_file" ]]; then
+            # Check file permissions
+            local perms
+            perms=$(stat -f "%Lp" "$ollama_key_file" 2>/dev/null || stat -c "%a" "$ollama_key_file" 2>/dev/null || echo "unknown")
+
+            if [[ "$perms" == "600" ]]; then
+                add_check "ollama_secret_perms" "pass" "Ollama API key file has correct permissions (600)" "warning"
+            else
+                add_check "ollama_secret_perms" "warning" "Ollama API key file should have 600 permissions (got: $perms)" "warning"
+            fi
+
+            # Check it's not placeholder
+            if grep -q "PLACEHOLDER" "$ollama_key_file" 2>/dev/null; then
+                add_check "ollama_secret_valid" "warning" "Ollama API key contains placeholder - replace before deployment" "warning"
+            else
+                add_check "ollama_secret_valid" "pass" "Ollama API key file exists and is not empty" "warning"
+            fi
+        else
+            add_check "ollama_secret_valid" "warning" "Ollama API key file is empty" "warning"
+        fi
+    else
+        # This is optional - only needed for cloud models
+        add_check "ollama_secret_valid" "pass" "Ollama API key not configured (optional for local models)" "warning"
+    fi
+}
+
 # Output functions
 output_json() {
     local status="pass"
@@ -313,6 +417,10 @@ main() {
     check_network_exists
     check_s3_credentials
     check_disk_space
+
+    # LLM Failover checks
+    check_ollama_config
+    check_ollama_secret
 
     # Output results
     if [[ "$OUTPUT_JSON" == "true" ]]; then

@@ -139,8 +139,10 @@
 
 ### Implementation for User Story 3
 
-- [ ] T022 [P] [US3] Add Ollama configuration validation to scripts/preflight-check.sh
-- [ ] T023 [P] [US3] Add OLLAMA_API_KEY secret existence check to scripts/preflight-check.sh
+- [X] T022 [P] [US3] Add Ollama configuration validation to scripts/preflight-check.sh
+  → Artifacts: [scripts/preflight-check.sh](/scripts/preflight-check.sh)
+- [X] T023 [P] [US3] Add OLLAMA_API_KEY secret existence check to scripts/preflight-check.sh
+  → Artifacts: [scripts/preflight-check.sh](/scripts/preflight-check.sh)
 - [ ] T024 [US3] Add failover smoke test step to .github/workflows/deploy.yml verify job
 - [ ] T025 [US3] Add TOML syntax validation for moltis.toml in .github/workflows/deploy.yml
 - [ ] T026 [US3] Add Ollama health check step to .github/workflows/deploy.yml verify job
