@@ -228,6 +228,250 @@ get_llm_provider_status() {
     echo "{\"glm\":\"$glm_status\",\"ollama\":\"$ollama_status\"}"
 }
 
+# ========================================================================
+# CIRCUIT BREAKER STATE MACHINE
+# ========================================================================
+# States: CLOSED (normal) → OPEN (failed) → HALF-OPEN (testing recovery)
+# Contract: specs/001-fallback-llm-ollama/contracts/circuit-breaker-state.md
+
+# Circuit breaker configuration
+CIRCUIT_BREAKER_FAILURE_THRESHOLD="${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-3}"
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT="${CIRCUIT_BREAKER_RECOVERY_TIMEOUT:-300}"  # 5 minutes
+CIRCUIT_BREAKER_SUCCESS_THRESHOLD="${CIRCUIT_BREAKER_SUCCESS_THRESHOLD:-2}"
+CIRCUIT_BREAKER_STATE_FILE="${CIRCUIT_BREAKER_STATE_FILE:-/tmp/moltis-llm-state.json}"
+
+# Circuit breaker states
+CB_STATE_CLOSED="closed"        # Normal operation
+CB_STATE_OPEN="open"            # Fallback mode
+CB_STATE_HALF_OPEN="half_open"  # Testing recovery
+
+# Initialize circuit breaker state file
+init_circuit_breaker() {
+    if [[ ! -f "$CIRCUIT_BREAKER_STATE_FILE" ]]; then
+        local initial_state
+        initial_state=$(cat <<EOF
+{
+    "state": "$CB_STATE_CLOSED",
+    "failure_count": 0,
+    "success_count": 0,
+    "last_failure_time": null,
+    "last_state_change": "$(get_timestamp)",
+    "active_provider": "glm",
+    "fallback_provider": "ollama"
+}
+EOF
+)
+        echo "$initial_state" > "$CIRCUIT_BREAKER_STATE_FILE"
+        log_info "Circuit breaker initialized in CLOSED state"
+    fi
+}
+
+# Read circuit breaker state
+get_circuit_breaker_state() {
+    init_circuit_breaker
+
+    local state
+    state=$(cat "$CIRCUIT_BREAKER_STATE_FILE" 2>/dev/null || echo "{}")
+
+    if ! echo "$state" | jq -e '.state' > /dev/null 2>&1; then
+        init_circuit_breaker
+        state=$(cat "$CIRCUIT_BREAKER_STATE_FILE")
+    fi
+
+    echo "$state"
+}
+
+# Get current state name
+get_current_state() {
+    get_circuit_breaker_state | jq -r '.state'
+}
+
+# Get active provider
+get_active_provider() {
+    get_circuit_breaker_state | jq -r '.active_provider'
+}
+
+# Update circuit breaker state (with file locking)
+update_circuit_breaker() {
+    local new_state="$1"
+    local active_provider="$2"
+    local failure_count="${3:-0}"
+    local success_count="${4:-0}"
+
+    init_circuit_breaker
+
+    local current_state
+    current_state=$(get_circuit_breaker_state)
+    local old_state
+    old_state=$(echo "$current_state" | jq -r '.state')
+
+    # Build new state
+    local new_state_json
+    new_state_json=$(echo "$current_state" | jq \
+        --arg state "$new_state" \
+        --arg provider "$active_provider" \
+        --argjson failures "$failure_count" \
+        --argjson successes "$success_count" \
+        --arg timestamp "$(get_timestamp)" \
+        '{
+            state: $state,
+            failure_count: $failures,
+            success_count: $successes,
+            last_failure_time: .last_failure_time,
+            last_state_change: (if .state != $state then $timestamp else .last_state_change end),
+            active_provider: $provider,
+            fallback_provider: .fallback_provider
+        }')
+
+    # Write with locking (using flock)
+    (
+        flock -x 200
+        echo "$new_state_json" > "$CIRCUIT_BREAKER_STATE_FILE"
+    ) 200>"${CIRCUIT_BREAKER_STATE_FILE}.lock"
+
+    # Log state change
+    if [[ "$old_state" != "$new_state" ]]; then
+        log_info "Circuit breaker: $old_state → $new_state (provider: $active_provider)"
+        send_alert "Circuit Breaker State Change" "State changed from $old_state to $new_state"
+    fi
+}
+
+# Record a failure
+record_failure() {
+    local current_state
+    current_state=$(get_circuit_breaker_state)
+    local state
+    state=$(echo "$current_state" | jq -r '.state')
+    local failure_count
+    failure_count=$(echo "$current_state" | jq -r '.failure_count')
+
+    failure_count=$((failure_count + 1))
+
+    log_warn "Recording failure ($failure_count/$CIRCUIT_BREAKER_FAILURE_THRESHOLD)"
+
+    # State transitions
+    case "$state" in
+        "$CB_STATE_CLOSED")
+            if [[ $failure_count -ge $CIRCUIT_BREAKER_FAILURE_THRESHOLD ]]; then
+                log_error "Failure threshold reached, opening circuit"
+                update_circuit_breaker "$CB_STATE_OPEN" "ollama" "$failure_count" 0
+                # Update last_failure_time
+                local updated_state
+                updated_state=$(cat "$CIRCUIT_BREAKER_STATE_FILE" | jq --arg ts "$(get_timestamp)" '.last_failure_time = $ts')
+                echo "$updated_state" > "$CIRCUIT_BREAKER_STATE_FILE"
+            else
+                update_circuit_breaker "$CB_STATE_CLOSED" "glm" "$failure_count" 0
+            fi
+            ;;
+        "$CB_STATE_HALF_OPEN")
+            log_error "Failure in HALF-OPEN state, returning to OPEN"
+            update_circuit_breaker "$CB_STATE_OPEN" "ollama" "$failure_count" 0
+            local updated_state
+            updated_state=$(cat "$CIRCUIT_BREAKER_STATE_FILE" | jq --arg ts "$(get_timestamp)" '.last_failure_time = $ts')
+            echo "$updated_state" > "$CIRCUIT_BREAKER_STATE_FILE"
+            ;;
+        "$CB_STATE_OPEN")
+            # Already open, just update failure count
+            update_circuit_breaker "$CB_STATE_OPEN" "ollama" "$failure_count" 0
+            ;;
+    esac
+}
+
+# Record a success
+record_success() {
+    local current_state
+    current_state=$(get_circuit_breaker_state)
+    local state
+    state=$(echo "$current_state" | jq -r '.state')
+    local success_count
+    success_count=$(echo "$current_state" | jq -r '.success_count')
+
+    success_count=$((success_count + 1))
+
+    log_info "Recording success ($success_count/$CIRCUIT_BREAKER_SUCCESS_THRESHOLD)"
+
+    case "$state" in
+        "$CB_STATE_HALF_OPEN")
+            if [[ $success_count -ge $CIRCUIT_BREAKER_SUCCESS_THRESHOLD ]]; then
+                log_info "Success threshold reached, closing circuit"
+                update_circuit_breaker "$CB_STATE_CLOSED" "glm" 0 "$success_count"
+            else
+                update_circuit_breaker "$CB_STATE_HALF_OPEN" "glm" 0 "$success_count"
+            fi
+            ;;
+        "$CB_STATE_CLOSED")
+            # Reset failure count on success
+            update_circuit_breaker "$CB_STATE_CLOSED" "glm" 0 "$success_count"
+            ;;
+        "$CB_STATE_OPEN")
+            # Should not happen - successes in OPEN state are from fallback
+            ;;
+    esac
+}
+
+# Check if we should transition from OPEN to HALF-OPEN
+check_recovery_timeout() {
+    local current_state
+    current_state=$(get_circuit_breaker_state)
+    local state
+    state=$(echo "$current_state" | jq -r '.state')
+    local last_failure
+    last_failure=$(echo "$current_state" | jq -r '.last_failure_time')
+
+    if [[ "$state" != "$CB_STATE_OPEN" ]]; then
+        return 1
+    fi
+
+    if [[ "$last_failure" == "null" ]]; then
+        return 1
+    fi
+
+    # Calculate time since last failure
+    local last_epoch current_epoch elapsed
+    last_epoch=$(date -d "$last_failure" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_failure}" +%s 2>/dev/null || echo "0")
+    current_epoch=$(date +%s)
+    elapsed=$((current_epoch - last_epoch))
+
+    if [[ $elapsed -ge $CIRCUIT_BREAKER_RECOVERY_TIMEOUT ]]; then
+        log_info "Recovery timeout reached ($elapsed >= $CIRCUIT_BREAKER_RECOVERY_TIMEOUT), transitioning to HALF-OPEN"
+        update_circuit_breaker "$CB_STATE_HALF_OPEN" "glm" 0 0
+        return 0
+    fi
+
+    return 1
+}
+
+# Evaluate provider health and update circuit breaker
+evaluate_llm_health() {
+    local current_state
+    current_state=$(get_circuit_breaker_state)
+    local state
+    state=$(echo "$current_state" | jq -r '.state')
+
+    # Check for recovery timeout (OPEN → HALF-OPEN)
+    check_recovery_timeout
+
+    # Re-read state after potential transition
+    state=$(get_current_state)
+
+    case "$state" in
+        "$CB_STATE_CLOSED"|"$CB_STATE_HALF_OPEN")
+            if check_glm_health > /dev/null 2>&1; then
+                record_success
+            else
+                record_failure
+            fi
+            ;;
+        "$CB_STATE_OPEN")
+            # In OPEN state, check if Ollama fallback is healthy
+            if ! check_ollama_health > /dev/null 2>&1; then
+                log_error "FALLBACK CRITICAL: Both GLM and Ollama are unavailable!"
+                send_alert "CRITICAL: No LLM Provider Available" "Both GLM and Ollama are down"
+            fi
+            ;;
+    esac
+}
+
 # Get container restart count in window
 get_restart_count() {
     local container="$1"
