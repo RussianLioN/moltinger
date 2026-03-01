@@ -121,6 +121,113 @@ check_http_health() {
     fi
 }
 
+# ========================================================================
+# LLM PROVIDER HEALTH CHECKS (Circuit Breaker Support)
+# ========================================================================
+
+# GLM API configuration
+GLM_API_HOST="${GLM_API_HOST:-https://api.z.ai}"
+GLM_API_KEY="${GLM_API_KEY:-}"
+GLM_MODEL="${GLM_MODEL:-glm-5}"
+GLM_HEALTH_TIMEOUT="${GLM_HEALTH_TIMEOUT:-10}"
+
+# Ollama API configuration
+OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-gemini-3-flash-preview:cloud}"
+OLLAMA_HEALTH_TIMEOUT="${OLLAMA_HEALTH_TIMEOUT:-10}"
+
+# Check GLM (Z.ai) API health
+check_glm_health() {
+    local timeout="${1:-$GLM_HEALTH_TIMEOUT}"
+    local url="${GLM_API_HOST}/v1/models"
+    local response_code
+
+    # If no API key, skip check
+    if [[ -z "$GLM_API_KEY" ]]; then
+        log_warn "GLM_API_KEY not set, skipping GLM health check"
+        return 2  # Degraded - can't check
+    fi
+
+    log_info "Checking GLM API health at $url"
+
+    response_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        --max-time "$timeout" \
+        -H "Authorization: Bearer $GLM_API_KEY" \
+        "$url" 2>/dev/null || echo "000")
+
+    case "$response_code" in
+        200|201)
+            log_info "GLM API is healthy (HTTP $response_code)"
+            return 0
+            ;;
+        401|403)
+            log_error "GLM API authentication failed (HTTP $response_code)"
+            return 1
+            ;;
+        429)
+            log_warn "GLM API rate limited (HTTP $response_code)"
+            return 1
+            ;;
+        500|502|503|504)
+            log_error "GLM API server error (HTTP $response_code)"
+            return 1
+            ;;
+        000)
+            log_error "GLM API unreachable (timeout or connection refused)"
+            return 1
+            ;;
+        *)
+            log_warn "GLM API unexpected response (HTTP $response_code)"
+            return 1
+            ;;
+    esac
+}
+
+# Check Ollama API health
+check_ollama_health() {
+    local timeout="${1:-$OLLAMA_HEALTH_TIMEOUT}"
+    local url="${OLLAMA_HOST}/api/tags"
+    local response_code
+
+    log_info "Checking Ollama API health at $url"
+
+    response_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        --max-time "$timeout" \
+        "$url" 2>/dev/null || echo "000")
+
+    if [[ "$response_code" == "200" ]]; then
+        log_info "Ollama API is healthy (HTTP $response_code)"
+        return 0
+    else
+        log_error "Ollama API check failed (HTTP $response_code)"
+        return 1
+    fi
+}
+
+# Get current LLM provider status for JSON output
+get_llm_provider_status() {
+    local glm_status="unknown"
+    local ollama_status="unknown"
+
+    if [[ -n "$GLM_API_KEY" ]]; then
+        if check_glm_health > /dev/null 2>&1; then
+            glm_status="healthy"
+        else
+            glm_status="unhealthy"
+        fi
+    else
+        glm_status="not_configured"
+    fi
+
+    if check_ollama_health > /dev/null 2>&1; then
+        ollama_status="healthy"
+    else
+        ollama_status="unhealthy"
+    fi
+
+    echo "{\"glm\":\"$glm_status\",\"ollama\":\"$ollama_status\"}"
+}
+
 # Get container restart count in window
 get_restart_count() {
     local container="$1"
