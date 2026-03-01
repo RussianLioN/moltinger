@@ -87,10 +87,11 @@ get_last_429() {
 }
 
 # ==============================================================================
-# Количество процессов Claude
+# Количество уникальных процессов Claude
 # ==============================================================================
 get_process_count() {
-    lsof 2>/dev/null | grep -c "2.1.50.*txt" || echo "0"
+    # Count unique PIDs, not file handles
+    lsof 2>/dev/null | grep "2.1.50.*txt" | awk '{print $2}' | sort -u | wc -l | tr -d ' '
 }
 
 # ==============================================================================
@@ -167,14 +168,28 @@ alarm_mode() {
             echo -e "${RED}⚠️  RATE LIMIT DETECTED!${NC} $(date '+%H:%M:%S')"
             echo -e "   ${RED}$count errors in last minute${NC}"
 
-            # Звуковое уведомление (macOS)
+            # Метод 1: Terminal bell (работает в большинстве терминалов)
+            printf '\a'  # ASCII BEL
+
+            # Метод 2: tput bel (альтернатива)
+            tput bel 2>/dev/null
+
+            # Метод 3: Запись в файл для внешнего мониторинга
+            echo "$(date '+%Y-%m-%d %H:%M:%S') RATE_LIMIT $count errors" >> /tmp/claude-rate-alert.log
+
+            # Метод 4: Звуковое уведомление (macOS, может не работать в sandbox)
             if command -v say &> /dev/null; then
                 say "rate limit" 2>/dev/null &
             fi
 
-            # Визуальное уведомление (macOS)
+            # Метод 5: Визуальное уведомление (macOS, может не работать в sandbox)
             if command -v osascript &> /dev/null; then
-                osascript -e "display notification \"Z.ai rate limit reached\" with title \"Claude Code\"" 2>/dev/null &
+                osascript -e "display notification \"Z.ai rate limit: $count errors\" with title \"Claude Code\"" 2>/dev/null &
+            fi
+
+            # Метод 6: terminal-notifier (если установлен)
+            if command -v terminal-notifier &> /dev/null; then
+                terminal-notifier -title "Claude Code" -message "Rate limit: $count errors" -sound default 2>/dev/null &
             fi
         fi
 
