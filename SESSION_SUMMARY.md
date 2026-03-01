@@ -157,11 +157,11 @@ GitOps Compliance: Enforced ✅
 - `cf65a93` — feat(fallback-llm): add Prometheus alerts and AlertManager config (T020-T021)
 - `5ee89c2` — feat(fallback-llm): add Ollama validation to preflight (T022-T023)
 - `19505b9` — feat(fallback-llm): add CI/CD validation for failover (T024-T026)
+- `e4d02b8` — docs(fallback-llm): update SESSION_SUMMARY and .gitignore (T027, T030)
+- `88f59df` — docs(fallback-llm): complete Phase 6 - documentation and close epic (T028-T032)
 
-**В работе** (Phase 6):
-- [ ] T027-T030: Documentation updates
-- [ ] T031: quickstart.md validation
-- [ ] T032: Close Beads task moltinger-39q
+**Feature Complete**: Все 32 задачи выполнены, готово к деплою.
+**Beads Epic**: moltinger-39q закрыт
 
 ---
 
