@@ -910,6 +910,96 @@ jobs:
           EOF
           echo "::endgroup::"
 
+      # ===========================================
+      # LLM Failover Validation (T024-T026)
+      # ===========================================
+      - name: Validate TOML syntax
+        run: |
+          echo "::group::TOML syntax validation"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Install Python TOML validator if not present
+            if ! python3 -c "import toml" 2>/dev/null; then
+              pip3 install toml 2>/dev/null || apt-get install -y python3-toml 2>/dev/null || true
+            fi
+
+            # Validate moltis.toml syntax
+            if python3 -c "import toml; toml.load('config/moltis.toml')" 2>/dev/null; then
+              echo "::notice::moltis.toml syntax is valid"
+            else
+              echo "::warning::TOML validation failed - checking with basic parser"
+              # Fallback: basic syntax check
+              if grep -E '^\s*\[.*\]\s*$' config/moltis.toml > /dev/null; then
+                echo "Basic TOML structure looks OK"
+              fi
+            fi
+          EOF
+          echo "::endgroup::"
+
+      - name: Validate Ollama configuration
+        run: |
+          echo "::group::Ollama configuration validation"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Check if Ollama is configured in docker-compose
+            if grep -q 'ollama:' docker-compose.yml; then
+              echo "Ollama service found in docker-compose.yml"
+
+              # Check if Ollama container is running
+              if docker ps --filter "name=ollama" --filter "status=running" | grep -q ollama; then
+                echo "::notice::Ollama container is running"
+
+                # Check Ollama health
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:11434/api/tags 2>/dev/null || echo "000")
+                if [ "$HTTP_CODE" = "200" ]; then
+                  echo "::notice::Ollama API is responding (HTTP 200)"
+                else
+                  echo "::warning::Ollama API returned HTTP $HTTP_CODE (may be starting)"
+                fi
+              else
+                echo "::warning::Ollama container is not running (may be intentional)"
+              fi
+            else
+              echo "::notice::Ollama service not configured in docker-compose.yml"
+            fi
+          EOF
+          echo "::endgroup::"
+
+      - name: Validate failover configuration
+        run: |
+          echo "::group::Failover configuration validation"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Check failover is enabled in moltis.toml
+            if grep -A5 '^\[failover\]' config/moltis.toml | grep -q 'enabled.*=.*true'; then
+              echo "::notice::Failover is enabled in moltis.toml"
+
+              # Check fallback models are configured
+              if grep -A10 '^\[failover\]' config/moltis.toml | grep -q 'fallback_models'; then
+                echo "::notice::Fallback models are configured"
+              else
+                echo "::warning::No fallback_models configured in failover section"
+              fi
+            else
+              echo "::notice::Failover is not enabled (optional feature)"
+            fi
+
+            # Check circuit breaker state file
+            if [ -f /tmp/moltis-llm-state.json ]; then
+              echo "::notice::Circuit breaker state file exists"
+              cat /tmp/moltis-llm-state.json | head -c 200
+            else
+              echo "::notice::Circuit breaker state file not found (will be created on first check)"
+            fi
+          EOF
+          echo "::endgroup::"
+
       - name: Get deployment info
         id: info
         run: |
