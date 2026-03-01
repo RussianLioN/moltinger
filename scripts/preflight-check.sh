@@ -9,6 +9,7 @@
 # Options:
 #   --json       Output in JSON format
 #   --strict     Fail on warnings (not just errors)
+#   --ci         CI/CD mode (skip Docker/runtime checks)
 #   -h, --help   Show help message
 #
 # Exit Codes:
@@ -43,6 +44,7 @@ OPTIONAL_SECRETS=(
 # Output format
 OUTPUT_JSON=false
 STRICT_MODE=false
+CI_MODE="${CI:-false}"  # Auto-detect from CI env var, or use --ci flag
 
 # Colors
 RED='\033[0;31m'
@@ -135,17 +137,55 @@ check_docker_available() {
 }
 
 check_compose_valid() {
-    local compose_file="$PROJECT_ROOT/docker-compose.yml"
+    # In CI mode, check docker-compose.prod.yml; locally check both
+    local compose_files=()
 
-    if [[ ! -f "$compose_file" ]]; then
-        add_check "compose_valid" "fail" "docker-compose.yml not found" "error"
-        return
+    if [[ "$CI_MODE" == "true" ]]; then
+        compose_files+=("$PROJECT_ROOT/docker-compose.prod.yml")
+    else
+        compose_files+=("$PROJECT_ROOT/docker-compose.yml")
+        compose_files+=("$PROJECT_ROOT/docker-compose.prod.yml")
     fi
 
-    if docker compose -f "$compose_file" config --quiet 2>/dev/null; then
-        add_check "compose_valid" "pass" "docker-compose.yml syntax is valid" "error"
-    else
-        add_check "compose_valid" "fail" "docker-compose.yml has syntax errors" "error"
+    local all_valid=true
+    local checked_files=()
+
+    for compose_file in "${compose_files[@]}"; do
+        if [[ ! -f "$compose_file" ]]; then
+            if [[ "$CI_MODE" != "true" || "$compose_file" == *"prod"* ]]; then
+                # In CI, only prod is required; locally both are checked
+                all_valid=false
+                add_check "compose_valid" "fail" "$(basename $compose_file) not found" "error"
+            fi
+            continue
+        fi
+
+        checked_files+=("$(basename $compose_file)")
+
+        # In CI mode, just check syntax without Docker
+        if [[ "$CI_MODE" == "true" ]]; then
+            # Basic YAML validation (requires yq or python)
+            if command -v yq &> /dev/null && yq eval '.' "$compose_file" &> /dev/null; then
+                : # Valid
+            elif python3 -c "import yaml; yaml.safe_load(open('$compose_file'))" 2>/dev/null; then
+                : # Valid
+            else
+                all_valid=false
+                add_check "compose_valid" "fail" "$(basename $compose_file) has syntax errors" "error"
+                continue
+            fi
+        else
+            # Full Docker validation
+            if ! docker compose -f "$compose_file" config --quiet 2>/dev/null; then
+                all_valid=false
+                add_check "compose_valid" "fail" "$(basename $compose_file) has syntax errors" "error"
+                continue
+            fi
+        fi
+    done
+
+    if [[ "$all_valid" == "true" && ${#checked_files[@]} -gt 0 ]]; then
+        add_check "compose_valid" "pass" "Compose files valid: ${checked_files[*]}" "error"
     fi
 }
 
@@ -369,6 +409,7 @@ Usage:
 Options:
     --json       Output in JSON format for AI parsing
     --strict     Fail on warnings (not just errors)
+    --ci         CI/CD mode (skip Docker/runtime checks, use docker-compose.prod.yml)
     -h, --help   Show this help message
 
 Exit Codes:
@@ -377,8 +418,9 @@ Exit Codes:
     4 - Pre-flight validation failed
 
 Examples:
-    $0                    # Human-readable output
+    $0                    # Human-readable output (local)
     $0 --json             # JSON output for CI/CD
+    $0 --ci --json        # CI mode (GitHub Actions)
     $0 --json --strict    # Strict mode for production
 
 Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
@@ -396,6 +438,10 @@ while [[ $# -gt 0 ]]; do
             STRICT_MODE=true
             shift
             ;;
+        --ci)
+            CI_MODE=true
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -410,17 +456,26 @@ done
 
 # Main execution
 main() {
-    # Run all checks
-    check_secrets_exist
-    check_docker_available
-    check_compose_valid
-    check_network_exists
-    check_s3_credentials
-    check_disk_space
+    # In CI mode, only check configuration files (secrets are in GitHub Secrets)
+    if [[ "$CI_MODE" == "true" ]]; then
+        if [[ "$OUTPUT_JSON" == "false" ]]; then
+            echo "Running in CI mode - skipping Docker/runtime checks"
+        fi
+        check_compose_valid
+        check_ollama_config
+    else
+        # Full checks for local/production runtime
+        check_secrets_exist
+        check_docker_available
+        check_compose_valid
+        check_network_exists
+        check_s3_credentials
+        check_disk_space
 
-    # LLM Failover checks
-    check_ollama_config
-    check_ollama_secret
+        # LLM Failover checks
+        check_ollama_config
+        check_ollama_secret
+    fi
 
     # Output results
     if [[ "$OUTPUT_JSON" == "true" ]]; then

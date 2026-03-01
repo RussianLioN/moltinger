@@ -216,8 +216,8 @@ jobs:
           echo "::group::Pre-flight Validation (P2-6)"
           chmod +x scripts/preflight-check.sh
 
-          # Run preflight checks in JSON mode for parsing
-          if ./scripts/preflight-check.sh --json --strict > /tmp/preflight-result.json 2>&1; then
+          # Run preflight checks in CI mode (skip Docker/runtime checks)
+          if ./scripts/preflight-check.sh --ci --json --strict > /tmp/preflight-result.json 2>&1; then
             echo "passed=true" >> $GITHUB_OUTPUT
             echo "::notice::All preflight checks passed ✅"
             cat /tmp/preflight-result.json | jq .
