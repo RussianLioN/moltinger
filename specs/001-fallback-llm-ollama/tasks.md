@@ -114,10 +114,14 @@
 
 ### Implementation for User Story 2
 
-- [ ] T016 [P] [US2] Add llm_provider_available gauge metric export to scripts/health-monitor.sh
-- [ ] T017 [P] [US2] Add llm_fallback_triggered_total counter metric to scripts/health-monitor.sh
-- [ ] T018 [US2] Add llm_request_duration_seconds histogram metric to scripts/health-monitor.sh
-- [ ] T019 [US2] Add circuit breaker state metric (moltis_circuit_state) to scripts/health-monitor.sh
+- [X] T016 [P] [US2] Add llm_provider_available gauge metric export to scripts/health-monitor.sh
+  → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
+- [X] T017 [P] [US2] Add llm_fallback_triggered_total counter metric to scripts/health-monitor.sh
+  → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
+- [X] T018 [US2] Add llm_request_duration_seconds histogram metric to scripts/health-monitor.sh
+  → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
+- [X] T019 [US2] Add circuit breaker state metric (moltis_circuit_state) to scripts/health-monitor.sh
+  → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
 - [ ] T020 [US2] Add Prometheus alert rules for GLM API unavailability in config/prometheus/alerts.yml
 - [ ] T021 [US2] Add AlertManager notification config for failover events in config/alertmanager/alertmanager.yml
 

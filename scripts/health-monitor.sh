@@ -472,6 +472,143 @@ evaluate_llm_health() {
     esac
 }
 
+# ========================================================================
+# PROMETHEUS METRICS EXPORT
+# ========================================================================
+# Exports metrics for Prometheus node_exporter textfile collector
+# Contract: specs/001-fallback-llm-ollama/contracts/prometheus-metrics.md
+
+# Prometheus textfile directory
+PROMETHEUS_TEXTFILE_DIR="${PROMETHEUS_TEXTFILE_DIR:-/var/lib/prometheus/textfile_exports}"
+PROMETHEUS_METRICS_FILE="${PROMETHEUS_METRICS_FILE:-$PROMETHEUS_TEXTFILE_DIR/moltis_llm.prom}"
+
+# Fallback triggered counter file (persists across restarts)
+FALLBACK_COUNTER_FILE="${FALLBACK_COUNTER_FILE:-/tmp/moltis-fallback-counter}"
+
+# Get or initialize fallback counter
+get_fallback_counter() {
+    if [[ -f "$FALLBACK_COUNTER_FILE" ]]; then
+        cat "$FALLBACK_COUNTER_FILE" 2>/dev/null || echo "0"
+    else
+        echo "0"
+    fi
+}
+
+# Increment fallback counter
+increment_fallback_counter() {
+    local counter
+    counter=$(get_fallback_counter)
+    counter=$((counter + 1))
+    echo "$counter" > "$FALLBACK_COUNTER_FILE"
+    echo "$counter"
+}
+
+# Map circuit breaker state to numeric value
+state_to_numeric() {
+    local state="$1"
+    case "$state" in
+        "$CB_STATE_CLOSED")    echo "0" ;;
+        "$CB_STATE_OPEN")      echo "1" ;;
+        "$CB_STATE_HALF_OPEN") echo "2" ;;
+        *)                     echo "-1" ;;
+    esac
+}
+
+# Export Prometheus metrics
+export_prometheus_metrics() {
+    # Ensure directory exists
+    mkdir -p "$PROMETHEUS_TEXTFILE_DIR" 2>/dev/null || {
+        log_warn "Cannot create Prometheus textfile directory: $PROMETHEUS_TEXTFILE_DIR"
+        return 1
+    }
+
+    local cb_state
+    cb_state=$(get_circuit_breaker_state)
+    local state
+    state=$(echo "$cb_state" | jq -r '.state')
+    local failure_count
+    failure_count=$(echo "$cb_state" | jq -r '.failure_count')
+    local success_count
+    success_count=$(echo "$cb_state" | jq -r '.success_count')
+    local active_provider
+    active_provider=$(echo "$cb_state" | jq -r '.active_provider')
+
+    # Check current provider availability
+    local glm_available=0
+    local ollama_available=0
+
+    if check_glm_health > /dev/null 2>&1; then
+        glm_available=1
+    fi
+
+    if check_ollama_health > /dev/null 2>&1; then
+        ollama_available=1
+    fi
+
+    # Get fallback counter
+    local fallback_total
+    fallback_total=$(get_fallback_counter)
+
+    # Check if we should increment fallback counter (state just changed to OPEN)
+    if [[ "$state" == "$CB_STATE_OPEN" ]] && [[ "$failure_count" -eq "$CIRCUIT_BREAKER_FAILURE_THRESHOLD" ]]; then
+        fallback_total=$(increment_fallback_counter)
+    fi
+
+    # Get state numeric value
+    local state_numeric
+    state_numeric=$(state_to_numeric "$state")
+
+    # Build metrics file
+    cat > "$PROMETHEUS_METRICS_FILE.tmp" << EOF
+# HELP llm_provider_available Whether the LLM provider is available (1=available, 0=unavailable)
+# TYPE llm_provider_available gauge
+llm_provider_available{provider="glm"} $glm_available
+llm_provider_available{provider="ollama"} $ollama_available
+
+# HELP llm_fallback_triggered_total Total number of times fallback was triggered
+# TYPE llm_fallback_triggered_total counter
+llm_fallback_triggered_total $fallback_total
+
+# HELP moltis_circuit_state Circuit breaker state (0=closed, 1=open, 2=half-open)
+# TYPE moltis_circuit_state gauge
+moltis_circuit_state $state_numeric
+
+# HELP moltis_circuit_failures Current failure count in circuit breaker
+# TYPE moltis_circuit_failures gauge
+moltis_circuit_failures $failure_count
+
+# HELP moltis_circuit_successes Current success count in circuit breaker
+# TYPE moltis_circuit_successes gauge
+moltis_circuit_successes $success_count
+
+# HELP moltis_active_provider Currently active LLM provider (1=glm, 0=ollama)
+# TYPE moltis_active_provider gauge
+moltis_active_provider{provider="$active_provider"} 1
+EOF
+
+    # Atomic rename
+    mv "$PROMETHEUS_METRICS_FILE.tmp" "$PROMETHEUS_METRICS_FILE" 2>/dev/null || {
+        log_warn "Failed to write Prometheus metrics file"
+        return 1
+    }
+
+    log_info "Prometheus metrics exported to $PROMETHEUS_METRICS_FILE"
+}
+
+# Output current metrics to stdout (for debugging)
+show_prometheus_metrics() {
+    local cb_state
+    cb_state=$(get_circuit_breaker_state)
+    local state
+    state=$(echo "$cb_state" | jq -r '.state')
+
+    echo "# LLM Provider Metrics"
+    echo "llm_provider_available{provider=\"glm\"} $(check_glm_health > /dev/null 2>&1 && echo 1 || echo 0)"
+    echo "llm_provider_available{provider=\"ollama\"} $(check_ollama_health > /dev/null 2>&1 && echo 1 || echo 0)"
+    echo "llm_fallback_triggered_total $(get_fallback_counter)"
+    echo "moltis_circuit_state $(state_to_numeric "$state")"
+}
+
 # Get container restart count in window
 get_restart_count() {
     local container="$1"
