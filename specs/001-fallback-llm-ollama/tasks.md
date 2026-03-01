@@ -87,7 +87,8 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [P] [US1] Create scripts/ollama-health.sh for Ollama health checks
+- [X] T009 [P] [US1] Create scripts/ollama-health.sh for Ollama health checks
+  → Artifacts: [scripts/ollama-health.sh](/scripts/ollama-health.sh)
 - [ ] T010 [P] [US1] Add GLM health check function to scripts/health-monitor.sh
 - [ ] T011 [US1] Implement circuit breaker state machine in scripts/health-monitor.sh (CLOSED → OPEN → HALF-OPEN)
 - [ ] T012 [US1] Add state file management (/tmp/moltis-llm-state.json) to scripts/health-monitor.sh
