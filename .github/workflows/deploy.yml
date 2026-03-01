@@ -295,11 +295,11 @@ jobs:
           FAILED=0
 
           # Run shellcheck on all bash scripts
-          # Note: -S style means only report errors (not style warnings)
+          # Note: -S error means only report actual errors (not warnings/info/style)
           for script in scripts/*.sh; do
             if [ -f "$script" ]; then
               echo "Checking: $script"
-              if ! shellcheck -x -s bash -S style "$script"; then
+              if ! shellcheck -x -s bash -S error "$script"; then
                 FAILED=$((FAILED + 1))
               fi
             fi
