@@ -148,7 +148,17 @@ GitOps Compliance: Enforced ✅
 - **Metrics**: Prometheus textfile exporter for node_exporter
 - **Failover Chain**: GLM-5 (Z.ai) → Ollama Gemini → Google Gemini
 
+**Дополнительные инструменты (post-feature)**:
+- ✅ `/rate` — команда для проверки rate limits
+- ✅ `scripts/rate-check.sh` — локальный мониторинг debug логов
+- ✅ `scripts/claude-rate-watch.sh` — live мониторинг процессов Claude
+- ✅ `scripts/zai-rate-monitor.sh` — API мониторинг Z.ai
+- ✅ `docs/reports/consilium/openclaw-clone-plan.md` — план нового проекта "kruzh-claw"
+
 **Коммиты сессии**:
+- `d7fc975` — feat(tools): add rate limit monitoring and OpenClaw clone plan
+- `41e2724` — fix(fallback-llm): use OLLAMA_API_KEY env var instead of Docker secret
+- `e129990` — docs(session): mark Fallback LLM feature as complete
 - `98ec7ba` — feat(fallback-llm): add Ollama sidecar and configure failover
 - `5dc8f0b` — feat(fallback-llm): add Ollama health check script (T009)
 - `fd06e46` — feat(fallback-llm): add GLM/Ollama health checks (T010)
