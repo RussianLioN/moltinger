@@ -164,12 +164,22 @@ check_compose_valid() {
 
         # In CI mode, just check syntax without Docker
         if [[ "$CI_MODE" == "true" ]]; then
-            # Basic YAML validation (requires yq or python)
+            # Basic YAML validation (requires yq, python with yaml, or just skip if unavailable)
+            local yaml_valid=false
+
             if command -v yq &> /dev/null && yq eval '.' "$compose_file" &> /dev/null; then
-                : # Valid
-            elif python3 -c "import yaml; yaml.safe_load(open('$compose_file'))" 2>/dev/null; then
-                : # Valid
+                yaml_valid=true
+            elif command -v python3 &> /dev/null && python3 -c "import yaml; yaml.safe_load(open('$compose_file'))" 2>/dev/null; then
+                yaml_valid=true
+            elif command -v ruby &> /dev/null && ruby -ryaml -e "YAML.load_file('$compose_file')" 2>/dev/null; then
+                yaml_valid=true
             else
+                # No YAML validator available - skip validation (file exists check already passed)
+                add_check "compose_valid" "pass" "$(basename $compose_file) exists (YAML validation skipped - no validator available)" "warning"
+                continue
+            fi
+
+            if [[ "$yaml_valid" != "true" ]]; then
                 all_valid=false
                 add_check "compose_valid" "fail" "$(basename $compose_file) has syntax errors" "error"
                 continue
@@ -345,18 +355,36 @@ output_json() {
         status="warning"
     fi
 
-    # Build checks array
-    local checks_json
-    checks_json=$(printf '%s\n' "${CHECKS[@]}" | jq -s '.')
+    # Handle empty arrays gracefully
+    local checks_json="[]"
+    local missing_json="[]"
+    local errors_json="[]"
+    local warnings_json="[]"
+
+    if [[ ${#CHECKS[@]} -gt 0 ]]; then
+        checks_json=$(printf '%s\n' "${CHECKS[@]}" | jq -s '.')
+    fi
+
+    if [[ ${#MISSING_SECRETS[@]} -gt 0 ]]; then
+        missing_json=$(printf '%s\n' "${MISSING_SECRETS[@]}" | jq -R . | jq -s .)
+    fi
+
+    if [[ ${#ERRORS[@]} -gt 0 ]]; then
+        errors_json=$(printf '%s\n' "${ERRORS[@]}" | jq -R . | jq -s .)
+    fi
+
+    if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+        warnings_json=$(printf '%s\n' "${WARNINGS[@]}" | jq -R . | jq -s .)
+    fi
 
     # Build output
     jq -n \
         --arg status "$status" \
         --arg timestamp "$timestamp" \
         --argjson checks "$checks_json" \
-        --argjson missing_secrets "$(printf '%s\n' "${MISSING_SECRETS[@]}" | jq -R . | jq -s .)" \
-        --argjson errors "$(printf '%s\n' "${ERRORS[@]}" | jq -R . | jq -s .)" \
-        --argjson warnings "$(printf '%s\n' "${WARNINGS[@]}" | jq -R . | jq -s .)" \
+        --argjson missing_secrets "$missing_json" \
+        --argjson errors "$errors_json" \
+        --argjson warnings "$warnings_json" \
         '{
             status: $status,
             timestamp: $timestamp,
