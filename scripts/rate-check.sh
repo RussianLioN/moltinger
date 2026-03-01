@@ -165,32 +165,42 @@ alarm_mode() {
 
         if [[ "$count" -gt 0 && "$count" -ne "$last_count" ]]; then
             # Новые 429 ошибки!
-            echo -e "${RED}⚠️  RATE LIMIT DETECTED!${NC} $(date '+%H:%M:%S')"
-            echo -e "   ${RED}$count errors in last minute${NC}"
+            # Визуальный ALERT - мигание и большой баннер
+            tput flash 2>/dev/null || true
+            echo ""
+            echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${RED}║                                                            ║${NC}"
+            echo -e "${RED}║   ⚠️  RATE LIMIT DETECTED! $(date '+%H:%M:%S')                       ║${NC}"
+            echo -e "${RED}║   $count errors in last minute                              ║${NC}"
+            echo -e "${RED}║                                                            ║${NC}"
+            echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
 
-            # Метод 1: Terminal bell (работает в большинстве терминалов)
-            printf '\a'  # ASCII BEL
+            # Метод 1: iTerm2 ATTENTION FIREWORKS (самый заметный!)
+            if command -v it2attention &> /dev/null; then
+                it2attention fireworks 2>/dev/null
+            fi
 
-            # Метод 2: tput bel (альтернатива)
+            # Метод 2: iTerm2 native notification
+            printf '\033]9;⚠️ RATE LIMIT: %s errors in last minute\007' "$count"
+
+            # Метод 3: iTerm2 set badge
+            printf '\033]1337;SetBadge=%s\007' "⚠️ $count"
+
+            # Метод 4: Triple bell
+            printf '\a\a\a'
+
+            # Метод 5: Terminal bell
             tput bel 2>/dev/null
 
-            # Метод 3: Запись в файл для внешнего мониторинга (в разрешённой директории)
+            # Метод 6: Запись в файл для внешнего мониторинга
             echo "$(date '+%Y-%m-%d %H:%M:%S') RATE_LIMIT $count errors" >> "$HOME/.claude/rate-alert.log"
 
-            # Метод 4: Звуковое уведомление (macOS, может не работать в sandbox)
-            if command -v say &> /dev/null; then
-                say "rate limit" 2>/dev/null &
-            fi
-
-            # Метод 5: Визуальное уведомление (macOS, может не работать в sandbox)
-            if command -v osascript &> /dev/null; then
-                osascript -e "display notification \"Z.ai rate limit: $count errors\" with title \"Claude Code\"" 2>/dev/null &
-            fi
-
-            # Метод 6: terminal-notifier (если установлен)
+            # Метод 7: terminal-notifier (если установлен)
             if command -v terminal-notifier &> /dev/null; then
-                terminal-notifier -title "Claude Code" -message "Rate limit: $count errors" -sound default 2>/dev/null &
+                terminal-notifier -title "⚠️ Claude Code Rate Limit" -message "$count errors detected" -sound default -timeout 5 2>/dev/null &
             fi
+
         fi
 
         last_count=$count
