@@ -158,10 +158,12 @@
 
 **Purpose**: Documentation and final improvements
 
-- [ ] T027 [P] Update SESSION_SUMMARY.md with Fallback LLM feature
+- [X] T027 [P] Update SESSION_SUMMARY.md with Fallback LLM feature
+  → Artifacts: [SESSION_SUMMARY.md](/SESSION_SUMMARY.md)
 - [ ] T028 [P] Update docs/SECRETS-MANAGEMENT.md with OLLAMA_API_KEY instructions
 - [ ] T029 Create docs/disaster-recovery.md with failover runbook
-- [ ] T030 [P] Add .gitignore entry for secrets/ollama_api_key.txt
+- [X] T030 [P] Add .gitignore entry for secrets/ollama_api_key.txt
+  → Artifacts: [.gitignore](/.gitignore)
 - [ ] T031 Run quickstart.md validation - verify deployment works end-to-end
 - [ ] T032 Close Beads task moltinger-xh7 (Fallback LLM provider)
 

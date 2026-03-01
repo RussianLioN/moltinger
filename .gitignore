@@ -8,6 +8,8 @@ data/
 
 # Docker secrets (never commit!)
 secrets/
+# Explicit entries for documentation
+secrets/ollama_api_key.txt
 
 # Moltis sensitive files
 config/provider_keys.json

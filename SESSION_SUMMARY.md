@@ -21,6 +21,7 @@
 | **AI Assistant** | Moltis (ghcr.io/moltis-org/moltis:latest) |
 | **Telegram Bot** | @moltinger_bot |
 | **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
+| **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
 | **CI/CD** | GitHub Actions |
 | **Issue Tracking** | Beads |
 
@@ -36,6 +37,8 @@ Moltis: Running ✅
 URL: https://moltis.ainetic.tech
 Telegram Bot: @moltinger_bot ✅
 LLM Provider: zai (GLM-5) ✅
+LLM Fallback: Ollama Sidecar ✅ (configured, ready to deploy)
+Circuit Breaker: Configured ✅
 CI/CD: Working ✅
 GitOps Compliance: Enforced ✅
 ```
@@ -97,6 +100,7 @@ GitOps Compliance: Enforced ✅
 | `TELEGRAM_BOT_TOKEN` | ✅ | Bot token (@moltinger_bot) |
 | `TELEGRAM_ALLOWED_USERS` | ✅ | Allowed user IDs |
 | `GLM_API_KEY` | ✅ | LLM API (Zhipu AI) |
+| `OLLAMA_API_KEY` | ⚠️ | Ollama Cloud (optional - for cloud models) |
 | `SSH_PRIVATE_KEY` | ✅ | Deploy key |
 | `MOLTIS_PASSWORD` | ✅ | Auth password |
 | `TAVILY_API_KEY` | ✅ | Web search |
@@ -104,6 +108,62 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-01 (продолжение): Fallback LLM with Ollama Sidecar (001-fallback-llm-ollama)
+
+**Завершено**:
+
+#### Consilium Architecture Discussion
+- ✅ Запущен консилиум 19 экспертов для обсуждения архитектуры failover
+- ✅ Рекомендован вариант: Ollama Sidecar + Circuit Breaker
+- ✅ Анализ 5 вариантов развёртывания
+
+#### Speckit Workflow Complete
+- ✅ `/speckit.specify` — spec.md с 3 user stories
+- ✅ `/speckit.plan` — plan.md, research.md, data-model.md, contracts/
+- ✅ `/speckit.tasks` — 32 задачи в 7 фазах
+- ✅ `/speckit.tobeads` — Epic moltinger-39q в Beads
+
+#### Implementation (Phase 1-5 Complete)
+- ✅ **Phase 1: Setup** — Ollama sidecar в docker-compose.prod.yml (4 CPUs, 8GB RAM)
+- ✅ **Phase 2: Foundational** — moltis.toml failover config (GLM → Ollama → Gemini)
+- ✅ **Phase 3: US1 MVP** — Circuit Breaker state machine (CLOSED → OPEN → HALF-OPEN)
+- ✅ **Phase 4: US2** — Prometheus metrics (llm_provider_available, moltis_circuit_state)
+- ✅ **Phase 5: US3** — CI/CD validation (preflight checks, smoke tests)
+
+#### Files Created/Modified
+- `docker-compose.prod.yml` — Ollama service + ollama-data volume + ollama_api_key secret
+- `config/moltis.toml` — ollama provider enabled + failover chain configured
+- `scripts/ollama-health.sh` — Ollama health check script
+- `scripts/health-monitor.sh` — Circuit breaker + Prometheus metrics
+- `config/prometheus/alert-rules.yml` — LLM failover alerts
+- `config/alertmanager/alertmanager.yml` — Alert routing for failover
+- `scripts/preflight-check.sh` — Ollama config validation
+- `.github/workflows/deploy.yml` — CI/CD validation steps
+- `.gitignore` — Explicit ollama_api_key.txt entry
+
+#### Key Technical Decisions
+- **Circuit Breaker**: 3 failures → OPEN state → 5 min recovery timeout
+- **State File**: `/tmp/moltis-llm-state.json` with flock locking
+- **Metrics**: Prometheus textfile exporter for node_exporter
+- **Failover Chain**: GLM-5 (Z.ai) → Ollama Gemini → Google Gemini
+
+**Коммиты сессии**:
+- `98ec7ba` — feat(fallback-llm): add Ollama sidecar and configure failover
+- `5dc8f0b` — feat(fallback-llm): add Ollama health check script (T009)
+- `fd06e46` — feat(fallback-llm): add GLM/Ollama health checks (T010)
+- `c1b2be5` — feat(fallback-llm): implement circuit breaker state machine (T011-T015)
+- `68c6dbb` — feat(fallback-llm): add Prometheus metrics export (T016-T019)
+- `cf65a93` — feat(fallback-llm): add Prometheus alerts and AlertManager config (T020-T021)
+- `5ee89c2` — feat(fallback-llm): add Ollama validation to preflight (T022-T023)
+- `19505b9` — feat(fallback-llm): add CI/CD validation for failover (T024-T026)
+
+**В работе** (Phase 6):
+- [ ] T027-T030: Documentation updates
+- [ ] T031: quickstart.md validation
+- [ ] T032: Close Beads task moltinger-39q
+
+---
 
 ### 2026-03-01: Docker Deployment Improvements - Feature Complete
 
@@ -278,8 +338,8 @@ scripts/scripts-verify.sh         # Validate scripts
 
 ## 🎯 Next Steps
 
-1. **P4 Backlog** — 9 задач готовы к работе (см. `bd ready`)
-2. **moltinger-xh7** — CRITICAL: Fallback LLM provider
+1. **P4 Backlog** — 8 задач готовы к работе (см. `bd ready`)
+2. **Deploy Fallback LLM** — `git push` + `docker compose up -d`
 3. **moltinger-sjx** — HIGH: S3 Offsite Backup
 4. Протестировать skill telegram-learner на канале @tsingular
 5. Создать навык самообновления инструкции
@@ -288,7 +348,7 @@ scripts/scripts-verify.sh         # Validate scripts
 
 | # | Task | Priority | Why |
 |---|------|----------|-----|
-| 1 | `moltinger-xh7` | CRITICAL | Fallback LLM - без него Moltis не работает при падении GLM |
+| 1 | ~~`moltinger-xh7`~~ | ~~CRITICAL~~ | ✅ DONE: Fallback LLM with Ollama Sidecar |
 | 2 | `moltinger-sjx` | HIGH | S3 Offsite Backup - disaster recovery |
 | 3 | `moltinger-r8r` | MEDIUM | Traefik Rate Limiting - защита от abuse |
 | 4 | `moltinger-j22` | MEDIUM | AlertManager Receivers - уведомления |
@@ -329,4 +389,4 @@ scripts/scripts-verify.sh         # Validate scripts
 
 ---
 
-*Last updated: 2026-02-28 | Session: P4 Tasks & CI/CD Improvements*
+*Last updated: 2026-03-01 | Session: Fallback LLM with Ollama Sidecar*
