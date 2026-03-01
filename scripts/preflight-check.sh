@@ -347,11 +347,23 @@ output_json() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    if [[ ${#ERRORS[@]} -gt 0 ]]; then
+    # Use safe array access to avoid unbound variable errors
+    local error_count=0
+    local warning_count=0
+    local check_count=0
+    local missing_count=0
+
+    # Count array elements safely (declare -a creates empty arrays, so this is safe)
+    error_count=${#ERRORS[@]}
+    warning_count=${#WARNINGS[@]}
+    check_count=${#CHECKS[@]}
+    missing_count=${#MISSING_SECRETS[@]}
+
+    if [[ $error_count -gt 0 ]]; then
         status="fail"
-    elif [[ ${#WARNINGS[@]} -gt 0 && "$STRICT_MODE" == "true" ]]; then
+    elif [[ $warning_count -gt 0 && "$STRICT_MODE" == "true" ]]; then
         status="fail"
-    elif [[ ${#WARNINGS[@]} -gt 0 ]]; then
+    elif [[ $warning_count -gt 0 ]]; then
         status="warning"
     fi
 
@@ -361,19 +373,19 @@ output_json() {
     local errors_json="[]"
     local warnings_json="[]"
 
-    if [[ ${#CHECKS[@]} -gt 0 ]]; then
+    if [[ $check_count -gt 0 ]]; then
         checks_json=$(printf '%s\n' "${CHECKS[@]}" | jq -s '.')
     fi
 
-    if [[ ${#MISSING_SECRETS[@]} -gt 0 ]]; then
+    if [[ $missing_count -gt 0 ]]; then
         missing_json=$(printf '%s\n' "${MISSING_SECRETS[@]}" | jq -R . | jq -s .)
     fi
 
-    if [[ ${#ERRORS[@]} -gt 0 ]]; then
+    if [[ $error_count -gt 0 ]]; then
         errors_json=$(printf '%s\n' "${ERRORS[@]}" | jq -R . | jq -s .)
     fi
 
-    if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+    if [[ $warning_count -gt 0 ]]; then
         warnings_json=$(printf '%s\n' "${WARNINGS[@]}" | jq -R . | jq -s .)
     fi
 
