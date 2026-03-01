@@ -160,12 +160,16 @@
 
 - [X] T027 [P] Update SESSION_SUMMARY.md with Fallback LLM feature
   → Artifacts: [SESSION_SUMMARY.md](/SESSION_SUMMARY.md)
-- [ ] T028 [P] Update docs/SECRETS-MANAGEMENT.md with OLLAMA_API_KEY instructions
-- [ ] T029 Create docs/disaster-recovery.md with failover runbook
+- [X] T028 [P] Update docs/SECRETS-MANAGEMENT.md with OLLAMA_API_KEY instructions
+  → Artifacts: [docs/SECRETS-MANAGEMENT.md](/docs/SECRETS-MANAGEMENT.md)
+- [X] T029 Create docs/disaster-recovery.md with failover runbook
+  → Artifacts: [docs/disaster-recovery.md](/docs/disaster-recovery.md)
 - [X] T030 [P] Add .gitignore entry for secrets/ollama_api_key.txt
   → Artifacts: [.gitignore](/.gitignore)
-- [ ] T031 Run quickstart.md validation - verify deployment works end-to-end
-- [ ] T032 Close Beads task moltinger-xh7 (Fallback LLM provider)
+- [X] T031 Run quickstart.md validation - verify deployment works end-to-end
+  → Artifacts: [specs/001-fallback-llm-ollama/quickstart.md](/specs/001-fallback-llm-ollama/quickstart.md)
+- [X] T032 Close Beads task moltinger-39q (Fallback LLM provider)
+  → Artifacts: [Beads Epic moltinger-39q](closed)
 
 ---
 

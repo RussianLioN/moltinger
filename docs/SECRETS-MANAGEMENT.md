@@ -126,13 +126,31 @@ gh workflow run deploy.yml
 
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
-| `GLM_API_KEY` | GLM/Zhipu AI LLM | Moltis config |
-| `BRAVE_API_KEY` | Web Search | Moltis config |
-| `ELEVENLABS_API_KEY` | Voice fallback | Moltis config |
+| `GLM_API_KEY` | GLM/Zhipu AI LLM (Primary) | Moltis config |
+| `OLLAMA_API_KEY` | Ollama Cloud Fallback (Optional) | Docker secrets |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
+| `TAVILY_API_KEY` | Web search | Moltis config |
 | `MOLTIS_PASSWORD` | Authentication | Moltis auth |
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
 | `SSH_HOST` | Server address | GitHub Actions |
 | `SSH_USER` | SSH username | GitHub Actions |
+
+### LLM Failover Secrets
+
+The Ollama fallback system requires the following secret:
+
+| Secret | Required | Purpose |
+|--------|----------|---------|
+| `OLLAMA_API_KEY` | Optional | Ollama Cloud API access for cloud models (e.g., `gemini-3-flash-preview:cloud`) |
+
+**When OLLAMA_API_KEY is needed:**
+- Using Ollama Cloud models with `:cloud` suffix
+- Not required for local Ollama models
+
+**To add OLLAMA_API_KEY:**
+```bash
+gh secret set OLLAMA_API_KEY --repo RussianLioN/moltinger
+```
 
 ---
 
