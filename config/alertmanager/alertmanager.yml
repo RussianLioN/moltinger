@@ -96,6 +96,37 @@ route:
         - alertname=~"Container.*"
       receiver: 'container-alerts'
 
+    # LLM Failover alerts - critical infrastructure
+    - matchers:
+        - component="llm-failover"
+      receiver: 'llm-failover-alerts'
+      routes:
+        # All providers down - highest priority
+        - matchers:
+            - alertname="AllLLMProvidersDown"
+          receiver: 'llm-critical'
+          group_wait: 10s
+          group_interval: 1m
+          repeat_interval: 30m
+        # Circuit breaker open - high priority
+        - matchers:
+            - alertname="CircuitBreakerOpen"
+          receiver: 'llm-failover-alerts'
+          group_wait: 30s
+          repeat_interval: 1h
+        # GLM down - warning level
+        - matchers:
+            - alertname="GLMProviderDown"
+          receiver: 'llm-failover-alerts'
+          group_wait: 2m
+          repeat_interval: 2h
+        # Info level alerts
+        - matchers:
+            - severity="info"
+          receiver: 'llm-failover-info'
+          group_wait: 10m
+          repeat_interval: 24h
+
 # Receivers
 receivers:
   # Default receiver
@@ -204,3 +235,67 @@ receivers:
     slack_configs:
       - channel: '#infra-alerts'
         send_resolved: true
+
+  # ====================================================================
+  # LLM FAILOVER ALERT RECEIVERS
+  # ====================================================================
+
+  # LLM failover alerts - standard
+  - name: 'llm-failover-alerts'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[LLM] {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - channel: '#moltis-alerts'
+        send_resolved: true
+        title: 'LLM Failover: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Provider State:*
+          *Description:* {{ .Annotations.description }}
+          *Circuit Breaker:* Check `/tmp/moltis-llm-state.json`
+          {{ end }}
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+
+  # LLM critical - all providers down
+  - name: 'llm-critical'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[CRITICAL] All LLM Providers Down'
+    slack_configs:
+      - channel: '#moltis-alerts'
+        send_resolved: true
+        title: 'CRITICAL: No LLM Provider Available'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+
+          *Immediate Actions:*
+          1. Check GLM (Z.ai) API status
+          2. Check Ollama container: `docker logs ollama-fallback`
+          3. Verify OLLAMA_API_KEY is valid
+          4. Check network connectivity
+
+          *State File:* `/tmp/moltis-llm-state.json`
+          {{ end }}
+        color: 'danger'
+
+  # LLM failover info - low priority notifications
+  - name: 'llm-failover-info'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[INFO] {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - channel: '#moltis-alerts'
+        send_resolved: true
+        title: 'LLM Info: {{ .GroupLabels.alertname }}'
+        color: '#439FE0'  # Blue for info

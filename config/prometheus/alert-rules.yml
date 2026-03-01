@@ -211,3 +211,92 @@ groups:
         annotations:
           summary: "LLM provider errors"
           description: "LLM provider is returning errors ({{ $value }}/sec)."
+
+      # ====================================================================
+      # CIRCUIT BREAKER & FAILOVER ALERTS (Fallback LLM Feature)
+      # ====================================================================
+
+      # GLM provider unavailable
+      - alert: GLMProviderDown
+        expr: llm_provider_available{provider="glm"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "GLM (Z.ai) provider is unavailable"
+          description: "Primary LLM provider GLM has been unavailable for more than 1 minute. Fallback to Ollama may be active."
+
+      # Circuit breaker opened (failover active)
+      - alert: CircuitBreakerOpen
+        expr: moltis_circuit_state == 1
+        for: 30s
+        labels:
+          severity: warning
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "Circuit breaker is OPEN - using fallback provider"
+          description: "Circuit breaker has opened due to GLM failures. System is now using Ollama fallback. Check GLM API status."
+
+      # Circuit breaker half-open (testing recovery)
+      - alert: CircuitBreakerHalfOpen
+        expr: moltis_circuit_state == 2
+        for: 1m
+        labels:
+          severity: info
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "Circuit breaker is HALF-OPEN - testing recovery"
+          description: "Circuit breaker is testing if GLM provider has recovered. If successful, will return to CLOSED state."
+
+      # Critical: Both providers down
+      - alert: AllLLMProvidersDown
+        expr: |
+          (llm_provider_available{provider="glm"} == 0) and (llm_provider_available{provider="ollama"} == 0)
+        for: 30s
+        labels:
+          severity: critical
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "CRITICAL: All LLM providers are unavailable"
+          description: "Both GLM and Ollama providers are down. Moltis cannot process LLM requests. Immediate intervention required."
+
+      # Fallback triggered (counter increased)
+      - alert: LLMFallbackTriggered
+        expr: increase(llm_fallback_triggered_total[5m]) > 0
+        for: 10s
+        labels:
+          severity: info
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "LLM fallback has been triggered"
+          description: "Circuit breaker has triggered fallback to Ollama {{ $value }} time(s) in the last 5 minutes."
+
+      # Ollama fallback unavailable
+      - alert: OllamaFallbackDown
+        expr: llm_provider_available{provider="ollama"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "Ollama fallback provider is unavailable"
+          description: "Ollama fallback is not available. If GLM fails, there will be no fallback option."
+
+      # High circuit breaker failure count
+      - alert: HighCircuitBreakerFailures
+        expr: moltis_circuit_failures > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: moltis
+          component: llm-failover
+        annotations:
+          summary: "Circuit breaker showing failures"
+          description: "Circuit breaker has recorded {{ $value }} failure(s). Monitor closely for potential failover."

@@ -122,8 +122,10 @@
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
 - [X] T019 [US2] Add circuit breaker state metric (moltis_circuit_state) to scripts/health-monitor.sh
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
-- [ ] T020 [US2] Add Prometheus alert rules for GLM API unavailability in config/prometheus/alerts.yml
-- [ ] T021 [US2] Add AlertManager notification config for failover events in config/alertmanager/alertmanager.yml
+- [X] T020 [US2] Add Prometheus alert rules for GLM API unavailability in config/prometheus/alerts.yml
+  → Artifacts: [config/prometheus/alert-rules.yml](/config/prometheus/alert-rules.yml)
+- [X] T021 [US2] Add AlertManager notification config for failover events in config/alertmanager/alertmanager.yml
+  → Artifacts: [config/alertmanager/alertmanager.yml](/config/alertmanager/alertmanager.yml)
 
 **Checkpoint**: Metrics visible in Prometheus, alerts trigger on GLM outage
 
