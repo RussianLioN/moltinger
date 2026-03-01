@@ -184,8 +184,8 @@ jobs:
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF#refs/tags/}"
           else
-            # Use default version from docker-compose.prod.yml
-            VERSION="v1.7.0"
+            # Use default version - must match what's on server
+            VERSION="latest"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "::notice::Deploying Moltis version: $VERSION"
