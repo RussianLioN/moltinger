@@ -27,7 +27,8 @@ NC='\033[0m'
 # ==============================================================================
 get_429_count() {
     local seconds=${1:-60}
-    local cutoff=$(date -v-${seconds}S +%s 2>/dev/null || date -d "${seconds} seconds ago" +%s 2>/dev/null)
+    # Use UTC for cutoff since debug logs are in UTC
+    local cutoff=$(date -v-${seconds}S -u +%s 2>/dev/null || date -u -d "${seconds} seconds ago" +%s 2>/dev/null)
 
     if [[ ! -d "$DEBUG_DIR" ]]; then
         echo "0"
@@ -37,7 +38,7 @@ get_429_count() {
     # Считаем 429 за период из ВСЕХ debug файлов
     local count=0
     # Check only files modified in last hour (performance optimization)
-    local recent_files=$(find "$DEBUG_DIR" -name "*.txt" -mmin -60 2>/dev/null)
+    local recent_files=$(find "$DEBUG_DIR" -name "*.txt" -mmin -60 2>/dev/null | tr '\n' ' ')
 
     if [[ -z "$recent_files" ]]; then
         echo "0"
@@ -48,7 +49,8 @@ get_429_count() {
         local timestamp=$(echo "$line" | grep -oE "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}" || echo "")
         if [[ -n "$timestamp" ]]; then
             local line_ts
-            line_ts=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$timestamp" +%s 2>/dev/null || echo "0")
+            # Parse as UTC (-u flag) since debug logs use UTC timestamps
+            line_ts=$(date -j -f "%Y-%m-%dT%H:%M:%S" -u "$timestamp" +%s 2>/dev/null || echo "0")
             if [[ "$line_ts" -ge "$cutoff" ]]; then
                 ((count++)) || true
             fi
@@ -69,7 +71,7 @@ get_last_429() {
     fi
 
     # Check files modified in last hour
-    local recent_files=$(find "$DEBUG_DIR" -name "*.txt" -mmin -60 2>/dev/null)
+    local recent_files=$(find "$DEBUG_DIR" -name "*.txt" -mmin -60 2>/dev/null | tr '\n' ' ')
 
     if [[ -z "$recent_files" ]]; then
         echo ""
