@@ -470,6 +470,10 @@ jobs:
           # This ensures ALL configuration (labels, networks, volumes) matches git
           scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
 
+          # Sync docker-compose.prod.yml (production configuration)
+          # CRITICAL: This file contains production-specific settings
+          scp docker-compose.prod.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.prod.yml
+
           # Sync config directory (moltis.toml, mcp-servers.json, etc.)
           # This ensures MCP servers and all Moltis settings match git
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
@@ -480,7 +484,7 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
 
-          echo "Configuration synced successfully (docker-compose.yml + config/ + scripts/)"
+          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/)"
           echo "::endgroup::"
 
       # ===========================================
@@ -603,12 +607,12 @@ jobs:
             set -e
             cd ${{ env.DEPLOY_PATH }}
 
-            # Validate docker-compose.yml syntax
-            docker compose config --quiet
+            # Validate docker-compose.prod.yml syntax (production config)
+            docker compose -f docker-compose.prod.yml config --quiet
 
             # Verify the file matches expected structure
-            if ! grep -q "traefik.enable=true" docker-compose.yml; then
-              echo "::error::Traefik labels missing in docker-compose.yml"
+            if ! grep -q "traefik.enable=true" docker-compose.prod.yml; then
+              echo "::error::Traefik labels missing in docker-compose.prod.yml"
               exit 1
             fi
 
@@ -626,16 +630,16 @@ jobs:
 
             cd ${{ env.DEPLOY_PATH }}
 
-            # Pull latest image
-            docker compose pull moltis
+            # Pull latest image (use production compose file)
+            docker compose -f docker-compose.prod.yml pull moltis
 
             # Stop container gracefully
             echo "Stopping current container..."
-            docker compose stop moltis || true
+            docker compose -f docker-compose.prod.yml stop moltis || true
 
             # Start new container
             echo "Starting new container..."
-            docker compose up -d moltis
+            docker compose -f docker-compose.prod.yml up -d moltis
 
             # Remove old images
             docker image prune -f
@@ -802,16 +806,16 @@ jobs:
 
             cd ${{ env.DEPLOY_PATH }}
 
-            # Stop container
-            docker compose stop moltis || true
+            # Stop container (use production compose file)
+            docker compose -f docker-compose.prod.yml stop moltis || true
 
             # Restore data (config + data directories)
             tar -xzf $BACKUP_FILE -C /
 
-            # Restore docker-compose.yml from backup (GitOps: exact config restore)
+            # Restore docker-compose.prod.yml from backup (GitOps: exact config restore)
             if [ -f "${BACKUP_FILE}.compose" ]; then
-              cp "${BACKUP_FILE}.compose" docker-compose.yml
-              echo "Restored docker-compose.yml from backup"
+              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
+              echo "Restored docker-compose.prod.yml from backup"
             fi
 
             # Pull the backed-up image version if known
@@ -819,8 +823,8 @@ jobs:
               docker pull $BACKUP_VERSION
             fi
 
-            # Start container
-            docker compose up -d moltis
+            # Start container (use production compose file)
+            docker compose -f docker-compose.prod.yml up -d moltis
 
             echo "Rollback completed to version: $BACKUP_VERSION"
           EOF
