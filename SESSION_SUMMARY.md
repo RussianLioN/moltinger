@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-02-28
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-02
 
 ---
 
@@ -100,7 +100,7 @@ GitOps Compliance: Enforced ✅
 | `TELEGRAM_BOT_TOKEN` | ✅ | Bot token (@moltinger_bot) |
 | `TELEGRAM_ALLOWED_USERS` | ✅ | Allowed user IDs |
 | `GLM_API_KEY` | ✅ | LLM API (Zhipu AI) |
-| `OLLAMA_API_KEY` | ⚠️ | Ollama Cloud (optional - for cloud models) |
+| `OLLAMA_API_KEY` | ✅ | Ollama Cloud (optional - for cloud models) |
 | `SSH_PRIVATE_KEY` | ✅ | Deploy key |
 | `MOLTIS_PASSWORD` | ✅ | Auth password |
 | `TAVILY_API_KEY` | ✅ | Web search |
@@ -108,6 +108,56 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-02: CI/CD Deployment Debug & Lessons Learned
+
+**Завершено**:
+
+#### Deployment Debug (15+ CI/CD runs)
+- ✅ **Deploy to Production: SUCCESS** — Moltis running, healthy
+- ✅ Исправлено 10 self-inflicted ошибок в CI/CD
+- ✅ **Incident #003** задокументирован в LESSONS-LEARNED.md
+
+#### Исправленные проблемы
+| # | Проблема | Решение |
+|---|----------|---------|
+| 1 | File secrets вместо env vars | Изменил на `${VAR}` из .env |
+| 2 | docker-compose.prod.yml не sync | Добавил `scp docker-compose.prod.yml` |
+| 3 | Deploy без `-f` флага | Добавил `-f docker-compose.prod.yml` |
+| 4 | traefik_proxy сеть не найдена | Создал `docker network create` |
+| 5 | CPU limits > server capacity | Уменьшил 4→2 CPUs |
+| 6 | Shellcheck warnings как errors | `-S error` вместо `-S style` |
+| 7 | CRLF в YAML | Конвертировал в LF |
+| 8 | Boolean в YAML | `true` → `"true"` |
+| 9 | TELEGRAM_ALLOWED_USERS без default | Добавил `${VAR:-}` |
+| 10 | Несуществующий image tag | Использую `latest` с сервера |
+
+#### Документация
+- ✅ **Incident #003** в `docs/LESSONS-LEARNED.md` — полный анализ ошибок
+- ✅ **Pre-Deploy-Config Checklist** — новый чеклист для изменений deploy
+- ✅ **Token optimization** — чеклисты перемещены из CLAUDE.md в LESSONS-LEARNED.md
+
+#### Коммиты сессии
+- `b04510a` — refactor: move checklists from CLAUDE.md to LESSONS-LEARNED.md (token optimization)
+- `0974da7` — docs(lessons): add Incident #003 retrospective
+- `b619f36` — fix(resources): adjust CPU limits to fit 2-CPU server
+- `89aac32` — fix(ci): sync docker-compose.prod.yml and use -f flag
+- `a87d745` — fix(deploy): use env vars instead of file secrets
+- `d909755` — fix(ci): use 'latest' image tag
+- `505fa76` — fix(ci): make image pull optional
+- `112504c` — fix(ci): use v1.7.0 as default version
+- `65b6321` — fix(ci): quote boolean env vars
+- `3ea97ec` — fix(ci): convert CRLF to LF
+- `1f44237` — fix(ci): use -S error for shellcheck
+- `61e41ac` — fix(ci): use -S style for shellcheck
+- `881c30e` — fix(ci): ignore SC2155 shellcheck warning
+- `44aaa7f` — fix(ci): remove --strict flag
+
+#### Главный урок
+> **"Understand Before Change"** — Всегда понимать существующую архитектуру ПЕРЕД изменениями.
+> См. `docs/LESSONS-LEARNED.md` → Quick Reference Card
+
+---
 
 ### 2026-03-01 (продолжение): Fallback LLM with Ollama Sidecar (001-fallback-llm-ollama)
 
@@ -348,11 +398,12 @@ scripts/scripts-verify.sh         # Validate scripts
 
 ## 🎯 Next Steps
 
-1. **P4 Backlog** — 8 задач готовы к работе (см. `bd ready`)
-2. **Deploy Fallback LLM** — `git push` + `docker compose up -d`
-3. **moltinger-sjx** — HIGH: S3 Offsite Backup
-4. Протестировать skill telegram-learner на канале @tsingular
-5. Создать навык самообновления инструкции
+1. **P4 Backlog** — 4 задачи готовы к работе (см. `bd ready`)
+2. **moltinger-sjx** — HIGH: S3 Offsite Backup
+3. **moltinger-r8r** — MEDIUM: Traefik Rate Limiting
+4. **moltinger-j22** — MEDIUM: AlertManager Receivers
+5. **moltinger-eb0** — MEDIUM: Grafana Dashboard
+6. Протестировать skill telegram-learner на канале @tsingular
 
 ### P4 Priority Tasks (Recommended Order)
 
@@ -399,4 +450,4 @@ scripts/scripts-verify.sh         # Validate scripts
 
 ---
 
-*Last updated: 2026-03-01 | Session: Fallback LLM with Ollama Sidecar*
+*Last updated: 2026-03-02 | Session: CI/CD Deployment Debug & Lessons Learned*
