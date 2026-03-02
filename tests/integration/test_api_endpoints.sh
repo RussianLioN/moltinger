@@ -131,13 +131,21 @@ api_request() {
     local data="${3:-}"
 
     local response_code
-    response_code=$(curl -s -b "$COOKIE_FILE" \
-        -X "$method" "${MOLTIS_URL}${endpoint}" \
-        ${data:--H "Content-Type: application/json"} \
-        ${data:--d "$data"} \
-        -o "$COOKIE_FILE.response" \
-        -w "%{http_code}" \
-        --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
+    if [[ -n "$data" ]]; then
+        response_code=$(curl -s -b "$COOKIE_FILE" \
+            -X "$method" "${MOLTIS_URL}${endpoint}" \
+            -H "Content-Type: application/json" \
+            -d "$data" \
+            -o "$COOKIE_FILE.response" \
+            -w "%{http_code}" \
+            --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
+    else
+        response_code=$(curl -s -b "$COOKIE_FILE" \
+            -X "$method" "${MOLTIS_URL}${endpoint}" \
+            -o "$COOKIE_FILE.response" \
+            -w "%{http_code}" \
+            --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
+    fi
 
     RESPONSE_BODY=$(cat "$COOKIE_FILE.response" 2>/dev/null || echo "")
     rm -f "$COOKIE_FILE.response"
@@ -234,14 +242,21 @@ test_chat_response_format() {
     fi
 }
 
-# Test 5: Metrics endpoint (no auth required)
+# Test 5: Metrics endpoint (requires auth)
 test_metrics_endpoint() {
     test_start "metrics_endpoint"
 
+    # Skip if not authenticated
+    if [[ "$AUTH_SUCCESS" != "true" ]]; then
+        test_skip "Authentication not successful, skipping metrics test"
+        return 2
+    fi
+
     local response_code
     response_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        -b "$COOKIE_FILE" \
         --max-time "$TEST_TIMEOUT" \
-        "${MOLTIS_URL}/metrics" 2>/dev/null || echo "000")
+        "${MOLTIS_URL}/api/v1/metrics" 2>/dev/null || echo "000")
 
     if [[ "$response_code" == "200" ]]; then
         test_pass
@@ -254,8 +269,14 @@ test_metrics_endpoint() {
 test_metrics_prometheus_format() {
     test_start "metrics_prometheus_format"
 
+    # Skip if not authenticated
+    if [[ "$AUTH_SUCCESS" != "true" ]]; then
+        test_skip "Authentication not successful, skipping metrics format test"
+        return 2
+    fi
+
     local response
-    response=$(curl -s --max-time "$TEST_TIMEOUT" "${MOLTIS_URL}/metrics" 2>/dev/null || echo "")
+    response=$(curl -s -b "$COOKIE_FILE" --max-time "$TEST_TIMEOUT" "${MOLTIS_URL}/api/v1/metrics" 2>/dev/null || echo "")
 
     if [[ -z "$response" ]]; then
         test_fail "Empty metrics response"
