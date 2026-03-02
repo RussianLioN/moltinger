@@ -423,7 +423,255 @@ Claude Code "забыл" о GitOps принципах в момент реали
 
 ---
 
+## Incident #003: Self-Inflicted CI/CD Failures (2026-03-02)
+
+**Ситуация**:
+~15 CI/CD запусков для деплоя OLLAMA_API_KEY, большинство failed из-за ошибок, созданных самим AI-ассистентом.
+
+**Duration**: ~2.5 часа
+**Root Cause**: Нарушение принципа "Understand Before Change" — изменения без понимания существующей архитектуры.
+
+---
+
+### Timeline of Errors
+
+| # | Error | Root Cause | Category |
+|---|-------|------------|----------|
+| 1 | Shellcheck `-S style` показывал warnings | Неправильный флаг (надо `-S error`) | Syntax |
+| 2 | `new-lines: expected \n` | CRLF вместо LF в docker-compose.prod.yml | Encoding |
+| 3 | `MOLTIS_NO_TLS contains true, invalid type` | Boolean вместо string в YAML | Typing |
+| 4 | `TELEGRAM_ALLOWED_USERS variable is not set` | Нет default value (`${VAR:-}`) | Config |
+| 5 | `manifest unknown` для v1.7.0/latest | Тег не существует удалённо | Registry |
+| 6 | `secret file does not exist` | File secrets вместо env vars | Architecture |
+| 7 | docker-compose.prod.yml не sync | Workflow sync только .yml, не .prod.yml | CI/CD |
+| 8 | `docker compose` без `-f` флага | Использовался не тот compose файл | CI/CD |
+| 9 | `network traefik_proxy not found` | External сеть не создана | Infrastructure |
+| 10 | `CPUs from 0.01 to 2.00` | Limits 4 CPU > server 2 CPU | Resources |
+
+---
+
+### Root Cause Analysis
+
+#### 🔴 КРИТИЧЕСКАЯ ОШИБКА: Не прочитал существующую архитектуру
+
+```
+ПРОБЛЕМА: AI начал менять docker-compose.prod.yml (добавил file secrets)
+не проверив, как УЖЕ работают секреты в проекте.
+
+ФАКТ: Проект использует GitHub Secrets → .env → docker compose
+ПРЕДПОЛОЖЕНИЕ AI: Нужно Docker file secrets
+
+РЕЗУЛЬТАТ: Создал конфигурацию, которая противоречила существующему подходу.
+```
+
+#### 🔴 КАСКАДНЫЕ ОШИБКИ: Одно изменение сломало другое
+
+```
+Change 1: Добавил secrets section → Требует файлы в ./secrets/
+Change 2: Не создал файлы → Deploy failed
+Change 3: Убрал secrets → Но файл на сервере старый
+Change 4: Workflow sync только docker-compose.yml → prod.yml устарел
+Change 5: Deploy использует docker compose без -f → Берёт .yml не .prod.yml
+```
+
+---
+
+### Expert Panel Analysis
+
+#### 1. 🏗️ Solution Architect
+
+**Диагноз**: Нарушение принципа "Read Before Write"
+
+```
+ПРОБЛЕМА: Изменения вносились без чтения:
+- SESSION_SUMMARY.md (как работают секреты?)
+- Существующего workflow (как происходит sync?)
+- Сервера (какие ресурсы? какие сети?)
+
+ПРАВИЛО: Перед ЛЮБЫМИ изменениями deploy конфигурации:
+1. Прочитать SESSION_SUMMARY.md
+2. Проверить сервер: docker images, docker network ls, nproc
+3. Прочитать существующий workflow
+4. Только потом вносить изменения
+```
+
+#### 2. 🔐 Security Architect
+
+**Диагноз**: Неправильный выбор механизма секретов
+
+```
+ПРОБЛЕМА: Docker file secrets требуют:
+- Файлы на сервере в ./secrets/
+- Ручное управление файлами
+- Нет audit trail
+
+СУЩЕСТВУЮЩИЙ ПОДХОД (правильный):
+- GitHub Secrets (зашифрованы)
+- CI/CD генерирует .env из secrets
+- docker compose читает ${VAR} из .env
+- Audit trail в GitHub Actions logs
+
+УРОК: Всегда проверять существующий подход к секретам ПЕРЕД изменениями
+```
+
+#### 3. 🐳 Docker Compose Expert
+
+**Диагноз**: Неполная синхронизация конфигурации
+
+```yaml
+# ПРОБЛЕМА: Workflow синхронизировал только один файл
+- name: Sync configuration files
+  run: |
+    scp docker-compose.yml server:/path/  # ✅
+    # docker-compose.prod.yml ЗАБЫЛИ!     # ❌
+
+# РЕШЕНИЕ: Синхронизировать ВСЕ compose файлы
+- name: Sync configuration files
+  run: |
+    scp docker-compose.yml server:/path/
+    scp docker-compose.prod.yml server:/path/  # ✅ Added
+```
+
+#### 4. ⚙️ DevOps Engineer
+
+**Диагноз**: Deploy step не указывает правильный compose файл
+
+```bash
+# ПРОБЛЕМА: docker compose без -f использует docker-compose.yml
+docker compose up -d moltis
+
+# РЕШЕНИЕ: Явно указывать production config
+docker compose -f docker-compose.prod.yml up -d moltis
+```
+
+#### 5. 🖥️ Infrastructure Engineer
+
+**Диагноз**: Не проверены ресурсы сервера
+
+```bash
+# ПРОБЛЕМА: Config требует 4 CPUs, сервер имеет 2
+deploy:
+  resources:
+    limits:
+      cpus: '4'  # ❌ Server has only 2!
+
+# ПРОВЕРКА ПЕРЕД ИЗМЕНЕНИЕМ:
+ssh server "nproc"  # Should be first step!
+```
+
+#### 6. 🌐 Network Engineer
+
+**Диагноз**: External сеть не создана
+
+```yaml
+# docker-compose.prod.yml объявляет external сеть
+networks:
+  traefik_proxy:
+    external: true  # Должна существовать!
+
+# ПРОВЕРКА И СОЗДАНИЕ:
+ssh server "docker network create traefik_proxy"
+```
+
+---
+
+### 📋 Pre-Implementation Checklist (UPDATED)
+
+```
+╔═══════════════════════════════════════════════════════════════════════════╗
+║        PRE-DEPLOY-CONFIGURATION CHANGE CHECKLIST (MANDATORY)              ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║ 1. [ ] Прочитать SESSION_SUMMARY.md — как работают секреты?               ║
+║ 2. [ ] Проверить сервер:                                                  ║
+║       - docker images | grep moltis (какой tag?)                          ║
+║       - docker network ls (какие сети?)                                   ║
+║       - nproc (сколько CPU?)                                              ║
+║       - free -h (сколько памяти?)                                         ║
+║ 3. [ ] Прочитать существующий workflow — что sync'ится?                   ║
+║ 4. [ ] Проверить .env на сервере — какие переменные есть?                 ║
+║ 5. [ ] Сравнить с GitHub Secrets: gh secret list                          ║
+║ 6. [ ] Только ПОСЛЕ этого вносить изменения                               ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### 📊 Metrics
+
+| Metric | This Session | Target |
+|--------|--------------|--------|
+| CI/CD attempts | ~15 | 1 |
+| Time to success | ~2.5 hours | <10 min |
+| Self-inflicted errors | 10 | 0 |
+| SSH rate limits hit | 3+ | 0 |
+| Root cause analysis depth | High | - |
+
+---
+
+### 🛡️ Prevention Rules (NEW)
+
+#### Rule #1: Read Before Change
+```markdown
+## Before modifying ANY deployment configuration:
+
+1. Read SESSION_SUMMARY.md (how do secrets work?)
+2. Check server resources (CPU, memory, networks)
+3. Read existing workflow (what gets synced?)
+4. Verify against GitHub Secrets
+```
+
+#### Rule #2: Verify File Sync
+```markdown
+## When adding new config files:
+
+1. Add to git (git add, git commit)
+2. Add to CI/CD sync step (scp to server)
+3. Verify in workflow that ALL needed files are synced
+```
+
+#### Rule #3: Resource Limits Reality Check
+```markdown
+## Before setting resource limits:
+
+ssh server "nproc && free -h"
+# Then set limits to 50-75% of available resources
+```
+
+#### Rule #4: Compose File Consistency
+```markdown
+## When using multiple compose files:
+
+1. ALL compose files must be synced
+2. ALL docker compose commands must use -f flag
+3. Validation must check the SAME file as deploy
+```
+
+---
+
+### Files Modified During Incident
+
+| File | Change | Reason |
+|------|--------|--------|
+| `.github/workflows/deploy.yml` | +20 lines | Sync prod.yml, use -f flag |
+| `docker-compose.prod.yml` | -26 lines | Remove file secrets, adjust CPU |
+| `docker-compose.yml` | Boolean→string | YAML typing fix |
+| `docs/LESSONS-LEARNED.md` | +150 lines | This retrospective |
+
+---
+
+### ✅ Resolution
+
+После исправления всех 10 ошибок:
+- Deploy to Production: **SUCCESS**
+- Moltis container: **Running, Healthy**
+- Health check: **200 OK**
+
+---
+
 *Document created: 2026-02-17*
-*Last updated: 2026-02-27*
+*Last updated: 2026-03-02*
 *Incident resolved: ✅ Tavily MCP working*
 *New incident added: ⚠️ GitOps violation documented*
+*New incident added: 🔴 Self-inflicted CI/CD failures documented*
