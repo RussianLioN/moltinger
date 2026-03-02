@@ -156,7 +156,8 @@ find_test_files() {
         fi
     done < <(find "$SECURITY_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
-    echo "${test_files[@]}"
+    # Print each file on a separate line for mapfile
+    printf '%s\n' "${test_files[@]}"
 }
 
 # ==============================================================================
@@ -287,13 +288,41 @@ run_test_file() {
 
     log_info "Running: $test_name"
 
-    # Source and run the test file
-    if source "$test_file"; then
-        log_debug "Test file sourced successfully: $test_file"
-    else
+    # Source the test file
+    if ! source "$test_file"; then
         log_error "Failed to source test file: $test_file"
-        test_fail "Failed to execute test file: $test_name"
+        test_fail "Failed to source test file: $test_name"
         return 1
+    fi
+
+    # Call the test runner function based on test name
+    # test_authentication.sh -> run_authentication_tests
+    # test_input_validation.sh -> run_input_validation_tests
+    local test_function_name=""
+    case "$test_name" in
+        test_authentication)
+            test_function_name="run_authentication_tests"
+            ;;
+        test_input_validation)
+            test_function_name="run_input_validation_tests"
+            ;;
+        *)
+            # Try to infer function name: test_<name> -> run_<name>_tests
+            local base_name="${test_name#test_}"
+            test_function_name="run_${base_name}_tests"
+            ;;
+    esac
+
+    # Check if function exists and call it
+    if declare -f "$test_function_name" > /dev/null; then
+        log_debug "Calling test function: $test_function_name"
+        # Export output mode variables for sourced scripts
+        export OUTPUT_JSON VERBOSE
+        "$test_function_name"
+    else
+        log_warn "Test function $test_function_name not found in $test_file"
+        # Some test files may run automatically when sourced (with BASH_SOURCE check)
+        log_debug "Test file may run tests automatically on source"
     fi
 }
 

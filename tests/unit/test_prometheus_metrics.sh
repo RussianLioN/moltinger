@@ -27,11 +27,11 @@ CB_STATE_OPEN="open"
 CB_STATE_HALF_OPEN="half_open"
 
 # Test state file
-TEST_STATE_FILE="/tmp/test-metrics-cb-state-$$"
+TEST_STATE_FILE="${TMPDIR:-/tmp}/test-metrics-cb-state-$$"
 export CIRCUIT_BREAKER_STATE_FILE="$TEST_STATE_FILE"
 
 # Counter file for fallback metrics
-TEST_COUNTER_FILE="/tmp/test-metrics-fallback-counter-$$"
+TEST_COUNTER_FILE="${TMPDIR:-/tmp}/test-metrics-fallback-counter-$$"
 export FALLBACK_COUNTER_FILE="$TEST_COUNTER_FILE"
 
 # ==============================================================================
@@ -156,7 +156,11 @@ teardown_test() {
 
 # Check if metric name follows Prometheus conventions
 validate_metric_name() {
-    local metric_name="$1"
+    local metric_line="$1"
+
+    # Extract metric name (everything before { or space)
+    local metric_name
+    metric_name=$(echo "$metric_line" | sed 's/{.*//' | sed 's/ .*//')
 
     # Prometheus metric names should match: [a-zA-Z_:][a-zA-Z0-9_:]*
     if echo "$metric_name" | grep -qE '^[a-zA-Z_:][a-zA-Z0-9_:]*$'; then
@@ -171,7 +175,11 @@ validate_metric_help() {
     local metrics_output="$1"
     local metric_name="$2"
 
-    if echo "$metrics_output" | grep -q "^# HELP $metric_name "; then
+    # Extract base metric name (without labels)
+    local base_name
+    base_name=$(echo "$metric_name" | sed 's/{.*//')
+
+    if echo "$metrics_output" | grep -q "^# HELP $base_name "; then
         return 0
     else
         return 1
@@ -183,7 +191,11 @@ validate_metric_type() {
     local metrics_output="$1"
     local metric_name="$2"
 
-    if echo "$metrics_output" | grep -q "^# TYPE $metric_name "; then
+    # Extract base metric name (without labels)
+    local base_name
+    base_name=$(echo "$metric_name" | sed 's/{.*//')
+
+    if echo "$metrics_output" | grep -q "^# TYPE $base_name "; then
         return 0
     else
         return 1
@@ -383,15 +395,19 @@ test_metric_help_text() {
     local metrics
     metrics=$(generate_mock_metrics)
 
-    # Extract all metric names (non-comment lines)
+    # Extract all metric base names (non-comment lines, without labels)
     local metric_names=()
     while IFS= read -r line; do
         if [[ "$line" =~ ^# ]] || [[ -z "$line" ]]; then
             continue
         fi
+        # Extract metric name without labels
         local metric_name
-        metric_name=$(echo "$line" | awk '{print $1}')
-        metric_names+=("$metric_name")
+        metric_name=$(echo "$line" | awk '{print $1}' | sed 's/{.*//')
+        # Add unique names only
+        if [[ ! " ${metric_names[*]} " =~ " ${metric_name} " ]]; then
+            metric_names+=("$metric_name")
+        fi
     done <<< "$metrics"
 
     local failed=0

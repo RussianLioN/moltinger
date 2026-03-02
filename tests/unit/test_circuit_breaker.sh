@@ -23,7 +23,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 # Test-specific configuration
-TEST_STATE_FILE="/tmp/test-cb-state-$$"
+TEST_STATE_FILE="${TMPDIR:-/tmp}/test-cb-state-$$"
 TEST_RECOVERY_TIMEOUT=5  # Short timeout for tests
 
 # Circuit breaker configuration (matches health-monitor.sh)
@@ -222,9 +222,12 @@ check_recovery_timeout() {
         return 1
     fi
 
+    # Use UTC timezone for consistent date parsing
     local last_epoch current_epoch elapsed
-    last_epoch=$(date -d "$last_failure" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_failure}" +%s 2>/dev/null || echo "0")
-    current_epoch=$(date +%s)
+    last_epoch=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_failure}" +%s 2>/dev/null ||
+                 TZ=UTC date -d "$last_failure" +%s 2>/dev/null ||
+                 echo "0")
+    current_epoch=$(TZ=UTC date +%s 2>/dev/null || date +%s)
     elapsed=$((current_epoch - last_epoch))
 
     if [[ $elapsed -ge $CIRCUIT_BREAKER_RECOVERY_TIMEOUT ]]; then
@@ -318,9 +321,15 @@ test_cb_open_to_half_open() {
     init_circuit_breaker
 
     # Force circuit to OPEN state with a past failure time
+    # Use UTC for consistent epoch calculation
+    local current_epoch
+    current_epoch=$(TZ=UTC date +%s 2>/dev/null || date +%s)
+    local past_epoch=$((current_epoch - TEST_RECOVERY_TIMEOUT - 2))
+
+    # Format as ISO8601 UTC using TZ=UTC
     local past_timestamp
-    past_timestamp=$(date -u -d "$((TEST_RECOVERY_TIMEOUT + 2)) seconds ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null ||
-                     date -u -v-"$((TEST_RECOVERY_TIMEOUT + 2))S" +"%Y-%m-%dT%H:%M:%SZ")
+    past_timestamp=$(TZ=UTC date -j -f "%s" "$past_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null ||
+                     TZ=UTC date -u -d "@$past_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
 
     local open_state
     open_state=$(cat <<EOF
@@ -466,10 +475,9 @@ test_cb_recovery_timeout_not_yet() {
     setup_test
     init_circuit_breaker
 
-    # Set state to OPEN with recent failure time
-    local recent_timestamp
-    recent_timestamp=$(date -u -d "2 seconds ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null ||
-                       date -u -v-2S +"%Y-%m-%dT%H:%M:%SZ")
+    # Set state to OPEN with current time (just now, not enough time passed)
+    local current_time
+    current_time=$(get_timestamp)
 
     local open_state
     open_state=$(cat <<EOF
@@ -477,8 +485,8 @@ test_cb_recovery_timeout_not_yet() {
     "state": "$CB_STATE_OPEN",
     "failure_count": 3,
     "success_count": 0,
-    "last_failure_time": "$recent_timestamp",
-    "last_state_change": "$(get_timestamp)",
+    "last_failure_time": "$current_time",
+    "last_state_change": "$current_time",
     "active_provider": "ollama",
     "fallback_provider": "ollama"
 }
@@ -486,7 +494,7 @@ EOF
 )
     echo "$open_state" > "$CIRCUIT_BREAKER_STATE_FILE"
 
-    # Check recovery timeout - should NOT transition
+    # Check recovery timeout - should NOT transition (just happened)
     if check_recovery_timeout; then
         test_fail "Recovery timeout should not trigger before timeout expires"
     else

@@ -161,21 +161,26 @@ run_test_file() {
 
     log_info "Running: $test_name"
 
-    # Source and run the test file
-    # Tests should call test helpers and set TESTS_PASSED/FAILED
-    if source "$test_file"; then
-        log_debug "Test file sourced successfully: $test_file"
+    # Source the test file and explicitly call run_all_tests
+    # This ensures test functions are loaded in current shell
+    source "$test_file"
+
+    # Call run_all_tests if it exists
+    if declare -f run_all_tests > /dev/null; then
+        run_all_tests
     else
-        log_error "Failed to source test file: $test_file"
-        test_fail "Failed to execute test file: $test_file"
+        log_error "run_all_tests function not found in: $test_file"
+        test_fail "Test file missing run_all_tests function: $test_file"
         return 1
     fi
 }
 
 # Run all test files
 run_all_tests() {
-    local test_files
-    mapfile -t test_files < <(find_test_files)
+    local test_files=()
+    while IFS= read -r -d '' file; do
+        test_files+=("$file")
+    done < <(find "$UNIT_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
     if [[ ${#test_files[@]} -eq 0 ]]; then
         if [[ -n "$FILTER_PATTERN" ]]; then

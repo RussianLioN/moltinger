@@ -161,7 +161,7 @@ test_bot_token_valid() {
         local error_code
         error_code=$(echo "$response" | jq -r '.error_code // "unknown"')
         local description
-        description=$(echo "$response" | jq -r '.description // "unknown error"')
+        description=$(echo "$response" | jq -r '.description // "unknown"')
 
         test_fail "Bot token invalid: [$error_code] $description"
     fi
@@ -341,7 +341,7 @@ test_message_send() {
         return 1
     fi
 
-    local test_message="🧪 Integration test from Moltis - $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+    local test_message="Integration test from Moltis"
 
     local response
     response=$(telegram_api "sendMessage" "{\"chat_id\":\"$TELEGRAM_TEST_USER\",\"text\":\"$test_message\"}")
@@ -358,7 +358,7 @@ test_message_send() {
         local error_code
         error_code=$(echo "$response" | jq -r '.error_code // "unknown"')
         local description
-        description=$(echo "$response" | jq -r '.description // "unknown error"")
+        description=$(echo "$response" | jq -r '.description // "unknown"')
 
         # User may have blocked the bot or not started a conversation
         if [[ "$error_code" == "403" ]]; then
@@ -381,12 +381,12 @@ test_api_response_time() {
     fi
 
     local start_time
-    start_time=$(date +%s%N 2>/dev/null || python3 -c "import time; print(int(time.time() * 1000000000))")
+    start_time=$(date +%s%N 2>/dev/null || echo "$(date +%s)000000000")
 
     telegram_api "getMe" > /dev/null 2>&1 || true
 
     local end_time
-    end_time=$(date +%s%N 2>/dev/null || python3 -c "import time; print(int(time.time() * 1000000000))")
+    end_time=$(date +%s%N 2>/dev/null || echo "$(date +%s)000000000")
 
     local duration_ns=$((end_time - start_time))
     local duration_ms=$((duration_ns / 1000000))
@@ -401,7 +401,7 @@ test_api_response_time() {
     fi
 }
 
-# Test 9: Bot has no pending updates ( webhook is processing correctly)
+# Test 9: Bot has no pending updates (webhook is processing correctly)
 test_pending_updates() {
     test_start "pending_updates"
 
