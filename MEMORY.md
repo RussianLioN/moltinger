@@ -1,5 +1,141 @@
 # Project Memory & Lessons Learned
 
+> **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ перед любым планированием или реализацией!**
+>
+> Этот файл содержит критическую конфигурацию проекта.
+> Проверь его ПЕРЕД любыми изменениями в deploy, docker, traefik.
+
+---
+
+## Production Configuration (CRITICAL)
+
+### Server: ainetic.tech (45.148.117.156)
+
+| Resource | Value |
+|----------|-------|
+| CPU | **2 cores** (не 4!) |
+| RAM | 8GB |
+| OS | Ubuntu 22.04.5 LTS |
+| Deploy Path | `/opt/moltinger` |
+
+### Docker Networks (CRITICAL - проверять ПЕРЕД изменениями!)
+
+| Network | Purpose | Containers |
+|---------|---------|------------|
+| `traefik-net` | **PRIMARY** Traefik routing | traefik, moltis, ... |
+| `ainetic_net` | Internal services | n8n, postgres, redis, grafana, prometheus |
+| `monitoring` | Moltis monitoring | moltis, prometheus |
+
+**⚠️ ВАЖНО**:
+- Moltis должен быть в `traefik-net`, НЕ `traefik_proxy`!
+- Traefik использует `traefik-net` для DNS resolution
+
+### Domain Mapping
+
+| Service | Domain |
+|---------|--------|
+| Moltis | `moltis.ainetic.tech` |
+| N8N | `ainetic.tech` |
+| Grafana | `grafana.ainetic.tech` |
+| Prometheus | `prometheus.ainetic.tech` |
+
+### Traefik Labels (CRITICAL)
+
+```yaml
+# Moltis labels (docker-compose.prod.yml)
+labels:
+  - "traefik.enable=true"
+  - "traefik.docker.network=traefik-net"  # CRITICAL for DNS!
+  - "traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)"
+```
+
+### Environment Variables (.env on server)
+
+```bash
+MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
+```
+
+---
+
+## Project Structure (Key Files)
+
+```
+moltinger/
+├── docker-compose.yml          # Development compose
+├── docker-compose.prod.yml     # Production compose (traefik-net!)
+├── config/
+│   ├── moltis.toml             # Moltis application config
+│   ├── prometheus/             # Prometheus config
+│   └── alertmanager/           # AlertManager config
+├── scripts/
+│   ├── deploy.sh               # Deploy script
+│   ├── preflight-check.sh      # Pre-flight validation
+│   └── health-monitor.sh       # Health monitoring
+├── .github/workflows/
+│   └── deploy.yml              # CI/CD pipeline
+├── docs/
+│   ├── LESSONS-LEARNED.md      # Detailed incident analysis
+│   └── compose-structure.md    # YAML anchors docs
+├── .specify/
+│   ├── memory/constitution.md  # Project constitution
+│   └── specs/                  # Feature specifications
+├── SESSION_SUMMARY.md          # Session history
+├── MEMORY.md                   # THIS FILE - READ FIRST!
+└── CLAUDE.md                   # AI instructions
+```
+
+---
+
+## Debug Commands
+
+```bash
+# Check container networks
+ssh root@ainetic.tech "docker inspect moltis --format '{{range \$k, \$v := .NetworkSettings.Networks}}{{\$k}} {{end}}'"
+
+# Check Traefik routing
+ssh root@ainetic.tech "curl -sk -o /dev/null -w '%{http_code}' https://moltis.ainetic.tech/health"
+
+# Check Traefik logs for Moltis
+ssh root@ainetic.tech "docker logs traefik 2>&1 | grep -i moltis | tail -10"
+
+# Check which IP Traefik uses (should be traefik-net IP!)
+ssh root@ainetic.tech "docker logs traefik 2>&1 | grep 'moltis@docker' | tail -5"
+
+# Check networks on server
+ssh root@ainetic.tech "docker network ls | grep -E 'traefik|ainetic|monitoring'"
+
+# Check .env on server
+ssh root@ainetic.tech "cat /opt/moltinger/.env | grep DOMAIN"
+```
+
+---
+
+## Docker Network Pitfalls (Lesson #14)
+
+### Problem: Traefik 404/503
+
+**Root Causes (2026-03-02)**:
+1. Moltis в `traefik_proxy`, Traefik в `traefik-net` = разные сети
+2. `MOLTIS_DOMAIN=ainetic.tech` вместо `moltis.ainetic.tech`
+3. Docker DNS возвращает IP из первой по алфавиту сети (monitoring < traefik-net)
+
+**Solutions**:
+```yaml
+# 1. Использовать существующую сеть
+networks:
+  traefik-net:    # НЕ traefik_proxy!
+    external: true
+
+# 2. Правильный default в compose
+MOLTIS_DOMAIN=moltis.ainetic.tech
+
+# 3. Явно указать сеть для Traefik DNS
+labels:
+  - "traefik.docker.network=traefik-net"
+```
+
+---
+
 ## GitOps Principles (MANDATORY)
 
 ### The Configuration Drift Incident (2026-02-16)

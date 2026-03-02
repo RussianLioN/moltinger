@@ -1,17 +1,34 @@
 # Agent Instructions
 
-## ⚠️ MANDATORY: Read SESSION_STATE.md First!
+## ⚠️ MANDATORY: Read MEMORY.md First!
 
-**Before starting ANY work**, read the session state file:
+**Before ANY planning or implementation**, read the project memory:
 ```bash
-cat SESSION_STATE.md
+cat MEMORY.md
+```
+
+This file contains:
+- **Production configuration** (Docker networks, domains, server resources)
+- **Project structure** (key files and folders)
+- **Debug commands** for troubleshooting
+- **Critical pitfalls** from past incidents
+
+**Why?** Prevents repeating mistakes like wrong Docker network or domain.
+
+---
+
+## ⚠️ MANDATORY: Read SESSION_SUMMARY.md at Session Start!
+
+**Before starting ANY work**, read the session summary:
+```bash
+cat SESSION_SUMMARY.md
 ```
 
 This file contains:
 - Current project status (secrets, deployment, paths)
 - What was already done (commits, configurations)
 - What is pending (tasks, blockers)
-- Server and local file locations
+- Session history
 
 **Update it at session end**: Run `/session-summary`
 
@@ -31,9 +48,11 @@ bd sync               # Sync with git
 
 ## ⚠️ Pre-Change Checklists
 
-**Before ANY integration or deploy config change**: See `docs/LESSONS-LEARNED.md` → Quick Reference Card.
+**Before ANY integration or deploy config change**:
+1. Read `MEMORY.md` - check current configuration
+2. See `docs/LESSONS-LEARNED.md` → Quick Reference Card
 
-**On ERROR**: Check `docs/LESSONS-LEARNED.md` first for similar patterns.
+**On ERROR**: Check `MEMORY.md` and `docs/LESSONS-LEARNED.md` first for similar patterns.
 
 ## Landing the Plane (Session Completion)
 
