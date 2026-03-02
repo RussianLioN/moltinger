@@ -18,19 +18,19 @@ set -euo pipefail
 # ==============================================================================
 
 # Test state
-declare -g TEST_CURRENT=""
-declare -g TESTS_PASSED=0
-declare -g TESTS_FAILED=0
-declare -g TESTS_SKIPPED=0
-declare -g TESTS_TOTAL=0
-declare -g TEST_START_TIME=""
-declare -ga TEST_FAILURES=()
-declare -ga TEST_SKIP_REASONS=()
+declare TEST_CURRENT=""
+declare TESTS_PASSED=0
+declare TESTS_FAILED=0
+declare TESTS_SKIPPED=0
+declare TESTS_TOTAL=0
+declare TEST_START_TIME=""
+declare -a TEST_FAILURES=()
+declare -a TEST_SKIP_REASONS=()
 
 # Output configuration
-declare -g OUTPUT_JSON=false
-declare -g VERBOSE=false
-declare -g COLOR_ENABLED=true
+declare OUTPUT_JSON=false
+declare VERBOSE=false
+declare COLOR_ENABLED=true
 
 # ==============================================================================
 # COLORS
