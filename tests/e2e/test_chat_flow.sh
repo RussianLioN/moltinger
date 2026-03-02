@@ -244,8 +244,9 @@ test_login_invalid_password() {
         fi
     fi
 
-    # Restore valid session
+    # Restore valid session and LOGIN_SUCCESS flag
     mv "$saved_cookie" "$COOKIE_FILE" 2>/dev/null || true
+    LOGIN_SUCCESS=true  # Restore the flag since we have a valid session
 }
 
 # Test 3: Chat message - send simple greeting
