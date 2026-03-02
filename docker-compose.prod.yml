@@ -99,7 +99,7 @@ services:
       - "prometheus.io/path=/metrics"
 
     networks:
-      - traefik_proxy
+      - traefik-net
       - monitoring
 
   # ========================================================================
@@ -328,7 +328,7 @@ volumes:
 # NETWORKS
 # ========================================================================
 networks:
-  traefik_proxy:
+  traefik-net:
     external: true
   monitoring:
     driver: bridge
