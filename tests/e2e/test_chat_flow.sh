@@ -121,7 +121,7 @@ moltis_login() {
     response_code=$(curl -s -c "$COOKIE_FILE" -b "$COOKIE_FILE" \
         -X POST "${MOLTIS_URL}/api/auth/login" \
         -H "Content-Type: application/json" \
-        -d "\{"password\":"${password}" \
+        -d "{\"password\":\"${password}\"}" \
         -o /dev/null \
         -w "%{http_code}" \
         --max-time "$LOGIN_TIMEOUT" 2>/dev/null || echo "000")
