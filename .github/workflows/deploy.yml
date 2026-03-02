@@ -563,7 +563,7 @@ jobs:
           TELEGRAM_ALLOWED_USERS=${{ secrets.TELEGRAM_ALLOWED_USERS }}
 
           # Domain
-          MOLTIS_DOMAIN=ainetic.tech
+          MOLTIS_DOMAIN=moltis.ainetic.tech
           EOF
 
           # Copy to server
