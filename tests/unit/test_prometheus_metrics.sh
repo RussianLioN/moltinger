@@ -404,8 +404,8 @@ test_metric_help_text() {
         # Extract metric name without labels
         local metric_name
         metric_name=$(echo "$line" | awk '{print $1}' | sed 's/{.*//')
-        # Add unique names only
-        if [[ ! " ${metric_names[*]} " =~ " ${metric_name} " ]]; then
+        # Add unique names only (handle empty array safely)
+        if [[ ${#metric_names[@]} -eq 0 ]] || [[ ! " ${metric_names[*]} " =~ " ${metric_name} " ]]; then
             metric_names+=("$metric_name")
         fi
     done <<< "$metrics"

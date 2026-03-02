@@ -236,8 +236,10 @@ run_test_file() {
 
 # Run all test files sequentially
 run_all_tests() {
-    local test_files
-    mapfile -t test_files < <(find_test_files)
+    local test_files=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && test_files+=("$line")
+    done < <(find_test_files)
 
     if [[ ${#test_files[@]} -eq 0 ]]; then
         if [[ -n "$FILTER_PATTERN" ]]; then
@@ -257,8 +259,10 @@ run_all_tests() {
 
 # Run tests in parallel (experimental)
 run_all_tests_parallel() {
-    local test_files
-    mapfile -t test_files < <(find_test_files)
+    local test_files=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && test_files+=("$line")
+    done < <(find_test_files)
 
     if [[ ${#test_files[@]} -eq 0 ]]; then
         log_warn "No integration tests found"

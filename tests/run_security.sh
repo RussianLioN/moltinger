@@ -41,9 +41,9 @@ OUTPUT_JSON=false
 VERBOSE=false
 SEVERITY_FILTER=""
 
-# Security results
-declare -ga SECURITY_FINDINGS=()
-declare -g VULNERABILITY_COUNT=0
+# Security results (compatible with bash and zsh)
+SECURITY_FINDINGS=()
+VULNERABILITY_COUNT=0
 
 # ==============================================================================
 # USAGE
@@ -329,7 +329,10 @@ run_test_file() {
 # Run all test files
 run_all_tests() {
     local test_files
-    mapfile -t test_files < <(find_test_files)
+    local test_files=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && test_files+=("$line")
+    done < <(find_test_files)
 
     if [[ ${#test_files[@]} -eq 0 ]]; then
         if [[ -n "$FILTER_PATTERN" ]]; then
