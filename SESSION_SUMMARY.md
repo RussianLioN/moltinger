@@ -126,6 +126,67 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
+### 2026-03-02 (продолжение 2): Test Suite Bug Fixes & Server Validation
+
+**Завершено**:
+
+#### Test Suite Implementation
+- ✅ 18 тестовых файлов создано (unit, integration, e2e, security)
+- ✅ Test infrastructure: helpers, runners, CI/CD workflow
+
+#### Bug Fixes (Shell Compatibility)
+| # | Проблема | Решение |
+|---|----------|---------|
+| 1 | `mapfile: command not found` | Заменил на `while IFS= read -r` loop |
+| 2 | `declare -g: invalid option` | Убрал `-g` flag |
+| 3 | Empty array unbound variable | Добавил `${#arr[@]} -eq 0` check |
+| 4 | Wrong login endpoint `/login` | Исправил на `/api/auth/login` |
+| 5 | Wrong Content-Type `x-www-form-urlencoded` | Исправил на `application/json` |
+| 6 | `api_request` function bug | Переписал с правильным if/else |
+| 7 | Metrics endpoint `/metrics` | Исправил на `/api/v1/metrics` с auth |
+
+#### Server Validation Results
+**Integration Tests**: 9/10 passed (1 skipped - metrics format)
+- ✅ health_endpoint
+- ✅ login_endpoint
+- ✅ chat_endpoint
+- ✅ chat_response_format
+- ✅ metrics_endpoint
+- ⏭️ metrics_prometheus_format (skipped)
+- ✅ mcp_servers_endpoint
+- ✅ session_persistence
+- ✅ unauthorized_request
+- ✅ api_response_time
+
+**Security Tests**: 4/6 passed
+- ✅ auth_valid_password
+- ✅ auth_invalid_password
+- ✅ auth_session_cookie
+- ✅ auth_session_persistence
+- ❌ auth_rate_limiting (HTTP 400 vs expected 401)
+- ❌ auth_brute_force (HTTP 400 vs expected 401)
+
+#### Website Investigation
+- ✅ moltis.ainetic.tech **РАБОТАЕТ** (не "пустая страница")
+- ✅ Returns HTTP 303 → /login (корректное поведение)
+- ✅ Login page загружается с JavaScript
+- ✅ Health endpoint: `{"status":"ok","version":"0.10.6"}`
+
+#### Коммиты сессии
+- `1c431e7` — fix(tests): fix api_request function and metrics endpoint
+- `a9cd1d7` — fix(tests): use correct login endpoint /api/auth/login with JSON
+- `d493a71` — fix(tests): improve shell compatibility for zsh and bash
+
+#### Ключевые выводы
+1. **API Endpoints**:
+   - Login: `POST /api/auth/login` с `{"password":"..."}`
+   - Chat: `POST /api/v1/chat` с cookie
+   - Metrics: `GET /api/v1/metrics` с cookie (не `/metrics`)
+2. **Shell Compatibility**: Bash-скрипты должны избегать bashisms для zsh
+3. **Website работает**: "Пустая страница" - client-side issue (browser cache, JS, CORS)
+
+---
+
 ### 2026-03-02 (продолжение): CI/CD Test Suite Integration
 
 **Завершено**:
@@ -566,4 +627,4 @@ gh run view --workflow test.yml   # View latest test run details
 
 ---
 
-*Last updated: 2026-03-02 | Session: CI/CD Test Suite Integration*
+*Last updated: 2026-03-02 | Session: Test Suite Bug Fixes & Server Validation*
