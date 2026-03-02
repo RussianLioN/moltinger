@@ -4,7 +4,7 @@
 #
 # Test Scenarios:
 #   - /health (GET, no auth) → 200
-#   - /login (POST, password) → 200/302
+#   -  /api/auth/login (POST, password) → 200/302
 #   - /api/v1/chat (POST, cookie) → 200
 #   - /metrics (GET, no auth) → 200
 #   - /api/mcp/servers (GET, cookie) → 200
@@ -105,9 +105,9 @@ moltis_authenticate() {
 
     local response_code
     response_code=$(curl -s -c "$COOKIE_FILE" -b "$COOKIE_FILE" \
-        -X POST "${MOLTIS_URL}/login" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "password=${MOLTIS_PASSWORD}" \
+        -X POST "${MOLTIS_URL}/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d "{\"password\":\"${MOLTIS_PASSWORD}\"}" \
         -o /dev/null \
         -w "%{http_code}" \
         --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")

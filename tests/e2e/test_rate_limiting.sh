@@ -118,9 +118,9 @@ trap cleanup_rate_limiting_tests EXIT
 rate_limit_auth() {
     if [[ -n "$MOLTIS_PASSWORD" ]]; then
         curl -s -c "$COOKIE_FILE" \
-            -X POST "${MOLTIS_URL}/login" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "password=${MOLTIS_PASSWORD}" \
+            -X POST "${MOLTIS_URL}/api/auth/login" \
+            -H "Content-Type: application/json" \
+            -d "\{"password\":"${MOLTIS_PASSWORD}\}" \
             -o /dev/null \
             --max-time 10 2>/dev/null || true
     fi

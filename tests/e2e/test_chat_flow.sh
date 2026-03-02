@@ -3,7 +3,7 @@
 # Tests full user journey from login to chat response
 #
 # Test Scenarios:
-#   1. Login flow - POST /login with password, get session cookie
+#   1. Login flow - POST  /api/auth/login with password, get session cookie
 #   2. Chat message - POST /api/v1/chat with message, get response
 #   3. Chat context - Follow-up question verifies context maintained
 #   4. Chat timeout - Verify response within 30 seconds
@@ -119,9 +119,9 @@ moltis_login() {
 
     local response_code
     response_code=$(curl -s -c "$COOKIE_FILE" -b "$COOKIE_FILE" \
-        -X POST "${MOLTIS_URL}/login" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "password=${password}" \
+        -X POST "${MOLTIS_URL}/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d "\{"password\":"${password}" \
         -o /dev/null \
         -w "%{http_code}" \
         --max-time "$LOGIN_TIMEOUT" 2>/dev/null || echo "000")
@@ -425,9 +425,9 @@ test_chat_concurrent_sessions() {
     # Login second session
     local response_code
     response_code=$(curl -s -c "$cookie2" \
-        -X POST "${MOLTIS_URL}/login" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "password=${MOLTIS_PASSWORD}" \
+        -X POST "${MOLTIS_URL}/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d "\{"password\":"${MOLTIS_PASSWORD}\}" \
         -o /dev/null \
         -w "%{http_code}" \
         --max-time "$LOGIN_TIMEOUT" 2>/dev/null || echo "000")

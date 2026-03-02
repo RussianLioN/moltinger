@@ -104,9 +104,9 @@ moltis_authenticate() {
 
     local response_code
     response_code=$(curl -s -c "$COOKIE_FILE" -b "$COOKIE_FILE" \
-        -X POST "${MOLTIS_URL}/login" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "password=${password}" \
+        -X POST "${MOLTIS_URL}/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d "\{"password\":"${password}" \
         -o /dev/null \
         -w "%{http_code}" \
         --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
