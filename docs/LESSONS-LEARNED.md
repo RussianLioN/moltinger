@@ -284,7 +284,45 @@ UAT CHECKLIST:
 
 ---
 
-## Action Items
+### 14. 🌐 Docker Network Engineer (Traefik Routing)
+
+**Диагноз**: Traefik 404/503 из-за неправильной сети и DNS resolution
+
+```
+ПРОБЛЕМА: Moltis возвращал HTTP 404, затем HTTP 503:
+1. Moltis был в сети traefik_proxy, а Traefik в traefik-net
+2. MOLTIS_DOMAIN=ainetic.tech вместо moltis.ainetic.tech
+3. Docker DNS возвращал IP из monitoring сети, не traefik-net
+
+ROOT CAUSES:
+- Не проверил docker network ls на сервере ПЕРЕД изменениями
+- Использовал неправильный default в ${MOLTIS_DOMAIN:-ainetic.tech}
+- Docker сортирует сети по алфавиту, не по порядку в compose
+
+РЕШЕНИЕ:
+# 1. Использовать существующую сеть
+networks:
+  traefik-net:  # НЕ traefik_proxy!
+    external: true
+
+# 2. Правильный default
+MOLTIS_DOMAIN=moltis.ainetic.tech  # НЕ ainetic.tech
+
+# 3. Явно указать сеть для Traefik DNS
+labels:
+  - "traefik.docker.network=traefik-net"  # CRITICAL!
+
+# DEBUG COMMANDS:
+docker network inspect traefik-net --format '{{range .Containers}}{{.Name}}: {{.IPv4Address}}{{end}}'
+docker logs traefik 2>&1 | grep -i moltis | tail -5
+```
+
+**Рекомендация**:
+1. Всегда проверять `docker network ls` на сервере перед изменением сетей
+2. Добавить `traefik.docker.network` label для всех сервисов за Traefik
+3. Проверять .env на сервере — переменные переопределяют defaults
+
+---
 
 ### Immediate (P0)
 
