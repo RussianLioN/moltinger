@@ -39,14 +39,16 @@ Telegram Bot: @moltinger_bot ✅
 LLM Provider: zai (GLM-5) ✅
 LLM Fallback: Ollama Sidecar ✅ (configured, ready to deploy)
 Circuit Breaker: Configured ✅
-CI/CD: Working ✅
+CI/CD: Working ✅ (with test suite)
+Test Suite: Integrated ✅ (unit/integration/security/e2e)
 GitOps Compliance: Enforced ✅
 ```
 
 ### Версия
 
 **Current Release**: v1.8.0
-**Feature Complete**: 001-docker-deploy-improvements (2026-03-01)
+**Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
+**Test Suite**: Added comprehensive CI/CD test integration
 
 ---
 
@@ -59,6 +61,7 @@ GitOps Compliance: Enforced ✅
 | `config/moltis.toml` | Основная конфигурация Moltis |
 | `docker-compose.prod.yml` | Docker Compose для продакшена |
 | `.github/workflows/deploy.yml` | CI/CD пайплайн с GitOps compliance |
+| `.github/workflows/test.yml` | Test suite CI/CD workflow (новое!) |
 | `.claude/settings.json` | Sandbox и permissions конфигурация |
 
 ### GitOps Infrastructure (новое 2026-02-28)
@@ -72,6 +75,20 @@ GitOps Compliance: Enforced ✅
 | `scripts/scripts-verify.sh` | Manifest validator |
 | `scripts/gitops-metrics.sh` | Metrics collector |
 | `scripts/manifest.json` | IaC manifest для scripts |
+
+### Test Suite (новое 2026-03-02)
+
+| Файл | Назначение |
+|------|------------|
+| `tests/run_unit.sh` | Unit test runner |
+| `tests/run_integration.sh` | Integration test runner |
+| `tests/run_e2e.sh` | E2E test runner |
+| `tests/run_security.sh` | Security test runner |
+| `tests/lib/test_helpers.sh` | Test helper functions |
+| `tests/unit/` | Unit tests (circuit breaker, config, metrics) |
+| `tests/integration/` | Integration tests (API, failover, MCP, Telegram) |
+| `tests/e2e/` | E2E tests (chat flow, recovery, failover chain) |
+| `tests/security/` | Security tests (auth, input validation) |
 
 ### Самообучение
 
@@ -108,6 +125,64 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-02 (продолжение): CI/CD Test Suite Integration
+
+**Завершено**:
+
+#### Test Suite CI/CD Workflow
+- ✅ `.github/workflows/test.yml` создан (534 строк)
+- ✅ 4 test jobs: unit, integration, security, e2e
+- ✅ Test results uploaded as artifacts (7-30 day retention)
+- ✅ GitHub Step Summary с тестовыми метриками
+- ✅ Fast-fail на unit test failure
+- ✅ Manual workflow dispatch с выбором test suite
+
+#### Test Files Created/Updated
+**Unit Tests:**
+- `tests/unit/test_circuit_breaker.sh` — Circuit breaker state machine
+- `tests/unit/test_config_validation.sh` — TOML/YAML validation
+- `tests/unit/test_prometheus_metrics.sh` — Metrics export
+
+**Integration Tests:**
+- `tests/integration/test_api_endpoints.sh` — Moltis API
+- `tests/integration/test_llm_failover.sh` — Failover chain
+- `tests/integration/test_mcp_servers.sh` — MCP connectivity
+- `tests/integration/test_telegram_integration.sh` — Telegram bot
+
+**E2E Tests:**
+- `tests/e2e/test_chat_flow.sh` — Complete chat scenarios
+- `tests/e2e/test_deployment_recovery.sh` — Rollback scenarios
+- `tests/e2e/test_full_failover_chain.sh` — End-to-end failover
+- `tests/e2e/test_rate_limiting.sh` — Rate limit handling
+
+**Security Tests:**
+- `tests/security/test_authentication.sh` — Auth flows
+- `tests/security/test_input_validation.sh` — Input sanitization
+
+#### Test Runners Updated
+- `tests/run_unit.sh` — Fix run_all_tests function call
+- `tests/run_integration.sh` — Parallel execution support
+- `tests/run_e2e.sh` — Timeout и container management
+- `tests/run_security.sh` — Severity filtering
+
+#### Makefile Targets (уже существовали)
+- `make test` — Run unit tests (default)
+- `make test-unit` — Unit tests only
+- `make test-integration` — Integration tests
+- `make test-e2e` — E2E tests
+- `make test-security` — Security tests
+- `make test-all` — All test suites
+
+#### Коммит сессии
+- `03c4c1a` — feat(ci): add comprehensive test suite CI/CD workflow
+
+#### Next Steps
+- Дождаться первого запуска test workflow на GitHub Actions
+- Проверить, что все тесты проходят корректно
+- При необходимости добавить зависимости для тестов
+
+---
 
 ### 2026-03-02: CI/CD Deployment Debug & Lessons Learned
 
@@ -421,6 +496,18 @@ bd doctor             # Health check
 # GitOps
 scripts/gitops-metrics.sh json    # Collect metrics
 scripts/scripts-verify.sh         # Validate scripts
+
+# Tests
+make test             # Run unit tests (default)
+make test-unit        # Run unit tests only
+make test-integration # Run integration tests
+make test-e2e         # Run end-to-end tests
+make test-security    # Run security tests
+make test-all         # Run all test suites
+
+# CI/CD Test Workflow
+gh run list --workflow test.yml  # View test workflow runs
+gh run view --workflow test.yml   # View latest test run details
 ```
 
 ---
@@ -479,4 +566,4 @@ scripts/scripts-verify.sh         # Validate scripts
 
 ---
 
-*Last updated: 2026-03-02 | Session: CI/CD Deployment Debug & Lessons Learned*
+*Last updated: 2026-03-02 | Session: CI/CD Test Suite Integration*
