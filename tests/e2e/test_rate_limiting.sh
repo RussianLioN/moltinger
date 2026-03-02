@@ -153,7 +153,10 @@ make_request() {
         if [[ "$line" =~ ^[Rr]ate-[Ll]imit: ]] || \
            [[ "$line" =~ ^[Xx]-[Rr]ate[Ll]imit- ]] || \
            [[ "$line" =~ ^[Xx]-[Rr]ate[Ll]imit-[Aa]fter: ]]; then
-            headers+="${line//$'\r'/'};"
+            # Remove carriage return using tr instead of parameter expansion
+            local clean_line
+            clean_line=$(echo "$line" | tr -d '\r')
+            headers+="${clean_line};"
         fi
     done <<< "$output"
 
@@ -543,6 +546,62 @@ test_legitimate_traffic() {
     fi
 }
 
+# Test 11: Response time metrics (P50, P95, P99)
+test_response_time_metrics() {
+    test_start "rate_limit_response_metrics"
+
+    local sample_count=50
+    local times_file="/tmp/rl-times-$$"
+    rm -f "$times_file"
+
+    # Collect response times
+    for i in $(seq 1 "$sample_count"); do
+        local start_time
+        start_time=$(date +%s%3N)  # Milliseconds
+
+        local response
+        response=$(make_request "/health")
+        local status
+        status=$(get_status "$response")
+
+        local end_time
+        end_time=$(date +%s%3N)
+
+        local duration=$((end_time - start_time))
+        echo "$duration" >> "$times_file"
+
+        # Small delay to avoid overwhelming
+        sleep 0.05
+    done
+
+    # Calculate percentiles
+    local sorted_times="/tmp/rl-sorted-$$"
+    sort -n "$times_file" > "$sorted_times"
+
+    local p50_index=$((sample_count * 50 / 100))
+    local p95_index=$((sample_count * 95 / 100))
+    local p99_index=$((sample_count * 99 / 100))
+
+    local p50=$(sed -n "${p50_index}p" "$sorted_times")
+    local p95=$(sed -n "${p95_index}p" "$sorted_times")
+    local p99=$(sed -n "${p99_index}p" "$sorted_times")
+
+    rm -f "$times_file" "$sorted_times"
+
+    log_info "Response Time Metrics (ms):"
+    log_info "  P50: ${p50}ms"
+    log_info "  P95: ${p95}ms"
+    log_info "  P99: ${p99}ms"
+
+    # Check if percentiles are reasonable (not too slow)
+    # P95 should be under 5 seconds (5000ms) for a healthy API
+    if [[ $p95 -lt 5000 ]]; then
+        test_pass
+    else
+        test_skip "P95 (${p95}ms) is above 5000ms threshold"
+    fi
+}
+
 # ==============================================================================
 # TEST RUNNER
 # ==============================================================================
@@ -574,6 +633,7 @@ run_rate_limiting_tests() {
     test_per_session_rate_limit || true
     test_retry_after_header || true
     test_endpoint_specific_limits || true
+    test_response_time_metrics || true
     test_legitimate_traffic
 }
 

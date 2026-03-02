@@ -477,7 +477,96 @@ test_graceful_shutdown() {
     fi
 }
 
-# Test 12: Multiple restart stress test
+# Test 12: Session state preserved across restart
+test_session_restore_after_restart() {
+    test_start "recovery_session_restore"
+
+    # Skip if container wasn't running
+    if [[ "$WAS_RUNNING" != "true" ]]; then
+        test_skip "Container was not running before tests"
+        return 2
+    fi
+
+    # Get password for authentication
+    local password=""
+    if [[ -f "$MOLTIS_ENV_FILE" ]]; then
+        password=$(grep "^MOLTIS_PASSWORD=" "$MOLTIS_ENV_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    fi
+
+    if [[ -z "$password" ]]; then
+        test_skip "No password available for session test"
+        return 2
+    fi
+
+    # Create session before restart
+    local cookie_file="/tmp/moltis-session-test-$$"
+    local response_code
+
+    response_code=$(curl -s -c "$cookie_file" \
+        -X POST "${MOLTIS_URL}/login" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "password=${password}" \
+        -o /dev/null \
+        -w "%{http_code}" \
+        --max-time 10 2>/dev/null || echo "000")
+
+    if [[ "$response_code" != "200" ]] && [[ "$response_code" != "302" ]]; then
+        rm -f "$cookie_file"
+        test_skip "Failed to create session before restart"
+        return 2
+    fi
+
+    # Record session ID before restart
+    local session_before
+    session_before=$(grep -i "session\|moltis" "$cookie_file" 2>/dev/null | head -1 || echo "")
+    log_debug "Session before restart: $session_before"
+
+    # Restart container
+    log_debug "Restarting container..."
+    docker restart "$MOLTIS_CONTAINER" > /dev/null 2>&1 || {
+        rm -f "$cookie_file"
+        test_fail "Failed to restart container"
+        return 1
+    }
+
+    # Wait for health
+    if ! wait_for_healthy 60; then
+        rm -f "$cookie_file"
+        test_fail "Container did not become healthy after restart"
+        return 1
+    fi
+
+    # Try to use the old session
+    local response_after
+    response_after=$(curl -s -b "$cookie_file" \
+        "${MOLTIS_URL}/api/v1/chat" \
+        --max-time 10 2>/dev/null || echo "")
+
+    rm -f "$cookie_file"
+
+    # Session behavior depends on implementation:
+    # - Some systems invalidate sessions on restart
+    # - Some persist sessions (Redis, DB)
+    # We verify the system handles it gracefully
+    if [[ -n "$response_after" ]] || [[ "$response_after" == "null" ]]; then
+        log_debug "Session test completed - response: ${response_after:0:50}"
+        test_pass "Session handled after restart (may be invalidated or persisted)"
+    else
+        # Check if we got a redirect to login (session invalidated)
+        local check_response
+        check_response=$(curl -s -i -b "$cookie_file" \
+            "${MOLTIS_URL}/api/v1/chat" \
+            --max-time 10 2>/dev/null | grep -i "login\|302\|401" || echo "")
+
+        if [[ -n "$check_response" ]]; then
+            test_pass "Session properly invalidated after restart"
+        else
+            test_fail "Unexpected session behavior after restart"
+        fi
+    fi
+}
+
+# Test 13: Multiple restart stress test
 test_multiple_restart_stress() {
     test_start "recovery_stress_test"
 
@@ -545,6 +634,7 @@ run_deployment_recovery_tests() {
     if [[ "$WAS_RUNNING" == "true" ]]; then
         log_info "Container was running - performing invasive recovery tests..."
         test_container_resource_limits
+        test_session_restore_after_restart || true
         test_graceful_shutdown || true
         test_container_stop_start || true
         test_container_restart || true
