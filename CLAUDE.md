@@ -29,57 +29,11 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
-## ⚠️ Pre-Integration Checklist (MANDATORY)
+## ⚠️ Pre-Change Checklists
 
-**Before adding ANY external dependency/integration**, complete ALL steps:
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║           PRE-INTEGRATION CHECKLIST (MANDATORY)              ║
-╠══════════════════════════════════════════════════════════════╣
-║ 1. [ ] Find official documentation URL                        ║
-║ 2. [ ] Read installation section completely                   ║
-║ 3. [ ] Verify: npm view <package> || pip show <package>       ║
-║ 4. [ ] Pin version: package@1.2.3 (not @latest)               ║
-║ 5. [ ] Add docs URL to config comment                         ║
-║ 6. [ ] Validate config syntax before commit                   ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
-**Why?** See `docs/LESSONS-LEARNED.md` for incident analysis.
+**Before ANY integration or deploy config change**: See `docs/LESSONS-LEARNED.md` → Quick Reference Card.
 
 **On ERROR**: Check `docs/LESSONS-LEARNED.md` first for similar patterns.
-
-## ⚠️ Pre-Deploy-Config Change Checklist (MANDATORY)
-
-**Before modifying ANY deployment configuration** (docker-compose, workflows, resource limits):
-
-```
-╔═══════════════════════════════════════════════════════════════════════════╗
-║        PRE-DEPLOY-CONFIG CHANGE CHECKLIST (MANDATORY)                     ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║ 1. [ ] Read SESSION_SUMMARY.md — How do secrets work in this project?    ║
-║ 2. [ ] Check server resources:                                            ║
-║       - ssh server "nproc" (CPU count)                                    ║
-║       - ssh server "free -h" (memory)                                     ║
-║       - ssh server "docker network ls" (networks)                         ║
-║       - ssh server "docker images | grep moltis" (available tags)         ║
-║ 3. [ ] Read existing workflow — What files are synced?                    ║
-║ 4. [ ] Check .env on server — What variables exist?                       ║
-║ 5. [ ] Compare with GitHub Secrets: `gh secret list`                      ║
-║ 6. [ ] ONLY THEN make changes                                             ║
-║                                                                           ║
-╚═══════════════════════════════════════════════════════════════════════════╝
-```
-
-**Why?** Incident #003 (2026-03-02): 10 self-inflicted errors from not checking existing architecture.
-
-**Common Mistakes to Avoid**:
-- Adding file secrets when project uses GitHub Secrets → .env
-- Setting CPU limits higher than server capacity
-- Syncing only docker-compose.yml when using docker-compose.prod.yml
-- Using `docker compose` without `-f docker-compose.prod.yml` for production
 
 ## Landing the Plane (Session Completion)
 

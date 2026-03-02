@@ -336,6 +336,17 @@ UAT CHECKLIST:
 ║ 5. [ ] Add docs URL to config comment                         ║
 ║ 6. [ ] Validate config syntax before commit                   ║
 ╚══════════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║        PRE-DEPLOY-CONFIG CHANGE CHECKLIST (Incident #003)                 ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║ 1. [ ] Read SESSION_SUMMARY.md — How do secrets work?                    ║
+║ 2. [ ] Check server: nproc, free -h, docker network ls, docker images    ║
+║ 3. [ ] Read existing workflow — What files are synced?                   ║
+║ 4. [ ] Check .env on server — What variables exist?                      ║
+║ 5. [ ] Compare with GitHub Secrets: gh secret list                       ║
+║ 6. [ ] ONLY THEN make changes                                            ║
+╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
