@@ -5,6 +5,7 @@
 .PHONY: monitoring-up monitoring-down prometheus alertmanager grafana
 .PHONY: secrets generate-key setup clean
 .PHONY: backup-enable backup-disable backup-status version-check
+.PHONY: test test-unit test-integration test-e2e test-security test-all
 
 # Default target
 help:
@@ -45,6 +46,14 @@ help:
 	@echo ""
 	@echo "Version:"
 	@echo "  version-check   - Show current Docker image versions"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test            - Run unit tests (default)"
+	@echo "  test-unit       - Run unit tests only"
+	@echo "  test-integration - Run integration tests"
+	@echo "  test-e2e        - Run end-to-end tests"
+	@echo "  test-security   - Run security tests"
+	@echo "  test-all        - Run all tests"
 
 # ========================================================================
 # DEPLOYMENT
@@ -185,3 +194,28 @@ dev-down:
 
 dev-logs:
 	docker compose logs -f
+
+# ========================================================================
+# TESTING
+# ========================================================================
+
+test: test-unit
+
+test-unit:
+	@echo "Running unit tests..."
+	@./tests/run_unit.sh
+
+test-integration:
+	@echo "Running integration tests..."
+	@./tests/run_integration.sh
+
+test-e2e:
+	@echo "Running end-to-end tests..."
+	@./tests/run_e2e.sh
+
+test-security:
+	@echo "Running security tests..."
+	@./tests/run_security.sh
+
+test-all: test-unit test-integration test-e2e test-security
+	@echo "All test suites completed"
