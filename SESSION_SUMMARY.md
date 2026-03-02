@@ -159,6 +159,35 @@ GitOps Compliance: Enforced ✅
 
 ---
 
+### 2026-03-02 (продолжение): CI/CD Smoke Test 404 Fix
+
+**Проблема**: Post-deployment Verification падал с HTTP 404 на Traefik routing test.
+
+**Root Causes (3 bugs)**:
+1. **Network mismatch**: Moltis → `traefik_proxy`, Traefik → `traefik-net` (разные сети!)
+2. **Wrong domain**: `MOLTIS_DOMAIN=ainetic.tech` вместо `moltis.ainetic.tech` в deploy.yml
+3. **Docker DNS priority**: Traefik использовал IP из monitoring сети, не traefik-net
+
+**Fixes Applied**:
+- `e47e309` — fix(deploy): use traefik-net instead of traefik_proxy
+- `5572c0c` — fix(deploy): correct Traefik Host rule to moltis.ainetic.tech
+- `53194c0` — fix(deploy): set correct MOLTIS_DOMAIN in deploy.yml
+- `df36060` — fix(deploy): add traefik.docker.network label for correct IP resolution
+
+**Результат**: All smoke tests passed ✅
+- Test 1: Container running ✅
+- Test 2: Health endpoint ✅
+- Test 3: Traefik routing (HTTP 200) ✅
+- Test 4: Main endpoint (HTTP 303) ✅
+- Test 5: GitOps config check ✅
+
+**Урок**: При диагностике routing проблем проверять:
+1. Обе ли стороны в одной Docker сети
+2. Правильный ли Host rule в labels
+3. Какую сеть использует Traefik для DNS resolution
+
+---
+
 ### 2026-03-01 (продолжение): Fallback LLM with Ollama Sidecar (001-fallback-llm-ollama)
 
 **Завершено**:
