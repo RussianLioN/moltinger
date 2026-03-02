@@ -86,7 +86,7 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.moltis.rule=Host(`${MOLTIS_DOMAIN:-ainetic.tech}`)"
+      - "traefik.http.routers.moltis.rule=Host(`${MOLTIS_DOMAIN:-moltis.ainetic.tech}`)"
       - "traefik.http.routers.moltis.entrypoints=websecure"
       - "traefik.http.routers.moltis.tls.certresolver=letsencrypt"
       - "traefik.http.services.moltis.loadbalancer.server.port=13131"
