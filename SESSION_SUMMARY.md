@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-03
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-04
 
 ---
 
@@ -126,7 +126,7 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
-### 2026-03-04: Lessons Architecture & Session Close (001-rca-skill-upgrades)
+### 2026-03-04: Lessons Architecture & Lessons Skill (001-rca-skill-upgrades)
 
 **Завершено**:
 
@@ -144,24 +144,31 @@ GitOps Compliance: Enforced ✅
 - ✅ **US3**: RCA Hub Architecture — INDEX.md, rca-index.sh
 - ✅ **US4**: Chain-of-Thought Pattern — структурированный анализ
 - ✅ **US5**: Test Generation — Regression Test секция в шаблоне
-- ✅ Комплексный тест всех 5 user stories — пройден
+- ✅ **US6**: Lessons Query Skill — `.claude/skills/lessons/SKILL.md` (372 строки)
+- ✅ Комплексный тест всех user stories — пройден
+
+#### Lessons Skill (US6) — NEW!
+- ✅ `.claude/skills/lessons/SKILL.md` — natural language interface для поиска уроков
+- ✅ FR-027: Query command mapping (severity/tag/category → query-lessons.sh)
+- ✅ FR-028: Rebuild index command (→ build-lessons-index.sh)
+- ✅ FR-029: Structured output formatting с emoji
+- ✅ FR-030/FR-031: Context suggestions + RCA integration
+- ✅ Задача `moltinger-wk1` выполнена
 
 #### Инциденты и уроки
 - ✅ **RCA-003**: Git Branch Confusion — документирован, уроки извлечены
 - ✅ Восстановлена ветка `001-browser-compatibility-fix` после случайного удаления
 
-**Новая задача в бэклоге**:
-- `moltinger-wk1` — Create lessons skill for querying and managing RCA lessons (P3)
-
 **Коммиты сессии**:
+- `de92ff7` — chore: update LESSONS-LEARNED.md date
+- `72cfe89` — feat(skills): add lessons skill for RCA lesson management (US6)
+- `475e890` — docs(spec): add US6 Lessons Query Skill to RCA enhancements
+- `b6a3478` — docs(session): update with RCA Skill Enhancements completion
 - `03e7c5c` — chore(beads): add lessons skill task to backlog (moltinger-wk1)
 - `0fac204` — feat(lessons): implement Lessons Architecture from RCA consilium
-- `e2b537a` — test(rca): comprehensive test of enhanced RCA skill
-- `5ca3139` — docs(rca): add RCA-003 for git branch confusion
-- `de22503` — feat(rca): complete Phase 8 - Integration & Polish
-- `4506d43` — feat(rca): complete Phase 7 - Test Generation (US5)
 
 **Ветка готова к PR**: `001-rca-skill-upgrades`
+- **Осталось**: T044, T054 — тестирование в новой сессии (manual)
 
 ---
 
