@@ -83,6 +83,30 @@
 
 [Ключевые выводы для предотвращения подобных ошибок в будущем]
 
+## Regression Test (Optional - for code errors only)
+
+*Если тип ошибки = code, создать failing test:*
+
+**Test File:** `tests/rca/RCA-NNN.test.ts`
+
+```typescript
+describe('RCA-[ID]: [Short Description]', () => {
+  it('should [expected behavior]', async () => {
+    // Given: [setup from RCA context]
+
+    // When: [action that caused error]
+
+    // Then: [expected outcome, not error]
+  });
+});
+```
+
+**Test Status:**
+- [ ] Test created
+- [ ] Test fails (reproduces bug)
+- [ ] Fix applied
+- [ ] Test passes
+
 ---
 
 *Создано с помощью навыка rca-5-whys*

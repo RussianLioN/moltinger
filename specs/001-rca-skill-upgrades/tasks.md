@@ -164,10 +164,10 @@
 
 ### Implementation for User Story 5
 
-- [ ] T038 [US5] Add Test Generation section to SKILL.md (for code errors only)
-- [ ] T039 [US5] Create test template structure in SKILL.md (Given/When/Then)
-- [ ] T040 [US5] Add test file naming convention to SKILL.md (tests/rca/RCA-NNN.test.ts)
-- [ ] T041 [US5] Update docs/rca/TEMPLATE.md with optional Test section
+- [X] T038 [US5] Add Test Generation section to SKILL.md (for code errors only)
+- [X] T039 [US5] Create test template structure in SKILL.md (Given/When/Then)
+- [X] T040 [US5] Add test file naming convention to SKILL.md (tests/rca/RCA-NNN.test.ts)
+- [X] T041 [US5] Update docs/rca/TEMPLATE.md with optional Test section → Artifacts: [TEMPLATE.md](docs/rca/TEMPLATE.md)
 
 **Checkpoint**: Test Generation functional - code errors can generate regression tests
 
