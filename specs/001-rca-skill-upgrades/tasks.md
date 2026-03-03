@@ -118,14 +118,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Create rca-index.sh script at `.claude/skills/rca-5-whys/lib/rca-index.sh`
-- [ ] T026 [US3] Implement `update` command in rca-index.sh (add new RCA entry)
-- [ ] T027 [US3] Implement `validate` command in rca-index.sh (check consistency)
-- [ ] T028 [US3] Implement `next-id` command in rca-index.sh (get RCA-NNN)
-- [ ] T029 [US3] Implement statistics calculation in rca-index.sh (by category, severity)
-- [ ] T030 [US3] Implement pattern detection in rca-index.sh (3+ RCA in category)
-- [ ] T031 [US3] Update docs/rca/INDEX.md with full structure per contracts/rca-index-schema.md
-- [ ] T032 [US3] Integrate rca-index.sh into SKILL.md workflow
+- [X] T025 [US3] Create rca-index.sh script at `.claude/skills/rca-5-whys/lib/rca-index.sh` → Artifacts: [rca-index.sh](.claude/skills/rca-5-whys/lib/rca-index.sh)
+- [X] T026 [US3] Implement `update` command in rca-index.sh (add new RCA entry)
+- [X] T027 [US3] Implement `validate` command in rca-index.sh (check consistency)
+- [X] T028 [US3] Implement `next-id` command in rca-index.sh (get RCA-NNN)
+- [X] T029 [US3] Implement statistics calculation in rca-index.sh (by category, severity)
+- [X] T030 [US3] Implement pattern detection in rca-index.sh (3+ RCA in category)
+- [X] T031 [US3] Update docs/rca/INDEX.md with full structure per contracts/rca-index-schema.md → Artifacts: [INDEX.md](docs/rca/INDEX.md)
+- [X] T032 [US3] Integrate rca-index.sh into SKILL.md workflow
 
 **Checkpoint**: RCA Hub Architecture functional - all RCA tracked with analytics
 
