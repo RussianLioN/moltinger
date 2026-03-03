@@ -136,6 +136,29 @@
 
 ---
 
+### User Story 6 - Natural Language Lessons Query (Priority: P3)
+
+**Как** разработчик или LLM-ассистент
+**Я хочу** иметь natural language интерфейс для поиска уроков из прошлых RCA
+**Чтобы** быстро находить релевантные уроки и предотвращать повторение ошибок
+
+**Why this priority**: Уроки уже хранятся в RCA файлах, но доступ к ним только через bash-скрипты. P3 потому что базовый функционал работает, skill добавляет удобство.
+
+**Independent Test**:
+1. Вызвать skill с запросом "покажи уроки по docker"
+2. Проверить, что возвращаются релевантные RCA с docker-тегом
+3. Вызвать skill с запросом "критичные уроки"
+4. Проверить, что возвращаются P0/P1 уроки
+
+**Acceptance Scenarios**:
+
+1. **Given** пользователь хочет найти уроки, **When** использует natural language запрос (severity, tag, category), **Then** skill преобразует запрос в вызов query-lessons.sh
+2. **Given** найдены уроки, **When** отображаются результаты, **Then** показывается: title, date, severity, category, brief summary
+3. **Given** пользователь хочет обновить индекс, **When** запрашивает rebuild, **Then** skill вызывает build-lessons-index.sh
+4. **Given** пользователь хочет увидеть похожие инциденты, **When** указывает контекст текущей ошибки, **Then** skill предлагает релевантные прошлые уроки
+
+---
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -182,7 +205,15 @@
 
 - **FR-024**: RCA навык ДОЛЖЕН интегрироваться с существующим systematic-debugging skill
 - **FR-025**: RCA ДОЛЖЕН использовать Claude Code tools: Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion
-- **FR-026**: RCA ДОЛЖЕН поддерживать MCP tools для расширенного анализа (supabase, context7)
+- **FR-026**: RCA ДОЛЖEN поддерживать MCP tools для расширенного анализа (supabase, context7)
+
+#### Lessons Query Skill
+
+- **FR-027**: Skill ДОЛЖЕН предоставлять natural language интерфейс для query-lessons.sh (--severity, --tag, --category, --all)
+- **FR-028**: Skill ДОЛЖЕН поддерживать rebuild индекса через build-lessons-index.sh
+- **FR-029**: Skill ДОЛЖЕН отображать результаты в структурированном формате (title, date, severity, category, summary)
+- **FR-030**: Skill ДОЛЖЕН предлагать релевантные уроки на основе контекста текущей ошибки
+- **FR-031**: Skill ДОЛЖЕН интегрироваться с RCA workflow для автоматического предложения похожих инцидентов
 
 ### Key Entities
 
@@ -206,6 +237,8 @@
 - **SC-005**: RCA Index позволяет найти связанный RCA за < 10 секунд
 - **SC-006**: 100% code-ошибок имеют предложение создать regression test
 - **SC-007**: Повторяемость ошибок снижается на 50% благодаря тестам из RCA
+- **SC-008**: Поиск уроков через skill занимает < 5 секунд (vs ручной поиск через bash)
+- **SC-009**: 90% запросов к lessons skill возвращают релевантные результаты
 
 ### Quality Metrics
 

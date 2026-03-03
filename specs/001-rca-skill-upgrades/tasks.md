@@ -185,6 +185,31 @@
 
 ---
 
+## Phase 9: User Story 6 - Lessons Query Skill (Priority: P3)
+
+**Goal**: Natural language интерфейс для поиска и управления уроками из RCA
+
+**Independent Test**:
+1. Вызвать skill с запросом "покажи уроки по docker"
+2. Проверить, что возвращаются релевантные RCA
+3. Вызвать skill с запросом "rebuild index"
+4. Проверить, что LESSONS-LEARNED.md обновлён
+
+### Implementation for User Story 6
+
+- [ ] T047 [US6] Create lessons skill directory at `.claude/skills/lessons/`
+- [ ] T048 [US6] Create SKILL.md with frontmatter and natural language interface spec
+- [ ] T049 [US6] Implement query command mapping (severity/tag/category → query-lessons.sh args)
+- [ ] T050 [US6] Implement index rebuild command (→ build-lessons-index.sh)
+- [ ] T051 [US6] Implement context-based lesson suggestions (similar incidents)
+- [ ] T052 [US6] Add output formatting (title, date, severity, category, summary)
+- [ ] T053 [US6] Integrate with rca-5-whys skill for auto-suggestions
+- [ ] T054 [US6] Test skill in new session with various queries
+
+**Checkpoint**: Lessons Query Skill functional - natural language access to RCA lessons
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -204,7 +229,7 @@ Phase 2 (Foundational)
         │
         ├──► US1 (Auto-Context) ──┐
         │                         │
-        ├──► US2 (Templates) ─────┼──► Phase 8 (Integration)
+        ├──► US2 (Templates) ─────┼──► Phase 8 (Integration) ──► US6 (Lessons Skill)
         │                         │
         ├──► US3 (Hub/Index) ─────┤
         │                         │
@@ -223,6 +248,7 @@ Phase 2 (Foundational)
 | Phase 4 | T019, T020, T021, T022 (different template files) |
 | Phase 5 | T026, T027, T028 (different commands in same file - sequential) |
 | Phase 8 | T043, T046 (different files) |
+| Phase 9 | T049, T050, T051 (different commands - can be parallel in implementation) |
 
 ---
 
@@ -256,6 +282,7 @@ Task: "Create Generic template at .claude/skills/rca-5-whys/templates/generic.md
 | MVP | US1 + US2 | Auto-context + Domain templates |
 | v1.1 | +US3 +US4 | Analytics + Structured reasoning |
 | v1.2 | +US5 | Regression test generation |
+| v1.3 | +US6 | Natural language lessons query |
 
 ---
 
