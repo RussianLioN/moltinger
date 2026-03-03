@@ -197,13 +197,13 @@
 
 ### Implementation for User Story 6
 
-- [ ] T047 [US6] Create lessons skill directory at `.claude/skills/lessons/`
-- [ ] T048 [US6] Create SKILL.md with frontmatter and natural language interface spec
-- [ ] T049 [US6] Implement query command mapping (severity/tag/category → query-lessons.sh args)
-- [ ] T050 [US6] Implement index rebuild command (→ build-lessons-index.sh)
-- [ ] T051 [US6] Implement context-based lesson suggestions (similar incidents)
-- [ ] T052 [US6] Add output formatting (title, date, severity, category, summary)
-- [ ] T053 [US6] Integrate with rca-5-whys skill for auto-suggestions
+- [X] T047 [US6] Create lessons skill directory at `.claude/skills/lessons/` → Artifacts: [lessons/](.claude/skills/lessons/)
+- [X] T048 [US6] Create SKILL.md with frontmatter and natural language interface spec → Artifacts: [SKILL.md](.claude/skills/lessons/SKILL.md)
+- [X] T049 [US6] Implement query command mapping (severity/tag/category → query-lessons.sh args)
+- [X] T050 [US6] Implement index rebuild command (→ build-lessons-index.sh)
+- [X] T051 [US6] Implement context-based lesson suggestions (similar incidents)
+- [X] T052 [US6] Add output formatting (title, date, severity, category, summary)
+- [X] T053 [US6] Integrate with rca-5-whys skill for auto-suggestions
 - [ ] T054 [US6] Test skill in new session with various queries
 
 **Checkpoint**: Lessons Query Skill functional - natural language access to RCA lessons
