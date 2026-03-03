@@ -45,127 +45,7 @@
 | **3** | `moltinger-r8r` | Traefik Rate Limiting | 20-30m | None | Quick win - abuse protection |
 | **4** | `moltinger-j22` | AlertManager Receivers | 30-45m | Slack webhook / Telegram bot | Operations - incident notifications |
 | **5** | `moltinger-eb0` | Grafana Dashboard | 1-2h | Prometheus (already running) | Improvement - metrics visualization |
-
----
-
-## Task Details
-
-### 1. moltinger-xh7: Fallback LLM Provider
-
-**Problem:** GLM-5 (Z.ai) is the only LLM provider. If API fails → Moltis stops working.
-
-**Solution:** Add Groq (free, fast) or Anthropic as fallback.
-
-**Current State:**
-```toml
-# config/moltis.toml - only GLM
-[providers.openai]
-enabled = true
-base_url = "https://api.z.ai/api/anthropic"
-model = "glm-5"
-```
-
-**Implementation:**
-1. Add Groq provider configuration
-2. Configure fallback chain in Moltis
-3. Test fallback behavior
-
-**ROI:** ⭐⭐⭐⭐⭐ Critical for production reliability
-
----
-
-### 2. moltinger-sjx: S3 Offsite Backup
-
-**Problem:** Backups only stored locally. If server dies → data lost.
-
-**Solution:** Duplicate backups to S3-compatible storage (Wasabi, AWS, Backblaze).
-
-**Current State:**
-```bash
-# backup-moltis-enhanced.sh already supports S3
-S3_ENABLED=false  # ← need to enable
-```
-
-**Implementation:**
-1. Add S3 credentials to GitHub Secrets
-2. Update backup config with S3 settings
-3. Enable S3_ENABLED=true
-4. Test backup upload
-
-**ROI:** ⭐⭐⭐⭐ Protection of critical data
-
----
-
-### 3. moltinger-r8r: Traefik Rate Limiting
-
-**Problem:** No abuse/DDoS protection at reverse proxy level.
-
-**Solution:** Configure rate limiting middleware in Traefik.
-
-**Implementation:**
-1. Add rateLimit middleware to Traefik config
-2. Apply to moltis router
-3. Test with curl burst
-
-**ROI:** ⭐⭐⭐ Protection from primitive attacks
-
----
-
-### 4. moltinger-j22: AlertManager Receivers
-
-**Problem:** AlertManager configured but doesn't send notifications.
-
-**Solution:** Configure receivers for Slack/Telegram.
-
-**Implementation:**
-1. Add Slack webhook or Telegram bot config
-2. Update alertmanager.yml
-3. Test alert delivery
-
-**ROI:** ⭐⭐⭐ Quick incident response
-
----
-
-### 5. moltinger-eb0: Grafana Dashboard
-
-**Problem:** Prometheus collects metrics but no visualization.
-
-**Solution:** Add Grafana with pre-configured dashboard.
-
-**Implementation:**
-1. Add Grafana to docker-compose.prod.yml
-2. Configure Prometheus datasource
-3. Import Moltis dashboard
-
-**ROI:** ⭐⭐⭐ Monitoring convenience
-
----
-
-## Low Priority Tasks
-
-### moltinger-ipo: Loki + Promtail
-- Log aggregation system
-- Requires new infrastructure
-- Current ROI: Low (logs available via docker logs)
-
-### moltinger-da0: Backup Encryption Vault
-- Secure key storage (HashiCorp Vault or similar)
-- Current state: key in /etc/moltis/backup.key
-- Current ROI: Low (already working)
-
-### moltinger-6ql: SearXNG Web Search
-- Self-hosted web search for Moltis
-- Current state: Tavily API working
-- Current ROI: Low (alternative already available)
-
----
-
-## Do Not Do
-
-### moltinger-9qh: Remove Privileged Mode
-- **Why not:** Moltis requires privileged mode for Docker-in-Docker sandbox execution
-- **Impact:** Would break Moltis core functionality
-- **Status:** Closed as "won't fix" - architectural requirement
+| **6** | `moltinger-esr` | Testing Technical Debt - Fallback LLM | 4-6h | None | Tests exist but not integrated in CI/CD |
 
 ---
 
@@ -180,9 +60,10 @@ S3_ENABLED=false  # ← need to enable
 |-----------|--------|----------|
 | `tests/unit/test_circuit_breaker.sh` | ✅ Работает | 10 тестов проходят |
 | `tests/unit/test_prometheus_metrics.sh` | ✅ Работает | - |
+| `tests/unit/test_config_validation.sh` | ✅ Работает | - |
 | `tests/integration/test_llm_failover.sh` | ❌ Баг | Неверный `PROJECT_ROOT` путь |
 | `tests/e2e/test_full_failover_chain.sh` | ❓ Не проверен | Требует Docker |
-| CI/CD integration | ❌ Отсутствует | Только shellcheck/yamllint |
+| CI/CD integration | ❌ Отсутствует | Только shellcheck/yamllint в deploy.yml |
 
 ### Bugs Found
 
@@ -192,27 +73,27 @@ S3_ENABLED=false  # ← need to enable
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/../.."  # = moltinger/../.. = coding/
 
 # Должен быть:
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/.."      # = moltinger/tests/.. = moltinger/
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/.."      # = moltinger/tests/..
 ```
 
 ### Tasks (from spec 003-testing-infrastructure)
 
 #### Phase A: Fix Critical Bugs (P1)
 - [ ] **T-TEST-001**: Исправить `PROJECT_ROOT` в `tests/integration/test_llm_failover.sh`
-- [ ] **T-TEST-002**: Проверить и исправить пути во всех integration тестах
-- [ ] **T-TEST-003**: Добавить pre-flight check на Docker daemon в integration тесты
+- [ ] **T-TEST-002**: Audit all integration test paths (blocked by: moltinger-3y9)
+- [ ] **T-TEST-003**: Добав Docker daemon pre-flight check (blocked by: moltinger-3y9)
 
 #### Phase B: CI/CD Integration (P1)
-- [ ] **T-TEST-004**: Добавить job `test-unit` в `.github/workflows/deploy.yml`
-- [ ] **T-TEST-005**: Добавить job `test-integration` в `.github/workflows/deploy.yml`
-- [ ] **T-TEST-006**: Сделать deploy зависимым от успешного прохождения тестов
-- [ ] **T-TEST-007**: Добавить upload test results artifact
+- [ ] **T-TEST-004**: Добав job `test-unit` в `.github/workflows/deploy.yml`
+- [ ] **T-TEST-005**: Добав job `test-integration` в `.github/workflows/deploy.yml`
+- [ ] **T-TEST-006**: Сделать deploy зависимым от успеш tests (blocked by: moltinger-39q.6)
+- [ ] **T-TEST-007**: Добав upload test results artifact
 
 #### Phase C: Test Coverage for Fallback LLM (P2)
-- [ ] **T-TEST-008**: Добавить тест GLM → Ollama failover в `test_llm_failover.sh`
+- [ ] **T-TEST-008**: Добавить тест GLM →Ollama failover в `test_llm_failover.sh`
 - [ ] **T-TEST-009**: Добавить тест Ollama recovery (HALF-OPEN → CLOSED)
 - [ ] **T-TEST-010**: Добавить тест Prometheus metrics при failover
-- [ ] **T-TEST-011**: Добавить E2E тест полного цикла failover в `test_full_failover_chain.sh`
+- [ ] **T-TEST-011**: Добавить E2E тест полного failover chain в `test_full_failover_chain.sh`
 
 #### Phase D: Documentation (P3)
 - [ ] **T-TEST-012**: Обновить `tests/README.md` с инструкциями для CI/CD
@@ -231,21 +112,12 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/.."      # = moltinger/tests/.. = molting
 
 ### Related Beads Tasks (to close)
 
-Следующие задачи из `moltinger-39q` должны быть закрыты после завершения тестирования:
+Следующие задачи из `moltinger-39q` должны быть закры после заверш тестирования:
 - `moltinger-39q.4.1`: T009 Create scripts/ollama-health.sh → добавить тест
-- `moltinger-39q.4.2`: T010 Add GLM health check → добавить тест
+- `moltinger-39q.4.2`: T010 Add GLM health check → покрыть тестами
 - `moltinger-39q.4.3-7`: T011-T015 Circuit breaker → покрыть тестами
+
+### Related Beads Tasks (to close)
+
+Следующие задачи из `moltinger-39q` должны быть закры after заверш тестирования:
 - `moltinger-39q.5.1-6`: T016-T021 Prometheus metrics → покрыть тестами
-
----
-
-## Session Progress
-
-| Date | Completed |
-|------|-----------|
-| 2026-02-28 | moltinger-hdn (backup cron), moltinger-kpt (pre-deploy tests), moltinger-eml (sed fix) |
-| 2026-03-03 | Added Testing Technical Debt section |
-
----
-
-*Last updated: 2026-03-03*
