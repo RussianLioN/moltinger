@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-02
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-03
 
 ---
 
@@ -125,6 +125,53 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-03: RCA Skill Enhancements (Feature: 001-rca-skill-upgrades)
+
+**Завершено**:
+
+#### RCA Skill Creation
+- ✅ Создан навык `rca-5-whys` для Root Cause Analysis методом "5 Почему"
+- ✅ Добавлен MANDATORY раздел в CLAUDE.md с триггерами для exit code != 0
+- ✅ Создан шаблон отчёта `docs/rca/TEMPLATE.md`
+- ✅ Протестировано в новой сессии — LLM автоматически запускает RCA
+
+#### Expert Consilium (13 экспертов)
+Проведён консилиум специалистов для улучшения навыка:
+- 🏗️ Architect: RCA Hub Architecture
+- 🐳 Docker Engineer: Domain-Specific Templates
+- 🐚 Unix Expert: Auto-Context Collection
+- 🚀 DevOps: RCA → Rollback → Fix Pipeline
+- 🔧 CI/CD Architect: Quality Gate Integration
+- 📚 GitOps Specialist: Git-based RCA Index
+- И другие...
+
+#### Feature Specification (001-rca-skill-upgrades)
+- ✅ Создана спецификация через `/speckit.specify`
+- ✅ 5 User Stories с приоритетами P1-P3
+- ✅ 26 Functional Requirements
+- ✅ 7 Success Criteria
+- ✅ Ветка: `001-rca-skill-upgrades`
+
+**Коммиты сессии**:
+- `c97f9cd` — feat(skills): add rca-5-whys skill for Root Cause Analysis
+- `dbe6f39` — fix(skills): integrate RCA 5 Whys into systematic-debugging
+- `b28dda2` — fix(instructions): strengthen RCA trigger for any non-zero exit code
+- `d0a8c45` — docs(spec): add RCA Skill Enhancements specification
+
+**В работе (TODO)**:
+- [ ] #1: Auto-Context Collection для RCA (P1)
+- [ ] #2: Domain-Specific RCA Templates (P1)
+- [ ] #3: RCA Hub Architecture с INDEX.md (P2)
+- [ ] #4: Chain-of-Thought RCA Pattern (P2)
+- [ ] #5: Test Generation из RCA (P3)
+- [ ] #6: Интеграция с systematic-debugging
+
+**Следующие шаги**:
+- `/speckit.plan` — создать план реализации
+- Реализовать улучшения по приоритету
+
+---
 
 ### 2026-03-02 (продолжение 2): Test Suite Bug Fixes & Server Validation
 
