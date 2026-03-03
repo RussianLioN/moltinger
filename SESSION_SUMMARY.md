@@ -126,6 +126,45 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
+### 2026-03-04: Lessons Architecture & Session Close (001-rca-skill-upgrades)
+
+**Завершено**:
+
+#### Lessons Architecture Implementation
+- ✅ **Expert Consilium (13 экспертов)** — рекомендовали "Distributed Lessons, Centralized Index"
+- ✅ `scripts/query-lessons.sh` — поиск уроков из RCA отчётов по severity/tag/category
+- ✅ `scripts/build-lessons-index.sh` — генерация индекса уроков (POSIX-compatible)
+- ✅ `docs/LESSONS-LEARNED.md` — авто-генерируемый индекс с Quick Reference Card
+- ✅ `docs/rca/TEMPLATE.md` — добавлен YAML frontmatter для структурированных метаданных
+- ✅ Минимальная ссылка в CLAUDE.md — избегаем token bloat
+
+#### RCA Skill Enhancements — FEATURE COMPLETE ✅
+- ✅ **US1**: Auto-Context Collection — `context-collector.sh`
+- ✅ **US2**: Domain Templates — docker.md, cicd.md, data-loss.md, generic.md
+- ✅ **US3**: RCA Hub Architecture — INDEX.md, rca-index.sh
+- ✅ **US4**: Chain-of-Thought Pattern — структурированный анализ
+- ✅ **US5**: Test Generation — Regression Test секция в шаблоне
+- ✅ Комплексный тест всех 5 user stories — пройден
+
+#### Инциденты и уроки
+- ✅ **RCA-003**: Git Branch Confusion — документирован, уроки извлечены
+- ✅ Восстановлена ветка `001-browser-compatibility-fix` после случайного удаления
+
+**Новая задача в бэклоге**:
+- `moltinger-wk1` — Create lessons skill for querying and managing RCA lessons (P3)
+
+**Коммиты сессии**:
+- `03e7c5c` — chore(beads): add lessons skill task to backlog (moltinger-wk1)
+- `0fac204` — feat(lessons): implement Lessons Architecture from RCA consilium
+- `e2b537a` — test(rca): comprehensive test of enhanced RCA skill
+- `5ca3139` — docs(rca): add RCA-003 for git branch confusion
+- `de22503` — feat(rca): complete Phase 8 - Integration & Polish
+- `4506d43` — feat(rca): complete Phase 7 - Test Generation (US5)
+
+**Ветка готова к PR**: `001-rca-skill-upgrades`
+
+---
+
 ### 2026-03-03: RCA Skill Enhancements (Feature: 001-rca-skill-upgrades)
 
 **Завершено**:
@@ -158,18 +197,6 @@ GitOps Compliance: Enforced ✅
 - `dbe6f39` — fix(skills): integrate RCA 5 Whys into systematic-debugging
 - `b28dda2` — fix(instructions): strengthen RCA trigger for any non-zero exit code
 - `d0a8c45` — docs(spec): add RCA Skill Enhancements specification
-
-**В работе (TODO)**:
-- [ ] #1: Auto-Context Collection для RCA (P1)
-- [ ] #2: Domain-Specific RCA Templates (P1)
-- [ ] #3: RCA Hub Architecture с INDEX.md (P2)
-- [ ] #4: Chain-of-Thought RCA Pattern (P2)
-- [ ] #5: Test Generation из RCA (P3)
-- [ ] #6: Интеграция с systematic-debugging
-
-**Следующие шаги**:
-- `/speckit.plan` — создать план реализации
-- Реализовать улучшения по приоритету
 
 ---
 
