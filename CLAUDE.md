@@ -56,6 +56,67 @@ bd sync               # Sync with git
 
 ---
 
+## ⚠️ Pre-Work Checklist (RCA-003)
+
+**Before starting ANY work session**:
+
+```bash
+# 1. Check current branch
+git branch --show-current
+# Must match feature prefix from specs/XXX-feature-name/
+
+# 2. If wrong branch, switch:
+git checkout XXX-correct-branch
+```
+
+**Why?** See `docs/rca/2026-03-03-git-branch-confusion.md` - commits went to wrong branch.
+
+---
+
+## ⛔ CRITICAL: Branch Deletion Policy (RCA-003)
+
+**НИКОГДА не удалять ветку без явного запроса пользователя!**
+
+### Before ANY `git branch -D` or `git push --delete`:
+
+```bash
+# 1. Check if branch exists on remote
+git branch -r | grep <branch>
+
+# 2. Check branch content
+git log <branch> --oneline -5
+
+# 3. ASK USER before deletion
+```
+
+| Action | Requires User Confirmation |
+|--------|---------------------------|
+| `git branch -D <local>` | ✅ YES |
+| `git push origin --delete <remote>` | ✅ YES |
+| `git branch -d <merged>` | ⚠️ Verify merged first |
+
+**Why?** See `docs/rca/2026-03-03-git-branch-confusion.md` - branch was deleted incorrectly.
+
+---
+
+## 📚 Past Lessons Learned
+
+**Before making changes**, check relevant lessons from past incidents:
+
+```bash
+# View lessons index
+cat docs/LESSONS-LEARNED.md
+
+# Search lessons by topic
+./scripts/query-lessons.sh --tag docker
+./scripts/query-lessons.sh --severity P1
+./scripts/query-lessons.sh --all
+```
+
+**Why?** Lessons are extracted from RCA reports and organized by severity/tag. Avoid repeating past mistakes.
+
+---
+
 ## ⛔ CRITICAL: RCA при ЛЮБОМ exit code != 0
 
 **НЕПРЕРЫВНОЕ ПРАВИЛО:**

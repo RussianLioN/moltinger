@@ -1,9 +1,28 @@
+---
+title: "[Краткое описание проблемы]"
+date: YYYY-MM-DD
+severity: P3
+category: generic
+tags: []
+root_cause: ""
+---
+
 # RCA: [Краткое описание проблемы]
 
 **Дата:** YYYY-MM-DD
 **Статус:** Resolved / In Progress
 **Влияние:** [описание воздействия на пользователей/систему]
 **Контекст:** [сессия/задача/компонент]
+
+<!--
+Frontmatter fields (for lessons indexing):
+- title: Short description of the issue
+- date: YYYY-MM-DD format
+- severity: P0 (critical) | P1 (high) | P2 (medium) | P3 (low) | P4 (backlog)
+- category: docker | cicd | shell | data-loss | process | generic
+- tags: [list, of, relevant, tags] (e.g., [docker, traefik, networking])
+- root_cause: One-line summary of root cause
+-->
 
 ## Context
 
