@@ -142,11 +142,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T033 [US4] Add Error Classification section to SKILL.md (type, confidence, context quality)
-- [ ] T034 [US4] Add Hypothesis Generation section to SKILL.md (3 hypotheses with confidence)
-- [ ] T035 [US4] Add 5 Whys with Evidence format to SKILL.md
-- [ ] T036 [US4] Add Root Cause Validation section to SKILL.md (actionable, systemic, preventable)
-- [ ] T037 [US4] Update docs/rca/TEMPLATE.md with CoT structure
+- [X] T033 [US4] Add Error Classification section to SKILL.md (type, confidence, context quality)
+- [X] T034 [US4] Add Hypothesis Generation section to SKILL.md (3 hypotheses with confidence)
+- [X] T035 [US4] Add 5 Whys with Evidence format to SKILL.md
+- [X] T036 [US4] Add Root Cause Validation section to SKILL.md (actionable, systemic, preventable)
+- [X] T037 [US4] Update docs/rca/TEMPLATE.md with CoT structure → Artifacts: [TEMPLATE.md](docs/rca/TEMPLATE.md)
 
 **Checkpoint**: Chain-of-Thought Pattern functional - RCA has structured reasoning
 
