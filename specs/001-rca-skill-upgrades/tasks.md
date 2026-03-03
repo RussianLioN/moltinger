@@ -96,12 +96,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T019 [P] [US2] Create Docker template at `.claude/skills/rca-5-whys/templates/docker.md`
-- [ ] T020 [P] [US2] Create CI/CD template at `.claude/skills/rca-5-whys/templates/cicd.md`
-- [ ] T021 [P] [US2] Create Data Loss template at `.claude/skills/rca-5-whys/templates/data-loss.md`
-- [ ] T022 [P] [US2] Create Generic template at `.claude/skills/rca-5-whys/templates/generic.md`
-- [ ] T023 [US2] Add template selection logic to SKILL.md based on error type
-- [ ] T024 [US2] Add template reference section to SKILL.md
+- [X] T019 [P] [US2] Create Docker template at `.claude/skills/rca-5-whys/templates/docker.md` → Artifacts: [docker.md](.claude/skills/rca-5-whys/templates/docker.md)
+- [X] T020 [P] [US2] Create CI/CD template at `.claude/skills/rca-5-whys/templates/cicd.md` → Artifacts: [cicd.md](.claude/skills/rca-5-whys/templates/cicd.md)
+- [X] T021 [P] [US2] Create Data Loss template at `.claude/skills/rca-5-whys/templates/data-loss.md` → Artifacts: [data-loss.md](.claude/skills/rca-5-whys/templates/data-loss.md)
+- [X] T022 [P] [US2] Create Generic template at `.claude/skills/rca-5-whys/templates/generic.md` → Artifacts: [generic.md](.claude/skills/rca-5-whys/templates/generic.md)
+- [X] T023 [US2] Add template selection logic to SKILL.md based on error type
+- [X] T024 [US2] Add template reference section to SKILL.md
 
 **Checkpoint**: Domain-Specific Templates functional - errors use appropriate analysis patterns
 
