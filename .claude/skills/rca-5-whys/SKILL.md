@@ -1,7 +1,7 @@
 ---
 name: rca-5-whys
 description: Метод Root Cause Analysis "5 почему" для глубокого анализа любой допущенной ошибки. Срабатывает автоматически при ошибках. Задаёт 5 последовательных вопросов "почему" для нахождения корневой причины.
-allowed-tools: Read, Write, Edit, AskUserQuestion
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task, AskUserQuestion
 ---
 
 # Root Cause Analysis: Метод "5 Почему"
@@ -11,6 +11,16 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
 Метод "5 почему" — это техника RCA (Root Cause Analysis) для нахождения корневой причины проблемы через последовательные вопросы. Каждый ответ становится базой для следующего вопроса.
 
 **Принцип:** Поверхностная ошибка → Глубокий анализ → Системное исправление
+
+## Возможности (Enhanced)
+
+| Возможность | Описание |
+|-------------|----------|
+| **Auto-Context** | Автоматический сбор контекста (git, docker, system) |
+| **Domain Templates** | Специализированные шаблоны для Docker, CI/CD, Data Loss |
+| **Chain-of-Thought** | Структурированные рассуждения с гипотезами |
+| **RCA Index** | Реестр всех RCA с метриками и трендами |
+| **Test Generation** | Автоматическое создание regression тестов |
 
 ## Когда применять
 
@@ -252,3 +262,219 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
 ```
 
 **Помни:** Каждая ошибка — это возможность улучшить систему, а не просто исправить симптом.
+
+---
+
+## 🔄 Auto-Context Collection
+
+**При любой ошибке автоматически собирать контекст:**
+
+### Запуск сбора контекста
+
+```bash
+# Вызвать скрипт сбора контекста
+bash .claude/skills/rca-5-whys/lib/context-collector.sh <error_type>
+```
+
+### Типы ошибок для определения контекста
+
+| Error Type | Дополнительный контекст |
+|------------|------------------------|
+| `docker` | docker version, containers, networks, volumes |
+| `cicd` | workflow name, job, step, runner info |
+| `shell` | shell version, environment variables |
+| `data-loss` | backup status, disk space |
+| `generic` | базовый контекст только |
+
+### Формат контекста в RCA отчёте
+
+```markdown
+## Context
+
+| Field | Value |
+|-------|-------|
+| Timestamp | [ISO datetime] |
+| PWD | [working directory] |
+| Git Branch | [branch or N/A] |
+| Git Status | [short status] |
+| Docker Version | [version or N/A] |
+| Disk Usage | [percentage] |
+| Memory | [used/total] |
+| Error Type | [detected type] |
+```
+
+---
+
+## 📋 Domain-Specific Templates
+
+**Автоматический выбор шаблона по типу ошибки:**
+
+### Template Selection Logic
+
+```
+Error contains "docker|container|image|volume|network" → docker.md
+Error contains "workflow|pipeline|github actions|ci" → cicd.md
+Error contains "data loss|deleted|corrupted|backup" → data-loss.md
+Default → generic.md
+```
+
+### Templates Location
+
+```
+.claude/skills/rca-5-whys/templates/
+├── docker.md      # Layer Analysis: Image → Container → Network → Volume → Runtime
+├── cicd.md        # Pipeline Analysis: Workflow → Job → Step → Action
+├── data-loss.md   # Critical Protocol: STOP → SNAPSHOT → ASSESS → RESTORE → ANALYZE
+└── generic.md     # Standard 5-Why
+```
+
+### Использование шаблона
+
+1. Определить тип ошибки (pattern matching)
+2. Прочитать соответствующий шаблон из templates/
+3. Применить структуру из шаблона к RCA анализу
+
+---
+
+## 📊 RCA Index
+
+**Реестр всех RCA отчётов:**
+
+### Location
+
+`docs/rca/INDEX.md`
+
+### Structure
+
+```markdown
+# RCA Index
+
+## Statistics
+- Total RCA: N
+- By Category: docker (X), cicd (Y), ...
+- Avg Resolution Time: Xm
+
+## Registry
+| ID | Date | Category | Severity | Status | Root Cause | Fix |
+|----|------|----------|----------|--------|------------|-----|
+| RCA-001 | 2026-03-03 | docker | P1 | ✅ | ... | abc123 |
+
+## Patterns Detected
+⚠️ 3+ RCA in "docker" - consider systemic fix
+```
+
+### Управление INDEX
+
+```bash
+# Обновить INDEX после создания RCA
+bash .claude/skills/rca-5-whys/lib/rca-index.sh update
+
+# Получить следующий ID
+bash .claude/skills/rca-5-whys/lib/rca-index.sh next-id
+
+# Валидировать INDEX
+bash .claude/skills/rca-5-whys/lib/rca-index.sh validate
+```
+
+---
+
+## 🧠 Chain-of-Thought Pattern
+
+**Структурированные рассуждения для повышения точности RCA:**
+
+### Step 1: Error Classification
+
+```
+Error Type: [infra | code | config | process | communication]
+Confidence: [high | medium | low]
+Context Quality: [sufficient | partial | insufficient]
+```
+
+### Step 2: Hypothesis Generation
+
+```
+H1: [наиболее вероятная причина] (confidence: X%)
+H2: [вторая причина] (confidence: Y%)
+H3: [третья причина] (confidence: Z%)
+```
+
+### Step 3: 5 Whys with Evidence
+
+```
+Q1: Почему [ошибка]? → A1 (evidence: [источник])
+Q2: Почему [A1]? → A2 (evidence: [источник])
+Q3: Почему [A2]? → A3 (evidence: [источник])
+Q4: Почему [A3]? → A4 (evidence: [источник])
+Q5: Почему [A4]? → A5 (evidence: [источник])
+```
+
+### Step 4: Root Cause Validation
+
+```
+□ Actionable? [yes/no] - Можно ли исправить?
+□ Systemic? [yes/no] - Это системная проблема?
+□ Preventable? [yes/no] - Можно ли предотвратить в будущем?
+```
+
+---
+
+## 🧪 Test Generation
+
+**Автоматическое создание regression тестов для code-ошибок:**
+
+### Когда создавать тест
+
+- Тип ошибки: `code`
+- RCA завершён
+- Корневая причина найдена
+
+### Test Template (Vitest/TypeScript)
+
+```typescript
+describe('RCA-[ID]: [Short Description]', () => {
+  it('should [expected behavior]', async () => {
+    // Given: [setup from RCA context]
+    // When: [action that caused error]
+    // Then: [expected outcome, not error]
+  });
+});
+```
+
+### Test Location
+
+```
+tests/rca/RCA-NNN.test.ts
+```
+
+### Workflow
+
+1. RCA завершён для code-ошибки
+2. Предложить создать failing test
+3. Если пользователь согласен — создать тест
+4. Тест должен падать (failing test)
+5. После fix — тест должен проходить
+
+---
+
+## 📁 File Structure
+
+```
+.claude/skills/rca-5-whys/
+├── SKILL.md              # Этот файл
+├── templates/
+│   ├── docker.md         # Docker-specific RCA
+│   ├── cicd.md           # CI/CD-specific RCA
+│   ├── data-loss.md      # Critical data loss protocol
+│   └── generic.md        # Generic 5-Why
+└── lib/
+    ├── context-collector.sh  # Auto-context collection
+    └── rca-index.sh          # INDEX.md management
+
+docs/rca/
+├── INDEX.md              # RCA registry
+├── TEMPLATE.md           # Report template
+└── YYYY-MM-DD-*.md       # RCA reports
+
+tests/rca/
+└── RCA-NNN.test.ts       # Generated regression tests
+```
