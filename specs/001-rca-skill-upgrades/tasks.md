@@ -72,13 +72,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement base context collection (timestamp, pwd, shell) in `.claude/skills/rca-5-whys/lib/context-collector.sh`
-- [ ] T013 [P] [US1] Add git context collection (branch, status, recent commits) in context-collector.sh
-- [ ] T014 [P] [US1] Add docker context collection (version, containers, networks) in context-collector.sh
-- [ ] T015 [P] [US1] Add system context collection (disk, memory) in context-collector.sh
-- [ ] T016 [US1] Add error type detection (docker, cicd, shell, data-loss, generic) in context-collector.sh
-- [ ] T017 [US1] Integrate context-collector.sh into SKILL.md workflow
-- [ ] T018 [US1] Update docs/rca/TEMPLATE.md with Context section
+- [X] T012 [US1] Implement base context collection (timestamp, pwd, shell) in `.claude/skills/rca-5-whys/lib/context-collector.sh` → Artifacts: [context-collector.sh](.claude/skills/rca-5-whys/lib/context-collector.sh)
+- [X] T013 [P] [US1] Add git context collection (branch, status, recent commits) in context-collector.sh
+- [X] T014 [P] [US1] Add docker context collection (version, containers, networks) in context-collector.sh
+- [X] T015 [P] [US1] Add system context collection (disk, memory) in context-collector.sh
+- [X] T016 [US1] Add error type detection (docker, cicd, shell, data-loss, generic) in context-collector.sh
+- [X] T017 [US1] Integrate context-collector.sh into SKILL.md workflow
+- [X] T018 [US1] Update docs/rca/TEMPLATE.md with Context section → Artifacts: [TEMPLATE.md](docs/rca/TEMPLATE.md)
 
 **Checkpoint**: Auto-Context Collection fully functional - errors now include environment context
 

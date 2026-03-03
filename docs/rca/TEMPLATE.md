@@ -5,6 +5,22 @@
 **Влияние:** [описание воздействия на пользователей/систему]
 **Контекст:** [сессия/задача/компонент]
 
+## Context
+
+*Автоматически собирается через `bash .claude/skills/rca-5-whys/lib/context-collector.sh <error_type>`*
+
+| Field | Value |
+|-------|-------|
+| Timestamp | [ISO datetime] |
+| PWD | [working directory] |
+| Shell | [shell type] |
+| Git Branch | [branch or N/A] |
+| Git Status | [short status] |
+| Docker Version | [version or N/A] |
+| Disk Usage | [percentage] |
+| Memory | [used/total] |
+| Error Type | [docker/cicd/shell/data-loss/generic] |
+
 ## Ошибка
 
 [Описание симптома - что произошло, как проявилось]
