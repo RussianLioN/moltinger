@@ -377,7 +377,7 @@ enabled = true                    # Enable Telegram integration
 # Get user ID via @userinfobot
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
-allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"  # Comma-separated user IDs (from GitHub Secret)
+allowed_users = [262872984]  # Telegram user IDs (from @userinfobot)
 
 # ── Browser Automation ────────────────────────────────────────────────────────
 # Full browser control via Chrome DevTools Protocol (CDP).
