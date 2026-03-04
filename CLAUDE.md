@@ -1,5 +1,9 @@
 # Agent Instructions
 
+> **⛔ TOKEN LIMIT: ~700 lines max**
+> **Новый контент → отдельный файл → только ссылка здесь**
+> *Почему: каждый токен читается при каждом запросе*
+
 ## ⚠️ MANDATORY: Read MEMORY.md First!
 
 **Before ANY planning or implementation**, read the project memory:

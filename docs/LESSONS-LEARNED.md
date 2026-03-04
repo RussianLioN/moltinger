@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-04
-**Total Lessons**: 5
+**Total Lessons**: 6
 
 ---
 
@@ -45,15 +45,21 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
+#### process (1 lessons)
+- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
+
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
 
 ### Popular Tags
 
+- `token-optimization` (1 lessons)
 - `security` (1 lessons)
 - `rm-rf` (1 lessons)
+- `recurring-issue` (1 lessons)
 - `process` (1 lessons)
+- `instructions` (1 lessons)
 - `file-deletion` (1 lessons)
 
 
@@ -63,10 +69,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 5 |
+| Total Lessons | 6 |
 | Critical (P0/P1) | 0 |
-| Categories | 2 |
-| Unique Tags | 4 |
+| Categories | 3 |
+| Unique Tags | 7 |
 
 ---
 
