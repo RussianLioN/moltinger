@@ -240,10 +240,25 @@ b6a3478 docs(session): update with RCA Skill Enhancements completion
 
 #### 🚀 Next Steps
 
-1. **Merge `001-rca-skill-upgrades` → `main`** — Ready!
+1. **Merge `001-rca-skill-upgrades` → `main`** — IN PROGRESS
 2. **Close `moltinger-wk1`** — Task completed
 3. **Test RCA in production** — New session with error trigger
 4. **Monitor token usage** — Verify limits work
+
+---
+
+#### 📝 Final Commits (Token Bloat Fix)
+
+```
+72b7740 fix(token-bloat): remove CLAUDE.md/MEMORY.md direct write instructions
+6f50a95 fix(rca-skill): remove token bloat contradiction (RCA-004)
+```
+
+**Изменённые файлы**:
+- `.claude/skills/rca-5-whys/SKILL.md` — чеклист + warning
+- `.claude/agents/health/workers/reuse-hunter.md` — docs/architecture/
+- `.claude/skills/senior-architect/references/architecture_patterns.md`
+- `docs/rca/TEMPLATE.md` — new rule file pattern
 
 ---
 
