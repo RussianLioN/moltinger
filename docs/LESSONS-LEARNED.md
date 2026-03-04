@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-04
-**Total Lessons**: 4
+**Total Lessons**: 5
 
 ---
 
@@ -45,9 +45,16 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
+#### security (1 lessons)
+- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
+
 
 ### Popular Tags
 
+- `security` (1 lessons)
+- `rm-rf` (1 lessons)
+- `process` (1 lessons)
+- `file-deletion` (1 lessons)
 
 
 ---
@@ -56,10 +63,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 4 |
+| Total Lessons | 5 |
 | Critical (P0/P1) | 0 |
-| Categories | 1 |
-| Unique Tags | 0 |
+| Categories | 2 |
+| Unique Tags | 4 |
 
 ---
 
