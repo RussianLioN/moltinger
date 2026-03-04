@@ -455,14 +455,15 @@ export interface ExampleInterface {
 
 2. **Short-term Improvements**:
    - Create shared constants package if needed
-   - Document consolidation patterns in CLAUDE.md
+   - Document consolidation patterns in `docs/architecture/code-sharing.md`
 
 3. **Long-term Strategy**:
    - Establish code review checks for duplication
    - Add CI lint rule to detect re-export violations
 
 4. **Documentation Needs**:
-   - Update CLAUDE.md with new SSOT locations
+   - Update `docs/architecture/code-sharing.md` with new SSOT locations
+   - Add brief reference link in CLAUDE.md if critical
    - Document any new intentional separations
 
 ---
@@ -493,7 +494,7 @@ export interface ExampleInterface {
 
 - Re-run reuse scan after consolidation
 - Monitor for regression
-- Update CLAUDE.md with new patterns
+- Update `docs/architecture/code-sharing.md` with new patterns
 
 ---
 
