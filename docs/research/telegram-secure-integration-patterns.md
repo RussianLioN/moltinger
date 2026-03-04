@@ -54,7 +54,7 @@ This document analyzes secure patterns for integrating LLM systems (Claude Code,
 # config/moltis.toml
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"              # GitOps-compliant
-allowed_users = []                           # Or via TELEGRAM_ALLOWED_USERS
+allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"  # Comma-separated user IDs from env
 ```
 
 **GitHub Secrets**:
