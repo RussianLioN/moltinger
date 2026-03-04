@@ -112,7 +112,7 @@ export const supabaseAdmin = createClient<Database>(
 **Trade-offs:**
 - Code duplication (documented as intentional)
 - Synchronized updates required
-- Must document reasons in CLAUDE.md
+- Must document reasons in `docs/architecture/intentional-duplications.md` + brief reference in CLAUDE.md
 
 **Anti-Pattern to Avoid:**
 ```typescript

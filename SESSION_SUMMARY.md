@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-02
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-04
 
 ---
 
@@ -125,6 +125,177 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-04: RCA Skill Enhancements — FINAL SESSION (001-rca-skill-upgrades)
+
+**Статус**: ✅ FEATURE COMPLETE — Ready for merge to main
+
+---
+
+#### 🎯 Session Overview
+
+Сессия началась как continuation для завершения RCA Skill Enhancements. В ходе работы:
+1. Добавлен US6 (Lessons Query Skill) в спецификацию
+2. Реализован lessons skill через skill-builder-v2
+3. Проведено автономное тестирование всех 6 User Stories
+4. Выявлены и исправлены 2 критических gap в RCA workflow
+5. Добавлены token limit warnings для предотвращения bloat
+
+---
+
+#### 📦 Deliverables
+
+**New Files Created:**
+```
+.claude/skills/lessons/SKILL.md          # 372 lines - Natural language lessons interface
+docs/rca/2026-03-04-token-bloat-recurring.md  # RCA-004 report
+specs/001-rca-skill-upgrades/spec.md     # Updated with US6 (FR-027 to FR-031)
+specs/001-rca-skill-upgrades/tasks.md    # Updated with Phase 9 (T047-T054)
+```
+
+**Modified Files:**
+```
+.claude/skills/rca-5-whys/SKILL.md       # Added RCA COMPLETION CHECKLIST
+CLAUDE.md                                 # Added token limit warning (~700 lines max)
+MEMORY.md                                 # Added token limit warning (~300 lines max)
+docs/LESSONS-LEARNED.md                   # Auto-regenerated (6 lessons)
+```
+
+---
+
+#### 🧪 Testing Results
+
+**Autonomous Testing (all 6 US):**
+
+| User Story | Test Method | Result |
+|------------|-------------|--------|
+| US1: Auto-Context | `context-collector.sh shell` | ✅ PASS |
+| US2: Domain Templates | File check (4 templates) | ✅ PASS |
+| US3: RCA Hub | `rca-index.sh stats/validate` | ✅ PASS |
+| US4: Chain-of-Thought | SKILL.md content check | ✅ PASS |
+| US5: Test Generation | TEMPLATE.md content check | ✅ PASS |
+| US6: Lessons Skill | Skill invocation + query-lessons.sh | ✅ PASS |
+
+---
+
+#### 🔧 Bug Fixes & Improvements
+
+**RCA Skill Fix (Gap in workflow):**
+- **Problem**: RCA conducted but lessons not formalized/indexed
+- **Root Cause**: No mandatory step to run `build-lessons-index.sh`
+- **Fix**: Added 7-step RCA COMPLETION CHECKLIST to skill
+
+**Token Bloat Fix (RCA-004):**
+- **Problem**: Central files keep growing despite previous discussions
+- **Root Cause**: Rules were in OTHER files, not in the files themselves
+- **Fix**: Added explicit token limit warnings at top of CLAUDE.md and MEMORY.md
+
+---
+
+#### 📝 Commits This Session
+
+```
+1420dce fix(instructions): add token limit warnings to prevent bloat (RCA-004)
+d3ad740 fix(rca): add mandatory lessons indexing step to RCA workflow
+31b3e44 test(rca): complete T044 and T054 - autonomous testing passed
+de92ff7 chore: update LESSONS-LEARNED.md date
+72cfe89 feat(skills): add lessons skill for RCA lesson management (US6)
+475e890 docs(spec): add US6 Lessons Query Skill to RCA enhancements
+b6a3478 docs(session): update with RCA Skill Enhancements completion
+03e7c5c chore(beads): add lessons skill task to backlog (moltinger-wk1)
+0fac204 feat(lessons): implement Lessons Architecture from RCA consilium
+```
+
+---
+
+#### 📚 Lessons Learned This Session
+
+**RCA-004: Token Bloat is Recurring**
+1. Rules must be IN THE FILES THEY LIMIT, not in related docs
+2. LLM has no memory between sessions → persistent rules in content
+3. Explicit prohibition > implicit reference
+4. Max size in lines > abstract "don't grow"
+
+**RCA Workflow Gap**
+1. Analysis without formalization = lost knowledge
+2. Index rebuild is MANDATORY, not optional
+3. Verification step prevents "lesson exists but not found"
+
+---
+
+#### 📊 Final Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total Tasks | 54 (T001-T054) |
+| Tasks Completed | 54 (100%) |
+| User Stories | 6 (US1-US6) |
+| Functional Requirements | 31 (FR-001 to FR-031) |
+| Success Criteria | 9 (SC-001 to SC-009) |
+| RCA Reports Created | 6 |
+| Lessons Indexed | 6 |
+| Commits on Branch | 30+ |
+
+---
+
+#### 🚀 Next Steps
+
+1. **Merge `001-rca-skill-upgrades` → `main`** — IN PROGRESS
+2. **Close `moltinger-wk1`** — Task completed
+3. **Test RCA in production** — New session with error trigger
+4. **Monitor token usage** — Verify limits work
+
+---
+
+#### 📝 Final Commits (Token Bloat Fix)
+
+```
+72b7740 fix(token-bloat): remove CLAUDE.md/MEMORY.md direct write instructions
+6f50a95 fix(rca-skill): remove token bloat contradiction (RCA-004)
+```
+
+**Изменённые файлы**:
+- `.claude/skills/rca-5-whys/SKILL.md` — чеклист + warning
+- `.claude/agents/health/workers/reuse-hunter.md` — docs/architecture/
+- `.claude/skills/senior-architect/references/architecture_patterns.md`
+- `docs/rca/TEMPLATE.md` — new rule file pattern
+
+---
+
+### 2026-03-03: RCA Skill Enhancements (Feature: 001-rca-skill-upgrades)
+
+**Завершено**:
+
+#### RCA Skill Creation
+- ✅ Создан навык `rca-5-whys` для Root Cause Analysis методом "5 Почему"
+- ✅ Добавлен MANDATORY раздел в CLAUDE.md с триггерами для exit code != 0
+- ✅ Создан шаблон отчёта `docs/rca/TEMPLATE.md`
+- ✅ Протестировано в новой сессии — LLM автоматически запускает RCA
+
+#### Expert Consilium (13 экспертов)
+Проведён консилиум специалистов для улучшения навыка:
+- 🏗️ Architect: RCA Hub Architecture
+- 🐳 Docker Engineer: Domain-Specific Templates
+- 🐚 Unix Expert: Auto-Context Collection
+- 🚀 DevOps: RCA → Rollback → Fix Pipeline
+- 🔧 CI/CD Architect: Quality Gate Integration
+- 📚 GitOps Specialist: Git-based RCA Index
+- И другие...
+
+#### Feature Specification (001-rca-skill-upgrades)
+- ✅ Создана спецификация через `/speckit.specify`
+- ✅ 5 User Stories с приоритетами P1-P3
+- ✅ 26 Functional Requirements
+- ✅ 7 Success Criteria
+- ✅ Ветка: `001-rca-skill-upgrades`
+
+**Коммиты сессии**:
+- `c97f9cd` — feat(skills): add rca-5-whys skill for Root Cause Analysis
+- `dbe6f39` — fix(skills): integrate RCA 5 Whys into systematic-debugging
+- `b28dda2` — fix(instructions): strengthen RCA trigger for any non-zero exit code
+- `d0a8c45` — docs(spec): add RCA Skill Enhancements specification
+
+---
 
 ### 2026-03-02 (продолжение 2): Test Suite Bug Fixes & Server Validation
 
@@ -627,4 +798,4 @@ gh run view --workflow test.yml   # View latest test run details
 
 ---
 
-*Last updated: 2026-03-02 | Session: Test Suite Bug Fixes & Server Validation*
+*Last updated: 2026-03-04 | Session: RCA Skill Enhancements — FINAL SESSION*

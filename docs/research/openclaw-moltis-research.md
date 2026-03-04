@@ -222,7 +222,7 @@ enabled = true
 
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
-allowed_users = []            # Empty = all users
+allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"  # Comma-separated user IDs from env
 ```
 
 #### Metrics & Telemetry
@@ -555,7 +555,7 @@ enabled = true
 
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
-allowed_users = []            # Empty = all users, or specify IDs
+allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"  # Comma-separated user IDs from env, or specify IDs
 ```
 
 ### 5.2 Создание Telegram бота

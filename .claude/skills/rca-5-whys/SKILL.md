@@ -156,11 +156,17 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
 │ 2. [ ] Добавить раздел "## Уроки" в отчёт                   │
 │ 3. [ ] Запустить: ./scripts/build-lessons-index.sh          │
 │ 4. [ ] Проверить: ./scripts/query-lessons.sh --all          │
-│ 5. [ ] Обновить CLAUDE.md если нужно новое правило          │
-│ 6. [ ] Обновить MEMORY.md если нужна новая конфигурация     │
+│ 5. [ ] Создать отдельный файл правила (НЕ CLAUDE.md!)       │
+│        → docs/rules/, .claude/rules/, .claude/skills/       │
+│ 6. [ ] Добавить КРАТКУЮ ссылку (1-2 строки) в CLAUDE.md     │
 │ 7. [ ] Закоммитить изменения: git add docs/rca/ && git commit│
 └─────────────────────────────────────────────────────────────┘
 ```
+
+⚠️ **TOKEN BLOAT PREVENTION (RCA-004)**:
+- CLAUDE.md: MAX 700 lines — НЕ добавлять контент напрямую!
+- MEMORY.md: MAX 300 lines — новые уроки в docs/LESSONS-LEARNED.md
+- Новые правила → отдельные файлы → только ссылка в CLAUDE.md
 
 **Если урок НЕ индексируется** — система его не найдёт в будущем!
 
@@ -205,8 +211,8 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
 
 ## Связанные обновления
 
-- [ ] Инструкции CLAUDE.md обновлены
-- [ ] MEMORY.md обновлён
+- [ ] Новый файл правила создан (docs/rules/ или .claude/skills/)
+- [ ] Краткая ссылка добавлена в CLAUDE.md (1-2 строки)
 - [ ] Новые навыки созданы
 - [ ] Тесты добавлены
 
@@ -239,15 +245,21 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
 
 После RCA ОБЯЗАТЕЛЬНО оценить:
 
-### 1. Нужно ли обновить CLAUDE.md?
-- Добавить новое правило/предостережение
-- Обновить существующий раздел
-- Добавить пример ошибки
+### 1. Нужно ли создать новое правило?
+**⛔ НЕ добавлять в CLAUDE.md напрямую!** (MAX 700 lines)
 
-### 2. Нужно ли обновить MEMORY.md?
-- Зафиксировать конфигурацию
-- Добавить в Common Pitfalls
-- Обновить Debug Commands
+Вместо этого:
+- Создать отдельный файл в `docs/rules/YYYY-MM-DD-topic.md`
+- Или создать навык в `.claude/skills/topic/SKILL.md`
+- Добавить КРАТКУЮ ссылку (1-2 строки) в CLAUDE.md
+
+### 2. Нужно ли зафиксировать конфигурацию?
+**⛔ НЕ добавлять в MEMORY.md напрямую!** (MAX 300 lines)
+
+Вместо этого:
+- Уроки → docs/LESSONS-LEARNED.md (через build-lessons-index.sh)
+- Инциденты → docs/rca/YYYY-MM-DD-topic.md
+- Добавить КРАТКУЮ ссылку в MEMORY.md если критично
 
 ### 3. Нужно ли создать новый навык?
 - Если ошибка повторяющаяся

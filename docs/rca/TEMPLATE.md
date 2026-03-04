@@ -1,3 +1,12 @@
+---
+title: "[Краткое описание проблемы]"
+date: YYYY-MM-DD
+severity: P3
+category: generic
+tags: []
+root_cause: ""
+---
+
 # RCA: [Краткое описание проблемы]
 
 **Дата:** YYYY-MM-DD
@@ -5,21 +14,73 @@
 **Влияние:** [описание воздействия на пользователей/систему]
 **Контекст:** [сессия/задача/компонент]
 
+<!--
+Frontmatter fields (for lessons indexing):
+- title: Short description of the issue
+- date: YYYY-MM-DD format
+- severity: P0 (critical) | P1 (high) | P2 (medium) | P3 (low) | P4 (backlog)
+- category: docker | cicd | shell | data-loss | process | generic
+- tags: [list, of, relevant, tags] (e.g., [docker, traefik, networking])
+- root_cause: One-line summary of root cause
+-->
+
+## Context
+
+*Автоматически собирается через `bash .claude/skills/rca-5-whys/lib/context-collector.sh <error_type>`*
+
+| Field | Value |
+|-------|-------|
+| Timestamp | [ISO datetime] |
+| PWD | [working directory] |
+| Shell | [shell type] |
+| Git Branch | [branch or N/A] |
+| Git Status | [short status] |
+| Docker Version | [version or N/A] |
+| Disk Usage | [percentage] |
+| Memory | [used/total] |
+| Error Type | [docker/cicd/shell/data-loss/generic] |
+
+## Error Classification (Chain-of-Thought)
+
+| Field | Value |
+|-------|-------|
+| Error Type | [infra/code/config/process/communication] |
+| Confidence | [high/medium/low] |
+| Context Quality | [sufficient/partial/insufficient] |
+
+### Hypotheses
+
+| # | Hypothesis | Confidence |
+|---|------------|------------|
+| H1 | [наиболее вероятная причина] | X% |
+| H2 | [вторая причина] | Y% |
+| H3 | [третья причина] | Z% |
+
 ## Ошибка
 
 [Описание симптома - что произошло, как проявилось]
 
-## Анализ 5 Почему
+## Анализ 5 Почему (with Evidence)
 
-| Уровень | Вопрос | Ответ |
-|---------|--------|-------|
-| 1 | Почему [симптом]? | [ответ] |
-| 2 | Почему [ответ1]? | [ответ] |
-| 3 | Почему [ответ2]? | [ответ] |
-| 4 | Почему [ответ3]? | [ответ] |
-| 5 | Почему [ответ4]? | [ответ] |
+| Уровень | Вопрос | Ответ | Evidence |
+|---------|--------|-------|----------|
+| 1 | Почему [симптом]? | [ответ] | [источник: logs/command/output] |
+| 2 | Почему [ответ1]? | [ответ] | [источник] |
+| 3 | Почему [ответ2]? | [ответ] | [источник] |
+| 4 | Почему [ответ3]? | [ответ] | [источник] |
+| 5 | Почему [ответ4]? | [ответ] | [источник] |
 
 ## Корневая причина
+
+[Итоговый вывод - системная причина, на которую можно повлиять]
+
+### Root Cause Validation
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| □ Actionable? | [yes/no] | Можно ли исправить? |
+| □ Systemic? | [yes/no] | Это системная проблема? |
+| □ Preventable? | [yes/no] | Можно ли предотвратить в будущем? |
 
 [Итоговый вывод - системная причина, на которую можно повлиять]
 
@@ -31,8 +92,8 @@
 
 ## Связанные обновления
 
-- [ ] Инструкции CLAUDE.md обновлены
-- [ ] MEMORY.md обновлён
+- [ ] Новый файл правила создан (docs/rules/ или .claude/skills/)
+- [ ] Краткая ссылка добавлена в CLAUDE.md (1-2 строки)
 - [ ] Новые навыки созданы
 - [ ] Тесты добавлены
 - [ ] Чеклисты обновлены
@@ -40,6 +101,30 @@
 ## Уроки
 
 [Ключевые выводы для предотвращения подобных ошибок в будущем]
+
+## Regression Test (Optional - for code errors only)
+
+*Если тип ошибки = code, создать failing test:*
+
+**Test File:** `tests/rca/RCA-NNN.test.ts`
+
+```typescript
+describe('RCA-[ID]: [Short Description]', () => {
+  it('should [expected behavior]', async () => {
+    // Given: [setup from RCA context]
+
+    // When: [action that caused error]
+
+    // Then: [expected outcome, not error]
+  });
+});
+```
+
+**Test Status:**
+- [ ] Test created
+- [ ] Test fails (reproduces bug)
+- [ ] Fix applied
+- [ ] Test passes
 
 ---
 

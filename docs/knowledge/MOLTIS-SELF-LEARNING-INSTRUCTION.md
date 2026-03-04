@@ -204,7 +204,7 @@ enabled = true
 
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
-allowed_users = []            # [] = все пользователи
+allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"  # Comma-separated user IDs from env
 ```
 
 ### 2.4 Формат SKILL.md
