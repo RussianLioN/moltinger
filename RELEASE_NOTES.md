@@ -2,6 +2,95 @@
 
 User-facing release notes for all versions.
 
+## v1.9.0
+
+_Released on 2026-03-04_
+
+### ✨ New Features
+
+- **Skills**: Add lessons skill for RCA lesson management (US6)
+- **lessons**: Implement Lessons Architecture from RCA consilium
+- **rca**: Complete Phase 8 - Integration & Polish
+- **rca**: Complete Phase 7 - Test Generation (US5)
+- **rca**: Complete Phase 6 - Chain-of-Thought Pattern (US4)
+- **rca**: Complete Phase 5 - RCA Hub Architecture (US3)
+- **rca**: Complete Phase 4 - Domain-Specific Templates (US2)
+- **rca**: Complete Phase 3 - Auto-Context Collection (US1)
+- **rca**: Complete Phase 2 - foundational enhancements
+- **tasks**: Generate task list for RCA Skill Enhancements
+- **plan**: Complete RCA Skill Enhancements planning phase
+- **Skills**: Add rca-5-whys skill for Root Cause Analysis
+- **tests**: Enhance E2E tests with session restore and rate limiting scenarios
+- **CI/CD**: Add matrix testing, caching, and slack notifications
+- **CI/CD**: Add comprehensive test suite CI/CD workflow
+- **tests**: Add more test files and normalize line endings
+- **tests**: Add test infrastructure framework
+- **tools**: Add rate limit monitoring and OpenClaw clone plan
+- **fallback-llm**: Add CI/CD validation for failover (T024-T026, moltinger-39q)
+- **fallback-llm**: Add Ollama validation to preflight (T022-T023, moltinger-39q)
+- **fallback-llm**: Add Prometheus alerts and AlertManager config (T020-T021, moltinger-39q)
+- **fallback-llm**: Add Prometheus metrics export (T016-T019, moltinger-39q)
+- **fallback-llm**: Implement circuit breaker state machine (T011-T015, moltinger-39q)
+- **scripts**: Add it2attention fireworks for visible rate limit alerts
+- **fallback-llm**: Add GLM/Ollama health checks (T010, moltinger-39q)
+- **fallback-llm**: Add Ollama health check script (T009, moltinger-39q)
+- **fallback-llm**: Add Ollama sidecar and configure failover (moltinger-39q)
+- **moltis**: Add Gemini fallback for Z.ai rate limit resilience
+
+### 🔧 Improvements
+
+- **moltis**: Reduce timeout to 30s for fast failover
+- **telegram**: Change allowed_users to env var format for whitelist support
+- Move checklists from CLAUDE.md to LESSONS-LEARNED.md (token optimization)
+
+### 🐛 Bug Fixes
+
+- **telegram**: Use array format for allowed_users instead of env string
+- **token-bloat**: Remove CLAUDE.md/MEMORY.md direct write instructions
+- **rca-skill**: Remove token bloat contradiction (RCA-004)
+- **instructions**: Add token limit warnings to prevent bloat (RCA-004)
+- **rca**: Add mandatory lessons indexing step to RCA workflow
+- **rca**: Add mandatory lessons indexing step to RCA workflow
+- **tests**: Restore LOGIN_SUCCESS after invalid password test
+- **tests**: Correct JSON escaping in E2E login test
+- **instructions**: Strengthen RCA trigger for any non-zero exit code
+- **Skills**: Integrate RCA 5 Whys into systematic-debugging
+- **tests**: Fix api_request function and metrics endpoint
+- **tests**: Use correct login endpoint /api/auth/login with JSON
+- **tests**: Improve shell compatibility for zsh and bash
+- **deploy**: Specify traefik.docker.network to use correct IP
+- **deploy**: Set correct MOLTIS_DOMAIN to moltis.ainetic.tech
+- **deploy**: Correct Traefik Host rule to moltis.ainetic.tech
+- **deploy**: Use traefik-net instead of traefik_proxy
+- **resources**: Adjust CPU limits to fit 2-CPU server (moltis: 2, ollama: 1.5)
+- **CI/CD**: Sync docker-compose.prod.yml and use -f flag for all compose commands
+- **deploy**: Use env vars instead of file secrets - secrets from GitHub via .env
+- **CI/CD**: Use 'latest' image tag which exists on server
+- **CI/CD**: Make image pull optional - use local image if pull fails
+- **CI/CD**: Use v1.7.0 as default version instead of non-existent latest tag
+- **CI/CD**: Quote boolean env vars and add defaults for TELEGRAM_ALLOWED_USERS
+- **CI/CD**: Convert CRLF to LF line endings in docker-compose.prod.yml
+- **CI/CD**: Use -S error to only report actual shellcheck errors
+- **CI/CD**: Use -S style to only report shellcheck errors, not warnings
+- **CI/CD**: Ignore SC2155 shellcheck style warning for bash scripts
+- **CI/CD**: Remove --strict flag since secrets are in GitHub, not local files
+- **CI/CD**: Initialize arrays without declare to avoid unbound variable in bash
+- **CI/CD**: Remove -v syntax for array check, use simple length check
+- **CI/CD**: Separate stdout/stderr in preflight to avoid JSON corruption
+- **CI/CD**: Handle empty arrays and missing YAML validators gracefully
+- **CI/CD**: Redirect CI mode message to stderr for valid JSON output
+- **CI/CD**: Add --ci mode to preflight-check.sh for GitHub Actions
+- **fallback-llm**: Use OLLAMA_API_KEY env var instead of Docker secret
+- **scripts**: Use home directory for alert log (sandbox fix)
+- **scripts**: Correct process count and add notification fallbacks
+- **scripts**: Fix timezone and newline bugs in rate-check
+- **scripts**: Detect Z.ai rate limit code "1302" in addition to HTTP 429
+- **scripts**: Rate-check now monitors ALL parallel sessions
+
+---
+
+_This release was automatically generated from 107 commits._
+
 ## v1.8.0
 
 _Released on 2026-02-28_
