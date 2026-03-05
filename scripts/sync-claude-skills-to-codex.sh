@@ -9,6 +9,25 @@ Usage:
 EOF
 }
 
+has_yaml_frontmatter() {
+  local file="$1"
+  local first_line
+
+  # SKILL.md must begin with frontmatter and include a closing delimiter.
+  first_line="$(head -n 1 "${file}" | tr -d '\r')"
+  if [[ "${first_line}" != "---" ]]; then
+    return 1
+  fi
+
+  awk '
+    {
+      sub(/\r$/, "", $0)
+    }
+    NR > 1 && $0 == "---" { found = 1; exit }
+    END { exit found ? 0 : 1 }
+  ' "${file}"
+}
+
 mode="${1:---install}"
 if [[ "${mode}" != "--install" && "${mode}" != "--check" ]]; then
   usage
@@ -28,6 +47,26 @@ dest_root="${CODEX_HOME:-$HOME/.codex}/skills"
 
 if [[ ! -d "${src_root}" ]]; then
   echo "Source skills directory not found: ${src_root}" >&2
+  exit 1
+fi
+
+declare -a invalid_frontmatter=()
+while IFS= read -r -d '' skill_dir; do
+  skill_name="$(basename "${skill_dir}")"
+  skill_file="${skill_dir}/SKILL.md"
+  if [[ ! -f "${skill_file}" ]]; then
+    continue
+  fi
+
+  if ! has_yaml_frontmatter "${skill_file}"; then
+    invalid_frontmatter+=("${skill_name}: ${skill_file}")
+  fi
+done < <(find "${src_root}" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+
+if [[ "${#invalid_frontmatter[@]}" -gt 0 ]]; then
+  echo "Detected ${#invalid_frontmatter[@]} invalid SKILL.md file(s) without YAML frontmatter:" >&2
+  printf ' - %s\n' "${invalid_frontmatter[@]}" >&2
+  echo "Each SKILL.md must start with YAML frontmatter delimited by ---" >&2
   exit 1
 fi
 

@@ -1,3 +1,8 @@
+---
+description: Beads issue tracking workflow for claiming, updating, and closing tasks with the bd CLI.
+argument-hint: ""
+---
+
 # Beads Issue Tracking Skill
 
 > **Attribution**: [Beads](https://github.com/steveyegge/beads) by [Steve Yegge](https://github.com/steveyegge)
