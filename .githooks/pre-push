@@ -1,0 +1,13 @@
+#!/bin/bash
+# Pre-push: Block push when branch/worktree session guard detects drift.
+
+set -euo pipefail
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
+
+if [[ -x "$GUARD_SCRIPT" ]]; then
+  "$GUARD_SCRIPT" --check --hook pre-push
+fi
+
+exit 0
