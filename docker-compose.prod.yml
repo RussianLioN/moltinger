@@ -90,6 +90,11 @@ services:
       - "traefik.http.routers.moltis.rule=Host(`${MOLTIS_DOMAIN:-moltis.ainetic.tech}`)"
       - "traefik.http.routers.moltis.entrypoints=websecure"
       - "traefik.http.routers.moltis.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.moltis.middlewares=moltis-proxy-headers@docker"
+      # Ensure Moltis consistently sees HTTPS-originated requests behind Traefik.
+      - "traefik.http.middlewares.moltis-proxy-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.moltis-proxy-headers.headers.customrequestheaders.X-Forwarded-Host=${MOLTIS_DOMAIN:-moltis.ainetic.tech}"
+      - "traefik.http.middlewares.moltis-proxy-headers.headers.customrequestheaders.X-Forwarded-Port=443"
       - "traefik.http.services.moltis.loadbalancer.server.port=13131"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.interval=30s"
