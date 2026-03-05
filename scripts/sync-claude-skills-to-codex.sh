@@ -51,17 +51,12 @@ if [[ ! -d "${src_root}" ]]; then
 fi
 
 declare -a invalid_frontmatter=()
-while IFS= read -r -d '' skill_dir; do
-  skill_name="$(basename "${skill_dir}")"
-  skill_file="${skill_dir}/SKILL.md"
-  if [[ ! -f "${skill_file}" ]]; then
-    continue
-  fi
-
+while IFS= read -r -d '' skill_file; do
+  skill_rel="${skill_file#${src_root}/}"
   if ! has_yaml_frontmatter "${skill_file}"; then
-    invalid_frontmatter+=("${skill_name}: ${skill_file}")
+    invalid_frontmatter+=("${skill_rel}")
   fi
-done < <(find "${src_root}" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+done < <(find "${src_root}" -type f -name "SKILL.md" -print0 | sort -z)
 
 if [[ "${#invalid_frontmatter[@]}" -gt 0 ]]; then
   echo "Detected ${#invalid_frontmatter[@]} invalid SKILL.md file(s) without YAML frontmatter:" >&2
@@ -76,23 +71,20 @@ synced=0
 checked=0
 declare -a missing_or_outdated=()
 
-while IFS= read -r -d '' skill_dir; do
-  skill_name="$(basename "${skill_dir}")"
-  if [[ ! -f "${skill_dir}/SKILL.md" ]]; then
-    continue
-  fi
-
-  dest_dir="${dest_root}/${skill_name}"
+while IFS= read -r -d '' skill_file; do
+  skill_dir="$(dirname "${skill_file}")"
+  skill_rel="${skill_dir#${src_root}/}"
+  dest_dir="${dest_root}/${skill_rel}"
 
   if [[ "${mode}" == "--check" ]]; then
     checked=$((checked + 1))
     if [[ ! -d "${dest_dir}" ]]; then
-      missing_or_outdated+=("${skill_name} (missing)")
+      missing_or_outdated+=("${skill_rel} (missing)")
       continue
     fi
 
     if rsync -an --delete "${skill_dir}/" "${dest_dir}/" | grep -q .; then
-      missing_or_outdated+=("${skill_name} (outdated)")
+      missing_or_outdated+=("${skill_rel} (outdated)")
     fi
     continue
   fi
@@ -100,7 +92,7 @@ while IFS= read -r -d '' skill_dir; do
   mkdir -p "${dest_dir}"
   rsync -a --delete "${skill_dir}/" "${dest_dir}/"
   synced=$((synced + 1))
-done < <(find "${src_root}" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+done < <(find "${src_root}" -type f -name "SKILL.md" -print0 | sort -z)
 
 if [[ "${mode}" == "--check" ]]; then
   if [[ "${#missing_or_outdated[@]}" -eq 0 ]]; then
