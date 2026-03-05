@@ -1,9 +1,3 @@
-# Agent Instructions
-
-> GENERATED FILE. DO NOT EDIT DIRECTLY.
-> Source: `.ai/instructions/shared-core.md` + `.ai/instructions/codex-adapter.md`
-> Regenerate with: `./scripts/sync-agent-instructions.sh --write`
-
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
@@ -41,39 +35,3 @@ bd sync               # Sync with git
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
-## Codex Adapter
-
-This file is Codex-specific and is merged into `AGENTS.md` by:
-
-```bash
-./scripts/sync-agent-instructions.sh --write
-```
-
-## Claude Skill Bridge
-
-Claude project skills are stored in:
-
-```bash
-.claude/skills/
-```
-
-Install or update them into Codex global skills:
-
-```bash
-./scripts/sync-claude-skills-to-codex.sh --install
-```
-
-Verify the bridge is up to date:
-
-```bash
-./scripts/sync-claude-skills-to-codex.sh --check
-```
-
-After installing or updating skills, restart Codex to refresh skill discovery.
-
-## Scope Notes
-
-- `.claude/skills/*` are imported as Codex skills.
-- `.claude/commands/*` and `.claude/agents/*` stay in-repo as reference workflows.
-- When both a command and a skill describe the same workflow, prefer the skill.

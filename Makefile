@@ -6,6 +6,7 @@
 .PHONY: secrets generate-key setup clean
 .PHONY: backup-enable backup-disable backup-status version-check
 .PHONY: test test-unit test-integration test-e2e test-security test-all
+.PHONY: instructions-sync instructions-check skills-sync skills-check
 
 # Default target
 help:
@@ -54,6 +55,12 @@ help:
 	@echo "  test-e2e        - Run end-to-end tests"
 	@echo "  test-security   - Run security tests"
 	@echo "  test-all        - Run all tests"
+	@echo ""
+	@echo "AI instructions & skills:"
+	@echo "  instructions-sync  - Regenerate AGENTS.md from shared sources"
+	@echo "  instructions-check - Verify AGENTS.md is in sync"
+	@echo "  skills-sync        - Sync .claude skills into \$$CODEX_HOME/skills"
+	@echo "  skills-check       - Verify Codex skills sync state"
 
 # ========================================================================
 # DEPLOYMENT
@@ -219,3 +226,19 @@ test-security:
 
 test-all: test-unit test-integration test-e2e test-security
 	@echo "All test suites completed"
+
+# ========================================================================
+# AI INSTRUCTIONS & SKILLS
+# ========================================================================
+
+instructions-sync:
+	@./scripts/sync-agent-instructions.sh --write
+
+instructions-check:
+	@./scripts/sync-agent-instructions.sh --check
+
+skills-sync:
+	@./scripts/sync-claude-skills-to-codex.sh --install
+
+skills-check:
+	@./scripts/sync-claude-skills-to-codex.sh --check

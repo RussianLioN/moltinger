@@ -4,6 +4,8 @@
 > **Новый контент → отдельный файл → только ссылка здесь**
 > *Почему: каждый токен читается при каждом запросе*
 
+Shared core instructions (Claude + Codex): @.ai/instructions/shared-core.md
+
 ## ⚠️ MANDATORY: Read MEMORY.md First!
 
 **Before ANY planning or implementation**, read the project memory:
