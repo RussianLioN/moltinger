@@ -42,6 +42,16 @@ bd sync               # Sync with git
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 
+## Speckit Artifact Guard
+
+If work is driven by a Speckit package (`specs/<feature>/`):
+
+1. Before changing runtime code, reconcile spec artifacts:
+   - `git status --short specs/<feature>/`
+   - ensure `spec.md`, `plan.md`, `tasks.md` are tracked and present in branch
+2. Update `specs/<feature>/tasks.md` checkboxes as tasks are completed.
+3. Before push, verify implementation and spec artifacts are synchronized (no hidden untracked Speckit files).
+
 ## Codex Adapter
 
 This file is Codex-specific and is merged into `AGENTS.md` by:
