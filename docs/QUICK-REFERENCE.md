@@ -38,6 +38,16 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
   -d "text=Test message"
 ```
 
+### Постоянный мониторинг webhook/качества ответов
+
+```bash
+# Одноразовый запуск (JSON отчёт)
+./scripts/telegram-webhook-monitor.sh --json
+
+# Server-side cron (GitOps): scripts/cron.d/moltis-telegram-webhook-monitor
+# CI schedule: .github/workflows/telegram-webhook-monitor.yml
+```
+
 ---
 
 ## Skills System
@@ -102,4 +112,4 @@ Workflow variable:
 
 ---
 
-*Last updated: 2026-02-18*
+*Last updated: 2026-03-06*
