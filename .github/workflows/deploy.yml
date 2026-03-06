@@ -338,11 +338,11 @@ jobs:
           sudo apt-get install -y -qq docker-compose
 
           # Validate compose file syntax (without pulling images)
-          if docker-compose config --quiet 2>/dev/null; then
-            echo "::notice::docker-compose.yml syntax valid ✅"
+          if docker-compose -f docker-compose.prod.yml config --quiet 2>/dev/null; then
+            echo "::notice::docker-compose.prod.yml syntax valid ✅"
           else
-            echo "::error::docker-compose.yml has syntax errors"
-            docker-compose config
+            echo "::error::docker-compose.prod.yml has syntax errors"
+            docker-compose -f docker-compose.prod.yml config
             exit 1
           fi
 
@@ -388,37 +388,66 @@ jobs:
             set -e
 
             BACKUP_DIR="${{ env.BACKUP_PATH }}"
-            CONFIG_DIR="${{ env.DEPLOY_PATH }}/config"
-            DATA_DIR="${{ env.DEPLOY_PATH }}/data"
-            COMPOSE_FILE="${{ env.DEPLOY_PATH }}/docker-compose.yml"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
+            CONFIG_DIR="$DEPLOY_DIR/config"
+            DATA_DIR="$DEPLOY_DIR/data"
+            ENV_FILE="$DEPLOY_DIR/.env"
+            COMPOSE_FILE="$DEPLOY_DIR/docker-compose.prod.yml"
 
             mkdir -p "$BACKUP_DIR"
 
             # Get current image version for backup metadata
             CURRENT_IMAGE=$(docker inspect moltis --format='{{.Config.Image}}' 2>/dev/null || echo "unknown")
 
-            # Create backup (includes docker-compose.yml for full rollback)
+            # Create backup (includes config/data/.env for full rollback)
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
             BACKUP_FILE="$BACKUP_DIR/pre_deploy_$TIMESTAMP.tar.gz"
 
-            if [ -d "$CONFIG_DIR" ] && [ -d "$DATA_DIR" ]; then
-              tar -czf "$BACKUP_FILE" \
-                -C "$(dirname $CONFIG_DIR)" "$(basename $CONFIG_DIR)" \
-                -C "$(dirname $DATA_DIR)" "$(basename $DATA_DIR)" \
-                2>/dev/null || true
-
-              # Backup docker-compose.yml separately (for GitOps rollback)
-              if [ -f "$COMPOSE_FILE" ]; then
-                cp "$COMPOSE_FILE" "$BACKUP_FILE.compose"
-              fi
-
-              # Save image version metadata
-              echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
-
-              echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
-            else
-              echo "::warning::Config or data directories not found, skipping backup"
+            BACKUP_ITEMS=""
+            if [ -d "$CONFIG_DIR" ]; then
+              BACKUP_ITEMS="$BACKUP_ITEMS config"
             fi
+            if [ -d "$DATA_DIR" ]; then
+              BACKUP_ITEMS="$BACKUP_ITEMS data"
+            fi
+            if [ -f "$ENV_FILE" ]; then
+              BACKUP_ITEMS="$BACKUP_ITEMS .env"
+            fi
+
+            if [ -n "$BACKUP_ITEMS" ]; then
+              tar -czf "$BACKUP_FILE" -C "$DEPLOY_DIR" $BACKUP_ITEMS
+            else
+              tar -czf "$BACKUP_FILE" --files-from /dev/null
+              echo "::warning::No config/data/.env found, created metadata-only backup archive"
+            fi
+
+            # Backup docker-compose.prod.yml separately (for GitOps rollback)
+            if [ -f "$COMPOSE_FILE" ]; then
+              cp "$COMPOSE_FILE" "$BACKUP_FILE.compose"
+            else
+              echo "::error::Missing compose file for rollback: $COMPOSE_FILE"
+              exit 1
+            fi
+
+            # Save image version metadata
+            echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
+
+            if [ ! -f "$BACKUP_FILE" ]; then
+              echo "::error::Backup archive was not created"
+              exit 1
+            fi
+
+            if [ ! -f "$BACKUP_FILE.version" ]; then
+              echo "::error::Backup version metadata missing"
+              exit 1
+            fi
+
+            if [ ! -f "$BACKUP_FILE.compose" ]; then
+              echo "::error::Backup compose metadata missing"
+              exit 1
+            fi
+
+            echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
 
             # Rotate old backups (keep last 10)
             cd "$BACKUP_DIR"
@@ -435,7 +464,7 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [preflight, backup, test]
-    if: always() && needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success'
+    if: needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success' && needs.backup.result == 'success'
     environment:
       name: production
       url: https://moltis.ainetic.tech
@@ -539,6 +568,7 @@ jobs:
       # ===========================================
       - name: Generate .env from Secrets
         run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
           echo "::group::Generating .env file from GitHub Secrets"
 
           # Create .env file content with secrets expanded
@@ -564,6 +594,9 @@ jobs:
 
           # Domain
           MOLTIS_DOMAIN=moltis.ainetic.tech
+
+          # Deployment
+          MOLTIS_VERSION=$VERSION
           EOF
 
           # Copy to server
@@ -623,15 +656,17 @@ jobs:
       - name: Deploy container
         id: deploy
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
-          echo "::group::Deploying Moltis $VERSION"
+          echo "::group::Deploying Moltis ${{ needs.preflight.outputs.version }}"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
+            VERSION="${{ needs.preflight.outputs.version }}"
+            EXPECTED_IMAGE="${{ env.MOLTIS_IMAGE }}:${{ needs.preflight.outputs.version }}"
+
             cd ${{ env.DEPLOY_PATH }}
 
-            # Pull latest image (use production compose file)
-            docker compose -f docker-compose.prod.yml pull moltis
+            # Pull pinned image version (use production compose file)
+            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml pull moltis
 
             # Stop container gracefully
             echo "Stopping current container..."
@@ -639,7 +674,14 @@ jobs:
 
             # Start new container
             echo "Starting new container..."
-            docker compose -f docker-compose.prod.yml up -d moltis
+            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml up -d moltis
+
+            # Verify expected image is running
+            RUNNING_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo "unknown")
+            if [ "$RUNNING_IMAGE" != "$EXPECTED_IMAGE" ]; then
+              echo "::error::Running image mismatch. Expected: $EXPECTED_IMAGE, actual: $RUNNING_IMAGE"
+              exit 1
+            fi
 
             # Remove old images
             docker image prune -f
@@ -689,10 +731,10 @@ jobs:
         run: |
           echo "::group::Verifying external access"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
             # Check Traefik routing
-            curl -sf https://moltis.ainetic.tech/health -o /dev/null && \
-              echo "::notice::External access verified via Traefik" || \
-              echo "::warning::External access check failed"
+            curl -fsS https://moltis.ainetic.tech/health -o /dev/null
+            echo "::notice::External access verified via Traefik"
           EOF
           echo "::endgroup::"
 
@@ -809,8 +851,8 @@ jobs:
             # Stop container (use production compose file)
             docker compose -f docker-compose.prod.yml stop moltis || true
 
-            # Restore data (config + data directories)
-            tar -xzf $BACKUP_FILE -C /
+            # Restore config/data/.env to deployment directory
+            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
 
             # Restore docker-compose.prod.yml from backup (GitOps: exact config restore)
             if [ -f "${BACKUP_FILE}.compose" ]; then
@@ -917,16 +959,16 @@ jobs:
               echo "Main endpoint: HTTP $HTTP_CODE (non-critical - Traefik middleware may cause delays)"
             fi
 
-            # Test 5: GitOps - verify docker-compose.yml has correct Traefik labels
+            # Test 5: GitOps - verify docker-compose.prod.yml has correct Traefik labels
             echo "Test 5: GitOps configuration check..."
             cd ${{ env.DEPLOY_PATH }}
-            if grep -q 'traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)' docker-compose.yml; then
+            if grep -q 'traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)' docker-compose.prod.yml; then
               echo "GitOps: Traefik Host rule correct (moltis.ainetic.tech)"
             else
-              echo "::error::GitOps violation: Traefik Host rule mismatch in docker-compose.yml"
+              echo "::error::GitOps violation: Traefik Host rule mismatch in docker-compose.prod.yml"
               echo "Expected: Host(\`moltis.ainetic.tech\`)"
               echo "Found in file:"
-              grep "traefik.http.routers.moltis.rule" docker-compose.yml || echo "(not found)"
+              grep "traefik.http.routers.moltis.rule" docker-compose.prod.yml || echo "(not found)"
               exit 1
             fi
 
@@ -969,9 +1011,9 @@ jobs:
             set -e
             cd ${{ env.DEPLOY_PATH }}
 
-            # Check if Ollama is configured in docker-compose
-            if grep -q 'ollama:' docker-compose.yml; then
-              echo "Ollama service found in docker-compose.yml"
+            # Check if Ollama is configured in docker-compose.prod.yml
+            if grep -q 'ollama:' docker-compose.prod.yml; then
+              echo "Ollama service found in docker-compose.prod.yml"
 
               # Check if Ollama container is running
               if docker ps --filter "name=ollama" --filter "status=running" | grep -q ollama; then
@@ -988,7 +1030,7 @@ jobs:
                 echo "::warning::Ollama container is not running (may be intentional)"
               fi
             else
-              echo "::notice::Ollama service not configured in docker-compose.yml"
+              echo "::notice::Ollama service not configured in docker-compose.prod.yml"
             fi
           EOF
           echo "::endgroup::"
