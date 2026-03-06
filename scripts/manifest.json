@@ -163,6 +163,56 @@
         "TELEGRAM_API_HASH"
       ]
     },
+    "telegram-web-user-login.mjs": {
+      "version": "1.0.0",
+      "description": "One-time Telegram Web user login and storage-state save",
+      "entrypoint": true,
+      "requires": ["node"],
+      "provides": ["telegram-web", "user-login", "state-bootstrap"],
+      "env_vars": [
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_LOGIN_TIMEOUT_MS"
+      ]
+    },
+    "telegram-web-user-probe.mjs": {
+      "version": "1.0.0",
+      "description": "Probe bot via Telegram Web as user and validate reply",
+      "entrypoint": true,
+      "requires": ["node"],
+      "provides": ["telegram-web", "user-probe", "quality-check"],
+      "env_vars": [
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_MESSAGE",
+        "TELEGRAM_WEB_TIMEOUT_SECONDS",
+        "TELEGRAM_WEB_MIN_REPLY_LEN"
+      ]
+    },
+    "telegram-web-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Wrapper for browser-based user monitor without API_HASH",
+      "entrypoint": true,
+      "requires": ["node"],
+      "provides": ["telegram-web", "user-monitor", "cron-ready"],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_MESSAGE",
+        "TELEGRAM_WEB_TIMEOUT_SECONDS",
+        "TELEGRAM_WEB_MIN_REPLY_LEN"
+      ]
+    },
+    "setup-telegram-web-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Install Playwright/Chromium dependencies for web user monitor",
+      "entrypoint": true,
+      "requires": ["node", "npm"],
+      "provides": ["telegram-web", "playwright", "setup"],
+      "env_vars": [
+        "PROJECT_DIR"
+      ]
+    },
     "setup-telegram-webhook-echo.sh": {
       "version": "1.0.0",
       "description": "Deploy lightweight Telegram webhook endpoint behind Traefik",
@@ -188,7 +238,8 @@
       "jq": "any",
       "tar": "any",
       "gpg": "optional",
-      "python3": "optional"
+      "python3": "optional",
+      "node": "optional"
     }
   },
   "deploy": {
@@ -221,6 +272,14 @@
       "schedule": "*/10 * * * *",
       "description": "User-level Telegram probe and bot reply quality validation",
       "command": "/opt/moltinger/scripts/telegram-user-monitor.sh",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-web-user-monitor": {
+      "source": "cron.d/moltis-telegram-web-user-monitor",
+      "target": "/etc/cron.d/moltis-telegram-web-user-monitor",
+      "schedule": "*/10 * * * *",
+      "description": "Browser-based Telegram Web user monitoring without API_HASH",
+      "command": "/opt/moltinger/scripts/telegram-web-user-monitor.sh",
       "issue": "moltinger-2kj"
     }
   }
