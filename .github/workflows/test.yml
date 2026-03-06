@@ -289,7 +289,7 @@ jobs:
 
       - name: Start Docker stack
         run: |
-          docker-compose -f docker-compose.yml up -d
+          docker-compose -f docker-compose.yml up -d moltis
           for i in {1..24}; do
             if curl -sf http://localhost:13131/health; then
               echo "Stack is ready"

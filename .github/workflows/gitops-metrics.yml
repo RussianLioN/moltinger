@@ -43,10 +43,10 @@ jobs:
           echo "::group::Collecting GitOps metrics"
 
           # Initialize metrics directory
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
+          ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
 
           # Calculate compliance metrics
-          METRICS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
+          METRICS_RAW=$(ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
             set -e
 
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
@@ -103,6 +103,14 @@ jobs:
               "$TIMESTAMP" "$TRACKED" "$COMPLIANT" "$COMPLIANCE_PCT" "$DEPLOY_AGE_MINUTES" "$compliance_met"
           ENDSSH
           )
+
+          # Keep only JSON payload in case remote shell outputs banners/warnings.
+          METRICS=$(printf '%s\n' "$METRICS_RAW" | awk '/^\{/{line=$0} END{print line}')
+          if ! echo "$METRICS" | jq -e . > /dev/null 2>&1; then
+            echo "::error::Failed to parse GitOps metrics JSON"
+            echo "$METRICS_RAW"
+            exit 1
+          fi
 
           echo "$METRICS" > /tmp/gitops-metrics.json
           echo "metrics<<EOF" >> $GITHUB_OUTPUT
