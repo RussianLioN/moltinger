@@ -127,6 +127,9 @@ cat docs/LESSONS-LEARNED.md
 
 ## ⛔ CRITICAL: RCA при ЛЮБОМ exit code != 0
 
+Формальный протокол авто-RCA и саморефлексии:
+`docs/rules/auto-rca-self-reflection.md`
+
 **НЕПРЕРЫВНОЕ ПРАВИЛО:**
 
 ```

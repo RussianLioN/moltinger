@@ -16,6 +16,25 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Auto-RCA (Mandatory)
+
+If the agent makes a mistake, RCA must start automatically before normal work continues.
+
+Triggers:
+- Any command/tool error (`exit code != 0`)
+- User reports misunderstanding/wrong action
+- Branch/worktree/context drift
+
+Protocol:
+1. Stop implementation immediately
+2. Run short 5-whys self-reflection
+3. Create/update RCA artifact in `docs/rca/`
+4. Update lessons index
+5. Apply preventive instruction update
+6. Resume only after RCA is completed
+
+Rule reference: `docs/rules/auto-rca-self-reflection.md`
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
@@ -41,7 +60,6 @@ bd sync               # Sync with git
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
 ## Speckit Artifact Guard
 
 If work is driven by a Speckit package (`specs/<feature>/`):
