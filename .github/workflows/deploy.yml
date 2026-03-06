@@ -367,6 +367,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight, gitops-compliance]
     if: needs.preflight.outputs.should_deploy == 'true' && github.event.inputs.rollback != 'true'
+    outputs:
+      backup_file: ${{ steps.backup.outputs.backup_file }}
 
     steps:
       - name: Setup SSH
@@ -455,7 +457,14 @@ jobs:
             ls -t pre_deploy_*.compose 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
           EOF
 
+          LATEST_BACKUP=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "ls -t ${{ env.BACKUP_PATH }}/pre_deploy_*.tar.gz 2>/dev/null | head -1")
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "::error::Failed to resolve latest backup artifact"
+            exit 1
+          fi
+
           echo "backup_timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "backup_file=$LATEST_BACKUP" >> $GITHUB_OUTPUT
 
   # ===========================================
   # Deploy Moltis container
@@ -468,6 +477,8 @@ jobs:
     environment:
       name: production
       url: https://moltis.ainetic.tech
+    outputs:
+      auto_rollback_performed: ${{ steps.rollback_auto.outputs.rolled_back }}
 
     steps:
       - name: Checkout code
@@ -726,6 +737,80 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Auto rollback on health check failure
+        id: rollback_auto
+        if: steps.health.outcome == 'failure'
+        run: |
+          echo "::group::Auto rollback on failed deploy health gate"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            BACKUP_FILE="${{ needs.backup.outputs.backup_file }}"
+            if [ -z "$BACKUP_FILE" ]; then
+              echo "::error::Auto rollback requires backup_file output"
+              exit 1
+            fi
+
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Stop failed deployment
+            docker compose -f docker-compose.prod.yml stop moltis || true
+
+            # Restore pre-deploy state
+            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
+
+            if [ -f "${BACKUP_FILE}.compose" ]; then
+              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
+            else
+              echo "::error::Rollback compose metadata missing: ${BACKUP_FILE}.compose"
+              exit 1
+            fi
+
+            BACKUP_VERSION=$(cat "${BACKUP_FILE}.version" 2>/dev/null || echo "unknown")
+            if [ "$BACKUP_VERSION" != "unknown" ]; then
+              docker pull "$BACKUP_VERSION" || true
+            fi
+
+            docker compose -f docker-compose.prod.yml up -d moltis
+          EOF
+          echo "rolled_back=true" >> $GITHUB_OUTPUT
+          echo "::endgroup::"
+
+      - name: Verify auto rollback health
+        if: steps.rollback_auto.outcome == 'success'
+        run: |
+          echo "::group::Verifying auto rollback health"
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+              "docker inspect --format='{{.State.Health.Status}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'not_found'")
+
+            if [ "$HEALTH" = "healthy" ]; then
+              break
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            sleep 5
+          done
+
+          if [ "$HEALTH" != "healthy" ]; then
+            echo "::error::Auto rollback health check failed"
+            exit 1
+          fi
+
+          HTTP_CODE=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "curl -sk -o /dev/null -w '%{http_code}' https://moltis.ainetic.tech/health")
+
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "401" ]; then
+            echo "::error::Auto rollback external health check failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+          echo "::notice::Auto rollback completed and service is healthy"
+          echo "::endgroup::"
+
       - name: Verify external access
         if: success()
         run: |
@@ -743,6 +828,8 @@ jobs:
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
           STATUS="${{ steps.health.outputs.status }}"
+          ROLLED_BACK="${{ steps.rollback_auto.outputs.rolled_back }}"
+          [ -z "$ROLLED_BACK" ] && ROLLED_BACK="false"
 
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -750,6 +837,7 @@ jobs:
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auto Rollback | $ROLLED_BACK |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY
 
@@ -912,7 +1000,7 @@ jobs:
     name: Post-deployment Verification
     runs-on: ubuntu-latest
     needs: [deploy, rollback]
-    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success')
+    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success' || needs.deploy.outputs.auto_rollback_performed == 'true')
 
     steps:
       - name: Setup SSH
@@ -1110,6 +1198,7 @@ jobs:
           echo "## Deployment Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The deployment to production has failed. Please check the logs above." >> $GITHUB_STEP_SUMMARY
+          echo "Auto rollback is attempted automatically when the deploy health gate fails." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Rollback Instructions" >> $GITHUB_STEP_SUMMARY
           echo "1. Go to Actions tab" >> $GITHUB_STEP_SUMMARY
