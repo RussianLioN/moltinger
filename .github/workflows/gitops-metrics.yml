@@ -46,7 +46,7 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
 
           # Calculate compliance metrics
-          METRICS=$(ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
+          METRICS_RAW=$(ssh -q -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "bash -se" << 'ENDSSH'
             set -e
 
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
@@ -99,6 +99,7 @@ jobs:
             fi
 
             # Output JSON
+            echo "__METRICS_JSON_START__"
             cat <<EOF
           {
             "timestamp": "$TIMESTAMP",
@@ -112,8 +113,21 @@ jobs:
             }
           }
           EOF
+            echo "__METRICS_JSON_END__"
           ENDSSH
           )
+
+          METRICS=$(printf '%s\n' "$METRICS_RAW" | awk '
+            /__METRICS_JSON_START__/ { capture=1; next }
+            /__METRICS_JSON_END__/ { capture=0; next }
+            capture { print }
+          ')
+
+          if ! echo "$METRICS" | jq -e . >/dev/null 2>&1; then
+            echo "::error::Failed to parse metrics JSON from remote output"
+            echo "$METRICS_RAW"
+            exit 1
+          fi
 
           echo "$METRICS" > /tmp/gitops-metrics.json
           echo "metrics<<EOF" >> $GITHUB_OUTPUT
