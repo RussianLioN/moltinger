@@ -54,6 +54,11 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 # User-level UAT probe (главный режим)
 ./scripts/telegram-user-monitor.sh --env-file .env
 
+# Альтернатива без API_HASH: Telegram Web
+./scripts/setup-telegram-web-user-monitor.sh --project-dir /opt/moltinger
+node scripts/telegram-web-user-login.mjs --state /opt/moltinger/data/.telegram-web-state.json
+./scripts/telegram-web-user-monitor.sh
+
 # Поднять webhook endpoint (Traefik + echo)
 ./scripts/setup-telegram-webhook-echo.sh --domain moltis.ainetic.tech --path /telegram-webhook
 
@@ -70,6 +75,7 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 
 Подробно: `docs/TELEGRAM-WEBHOOK-CLI.md`
 User-monitor: `docs/TELEGRAM-USER-MONITOR.md`
+No-API_HASH monitor: `docs/TELEGRAM-WEB-USER-MONITOR.md`
 
 ---
 
