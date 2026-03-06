@@ -94,19 +94,13 @@ jobs:
             DEPLOY_AGE_MINUTES=$(( (NOW - LAST_DEPLOY) / 60 ))
 
             # Output JSON
-            cat <<EOF
-            {
-              "timestamp": "$TIMESTAMP",
-              "tracked_files": $TRACKED,
-              "compliant_files": $COMPLIANT,
-              "compliance_percentage": $COMPLIANCE_PCT,
-              "last_deploy_age_minutes": $DEPLOY_AGE_MINUTES,
-              "slos": {
-                "compliance_target": 95,
-                "compliance_met": $([[ $COMPLIANCE_PCT -ge 95 ]] && echo "true" || echo "false")
-              }
-            }
-            EOF
+            compliance_met=false
+            if [ "$COMPLIANCE_PCT" -ge 95 ]; then
+              compliance_met=true
+            fi
+
+            printf '{"timestamp":"%s","tracked_files":%s,"compliant_files":%s,"compliance_percentage":%s,"last_deploy_age_minutes":%s,"slos":{"compliance_target":95,"compliance_met":%s}}\n' \
+              "$TIMESTAMP" "$TRACKED" "$COMPLIANT" "$COMPLIANCE_PCT" "$DEPLOY_AGE_MINUTES" "$compliance_met"
           ENDSSH
           )
 
