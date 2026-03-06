@@ -2,7 +2,7 @@
 # Setup Git Hooks for Session Management
 # Run once after cloning repo or when hooks are updated
 
-set -e
+set -euo pipefail
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo '.')"
 HOOKS_DIR="$PROJECT_ROOT/.githooks"
@@ -60,15 +60,37 @@ chmod +x "$HOOKS_DIR/pre-commit"
 # Create pre-push hook
 cat > "$HOOKS_DIR/pre-push" << 'EOF'
 #!/bin/bash
-# Pre-push: Block push when branch/worktree session guard detects drift.
+# Pre-push: block pushes on session drift or incomplete RCA protocol.
 
 set -euo pipefail
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
-GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
+SESSION_GUARD="$PROJECT_ROOT/scripts/git-session-guard.sh"
+RCA_GUARD="$PROJECT_ROOT/scripts/rca-completion-check.sh"
 
-if [[ -x "$GUARD_SCRIPT" ]]; then
-  "$GUARD_SCRIPT" --check --hook pre-push
+if [[ -x "$SESSION_GUARD" ]]; then
+  "$SESSION_GUARD" --check --hook pre-push
+fi
+
+if [[ -x "$RCA_GUARD" ]]; then
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ -z "${local_ref:-}" ]]; then
+      continue
+    fi
+
+    # Deleting remote refs should not trigger RCA checks.
+    if [[ "${local_sha}" =~ ^0+$ ]]; then
+      continue
+    fi
+
+    if [[ "${remote_sha}" =~ ^0+$ ]]; then
+      "$RCA_GUARD" --check --range "${local_sha}" --hook pre-push
+    elif ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+      "$RCA_GUARD" --check --range "${local_sha}" --hook pre-push
+    else
+      "$RCA_GUARD" --check --range "${remote_sha}..${local_sha}" --hook pre-push
+    fi
+  done
 fi
 
 exit 0
@@ -77,11 +99,11 @@ EOF
 chmod +x "$HOOKS_DIR/pre-push"
 
 # Configure git to use .githooks
-git config core.hooksPath "$HOOKS_DIR"
+git config core.hooksPath ".githooks"
 
 echo "✅ Git hooks configured:"
 echo "   - pre-commit: Session logging + session guard"
-echo "   - pre-push: Session guard"
+echo "   - pre-push: Session guard + RCA completion guard"
 echo ""
 echo "📁 Hooks location: $HOOKS_DIR"
 echo "⚙️  Git core.hooksPath: $(git config core.hooksPath)"
