@@ -44,12 +44,9 @@ const page = await context.newPage();
 try {
   await page.goto("https://web.telegram.org/k/", { waitUntil: "domcontentloaded", timeout: 60_000 });
 
-  // Login is considered complete when chat/search UI appears.
-  const loggedInSelectorCandidates = [
-    'input[placeholder*="Search"]',
-    'div[contenteditable="true"][role="textbox"]',
-    '[data-peer-id]',
-  ];
+  // Telegram Web is considered logged in only when real chat peers are visible.
+  // Previous heuristics based on generic textboxes caused false positives.
+  const loggedInSelectorCandidates = ['[data-peer-id]'];
 
   const deadline = Date.now() + timeoutMs;
   let loggedIn = false;
@@ -77,12 +74,12 @@ try {
     );
     process.exitCode = 2;
   } else {
-    await context.storageState({ path: statePath });
+    await context.storageState({ path: statePath, indexedDB: true });
     console.log(
       JSON.stringify({
         ok: true,
         status: "pass",
-        message: "Telegram Web login state saved",
+        message: "Telegram Web login state saved (cookies + localStorage + indexedDB)",
         state: statePath,
       })
     );
