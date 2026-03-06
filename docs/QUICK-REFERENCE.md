@@ -48,6 +48,25 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 # CI schedule: .github/workflows/telegram-webhook-monitor.yml
 ```
 
+### Standalone Telegram CLI (без Moltis)
+
+```bash
+# Поднять webhook endpoint (Traefik + echo)
+./scripts/setup-telegram-webhook-echo.sh --domain moltis.ainetic.tech --path /telegram-webhook
+
+# Управление webhook напрямую через Bot API
+./scripts/telegram-webhook-control.sh webhook-info
+./scripts/telegram-webhook-control.sh webhook-set --url "https://YOUR_DOMAIN/HOOK"
+
+# Отправка как бот
+./scripts/telegram-bot-send.sh --chat-id 262872984 --text "/status"
+
+# Отправка как пользователь (MTProto)
+./scripts/telegram-user-send.py --to @some_bot --text "/start"
+```
+
+Подробно: `docs/TELEGRAM-WEBHOOK-CLI.md`
+
 ---
 
 ## Skills System
