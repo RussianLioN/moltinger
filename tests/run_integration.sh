@@ -152,7 +152,8 @@ find_test_files() {
         fi
     done < <(find "$INTEGRATION_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
-    echo "${test_files[@]}"
+    # Print each file on its own line so the reader loop keeps entries separated.
+    printf '%s\n' "${test_files[@]}"
 }
 
 # ==============================================================================

@@ -915,40 +915,38 @@ Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
 EOF
 }
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --json)
-            OUTPUT_JSON=true
-            NO_COLOR=true
-            shift
-            ;;
-        --no-color)
-            NO_COLOR=true
-            shift
-            ;;
-        --once)
-            RUN_ONCE=true
-            shift
-            ;;
-        --interval)
-            HEALTH_CHECK_INTERVAL="$2"
-            shift 2
-            ;;
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            show_help
-            exit 1
-            ;;
-    esac
-done
-
-# Apply color settings
-disable_colors
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --json)
+                OUTPUT_JSON=true
+                NO_COLOR=true
+                shift
+                ;;
+            --no-color)
+                NO_COLOR=true
+                shift
+                ;;
+            --once)
+                RUN_ONCE=true
+                shift
+                ;;
+            --interval)
+                HEALTH_CHECK_INTERVAL="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
 
 # Signal handlers
 cleanup() {
@@ -956,7 +954,10 @@ cleanup() {
     exit 0
 }
 
-trap cleanup SIGTERM SIGINT
-
-# Run main
-main "$@"
+# Run main only when executed directly, not when sourced by tests.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    parse_args "$@"
+    disable_colors
+    trap cleanup SIGTERM SIGINT
+    main "$@"
+fi
