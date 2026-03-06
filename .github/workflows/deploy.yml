@@ -854,14 +854,14 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             cd ${{ env.DEPLOY_PATH }}
 
-            # Record the git commit SHA that was deployed
-            # This enables audit trail and drift detection
-            git log -1 --format="%H" > .deployed-sha 2>/dev/null || echo "${{ github.sha }}" > .deployed-sha
+            # Record the exact commit from the CI workflow context.
+            # Do not read local git state on server: deployment uses file sync, not git pull.
+            echo "${{ github.sha }}" > .deployed-sha
 
             # Also record deployment metadata
             cat > .deployment-info << INFO
           deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          git_sha=$(cat .deployed-sha)
+          git_sha=${{ github.sha }}
           workflow_run=${{ github.run_id }}
           version=${{ needs.preflight.outputs.version }}
           INFO
