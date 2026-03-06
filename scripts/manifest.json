@@ -96,6 +96,56 @@
         "MONITOR_VALIDATE_PREVIEW"
       ],
       "cron": "*/15 * * * *"
+    },
+    "telegram-webhook-control.sh": {
+      "version": "1.0.0",
+      "description": "Direct Telegram Bot API webhook management (set/get/delete)",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["telegram", "webhook", "bot-api", "control"],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-bot-send.sh": {
+      "version": "1.0.0",
+      "description": "Send Telegram messages from CLI as bot",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["telegram", "bot-api", "send-message"],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-user-send.py": {
+      "version": "1.0.0",
+      "description": "Send Telegram messages from CLI as user via MTProto (Telethon)",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "provides": ["telegram", "mtproto", "user-send"],
+      "env_vars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
+    "setup-telegram-webhook-echo.sh": {
+      "version": "1.0.0",
+      "description": "Deploy lightweight Telegram webhook endpoint behind Traefik",
+      "entrypoint": true,
+      "requires": ["docker"],
+      "provides": ["telegram", "webhook", "traefik", "endpoint-setup"],
+      "env_vars": [
+        "DOMAIN",
+        "PATH_PREFIX",
+        "CONTAINER_NAME",
+        "IMAGE",
+        "NETWORK"
+      ]
     }
   },
   "dependencies": {
@@ -107,7 +157,8 @@
       "curl": "any",
       "jq": "any",
       "tar": "any",
-      "gpg": "optional"
+      "gpg": "optional",
+      "python3": "optional"
     }
   },
   "deploy": {
