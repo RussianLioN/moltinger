@@ -186,6 +186,36 @@
         "TELEGRAM_SESSION"
       ]
     },
+    "telegram-user-probe.py": {
+      "version": "1.0.0",
+      "description": "Send probe as Telegram user and validate bot reply quality",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "provides": ["telegram", "mtproto", "probe", "uat"],
+      "env_vars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
+    "telegram-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "One-shot user-level monitor wrapper for periodic checks",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "provides": ["telegram", "user-monitor", "quality-check"],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_MONITOR_TARGET",
+        "TELEGRAM_MONITOR_MESSAGE",
+        "TELEGRAM_MONITOR_TIMEOUT_SECONDS",
+        "TELEGRAM_MONITOR_POLL_INTERVAL",
+        "TELEGRAM_MONITOR_MIN_REPLY_LEN",
+        "TELEGRAM_SESSION",
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH"
+      ]
+    },
     "setup-telegram-webhook-echo.sh": {
       "version": "1.0.0",
       "description": "Deploy lightweight Telegram webhook endpoint behind Traefik",
@@ -236,6 +266,14 @@
       "schedule": "*/15 * * * *",
       "description": "Telegram webhook health and response quality monitoring",
       "command": "/opt/moltinger/scripts/telegram-webhook-monitor.sh --json",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-user-monitor": {
+      "source": "cron.d/moltis-telegram-user-monitor",
+      "target": "/etc/cron.d/moltis-telegram-user-monitor",
+      "schedule": "*/10 * * * *",
+      "description": "User-level Telegram probe and bot reply quality validation",
+      "command": "/opt/moltinger/scripts/telegram-user-monitor.sh",
       "issue": "moltinger-2kj"
     }
   }
