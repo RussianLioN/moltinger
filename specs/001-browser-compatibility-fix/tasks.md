@@ -78,9 +78,9 @@
 - [ ] T013 [US1] If H4/H5 confirmed (CORS/CSP): add CORS headers middleware to `docker-compose.prod.yml`
 - [x] T014 [US1] Validate docker-compose.prod.yml syntax: run `docker compose -f docker-compose.prod.yml config --quiet` locally
 - [x] T015 [US1] Deploy fix via GitOps: commit changes, push to branch, create PR or merge to main for CI/CD deployment
-- [ ] T016 [US1] Verify fix in Chrome (regression test): open moltis.ainetic.tech, login, confirm UI works as before
-- [ ] T017 [US1] Verify fix in Yandex Browser: open moltis.ainetic.tech, login once, confirm no auth loop, UI is interactive
-- [ ] T018 [US1] Verify fix in Arc Browser: open moltis.ainetic.tech, confirm page loads (no blank), login works, UI is interactive
+- [x] T016 [US1] Verify fix in Chrome (regression test): open moltis.ainetic.tech, login, confirm UI works as before
+- [x] T017 [US1] Verify fix in Yandex Browser: open moltis.ainetic.tech, login once, confirm no auth loop, UI is interactive
+- [x] T018 [US1] Verify fix in Arc Browser: open moltis.ainetic.tech, confirm page loads (no blank), login works, UI is interactive
 
 **Checkpoint**: All 3 browsers load Moltis UI and authenticate correctly. MVP delivered.
 
@@ -126,7 +126,7 @@
 
 - [ ] T027 [P] Document browser compatibility findings and fix in `docs/LESSONS-LEARNED.md` — add new section "Browser Compatibility (2026-03-05)"
 - [ ] T028 [P] If root cause was in Moltis source: open upstream issue at https://github.com/moltis-org/moltis/issues with reproduction steps and workaround description
-- [ ] T029 Close Beads task moltinger-vt0 with reason: `bd close moltinger-vt0 --reason "Fixed browser compatibility: [summary of fix]"`
+- [x] T029 Close Beads task moltinger-vt0 with reason: `bd close moltinger-vt0 --reason "Fixed browser compatibility: [summary of fix]"`
 - [ ] T030 Run quickstart.md validation: verify diagnosis and fix steps in `specs/001-browser-compatibility-fix/quickstart.md` match actual steps taken, update if needed
 - [ ] T031 Sync and push: `bd sync && git push`
 
