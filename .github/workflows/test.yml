@@ -277,6 +277,16 @@ jobs:
       - name: Make scripts executable
         run: chmod +x tests/*.sh tests/e2e/*.sh tests/lib/*.sh
 
+      - name: Prepare Docker test environment
+        run: |
+          mkdir -p secrets
+          printf '%s\n' "test_password" > secrets/moltis_password.txt
+          printf '%s\n' "test_telegram_bot_token" > secrets/telegram_bot_token.txt
+          printf '%s\n' "test_tavily_api_key" > secrets/tavily_api_key.txt
+          printf '%s\n' "test_glm_api_key" > secrets/glm_api_key.txt
+
+          docker network inspect ainetic_net > /dev/null 2>&1 || docker network create ainetic_net
+
       - name: Start Docker stack
         run: |
           docker-compose -f docker-compose.yml up -d
