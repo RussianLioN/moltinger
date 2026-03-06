@@ -39,7 +39,7 @@ After skill sync, restart Codex so it reloads the available skills list.
 
 ## Scope of Imported Assets
 
-- Imported automatically: `.claude/skills/*`
-- Kept as in-repo references: `.claude/commands/*`, `.claude/agents/*`
+- Imported automatically as native skills: `.claude/skills/*`
+- Imported automatically as generated bridge skills: `.claude/commands/*`, `.claude/agents/*`
 
-If you want command-level parity in Codex, migrate legacy command files into skill directories over time.
+Generated bridge skills are written under `$CODEX_HOME/skills/claude-bridge/{commands,agents}`.

@@ -30,6 +30,7 @@ After installing or updating skills, restart Codex to refresh skill discovery.
 
 ## Scope Notes
 
-- `.claude/skills/*` are imported as Codex skills.
-- `.claude/commands/*` and `.claude/agents/*` stay in-repo as reference workflows.
+- `.claude/skills/*` are imported as native Codex skills.
+- `.claude/commands/*` are migrated into generated bridge skills under `$CODEX_HOME/skills/claude-bridge/commands/*`.
+- `.claude/agents/*` are migrated into generated bridge skills under `$CODEX_HOME/skills/claude-bridge/agents/*`.
 - When both a command and a skill describe the same workflow, prefer the skill.
