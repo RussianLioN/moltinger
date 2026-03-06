@@ -77,7 +77,7 @@
 - [ ] T012 [US1] If H3 confirmed (WebSocket upgrade): add WebSocket-specific headers middleware to `docker-compose.prod.yml`
 - [ ] T013 [US1] If H4/H5 confirmed (CORS/CSP): add CORS headers middleware to `docker-compose.prod.yml`
 - [x] T014 [US1] Validate docker-compose.prod.yml syntax: run `docker compose -f docker-compose.prod.yml config --quiet` locally
-- [ ] T015 [US1] Deploy fix via GitOps: commit changes, push to branch, create PR or merge to main for CI/CD deployment
+- [x] T015 [US1] Deploy fix via GitOps: commit changes, push to branch, create PR or merge to main for CI/CD deployment
 - [ ] T016 [US1] Verify fix in Chrome (regression test): open moltis.ainetic.tech, login, confirm UI works as before
 - [ ] T017 [US1] Verify fix in Yandex Browser: open moltis.ainetic.tech, login once, confirm no auth loop, UI is interactive
 - [ ] T018 [US1] Verify fix in Arc Browser: open moltis.ainetic.tech, confirm page loads (no blank), login works, UI is interactive
