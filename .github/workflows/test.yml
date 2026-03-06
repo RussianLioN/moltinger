@@ -279,6 +279,9 @@ jobs:
 
       - name: Prepare Docker test environment
         run: |
+          mkdir -p config data
+          chmod -R ugo+rwX config data
+
           mkdir -p secrets
           printf '%s\n' "test_password" > secrets/moltis_password.txt
           printf '%s\n' "test_telegram_bot_token" > secrets/telegram_bot_token.txt
