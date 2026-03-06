@@ -915,48 +915,50 @@ Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
 EOF
 }
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --json)
-            OUTPUT_JSON=true
-            NO_COLOR=true
-            shift
-            ;;
-        --no-color)
-            NO_COLOR=true
-            shift
-            ;;
-        --once)
-            RUN_ONCE=true
-            shift
-            ;;
-        --interval)
-            HEALTH_CHECK_INTERVAL="$2"
-            shift 2
-            ;;
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            show_help
-            exit 1
-            ;;
-    esac
-done
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --json)
+                OUTPUT_JSON=true
+                NO_COLOR=true
+                shift
+                ;;
+            --no-color)
+                NO_COLOR=true
+                shift
+                ;;
+            --once)
+                RUN_ONCE=true
+                shift
+                ;;
+            --interval)
+                HEALTH_CHECK_INTERVAL="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
 
-# Apply color settings
-disable_colors
+    # Apply color settings
+    disable_colors
 
-# Signal handlers
-cleanup() {
-    log_info "Health monitor shutting down"
-    exit 0
-}
+    # Signal handlers
+    cleanup() {
+        log_info "Health monitor shutting down"
+        exit 0
+    }
 
-trap cleanup SIGTERM SIGINT
+    trap cleanup SIGTERM SIGINT
 
-# Run main
-main "$@"
+    # Run main
+    main "$@"
+fi

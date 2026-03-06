@@ -159,26 +159,46 @@ run_test_file() {
     local test_name
     test_name=$(basename "$test_file" .sh)
 
+    test_start "$test_name"
     log_info "Running: $test_name"
 
-    # Source the test file and explicitly call run_all_tests
-    # This ensures test functions are loaded in current shell
-    source "$test_file"
+    local output=""
+    local exit_code=0
 
-    # Call run_all_tests if it exists
-    if declare -f run_all_tests > /dev/null; then
-        run_all_tests
+    set +e
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        bash "$test_file" > /dev/null 2>&1
+        exit_code=$?
     else
-        log_error "run_all_tests function not found in: $test_file"
-        test_fail "Test file missing run_all_tests function: $test_file"
-        return 1
+        output=$(bash "$test_file" 2>&1)
+        exit_code=$?
     fi
+    set -e
+
+    if [[ "$OUTPUT_JSON" != "true" ]] && [[ -n "$output" ]]; then
+        echo "$output"
+    fi
+
+    case "$exit_code" in
+        0)
+            test_pass
+            ;;
+        2)
+            test_skip "Test prerequisites not met"
+            ;;
+        *)
+            test_fail "Unit test script failed with exit code $exit_code"
+            ;;
+    esac
 }
 
 # Run all test files
 run_all_tests() {
     local test_files=()
     while IFS= read -r -d '' file; do
+        if [[ -n "$FILTER_PATTERN" ]] && [[ ! "$file" =~ $FILTER_PATTERN ]]; then
+            continue
+        fi
         test_files+=("$file")
     done < <(find "$UNIT_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
@@ -194,7 +214,9 @@ run_all_tests() {
     log_info "Found ${#test_files[@]} unit test(s)"
 
     for test_file in "${test_files[@]}"; do
-        run_test_file "$test_file"
+        if ! run_test_file "$test_file"; then
+            log_warn "Unexpected runner failure: $test_file"
+        fi
     done
 }
 

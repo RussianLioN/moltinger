@@ -27,7 +27,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/../.."
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Source test helpers
 # shellcheck source=tests/lib/test_helpers.sh
@@ -618,9 +618,11 @@ test_provider_status_json() {
 
 # Run all failover chain E2E tests
 run_failover_chain_tests() {
-    local setup_result
-    setup_result=$(setup_failover_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_failover_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         test_start "failover_chain_tests"

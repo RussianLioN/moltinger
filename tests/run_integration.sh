@@ -152,7 +152,7 @@ find_test_files() {
         fi
     done < <(find "$INTEGRATION_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
-    echo "${test_files[@]}"
+    printf '%s\n' "${test_files[@]}"
 }
 
 # ==============================================================================
@@ -224,14 +224,36 @@ run_test_file() {
     local test_name
     test_name=$(basename "$test_file" .sh)
 
-    # Source and run the test file
-    if source "$test_file"; then
-        log_debug "Test file sourced successfully: $test_file"
+    test_start "$test_name"
+
+    local output=""
+    local exit_code=0
+
+    set +e
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        bash "$test_file" > /dev/null 2>&1
+        exit_code=$?
     else
-        log_error "Failed to source test file: $test_file"
-        test_fail "Failed to execute test file: $test_name"
-        return 1
+        output=$(bash "$test_file" 2>&1)
+        exit_code=$?
     fi
+    set -e
+
+    if [[ "$OUTPUT_JSON" != "true" ]] && [[ -n "$output" ]]; then
+        echo "$output"
+    fi
+
+    case "$exit_code" in
+        0)
+            test_pass
+            ;;
+        2)
+            test_skip "Test prerequisites not met"
+            ;;
+        *)
+            test_fail "Integration test script failed with exit code $exit_code"
+            ;;
+    esac
 }
 
 # Run all test files sequentially
@@ -253,7 +275,9 @@ run_all_tests() {
     log_info "Found ${#test_files[@]} integration test(s)"
 
     for test_file in "${test_files[@]}"; do
-        run_test_file "$test_file"
+        if ! run_test_file "$test_file"; then
+            log_warn "Unexpected runner failure: $test_file"
+        fi
     done
 }
 
@@ -338,10 +362,9 @@ main() {
 
     # Run all tests
     if [[ "$PARALLEL" == "true" ]]; then
-        run_all_tests_parallel
-    else
-        run_all_tests
+        log_warn "Parallel mode is temporarily disabled to keep deterministic result aggregation"
     fi
+    run_all_tests
 
     # Generate report
     generate_report

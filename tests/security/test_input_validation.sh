@@ -637,9 +637,11 @@ test_whitespace_characters() {
 
 # Run all input validation security tests
 run_input_validation_tests() {
-    local setup_result
-    setup_result=$(setup_input_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_input_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         # Skip all tests

@@ -464,9 +464,11 @@ test_get_updates() {
 
 # Run all Telegram integration tests
 run_telegram_integration_tests() {
-    local setup_result
-    setup_result=$(setup_telegram_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_telegram_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         # Skip all tests

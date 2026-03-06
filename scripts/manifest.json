@@ -1,42 +1,40 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "moltinger-scripts",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Server automation scripts for Moltinger project",
   "maintainer": "DevOps Team",
   "repository": "https://github.com/RussianLioN/moltinger",
   "scripts": {
-    "deploy.sh": {
-      "version": "2.1.0",
-      "description": "Blue-green deployment with health checks, rollback, notifications",
-      "entrypoint": true,
-      "requires": ["docker", "docker-compose"],
-      "provides": ["deploy", "rollback", "status", "start", "stop", "restart", "logs"],
-      "gitops": true
-    },
     "backup-moltis-enhanced.sh": {
-      "version": "2.1.0",
+      "version": "3.0.0",
       "description": "Enterprise backup with encryption, offsite backup, integrity verification",
       "entrypoint": true,
       "requires": ["docker", "tar", "gpg"],
       "provides": ["backup", "restore", "verify", "list"],
       "cron": "0 2 * * *"
     },
-    "health-monitor.sh": {
+    "build-lessons-index.sh": {
       "version": "1.0.0",
-      "description": "Health monitoring and alerting",
+      "description": "Generate lessons learned index from RCA reports",
       "entrypoint": true,
-      "requires": ["curl", "docker"],
-      "provides": ["check", "watch", "alert"],
-      "cron": "*/5 * * * *"
+      "requires": ["find", "grep", "sed", "cut", "sort"],
+      "provides": ["build-lessons-index"]
     },
-    "test-moltis-api.sh": {
+    "claude-rate-watch.sh": {
       "version": "1.0.0",
-      "description": "Moltis HTTP API testing script",
+      "description": "Monitor Claude debug logs for rate limit status",
       "entrypoint": true,
-      "requires": ["curl", "jq"],
-      "provides": ["test-api"],
-      "env_vars": ["MOLTIS_URL", "MOLTIS_PASSWORD"]
+      "requires": ["find", "grep", "awk"],
+      "provides": ["rate-watch", "rate-watch-live", "rate-watch-stats"]
+    },
+    "deploy.sh": {
+      "version": "2.2.0",
+      "description": "Blue-green deployment with health checks, rollback, notifications",
+      "entrypoint": true,
+      "requires": ["docker", "docker-compose"],
+      "provides": ["deploy", "rollback", "status", "start", "stop", "restart", "logs"],
+      "gitops": true
     },
     "gitops-guards.sh": {
       "version": "1.0.0",
@@ -54,14 +52,6 @@
         "gitops_guard_config"
       ]
     },
-    "scripts-verify.sh": {
-      "version": "1.0.0",
-      "description": "Validate scripts manifest and verify integrity",
-      "entrypoint": true,
-      "requires": ["jq", "sha256sum"],
-      "provides": ["verify", "validate"],
-      "ci": true
-    },
     "gitops-metrics.sh": {
       "version": "1.0.0",
       "description": "Collect and report GitOps compliance metrics",
@@ -74,6 +64,87 @@
         "drift_detection_sla_minutes": 360
       },
       "cron": "0 * * * *"
+    },
+    "health-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Health monitoring and alerting",
+      "entrypoint": true,
+      "requires": ["curl", "docker"],
+      "provides": ["check", "watch", "alert"],
+      "cron": "*/5 * * * *"
+    },
+    "ollama-health.sh": {
+      "version": "1.0.0",
+      "description": "Health checks for Ollama sidecar and fallback generation",
+      "entrypoint": true,
+      "requires": ["curl", "docker", "jq"],
+      "provides": ["ollama-health", "ollama-health-json"]
+    },
+    "preflight-check.sh": {
+      "version": "1.0.0",
+      "description": "Pre-deployment validation for compose config and required secrets",
+      "entrypoint": true,
+      "requires": ["jq"],
+      "provides": ["preflight-check", "preflight-json", "preflight-ci"],
+      "ci": true
+    },
+    "query-lessons.sh": {
+      "version": "1.0.0",
+      "description": "Query RCA lessons by severity, tag, or category",
+      "entrypoint": true,
+      "requires": ["find", "grep", "sed"],
+      "provides": ["query-lessons"]
+    },
+    "rate-check.sh": {
+      "version": "1.0.0",
+      "description": "Quick rate-limit check from Claude debug logs",
+      "entrypoint": true,
+      "requires": ["find", "grep", "awk"],
+      "provides": ["rate-check", "rate-watch", "rate-alarm"]
+    },
+    "scripts-verify.sh": {
+      "version": "1.0.0",
+      "description": "Validate scripts manifest and verify integrity",
+      "entrypoint": true,
+      "requires": ["jq", "sha256sum"],
+      "provides": ["verify", "validate"],
+      "ci": true
+    },
+    "setup-git-hooks.sh": {
+      "version": "1.0.0",
+      "description": "Install repository git hooks for session management automation",
+      "entrypoint": true,
+      "requires": ["git"],
+      "provides": ["setup-git-hooks"]
+    },
+    "sync-agent-instructions.sh": {
+      "version": "1.0.0",
+      "description": "Regenerate or check AGENTS.md from .ai instruction sources",
+      "entrypoint": true,
+      "requires": ["awk"],
+      "provides": ["sync-agent-instructions", "check-agent-instructions"]
+    },
+    "sync-claude-skills-to-codex.sh": {
+      "version": "1.0.0",
+      "description": "Sync Claude bridge skills into Codex global skills directory",
+      "entrypoint": true,
+      "requires": ["find", "rsync"],
+      "provides": ["sync-skills-install", "sync-skills-check"]
+    },
+    "test-moltis-api.sh": {
+      "version": "1.0.0",
+      "description": "Moltis HTTP API testing script",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["test-api"],
+      "env_vars": ["MOLTIS_URL", "MOLTIS_PASSWORD"]
+    },
+    "zai-rate-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Monitor Z.ai Coding Plan API rate limits and output JSON for CI",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["zai-rate-monitor", "zai-rate-watch", "zai-rate-json"]
     }
   },
   "dependencies": {

@@ -161,7 +161,7 @@ find_test_files() {
         fi
     done < <(find "$E2E_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
-    echo "${test_files[@]}"
+    printf '%s\n' "${test_files[@]}"
 }
 
 # ==============================================================================
@@ -182,7 +182,22 @@ start_containers() {
     fi
 
     # Start the stack
-    if docker compose -f docker-compose.prod.yml up -d 2>&1; then
+    local compose_exit=0
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        if docker compose -f docker-compose.prod.yml up -d > /dev/null 2>&1; then
+            compose_exit=0
+        else
+            compose_exit=$?
+        fi
+    else
+        if docker compose -f docker-compose.prod.yml up -d 2>&1; then
+            compose_exit=0
+        else
+            compose_exit=$?
+        fi
+    fi
+
+    if [[ $compose_exit -eq 0 ]]; then
         log_info "Containers started successfully"
         CONTAINERS_STARTED=true
         STARTED_CONTAINERS=("moltis")
@@ -221,7 +236,11 @@ stop_containers() {
         log_info "Stopping containers..."
 
         cd "$PROJECT_ROOT"
-        docker compose -f docker-compose.prod.yml down 2>&1 || true
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            docker compose -f docker-compose.prod.yml down > /dev/null 2>&1 || true
+        else
+            docker compose -f docker-compose.prod.yml down 2>&1 || true
+        fi
 
         log_info "Containers stopped"
     fi
@@ -252,35 +271,46 @@ run_test_file() {
     local test_name
     test_name=$(basename "$test_file" .sh)
 
+    test_start "$test_name"
     log_info "Running: $test_name (timeout: ${TIMEOUT}s)"
 
-    # Run with timeout
     local output
     local exit_code
 
-    output=$(timeout "$TIMEOUT" bash -c "
-        source '$LIB_DIR/test_helpers.sh'
-        set_json_output '$OUTPUT_JSON'
-        source '$test_file'
-    " 2>&1) || exit_code=$?
+    set +e
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        timeout "$TIMEOUT" bash "$test_file" > /dev/null 2>&1
+        exit_code=$?
+    else
+        output=$(timeout "$TIMEOUT" bash "$test_file" 2>&1)
+        exit_code=$?
+    fi
+    set -e
 
-    if [[ ${exit_code:-0} -eq 124 ]]; then
-        log_error "Test timed out after ${TIMEOUT}s: $test_name"
-        test_fail "Test timed out: $test_name"
-        return 1
-    elif [[ ${exit_code:-0} -ne 0 ]]; then
-        log_error "Test failed with exit code $exit_code: $test_name"
+    if [[ "$OUTPUT_JSON" != "true" ]] && [[ -n "${output:-}" ]]; then
         echo "$output"
-        test_fail "Test failed: $test_name"
-        return 1
     fi
 
-    log_debug "Test completed: $test_name"
+    case "${exit_code:-0}" in
+        0)
+            test_pass
+            ;;
+        2)
+            test_skip "Test prerequisites not met"
+            ;;
+        124)
+            log_error "Test timed out after ${TIMEOUT}s: $test_name"
+            test_fail "Test timed out: $test_name"
+            ;;
+        *)
+            log_error "Test failed with exit code ${exit_code:-unknown}: $test_name"
+            test_fail "Test failed: $test_name"
+            ;;
+    esac
 }
 
 # Run all test files
 run_all_tests() {
-    local test_files
     local test_files=()
     while IFS= read -r line; do
         [[ -n "$line" ]] && test_files+=("$line")
@@ -298,7 +328,9 @@ run_all_tests() {
     log_info "Found ${#test_files[@]} E2E test(s)"
 
     for test_file in "${test_files[@]}"; do
-        run_test_file "$test_file"
+        if ! run_test_file "$test_file"; then
+            log_warn "Unexpected runner failure: $test_file"
+        fi
     done
 }
 
@@ -347,7 +379,12 @@ main() {
     fi
 
     # Start containers
-    start_containers
+    if ! start_containers; then
+        test_start "environment_startup"
+        test_fail "Failed to start required containers for E2E tests"
+        generate_report
+        return 1
+    fi
 
     # Run all tests
     run_all_tests

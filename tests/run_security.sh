@@ -42,7 +42,7 @@ VERBOSE=false
 SEVERITY_FILTER=""
 
 # Security results (compatible with bash and zsh)
-SECURITY_FINDINGS=()
+declare -a SECURITY_FINDINGS=()
 VULNERABILITY_COUNT=0
 
 # ==============================================================================
@@ -286,44 +286,38 @@ run_test_file() {
     local test_name
     test_name=$(basename "$test_file" .sh)
 
+    test_start "$test_name"
     log_info "Running: $test_name"
 
-    # Source the test file
-    if ! source "$test_file"; then
-        log_error "Failed to source test file: $test_file"
-        test_fail "Failed to source test file: $test_name"
-        return 1
+    local output=""
+    local exit_code=0
+
+    set +e
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        bash "$test_file" > /dev/null 2>&1
+        exit_code=$?
+    else
+        output=$(bash "$test_file" 2>&1)
+        exit_code=$?
+    fi
+    set -e
+
+    if [[ "$OUTPUT_JSON" != "true" ]] && [[ -n "$output" ]]; then
+        echo "$output"
     fi
 
-    # Call the test runner function based on test name
-    # test_authentication.sh -> run_authentication_tests
-    # test_input_validation.sh -> run_input_validation_tests
-    local test_function_name=""
-    case "$test_name" in
-        test_authentication)
-            test_function_name="run_authentication_tests"
+    case "$exit_code" in
+        0)
+            test_pass
             ;;
-        test_input_validation)
-            test_function_name="run_input_validation_tests"
+        2)
+            test_skip "Test prerequisites not met"
             ;;
         *)
-            # Try to infer function name: test_<name> -> run_<name>_tests
-            local base_name="${test_name#test_}"
-            test_function_name="run_${base_name}_tests"
+            log_error "Security test script failed with exit code $exit_code: $test_name"
+            test_fail "Security test script failed with exit code $exit_code"
             ;;
     esac
-
-    # Check if function exists and call it
-    if declare -f "$test_function_name" > /dev/null; then
-        log_debug "Calling test function: $test_function_name"
-        # Export output mode variables for sourced scripts
-        export OUTPUT_JSON VERBOSE
-        "$test_function_name"
-    else
-        log_warn "Test function $test_function_name not found in $test_file"
-        # Some test files may run automatically when sourced (with BASH_SOURCE check)
-        log_debug "Test file may run tests automatically on source"
-    fi
 }
 
 # Run all test files
@@ -346,7 +340,9 @@ run_all_tests() {
     log_info "Found ${#test_files[@]} security test(s)"
 
     for test_file in "${test_files[@]}"; do
-        run_test_file "$test_file"
+        if ! run_test_file "$test_file"; then
+            log_warn "Continuing after security runner error: $test_file"
+        fi
     done
 }
 
@@ -461,16 +457,18 @@ generate_security_report_json() {
     local medium_count=0
     local low_count=0
 
-    for finding in "${SECURITY_FINDINGS[@]}"; do
-        local severity
-        severity=$(echo "$finding" | jq -r '.severity')
-        case "$severity" in
-            critical) ((critical_count++)) || true ;;
-            high) ((high_count++)) || true ;;
-            medium) ((medium_count++)) || true ;;
-            low) ((low_count++)) || true ;;
-        esac
-    done
+    if [[ ${#SECURITY_FINDINGS[@]} -gt 0 ]]; then
+        for finding in "${SECURITY_FINDINGS[@]}"; do
+            local severity
+            severity=$(echo "$finding" | jq -r '.severity')
+            case "$severity" in
+                critical) ((critical_count++)) || true ;;
+                high) ((high_count++)) || true ;;
+                medium) ((medium_count++)) || true ;;
+                low) ((low_count++)) || true ;;
+            esac
+        done
+    fi
 
     # Output JSON
     jq -n \

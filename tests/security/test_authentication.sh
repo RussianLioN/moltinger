@@ -433,9 +433,11 @@ test_logout_invalidates_session() {
 
 # Run all authentication security tests
 run_authentication_tests() {
-    local setup_result
-    setup_result=$(setup_auth_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_auth_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         # Skip all tests

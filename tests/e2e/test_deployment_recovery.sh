@@ -28,7 +28,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/../.."
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Source test helpers
 # shellcheck source=tests/lib/test_helpers.sh
@@ -606,9 +606,11 @@ test_multiple_restart_stress() {
 
 # Run all deployment recovery E2E tests
 run_deployment_recovery_tests() {
-    local setup_result
-    setup_result=$(setup_deployment_recovery_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_deployment_recovery_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         test_start "deployment_recovery_tests"

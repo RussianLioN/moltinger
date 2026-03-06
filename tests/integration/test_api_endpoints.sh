@@ -397,9 +397,11 @@ test_api_response_time() {
 
 # Run all API endpoint tests
 run_api_endpoint_tests() {
-    local setup_result
-    setup_result=$(setup_api_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_api_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         # Skip all tests

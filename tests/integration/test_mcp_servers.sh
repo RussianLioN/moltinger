@@ -29,7 +29,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/../.."
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Source test helpers
 # shellcheck source=tests/lib/test_helpers.sh
@@ -298,9 +298,11 @@ test_mcp_tools_discoverable() {
 
 # Run all MCP server tests
 run_mcp_server_tests() {
-    local setup_result
-    setup_result=$(setup_mcp_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_mcp_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         # Skip all tests

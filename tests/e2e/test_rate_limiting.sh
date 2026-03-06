@@ -30,7 +30,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/../.."
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Source test helpers
 # shellcheck source=tests/lib/test_helpers.sh
@@ -608,9 +608,11 @@ test_response_time_metrics() {
 
 # Run all rate limiting E2E tests
 run_rate_limiting_tests() {
-    local setup_result
-    setup_result=$(setup_rate_limiting_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_rate_limiting_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -ne 0 ]]; then
         test_start "rate_limiting_tests"

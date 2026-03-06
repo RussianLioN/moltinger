@@ -27,7 +27,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/../.."
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Source test helpers
 # shellcheck source=tests/lib/test_helpers.sh
@@ -62,16 +62,23 @@ setup_llm_failover_tests() {
     init_circuit_breaker
 
     # Check dependencies
-    local has_deps=true
+    local -a missing_deps=()
 
     if ! command -v jq &> /dev/null; then
-        log_warn "jq not installed, skipping some tests"
-        has_deps=false
+        missing_deps+=("jq")
     fi
 
     if ! command -v curl &> /dev/null; then
-        log_warn "curl not installed, skipping network tests"
-        has_deps=false
+        missing_deps+=("curl")
+    fi
+
+    if ! command -v flock &> /dev/null; then
+        missing_deps+=("flock")
+    fi
+
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        test_skip "Missing dependencies: ${missing_deps[*]}"
+        return 2
     fi
 
     # Check if at least one provider is configured
@@ -393,9 +400,11 @@ test_evaluate_llm_health() {
 
 # Run all LLM failover tests
 run_llm_failover_tests() {
-    local setup_result
-    setup_result=$(setup_llm_failover_tests)
-    local setup_code=$?
+    local setup_code=0
+    set +e
+    setup_llm_failover_tests
+    setup_code=$?
+    set -e
 
     if [[ $setup_code -eq 2 ]]; then
         # Skip all tests
