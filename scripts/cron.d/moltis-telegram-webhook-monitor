@@ -18,4 +18,4 @@ MOLTIS_BASE_URL=http://localhost:13131
 MOLTIS_ENV_FILE=/opt/moltinger/.env
 
 # Every 15 minutes run monitor and append JSON report.
-*/15 * * * * root /opt/moltinger/scripts/telegram-webhook-monitor.sh --json >> /var/log/moltis/telegram-webhook-monitor.log 2>&1
+*/15 * * * * root mkdir -p /var/log/moltis && /opt/moltinger/scripts/telegram-webhook-monitor.sh --json >> /var/log/moltis/telegram-webhook-monitor.log 2>&1
