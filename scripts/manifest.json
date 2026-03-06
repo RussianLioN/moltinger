@@ -74,6 +74,28 @@
         "drift_detection_sla_minutes": 360
       },
       "cron": "0 * * * *"
+    },
+    "telegram-webhook-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Telegram webhook and response cleanliness monitor",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["monitor", "telegram", "webhook", "quality"],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "MOLTIS_BASE_URL",
+        "MOLTIS_PASSWORD",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "TELEGRAM_TEST_USER",
+        "TELEGRAM_REQUIRE_WEBHOOK",
+        "TELEGRAM_REQUIRE_HTTPS_WEBHOOK",
+        "TELEGRAM_REQUIRE_TEST_USER",
+        "TELEGRAM_MAX_PENDING_UPDATES",
+        "TELEGRAM_TIMEOUT_SECONDS",
+        "MONITOR_VALIDATE_PREVIEW"
+      ],
+      "cron": "*/15 * * * *"
     }
   },
   "dependencies": {
@@ -103,6 +125,14 @@
       "description": "Weekly backup integrity verification (Sunday 03:00 MSK)",
       "command": "/opt/moltinger/scripts/backup-moltis-enhanced.sh verify",
       "issue": "moltinger-hdn"
+    },
+    "moltis-telegram-webhook-monitor": {
+      "source": "cron.d/moltis-telegram-webhook-monitor",
+      "target": "/etc/cron.d/moltis-telegram-webhook-monitor",
+      "schedule": "*/15 * * * *",
+      "description": "Telegram webhook health and response quality monitoring",
+      "command": "/opt/moltinger/scripts/telegram-webhook-monitor.sh --json",
+      "issue": "moltinger-2kj"
     }
   }
 }
