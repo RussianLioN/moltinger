@@ -51,6 +51,9 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 ### Standalone Telegram CLI (без Moltis)
 
 ```bash
+# User-level UAT probe (главный режим)
+./scripts/telegram-user-monitor.sh --env-file .env
+
 # Поднять webhook endpoint (Traefik + echo)
 ./scripts/setup-telegram-webhook-echo.sh --domain moltis.ainetic.tech --path /telegram-webhook
 
@@ -66,6 +69,7 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 ```
 
 Подробно: `docs/TELEGRAM-WEBHOOK-CLI.md`
+User-monitor: `docs/TELEGRAM-USER-MONITOR.md`
 
 ---
 

@@ -77,3 +77,4 @@ python3 -m pip install telethon
 
 - Bot API не умеет отправлять сообщения "от имени пользователя". Для этого нужен MTProto (Telethon/TDLib).
 - Для webhook Telegram нужен публичный HTTPS endpoint, доступный из интернета.
+- Для постоянной проверки ответов бота как пользователь: `docs/TELEGRAM-USER-MONITOR.md`.
