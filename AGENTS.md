@@ -34,6 +34,7 @@ Protocol:
 6. Resume only after RCA is completed
 
 Rule reference: `docs/rules/auto-rca-self-reflection.md`
+Runtime wrapper: `scripts/auto-rca-wrapper.sh`
 
 ## Landing the Plane (Session Completion)
 

@@ -129,6 +129,7 @@ cat docs/LESSONS-LEARNED.md
 
 Формальный протокол авто-RCA и саморефлексии:
 `docs/rules/auto-rca-self-reflection.md`
+Runtime-обертка для автоперехвата ошибок: `scripts/auto-rca-wrapper.sh`
 
 **НЕПРЕРЫВНОЕ ПРАВИЛО:**
 

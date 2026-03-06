@@ -38,6 +38,25 @@ Auto-RCA is mandatory on any of these events:
 8. **Resume**
    - Continue task only after steps above are completed.
 
+## Economy L1/L2 Mode
+
+To avoid token overuse, use two levels:
+
+1. **L1 (default, economical)**
+   - Immediate self-reflection block (`AUTO-RCA TRIGGERED`)
+   - No heavy documentation/index rebuild
+2. **L2 (escalation)**
+   - Full RCA report in `docs/rca/`
+   - Lessons index update
+
+L2 should be triggered on:
+- severity `P0`/`P1`
+- repeated error signature
+- explicit user request for full RCA
+
+Wrapper reference:
+`scripts/auto-rca-wrapper.sh`
+
 ## Required Response Format During Auto-RCA
 
 Use this block when trigger occurs:

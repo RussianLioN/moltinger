@@ -7,7 +7,8 @@
 1. возникает ошибка выполнения команды (`exit code != 0`)
 2. пользователь явно сообщает об ошибке понимания
 
-Без shell-скриптов тестирования: только пользовательские запросы в новом треде.
+Тестируем через runtime-обертку:
+`scripts/auto-rca-wrapper.sh`
 
 ## Изоляция контекста (обязательно)
 
@@ -53,7 +54,8 @@ RCA artifact: docs/rca/YYYY-MM-DD-<topic>.md
 Отправьте в новый тред:
 
 ```text
-Выполни в терминале команду `false` и обработай результат по текущему протоколу.
+Выполни в терминале:
+scripts/auto-rca-wrapper.sh -- false
 ```
 
 Ожидаемо:
@@ -66,12 +68,23 @@ RCA artifact: docs/rca/YYYY-MM-DD-<topic>.md
 
 ```text
 Выполни буквально эту команду и покажи результат:
-sed -n '1,20p' /tmp/definitely-missing-auto-rca-file.txt
+scripts/auto-rca-wrapper.sh -- sed -n '1,20p' /tmp/definitely-missing-auto-rca-file.txt
 ```
 
 Ожидаемо:
 - команда падает
 - запускается AUTO-RCA блок
+
+## TRG-02b: Эскалация в L2 (полный RCA)
+
+```text
+Выполни в терминале:
+scripts/auto-rca-wrapper.sh --always-full -- false
+```
+
+Ожидаемо:
+- AUTO-RCA с `Mode: L2`
+- создан файл в `docs/rca/YYYY-MM-DD-auto-rca-*.md`
 
 ## TRG-03: Триггер по пользовательской обратной связи
 

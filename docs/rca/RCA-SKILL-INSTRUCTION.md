@@ -108,6 +108,7 @@ scripts/rca-completion-check.sh --check --range HEAD
 Ниже команды, которые были проверены в репозитории:
 
 ```bash
+scripts/auto-rca-wrapper.sh -- false
 ./scripts/build-lessons-index.sh
 ./scripts/query-lessons.sh --all
 scripts/rca-completion-check.sh --check --range HEAD
