@@ -19,6 +19,9 @@ jobs:
   collect-metrics:
     name: Collect GitOps Metrics
     runs-on: ubuntu-latest
+    outputs:
+      compliance: ${{ steps.metrics.outputs.compliance }}
+      tracked_files: ${{ steps.metrics.outputs.tracked_files }}
 
     steps:
       - name: Checkout code
@@ -43,7 +46,7 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
 
           # Calculate compliance metrics
-          METRICS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
+          METRICS=$(ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
             set -e
 
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
@@ -56,20 +59,26 @@ jobs:
 
             # Check docker-compose.yml
             if [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
-              ((TRACKED++))
+              TRACKED=$((TRACKED + 1))
               if grep -q "traefik.enable=true" "$DEPLOY_PATH/docker-compose.yml"; then
-                ((COMPLIANT++))
+                COMPLIANT=$((COMPLIANT + 1))
               fi
             fi
 
             # Check config files exist
             for f in "$DEPLOY_PATH/config"/*; do
-              [ -f "$f" ] && ((TRACKED++)) && ((COMPLIANT++))
+              if [ -f "$f" ]; then
+                TRACKED=$((TRACKED + 1))
+                COMPLIANT=$((COMPLIANT + 1))
+              fi
             done
 
             # Check scripts exist
             for f in "$DEPLOY_PATH/scripts"/*.sh; do
-              [ -f "$f" ] && ((TRACKED++)) && ((COMPLIANT++))
+              if [ -f "$f" ]; then
+                TRACKED=$((TRACKED + 1))
+                COMPLIANT=$((COMPLIANT + 1))
+              fi
             done
 
             # Calculate compliance percentage
