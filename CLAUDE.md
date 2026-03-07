@@ -60,6 +60,8 @@ bd sync               # Sync with git
 
 **On ERROR**: Check `MEMORY.md` and `docs/LESSONS-LEARNED.md` first for similar patterns.
 
+**When using Speckit workflows**: apply `docs/rules/speckit-artifact-reconcile.md` before runtime code changes and before push.
+
 ---
 
 ## ⚠️ Pre-Work Checklist (RCA-003)
