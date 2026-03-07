@@ -82,11 +82,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Check Claude credentials
+        id: auth
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "::notice::Claude credentials found. Running AI review."
+          else
+            echo "enabled=false" >> $GITHUB_OUTPUT
+            echo "::warning::Missing CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY. AI review will be skipped."
+          fi
+
       - name: Run Claude Code Review
         id: claude-review
+        if: steps.auth.outputs.enabled == 'true'
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: true
@@ -238,6 +254,30 @@ jobs:
             --allowedTools Write,Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(gh run view:*),Bash(mkdir -p reports),Bash(date:*)
             --disallowedTools Edit,WebSearch,WebFetch
 
+      - name: Create fallback report (credentials missing)
+        if: steps.auth.outputs.enabled != 'true'
+        run: |
+          mkdir -p reports
+          REPORT_PATH="reports/pr-${{ steps.pr-context.outputs.number }}-review.md"
+          cat > "$REPORT_PATH" <<EOF
+          # Code Review Report - PR #${{ steps.pr-context.outputs.number }}
+
+          **Status**: Skipped (missing Claude credentials)
+          **Checked**: $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          ## Why skipped
+          This repository does not have \`CLAUDE_CODE_OAUTH_TOKEN\` or \`ANTHROPIC_API_KEY\` configured in GitHub Actions secrets.
+          The workflow completed in fallback mode to keep CI green without blocking pull requests.
+
+          ## Next steps
+          1. Add \`CLAUDE_CODE_OAUTH_TOKEN\` or \`ANTHROPIC_API_KEY\` to repository secrets to enable AI review.
+          2. Re-run this workflow for full automated review.
+          EOF
+
+          echo "## Claude Code Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "AI review skipped: missing credentials (fallback report generated)." >> $GITHUB_STEP_SUMMARY
+
       - name: Upload review report
         if: always()
         uses: actions/upload-artifact@v4
@@ -248,7 +288,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Check review success
-        if: steps.claude-review.outputs.conclusion != 'success'
+        if: steps.auth.outputs.enabled == 'true' && steps.claude-review.outputs.conclusion != 'success'
         run: |
           echo "::warning::Claude Code review completed with status: ${{ steps.claude-review.outputs.conclusion }}"
           echo "Check the execution log for details."
