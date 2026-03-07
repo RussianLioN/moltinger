@@ -15,6 +15,7 @@ const DEFAULT_TARGET = process.env.TELEGRAM_WEB_TARGET || "@moltinger_bot";
 const DEFAULT_MESSAGE = process.env.TELEGRAM_WEB_MESSAGE || "/status";
 const DEFAULT_TIMEOUT_SEC = Number(process.env.TELEGRAM_WEB_TIMEOUT_SECONDS || 45);
 const DEFAULT_MIN_REPLY_LEN = Number(process.env.TELEGRAM_WEB_MIN_REPLY_LEN || 2);
+const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIES || 2);
 
 function getArg(name, fallback = "") {
   const idx = process.argv.indexOf(name);
@@ -31,11 +32,34 @@ const target = getArg("--target", DEFAULT_TARGET);
 const text = getArg("--text", DEFAULT_MESSAGE);
 const timeoutSec = Number(getArg("--timeout", String(DEFAULT_TIMEOUT_SEC)));
 const minReplyLen = Number(getArg("--min-reply-len", String(DEFAULT_MIN_REPLY_LEN)));
+const composerRetries = Math.max(0, Number(getArg("--composer-retries", String(DEFAULT_COMPOSER_RETRIES))) || 0);
 const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
-const ERROR_RE = /(traceback|exception|stack\s*trace|panic|internal server error)/i;
+const ERROR_RE = /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout)/i;
 const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
+
+let stage = "login";
+let retriesUsed = 0;
+let chatOpenVerified = false;
+
+function normalizeTarget(value) {
+  const normalized = (value || "").toLowerCase().trim();
+  return {
+    raw: normalized,
+    noAt: normalized.startsWith("@") ? normalized.slice(1) : normalized,
+  };
+}
+
+function withDiagnostics(base, stats) {
+  return {
+    ...base,
+    stage,
+    retries_used: retriesUsed,
+    chat_open_verified: chatOpenVerified,
+    ...(stats ? { stats } : {}),
+  };
+}
 
 let chromium;
 try {
@@ -138,8 +162,7 @@ async function collectMessages(page) {
 }
 
 async function findTargetChat(page, targetValue) {
-  const targetLower = targetValue.toLowerCase();
-  const targetNoAt = targetLower.startsWith("@") ? targetLower.slice(1) : targetLower;
+  const targetParts = normalizeTarget(targetValue);
   const candidates = [
     "a.chatlist-chat[data-peer-id]",
     ".chatlist-chat[data-peer-id]",
@@ -147,7 +170,18 @@ async function findTargetChat(page, targetValue) {
     ".chatlist-chat",
   ];
 
-  let firstVisible = null;
+  let best = null;
+  let bestScore = 0;
+
+  const getScore = (text) => {
+    const t = text.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!t) return 0;
+    if (targetParts.raw && t.includes(targetParts.raw)) return 3;
+    if (targetParts.noAt && t.includes(`@${targetParts.noAt}`)) return 2;
+    if (targetParts.noAt && t.includes(targetParts.noAt)) return 1;
+    return 0;
+  };
+
   for (const sel of candidates) {
     const rows = page.locator(sel);
     const count = Math.min(await rows.count(), 80);
@@ -155,14 +189,70 @@ async function findTargetChat(page, targetValue) {
       const row = rows.nth(i);
       const visible = await row.isVisible().catch(() => false);
       if (!visible) continue;
-      if (!firstVisible) firstVisible = row;
       const raw = await row.innerText().catch(() => "");
-      const textRow = raw.toLowerCase().replace(/\s+/g, " ").trim();
-      if (textRow.includes(targetLower) || textRow.includes(targetNoAt)) return row;
+      const score = getScore(raw);
+      if (score > bestScore) {
+        best = row;
+        bestScore = score;
+      }
+      if (score >= 3) {
+        return row;
+      }
     }
   }
 
-  return firstVisible;
+  return bestScore > 0 ? best : null;
+}
+
+async function verifyChatOpen(page, targetValue) {
+  const targetParts = normalizeTarget(targetValue);
+  return page
+    .evaluate((parts) => {
+      const hash = (location.hash || "").toLowerCase();
+      const hashHasTarget = Boolean(parts.noAt && hash.includes(parts.noAt));
+      const hasComposer = Boolean(
+        document.querySelector(
+          'div.input-message-input[contenteditable="true"][data-peer-id], .input-message-container [contenteditable="true"]'
+        )
+      );
+      const hasChatPane = Boolean(document.querySelector(".chat, .chat-info-wrapper, .new-message-wrapper"));
+      return {
+        open: hashHasTarget || (hasComposer && hasChatPane),
+        hashHasTarget,
+        hasComposer,
+        hasChatPane,
+      };
+    }, targetParts)
+    .catch(() => ({ open: false, hashHasTarget: false, hasComposer: false, hasChatPane: false }));
+}
+
+async function openTargetChat(page, search, targetValue, maxRetries = 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    stage = "search";
+    await search.click({ timeout: 10_000 });
+    await search.fill("");
+    await search.type(targetValue, { delay: 40 });
+    await page.waitForTimeout(1200 + attempt * 400);
+
+    stage = "chat_open";
+    const chat = await findTargetChat(page, targetValue);
+    if (chat) {
+      await chat.click({ timeout: 10_000 });
+      await page.waitForTimeout(1000 + attempt * 300);
+      const verified = await verifyChatOpen(page, targetValue);
+      if (verified.open) {
+        chatOpenVerified = true;
+        return true;
+      }
+    }
+
+    if (attempt < maxRetries) {
+      retriesUsed += 1;
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(600 * (attempt + 1));
+    }
+  }
+  return false;
 }
 
 async function pageStats(page) {
@@ -180,13 +270,15 @@ async function pageStats(page) {
 const browser = await chromium.launch({ headless: !headed });
 if (!fs.existsSync(statePath)) {
   console.log(
-    JSON.stringify({
-      ok: false,
-      status: "fail",
-      error: "Telegram Web state file not found",
-      state: statePath,
-      hint: "Run: node scripts/telegram-web-user-login.mjs --state " + statePath,
-    })
+    JSON.stringify(
+      withDiagnostics({
+        ok: false,
+        status: "fail",
+        error: "Telegram Web state file not found",
+        state: statePath,
+        hint: "Run: node scripts/telegram-web-user-login.mjs --state " + statePath,
+      })
+    )
   );
   await browser.close();
   process.exit(2);
@@ -198,54 +290,56 @@ const page = await context.newPage();
 try {
   await page.goto("https://web.telegram.org/k/", { waitUntil: "domcontentloaded", timeout: 60_000 });
 
+  stage = "login";
   const ready = await waitForTelegramUi(page);
   if (!ready.ready) {
     console.log(
-      JSON.stringify({
-        ok: false,
-        status: "fail",
-        error: "Telegram Web UI did not become ready in time",
-        stats: ready.stats,
-        hint: "Run: node scripts/telegram-web-user-login.mjs --state " + statePath,
-      })
+      JSON.stringify(
+        withDiagnostics({
+          ok: false,
+          status: "fail",
+          error: "Telegram Web UI did not become ready in time",
+          stats: ready.stats,
+          hint: "Run: node scripts/telegram-web-user-login.mjs --state " + statePath,
+        })
+      )
     );
     process.exit(2);
   }
 
+  stage = "search";
   const search = await locateSearchInput(page);
   if (!search) {
     console.log(
-      JSON.stringify({
-        ok: false,
-        status: "fail",
-        error: "Telegram Web is not logged in or UI not detected",
-        hint: "Run: scripts/telegram-web-user-login.mjs",
-        stats: await pageStats(page),
-      })
+      JSON.stringify(
+        withDiagnostics({
+          ok: false,
+          status: "fail",
+          error: "Telegram Web is not logged in or UI not detected",
+          hint: "Run: scripts/telegram-web-user-login.mjs",
+          stats: await pageStats(page),
+        })
+      )
     );
     process.exit(2);
   }
 
-  await search.click({ timeout: 10_000 });
-  await search.fill("");
-  await search.type(target, { delay: 40 });
-  await page.waitForTimeout(1500);
-
-  const chat = await findTargetChat(page, target);
-  if (!chat) {
+  stage = "chat_open";
+  const chatOpened = await openTargetChat(page, search, target, 2);
+  if (!chatOpened) {
     console.log(
-      JSON.stringify({
-        ok: false,
-        status: "fail",
-        error: "Cannot locate target chat in Telegram Web UI",
-        target,
-        stats: await pageStats(page),
-      })
+      JSON.stringify(
+        withDiagnostics({
+          ok: false,
+          status: "fail",
+          error: "Cannot locate or open target chat in Telegram Web UI",
+          target,
+          stats: await pageStats(page),
+        })
+      )
     );
     process.exit(3);
   }
-  await chat.click({ timeout: 10_000 });
-  await page.waitForTimeout(1500);
 
   const beforeMessages = await collectMessages(page);
   const beforeMaxMid = beforeMessages.reduce((max, m) => {
@@ -255,25 +349,38 @@ try {
   const priorVerificationPrompt = beforeMessages.some(
     (m) => m.direction === "in" && /verification code|enter the verification code/i.test(m.text)
   );
-  const composer = await locateComposer(page);
+
+  stage = "composer";
+  let composer = await locateComposer(page);
+  for (let attempt = 0; !composer && attempt < composerRetries; attempt += 1) {
+    retriesUsed += 1;
+    await page.waitForTimeout(500 * (attempt + 1));
+    await openTargetChat(page, search, target, 0);
+    composer = await locateComposer(page);
+  }
+
   if (!composer) {
     console.log(
-      JSON.stringify({
-        ok: false,
-        status: "fail",
-        error: "Cannot find message composer in Telegram Web UI",
-        stats: await pageStats(page),
-      })
+      JSON.stringify(
+        withDiagnostics({
+          ok: false,
+          status: "fail",
+          error: "Cannot find message composer in Telegram Web UI",
+          stats: await pageStats(page),
+        })
+      )
     );
     process.exit(3);
   }
 
+  stage = "send";
   await composer.focus();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.press("Backspace");
   await page.keyboard.type(text, { delay: 20 });
   await page.keyboard.press("Enter");
 
+  stage = "wait_reply";
   const deadline = Date.now() + timeoutSec * 1000;
   let replyText = "";
   let replyMid = 0;
@@ -307,17 +414,19 @@ try {
       Boolean(latestIncoming && /verification code|enter the verification code/i.test(latestIncoming.text));
 
     console.log(
-      JSON.stringify({
-        ok: false,
-        status: "fail",
-        error: "Timeout waiting for reply",
-        target,
-        sent_text: text,
-        timeout_seconds: timeoutSec,
-        outgoing_sent: outgoingSent,
-        possible_reason: verificationBlocked ? "bot_requires_verification_code" : undefined,
-        stats: await pageStats(page),
-      })
+      JSON.stringify(
+        withDiagnostics({
+          ok: false,
+          status: "fail",
+          error: "Timeout waiting for reply",
+          target,
+          sent_text: text,
+          timeout_seconds: timeoutSec,
+          outgoing_sent: outgoingSent,
+          possible_reason: verificationBlocked ? "bot_requires_verification_code" : undefined,
+          stats: await pageStats(page),
+        })
+      )
     );
     process.exit(4);
   }
@@ -333,18 +442,23 @@ try {
     .map(([name]) => name);
 
   const ok = failures.length === 0;
+  const payload = withDiagnostics({
+    ok,
+    status: ok ? "pass" : "fail",
+    target,
+    sent_text: text,
+    reply_text: replyText,
+    reply_mid: replyMid,
+    checks,
+    failures,
+  });
+
+  if (debug && !payload.stats) {
+    payload.stats = await pageStats(page);
+  }
+
   console.log(
-    JSON.stringify({
-      ok,
-      status: ok ? "pass" : "fail",
-      target,
-      sent_text: text,
-      reply_text: replyText,
-      reply_mid: replyMid,
-      checks,
-      failures,
-      ...(debug ? { stats: await pageStats(page) } : {}),
-    })
+    JSON.stringify(payload)
   );
   process.exit(ok ? 0 : 5);
 } finally {

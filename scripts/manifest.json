@@ -185,7 +185,8 @@
         "TELEGRAM_WEB_TARGET",
         "TELEGRAM_WEB_MESSAGE",
         "TELEGRAM_WEB_TIMEOUT_SECONDS",
-        "TELEGRAM_WEB_MIN_REPLY_LEN"
+        "TELEGRAM_WEB_MIN_REPLY_LEN",
+        "TELEGRAM_WEB_COMPOSER_RETRIES"
       ]
     },
     "telegram-web-user-monitor.sh": {
@@ -198,9 +199,11 @@
         "MOLTIS_ENV_FILE",
         "TELEGRAM_WEB_STATE",
         "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_PROBE_PROFILE",
         "TELEGRAM_WEB_MESSAGE",
         "TELEGRAM_WEB_TIMEOUT_SECONDS",
-        "TELEGRAM_WEB_MIN_REPLY_LEN"
+        "TELEGRAM_WEB_MIN_REPLY_LEN",
+        "TELEGRAM_WEB_COMPOSER_RETRIES"
       ]
     },
     "setup-telegram-web-user-monitor.sh": {
@@ -210,7 +213,8 @@
       "requires": ["node", "npm"],
       "provides": ["telegram-web", "playwright", "setup"],
       "env_vars": [
-        "PROJECT_DIR"
+        "PROJECT_DIR",
+        "INSTALL_SYSTEMD"
       ]
     },
     "setup-telegram-webhook-echo.sh": {
@@ -249,6 +253,21 @@
     "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
     "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
   },
+  "systemd_units": {
+    "moltis-telegram-web-user-monitor.service": {
+      "source": "systemd/moltis-telegram-web-user-monitor.service",
+      "target": "/etc/systemd/system/moltis-telegram-web-user-monitor.service",
+      "description": "Telegram Web user monitor one-shot service",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-web-user-monitor.timer": {
+      "source": "systemd/moltis-telegram-web-user-monitor.timer",
+      "target": "/etc/systemd/system/moltis-telegram-web-user-monitor.timer",
+      "description": "Primary scheduler for Telegram Web user monitor",
+      "schedule": "OnUnitActiveSec=10min",
+      "issue": "moltinger-2kj"
+    }
+  },
   "cron_jobs": {
     "moltis-backup-verify": {
       "source": "cron.d/moltis-backup-verify",
@@ -278,7 +297,7 @@
       "source": "cron.d/moltis-telegram-web-user-monitor",
       "target": "/etc/cron.d/moltis-telegram-web-user-monitor",
       "schedule": "*/10 * * * *",
-      "description": "Browser-based Telegram Web user monitoring without API_HASH",
+      "description": "Browser-based Telegram Web user monitoring without API_HASH (fallback scheduler)",
       "command": "/opt/moltinger/scripts/telegram-web-user-monitor.sh",
       "issue": "moltinger-2kj"
     }

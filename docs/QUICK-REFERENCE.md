@@ -57,7 +57,10 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 # Альтернатива без API_HASH: Telegram Web
 ./scripts/setup-telegram-web-user-monitor.sh --project-dir /opt/moltinger
 node scripts/telegram-web-user-login.mjs --state /opt/moltinger/data/.telegram-web-state.json
-./scripts/telegram-web-user-monitor.sh
+TELEGRAM_WEB_PROBE_PROFILE=echo_ping TELEGRAM_WEB_MESSAGE=test2 ./scripts/telegram-web-user-monitor.sh
+
+# Primary scheduler (systemd timer)
+systemctl enable --now moltis-telegram-web-user-monitor.timer
 
 # Поднять webhook endpoint (Traefik + echo)
 ./scripts/setup-telegram-webhook-echo.sh --domain moltis.ainetic.tech --path /telegram-webhook
@@ -76,6 +79,7 @@ node scripts/telegram-web-user-login.mjs --state /opt/moltinger/data/.telegram-w
 Подробно: `docs/TELEGRAM-WEBHOOK-CLI.md`
 User-monitor: `docs/TELEGRAM-USER-MONITOR.md`
 No-API_HASH monitor: `docs/TELEGRAM-WEB-USER-MONITOR.md`
+Clean deploy runbook: `docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md`
 
 ---
 
