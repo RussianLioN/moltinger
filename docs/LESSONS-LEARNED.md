@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-07
-**Total Lessons**: 7
+**Total Lessons**: 8
 
 ---
 
@@ -10,6 +10,9 @@
 
 ### By Severity
 
+
+#### P2 (1 lessons)
+- [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
 #### P3 (4 lessons)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -23,6 +26,9 @@
 
 ### By Category
 
+
+#### cicd (1 lessons)
+- [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
 #### generic (4 lessons)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -67,9 +73,9 @@
 - `recurring-issue` (1 lessons)
 - `protocol` (1 lessons)
 - `process` (1 lessons)
+- `permissions` (1 lessons)
 - `instructions` (1 lessons)
-- `file-deletion` (1 lessons)
-- `false` (1 lessons)
+- `gitops` (1 lessons)
 
 
 ---
@@ -78,10 +84,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 7 |
+| Total Lessons | 8 |
 | Critical (P0/P1) | 0 |
-| Categories | 4 |
-| Unique Tags | 11 |
+| Categories | 5 |
+| Unique Tags | 16 |
 
 ---
 
