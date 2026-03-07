@@ -1,86 +1,37 @@
 {
-  "name": "claude-code-orchestrator-kit",
+  "name": "moltinger",
   "version": "1.9.0",
-  "description": "Professional automation and orchestration system for Claude Code with 39 AI agents, 37 skills, 18 slash commands, 7 MCP configurations, quality gates, and inline orchestration workflows",
-  "main": "index.js",
-  "type": "module",
+  "description": "Infrastructure automation and deployment toolkit for self-hosted Moltis",
+  "private": true,
   "scripts": {
-    "postinstall": "node postinstall.js",
-    "setup": "bash switch-mcp.sh",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "./tests/run_unit.sh --json",
+    "test:integration": "./tests/run_integration.sh --json",
+    "test:security": "./tests/run_security.sh --json",
+    "test:e2e": "./tests/run_e2e.sh --json",
+    "test:all": "npm run test && npm run test:integration && npm run test:security",
+    "preflight": "./scripts/preflight-check.sh --ci --json",
+    "scripts:verify": "./scripts/scripts-verify.sh"
   },
   "keywords": [
-    "claude",
-    "claude-code",
-    "ai",
-    "ai-agents",
-    "agents",
-    "orchestration",
-    "automation",
-    "workflow",
-    "mcp",
-    "model-context-protocol",
-    "skills",
-    "inline-orchestration",
-    "supabase",
-    "code-quality",
-    "code-review",
-    "health-monitoring",
-    "devtools",
-    "productivity",
-    "ci-cd",
-    "devops",
-    "quality-gates",
-    "bug-detection",
-    "security-scanning",
-    "dependency-management",
-    "dead-code",
-    "speckit",
-    "prompt-engineering",
-    "llm"
+    "moltis",
+    "docker",
+    "deployment",
+    "gitops",
+    "monitoring",
+    "backup",
+    "devops"
   ],
-  "author": {
-    "name": "Igor Maslennikov",
-    "email": "maslennikov-ig@users.noreply.github.com",
-    "url": "https://github.com/maslennikov-ig"
-  },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/maslennikov-ig/claude-code-orchestrator-kit.git"
+    "url": "git+https://github.com/RussianLioN/moltinger.git"
   },
   "bugs": {
-    "url": "https://github.com/maslennikov-ig/claude-code-orchestrator-kit/issues"
+    "url": "https://github.com/RussianLioN/moltinger/issues"
   },
-  "homepage": "https://aidevteam.ru/",
+  "homepage": "https://github.com/RussianLioN/moltinger",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  },
-  "files": [
-    ".claude/",
-    "mcp/",
-    "docs/",
-    ".github/",
-    "switch-mcp.sh",
-    "CLAUDE.md",
-    "README.md",
-    "LICENSE",
-    ".env.example",
-    ".gitignore",
-    "postinstall.js",
-    "index.js"
-  ],
-  "bin": {
-    "claude-orchestrator": "./switch-mcp.sh"
-  },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   }
 }

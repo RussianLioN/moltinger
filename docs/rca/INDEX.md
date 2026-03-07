@@ -1,44 +1,45 @@
 # RCA Index
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-07
 **Version**: 1.1.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 4 |
+| Total RCA | 7 |
 | Avg Resolution Time | N/A |
-| This Month | 4 |
+| This Month | 7 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| docker | 1 | 25% |
-| cicd | 0 | 0% |
-| shell | 1 | 25% |
-| data-loss | 0 | 0% |
-| generic | 1 | 25% |
-| process | 1 | 25% |
+| generic | 4 | 57% |
+| process | 1 | 14% |
+| security | 1 | 14% |
+| shell | 1 | 14% |
 
 ## By Severity
 
 | Severity | Count | Description |
 |----------|-------|-------------|
-| P0 | 0 | Critical - blocks release |
-| P1 | 1 | High - production impact |
+| P0 | 1 | Critical - blocks release |
+| P1 | 0 | High - production impact |
 | P2 | 1 | Medium - process issue |
-| P3 | 2 | Low - minor issue |
-| P4 | 0 | Backlog |
+| P3 | 4 | Low - minor issue |
+| P4 | 1 | Backlog |
 
 ## Registry
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
-| RCA-004 | 2026-03-03 | shell | P3 | resolved | Test scenario for QA validation | test passed |
-| RCA-003 | 2026-03-03 | process | P2 | resolved | No branch validation in speckit | cherry-pick + rule |
-| RCA-002 | 2026-03-03 | docker | P1 | resolved | Missing network validation | preflight-check |
+| RCA-007 | 2026-03-07 | shell | P4 | resolved | Misinterpreted non-zero code from diagnostic command | protocol note added |
+| RCA-006 | 2026-03-04 | security | P0 | resolved | Unsafe command handling path | manual guard + policy check |
+| RCA-005 | 2026-03-04 | process | P2 | resolved | Instruction growth and duplication in sessions | optimization + guardrails |
+| RCA-004 | 2026-03-03 | generic | P3 | resolved | Test scenario for QA validation | test passed |
+| RCA-003 | 2026-03-03 | generic | P3 | resolved | Missing branch validation in Speckit flow | cherry-pick + rule |
+| RCA-002 | 2026-03-03 | generic | P3 | resolved | Missing network validation in review flow | preflight-check |
 | RCA-001 | 2026-03-03 | generic | P3 | resolved | Missing auto-trigger for RCA skill | skill created |
 
 ## Patterns Detected

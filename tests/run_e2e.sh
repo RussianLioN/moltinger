@@ -9,6 +9,7 @@
 #   --json       Output results in JSON format
 #   --verbose    Enable verbose output
 #   --timeout N  Set test timeout in seconds (default: 300)
+#   --startup-timeout N  Set container startup timeout in seconds (default: 180)
 #   --filter PATTERN  Run only tests matching pattern
 #   --keep-containers  Don't stop containers after tests
 #   -h, --help   Show help message
@@ -41,7 +42,9 @@ FILTER_PATTERN=""
 OUTPUT_JSON=false
 VERBOSE=false
 TIMEOUT=300
+STARTUP_TIMEOUT=180
 KEEP_CONTAINERS=false
+TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 
 # Container management
 CONTAINERS_STARTED=false
@@ -70,6 +73,7 @@ OPTIONS:
     --json              Output results in JSON format
     --verbose           Enable verbose output
     --timeout N         Set test timeout in seconds (default: 300)
+    --startup-timeout N Set startup timeout in seconds (default: 180)
     --filter PATTERN    Run only tests matching pattern
     --keep-containers   Don't stop containers after tests
     -h, --help          Show this help message
@@ -112,6 +116,10 @@ parse_args() {
                 ;;
             --timeout)
                 TIMEOUT="$2"
+                shift 2
+                ;;
+            --startup-timeout)
+                STARTUP_TIMEOUT="$2"
                 shift 2
                 ;;
             --filter)
@@ -168,6 +176,78 @@ find_test_files() {
 # CONTAINER MANAGEMENT
 # ==============================================================================
 
+# Ensure external Traefik network exists for docker-compose.prod.yml
+ensure_traefik_network() {
+    if docker network ls --format '{{.Name}}' | grep -qx "$TRAEFIK_NETWORK" 2>/dev/null; then
+        return 0
+    fi
+
+    log_warn "Network $TRAEFIK_NETWORK not found, creating..."
+    if docker network create "$TRAEFIK_NETWORK" > /dev/null 2>&1; then
+        log_info "Created network $TRAEFIK_NETWORK"
+        return 0
+    fi
+
+    log_error "Failed to create required network: $TRAEFIK_NETWORK"
+    return 1
+}
+
+# Ensure required bind-mount directories from compose file exist
+ensure_bind_mount_dirs() {
+    local required_dirs=(
+        "$PROJECT_ROOT/data"
+    )
+
+    for dir in "${required_dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            mkdir -p "$dir" || {
+                log_error "Failed to create required directory: $dir"
+                return 1
+            }
+        fi
+    done
+
+    return 0
+}
+
+# Start compose command with an internal timeout (portable, no external timeout binary)
+run_compose_up_with_timeout() {
+    local log_file="/tmp/moltis-e2e-compose-up-$$.log"
+    local compose_pid=0
+    local waited=0
+    local exit_code=0
+
+    docker compose -f docker-compose.prod.yml up -d moltis > "$log_file" 2>&1 &
+    compose_pid=$!
+
+    while kill -0 "$compose_pid" 2>/dev/null; do
+        if [[ $waited -ge $STARTUP_TIMEOUT ]]; then
+            kill "$compose_pid" 2>/dev/null || true
+            wait "$compose_pid" 2>/dev/null || true
+            if [[ "$OUTPUT_JSON" != "true" ]] && [[ -s "$log_file" ]]; then
+                cat "$log_file"
+            fi
+            rm -f "$log_file"
+            return 124
+        fi
+
+        sleep 1
+        ((waited += 1)) || true
+    done
+
+    set +e
+    wait "$compose_pid"
+    exit_code=$?
+    set -e
+
+    if [[ "$OUTPUT_JSON" != "true" ]] && [[ -s "$log_file" ]]; then
+        cat "$log_file"
+    fi
+    rm -f "$log_file"
+
+    return "$exit_code"
+}
+
 # Start required containers for E2E tests
 start_containers() {
     log_info "Starting containers for E2E tests..."
@@ -181,20 +261,20 @@ start_containers() {
         return 0
     fi
 
-    # Start the stack
+    if ! ensure_traefik_network; then
+        return 1
+    fi
+
+    if ! ensure_bind_mount_dirs; then
+        return 1
+    fi
+
+    # Start only the service required for E2E API checks
     local compose_exit=0
-    if [[ "$OUTPUT_JSON" == "true" ]]; then
-        if docker compose -f docker-compose.prod.yml up -d > /dev/null 2>&1; then
-            compose_exit=0
-        else
-            compose_exit=$?
-        fi
+    if run_compose_up_with_timeout; then
+        compose_exit=0
     else
-        if docker compose -f docker-compose.prod.yml up -d 2>&1; then
-            compose_exit=0
-        else
-            compose_exit=$?
-        fi
+        compose_exit=$?
     fi
 
     if [[ $compose_exit -eq 0 ]]; then
@@ -220,7 +300,11 @@ start_containers() {
             log_warn "Moltis did not become healthy within ${max_wait}s"
         fi
     else
-        log_error "Failed to start containers"
+        if [[ $compose_exit -eq 124 ]]; then
+            log_error "Timed out starting containers after ${STARTUP_TIMEOUT}s"
+        else
+            log_error "Failed to start containers"
+        fi
         return 1
     fi
 }
@@ -237,9 +321,9 @@ stop_containers() {
 
         cd "$PROJECT_ROOT"
         if [[ "$OUTPUT_JSON" == "true" ]]; then
-            docker compose -f docker-compose.prod.yml down > /dev/null 2>&1 || true
+            docker compose -f docker-compose.prod.yml stop moltis > /dev/null 2>&1 || true
         else
-            docker compose -f docker-compose.prod.yml down 2>&1 || true
+            docker compose -f docker-compose.prod.yml stop moltis 2>&1 || true
         fi
 
         log_info "Containers stopped"

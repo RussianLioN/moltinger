@@ -170,7 +170,7 @@ secrets:
 
 network:
 	@echo "Creating Docker networks..."
-	@docker network create traefik_proxy 2>/dev/null || echo "Network traefik_proxy already exists"
+	@docker network create traefik-net 2>/dev/null || echo "Network traefik-net already exists"
 	@docker network create monitoring 2>/dev/null || echo "Network monitoring already exists"
 
 clean:

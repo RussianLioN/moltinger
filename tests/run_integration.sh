@@ -40,6 +40,7 @@ FILTER_PATTERN=""
 OUTPUT_JSON=false
 VERBOSE=false
 PARALLEL=false
+DOCKER_READY=true
 
 # Parallel execution
 PARALLEL_JOBS=4
@@ -196,6 +197,7 @@ run_preflight_checks() {
 
     if ! check_docker; then
         all_passed=false
+        DOCKER_READY=false
     fi
 
     # Moltis container check is optional (some tests may not need it)
@@ -273,6 +275,17 @@ run_all_tests() {
     fi
 
     log_info "Found ${#test_files[@]} integration test(s)"
+
+    # Gracefully skip integration tests when Docker daemon is unavailable.
+    if [[ "$DOCKER_READY" != "true" ]]; then
+        for test_file in "${test_files[@]}"; do
+            local test_name
+            test_name=$(basename "$test_file" .sh)
+            test_start "$test_name"
+            test_skip "Docker daemon unavailable"
+        done
+        return 0
+    fi
 
     for test_file in "${test_files[@]}"; do
         if ! run_test_file "$test_file"; then

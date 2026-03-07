@@ -22,6 +22,7 @@ fi
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.prod.yml"
 ENV_FILE="$PROJECT_ROOT/.env"
+TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 
 # Deployment settings
 HEALTH_CHECK_TIMEOUT=300
@@ -174,9 +175,9 @@ check_prerequisites() {
     fi
 
     # Check network
-    if ! docker network ls | grep -q "traefik_proxy"; then
-        log_warn "traefik_proxy network not found, creating..."
-        docker network create traefik_proxy
+    if ! docker network ls --format '{{.Name}}' | grep -qx "$TRAEFIK_NETWORK"; then
+        log_warn "$TRAEFIK_NETWORK network not found, creating..."
+        docker network create "$TRAEFIK_NETWORK"
     fi
 
     log_success "Prerequisites check passed"
