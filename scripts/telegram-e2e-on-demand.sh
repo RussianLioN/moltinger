@@ -3,7 +3,7 @@
 #
 # Exit codes:
 #   0 - completed with report
-#   2 - precondition/config error (includes deferred_real_user in MVP)
+#   2 - precondition/config error
 #   3 - timeout/no observed response
 #   4 - upstream/auth error
 
@@ -32,6 +32,7 @@ CONTEXT_JSON='{}'
 
 TMP_DIR=""
 COOKIE_FILE=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'USAGE'
@@ -250,8 +251,13 @@ init_runtime() {
   trap 'rm -rf "$TMP_DIR"' EXIT
 }
 
-run_real_user_deferred() {
-  TRANSPORT="telegram_real_user_deferred"
+run_real_user() {
+  TRANSPORT="telegram_mtproto_real_user"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    CONTEXT_JSON='{"notes":["python3 is required for real_user mode"]}'
+    precondition_fail "python3 is required for real_user mode"
+  fi
 
   local required_vars=(
     TELEGRAM_TEST_API_ID
@@ -260,7 +266,6 @@ run_real_user_deferred() {
   )
 
   local missing=()
-  local required_json missing_json
   local key
   for key in "${required_vars[@]}"; do
     if [[ -z "${!key:-}" ]]; then
@@ -268,31 +273,80 @@ run_real_user_deferred() {
     fi
   done
 
-  required_json="$(printf '%s\n' "${required_vars[@]}" | jq -R . | jq -s .)"
   if [[ ${#missing[@]} -gt 0 ]]; then
+    local missing_json
     missing_json="$(printf '%s\n' "${missing[@]}" | jq -R . | jq -s .)"
-  else
-    missing_json='[]'
+    CONTEXT_JSON="$(jq -cn \
+      --argjson missing "$missing_json" \
+      --arg hint1 "Set TELEGRAM_TEST_API_ID, TELEGRAM_TEST_API_HASH, TELEGRAM_TEST_SESSION" \
+      --arg hint2 "Generate TELEGRAM_TEST_SESSION once via Telegram OTP bootstrap" \
+      '{missing_prerequisites:$missing, action_hints:[$hint1,$hint2]}')"
+    precondition_fail "Missing required TELEGRAM_TEST_* prerequisites for real_user mode"
   fi
 
-  CONTEXT_JSON="$(jq -cn \
-    --argjson required "$required_json" \
-    --argjson missing "$missing_json" \
-    --arg note "real_user mode is deferred in MVP" \
-    --arg hint1 "Provision TELEGRAM_TEST_API_ID, TELEGRAM_TEST_API_HASH, TELEGRAM_TEST_SESSION in CI/local env" \
-    --arg hint2 "Use mode=synthetic for current MVP E2E checks" \
-    '{required_prerequisites:$required, missing_prerequisites:$missing, notes:[$note], action_hints:[$hint1,$hint2]}')"
-
-  STATUS="deferred_real_user"
-  ERROR_CODE="real_user_deferred"
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    ERROR_MESSAGE="real_user mode deferred in MVP; missing prerequisites"
-  else
-    ERROR_MESSAGE="real_user mode deferred in MVP; implementation planned in next increment"
+  local helper_script="$SCRIPT_DIR/telegram-real-user-e2e.py"
+  if [[ ! -f "$helper_script" ]]; then
+    CONTEXT_JSON='{"notes":["real_user helper script not found"]}'
+    upstream_fail "real_user helper script is missing"
   fi
 
-  finish_with_status 2
+  local helper_output_file="$TMP_DIR/real-user-result.json"
+  local helper_error_file="$TMP_DIR/real-user-error.log"
+  local bot_username="${TELEGRAM_TEST_BOT_USERNAME:-@moltinger_bot}"
+  local helper_args=(
+    "$helper_script"
+    --api-id "${TELEGRAM_TEST_API_ID}"
+    --api-hash "${TELEGRAM_TEST_API_HASH}"
+    --session "${TELEGRAM_TEST_SESSION}"
+    --bot-username "$bot_username"
+    --message "$MESSAGE"
+    --timeout-sec "$TIMEOUT_SEC"
+  )
+  if [[ "$VERBOSE" == "true" ]]; then
+    helper_args+=(--verbose)
+  fi
+
+  set +e
+  python3 "${helper_args[@]}" > "$helper_output_file" 2> "$helper_error_file"
+  local helper_exit=$?
+  set -e
+
+  if ! jq -e . "$helper_output_file" >/dev/null 2>&1; then
+    local helper_stderr
+    helper_stderr="$(tail -n 50 "$helper_error_file" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')"
+    CONTEXT_JSON="$(jq -cn --arg stderr "$helper_stderr" '{helper_stderr:$stderr}')"
+    upstream_fail "real_user helper returned invalid JSON"
+  fi
+
+  TRANSPORT="$(jq -r '.transport // "telegram_mtproto_real_user"' "$helper_output_file")"
+  OBSERVED_RESPONSE="$(jq -r '.observed_response // ""' "$helper_output_file")"
+  STATUS="$(jq -r '.status // "upstream_failed"' "$helper_output_file")"
+  ERROR_CODE="$(jq -r '.error_code // ""' "$helper_output_file")"
+  ERROR_MESSAGE="$(jq -r '.error_message // ""' "$helper_output_file")"
+  CONTEXT_JSON="$(jq -c --argjson helper_exit "$helper_exit" '(.context // {}) + {helper_exit_code:$helper_exit}' "$helper_output_file")"
+
+  case "$STATUS" in
+    completed)
+      finish_with_status 0
+      ;;
+    timeout)
+      finish_with_status 3
+      ;;
+    precondition_failed)
+      finish_with_status 2
+      ;;
+    upstream_failed)
+      finish_with_status 4
+      ;;
+    *)
+      ERROR_CODE="upstream"
+      if [[ -z "$ERROR_MESSAGE" ]]; then
+        ERROR_MESSAGE="Unexpected real_user status from helper: $STATUS"
+      fi
+      STATUS="upstream_failed"
+      finish_with_status 4
+      ;;
+  esac
 }
 
 run_synthetic() {
@@ -400,7 +454,7 @@ main() {
       run_synthetic
       ;;
     real_user)
-      run_real_user_deferred
+      run_real_user
       ;;
     *)
       precondition_fail "Unsupported mode"

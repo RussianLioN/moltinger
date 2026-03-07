@@ -33,10 +33,20 @@ Then watch run:
 gh run watch
 ```
 
-## Deferred Real User Mode (MVP)
+## Real User Mode (MTProto)
 
 ```bash
-./scripts/telegram-e2e-on-demand.sh --mode real_user --message '/status'
+export TELEGRAM_TEST_API_ID='123456'
+export TELEGRAM_TEST_API_HASH='your_api_hash'
+export TELEGRAM_TEST_SESSION='your_string_session'
+export TELEGRAM_TEST_BOT_USERNAME='@moltinger_bot'
+
+./scripts/telegram-e2e-on-demand.sh \
+  --mode real_user \
+  --message '/status' \
+  --timeout-sec 45 \
+  --output /tmp/telegram-e2e-real-user.json \
+  --verbose
 ```
 
-Expected in MVP: structured deferred/precondition diagnostic (`deferred_real_user` or `precondition_failed`).
+Expected: JSON artifact with `status=completed` and non-empty `observed_response` when bot replies before timeout.

@@ -16,12 +16,12 @@
   - strict contains/regex pass-fail in MVP
   - CI-hard blocking checks
 
-## Decision 3: Deferred real_user mode
+## Decision 3: Implemented real_user mode (MTProto)
 
-- **Decision**: Expose `real_user` mode contract with explicit deferred diagnostics.
-- **Rationale**: Preserves future extensibility without introducing MTProto complexity into MVP.
+- **Decision**: Implement `real_user` mode with MTProto using Telegram test-user `StringSession`.
+- **Rationale**: Enables true user-path E2E directly from chat/CI without manual message sending by operator.
 - **Alternatives considered**:
-  - Immediate MTProto implementation (higher security/ops overhead)
+  - Deferred contract only (insufficient for requested no-manual testing flow)
   - Omitting real_user mode entirely (causes future interface churn)
 
 ## Decision 4: Security and observability

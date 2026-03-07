@@ -49,12 +49,12 @@
 
 ---
 
-## Phase 5: User Story 3 - Real User Contract (Deferred) (P3)
+## Phase 5: User Story 3 - Real User MTProto Execution (P3)
 
-- [x] T030 [US3] Add `real_user` mode branch with deferred status handling
-- [x] T031 [US3] Add prerequisite validation for reserved `TELEGRAM_TEST_*` secrets
-- [x] T032 [US3] Return structured deferred/precondition diagnostics
-- [x] T033 [US3] Document deferred semantics and future extension path
+- [x] T030 [US3] Add `real_user` mode execution path via MTProto
+- [x] T031 [US3] Add prerequisite validation for `TELEGRAM_TEST_*` secrets
+- [x] T032 [US3] Return structured runtime/precondition diagnostics
+- [x] T033 [US3] Document real_user setup and execution path
 
 ---
 

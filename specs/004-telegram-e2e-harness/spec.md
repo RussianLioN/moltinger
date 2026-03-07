@@ -38,18 +38,18 @@ The same test scenario can be run either locally via CLI or remotely via GitHub 
 
 ---
 
-### User Story 3 - Real User Mode Contract (Deferred) (Priority: P3)
+### User Story 3 - Real User Mode via MTProto (Priority: P3)
 
-A reserved `real_user` mode is exposed for future true Telegram user emulation. In MVP it does not send messages yet, but it validates prerequisites and returns explicit deferred diagnostics.
+`real_user` mode sends a message to the bot through a test Telegram user session (MTProto) and captures the bot reply as an E2E artifact.
 
-**Why this priority**: Protects architecture from rework and allows controlled future extension without blocking MVP.
+**Why this priority**: Enables true user-path validation directly from Codex/CI without manual operator messaging.
 
-**Independent Test**: Run `mode=real_user` without required future secrets and get structured deferred/precondition diagnostics while synthetic mode remains unaffected.
+**Independent Test**: Run `mode=real_user` with valid `TELEGRAM_TEST_*` secrets and receive non-empty `observed_response` for `/status`.
 
 **Acceptance Scenarios**:
 
-1. **Given** `mode=real_user` is requested in MVP, **When** prerequisites are incomplete, **Then** system returns a structured deferred status with actionable hints.
-2. **Given** synthetic mode is operational, **When** real_user mode is invoked and deferred, **Then** synthetic mode behavior remains unchanged.
+1. **Given** `mode=real_user` and valid Telegram test session prerequisites, **When** operator runs a command, **Then** harness sends message to bot and captures reply.
+2. **Given** missing or invalid real_user prerequisites, **When** mode is invoked, **Then** system returns `precondition_failed` with actionable diagnostics.
 
 ---
 
@@ -69,12 +69,12 @@ A reserved `real_user` mode is exposed for future true Telegram user emulation. 
 - **FR-003**: System MUST emit a structured JSON artifact with execution input, observed response, timing, status, and context metadata.
 - **FR-004**: System MUST NOT change default production Telegram runtime behavior.
 - **FR-005**: In `synthetic` mode, system MUST use existing Moltis HTTP endpoints for auth and chat (`/api/auth/login`, `/api/v1/chat`).
-- **FR-006**: In MVP, `real_user` mode MUST validate prerequisites and return transparent deferred diagnostics without message delivery.
+- **FR-006**: `real_user` mode MUST send message using MTProto test session and capture bot reply within timeout.
 - **FR-007**: System MUST be safe for repeated manual runs (idempotent operational behavior, no persistent test-mode side effects).
 - **FR-008**: System MUST redact sensitive information (passwords, tokens, session cookies) from logs and artifacts.
 - **FR-009**: CLI MUST expose documented exit codes for completed, precondition/config failure, timeout, and upstream/auth failure.
 - **FR-010**: Workflow MUST always upload execution artifacts even when command exits non-zero.
-- **FR-011**: `real_user` mode MUST return one of `deferred_real_user` or `precondition_failed` in a structured way.
+- **FR-011**: `real_user` mode MUST return structured `precondition_failed` for missing/invalid Telegram prerequisites.
 
 ### Key Entities
 

@@ -37,7 +37,10 @@ Path: `.github/workflows/telegram-e2e-on-demand.yml`
 ### Secrets
 
 - `MOLTIS_PASSWORD` (required for synthetic)
-- `TELEGRAM_TEST_*` reserved for future `real_user` mode
+- `TELEGRAM_TEST_API_ID` (required for `real_user`)
+- `TELEGRAM_TEST_API_HASH` (required for `real_user`)
+- `TELEGRAM_TEST_SESSION` (required for `real_user`)
+- `TELEGRAM_TEST_BOT_USERNAME` (optional, default `@moltinger_bot`)
 
 ### Artifacts
 
@@ -58,7 +61,7 @@ Path: `.github/workflows/telegram-e2e-on-demand.yml`
   "duration_ms": 0,
   "transport": "string",
   "observed_response": "string",
-  "status": "completed|timeout|precondition_failed|upstream_failed|deferred_real_user",
+  "status": "completed|timeout|precondition_failed|upstream_failed",
   "error_code": "string",
   "error_message": "string",
   "context": {}

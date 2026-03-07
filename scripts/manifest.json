@@ -57,13 +57,27 @@
       "version": "1.0.0",
       "description": "On-demand Telegram/Moltis E2E harness with manual verdict reporting",
       "entrypoint": true,
-      "requires": ["curl", "jq"],
+      "requires": ["curl", "jq", "python3"],
       "provides": ["telegram-e2e-on-demand"],
       "env_vars": [
         "MOLTIS_PASSWORD",
         "TELEGRAM_TEST_API_ID",
         "TELEGRAM_TEST_API_HASH",
-        "TELEGRAM_TEST_SESSION"
+        "TELEGRAM_TEST_SESSION",
+        "TELEGRAM_TEST_BOT_USERNAME"
+      ]
+    },
+    "telegram-real-user-e2e.py": {
+      "version": "1.0.0",
+      "description": "MTProto helper for real_user mode in telegram-e2e-on-demand.sh",
+      "entrypoint": false,
+      "type": "helper",
+      "requires": ["python3"],
+      "env_vars": [
+        "TELEGRAM_TEST_API_ID",
+        "TELEGRAM_TEST_API_HASH",
+        "TELEGRAM_TEST_SESSION",
+        "TELEGRAM_TEST_BOT_USERNAME"
       ]
     },
     "gitops-guards.sh": {

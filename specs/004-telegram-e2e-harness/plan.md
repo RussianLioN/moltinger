@@ -5,7 +5,7 @@
 
 ## Summary
 
-Deliver an on-demand E2E harness for Telegram/Moltis debugging with two triggers (CLI and workflow dispatch), manual-verdict artifacts, and a deferred `real_user` mode contract. Keep production Telegram runtime unchanged.
+Deliver an on-demand E2E harness for Telegram/Moltis debugging with two triggers (CLI and workflow dispatch), manual-verdict artifacts, and working `real_user` mode via MTProto test account. Keep production Telegram runtime unchanged.
 
 ## Technical Context
 
@@ -63,7 +63,7 @@ tests/
 
 1. Transport for synthetic mode: use existing authenticated Moltis chat HTTP flow.
 2. Manual verdict policy: artifact-centric, no semantic assert in MVP.
-3. Deferred real_user policy: contract-first with structured deferred status.
+3. real_user policy: MTProto test-session transport with explicit prerequisite diagnostics.
 4. Security policy: strict log redaction for passwords/tokens/cookies.
 
 ## Phase 1: Design Artifacts

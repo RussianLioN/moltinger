@@ -18,7 +18,6 @@
   - `timeout`
   - `precondition_failed`
   - `upstream_failed`
-  - `deferred_real_user`
 - `observed_response` (string, optional): textual/JSON-stringified observed response
 - `error_code` (string, optional)
 - `error_message` (string, optional)
@@ -32,4 +31,9 @@
 - `poll_attempts` (integer, optional)
 - `timeout_sec` (integer, optional)
 - `missing_prerequisites` (array[string], optional)
+- `bot_username` (string, optional)
+- `bot_user_id` (integer, optional)
+- `chat_id` (integer, optional)
+- `sent_message_id` (integer, optional)
+- `reply_message_id` (integer, optional)
 - `notes` (array[string], optional)

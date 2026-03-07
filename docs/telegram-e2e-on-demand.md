@@ -34,10 +34,15 @@ export MOLTIS_PASSWORD='***'
 - `--moltis-password-env <ENV_NAME>` (по умолчанию `MOLTIS_PASSWORD`)
 - `--verbose`
 
+Примечание по зависимостям:
+
+- для `synthetic`: `curl`, `jq`
+- для `real_user`: `python3` + пакет `telethon` (`python3 -m pip install telethon`)
+
 ### Exit codes
 
 - `0`: `status=completed`
-- `2`: `precondition_failed` или `deferred_real_user`
+- `2`: `precondition_failed`
 - `3`: `timeout`
 - `4`: `upstream_failed`
 
@@ -60,9 +65,10 @@ gh workflow run telegram-e2e-on-demand.yml \
 Секреты:
 
 - `MOLTIS_PASSWORD` (обязателен для `synthetic`)
-- `TELEGRAM_TEST_API_ID` (reserved для будущего `real_user`)
-- `TELEGRAM_TEST_API_HASH` (reserved для будущего `real_user`)
-- `TELEGRAM_TEST_SESSION` (reserved для будущего `real_user`)
+- `TELEGRAM_TEST_API_ID` (обязателен для `real_user`)
+- `TELEGRAM_TEST_API_HASH` (обязателен для `real_user`)
+- `TELEGRAM_TEST_SESSION` (обязателен для `real_user`, StringSession тестового Telegram-пользователя)
+- `TELEGRAM_TEST_BOT_USERNAME` (опционально, default `@moltinger_bot`)
 
 Артефакты:
 
@@ -82,7 +88,7 @@ gh workflow run telegram-e2e-on-demand.yml \
 - `duration_ms`
 - `transport`
 - `observed_response`
-- `status` (`completed` | `timeout` | `precondition_failed` | `upstream_failed` | `deferred_real_user`)
+- `status` (`completed` | `timeout` | `precondition_failed` | `upstream_failed`)
 - `error_code`
 - `error_message`
 - `context`
@@ -90,5 +96,21 @@ gh workflow run telegram-e2e-on-demand.yml \
 ## MVP Boundary
 
 - `mode=synthetic`: рабочий транспорт через `/api/auth/login` + `/api/v1/chat`.
-- `mode=real_user`: в MVP только контракт/guards, без реальной отправки в Telegram.
+- `mode=real_user`: рабочая отправка через MTProto (Telethon) от тестового пользователя к боту.
 - Штатный режим прод-бота не меняется.
+
+## Real User Example
+
+```bash
+export TELEGRAM_TEST_API_ID='123456'
+export TELEGRAM_TEST_API_HASH='your_api_hash'
+export TELEGRAM_TEST_SESSION='your_string_session'
+export TELEGRAM_TEST_BOT_USERNAME='@moltinger_bot'
+
+./scripts/telegram-e2e-on-demand.sh \
+  --mode real_user \
+  --message '/status' \
+  --timeout-sec 45 \
+  --output /tmp/telegram-e2e-real-user.json \
+  --verbose
+```
