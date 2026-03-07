@@ -603,6 +603,9 @@ jobs:
           # Telegram Bot
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALLOWED_USERS=${{ secrets.TELEGRAM_ALLOWED_USERS }}
+          TELEGRAM_TEST_USER=${{ secrets.TELEGRAM_TEST_USER }}
+          TELEGRAM_WEBHOOK_URL=https://moltis.ainetic.tech/telegram/webhook
+          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
 
           # Domain
           MOLTIS_DOMAIN=moltis.ainetic.tech
