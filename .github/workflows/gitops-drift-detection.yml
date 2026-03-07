@@ -10,6 +10,10 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 env:
   SSH_HOST: ainetic.tech
   SSH_USER: root
@@ -103,12 +107,18 @@ jobs:
       - name: Create issue on drift
         if: steps.drift.outputs.drift_found == 'true'
         run: |
-          # Check for existing open drift issue to prevent duplicates
-          EXISTING=$(gh issue list --repo ${{ github.repository }} --label drift --state open --limit 1 --json number 2>/dev/null || echo "[]")
+          # Check for existing open drift issue to prevent duplicates.
+          # Search by title to avoid hard dependency on labels.
+          EXISTING_NUMBER=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --search "GitOps Drift Detected in:title" \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // empty' 2>/dev/null || true)
 
-          if [ "$EXISTING" != "[]" ] && [ -n "$EXISTING" ]; then
-            echo "::warning::Open drift issue already exists. Skipping issue creation."
-            echo "Existing issue: $EXISTING"
+          if [ -n "$EXISTING_NUMBER" ]; then
+            echo "::warning::Open drift issue #$EXISTING_NUMBER already exists. Skipping issue creation."
             exit 0
           fi
 
@@ -140,11 +150,33 @@ jobs:
           *Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)*
           "
 
-          gh issue create \
+          # Create issue in non-blocking mode.
+          set +e
+          ISSUE_URL=$(gh issue create \
             --repo ${{ github.repository }} \
             --title "🔍 GitOps Drift Detected - $(date -u +%Y-%m-%d)" \
-            --body "$ISSUE_BODY" \
-            --label "gitops,drift,automation"
+            --body "$ISSUE_BODY" 2>/tmp/gh-issue-create.err)
+          CREATE_EXIT=$?
+          set -e
+
+          if [ $CREATE_EXIT -ne 0 ] || [ -z "$ISSUE_URL" ]; then
+            echo "::warning::Could not create drift issue (non-blocking)."
+            if [ -s /tmp/gh-issue-create.err ]; then
+              echo "::warning::$(tail -n 1 /tmp/gh-issue-create.err)"
+            fi
+            exit 0
+          fi
+
+          ISSUE_NUMBER="${ISSUE_URL##*/}"
+          if ! gh issue edit "$ISSUE_NUMBER" \
+            --repo ${{ github.repository }} \
+            --add-label "gitops" \
+            --add-label "drift" \
+            --add-label "automation" >/dev/null 2>&1; then
+            echo "::warning::Issue created without labels (labels missing or token lacks permissions)."
+          fi
+
+          echo "::notice::Drift issue created: $ISSUE_URL"
         env:
           GH_TOKEN: ${{ github.token }}
 
