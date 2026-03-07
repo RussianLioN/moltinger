@@ -51,6 +51,9 @@ bootstrap_json="$(
 )"
 export TELEGRAM_TEST_SESSION="$(cat /tmp/telegram-test.session)"
 
+# If code is invalid/expired, use /resend inside bootstrap process instead of restarting it.
+# If OTP delivery is unreliable, switch to --login-mode qr.
+
 ./scripts/telegram-e2e-on-demand.sh \
   --mode real_user \
   --message '/status' \

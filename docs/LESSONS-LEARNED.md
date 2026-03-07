@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-07
-**Total Lessons**: 8
+**Total Lessons**: 9
 
 ---
 
@@ -13,6 +13,9 @@
 
 #### P1 (1 lessons)
 - [Telegram bot stopped responding to commands](../docs/rca/2026-03-07-telegram-bot-no-response.md)
+
+#### P2 (1 lessons)
+- [Telegram OTP bootstrap loop produced stale/invalid codes](../docs/rca/2026-03-07-telegram-otp-bootstrap-loop.md)
 
 #### P3 (4 lessons)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -33,24 +36,6 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### generic (4 lessons)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (4 lessons)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (4 lessons)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
 #### process (1 lessons)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
@@ -60,22 +45,23 @@
 #### shell (1 lessons)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
-#### telegram (1 lessons)
+#### telegram (2 lessons)
+- [Telegram OTP bootstrap loop produced stale/invalid codes](../docs/rca/2026-03-07-telegram-otp-bootstrap-loop.md)
 - [Telegram bot stopped responding to commands](../docs/rca/2026-03-07-telegram-bot-no-response.md)
 
 
 ### Popular Tags
 
+- `telegram` (2 lessons)
 - `process` (2 lessons)
+- `e2e` (2 lessons)
 - `webhook` (1 lessons)
 - `token-optimization` (1 lessons)
-- `telegram` (1 lessons)
+- `telethon` (1 lessons)
 - `shell` (1 lessons)
 - `security` (1 lessons)
 - `rm-rf` (1 lessons)
 - `recurring-issue` (1 lessons)
-- `rca-protocol` (1 lessons)
-- `protocol` (1 lessons)
 
 
 ---
@@ -84,10 +70,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 8 |
+| Total Lessons | 9 |
 | Critical (P0/P1) | 1 |
 | Categories | 5 |
-| Unique Tags | 15 |
+| Unique Tags | 18 |
 
 ---
 

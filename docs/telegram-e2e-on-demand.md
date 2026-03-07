@@ -138,8 +138,46 @@ echo "$bootstrap_json" | jq .
 gh secret set TELEGRAM_TEST_SESSION --repo RussianLioN/moltinger < /tmp/telegram-test.session
 ```
 
+Если код не подошёл или истёк, не перезапускай процесс: в интерактивном режиме скрипта введи `/resend`, чтобы запросить новый OTP в той же сессии и не потерять контекст.
+
 Если у аккаунта включен Telegram 2FA:
 
 ```bash
 export TELEGRAM_TEST_2FA_PASSWORD='your-password'
 ```
+
+### QR login fallback (when OTP delivery is unreliable)
+
+```bash
+python3 scripts/telegram-real-user-bootstrap.py \
+  --api-id "$TELEGRAM_TEST_API_ID" \
+  --api-hash "$TELEGRAM_TEST_API_HASH" \
+  --phone "+79991234567" \
+  --login-mode qr \
+  --qr-timeout-sec 180 \
+  --session-out /tmp/telegram-test.session \
+  --verbose
+```
+
+In `qr` mode script prints a login URL. Open it on another screen and confirm in Telegram:
+`Settings -> Devices -> Link Desktop Device`.
+
+## Controlled real_user CLI adapter
+
+For command-driven E2E without exposing raw session in prompts, use:
+`scripts/telegram-real-user-cli.py`
+
+Examples:
+
+```bash
+# Resolve target metadata
+python3 scripts/telegram-real-user-cli.py resolve --target '@moltinger_bot'
+
+# Send and wait for bot reply in one command
+python3 scripts/telegram-real-user-cli.py probe \
+  --to '@moltinger_bot' \
+  --text '/status' \
+  --timeout-sec 45
+```
+
+Adapter commands: `resolve`, `send`, `reply-wait`, `list-dialogs`, `probe`.

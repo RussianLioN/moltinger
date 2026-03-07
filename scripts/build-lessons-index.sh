@@ -111,13 +111,13 @@ cat >> "$OUTPUT_FILE" << 'SECTION'
 
 SECTION
 
-cut -d'|' -f1,2,3 "$TMP_CATEGORY" | sort -u | while read line; do
-    cat=$(echo "$line" | cut -d'|' -f1)
+cut -d'|' -f1 "$TMP_CATEGORY" | sort -u | while read -r cat; do
+    [[ -z "$cat" ]] && continue
     count=$(grep "^$cat|" "$TMP_CATEGORY" | wc -l | tr -d ' ')
     if [[ $count -gt 0 ]]; then
         echo "" >> "$OUTPUT_FILE"
         echo "#### $cat ($count lessons)" >> "$OUTPUT_FILE"
-        grep "^$cat|" "$TMP_CATEGORY" | while read l; do
+        grep "^$cat|" "$TMP_CATEGORY" | while read -r l; do
             title=$(echo "$l" | cut -d'|' -f2)
             file=$(echo "$l" | cut -d'|' -f3)
             echo "- [$title](../$file)" >> "$OUTPUT_FILE"

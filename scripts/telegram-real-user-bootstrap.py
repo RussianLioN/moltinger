@@ -55,6 +55,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-id", required=True, help="Telegram API ID")
     parser.add_argument("--api-hash", required=True, help="Telegram API hash")
     parser.add_argument("--phone", required=True, help="Phone in international format, e.g. +79991234567")
+    parser.add_argument(
+        "--login-mode",
+        choices=["otp", "qr"],
+        default="otp",
+        help="Authorization mode: otp (default) or qr",
+    )
     parser.add_argument("--code", help="OTP code from Telegram (optional; can also use TELEGRAM_TEST_OTP_CODE)")
     parser.add_argument(
         "--password",
@@ -68,6 +74,12 @@ def parse_args() -> argparse.Namespace:
         "--print-session",
         action="store_true",
         help="Print raw session in JSON (unsafe for shared logs)",
+    )
+    parser.add_argument(
+        "--qr-timeout-sec",
+        type=int,
+        default=180,
+        help="QR login wait timeout in seconds (default: 180)",
     )
     parser.add_argument("--verbose", action="store_true", help="Verbose logs to stderr")
     return parser.parse_args()
@@ -128,6 +140,7 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
 
     api_hash = str(args.api_hash).strip()
     phone = str(args.phone).strip()
+    login_mode = str(args.login_mode).strip()
     code = str(args.code or os.getenv("TELEGRAM_TEST_OTP_CODE", "")).strip().replace(" ", "")
     password = str(args.password or os.getenv("TELEGRAM_TEST_2FA_PASSWORD", "")).strip()
     session_out = str(args.session_out or "").strip()
@@ -136,6 +149,10 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
         return build_precondition("api_hash is required"), EXIT_PRECONDITION
     if not phone:
         return build_precondition("phone is required"), EXIT_PRECONDITION
+    if login_mode not in {"otp", "qr"}:
+        return build_precondition("login_mode must be otp or qr"), EXIT_PRECONDITION
+    if args.qr_timeout_sec <= 0:
+        return build_precondition("qr_timeout_sec must be positive"), EXIT_PRECONDITION
     if not session_out and not bool(args.print_session):
         return (
             build_precondition("Set --session-out or --print-session to receive session output"),
@@ -144,7 +161,12 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
 
     try:
         from telethon import TelegramClient  # type: ignore
-        from telethon.errors import RPCError, SessionPasswordNeededError  # type: ignore
+        from telethon.errors import (  # type: ignore
+            PhoneCodeExpiredError,
+            PhoneCodeInvalidError,
+            RPCError,
+            SessionPasswordNeededError,
+        )
         from telethon.sessions import StringSession  # type: ignore
     except Exception:
         return (
@@ -159,53 +181,200 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
 
     try:
         await client.connect()
-        log(args.verbose, f"Requesting OTP for phone {mask_phone(phone)}")
-        sent = await client.send_code_request(phone)
+        sent_type: str | None = None
+        sent_next_type: str | None = None
+        sent_timeout: int | None = None
+        code_attempts = 0
+        resend_attempts = 0
+        qr_wait_timeout: int | None = None
 
-        if not code:
+        if login_mode == "qr":
+            log(args.verbose, f"Requesting QR login for phone {mask_phone(phone)}")
+            qr_login = await client.qr_login()
+            qr_wait_timeout = int(args.qr_timeout_sec)
+
             if not sys.stdin.isatty():
                 return (
                     build_precondition(
-                        "OTP code is required (use --code or TELEGRAM_TEST_OTP_CODE)",
-                        {"phone_masked": mask_phone(phone)},
+                        "qr login mode requires interactive terminal",
+                        {"phone_masked": mask_phone(phone), "login_mode": login_mode},
                     ),
                     EXIT_PRECONDITION,
                 )
-            code = input("Enter Telegram OTP code: ").strip().replace(" ", "")
 
-        if not code:
-            return (
-                build_precondition("OTP code cannot be empty", {"phone_masked": mask_phone(phone)}),
-                EXIT_PRECONDITION,
+            print(
+                (
+                    "QR login URL (open it on another screen and confirm in Telegram -> "
+                    "Settings -> Devices -> Link Desktop Device):\n"
+                    f"{qr_login.url}"
+                ),
+                file=sys.stderr,
             )
 
-        try:
-            await client.sign_in(phone=phone, code=code, phone_code_hash=sent.phone_code_hash)
-        except SessionPasswordNeededError:
-            if not password:
-                if not sys.stdin.isatty():
+            try:
+                await qr_login.wait(timeout=float(qr_wait_timeout))
+            except asyncio.TimeoutError:
+                return (
+                    build_upstream(
+                        "qr login timed out",
+                        {
+                            "phone_masked": mask_phone(phone),
+                            "login_mode": login_mode,
+                            "qr_timeout_sec": qr_wait_timeout,
+                        },
+                    ),
+                    EXIT_UPSTREAM,
+                )
+            except SessionPasswordNeededError:
+                if not password:
+                    password = getpass.getpass("Enter Telegram 2FA password: ").strip()
+                if not password:
+                    return (
+                        build_precondition("2FA password cannot be empty", {"phone_masked": mask_phone(phone)}),
+                        EXIT_PRECONDITION,
+                    )
+                await client.sign_in(password=password)
+        else:
+            log(args.verbose, f"Requesting OTP for phone {mask_phone(phone)}")
+            sent = await client.send_code_request(phone)
+            sent_type = sent.type.__class__.__name__ if getattr(sent, "type", None) else None
+            sent_next_type = sent.next_type.__class__.__name__ if getattr(sent, "next_type", None) else None
+            sent_timeout = getattr(sent, "timeout", None)
+
+            log(
+                args.verbose,
+                (
+                    "OTP delivery details: "
+                    f"type={sent_type or 'unknown'}, next_type={sent_next_type or 'none'}, "
+                    f"timeout={sent_timeout}"
+                ),
+            )
+
+            while True:
+                if not code:
+                    if not sys.stdin.isatty():
+                        return (
+                            build_precondition(
+                                "OTP code is required (use --code or TELEGRAM_TEST_OTP_CODE)",
+                                {
+                                    "phone_masked": mask_phone(phone),
+                                    "sent_type": sent_type,
+                                    "next_type": sent_next_type,
+                                    "timeout": sent_timeout,
+                                },
+                            ),
+                            EXIT_PRECONDITION,
+                        )
+                    code = input("Enter Telegram OTP code (or /resend): ").strip().replace(" ", "")
+
+                if not code:
                     return (
                         build_precondition(
-                            "2FA password required (use --password or TELEGRAM_TEST_2FA_PASSWORD)",
-                            {"phone_masked": mask_phone(phone)},
+                            "OTP code cannot be empty",
+                            {
+                                "phone_masked": mask_phone(phone),
+                                "sent_type": sent_type,
+                                "next_type": sent_next_type,
+                                "timeout": sent_timeout,
+                            },
                         ),
                         EXIT_PRECONDITION,
                     )
-                password = getpass.getpass("Enter Telegram 2FA password: ").strip()
 
-            if not password:
-                return (
-                    build_precondition("2FA password cannot be empty", {"phone_masked": mask_phone(phone)}),
-                    EXIT_PRECONDITION,
-                )
+                if code.lower() == "/resend":
+                    resend_attempts += 1
+                    log(args.verbose, "Resending OTP code")
+                    sent = await client.send_code_request(phone)
+                    sent_type = sent.type.__class__.__name__ if getattr(sent, "type", None) else None
+                    sent_next_type = sent.next_type.__class__.__name__ if getattr(sent, "next_type", None) else None
+                    sent_timeout = getattr(sent, "timeout", None)
+                    log(
+                        args.verbose,
+                        (
+                            "OTP resend details: "
+                            f"type={sent_type or 'unknown'}, next_type={sent_next_type or 'none'}, "
+                            f"timeout={sent_timeout}"
+                        ),
+                    )
+                    code = ""
+                    continue
 
-            await client.sign_in(password=password)
+                code_attempts += 1
+                try:
+                    await client.sign_in(phone=phone, code=code, phone_code_hash=sent.phone_code_hash)
+                    break
+                except PhoneCodeInvalidError:
+                    if not sys.stdin.isatty():
+                        return (
+                            build_upstream(
+                                "telegram RPC error: PhoneCodeInvalidError",
+                                {
+                                    "details": "The phone code entered was invalid",
+                                    "phone_masked": mask_phone(phone),
+                                    "code_attempts": code_attempts,
+                                    "resend_attempts": resend_attempts,
+                                    "sent_type": sent_type,
+                                },
+                            ),
+                            EXIT_UPSTREAM,
+                        )
+                    print("Invalid OTP code. Try again or enter /resend.", file=sys.stderr)
+                    code = ""
+                    continue
+                except PhoneCodeExpiredError:
+                    if not sys.stdin.isatty():
+                        return (
+                            build_upstream(
+                                "telegram RPC error: PhoneCodeExpiredError",
+                                {
+                                    "details": "The phone code has expired",
+                                    "phone_masked": mask_phone(phone),
+                                    "code_attempts": code_attempts,
+                                    "resend_attempts": resend_attempts,
+                                    "sent_type": sent_type,
+                                },
+                            ),
+                            EXIT_UPSTREAM,
+                        )
+                    print("OTP code expired. Enter /resend to request a new code.", file=sys.stderr)
+                    code = ""
+                    continue
+                except SessionPasswordNeededError:
+                    if not password:
+                        if not sys.stdin.isatty():
+                            return (
+                                build_precondition(
+                                    "2FA password required (use --password or TELEGRAM_TEST_2FA_PASSWORD)",
+                                    {
+                                        "phone_masked": mask_phone(phone),
+                                        "code_attempts": code_attempts,
+                                        "resend_attempts": resend_attempts,
+                                    },
+                                ),
+                                EXIT_PRECONDITION,
+                            )
+                        password = getpass.getpass("Enter Telegram 2FA password: ").strip()
+
+                    if not password:
+                        return (
+                            build_precondition("2FA password cannot be empty", {"phone_masked": mask_phone(phone)}),
+                            EXIT_PRECONDITION,
+                        )
+
+                    await client.sign_in(password=password)
+                    break
 
         if not await client.is_user_authorized():
             return (
                 build_upstream(
                     "Telegram authorization failed",
-                    {"phone_masked": mask_phone(phone)},
+                    {
+                        "phone_masked": mask_phone(phone),
+                        "login_mode": login_mode,
+                        "sent_type": sent_type,
+                        "next_type": sent_next_type,
+                        "timeout": sent_timeout,
+                    },
                 ),
                 EXIT_UPSTREAM,
             )
@@ -233,6 +402,13 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
                     "api_id": api_id,
                     "session_length": len(session_value),
                     "session_out": session_out or None,
+                    "login_mode": login_mode,
+                    "qr_timeout_sec": qr_wait_timeout,
+                    "sent_type": sent_type,
+                    "next_type": sent_next_type,
+                    "timeout": sent_timeout,
+                    "code_attempts": code_attempts,
+                    "resend_attempts": resend_attempts,
                 },
             ),
             EXIT_COMPLETED,
@@ -241,7 +417,7 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
         return (
             build_upstream(
                 f"telegram RPC error: {exc.__class__.__name__}",
-                {"details": str(exc), "phone_masked": mask_phone(phone)},
+                {"details": str(exc), "phone_masked": mask_phone(phone), "login_mode": login_mode},
             ),
             EXIT_UPSTREAM,
         )
@@ -249,7 +425,7 @@ async def run_bootstrap(args: argparse.Namespace) -> tuple[BootstrapResult, int]
         return (
             build_upstream(
                 f"unexpected error: {exc.__class__.__name__}",
-                {"details": str(exc), "phone_masked": mask_phone(phone)},
+                {"details": str(exc), "phone_masked": mask_phone(phone), "login_mode": login_mode},
             ),
             EXIT_UPSTREAM,
         )

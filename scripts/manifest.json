@@ -91,6 +91,24 @@
       ],
       "provides": ["telegram-session-bootstrap"]
     },
+    "telegram-real-user-cli.py": {
+      "version": "1.0.0",
+      "description": "Controlled MTProto adapter (resolve/send/reply-wait/list-dialogs/probe) for real_user E2E",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "env_vars": [
+        "TELEGRAM_TEST_API_ID",
+        "TELEGRAM_TEST_API_HASH",
+        "TELEGRAM_TEST_SESSION"
+      ],
+      "provides": [
+        "telegram-real-user-resolve",
+        "telegram-real-user-send",
+        "telegram-real-user-reply-wait",
+        "telegram-real-user-list-dialogs",
+        "telegram-real-user-probe"
+      ]
+    },
     "gitops-guards.sh": {
       "version": "1.0.0",
       "description": "GitOps compliance guard functions library",
