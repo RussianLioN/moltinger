@@ -10,68 +10,33 @@
       "version": "2.1.0",
       "description": "Blue-green deployment with health checks, rollback, notifications",
       "entrypoint": true,
-      "requires": [
-        "docker",
-        "docker-compose"
-      ],
-      "provides": [
-        "deploy",
-        "rollback",
-        "status",
-        "start",
-        "stop",
-        "restart",
-        "logs"
-      ],
+      "requires": ["docker", "docker-compose"],
+      "provides": ["deploy", "rollback", "status", "start", "stop", "restart", "logs"],
       "gitops": true
     },
     "backup-moltis-enhanced.sh": {
       "version": "2.1.0",
       "description": "Enterprise backup with encryption, offsite backup, integrity verification",
       "entrypoint": true,
-      "requires": [
-        "docker",
-        "tar",
-        "gpg"
-      ],
-      "provides": [
-        "backup",
-        "restore",
-        "verify",
-        "list"
-      ],
+      "requires": ["docker", "tar", "gpg"],
+      "provides": ["backup", "restore", "verify", "list"],
       "cron": "0 2 * * *"
     },
     "health-monitor.sh": {
       "version": "1.0.0",
       "description": "Health monitoring and alerting",
       "entrypoint": true,
-      "requires": [
-        "curl",
-        "docker"
-      ],
-      "provides": [
-        "check",
-        "watch",
-        "alert"
-      ],
+      "requires": ["curl", "docker"],
+      "provides": ["check", "watch", "alert"],
       "cron": "*/5 * * * *"
     },
     "test-moltis-api.sh": {
       "version": "1.0.0",
       "description": "Moltis HTTP API testing script",
       "entrypoint": true,
-      "requires": [
-        "curl",
-        "jq"
-      ],
-      "provides": [
-        "test-api"
-      ],
-      "env_vars": [
-        "MOLTIS_URL",
-        "MOLTIS_PASSWORD"
-      ]
+      "requires": ["curl", "jq"],
+      "provides": ["test-api"],
+      "env_vars": ["MOLTIS_URL", "MOLTIS_PASSWORD"]
     },
     "gitops-guards.sh": {
       "version": "1.0.0",
@@ -93,28 +58,16 @@
       "version": "1.0.0",
       "description": "Validate scripts manifest and verify integrity",
       "entrypoint": true,
-      "requires": [
-        "jq",
-        "sha256sum"
-      ],
-      "provides": [
-        "verify",
-        "validate"
-      ],
+      "requires": ["jq", "sha256sum"],
+      "provides": ["verify", "validate"],
       "ci": true
     },
     "gitops-metrics.sh": {
       "version": "1.0.0",
       "description": "Collect and report GitOps compliance metrics",
       "entrypoint": true,
-      "requires": [
-        "sha256sum"
-      ],
-      "provides": [
-        "metrics",
-        "slo",
-        "report"
-      ],
+      "requires": ["sha256sum"],
+      "provides": ["metrics", "slo", "report"],
       "slos": {
         "compliance_target": 95,
         "deploy_success_target": 99,
