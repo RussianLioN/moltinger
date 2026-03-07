@@ -56,9 +56,6 @@ services:
       # Telegram bot configuration
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
-      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-https://moltis.ainetic.tech/telegram/webhook}
-      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
-      TELEGRAM_TEST_USER: ${TELEGRAM_TEST_USER:-}
       # Tavily API for MCP server
       TAVILY_API_KEY: ${TAVILY_API_KEY}
       # GLM-5 API key for Z.ai Coding Plan (OpenAI-compatible)
