@@ -51,6 +51,17 @@
 
 ## ✅ Allowed Patterns
 
+### 0. Context-first lookup (for agents and operators)
+
+Before asking for secret/env values, check:
+
+1. `MEMORY.md`
+2. `SESSION_SUMMARY.md`
+3. This file (`docs/SECRETS-MANAGEMENT.md`)
+4. `.github/workflows/deploy.yml` (`Generate .env from Secrets`)
+
+If a value is already documented there, reuse it and do not ask again.
+
 ### 1. GitHub Secrets (Recommended)
 
 ```bash

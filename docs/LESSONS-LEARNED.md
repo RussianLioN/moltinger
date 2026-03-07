@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-07
-**Total Lessons**: 7
+**Total Lessons**: 8
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P2 (1 lessons)
+#### P2 (2 lessons)
+- [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### P3 (4 lessons)
@@ -36,7 +37,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (1 lessons)
+#### process (2 lessons)
+- [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### security (1 lessons)
@@ -48,16 +50,16 @@
 
 ### Popular Tags
 
+- `process` (2 lessons)
+- `instructions` (2 lessons)
 - `token-optimization` (1 lessons)
+- `telegram` (1 lessons)
 - `shell` (1 lessons)
 - `security` (1 lessons)
+- `secrets` (1 lessons)
 - `rm-rf` (1 lessons)
 - `recurring-issue` (1 lessons)
 - `protocol` (1 lessons)
-- `process` (1 lessons)
-- `instructions` (1 lessons)
-- `file-deletion` (1 lessons)
-- `false` (1 lessons)
 
 
 ---
@@ -66,10 +68,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 7 |
+| Total Lessons | 8 |
 | Critical (P0/P1) | 1 |
 | Categories | 4 |
-| Unique Tags | 11 |
+| Unique Tags | 14 |
 
 ---
 

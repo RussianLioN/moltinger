@@ -7,18 +7,18 @@
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 7 |
+| Total RCA | 8 |
 | Avg Resolution Time | N/A |
-| This Month | 7 |
+| This Month | 8 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 57% |
-| process | 1 | 14% |
-| security | 1 | 14% |
-| shell | 1 | 14% |
+| generic | 4 | 50% |
+| process | 2 | 25% |
+| security | 1 | 12% |
+| shell | 1 | 12% |
 
 ## By Severity
 
@@ -26,7 +26,7 @@
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
 | P1 | 0 | High - production impact |
-| P2 | 1 | Medium - process issue |
+| P2 | 2 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
 
@@ -34,6 +34,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-008 | 2026-03-07 | process | P2 | resolved | No mandatory context-first lookup before asking for secret values | added context-first protocol |
 | RCA-007 | 2026-03-07 | shell | P4 | resolved | Misinterpreted non-zero code from diagnostic command | protocol note added |
 | RCA-006 | 2026-03-04 | security | P0 | resolved | Unsafe command handling path | manual guard + policy check |
 | RCA-005 | 2026-03-04 | process | P2 | resolved | Instruction growth and duplication in sessions | optimization + guardrails |
@@ -44,7 +45,7 @@
 
 ## Patterns Detected
 
-*No patterns detected yet - need 3+ RCA in same category*
+⚠️ Warning: 4+ RCA in category `generic` - continue shifting fixes from ad-hoc notes to hard rules/checklists.
 
 ---
 
