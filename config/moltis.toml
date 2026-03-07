@@ -378,7 +378,7 @@ enabled = true                    # Keep Telegram integration explicitly enabled
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
-allowlist = ["262872984"]  # Telegram user IDs as strings
+allowlist = ["262872984", "8153127006"]  # Telegram user IDs as strings
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
 # webhook_url = "${TELEGRAM_WEBHOOK_URL}"
 # webhook_secret = "${TELEGRAM_WEBHOOK_SECRET}"
