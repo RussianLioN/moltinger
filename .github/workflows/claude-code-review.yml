@@ -75,9 +75,9 @@ jobs:
             echo "number=${{ inputs.pr_number }}" >> $GITHUB_OUTPUT
             echo "focus=${{ inputs.focus_area }}" >> $GITHUB_OUTPUT
             # For manual runs, fetch PR info
-            PR_DATA=$(gh pr view ${{ inputs.pr_number }} --json author,authorAssociation)
+            PR_DATA=$(gh pr view ${{ inputs.pr_number }} --json author)
             echo "author=$(echo $PR_DATA | jq -r '.author.login')" >> $GITHUB_OUTPUT
-            echo "association=$(echo $PR_DATA | jq -r '.authorAssociation')" >> $GITHUB_OUTPUT
+            echo "association=MANUAL" >> $GITHUB_OUTPUT
           fi
         env:
           GH_TOKEN: ${{ github.token }}
