@@ -79,6 +79,7 @@ jobs:
         run: |
           echo "::group::GitOps Compliance Check"
           DRIFT_FOUND=false
+          SERVER_DIRTY=false
 
           # Function to compare files
           compare_files() {
@@ -137,18 +138,50 @@ jobs:
             done
           fi
 
+          # Check 5: systemd/ directory
+          echo "=== Check 5: systemd/ directory ==="
+          if [ -d "systemd" ] && [ "$(ls -A systemd 2>/dev/null)" ]; then
+            for UNIT in systemd/*; do
+              if [ -f "$UNIT" ]; then
+                UNIT_NAME=$(basename "$UNIT")
+                if ! compare_files "$UNIT" "${{ env.DEPLOY_PATH }}/systemd/$UNIT_NAME" "systemd/$UNIT_NAME"; then
+                  DRIFT_FOUND=true
+                fi
+              fi
+            done
+          fi
+
+          # Check 6: server worktree cleanliness (hard block)
+          echo "=== Check 6: server git status --porcelain ==="
+          SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
+          if [ -n "$SERVER_STATUS" ]; then
+            echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
+            echo "$SERVER_STATUS"
+            SERVER_DIRTY=true
+            DRIFT_FOUND=true
+          else
+            echo "::notice::Server working tree is clean ✅"
+          fi
+
           # Output results
           if [ "$DRIFT_FOUND" = true ]; then
-            echo "::warning::GitOps drift detected - files will be synced during deployment"
+            echo "::error::GitOps drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
             echo "compliant=false" >> $GITHUB_OUTPUT
+            echo "server_dirty=$SERVER_DIRTY" >> $GITHUB_OUTPUT
           else
             echo "::notice::All GitOps checks passed ✅"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
             echo "compliant=true" >> $GITHUB_OUTPUT
+            echo "server_dirty=false" >> $GITHUB_OUTPUT
           fi
           echo "::endgroup::"
 
+      - name: Block deployment on GitOps drift
+        if: steps.check.outputs.drift_detected == 'true'
+        run: |
+          echo "::error::Deployment blocked: GitOps drift or dirty server worktree detected."
+          exit 1
       - name: Compliance summary
         if: always()
         run: |
@@ -157,9 +190,10 @@ jobs:
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Drift Detected | \`${{ steps.check.outputs.drift_detected }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server Dirty | \`${{ steps.check.outputs.server_dirty }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliant | \`${{ steps.check.outputs.compliant }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> Note: Drift will be auto-corrected during deployment" >> $GITHUB_STEP_SUMMARY
+          echo "> Drift now blocks deployment until server and git state are aligned." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
   # Pre-flight checks and validation (P2-6)
@@ -473,8 +507,8 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [preflight, backup, test]
-    if: needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success' && needs.backup.result == 'success'
+    needs: [preflight, backup, test, gitops-compliance]
+    if: needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success' && needs.backup.result == 'success' && needs.gitops-compliance.result == 'success'
     environment:
       name: production
       url: https://moltis.ainetic.tech
@@ -525,7 +559,11 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
 
-          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/)"
+          # Sync systemd units (scheduler as code)
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/systemd"
+          scp -r systemd/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/systemd/ 2>/dev/null || echo "No systemd units to sync"
+
+          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/ + systemd/)"
           echo "::endgroup::"
 
       # ===========================================
@@ -570,6 +608,31 @@ jobs:
             echo "::notice::No cron jobs to install (scripts/cron.d/ empty or missing)"
           fi
 
+          echo "::endgroup::"
+
+      - name: Install systemd timer (primary monitor scheduler)
+        run: |
+          echo "::group::Installing systemd timer for telegram web user monitor"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'SYSTEMDEOF'
+            set -e
+
+            SERVICE_SRC="/opt/moltinger/systemd/moltis-telegram-web-user-monitor.service"
+            TIMER_SRC="/opt/moltinger/systemd/moltis-telegram-web-user-monitor.timer"
+
+            if [ ! -f "$SERVICE_SRC" ] || [ ! -f "$TIMER_SRC" ]; then
+              echo "::error::systemd units not found in /opt/moltinger/systemd"
+              exit 1
+            fi
+
+            cp "$SERVICE_SRC" /etc/systemd/system/moltis-telegram-web-user-monitor.service
+            cp "$TIMER_SRC" /etc/systemd/system/moltis-telegram-web-user-monitor.timer
+            chmod 644 /etc/systemd/system/moltis-telegram-web-user-monitor.service
+            chmod 644 /etc/systemd/system/moltis-telegram-web-user-monitor.timer
+            systemctl daemon-reload
+            systemctl enable --now moltis-telegram-web-user-monitor.timer
+            systemctl is-active --quiet moltis-telegram-web-user-monitor.timer
+            echo "systemd timer active: moltis-telegram-web-user-monitor.timer"
+          SYSTEMDEOF
           echo "::endgroup::"
 
       # ===========================================
