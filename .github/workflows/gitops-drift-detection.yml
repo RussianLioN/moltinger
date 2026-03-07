@@ -98,7 +98,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
           if [ "$DRIFT_FOUND" = true ]; then
-            echo "::error::GitOps drift detected! Manual server modifications found."
+            echo "::warning::GitOps drift detected! Manual server modifications found."
           else
             echo "::notice::All configuration files match git ✅"
           fi

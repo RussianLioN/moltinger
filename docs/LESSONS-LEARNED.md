@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-07
-**Total Lessons**: 8
+**Total Lessons**: 9
 
 ---
 
@@ -14,7 +14,8 @@
 #### P2 (1 lessons)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### P3 (4 lessons)
+#### P3 (5 lessons)
+- [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
 - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
@@ -27,7 +28,12 @@
 ### By Category
 
 
-#### cicd (1 lessons)
+#### cicd (2 lessons)
+- [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
+- [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
+
+#### cicd (2 lessons)
+- [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
 #### generic (4 lessons)
@@ -66,16 +72,16 @@
 
 ### Popular Tags
 
+- `github-actions` (2 lessons)
+- `drift-detection` (2 lessons)
 - `token-optimization` (1 lessons)
+- `signal-noise` (1 lessons)
 - `shell` (1 lessons)
 - `security` (1 lessons)
 - `rm-rf` (1 lessons)
 - `recurring-issue` (1 lessons)
+- `rca` (1 lessons)
 - `protocol` (1 lessons)
-- `process` (1 lessons)
-- `permissions` (1 lessons)
-- `instructions` (1 lessons)
-- `gitops` (1 lessons)
 
 
 ---
@@ -84,10 +90,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 8 |
+| Total Lessons | 9 |
 | Critical (P0/P1) | 0 |
 | Categories | 5 |
-| Unique Tags | 16 |
+| Unique Tags | 19 |
 
 ---
 
