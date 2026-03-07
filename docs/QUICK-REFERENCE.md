@@ -85,8 +85,11 @@ make logs LOGS_OPTS=-f
 |--------|--------|---------|
 | TELEGRAM_BOT_TOKEN | ✅ | Bot token |
 | TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
-| GLM_API_KEY | ✅ | LLM API |
+| GLM_API_KEY | ✅ | LLM API + AI workflows |
 | SSH_PRIVATE_KEY | ✅ | Deploy |
+
+Workflow variable:
+- `AI_REVIEW_PROVIDER` (`zai` by default, `off` for emergency fallback-only mode)
 
 ---
 

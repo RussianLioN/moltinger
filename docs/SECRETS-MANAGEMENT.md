@@ -126,7 +126,7 @@ gh workflow run deploy.yml
 
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
-| `GLM_API_KEY` | GLM/Zhipu AI LLM (Primary) | Moltis config |
+| `GLM_API_KEY` | GLM/Zhipu AI LLM (Primary) | Moltis config + AI workflows |
 | `OLLAMA_API_KEY` | Ollama Cloud Fallback (Optional) | Docker secrets |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
 | `TAVILY_API_KEY` | Web search | Moltis config |
@@ -134,6 +134,12 @@ gh workflow run deploy.yml
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
 | `SSH_HOST` | Server address | GitHub Actions |
 | `SSH_USER` | SSH username | GitHub Actions |
+
+### AI Workflow Secrets (Code Review + Interactive Assistant)
+
+- `.github/workflows/claude-code-review.yml` and `.github/workflows/claude.yml` use `GLM_API_KEY` for Z.ai Coding Plan requests.
+- `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` are not required for current CI workflows.
+- Optional kill-switch: repository variable `AI_REVIEW_PROVIDER=off` disables active AI calls while keeping fallback reports/comments non-blocking.
 
 ### LLM Failover Secrets
 
