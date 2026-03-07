@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-07
-**Total Lessons**: 7
+**Total Lessons**: 8
 
 ---
 
@@ -10,6 +10,9 @@
 
 ### By Severity
 
+
+#### P1 (1 lessons)
+- [Telegram bot stopped responding to commands](../docs/rca/2026-03-07-telegram-bot-no-response.md)
 
 #### P3 (4 lessons)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -57,19 +60,22 @@
 #### shell (1 lessons)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
+#### telegram (1 lessons)
+- [Telegram bot stopped responding to commands](../docs/rca/2026-03-07-telegram-bot-no-response.md)
+
 
 ### Popular Tags
 
+- `process` (2 lessons)
+- `webhook` (1 lessons)
 - `token-optimization` (1 lessons)
+- `telegram` (1 lessons)
 - `shell` (1 lessons)
 - `security` (1 lessons)
 - `rm-rf` (1 lessons)
 - `recurring-issue` (1 lessons)
+- `rca-protocol` (1 lessons)
 - `protocol` (1 lessons)
-- `process` (1 lessons)
-- `instructions` (1 lessons)
-- `file-deletion` (1 lessons)
-- `false` (1 lessons)
 
 
 ---
@@ -78,10 +84,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 7 |
-| Critical (P0/P1) | 0 |
-| Categories | 4 |
-| Unique Tags | 11 |
+| Total Lessons | 8 |
+| Critical (P0/P1) | 1 |
+| Categories | 5 |
+| Unique Tags | 15 |
 
 ---
 

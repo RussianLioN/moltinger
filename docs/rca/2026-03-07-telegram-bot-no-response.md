@@ -1,3 +1,9 @@
+title: Telegram bot stopped responding to commands
+date: 2026-03-07
+severity: P1
+category: telegram
+tags: [telegram, webhook, e2e, process, rca-protocol]
+
 # RCA: Telegram bot stopped responding to commands
 
 Date: 2026-03-07
@@ -39,3 +45,10 @@ Deployment/config baseline lacked strict webhook-mode enforcement and strict pro
 - Keep polling as default fail-safe until webhook endpoint contract is re-validated.
 - Use controlled rollout workflow (`status` -> `enable` -> `verify`) and immediate `disable` on any regression.
 - Keep webhook URL and secret managed only via GitHub Secrets + CI/CD generated `.env`.
+
+## Уроки
+
+1. **RCA считается незавершенным без индексации уроков** — после любого RCA обязательно выполнить `./scripts/build-lessons-index.sh` и проверку через `./scripts/query-lessons.sh`.
+2. **Операционные команды должны идти с явным `cwd`** — в runbook всегда указывать точную директорию запуска, чтобы исключить ошибки исполнения в другой папке.
+3. **Real-user E2E требует отдельного one-time bootstrap шага** — `TELEGRAM_TEST_SESSION` генерируется через OTP и хранится в GitHub Secret, а не в постоянных локальных файлах.
+4. **Штатный режим бота и тестовый контур должны быть разделены** — on-demand `real_user/synthetic` проверки не должны менять постоянный прод-режим Telegram-канала.
