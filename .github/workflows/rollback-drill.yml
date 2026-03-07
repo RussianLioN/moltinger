@@ -100,6 +100,8 @@ jobs:
       - name: Drill summary
         if: always()
         run: |
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+
           echo "## Rollback Drill Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
@@ -110,3 +112,51 @@ jobs:
           echo "| Contains data/ | \`${{ steps.drill.outputs.has_data }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Contains .env | \`${{ steps.drill.outputs.has_env }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runbook | $RUNBOOK_URL |" >> $GITHUB_STEP_SUMMARY
+
+  notify-failure:
+    name: Notify Rollback Drill Failure
+    runs-on: ubuntu-latest
+    needs: [rollback-drill]
+    if: failure()
+
+    steps:
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping rollback drill failure notification"
+            exit 0
+          fi
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \":x: Rollback drill failed\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {\"type\": \"plain_text\", \"text\": \"❌ Rollback Drill Failed\"}
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {\"type\": \"mrkdwn\", \"text\": \"*Repo:*\\n${{ github.repository }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\\n${{ github.ref_name }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Commit:*\\n${{ github.sha }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Actor:*\\n${{ github.actor }}\"}
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Run\"}, \"url\": \"$RUN_URL\"},
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"Runbook\"}, \"url\": \"$RUNBOOK_URL\"}
+                  ]
+                }
+              ]
+            }" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Failed to send rollback drill failure Slack notification"

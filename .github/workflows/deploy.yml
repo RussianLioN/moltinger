@@ -455,6 +455,7 @@ jobs:
             cd "$BACKUP_DIR"
             ls -t pre_deploy_*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
             ls -t pre_deploy_*.compose 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+            ls -t pre_deploy_*.version 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
           EOF
 
           LATEST_BACKUP=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "ls -t ${{ env.BACKUP_PATH }}/pre_deploy_*.tar.gz 2>/dev/null | head -1")
@@ -817,18 +818,23 @@ jobs:
           echo "::group::Verifying external access"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
-            # Check Traefik routing
-            curl -fsS https://moltis.ainetic.tech/health -o /dev/null
-            echo "::notice::External access verified via Traefik"
+            # Check Traefik routing (401 = auth required, valid behavior)
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://moltis.ainetic.tech/health)
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+              echo "::notice::External access verified via Traefik (HTTP $HTTP_CODE)"
+            else
+              echo "::error::External access check failed (HTTP $HTTP_CODE)"
+              exit 1
+            fi
           EOF
           echo "::endgroup::"
-
       - name: Deployment summary
         if: always()
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
           STATUS="${{ steps.health.outputs.status }}"
           ROLLED_BACK="${{ steps.rollback_auto.outputs.rolled_back }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
           [ -z "$ROLLED_BACK" ] && ROLLED_BACK="false"
 
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
@@ -840,6 +846,48 @@ jobs:
           echo "| Auto Rollback | $ROLLED_BACK |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runbook | $RUNBOOK_URL |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify auto rollback event (Slack)
+        if: steps.rollback_auto.outputs.rolled_back == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping auto-rollback notification"
+            exit 0
+          fi
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \":warning: Auto rollback executed in Deploy Moltis\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {\"type\": \"plain_text\", \"text\": \"⚠️ Auto Rollback Executed\"}
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {\"type\": \"mrkdwn\", \"text\": \"*Repo:*\\n${{ github.repository }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\\n${{ github.ref_name }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Commit:*\\n${{ github.sha }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Actor:*\\n${{ github.actor }}\"}
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Run\"}, \"url\": \"$RUN_URL\"},
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"Runbook\"}, \"url\": \"$RUNBOOK_URL\"}
+                  ]
+                }
+              ]
+            }" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Failed to send auto-rollback Slack notification"
 
       # ===========================================
       # GitOps Step 3: Record deployed git SHA
@@ -1192,13 +1240,19 @@ jobs:
 
     steps:
       - name: Send failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+
           echo "::warning::Deployment failed! Check the logs for details."
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Deployment Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The deployment to production has failed. Please check the logs above." >> $GITHUB_STEP_SUMMARY
           echo "Auto rollback is attempted automatically when the deploy health gate fails." >> $GITHUB_STEP_SUMMARY
+          echo "Runbook: $RUNBOOK_URL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Rollback Instructions" >> $GITHUB_STEP_SUMMARY
           echo "1. Go to Actions tab" >> $GITHUB_STEP_SUMMARY
@@ -1206,3 +1260,36 @@ jobs:
           echo "3. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
           echo "4. Check 'Rollback to previous version'" >> $GITHUB_STEP_SUMMARY
           echo "5. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping failure Slack notification"
+            exit 0
+          fi
+
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \":x: Deploy Moltis failed\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {\"type\": \"plain_text\", \"text\": \"❌ Deploy Moltis Failed\"}
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {\"type\": \"mrkdwn\", \"text\": \"*Repo:*\\n${{ github.repository }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\\n${{ github.ref_name }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Commit:*\\n${{ github.sha }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Actor:*\\n${{ github.actor }}\"}
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Run\"}, \"url\": \"$RUN_URL\"},
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"Runbook\"}, \"url\": \"$RUNBOOK_URL\"}
+                  ]
+                }
+              ]
+            }" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Failed to send deploy failure Slack notification"
