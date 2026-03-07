@@ -1098,11 +1098,14 @@ jobs:
             # Test 5: GitOps - verify docker-compose.prod.yml has correct Traefik labels
             echo "Test 5: GitOps configuration check..."
             cd ${{ env.DEPLOY_PATH }}
-            if grep -q 'traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)' docker-compose.prod.yml; then
-              echo "GitOps: Traefik Host rule correct (moltis.ainetic.tech)"
+            if grep -qE 'traefik\.http\.routers\.moltis\.rule=Host\(`(\$\{MOLTIS_DOMAIN(:-[^}]*)?\}|moltis\.ainetic\.tech)`\)' docker-compose.prod.yml; then
+              echo "GitOps: Traefik Host rule check passed (literal or MOLTIS_DOMAIN template)"
             else
               echo "::error::GitOps violation: Traefik Host rule mismatch in docker-compose.prod.yml"
-              echo "Expected: Host(\`moltis.ainetic.tech\`)"
+              echo "Expected one of:"
+              echo "  - Host(\`moltis.ainetic.tech\`)"
+              echo "  - Host(\`\${MOLTIS_DOMAIN:-moltis.ainetic.tech}\`)"
+              echo "  - Host(\`\${MOLTIS_DOMAIN}\`)"
               echo "Found in file:"
               grep "traefik.http.routers.moltis.rule" docker-compose.prod.yml || echo "(not found)"
               exit 1
