@@ -131,11 +131,16 @@ gh workflow run deploy.yml
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook endpoint URL (optional) | Controlled webhook rollout |
 | `TELEGRAM_WEBHOOK_SECRET` | Telegram webhook anti-spoofing token (optional) | Controlled webhook rollout |
+| `TELEGRAM_TEST_API_ID` | Telegram API id (optional/reserved) | On-demand E2E `real_user` mode (future) |
+| `TELEGRAM_TEST_API_HASH` | Telegram API hash (optional/reserved) | On-demand E2E `real_user` mode (future) |
+| `TELEGRAM_TEST_SESSION` | Serialized Telegram test session (optional/reserved) | On-demand E2E `real_user` mode (future) |
 | `TAVILY_API_KEY` | Web search | Moltis config |
 | `MOLTIS_PASSWORD` | Authentication | Moltis auth |
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
 | `SSH_HOST` | Server address | GitHub Actions |
 | `SSH_USER` | SSH username | GitHub Actions |
+
+For MVP of on-demand Telegram E2E harness, only `MOLTIS_PASSWORD` is required (`synthetic` mode). `TELEGRAM_TEST_*` secrets are intentionally reserved for a deferred `real_user` implementation path.
 
 ### LLM Failover Secrets
 
