@@ -131,6 +131,9 @@ gh workflow run deploy.yml
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook endpoint URL (optional) | Controlled webhook rollout |
 | `TELEGRAM_WEBHOOK_SECRET` | Telegram webhook anti-spoofing token (optional) | Controlled webhook rollout |
+| `TELEGRAM_TEST_API_ID` | Telegram API id (optional/reserved) | On-demand E2E `real_user` mode (future) |
+| `TELEGRAM_TEST_API_HASH` | Telegram API hash (optional/reserved) | On-demand E2E `real_user` mode (future) |
+| `TELEGRAM_TEST_SESSION` | Serialized Telegram test session (optional/reserved) | On-demand E2E `real_user` mode (future) |
 | `TAVILY_API_KEY` | Web search | Moltis config |
 | `MOLTIS_PASSWORD` | Authentication | Moltis auth |
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
@@ -145,6 +148,10 @@ gh workflow run deploy.yml
 - Rollback artifacts for legacy Anthropic workflows are stored in:
   - `.github/workflows/claude.legacy.yml.disabled`
   - `.github/workflows/claude-code-review.legacy.yml.disabled`
+
+For on-demand Telegram E2E harness:
+- `synthetic` mode requires only `MOLTIS_PASSWORD`.
+- `real_user` mode requires `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, and `TELEGRAM_TEST_SESSION`.
 
 ### LLM Failover Secrets
 

@@ -1,0 +1,19 @@
+{
+  "run_id": "20260307T064430Z-00001",
+  "mode": "synthetic",
+  "trigger_source": "cli",
+  "message": "/status",
+  "started_at": "2026-03-07T06:44:30Z",
+  "finished_at": "2026-03-07T06:44:32Z",
+  "duration_ms": 2134,
+  "transport": "moltis_api_chat",
+  "observed_response": "{\"reply\":\"mock synthetic response\",\"poll_count\":2}",
+  "status": "completed",
+  "error_code": null,
+  "error_message": null,
+  "context": {
+    "login_http_code": "200",
+    "send_http_code": "202",
+    "poll_attempts": 2
+  }
+}
