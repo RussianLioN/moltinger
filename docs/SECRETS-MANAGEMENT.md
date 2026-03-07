@@ -1,7 +1,7 @@
 # Secrets Management Policy
 
 **Version**: 1.0
-**Last Updated**: 2026-02-17
+**Last Updated**: 2026-03-07
 
 ---
 
@@ -129,6 +129,8 @@ gh workflow run deploy.yml
 | `GLM_API_KEY` | GLM/Zhipu AI LLM (Primary) | Moltis config |
 | `OLLAMA_API_KEY` | Ollama Cloud Fallback (Optional) | Docker secrets |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
+| `TELEGRAM_WEBHOOK_URL` | Telegram webhook endpoint URL (optional) | Controlled webhook rollout |
+| `TELEGRAM_WEBHOOK_SECRET` | Telegram webhook anti-spoofing token (optional) | Controlled webhook rollout |
 | `TAVILY_API_KEY` | Web search | Moltis config |
 | `MOLTIS_PASSWORD` | Authentication | Moltis auth |
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
