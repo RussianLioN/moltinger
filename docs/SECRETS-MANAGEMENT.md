@@ -153,6 +153,7 @@ gh workflow run deploy.yml
 For on-demand Telegram E2E harness:
 - `synthetic` mode requires only `MOLTIS_PASSWORD`.
 - `real_user` mode requires `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, and `TELEGRAM_TEST_SESSION`; `TELEGRAM_TEST_BOT_USERNAME` is optional.
+- `TELEGRAM_TEST_SESSION` is generated once via `scripts/telegram-real-user-bootstrap.py` (OTP login).
 
 ### LLM Failover Secrets
 

@@ -279,7 +279,7 @@ run_real_user() {
     CONTEXT_JSON="$(jq -cn \
       --argjson missing "$missing_json" \
       --arg hint1 "Set TELEGRAM_TEST_API_ID, TELEGRAM_TEST_API_HASH, TELEGRAM_TEST_SESSION" \
-      --arg hint2 "Generate TELEGRAM_TEST_SESSION once via Telegram OTP bootstrap" \
+      --arg hint2 "Generate TELEGRAM_TEST_SESSION via scripts/telegram-real-user-bootstrap.py (OTP bootstrap)" \
       '{missing_prerequisites:$missing, action_hints:[$hint1,$hint2]}')"
     precondition_fail "Missing required TELEGRAM_TEST_* prerequisites for real_user mode"
   fi

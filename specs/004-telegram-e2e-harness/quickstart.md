@@ -38,8 +38,18 @@ gh run watch
 ```bash
 export TELEGRAM_TEST_API_ID='123456'
 export TELEGRAM_TEST_API_HASH='your_api_hash'
-export TELEGRAM_TEST_SESSION='your_string_session'
 export TELEGRAM_TEST_BOT_USERNAME='@moltinger_bot'
+
+# One-time OTP bootstrap for session
+bootstrap_json="$(
+  python3 scripts/telegram-real-user-bootstrap.py \
+    --api-id "$TELEGRAM_TEST_API_ID" \
+    --api-hash "$TELEGRAM_TEST_API_HASH" \
+    --phone "+79991234567" \
+    --session-out /tmp/telegram-test.session \
+    --code "12345"
+)"
+export TELEGRAM_TEST_SESSION="$(cat /tmp/telegram-test.session)"
 
 ./scripts/telegram-e2e-on-demand.sh \
   --mode real_user \

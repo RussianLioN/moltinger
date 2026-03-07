@@ -80,6 +80,17 @@
         "TELEGRAM_TEST_BOT_USERNAME"
       ]
     },
+    "telegram-real-user-bootstrap.py": {
+      "version": "1.0.0",
+      "description": "One-time OTP bootstrap helper for TELEGRAM_TEST_SESSION",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "env_vars": [
+        "TELEGRAM_TEST_OTP_CODE",
+        "TELEGRAM_TEST_2FA_PASSWORD"
+      ],
+      "provides": ["telegram-session-bootstrap"]
+    },
     "gitops-guards.sh": {
       "version": "1.0.0",
       "description": "GitOps compliance guard functions library",

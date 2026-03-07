@@ -114,3 +114,32 @@ export TELEGRAM_TEST_BOT_USERNAME='@moltinger_bot'
   --output /tmp/telegram-e2e-real-user.json \
   --verbose
 ```
+
+## Bootstrap TELEGRAM_TEST_SESSION (one-time)
+
+`TELEGRAM_TEST_SESSION` получается локально через OTP и потом кладется в GitHub Secret.
+
+```bash
+python3 -m pip install --upgrade telethon
+
+# If you omit --code, script will prompt OTP interactively.
+bootstrap_json="$(
+  python3 scripts/telegram-real-user-bootstrap.py \
+    --api-id "$TELEGRAM_TEST_API_ID" \
+    --api-hash "$TELEGRAM_TEST_API_HASH" \
+    --phone "+79991234567" \
+    --session-out /tmp/telegram-test.session \
+    --code "12345"
+)"
+
+echo "$bootstrap_json" | jq .
+
+# Save to GitHub Secret (repo example)
+gh secret set TELEGRAM_TEST_SESSION --repo RussianLioN/moltinger < /tmp/telegram-test.session
+```
+
+Если у аккаунта включен Telegram 2FA:
+
+```bash
+export TELEGRAM_TEST_2FA_PASSWORD='your-password'
+```
