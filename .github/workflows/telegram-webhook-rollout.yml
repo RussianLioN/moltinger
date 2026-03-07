@@ -1,0 +1,58 @@
+name: Telegram Webhook Rollout
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Webhook action to run"
+        required: true
+        default: "status"
+        type: choice
+        options:
+          - status
+          - enable
+          - verify
+          - disable
+      drop_pending_updates:
+        description: "Drop pending Telegram updates during enable/disable"
+        required: true
+        default: true
+        type: boolean
+      pending_max:
+        description: "Maximum allowed pending updates for verify"
+        required: true
+        default: "10"
+        type: string
+      expect_empty_last_error:
+        description: "Fail verify if Telegram reports last webhook error"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  rollout:
+    name: Telegram Webhook Rollout
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -yqq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Run rollout command
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_URL: ${{ secrets.TELEGRAM_WEBHOOK_URL }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          TELEGRAM_DROP_PENDING_UPDATES: ${{ inputs.drop_pending_updates }}
+          TELEGRAM_PENDING_MAX: ${{ inputs.pending_max }}
+          TELEGRAM_EXPECT_EMPTY_LAST_ERROR: ${{ inputs.expect_empty_last_error }}
+        run: |
+          chmod +x scripts/telegram-webhook-rollout.sh
+          ./scripts/telegram-webhook-rollout.sh "${{ inputs.action }}"

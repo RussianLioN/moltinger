@@ -459,6 +459,31 @@ test_config_readable() {
     fi
 }
 
+# Test 11: Telegram channel is explicitly enabled
+test_telegram_channel_enabled() {
+    test_start "TOML should explicitly enable Telegram channel"
+
+    if [[ ! -f "$TOML_CONFIG" ]]; then
+        test_skip "Config file not found: $TOML_CONFIG"
+        return
+    fi
+
+    # Require explicit channels.telegram.enabled=true to avoid silent regressions.
+    # Parse only [channels.telegram] section, not any generic enabled=true elsewhere.
+    local telegram_enabled
+    telegram_enabled="$(awk '
+      /^\[channels\.telegram\]/ { in_section=1; next }
+      /^\[/ { if (in_section) exit; in_section=0 }
+      in_section && $0 ~ /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*true([[:space:]]*#.*)?$/ { print "true"; exit }
+    ' "$TOML_CONFIG")"
+
+    if [[ "$telegram_enabled" == "true" ]]; then
+        test_pass
+    else
+        test_fail "Missing explicit channels.telegram.enabled = true"
+    fi
+}
+
 # ==============================================================================
 # TEST RUNNER
 # ==============================================================================
@@ -485,6 +510,7 @@ run_all_tests() {
     test_yaml_required_services
     test_toml_server_config
     test_config_readable
+    test_telegram_channel_enabled
 
     # Generate report
     generate_report
