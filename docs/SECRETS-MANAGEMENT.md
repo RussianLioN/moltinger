@@ -140,6 +140,9 @@ gh workflow run deploy.yml
 - `.github/workflows/claude-code-review.yml` and `.github/workflows/claude.yml` use `GLM_API_KEY` for Z.ai Coding Plan requests.
 - `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` are not required for current CI workflows.
 - Optional kill-switch: repository variable `AI_REVIEW_PROVIDER=off` disables active AI calls while keeping fallback reports/comments non-blocking.
+- Rollback artifacts for legacy Anthropic workflows are stored in:
+  - `.github/workflows/claude.legacy.yml.disabled`
+  - `.github/workflows/claude-code-review.legacy.yml.disabled`
 
 ### LLM Failover Secrets
 

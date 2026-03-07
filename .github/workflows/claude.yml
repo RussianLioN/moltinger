@@ -4,6 +4,26 @@ name: Claude Interactive Assistant
 # Triggered by @claude or @zai mentions in issues/PR comments/reviews.
 
 on:
+  workflow_dispatch:
+    inputs:
+      target_number:
+        description: "Issue/PR number for assistant response"
+        required: true
+        type: number
+      target_kind:
+        description: "Target type"
+        required: true
+        default: "pr"
+        type: choice
+        options:
+          - pr
+          - issue
+      message:
+        description: "Assistant request (include @zai or @claude)"
+        required: true
+        default: "@zai Please summarize risks in this change."
+        type: string
+
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -23,6 +43,7 @@ jobs:
   claude-assistant:
     name: Claude Assistant
     if: |
+      (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@zai'))) ||
       (github.event_name == 'pull_request_review_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@zai'))) ||
       (github.event_name == 'pull_request_review' && (contains(github.event.review.body, '@claude') || contains(github.event.review.body, '@zai'))) ||
@@ -75,6 +96,14 @@ jobs:
           reason=""
 
           case "$event_name" in
+            workflow_dispatch)
+              issue_number="${{ inputs.target_number }}"
+              request_text="${{ inputs.message }}"
+              request_author="${GITHUB_ACTOR}"
+              if [[ "${{ inputs.target_kind }}" == "pr" ]]; then
+                is_pr="true"
+              fi
+              ;;
             issue_comment)
               issue_number="$(jq -r '.issue.number // empty' "$event_path")"
               request_text="$(jq -r '.comment.body // ""' "$event_path")"
