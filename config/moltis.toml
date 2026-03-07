@@ -370,6 +370,7 @@ max_redirects = 3                 # Maximum HTTP redirects to follow
 readability = true                # Use readability extraction for HTML (cleaner output)
 
 [channels.telegram]
+enabled = true                    # Keep Telegram integration explicitly enabled
 
 # ── Telegram Bot Configuration ────────────────────────────────────────────────
 # Create bot via @BotFather, get token
