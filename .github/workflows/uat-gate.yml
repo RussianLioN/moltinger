@@ -115,15 +115,15 @@ jobs:
           echo "::group::GitOps Compliance Gate"
           PASSED=true
 
-          # Check 1: docker-compose.yml
-          echo "### Check 1: docker-compose.yml"
-          LOCAL_HASH=$(sha256sum docker-compose.yml | cut -d' ' -f1)
-          SERVER_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum ${{ env.DEPLOY_PATH }}/docker-compose.yml 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
+          # Check 1: docker-compose.prod.yml
+          echo "### Check 1: docker-compose.prod.yml"
+          LOCAL_HASH=$(sha256sum docker-compose.prod.yml | cut -d' ' -f1)
+          SERVER_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum ${{ env.DEPLOY_PATH }}/docker-compose.prod.yml 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
 
           if [[ "$LOCAL_HASH" == "$SERVER_HASH" ]]; then
-            echo "✅ docker-compose.yml matches"
+            echo "✅ docker-compose.prod.yml matches"
           else
-            echo "❌ docker-compose.yml MISMATCH"
+            echo "❌ docker-compose.prod.yml MISMATCH"
             echo "  Git:    $LOCAL_HASH"
             echo "  Server: $SERVER_HASH"
             PASSED=false
@@ -141,7 +141,7 @@ jobs:
 
           # Check 3: Traefik labels present
           echo "### Check 3: Traefik configuration"
-          if ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "grep -q 'traefik.enable=true' ${{ env.DEPLOY_PATH }}/docker-compose.yml"; then
+          if ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "grep -q 'traefik.enable=true' ${{ env.DEPLOY_PATH }}/docker-compose.prod.yml"; then
             echo "✅ Traefik labels present"
           else
             echo "❌ Traefik labels missing"
@@ -278,8 +278,8 @@ jobs:
       # ===========================================
       # GitOps Step 1: Sync configuration files from git
       # ===========================================
-      # CRITICAL: We sync the ENTIRE docker-compose.yml, not just the version.
-      # This ensures: labels, networks, volumes, environment - all match git.
+      # CRITICAL: We sync the ENTIRE docker-compose.prod.yml used for production runtime.
+      # This ensures labels, networks, volumes, and environment all match git.
       # NEVER use 'sed' to update only part of the file (causes config drift).
       # ===========================================
       - name: Sync configuration files (GitOps)
@@ -288,8 +288,12 @@ jobs:
           echo "::group::Syncing configuration files to server"
 
           # Sync docker-compose.yml from git to server
-          # This ensures ALL configuration (labels, networks, volumes) matches git
+          # This keeps non-prod compose in sync for tooling compatibility
           scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
+
+          # Sync docker-compose.prod.yml from git to server
+          # Production deploy path uses this file as source of truth
+          scp docker-compose.prod.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.prod.yml
 
           # Sync config directory (moltis.toml, mcp-servers.json, etc.)
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
@@ -299,7 +303,7 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
 
-          echo "Configuration synced successfully (docker-compose.yml + config/ + scripts/)"
+          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/)"
           echo "::endgroup::"
 
       - name: Deploy version ${{ needs.preflight.outputs.version }}
@@ -315,13 +319,13 @@ jobs:
             docker pull ghcr.io/moltis-org/moltis:$VERSION
 
             # Validate configuration before deploy (GitOps)
-            docker compose config --quiet
+            docker compose -f docker-compose.prod.yml config --quiet
 
             # Stop current container
-            docker compose stop moltis || true
+            docker compose -f docker-compose.prod.yml stop moltis || true
 
-            # Start new version (uses synced docker-compose.yml from git)
-            docker compose up -d moltis
+            # Start new version (uses synced docker-compose.prod.yml from git)
+            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml up -d moltis
 
             echo "Deployed $VERSION successfully"
           EOF

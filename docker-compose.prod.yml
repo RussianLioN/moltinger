@@ -98,7 +98,8 @@ services:
       - "traefik.http.services.moltis.loadbalancer.server.port=13131"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.interval=30s"
-      - "com.centurylinklabs.watchtower.enable=true"
+      # Keep Moltis updates deterministic via CI/CD, not watchtower
+      - "com.centurylinklabs.watchtower.enable=false"
       # Monitoring labels
       - "prometheus.io/scrape=true"
       - "prometheus.io/port=13131"
