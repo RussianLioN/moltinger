@@ -34,7 +34,10 @@ source "$LIB_DIR/test_helpers.sh"
 # Telegram configuration
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TELEGRAM_API_BASE="https://api.telegram.org/bot"
+TELEGRAM_ALLOWED_USERS="${TELEGRAM_ALLOWED_USERS:-}"
 TELEGRAM_TEST_USER="${TELEGRAM_TEST_USER:-}"
+TELEGRAM_REQUIRE_WEBHOOK="${TELEGRAM_REQUIRE_WEBHOOK:-false}"
+TELEGRAM_REQUIRE_TEST_USER="${TELEGRAM_REQUIRE_TEST_USER:-false}"
 TEST_TIMEOUT=30
 
 # Bot info cache
@@ -67,12 +70,19 @@ setup_telegram_tests() {
         local env_file="${PROJECT_ROOT:-/opt/moltinger}/.env"
         if [[ -f "$env_file" ]]; then
             TELEGRAM_BOT_TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" "$env_file" 2>/dev/null | cut -d'=' -f2-)
+            TELEGRAM_ALLOWED_USERS=$(grep "^TELEGRAM_ALLOWED_USERS=" "$env_file" 2>/dev/null | cut -d'=' -f2-)
+            TELEGRAM_TEST_USER=$(grep "^TELEGRAM_TEST_USER=" "$env_file" 2>/dev/null | cut -d'=' -f2-)
         fi
     fi
 
     if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
         test_skip "TELEGRAM_BOT_TOKEN not set"
         return 2
+    fi
+
+    if [[ -z "$TELEGRAM_TEST_USER" ]] && [[ -n "$TELEGRAM_ALLOWED_USERS" ]]; then
+        TELEGRAM_TEST_USER="${TELEGRAM_ALLOWED_USERS%%,*}"
+        log_debug "Using TELEGRAM_ALLOWED_USERS first entry as TELEGRAM_TEST_USER: $TELEGRAM_TEST_USER"
     fi
 
     return 0
@@ -260,6 +270,8 @@ test_webhook_configured() {
     if [[ -n "$webhook_url" ]] && [[ "$webhook_url" != "null" ]]; then
         log_debug "Webhook configured: $webhook_url"
         test_pass
+    elif [[ "$TELEGRAM_REQUIRE_WEBHOOK" == "true" ]]; then
+        test_fail "No webhook configured but TELEGRAM_REQUIRE_WEBHOOK=true"
     else
         test_skip "No webhook configured (bot may be using polling)"
     fi
@@ -281,6 +293,10 @@ test_webhook_https() {
     webhook_url=$(echo "$response" | jq -r '.result.url // ""')
 
     if [[ -z "$webhook_url" ]] || [[ "$webhook_url" == "null" ]]; then
+        if [[ "$TELEGRAM_REQUIRE_WEBHOOK" == "true" ]]; then
+            test_fail "Webhook required but URL is empty"
+            return 1
+        fi
         test_skip "No webhook configured"
         return 2
     fi
@@ -326,6 +342,10 @@ test_message_send() {
     test_start "message_send"
 
     if [[ -z "$TELEGRAM_TEST_USER" ]]; then
+        if [[ "$TELEGRAM_REQUIRE_TEST_USER" == "true" ]]; then
+            test_fail "TELEGRAM_TEST_USER not set but TELEGRAM_REQUIRE_TEST_USER=true"
+            return 1
+        fi
         test_skip "TELEGRAM_TEST_USER not set (will not send messages)"
         return 2
     fi

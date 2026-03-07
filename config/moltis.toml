@@ -377,6 +377,7 @@ enabled = true                    # Enable Telegram integration
 # Get user ID via @userinfobot
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
+webhook_url = "${TELEGRAM_WEBHOOK_URL}"  # HTTPS endpoint for inbound webhook mode
 dm_policy = "allowlist"
 allowlist = [262872984]  # Telegram user IDs (integers from @userinfobot)
 
