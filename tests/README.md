@@ -1,263 +1,156 @@
-# Moltis Test Framework
+# Moltis Test Architecture
 
-Тестовая инфраструктура для Moltis Agent, поддерживающая unit, integration, E2E и security тесты.
+Канонический entrypoint для тестов: `./tests/run.sh --lane <lane-or-group>`.
 
-## Структура
+Legacy-скрипты `./tests/run_unit.sh`, `./tests/run_integration.sh`, `./tests/run_security.sh`, `./tests/run_e2e.sh` сохранены как compatibility shims на один переходный цикл, но вся новая документация, CI и локальные команды должны идти через `./tests/run.sh`.
 
-```
-tests/
-├── lib/
-│   └── test_helpers.sh      # Shared test utilities and assertions
-├── unit/                    # Unit tests (no external dependencies)
-├── integration/             # Integration tests (Docker, services)
-├── e2e/                     # End-to-end tests (full stack)
-├── security/                # Security tests (auth, input validation, XSS)
-├── run_unit.sh              # Unit test runner
-├── run_integration.sh       # Integration test runner
-├── run_e2e.sh               # E2E test runner
-└── run_security.sh          # Security test runner
-```
+## Lane Model
 
-## Использование
+| Lane | Назначение | Blocking | Runtime | Secrets |
+| --- | --- | --- | --- | --- |
+| `static` | Статические проверки конфигов и dev-MCP smoke | PR | local | не нужны |
+| `component` | Component-level проверки production shell logic | PR | local | не нужны |
+| `integration_local` | Hermetic API integration на локальном stack | PR | `compose.test.yml` | не нужны |
+| `security_api` | Auth/input/rate-limit API security на локальном stack | PR | `compose.test.yml` | не нужны |
+| `mcp_fake` | MCP lifecycle через fake JSON-RPC harness | PR | local/node | не нужны |
+| `e2e_browser` | Настоящий browser flow через Playwright | `push main` | `compose.test.yml` | не нужны |
+| `resilience` | Destructive failover/recovery сценарии | nightly/manual | explicit live | opt-in |
+| `live_external` | Telegram, real providers, real MCP backends | nightly/manual | explicit live | opt-in |
 
-### Через Makefile
+## Lane Groups
 
-```bash
-# Запуск unit тестов (по умолчанию)
-make test
+| Group | Состав |
+| --- | --- |
+| `pr` | `static`, `component`, `integration_local`, `security_api`, `mcp_fake` |
+| `main` | `pr` + `e2e_browser` |
+| `nightly` | `resilience`, `live_external`, `security_runtime_smoke` |
+| `all` | `main` + `nightly` |
+| `unit_legacy` | `static`, `component` |
+| `integration_legacy` | `integration_local`, `provider_live`, `telegram_live`, `mcp_real` |
+| `security_legacy` | `security_api`, `security_runtime_smoke` |
+| `e2e_legacy` | `e2e_browser`, `resilience` |
 
-# Все типы тестов
-make test-unit           # Unit тесты
-make test-integration    # Integration тесты
-make test-e2e            # E2E тесты
-make test-security       # Security тесты
-make test-all            # Все тесты
-```
-
-### Непосредственно через скрипты
+## CLI Contract
 
 ```bash
-# Unit тесты
-./tests/run_unit.sh
-
-# С JSON выводом для CI/CD
-./tests/run_unit.sh --json
-
-# С фильтрацией
-./tests/run_unit.sh --filter "circuit_breaker"
-
-# Verbose режим
-./tests/run_unit.sh --verbose
-
-# Integration тесты
-./tests/run_integration.sh [--json] [--verbose] [--filter PATTERN] [--parallel]
-
-# E2E тесты
-./tests/run_e2e.sh [--json] [--verbose] [--timeout N] [--filter PATTERN] [--keep-containers]
-
-# Security тесты
-./tests/run_security.sh [--json] [--verbose] [--filter PATTERN] [--severity LEVEL]
+./tests/run.sh --lane pr --json --junit
+./tests/run.sh --lane component --filter circuit_breaker --verbose
+./tests/run.sh --lane nightly --live --compose-project nightly-$(date +%s)
 ```
 
-## Написание тестов
+Поддерживаемые флаги:
 
-### Базовый шаблон
+- `--lane <name>`: lane или group
+- `--json`: печатает aggregate `summary.json` в stdout
+- `--junit`: пишет aggregate `junit.xml`
+- `--filter <pattern>`: фильтрация по `suite_id` или пути
+- `--verbose`: verbose mode для suite-раннеров
+- `--live`: разрешает live-only lanes
+- `--compose-project <name>`: явное имя Docker Compose project
+- `--keep-stack`: не разбирать hermetic stack после прогона
 
-```bash
-#!/bin/bash
-# My Test Description
+Общие env vars:
 
-set -euo pipefail
+- `TEST_REPORT_DIR`: каталог артефактов, по умолчанию `./test-results`
+- `TEST_ENV_FILE`: env-файл для explicit live mode
+- `TEST_BASE_URL`: base URL для HTTP/browser suites
+- `TEST_TIMEOUT`: timeout suite/runtime
+- `TEST_LIVE=1`: альтернативный способ включить live mode
+- `COMPOSE_PROJECT_NAME`: имя compose project
 
-# Source test helpers
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../lib/test_helpers.sh"
+Exit contract:
 
-# Test case 1
-test_start "my_first_test"
-assert_eq "expected" "actual" "values should match"
-test_pass
+- `0`: pass
+- `1`: fail
+- `2`: skipped/unrunnable
+- `3`: harness error
 
-# Test case 2
-test_start "my_second_test"
-assert_file_exists "/path/to/file" "file should exist"
-test_pass
+## Hermetic Stack
 
-# Generate report
-generate_report
-```
+`compose.test.yml` — выделенный test stack для blocking suites.
 
-### Доступные утверждения (assertions)
+Свойства стека:
 
-```bash
-# Equality
-assert_eq "expected" "actual" "message"
-assert_ne "unexpected" "actual" "message"
+- внутренняя test network без `traefik-net`
+- service DNS вместо зависимости от host `localhost`
+- ephemeral test volumes
+- отдельный `test-runner` container с pinned toolchain (`bash`, `curl`, `jq`, `coreutils`, Playwright base image)
+- отсутствие зависимости от `/opt/moltinger/.env` и production bind-mounts
 
-# Boolean
-assert_true $exit_code "message"
-assert_false $exit_code "message"
+Все suites, требующие hermetic stack, поднимаются через `./tests/run.sh`; не вызывайте `docker compose -f compose.test.yml` напрямую как новый public interface.
 
-# String
-assert_contains "haystack" "needle" "message"
-assert_matches "string" "pattern" "message"
+## Live Mode
 
-# Files
-assert_file_exists "/path/to/file" "message"
-assert_dir_exists "/path/to/dir" "message"
-assert_file_contains "/path/to/file" "needle" "message"
+Blocking lanes не должны неявно читать `/opt/moltinger/.env`.
 
-# HTTP
-assert_http_code 200 "https://example.com" "message"
-assert_http_contains "https://example.com" "needle" "message"
+Live-only lanes (`resilience`, `live_external`, `security_runtime_smoke`, `telegram_live`, `provider_live`, `mcp_real`) запускаются только с `--live` или `TEST_LIVE=1`.
 
-# JSON
-assert_json_value '{"key":"value"}' ".key" "value" "message"
+Источники секретов для live mode:
 
-# Arrays
-assert_array_contains "element" "elem1" "elem2" "elem3"
+1. GitHub Secrets
+2. `/opt/moltinger/.env` на сервере как runtime-копия, сгенерированная CI/CD
+3. `TEST_ENV_FILE`, если live-прогон явно направлен на другой env-файл
 
-# Commands
-assert_command_success "ls -la" "message"
-assert_command_fails "false" "message"
+Если live mode не включён, полный skip обязан репортиться как `skipped`, а не как `passed`.
 
-# Numeric
-assert_gt 5 3 "message"
-assert_lt 3 5 "message"
-```
+## Reports And Diagnostics
 
-### Mocking утилиты
+После каждого прогона runner пишет:
 
-```bash
-# Mock GLM API failure
-mock_glm_failure
-# ... test failure handling ...
-restore_glm
+- `summary.json`: единый source of truth для gate job и CI summary
+- `junit.xml`: aggregate JUnit при флаге `--junit`
+- `suites/*.json`: per-suite JSON отчёты
+- `logs/*.log`: suite stderr/stdout логи
+- `diagnostics/*`: compose и container diagnostics при infra failures
 
-# Mock Ollama failure
-mock_ollama_failure
-# ... test failure handling ...
-restore_ollama
-
-# Mock container state
-mock_container_state "moltis" "unhealthy"
-```
-
-### Управление выводом
-
-```bash
-# Включить JSON вывод
-set_json_output true
-
-# Включить verbose режим
-set_verbose true
-```
-
-## JSON формат вывода
-
-### Успешный запуск
+Минимальный aggregate contract:
 
 ```json
 {
-  "status": "pass",
-  "timestamp": "2026-03-02T21:00:00Z",
+  "lane": "pr",
+  "status": "passed",
   "summary": {
-    "total": 10,
-    "passed": 10,
-    "failed": 0,
-    "skipped": 0,
-    "duration_seconds": 5
-  },
-  "failures": [],
-  "skipped_tests": []
-}
-```
-
-### С ошибками
-
-```json
-{
-  "status": "fail",
-  "timestamp": "2026-03-02T21:00:00Z",
-  "summary": {
-    "total": 10,
-    "passed": 8,
-    "failed": 2,
-    "skipped": 0,
-    "duration_seconds": 5
-  },
-  "failures": [
-    "test_circuit_breaker: Circuit did not open after threshold",
-    "test_config_validation: Invalid config accepted"
-  ],
-  "skipped_tests": []
-}
-```
-
-### Security тесты
-
-```json
-{
-  "status": "warning",
-  "timestamp": "2026-03-02T21:00:00Z",
-  "summary": {
-    "total": 5,
-    "passed": 5,
+    "total_suites": 5,
+    "total_cases": 17,
+    "passed": 17,
     "failed": 0,
     "skipped": 0
   },
-  "vulnerabilities": {
-    "total": 2,
-    "by_severity": {
-      "critical": 0,
-      "high": 0,
-      "medium": 2,
-      "low": 0
-    }
-  },
-  "findings": [
-    {
-      "description": "Insecure HTTP endpoint detected",
-      "severity": "medium",
-      "location": "config/moltis.toml"
-    }
-  ]
+  "suites": [],
+  "cases": []
 }
 ```
 
-## Конвенции
+`summary.total_cases` считается по test cases, а не по test files. `skipped` учитывается явно и не маскируется под success.
 
-1. **Имена файлов**: `test_<имя>.sh` в соответствующей директории
-2. **Исполняемость**: Все тестовые файлы должны быть `chmod +x`
-3. **Shebang**: `#!/bin/bash` в начале каждого файла
-4. **Safety**: `set -euo pipefail` для обработки ошибок
-5. **Source helpers**: Всегда sourcing `test_helpers.sh` в начале
+## Local Usage
 
-## CI/CD интеграция
+Через `npm`:
 
-```yaml
-- name: Run unit tests
-  run: make test-unit
-
-- name: Run integration tests
-  run: make test-integration
-
-- name: Run security tests
-  run: make test-security --json
-
-- name: Upload test results
-  if: always()
-  uses: actions/upload-artifact@v4
-  with:
-    name: test-results
-    path: test-results.json
+```bash
+npm test
+npm run test:pr
+npm run test:main
+npm run test:nightly
+npm run test:all
+npm run test:lane -- --lane component --filter prometheus
 ```
 
-## Справка
+Через `make`:
 
-Паттерны взяты из существующих скриптов проекта:
-- `scripts/health-monitor.sh` — цвета, JSON вывод, timestamps
-- `scripts/preflight-check.sh` — структура проверок, агрегация результатов
+```bash
+make test
+make test-main TEST_FLAGS="--json --junit"
+make test-live-external TEST_FLAGS="--json"
+```
 
-Дополнительная информация в контрактах:
-- `specs/001-docker-deploy-improvements/contracts/scripts.md`
+## Contracts
+
+Тестовые contracts лежат в `specs/001-docker-deploy-improvements/contracts/`:
+
+- `test-lanes.md`: canonical lane/group contract
+- `test-integration.md`: compatibility contract для integration-family suites
+- `test-e2e.md`: compatibility contract для browser/resilience suites
+- `scripts.md`: script-level contracts для deploy/backup/health tooling
+
+Если test file ссылается на старый `test-integration.md` или `test-e2e.md`, это compatibility doc, а не разрешение возвращаться к старой directory taxonomy.

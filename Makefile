@@ -1,60 +1,78 @@
 # Moltis Infrastructure Makefile
 # Usage: make <target>
 
-.PHONY: help deploy stop start restart status logs backup restore health-check
+.PHONY: help deploy stop start restart status logs backup restore health-check health-monitor
 .PHONY: monitoring-up monitoring-down prometheus alertmanager grafana
-.PHONY: secrets generate-key setup clean
+.PHONY: secrets generate-key setup clean network
 .PHONY: backup-enable backup-disable backup-status version-check
-.PHONY: test test-unit test-integration test-e2e test-security test-all
+.PHONY: test test-pr test-main test-nightly test-all
+.PHONY: test-static test-component test-integration-local test-security-api test-mcp-fake
+.PHONY: test-e2e-browser test-resilience test-live-external
+.PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
+
+TEST_FLAGS ?=
+TEST_RUNNER := ./tests/run.sh
 
 # Default target
 help:
 	@echo "Moltis Infrastructure Management"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  deploy          - Deploy Moltis stack"
-	@echo "  stop            - Stop all services"
-	@echo "  start           - Start all services"
-	@echo "  restart         - Restart all services"
-	@echo "  status          - Show service status"
-	@echo "  logs            - Show logs (use LOGS_OPTS=-f for follow)"
+	@echo "  deploy           - Deploy Moltis stack"
+	@echo "  stop             - Stop all services"
+	@echo "  start            - Start all services"
+	@echo "  restart          - Restart all services"
+	@echo "  status           - Show service status"
+	@echo "  logs             - Show logs (use LOGS_OPTS=-f for follow)"
 	@echo ""
 	@echo "Backup & Recovery:"
-	@echo "  backup          - Create backup"
-	@echo "  backup-list     - List available backups"
-	@echo "  backup-enable   - Enable systemd backup timer"
-	@echo "  backup-disable  - Disable systemd backup timer"
-	@echo "  backup-status   - Show backup timer status"
-	@echo "  restore FILE    - Restore from backup file"
-	@echo "  generate-key    - Generate encryption key"
+	@echo "  backup           - Create backup"
+	@echo "  backup-list      - List available backups"
+	@echo "  backup-enable    - Enable systemd backup timer"
+	@echo "  backup-disable   - Disable systemd backup timer"
+	@echo "  backup-status    - Show backup timer status"
+	@echo "  restore FILE     - Restore from backup file"
+	@echo "  generate-key     - Generate encryption key"
 	@echo ""
 	@echo "Monitoring:"
-	@echo "  monitoring-up   - Start monitoring stack"
-	@echo "  monitoring-down - Stop monitoring stack"
-	@echo "  prometheus      - Open Prometheus UI"
-	@echo "  alertmanager    - Open AlertManager UI"
+	@echo "  monitoring-up    - Start monitoring stack"
+	@echo "  monitoring-down  - Stop monitoring stack"
+	@echo "  prometheus       - Open Prometheus UI"
+	@echo "  alertmanager     - Open AlertManager UI"
 	@echo ""
 	@echo "Setup:"
-	@echo "  setup           - Initial setup (secrets, network)"
-	@echo "  secrets         - Create secrets from .env"
-	@echo "  generate-key    - Generate backup encryption key"
-	@echo "  clean           - Clean up Docker resources"
+	@echo "  setup            - Initial setup (secrets, network)"
+	@echo "  secrets          - Create secrets from .env"
+	@echo "  generate-key     - Generate backup encryption key"
+	@echo "  clean            - Clean up Docker resources"
 	@echo ""
 	@echo "Health:"
-	@echo "  health-check    - Run health check"
-	@echo "  health-monitor  - Start health monitor daemon"
+	@echo "  health-check     - Run health check"
+	@echo "  health-monitor   - Start health monitor daemon"
 	@echo ""
 	@echo "Version:"
-	@echo "  version-check   - Show current Docker image versions"
+	@echo "  version-check    - Show current Docker image versions"
 	@echo ""
-	@echo "Testing:"
-	@echo "  test            - Run unit tests (default)"
-	@echo "  test-unit       - Run unit tests only"
-	@echo "  test-integration - Run integration tests"
-	@echo "  test-e2e        - Run end-to-end tests"
-	@echo "  test-security   - Run security tests"
-	@echo "  test-all        - Run all tests"
+	@echo "Testing (canonical runner: ./tests/run.sh):"
+	@echo "  test             - Run PR gate lanes (static, component, integration_local, security_api, mcp_fake)"
+	@echo "  test-pr          - Same as test"
+	@echo "  test-main        - Run main gate lanes (pr + e2e_browser)"
+	@echo "  test-nightly     - Run live/nightly lanes with --live"
+	@echo "  test-all         - Run all lanes with --live"
+	@echo "  test-static      - Run static lane only"
+	@echo "  test-component   - Run component lane only"
+	@echo "  test-integration-local - Run integration_local lane only"
+	@echo "  test-security-api - Run security_api lane only"
+	@echo "  test-mcp-fake    - Run mcp_fake lane only"
+	@echo "  test-e2e-browser - Run e2e_browser lane only"
+	@echo "  test-resilience  - Run resilience lane only with --live"
+	@echo "  test-live-external - Run live_external lane only with --live"
+	@echo "  test-unit        - Compatibility alias for unit_legacy"
+	@echo "  test-integration - Compatibility alias for integration_legacy"
+	@echo "  test-security    - Compatibility alias for security_legacy"
+	@echo "  test-e2e         - Compatibility alias for e2e_legacy"
+	@echo "  TEST_FLAGS=\"--json --junit\" can be passed to any test target"
 	@echo ""
 	@echo "AI instructions & skills:"
 	@echo "  instructions-sync  - Regenerate AGENTS.md from shared sources"
@@ -206,26 +224,71 @@ dev-logs:
 # TESTING
 # ========================================================================
 
-test: test-unit
+test: test-pr
+
+test-pr:
+	@echo "Running PR gate lanes..."
+	@$(TEST_RUNNER) --lane pr $(TEST_FLAGS)
+
+test-main:
+	@echo "Running main gate lanes..."
+	@$(TEST_RUNNER) --lane main $(TEST_FLAGS)
+
+test-nightly:
+	@echo "Running nightly/live lanes..."
+	@$(TEST_RUNNER) --lane nightly --live $(TEST_FLAGS)
+
+test-all:
+	@echo "Running all lanes..."
+	@$(TEST_RUNNER) --lane all --live $(TEST_FLAGS)
+
+test-static:
+	@echo "Running static lane..."
+	@$(TEST_RUNNER) --lane static $(TEST_FLAGS)
+
+test-component:
+	@echo "Running component lane..."
+	@$(TEST_RUNNER) --lane component $(TEST_FLAGS)
+
+test-integration-local:
+	@echo "Running integration_local lane..."
+	@$(TEST_RUNNER) --lane integration_local $(TEST_FLAGS)
+
+test-security-api:
+	@echo "Running security_api lane..."
+	@$(TEST_RUNNER) --lane security_api $(TEST_FLAGS)
+
+test-mcp-fake:
+	@echo "Running mcp_fake lane..."
+	@$(TEST_RUNNER) --lane mcp_fake $(TEST_FLAGS)
+
+test-e2e-browser:
+	@echo "Running e2e_browser lane..."
+	@$(TEST_RUNNER) --lane e2e_browser $(TEST_FLAGS)
+
+test-resilience:
+	@echo "Running resilience lane..."
+	@$(TEST_RUNNER) --lane resilience --live $(TEST_FLAGS)
+
+test-live-external:
+	@echo "Running live_external lane..."
+	@$(TEST_RUNNER) --lane live_external --live $(TEST_FLAGS)
 
 test-unit:
-	@echo "Running unit tests..."
-	@./tests/run_unit.sh
+	@echo "Running unit_legacy compatibility group..."
+	@$(TEST_RUNNER) --lane unit_legacy $(TEST_FLAGS)
 
 test-integration:
-	@echo "Running integration tests..."
-	@./tests/run_integration.sh
-
-test-e2e:
-	@echo "Running end-to-end tests..."
-	@./tests/run_e2e.sh
+	@echo "Running integration_legacy compatibility group..."
+	@$(TEST_RUNNER) --lane integration_legacy $(TEST_FLAGS)
 
 test-security:
-	@echo "Running security tests..."
-	@./tests/run_security.sh
+	@echo "Running security_legacy compatibility group..."
+	@$(TEST_RUNNER) --lane security_legacy $(TEST_FLAGS)
 
-test-all: test-unit test-integration test-e2e test-security
-	@echo "All test suites completed"
+test-e2e:
+	@echo "Running e2e_legacy compatibility group..."
+	@$(TEST_RUNNER) --lane e2e_legacy $(TEST_FLAGS)
 
 # ========================================================================
 # AI INSTRUCTIONS & SKILLS
