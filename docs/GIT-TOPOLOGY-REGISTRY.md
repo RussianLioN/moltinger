@@ -59,12 +59,21 @@
 | `origin/006-git-topology-registry` | Active topology-registry feature branch. |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
-| `origin/codex/full-review` | Active parallel session; exclude from automated cleanup. |
 | `origin/codex/gitops-metrics-fix` | Active replacement PR #18. |
 | `origin/codex/gpt54-agents-split` | Needs decision |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/gpt-5-moltis` | Active feature branch. |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
+
+## Reviewed Intent Awaiting Reconciliation
+
+| Subject Type | Subject Key | Intent | Note | PR |
+|---|---|---|---|---|
+| `remote` | `origin/codex/full-review` | `protected` | Active parallel session; exclude from automated cleanup. | 6 |
+
+## Registry Warnings
+
+- Reviewed intent contains 1 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
 
 ## Operating Rules
 
