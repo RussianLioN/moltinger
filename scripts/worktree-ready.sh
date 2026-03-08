@@ -752,7 +752,17 @@ set_readiness_status() {
       return 0
     fi
 
-    report_status="created"
+    case "${report_env_state}" in
+      approval_needed)
+        report_status="needs_env_approval"
+        ;;
+      approved_or_not_required|no_envrc)
+        report_status="ready_for_codex"
+        ;;
+      *)
+        report_status="created"
+        ;;
+    esac
     return 0
   fi
 
@@ -773,6 +783,13 @@ set_readiness_next_steps() {
         add_next_step "cd $(shell_quote "${report_worktree_path}")"
       fi
       add_next_step "./scripts/git-session-guard.sh --refresh"
+      ;;
+    ready_for_codex)
+      add_next_step "cd $(shell_quote "${report_worktree_path}") && codex"
+      ;;
+    needs_env_approval)
+      add_next_step "cd $(shell_quote "${report_worktree_path}") && direnv allow"
+      add_next_step "codex"
       ;;
     created)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
