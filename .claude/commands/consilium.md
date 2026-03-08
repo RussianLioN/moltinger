@@ -1,31 +1,31 @@
 ---
-description: Launch expert consilium for panel discussion. Each expert works independently in isolated worktree,argument-hint: "[question]
+description: Run consilium analysis with adaptive execution mode and produce a full evidence-based report.
+argument-hint: "[question]"
 ---
 
 # Consilium Command
 
-Launch expert consilium to discuss a question in parallel with Each expert works in isolated worktree.
-
-Experts discuss and reach consensus, Architect leads the discussion.
-
-and generates final report.
-
----
+Run a multi-expert consilium analysis for the given question.
 
 ## Usage
-After user message:
-/consilium [question]
 
-Example: `/consilium How should we improve the Docker deployment process?`
----
+`/consilium [question]`
 
-## Output
-1. Individual expert opinions (1-3 bullet points each)
-2. Summary of discussion
-7. Final Consensus Report with:
-   - **Discussion Participants**: List of all experts
-   - **Consensus Reached**: Yes/No/Partial
-   - **Key Decisions**: List of decisions made
-   - **Final Recommendation**: The unified recommendation
-   - **Confidence Level**: High/Medium/Low (unanimous = Low
-   - **Next Steps**: Suggested actions
+Example:
+
+`/consilium Проверь изменения в Telegram-боте, найди корневую причину регресса и предложи минимум 5 решений`
+
+## Execution Contract
+
+1. Always attempt parallel execution first when sub-agents are available.
+2. If sub-agents are unavailable, continue in deterministic single-agent expert-matrix mode.
+3. Never stop with a short "fallback" note; always produce the complete report.
+4. Base conclusions on evidence (git history, diffs, configs, logs) when available.
+
+## Required Output
+
+1. `Consilium Report` with explicit `Execution Mode`.
+2. `Evidence` section with concrete facts.
+3. `Root Cause Analysis` with confidence.
+4. At least `5` solution options with trade-offs.
+5. `Recommended Plan`, `Rollback Plan`, and `Verification Checklist`.
