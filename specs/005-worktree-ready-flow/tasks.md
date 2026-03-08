@@ -1,0 +1,186 @@
+# Tasks: Worktree Ready UX
+
+**Input**: Design documents from `/specs/005-worktree-ready-flow/`
+**Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
+
+**Tests**: Manual workflow validation from `specs/005-worktree-ready-flow/quickstart.md` (no automated tests explicitly requested in the specification)
+
+**Organization**: Tasks are grouped by user story to preserve independent implementation and validation.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no unmet dependencies)
+- **[Story]**: Which user story the task belongs to (`[US1]`-`[US4]`)
+- Every task includes an exact file path
+
+---
+
+## Phase 0: Planning (Executor Assignment) ✅ COMPLETE
+
+**Purpose**: Lock the implementation surface and ensure the feature package is ready for execution.
+
+- [x] P001 Analyze the implementation surface across `.claude/commands/worktree.md`, `scripts/git-session-guard.sh`, and `specs/005-worktree-ready-flow/plan.md`
+- [x] P002 Record library and workflow decisions in `specs/005-worktree-ready-flow/research.md`
+- [x] P003 Define the UX and readiness contracts in `specs/005-worktree-ready-flow/contracts/worktree-command-interface.md` and `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md`
+- [x] P004 Break the feature into implementation phases in `specs/005-worktree-ready-flow/tasks.md`
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: Create the helper entrypoint and validation artifacts used by all stories.
+
+- [ ] T001 Create `scripts/worktree-ready.sh` with CLI usage, mode dispatch, and shell safety guards
+- [ ] T002 Create `specs/005-worktree-ready-flow/validation.md` as the implementation validation log for quickstart scenarios
+- [ ] T003 [P] Add a helper invocation placeholder and updated quick-usage skeleton to `.claude/commands/worktree.md`
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Build the shared readiness/reporting infrastructure required by every user story.
+
+**⚠️ CRITICAL**: No user story work should begin until this phase is complete.
+
+- [ ] T004 Implement path normalization, branch/path formatting, and reusable output rendering in `scripts/worktree-ready.sh`
+- [ ] T005 [P] Implement worktree/beads discovery using `bd worktree list` and `git worktree list` in `scripts/worktree-ready.sh`
+- [ ] T006 [P] Implement `scripts/git-session-guard.sh --status` integration and status parsing in `scripts/worktree-ready.sh`
+- [ ] T007 Implement readiness report generation matching `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md` in `scripts/worktree-ready.sh`
+- [ ] T008 Wire foundational helper usage, readiness vocabulary, and fallback rules into `.claude/commands/worktree.md`
+
+**Checkpoint**: The helper can classify a worktree and render a consistent readiness block.
+
+---
+
+## Phase 3: User Story 1 - Existing Branch Without Guesswork (Priority: P1) 🎯 MVP
+
+**Goal**: Existing branches can become worktrees through a first-class flow without forcing the user to remember low-level commands.
+
+**Independent Test**: Request a worktree for an existing branch and receive a sanitized path, a correct branch mapping, and an actionable `Next` block without follow-up explanation.
+
+### Implementation for User Story 1
+
+- [ ] T009 [US1] Implement existing-branch resolution and target-path derivation in `scripts/worktree-ready.sh`
+- [ ] T010 [US1] Implement already-attached-branch detection with existing-path reporting in `scripts/worktree-ready.sh`
+- [ ] T011 [US1] Add `attach` and `start --existing` routing rules to `.claude/commands/worktree.md`
+- [ ] T012 [US1] Add sanitized path preview and existing-branch output examples to `.claude/commands/worktree.md`
+
+**Checkpoint**: A user with an existing branch can get the right worktree without low-level command knowledge.
+
+---
+
+## Phase 4: User Story 2 - Honest Ready-to-Work Handoff (Priority: P1)
+
+**Goal**: The workflow reports actual session readiness and the exact next action instead of stopping at "created".
+
+**Independent Test**: Run the flow once in a context that needs environment approval and once in a context that does not; each time the final status and next steps must match reality.
+
+### Implementation for User Story 2
+
+- [ ] T013 [US2] Implement environment-readiness probes and next-step generation in `scripts/worktree-ready.sh`
+- [ ] T014 [US2] Map helper outcomes to `created`, `needs_env_approval`, `ready_for_codex`, and `action_required` in `scripts/worktree-ready.sh`
+- [ ] T015 [US2] Update the final status block and completion rules in `.claude/commands/worktree.md`
+- [ ] T016 [US2] Add manual copy-paste handoff examples for blocked and ready environments to `.claude/commands/worktree.md`
+
+**Checkpoint**: The command no longer overstates readiness and always tells the user the exact next step.
+
+---
+
+## Phase 5: User Story 3 - Optional Terminal and Codex Launch (Priority: P2)
+
+**Goal**: Frequent users can opt into a one-step handoff to a terminal or Codex session, with safe fallback when unsupported.
+
+**Independent Test**: Request `--handoff terminal` and `--handoff codex`; on supported systems automation runs, and on unsupported systems the user gets a correct manual fallback.
+
+### Implementation for User Story 3
+
+- [ ] T017 [US3] Implement `--handoff manual|terminal|codex` parsing and fallback selection in `scripts/worktree-ready.sh`
+- [ ] T018 [US3] Implement macOS terminal/Codex launch commands plus manual fallback output in `scripts/worktree-ready.sh`
+- [ ] T019 [US3] Document opt-in handoff behavior, platform limits, and safety boundaries in `.claude/commands/worktree.md`
+
+**Checkpoint**: Handoff automation is useful when requested and harmless when unavailable.
+
+---
+
+## Phase 6: User Story 4 - Readiness Diagnosis for Worktrees (Priority: P2)
+
+**Goal**: A developer can run doctor mode and immediately understand why a worktree is or is not ready.
+
+**Independent Test**: Run doctor against a healthy worktree and a degraded worktree; both must return concise status plus one exact recommended action for any failing probe.
+
+### Implementation for User Story 4
+
+- [ ] T020 [US4] Implement `doctor` mode with branch, beads, guard, and environment checks in `scripts/worktree-ready.sh`
+- [ ] T021 [US4] Route `/worktree doctor` and related diagnostics in `.claude/commands/worktree.md`
+- [ ] T022 [US4] Add occupied-branch and recovery-guidance examples to `.claude/commands/worktree.md`
+
+**Checkpoint**: Doctor mode provides a compact readiness diagnosis and concrete recovery steps.
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
+
+**Purpose**: Finalize docs, validate scenarios, and reconcile the feature package.
+
+- [ ] T023 Update quick usage, output format, and safety notes comprehensively in `.claude/commands/worktree.md`
+- [ ] T024 [P] Validate the scenarios from `specs/005-worktree-ready-flow/quickstart.md` and record results in `specs/005-worktree-ready-flow/validation.md`
+- [ ] T025 Reconcile implementation notes and checkbox state in `specs/005-worktree-ready-flow/tasks.md`
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Phase 1 (Setup)**: no dependencies
+- **Phase 2 (Foundational)**: depends on Phase 1 and blocks all user stories
+- **Phase 3 (US1)** and **Phase 4 (US2)**: depend on Phase 2 and form the MVP
+- **Phase 5 (US3)** and **Phase 6 (US4)**: depend on Phase 2 and can proceed after the MVP path
+- **Phase 7 (Polish)**: depends on all desired story work being complete
+
+### User Story Dependencies
+
+- **US1** depends on the foundational helper/reporting layer
+- **US2** depends on the foundational helper/reporting layer
+- **US3** depends on US2 readiness output being present
+- **US4** depends on the foundational helper/reporting layer and reuses US2 status vocabulary
+
+### Parallel Opportunities
+
+- T002 and T003 can proceed in parallel after T001
+- T005 and T006 can proceed in parallel after T004
+- US1 and US2 can proceed in parallel after Phase 2 if separate owners avoid editing the same command artifact simultaneously
+- T024 can run in parallel with final documentation cleanup once the implementation stabilizes
+
+---
+
+## Parallel Example: Foundational Phase
+
+```bash
+Task: "Implement worktree/beads discovery using bd worktree list and git worktree list in scripts/worktree-ready.sh"
+Task: "Implement scripts/git-session-guard.sh --status integration and status parsing in scripts/worktree-ready.sh"
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First
+
+1. Complete Phase 1 (Setup)
+2. Complete Phase 2 (Foundational)
+3. Complete Phase 3 (US1)
+4. Complete Phase 4 (US2)
+5. Validate the blocked-env and ready-env scenarios from `specs/005-worktree-ready-flow/quickstart.md`
+
+### Incremental Delivery
+
+1. Deliver MVP with existing-branch flow and honest readiness handoff
+2. Add opt-in terminal/Codex handoff
+3. Add doctor mode and final polish
+
+### Notes
+
+- `[P]` means parallelizable only when file ownership is respected
+- Manual validation is required because the feature spans shell environment behavior and user-facing command UX
+- The implementation must remain additive over the current low-level workflow
