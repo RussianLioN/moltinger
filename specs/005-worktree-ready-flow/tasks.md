@@ -69,7 +69,7 @@
 
 - [x] T009 [US1] [EXECUTOR: worker] [SEQUENTIAL] Implement existing-branch resolution and target-path derivation in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
 - [x] T010 [US1] [EXECUTOR: worker] [SEQUENTIAL] Implement already-attached-branch detection with existing-path reporting in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
-- [ ] T011 [US1] [EXECUTOR: worker] [SEQUENTIAL] Add `attach` and `start --existing` routing rules to `.claude/commands/worktree.md`
+- [x] T011 [US1] [EXECUTOR: worker] [SEQUENTIAL] Add `attach` and `start --existing` routing rules to `.claude/commands/worktree.md` → Artifacts: [worktree.md](../../.claude/commands/worktree.md)
 - [ ] T012 [US1] [EXECUTOR: worker] [SEQUENTIAL] Add sanitized path preview and existing-branch output examples to `.claude/commands/worktree.md`
 
 **Checkpoint**: A user with an existing branch can get the right worktree without low-level command knowledge.

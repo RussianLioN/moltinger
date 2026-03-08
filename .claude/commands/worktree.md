@@ -51,6 +51,16 @@ If command is empty (`/worktree`):
 
 Issue id regex: `[A-Za-z]+-[0-9]+`
 
+## Existing Branch Routing
+
+When the input is `/worktree start --existing <branch>` or `/worktree attach <branch>`:
+1. Treat the branch as pre-existing and do not derive a new branch name.
+2. Resolve whether the branch exists locally before proposing a worktree action.
+3. Derive a sanitized sibling-path preview from the branch name for user-facing output.
+4. Ask `scripts/worktree-ready.sh` for the actual branch-to-worktree mapping.
+5. If the branch is already attached elsewhere, prefer the reported existing path over the derived preview.
+6. If the branch is missing locally, return `action_required` with one exact corrective next step instead of suggesting a low-level create command.
+
 ## Helper Integration
 
 Readiness, path normalization, and handoff generation are being centralized in `scripts/worktree-ready.sh`.
@@ -110,6 +120,12 @@ For existing branches, prefer:
 - `/worktree attach <branch>`
 
 These flows should create or reuse a worktree for an already existing branch and then hand off to the helper for readiness output when available.
+
+Routing rules for these flows:
+1. Do not translate them into the "new branch from main" workflow.
+2. Do not invent a new branch name from the issue or slug.
+3. Use the helper result as authoritative when the branch is already attached to another worktree.
+4. Only fall back to `bd worktree create` when the branch exists locally and no existing attachment is reported.
 
 ## Doctor Workflow
 
