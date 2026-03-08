@@ -45,7 +45,7 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 ./scripts/telegram-webhook-monitor.sh --json
 
 # Server-side cron (GitOps): scripts/cron.d/moltis-telegram-webhook-monitor
-# CI schedule: .github/workflows/telegram-webhook-monitor.yml
+# GitHub Actions: manual workflow_dispatch only
 ```
 
 ### Standalone Telegram CLI (без Moltis)

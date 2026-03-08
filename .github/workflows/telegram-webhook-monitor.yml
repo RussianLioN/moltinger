@@ -1,8 +1,6 @@
 name: Telegram Webhook Monitor
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       require_webhook:
