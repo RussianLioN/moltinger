@@ -61,6 +61,22 @@ get_timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+iso8601_to_epoch() {
+    local timestamp="$1"
+
+    date -u -d "$timestamp" +%s 2>/dev/null || \
+        date -ju -f "%Y-%m-%dT%H:%M:%SZ" "$timestamp" +%s 2>/dev/null || \
+        python3 - "$timestamp" <<'PY'
+from datetime import datetime
+import sys
+
+value = sys.argv[1].strip()
+if value.endswith("Z"):
+    value = value[:-1] + "+00:00"
+print(int(datetime.fromisoformat(value).timestamp()))
+PY
+}
+
 # Alerting function
 send_alert() {
     local subject="$1"
@@ -428,7 +444,7 @@ check_recovery_timeout() {
 
     # Calculate time since last failure
     local last_epoch current_epoch elapsed
-    last_epoch=$(date -d "$last_failure" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_failure}" +%s 2>/dev/null || echo "0")
+    last_epoch=$(iso8601_to_epoch "$last_failure" 2>/dev/null || echo "0")
     current_epoch=$(date +%s)
     elapsed=$((current_epoch - last_epoch))
 
@@ -742,7 +758,7 @@ get_container_uptime() {
 
     # Parse ISO timestamp and calculate uptime
     local started_epoch
-    started_epoch=$(date -d "$started_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${started_at%%.*}" +%s 2>/dev/null || echo "0")
+    started_epoch=$(iso8601_to_epoch "${started_at%%.*}Z" 2>/dev/null || echo "0")
 
     if [[ "$started_epoch" == "0" ]]; then
         echo "0"

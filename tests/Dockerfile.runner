@@ -1,0 +1,11 @@
+FROM mcr.microsoft.com/playwright:v1.52.0-jammy
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash curl jq coreutils ca-certificates python3 ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+ENV CI=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+CMD ["bash", "-lc", "sleep infinity"]

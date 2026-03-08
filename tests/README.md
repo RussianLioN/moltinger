@@ -77,6 +77,8 @@ Exit contract:
 - отдельный `test-runner` container с pinned toolchain (`bash`, `curl`, `jq`, `coreutils`, Playwright base image)
 - отсутствие зависимости от `/opt/moltinger/.env` и production bind-mounts
 
+Этот hermetic stack является test fixture для CI и локальной воспроизводимости blocking lanes. Он не считается authoritative runtime для production/remote проверки; реальные удалённые проверки остаются только в `live_external` и `resilience`.
+
 Все suites, требующие hermetic stack, поднимаются через `./tests/run.sh`; не вызывайте `docker compose -f compose.test.yml` напрямую как новый public interface.
 
 ## Live Mode
