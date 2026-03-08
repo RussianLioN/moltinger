@@ -94,6 +94,8 @@ guard_current_worktree=""
 guard_raw_status=""
 guard_state="unknown"
 branch_resolution_state="not_required"
+environment_probe_path=""
+environment_state="unknown"
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
@@ -355,6 +357,11 @@ resolve_existing_branch_state() {
   return 1
 }
 
+reset_environment_probe() {
+  environment_probe_path=""
+  environment_state="unknown"
+}
+
 map_bd_beads_state() {
   local raw_state="$1"
 
@@ -589,6 +596,60 @@ discover_guard_state() {
   fi
 }
 
+resolve_environment_probe_path() {
+  if [[ -n "${discovered_worktree_path}" && -d "${discovered_worktree_path}" ]]; then
+    printf '%s\n' "${discovered_worktree_path}"
+    return 0
+  fi
+
+  if [[ -n "${target_path}" && -d "${target_path}" ]]; then
+    printf '%s\n' "${target_path}"
+    return 0
+  fi
+
+  return 1
+}
+
+discover_environment_state() {
+  local output=""
+  local exit_code=0
+
+  reset_environment_probe
+
+  if ! environment_probe_path="$(resolve_environment_probe_path)"; then
+    return 0
+  fi
+
+  if [[ ! -f "${environment_probe_path}/.envrc" ]]; then
+    environment_state="no_envrc"
+    return 0
+  fi
+
+  if ! command -v direnv >/dev/null 2>&1; then
+    environment_state="unknown"
+    return 0
+  fi
+
+  set +e
+  output="$(
+    cd "${environment_probe_path}" && direnv export json 2>&1
+  )"
+  exit_code=$?
+  set -e
+
+  if [[ "${exit_code}" -eq 0 ]]; then
+    environment_state="approved_or_not_required"
+    return 0
+  fi
+
+  if [[ "${output}" == *"is blocked. Run `direnv allow` to approve its content"* ]]; then
+    environment_state="approval_needed"
+    return 0
+  fi
+
+  environment_state="unknown"
+}
+
 reset_report() {
   report_worktree_path=""
   report_path_preview=""
@@ -657,6 +718,14 @@ apply_branch_resolution_to_report() {
   fi
 }
 
+apply_environment_probe_to_report() {
+  report_env_state="${environment_state}"
+
+  if [[ "${environment_state}" == "approval_needed" ]]; then
+    add_warning "Environment approval is required before launching the session."
+  fi
+}
+
 target_path_exists() {
   [[ -n "${target_path}" && -d "${target_path}" ]]
 }
@@ -666,8 +735,6 @@ report_worktree_path_exists() {
 }
 
 set_readiness_status() {
-  report_env_state="unknown"
-
   if [[ "${branch_resolution_state}" == "missing" ]]; then
     report_status="action_required"
     return 0
@@ -709,7 +776,14 @@ set_readiness_next_steps() {
       ;;
     created)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
-      add_next_step "direnv allow # if prompted"
+      case "${report_env_state}" in
+        approval_needed)
+          add_next_step "direnv allow"
+          ;;
+        unknown)
+          add_next_step "direnv allow # if prompted"
+          ;;
+      esac
       add_next_step "codex"
       ;;
     action_required)
@@ -820,6 +894,7 @@ prepare_report_target() {
   apply_discovery_to_report
   apply_guard_probe_to_report
   apply_branch_resolution_to_report
+  apply_environment_probe_to_report
 }
 
 render_mode_placeholder() {
@@ -864,6 +939,7 @@ prepare_create_context() {
 
   discover_target_state
   discover_guard_state
+  discover_environment_state
 }
 
 prepare_attach_context() {
@@ -884,6 +960,7 @@ prepare_attach_context() {
 
   discover_target_state
   discover_guard_state
+  discover_environment_state
 }
 
 prepare_doctor_context() {
@@ -909,6 +986,7 @@ prepare_doctor_context() {
 
   discover_target_state
   discover_guard_state
+  discover_environment_state
 }
 
 prepare_handoff_context() {
@@ -933,6 +1011,7 @@ prepare_handoff_context() {
 
   discover_target_state
   discover_guard_state
+  discover_environment_state
 }
 
 handle_create() {
