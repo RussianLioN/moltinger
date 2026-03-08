@@ -77,6 +77,12 @@ report_handoff_mode="manual"
 declare -a report_next_steps=()
 declare -a report_warnings=()
 
+discovered_worktree_name=""
+discovered_worktree_path=""
+discovered_branch_name=""
+discovered_beads_state=""
+discovered_redirect_target=""
+
 parse_args() {
   if [[ $# -eq 0 ]]; then
     usage >&2
@@ -293,6 +299,164 @@ shell_quote() {
   printf '%q' "$1"
 }
 
+require_command() {
+  local command_name="$1"
+
+  if ! command -v "${command_name}" >/dev/null 2>&1; then
+    die "Required command not found: ${command_name}"
+  fi
+}
+
+reset_discovery() {
+  discovered_worktree_name=""
+  discovered_worktree_path=""
+  discovered_branch_name=""
+  discovered_beads_state=""
+  discovered_redirect_target=""
+}
+
+map_bd_beads_state() {
+  local raw_state="$1"
+
+  case "${raw_state}" in
+    shared)
+      printf 'shared\n'
+      ;;
+    redirect)
+      printf 'redirected\n'
+      ;;
+    local|none|"")
+      printf 'missing\n'
+      ;;
+    *)
+      printf 'missing\n'
+      ;;
+  esac
+}
+
+iter_git_worktrees() {
+  local line=""
+  local current_path=""
+  local current_branch=""
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      worktree\ *)
+        current_path="$(normalize_path "${line#worktree }" "/")"
+        current_branch=""
+        ;;
+      branch\ refs/heads/*)
+        current_branch="${line#branch refs/heads/}"
+        ;;
+      "")
+        if [[ -n "${current_path}" ]]; then
+          printf '%s\t%s\n' "${current_path}" "${current_branch}"
+        fi
+        current_path=""
+        current_branch=""
+        ;;
+    esac
+  done < <(git -C "${resolved_repo_root}" worktree list --porcelain)
+
+  if [[ -n "${current_path}" ]]; then
+    printf '%s\t%s\n' "${current_path}" "${current_branch}"
+  fi
+}
+
+find_git_worktree_by_branch() {
+  local search_branch="$1"
+  local worktree_path=""
+  local worktree_branch=""
+
+  while IFS=$'\t' read -r worktree_path worktree_branch; do
+    if [[ "${worktree_branch}" == "${search_branch}" ]]; then
+      printf '%s\t%s\n' "${worktree_path}" "${worktree_branch}"
+      return 0
+    fi
+  done < <(iter_git_worktrees)
+
+  return 1
+}
+
+find_git_worktree_by_path() {
+  local search_path="$1"
+  local normalized_search_path=""
+  local worktree_path=""
+  local worktree_branch=""
+
+  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
+
+  while IFS=$'\t' read -r worktree_path worktree_branch; do
+    if [[ "${worktree_path}" == "${normalized_search_path}" ]]; then
+      printf '%s\t%s\n' "${worktree_path}" "${worktree_branch}"
+      return 0
+    fi
+  done < <(iter_git_worktrees)
+
+  return 1
+}
+
+find_bd_worktree_by_path() {
+  local search_path="$1"
+  local normalized_search_path=""
+
+  require_command jq
+  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
+
+  bd worktree list --json \
+    | jq -r --arg path "${normalized_search_path}" '
+        .[]
+        | select(.path == $path)
+        | [(.name // ""), (.path // ""), (.branch // ""), (.beads_state // ""), (.redirect_to // "")]
+        | @tsv
+      '
+}
+
+discover_target_state() {
+  local git_record=""
+  local bd_record=""
+  local bd_path=""
+  local git_path=""
+  local git_branch=""
+  local bd_name=""
+  local bd_branch=""
+  local bd_state=""
+  local bd_redirect=""
+
+  reset_discovery
+
+  if [[ -n "${target_path}" ]]; then
+    git_record="$(find_git_worktree_by_path "${target_path}" || true)"
+  elif [[ -n "${branch}" ]]; then
+    git_record="$(find_git_worktree_by_branch "${branch}" || true)"
+  fi
+
+  if [[ -n "${git_record}" ]]; then
+    IFS=$'\t' read -r git_path git_branch <<< "${git_record}"
+    discovered_worktree_path="${git_path}"
+    discovered_branch_name="${git_branch}"
+  fi
+
+  if [[ -n "${discovered_worktree_path}" ]]; then
+    bd_record="$(find_bd_worktree_by_path "${discovered_worktree_path}" || true)"
+  elif [[ -n "${target_path}" ]]; then
+    bd_record="$(find_bd_worktree_by_path "${target_path}" || true)"
+  fi
+
+  if [[ -n "${bd_record}" ]]; then
+    IFS=$'\t' read -r bd_name bd_path bd_branch bd_state bd_redirect <<< "${bd_record}"
+    discovered_worktree_name="${bd_name}"
+    if [[ -z "${discovered_worktree_path}" ]]; then
+      discovered_worktree_path="${bd_path}"
+    fi
+    if [[ -z "${discovered_branch_name}" ]]; then
+      discovered_branch_name="${bd_branch}"
+    fi
+    discovered_beads_state="$(map_bd_beads_state "${bd_state}")"
+    discovered_redirect_target="${bd_redirect}"
+  fi
+}
+
 reset_report() {
   report_worktree_path=""
   report_path_preview=""
@@ -311,6 +475,28 @@ set_report_target() {
   report_worktree_path="${target_path:-n/a}"
   report_path_preview="${path_preview:-n/a}"
   report_branch_name="${branch:-n/a}"
+}
+
+apply_discovery_to_report() {
+  if [[ -n "${discovered_worktree_path}" && "${discovered_worktree_path}" == "${target_path}" ]]; then
+    report_worktree_path="${discovered_worktree_path}"
+  fi
+
+  if [[ -n "${discovered_branch_name}" && "${report_branch_name}" == "n/a" ]]; then
+    report_branch_name="${discovered_branch_name}"
+  fi
+
+  if [[ -n "${discovered_beads_state}" ]]; then
+    report_beads_state="${discovered_beads_state}"
+  fi
+
+  if [[ -n "${discovered_worktree_path}" && -n "${target_path}" && "${discovered_worktree_path}" != "${target_path}" ]]; then
+    add_warning "Discovery found an existing worktree at ${discovered_worktree_path}"
+  fi
+
+  if [[ -n "${discovered_redirect_target}" ]]; then
+    add_warning "Discovery found beads redirect metadata for the target worktree"
+  fi
 }
 
 add_next_step() {
@@ -394,13 +580,14 @@ render_context_summary() {
 prepare_report_target() {
   reset_report
   set_report_target
+  apply_discovery_to_report
 }
 
 render_mode_placeholder() {
   local mode_name="$1"
 
   prepare_report_target
-  add_warning "Mode '${mode_name}' is still using placeholder readiness values until T005-T007 are implemented."
+  add_warning "Mode '${mode_name}' is still using placeholder readiness values until T006-T007 are implemented."
 
   case "${mode_name}" in
     create|attach)
@@ -409,7 +596,7 @@ render_mode_placeholder() {
       ;;
     doctor)
       report_status="action_required"
-      add_next_step "Re-run doctor after discovery and readiness probes land in T005-T007"
+      add_next_step "Re-run doctor after guard and readiness probes land in T006-T007"
       ;;
     handoff)
       report_status="action_required"
@@ -440,6 +627,8 @@ prepare_create_context() {
   else
     derive_sibling_worktree_path "${branch}"
   fi
+
+  discover_target_state
 }
 
 prepare_attach_context() {
@@ -454,6 +643,8 @@ prepare_attach_context() {
   else
     derive_sibling_worktree_path "${branch}"
   fi
+
+  discover_target_state
 }
 
 prepare_doctor_context() {
@@ -471,6 +662,8 @@ prepare_doctor_context() {
     target_path="${resolved_repo_root}"
     path_preview="${resolved_repo_root}"
   fi
+
+  discover_target_state
 }
 
 prepare_handoff_context() {
@@ -487,6 +680,8 @@ prepare_handoff_context() {
   else
     die "handoff mode requires --path or a branch context"
   fi
+
+  discover_target_state
 }
 
 handle_create() {
