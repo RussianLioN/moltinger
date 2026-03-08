@@ -21,8 +21,6 @@
 | `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
-| `remote-uat-hardening` | `feat/remote-uat-hardening` | `sibling-worktree` | Needs decision |
-| `remote-uat-hardening-new` | `feat/remote-uat-hardening-new` | `sibling-worktree` | Needs decision |
 
 ## Active Local Branches
 
@@ -38,8 +36,6 @@
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
-| `feat/remote-uat-hardening` | `none` | Needs decision |
-| `feat/remote-uat-hardening-new` | `none` | Needs decision |
 | `uat/006-git-topology-registry` | `origin/main` | Needs decision |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
