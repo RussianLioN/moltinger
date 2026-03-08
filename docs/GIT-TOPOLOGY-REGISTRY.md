@@ -10,7 +10,9 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `primary-feature-006` | `006-git-topology-registry` | `primary` | Active Speckit feature worktree for topology-registry automation |
+| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges |
+| `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation |
+| `parallel-feature-005` | `005-worktree-ready-flow` | `sibling-worktree` | Active parallel Speckit feature worktree |
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup |
 | `codex-gitops-metrics-fix` | `codex/gitops-metrics-fix` | `sibling-worktree` | Active replacement branch for closed PR `#3`; open PR `#18` |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research/documentation worktree |
@@ -19,9 +21,9 @@
 
 | Branch | Tracking | Status |
 |---|---|---|
-| `main` | `origin/main` | Canonical source of truth; currently not checked out in a dedicated worktree |
-| `006-git-topology-registry` | `none` | Active Speckit feature branch for topology-registry automation |
-| `005-worktree-ready-flow` | `none` | Valid parallel local feature branch; treat as separate workstream |
+| `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree |
+| `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists |
+| `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists |
 | `codex/gitops-metrics-fix` | `origin/codex/gitops-metrics-fix` | Fresh replacement branch with open PR `#18` |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation/research branch |
@@ -42,6 +44,8 @@
 | `origin/001-frontend` | Review later; currently dangling |
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup |
 | `origin/003-testing-infrastructure` | Historical planning branch |
+| `origin/005-worktree-ready-flow` | Active parallel feature branch |
+| `origin/006-git-topology-registry` | Active topology-registry feature branch |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation |
 | `origin/codex/full-review` | Active parallel session; exclude from automated cleanup |
