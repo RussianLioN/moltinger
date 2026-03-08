@@ -179,14 +179,23 @@ Next:
 
 Usage:
 - `/worktree doctor <branch-or-path>`
+- `/worktree doctor /absolute/path/to/worktree`
+- `/worktree doctor` (fallback to the current branch or current repository context when possible)
 
 Intent:
 1. Resolve the branch or worktree target.
 2. Run the helper diagnostics flow:
    - `scripts/worktree-ready.sh doctor --branch <branch>`
    - or `scripts/worktree-ready.sh doctor --path <absolute-path>`
-3. Return the helper report.
-4. If the helper is unavailable, fall back to a manual status block with at least one exact next action.
+3. Prefer a branch target when the user names a branch; prefer a path target when the user gives a path.
+4. Return the helper report with branch mapping, beads state, guard state, environment state, and one exact next action for any failed probe.
+5. If the helper is unavailable, fall back to a manual status block with at least one exact next action.
+
+Related diagnostics rules:
+- Use `doctor` for "why is this worktree not ready?" questions, not only for hard failures.
+- If the named branch is already attached elsewhere, report the discovered path instead of the derived preview path.
+- If the user is already inside the target worktree, `doctor` should work without forcing them to re-enter the path manually.
+- Keep the result compact; prefer one corrective path over a long troubleshooting checklist.
 
 ## Finish Workflow
 
