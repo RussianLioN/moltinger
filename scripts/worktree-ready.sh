@@ -93,6 +93,7 @@ guard_current_branch=""
 guard_current_worktree=""
 guard_raw_status=""
 guard_state="unknown"
+branch_resolution_state="not_required"
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
@@ -337,6 +338,21 @@ reset_guard_probe() {
   guard_current_worktree=""
   guard_raw_status=""
   guard_state="unknown"
+}
+
+resolve_existing_branch_state() {
+  branch_resolution_state="missing"
+
+  if [[ -z "${branch}" ]]; then
+    return 1
+  fi
+
+  if git -C "${resolved_repo_root}" show-ref --verify --quiet "refs/heads/${branch}"; then
+    branch_resolution_state="resolved"
+    return 0
+  fi
+
+  return 1
 }
 
 map_bd_beads_state() {
@@ -627,12 +643,23 @@ apply_guard_probe_to_report() {
   fi
 }
 
+apply_branch_resolution_to_report() {
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    add_warning "Existing branch '${branch}' is not available locally."
+  fi
+}
+
 target_path_exists() {
   [[ -n "${target_path}" && -d "${target_path}" ]]
 }
 
 set_readiness_status() {
   report_env_state="unknown"
+
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    report_status="action_required"
+    return 0
+  fi
 
   if [[ "${report_guard_state}" == "drift" ]]; then
     report_status="drift_detected"
@@ -655,6 +682,11 @@ set_readiness_status() {
 
 set_readiness_next_steps() {
   local mode_name="$1"
+
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    add_next_step "Create or fetch the branch '${branch}' before using attach or start --existing"
+    return 0
+  fi
 
   case "${report_status}" in
     drift_detected)
@@ -770,6 +802,7 @@ prepare_report_target() {
   set_report_target
   apply_discovery_to_report
   apply_guard_probe_to_report
+  apply_branch_resolution_to_report
 }
 
 render_mode_placeholder() {
@@ -792,6 +825,7 @@ render_mode_placeholder() {
 
 prepare_create_context() {
   require_git_repo
+  branch_resolution_state="not_required"
 
   if [[ -z "${branch}" ]]; then
     branch="${existing_branch:-}"
@@ -799,6 +833,10 @@ prepare_create_context() {
 
   if [[ -z "${branch}" ]]; then
     die "create mode requires --branch or --existing"
+  fi
+
+  if [[ -n "${existing_branch}" ]]; then
+    resolve_existing_branch_state || true
   fi
 
   if [[ -n "${target_path}" ]]; then
@@ -813,10 +851,13 @@ prepare_create_context() {
 
 prepare_attach_context() {
   require_git_repo
+  branch_resolution_state="not_required"
 
   if [[ -z "${branch}" ]]; then
     die "attach mode requires --branch"
   fi
+
+  resolve_existing_branch_state || true
 
   if [[ -n "${target_path}" ]]; then
     resolve_explicit_path "${target_path}"
@@ -830,9 +871,14 @@ prepare_attach_context() {
 
 prepare_doctor_context() {
   require_git_repo
+  branch_resolution_state="not_required"
 
   if [[ -z "${branch}" && -z "${target_path}" ]]; then
     branch="$(resolve_current_branch)"
+  fi
+
+  if [[ -n "${branch}" ]]; then
+    resolve_existing_branch_state || true
   fi
 
   if [[ -n "${target_path}" ]]; then
@@ -850,9 +896,14 @@ prepare_doctor_context() {
 
 prepare_handoff_context() {
   require_git_repo
+  branch_resolution_state="not_required"
 
   if [[ -z "${branch}" && -z "${target_path}" ]]; then
     branch="$(resolve_current_branch)"
+  fi
+
+  if [[ -n "${branch}" ]]; then
+    resolve_existing_branch_state || true
   fi
 
   if [[ -n "${target_path}" ]]; then
