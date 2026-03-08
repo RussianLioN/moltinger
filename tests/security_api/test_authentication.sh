@@ -10,9 +10,10 @@ TEST_TIMEOUT="${TEST_TIMEOUT:-20}"
 COOKIE_FILE="$(secure_temp_file security-auth-cookie)"
 HEADER_FILE="$(secure_temp_file security-auth-headers)"
 RESPONSE_FILE="$(secure_temp_file security-auth-response)"
+RPC_OUTPUT_FILE="$(secure_temp_file security-auth-rpc)"
 
 setup_security_auth() {
-    require_commands_or_skip curl jq || return 2
+    require_commands_or_skip curl jq node || return 2
     if [[ -z "$MOLTIS_PASSWORD" ]] && ! is_live_mode; then
         MOLTIS_PASSWORD="test_password"
     fi
@@ -63,19 +64,20 @@ run_security_authentication_tests() {
     fi
 
     test_start "security_api_protected_chat_requires_auth"
-    rm -f "$COOKIE_FILE"
-    local unauth_chat_code
-    unauth_chat_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"unauthenticated"}')
-    if [[ "$unauth_chat_code" == "401" || "$unauth_chat_code" == "403" || "$unauth_chat_code" == "302" || "$unauth_chat_code" == "303" ]]; then
+    if ws_rpc_request_noauth health '{}' "$RPC_OUTPUT_FILE"; then
+        test_fail "Protected WS transport should not accept unauthenticated clients"
+    elif jq -e '.ok == false and (.message | test("ws open timeout|connect"; "i"))' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Protected chat endpoint should require auth (got $unauth_chat_code)"
+        test_fail "Unauthenticated WS connect should fail"
     fi
 
     test_start "security_api_valid_password_accepted"
     local valid_code
     valid_code=$(login_with_password "$MOLTIS_PASSWORD")
     if [[ "$valid_code" == "200" || "$valid_code" == "302" || "$valid_code" == "303" ]]; then
+        TEST_COOKIE_HEADER="$(cookie_file_to_header "$COOKIE_FILE")"
+        export TEST_COOKIE_HEADER
         test_pass
     else
         test_fail "Valid password should authenticate (got $valid_code)"
@@ -89,13 +91,14 @@ run_security_authentication_tests() {
     fi
 
     test_start "security_api_logout_invalidates_session"
-    local logout_code post_logout_code
+    local logout_code
     logout_code=$(moltis_logout_code "$MOLTIS_URL" "$COOKIE_FILE" "$TEST_TIMEOUT")
-    post_logout_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"after logout"}')
-    if [[ "$logout_code" =~ ^(200|204|302|303)$ && "$post_logout_code" =~ ^(401|403|302|303)$ ]]; then
+    unset TEST_COOKIE_HEADER || true
+    curl_with_test_client_ip -s -b "$COOKIE_FILE" -H 'Accept: application/json' "${MOLTIS_URL}/api/auth/status" --max-time "$TEST_TIMEOUT" >"$RESPONSE_FILE"
+    if [[ "$logout_code" =~ ^(200|204|302|303)$ ]] && jq -e '.authenticated == false' "$RESPONSE_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Logout should invalidate session (logout=$logout_code, post=$post_logout_code)"
+        test_fail "Logout should invalidate the current authenticated session"
     fi
 
     generate_report

@@ -19,6 +19,7 @@
 - Все E2E suites запускаются только через `./tests/run.sh`.
 - Browser E2E must validate the real user transport via Playwright and must not degrade into HTTP-only substitutes.
 - `e2e_browser` may use the hermetic stack from `compose.test.yml` and must not rely on production secrets.
+- The hermetic browser fixture must pre-complete onboarding so browser assertions exercise `/chats/*` rather than stopping at `/onboarding`.
 - Hermetic browser E2E is a test fixture for CI/local reproducibility and does not replace the authoritative remote runtime used for live validation.
 - `resilience` must run in an isolated compose project and may not mutate shared environments.
 - Live-only E2E suites require explicit `--live`.

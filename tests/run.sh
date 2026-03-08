@@ -236,6 +236,22 @@ ensure_stack_ready() {
     return 0
 }
 
+bootstrap_stack_onboarding() {
+    mkdir -p "$TEST_REPORT_DIR"
+    local bootstrap_report="$TEST_REPORT_DIR/bootstrap-onboarding.json"
+
+    set +e
+    run_compose run --rm -T \
+        -e TEST_BASE_URL="http://moltis:13131" \
+        -e TEST_TIMEOUT="$TEST_TIMEOUT" \
+        -e MOLTIS_PASSWORD="${MOLTIS_PASSWORD:-test_password}" \
+        test-runner node tests/fixtures/bootstrap_onboarding.mjs >"$bootstrap_report"
+    local exit_code=$?
+    set -e
+
+    [[ $exit_code -eq 0 ]]
+}
+
 ensure_runner_prereqs() {
     command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; return 1; }
     [[ "${BASH_VERSINFO[0]:-0}" -ge 5 ]] || { echo "bash >= 5 is required" >&2; return 1; }
@@ -496,7 +512,22 @@ run_locally_in_container() {
 
     mkdir -p "$TEST_REPORT_DIR"
 
-    local report_dir_in_container="/workspace/${TEST_REPORT_DIR#$PROJECT_ROOT/}"
+    bootstrap_stack_onboarding || {
+        collect_stack_diagnostics
+        echo "Failed to bootstrap hermetic onboarding fixture" >&2
+        return 1
+    }
+
+    local report_dir_in_container
+    local -a extra_volume_args=()
+
+    if [[ "$TEST_REPORT_DIR" == "$PROJECT_ROOT"* ]]; then
+        report_dir_in_container="/workspace/${TEST_REPORT_DIR#$PROJECT_ROOT/}"
+    else
+        report_dir_in_container="/tmp/test-results"
+        extra_volume_args=(-v "$TEST_REPORT_DIR:$report_dir_in_container")
+    fi
+
     local -a forward_args=(--lane "$LANE" --compose-project "$COMPOSE_PROJECT_NAME")
     [[ "$OUTPUT_JSON" == "true" ]] && forward_args+=(--json)
     [[ "$WRITE_JUNIT" == "true" ]] && forward_args+=(--junit)
@@ -507,6 +538,7 @@ run_locally_in_container() {
 
     set +e
     run_compose run --rm -T \
+        "${extra_volume_args[@]}" \
         -e TEST_IN_CONTAINER=1 \
         -e TEST_REPORT_DIR="$report_dir_in_container" \
         -e TEST_BASE_URL="http://moltis:13131" \

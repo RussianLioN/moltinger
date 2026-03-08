@@ -45,6 +45,7 @@
 - Blocking lanes must not implicitly read `/opt/moltinger/.env`.
 - `integration_local`, `security_api`, and `e2e_browser` may recurse into `compose.test.yml` automatically.
 - `compose.test.yml` is a hermetic test fixture for CI/local reproducibility and is not the authoritative production runtime target.
+- The hermetic fixture must provide a writable Moltis config and pre-seed onboarding to a chat-ready state for chat-dependent suites.
 - Live-only lanes require explicit `--live` or `TEST_LIVE=1`.
 - Destructive suites must use isolated compose projects and may not mutate shared runtime stacks.
 

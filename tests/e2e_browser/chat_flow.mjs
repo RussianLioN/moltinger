@@ -1,7 +1,14 @@
-import { execSync } from 'node:child_process';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
+import {
+  SkipError,
+  assertAuthenticatedSession,
+  createPage,
+  ensureAuthenticatedPage,
+  ensureChatReady,
+  getPlaywright,
+  openAuthenticatedPage,
+} from '../lib/browser_runtime.mjs';
 
 const suiteId = process.env.TEST_SUITE_ID || 'e2e_browser_chat_flow';
 const suiteName = process.env.TEST_SUITE_NAME || suiteId;
@@ -11,15 +18,12 @@ const baseUrl = (process.env.TEST_BASE_URL || 'http://moltis:13131').replace(/\/
 const password = process.env.MOLTIS_PASSWORD || 'test_password';
 const testClientIp = process.env.TEST_CLIENT_IP || '';
 const defaultTimeoutMs = Number(process.env.TEST_TIMEOUT || '60') * 1000;
-const require = createRequire(import.meta.url);
 const authStateDir = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'moltis-e2e-auth-'));
 let sharedAuthStatePath = '';
 
 const cases = [];
 const failures = [];
 const skipped = [];
-
-class SkipError extends Error {}
 
 function now() {
   return Date.now();
@@ -46,54 +50,6 @@ function assert(condition, message) {
   }
 }
 
-async function getPlaywright() {
-  const globalNodeModules = (() => {
-    try {
-      return execSync('npm root -g', { encoding: 'utf8' }).trim();
-    } catch {
-      return '';
-    }
-  })();
-
-  const requireCandidates = [
-    'playwright',
-    '@playwright/test',
-    globalNodeModules ? path.join(globalNodeModules, 'playwright') : '',
-    globalNodeModules ? path.join(globalNodeModules, '@playwright/test') : '',
-  ].filter(Boolean);
-
-  for (const candidate of requireCandidates) {
-    try {
-      const module = require(candidate);
-      if (module?.chromium) {
-        return module;
-      }
-    } catch {
-      // Continue through candidates.
-    }
-  }
-
-  try {
-    const module = await import('playwright');
-    if (module?.chromium) {
-      return module;
-    }
-  } catch {
-    // Fall through to next import candidate.
-  }
-
-  try {
-    const module = await import('@playwright/test');
-    if (module?.chromium) {
-      return module;
-    }
-  } catch {
-    // Fall through to explicit failure below.
-  }
-
-  throw new Error('Playwright runtime is not available in the test runner image');
-}
-
 async function runCase(id, name, fn) {
   const testCase = { id, name, startedAt: now() };
   try {
@@ -108,28 +64,17 @@ async function runCase(id, name, fn) {
   }
 }
 
-async function createPage(browser, storageStatePath = '') {
-  const contextOptions = storageStatePath ? { storageState: storageStatePath } : {};
-  if (testClientIp) {
-    contextOptions.extraHTTPHeaders = {
-      'X-Forwarded-For': testClientIp,
-      'X-Real-IP': testClientIp,
-    };
-  }
-  const context = await browser.newContext(contextOptions);
-  const page = await context.newPage();
-  page.setDefaultTimeout(defaultTimeoutMs);
-  return { context, page };
-}
-
 async function ensureAuthenticatedState(browser) {
   if (sharedAuthStatePath && fs.existsSync(sharedAuthStatePath)) {
     return sharedAuthStatePath;
   }
 
-  const { context, page } = await createPage(browser);
+  const { context, page } = await createPage(browser, {
+    testClientIp,
+    defaultTimeoutMs,
+  });
   try {
-    await openAuthenticatedPage(page);
+    await openAuthenticatedPage(page, { baseUrl, password, defaultTimeoutMs });
     sharedAuthStatePath = path.join(authStateDir, 'storage-state.json');
     await context.storageState({ path: sharedAuthStatePath });
     return sharedAuthStatePath;
@@ -138,91 +83,8 @@ async function ensureAuthenticatedState(browser) {
   }
 }
 
-async function login(page, loginPassword = password) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
-  await page.locator('input[type="password"]').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-  await page.locator('input[type="password"]').fill(loginPassword);
-  await page.locator('button[type="submit"]').click();
-}
-
-async function bestEffortCompleteOnboarding(page) {
-  const maxSteps = 8;
-  for (let step = 0; step < maxSteps; step += 1) {
-    const chatInput = page.locator('#chatInput');
-    if (await chatInput.isVisible().catch(() => false)) {
-      return true;
-    }
-
-    const buttons = [
-      page.getByRole('button', { name: /^Continue$/i }),
-      page.getByRole('button', { name: /^Skip for now$/i }),
-      page.getByRole('button', { name: /^Skip$/i }),
-      page.getByRole('button', { name: /reporting for duty/i }),
-    ];
-
-    let clicked = false;
-    for (const button of buttons) {
-      try {
-        if (await button.first().isVisible({ timeout: 1000 }).catch(() => false)) {
-          await button.first().click();
-          clicked = true;
-          break;
-        }
-      } catch {
-        // Continue scanning actionable controls.
-      }
-    }
-
-    if (!clicked) {
-      return false;
-    }
-
-    await page.waitForLoadState('domcontentloaded').catch(() => {});
-    await page.waitForTimeout(500);
-  }
-
-  return await page.locator('#chatInput').isVisible().catch(() => false);
-}
-
-async function openAuthenticatedPage(page) {
-  await login(page, password);
-  await page.waitForTimeout(500);
-  const auth = await page.evaluate(async () => {
-    const response = await fetch('/api/auth/status');
-    return response.ok ? response.json() : { authenticated: false };
-  });
-  assert(auth.authenticated === true, 'Browser session should become authenticated after valid login');
-  return auth;
-}
-
-async function ensureAuthenticatedPage(page) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(500);
-  const auth = await page.evaluate(async () => {
-    const response = await fetch('/api/auth/status');
-    return response.ok ? response.json() : { authenticated: false };
-  });
-  if (auth.authenticated === true) {
-    return auth;
-  }
-  return openAuthenticatedPage(page);
-}
-
-async function assertAuthenticatedSession(page, message) {
-  const auth = await page.evaluate(async () => {
-    const response = await fetch('/api/auth/status');
-    return response.ok ? response.json() : { authenticated: false };
-  });
-  assert(auth.authenticated === true, message);
-  return auth;
-}
-
 async function reachChatOrSkip(page) {
-  await ensureAuthenticatedPage(page);
-  const chatReady = await bestEffortCompleteOnboarding(page);
-  if (!chatReady) {
-    throw new SkipError('Chat UI is not reachable from onboarding state in this environment yet');
-  }
+  await ensureChatReady(page, { baseUrl, password, defaultTimeoutMs });
 }
 
 async function reloadAndEnsureAuthenticated(page) {
@@ -246,10 +108,7 @@ async function reloadAndEnsureChat(page) {
     return;
   }
 
-  const chatReady = await bestEffortCompleteOnboarding(page);
-  if (!chatReady) {
-    throw new SkipError('Chat UI is not reachable after reload in this environment yet');
-  }
+  await ensureChatReady(page, { baseUrl, password, defaultTimeoutMs });
 }
 
 async function sendMessageThroughUi(page, message) {
@@ -274,7 +133,7 @@ async function run() {
   const browser = await playwright.chromium.launch({ headless: true });
   try {
     await runCase('e2e_browser_login_page_renders', 'Login page renders password auth form', async () => {
-      const { context, page } = await createPage(browser);
+      const { context, page } = await createPage(browser, { testClientIp, defaultTimeoutMs });
       try {
         await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
         await page.locator('input[type="password"]').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
@@ -287,9 +146,11 @@ async function run() {
     });
 
     await runCase('e2e_browser_invalid_login_rejected', 'Invalid password stays on auth flow and surfaces error', async () => {
-      const { context, page } = await createPage(browser);
+      const { context, page } = await createPage(browser, { testClientIp, defaultTimeoutMs });
       try {
-        await login(page, 'wrong-password');
+        await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' });
+        await page.locator('input[type="password"]').fill('wrong-password');
+        await page.locator('button[type="submit"]').click();
         const errorLocator = page.locator('.auth-error');
         await errorLocator.waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         const errorText = (await errorLocator.textContent()) || '';
@@ -300,9 +161,9 @@ async function run() {
     });
 
     await runCase('e2e_browser_login_establishes_session', 'Valid login authenticates browser session', async () => {
-      const { context, page } = await createPage(browser);
+      const { context, page } = await createPage(browser, { testClientIp, defaultTimeoutMs });
       try {
-        await openAuthenticatedPage(page);
+        await openAuthenticatedPage(page, { baseUrl, password, defaultTimeoutMs });
         sharedAuthStatePath = path.join(authStateDir, 'storage-state.json');
         await context.storageState({ path: sharedAuthStatePath });
       } finally {
@@ -312,7 +173,7 @@ async function run() {
 
     await runCase('e2e_browser_session_continuity_after_reload', 'Authenticated browser session survives page reload', async () => {
       const authStatePath = await ensureAuthenticatedState(browser);
-      const { context, page } = await createPage(browser, authStatePath);
+      const { context, page } = await createPage(browser, { storageStatePath: authStatePath, testClientIp, defaultTimeoutMs });
       try {
         await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
         await assertAuthenticatedSession(page, 'Browser session should be restored from saved auth state');
@@ -324,7 +185,7 @@ async function run() {
 
     await runCase('e2e_browser_chat_route_reachable', 'Browser can reach chat route after onboarding', async () => {
       const authStatePath = await ensureAuthenticatedState(browser);
-      const { context, page } = await createPage(browser, authStatePath);
+      const { context, page } = await createPage(browser, { storageStatePath: authStatePath, testClientIp, defaultTimeoutMs });
       try {
         await reachChatOrSkip(page);
         assert(await page.locator('#chatInput').isVisible(), 'Chat input should be visible after onboarding');
@@ -335,7 +196,7 @@ async function run() {
 
     await runCase('e2e_browser_refresh_reconnect_chat_ui', 'Chat UI reconnects after page reload', async () => {
       const authStatePath = await ensureAuthenticatedState(browser);
-      const { context, page } = await createPage(browser, authStatePath);
+      const { context, page } = await createPage(browser, { storageStatePath: authStatePath, testClientIp, defaultTimeoutMs });
       try {
         await reachChatOrSkip(page);
         await reloadAndEnsureChat(page);
@@ -347,7 +208,7 @@ async function run() {
 
     await runCase('e2e_browser_chat_round_trip', 'User can send a message through browser transport', async () => {
       const authStatePath = await ensureAuthenticatedState(browser);
-      const { context, page } = await createPage(browser, authStatePath);
+      const { context, page } = await createPage(browser, { storageStatePath: authStatePath, testClientIp, defaultTimeoutMs });
       try {
         await reachChatOrSkip(page);
         await sendMessageThroughUi(page, `browser ui smoke ${Date.now()}`);

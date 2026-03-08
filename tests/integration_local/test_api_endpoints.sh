@@ -10,10 +10,11 @@ TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
 COOKIE_FILE="$(secure_temp_file integration-api-cookie)"
 HEADER_FILE="$(secure_temp_file integration-api-headers)"
 RESPONSE_FILE="$(secure_temp_file integration-api-response)"
+RPC_OUTPUT_FILE="$(secure_temp_file integration-api-rpc)"
 AUTH_SUCCESS=false
 
 setup_integration_local() {
-    require_commands_or_skip curl jq || return 2
+    require_commands_or_skip curl jq node || return 2
     if [[ -z "$MOLTIS_PASSWORD" ]] && ! is_live_mode; then
         MOLTIS_PASSWORD="test_password"
     fi
@@ -30,6 +31,8 @@ login_or_fail() {
     local code
     code=$(moltis_login_code "$MOLTIS_URL" "$MOLTIS_PASSWORD" "$COOKIE_FILE" "$TEST_TIMEOUT")
     if [[ "$code" == "200" || "$code" == "302" || "$code" == "303" ]]; then
+        TEST_COOKIE_HEADER="$(cookie_file_to_header "$COOKIE_FILE")"
+        export TEST_COOKIE_HEADER
         AUTH_SUCCESS=true
         return 0
     fi
@@ -37,14 +40,11 @@ login_or_fail() {
     return 1
 }
 
-chat_request() {
-    local payload
-    payload=$(jq -nc --arg message "$1" '{message: $message}')
-    moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" "$payload" "$HEADER_FILE"
-}
-
-metrics_request() {
-    moltis_request GET "$MOLTIS_URL" "/api/v1/metrics" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" "" "$HEADER_FILE"
+read_auth_status() {
+    curl_with_test_client_ip -s -b "$COOKIE_FILE" \
+        -H 'Accept: application/json' \
+        "${MOLTIS_URL}/api/auth/status" \
+        --max-time "$TEST_TIMEOUT" >"$RESPONSE_FILE"
 }
 
 run_integration_local_api_tests() {
@@ -78,61 +78,60 @@ run_integration_local_api_tests() {
     fi
 
     test_start "integration_local_chat_requires_auth"
-    rm -f "$COOKIE_FILE"
-    local unauth_code
-    unauth_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"auth required?"}')
-    if [[ "$unauth_code" == "401" || "$unauth_code" == "403" || "$unauth_code" == "302" || "$unauth_code" == "303" ]]; then
+    if ws_rpc_request_noauth health '{}' "$RPC_OUTPUT_FILE"; then
+        test_fail "Protected WS transport should not accept unauthenticated clients"
+    elif jq -e '.ok == false and (.message | test("ws open timeout|connect"; "i"))' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Chat endpoint should reject unauthenticated requests (got $unauth_code)"
+        test_fail "Unauthenticated WS connect should fail"
     fi
 
     test_start "integration_local_chat_endpoint"
-    login_or_fail || true
-    local chat_code
-    chat_code=$(chat_request "Hello from integration_local")
-    if response_is_onboarding_redirect "$chat_code" "$HEADER_FILE"; then
-        test_skip "Fixture remains gated by product onboarding for chat API"
-    elif [[ "$chat_code" == "200" || "$chat_code" == "202" ]]; then
+    ws_rpc_request chat.send '{"text":"Hello from integration_local"}' "$RPC_OUTPUT_FILE" 2000 'chat'
+    if jq -e '.ok == true and .result.ok == true and .result.payload.ok == true and ([.events[]? | select(.event == "chat" and .payload.state == "final")] | length) >= 1' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Authenticated chat request should succeed (got $chat_code)"
+        test_fail "Authenticated chat RPC should stream a final chat event"
     fi
 
-    test_start "integration_local_metrics_endpoint"
-    local metrics_code
-    login_or_fail || true
-    metrics_code=$(metrics_request)
-    if response_is_onboarding_redirect "$metrics_code" "$HEADER_FILE"; then
-        test_skip "Fixture remains gated by product onboarding for metrics API"
-    elif [[ "$metrics_code" == "200" ]] && rg -q 'moltis_circuit_state|llm_provider_available' "$RESPONSE_FILE"; then
+    test_start "integration_local_runtime_status_rpc"
+    ws_rpc_request status '{}' "$RPC_OUTPUT_FILE"
+    if jq -e '.ok == true and .result.ok == true and (.result.payload.version | length > 0) and (.result.payload.connections >= 0)' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Metrics endpoint should expose Prometheus series"
+        test_fail "Status RPC should expose runtime state for the authenticated fixture"
     fi
 
     test_start "integration_local_session_persistence"
-    login_or_fail || true
-    local first_code second_code
-    first_code=$(chat_request "first session message")
-    second_code=$(chat_request "second session message")
-    if response_is_onboarding_redirect "$first_code" "$HEADER_FILE" || response_is_onboarding_redirect "$second_code" "$HEADER_FILE"; then
-        test_skip "Fixture remains gated by product onboarding for sequential chat flow"
-    elif [[ "$first_code" =~ ^(200|202)$ && "$second_code" =~ ^(200|202)$ ]]; then
+    local before_count after_count first_message second_message
+    first_message="first session message $(date +%s)"
+    second_message="second session message $(date +%s)"
+
+    ws_rpc_request chat.context '{}' "$RPC_OUTPUT_FILE"
+    before_count=$(jq -r '.result.payload.session.messageCount // 0' "$RPC_OUTPUT_FILE")
+
+    ws_rpc_request chat.send "$(jq -nc --arg text "$first_message" '{text: $text}')" "$RPC_OUTPUT_FILE" 1500 'chat'
+    ws_rpc_request chat.send "$(jq -nc --arg text "$second_message" '{text: $text}')" "$RPC_OUTPUT_FILE" 1500 'chat'
+    ws_rpc_request chat.context '{}' "$RPC_OUTPUT_FILE"
+    after_count=$(jq -r '.result.payload.session.messageCount // 0' "$RPC_OUTPUT_FILE")
+    ws_rpc_request chat.history '{}' "$RESPONSE_FILE"
+
+    if (( after_count >= before_count + 2 )) \
+        && jq -e --arg first "$first_message" --arg second "$second_message" '.result.payload | any(.content == $first) and any(.content == $second)' "$RESPONSE_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Session cookie should persist across sequential chat requests"
+        test_fail "Session context/history should retain sequential chat messages"
     fi
 
     test_start "integration_local_logout_invalidates_session"
-    login_or_fail || true
-    local logout_code post_logout_code
+    local logout_code
     logout_code=$(moltis_logout_code "$MOLTIS_URL" "$COOKIE_FILE" "$TEST_TIMEOUT")
-    post_logout_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"after logout"}')
-    if [[ "$logout_code" =~ ^(200|204|302|303)$ && "$post_logout_code" =~ ^(401|403|302|303)$ ]]; then
+    unset TEST_COOKIE_HEADER || true
+    read_auth_status
+    if [[ "$logout_code" =~ ^(200|204|302|303)$ ]] && jq -e '.authenticated == false' "$RESPONSE_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Logout should invalidate session (logout=$logout_code, post=$post_logout_code)"
+        test_fail "Logout should invalidate the current authenticated session"
     fi
 
     generate_report

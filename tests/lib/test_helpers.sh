@@ -12,3 +12,5 @@ source "$LIB_DIR/http.sh"
 source "$LIB_DIR/process.sh"
 # shellcheck source=tests/lib/docker.sh
 source "$LIB_DIR/docker.sh"
+# shellcheck source=tests/lib/rpc.sh
+source "$LIB_DIR/rpc.sh"

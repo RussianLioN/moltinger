@@ -17,6 +17,17 @@ services:
   moltis:
     image: ghcr.io/moltis-org/moltis@sha256:f13c9a0c584e29f739f1d7b22c914b19810e55afe3577bfcea427057cbb1bff3
     restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - >-
+        set -eu;
+        mkdir -p /home/moltis/.config/moltis;
+        if [ ! -f /home/moltis/.config/moltis/moltis.toml ]; then
+          cp /fixture-config/moltis.toml /home/moltis/.config/moltis/moltis.toml;
+        fi;
+        exec moltis --bind 0.0.0.0
     environment:
       MOLTIS_HOST: 0.0.0.0
       MOLTIS_NO_TLS: "true"
@@ -27,7 +38,8 @@ services:
       GLM_API_KEY: ""
       TAVILY_API_KEY: ""
     volumes:
-      - ./tests/fixtures/config:/home/moltis/.config/moltis:ro
+      - ./tests/fixtures/config:/fixture-config:ro
+      - moltis-test-config:/home/moltis/.config/moltis
       - moltis-test-data:/home/moltis/.moltis
     depends_on:
       ollama:
@@ -67,4 +79,5 @@ networks:
     driver: bridge
 
 volumes:
+  moltis-test-config:
   moltis-test-data:

@@ -8,12 +8,11 @@ MOLTIS_URL="${TEST_BASE_URL:-${MOLTIS_URL:-http://127.0.0.1:13131}}"
 MOLTIS_PASSWORD="${MOLTIS_PASSWORD:-}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-20}"
 COOKIE_FILE="$(secure_temp_file security-input-cookie)"
-HEADER_FILE="$(secure_temp_file security-input-headers)"
-RESPONSE_FILE="$(secure_temp_file security-input-response)"
+RPC_OUTPUT_FILE="$(secure_temp_file security-input-rpc)"
 MAX_MESSAGE_BYTES=12000
 
 setup_security_input() {
-    require_commands_or_skip curl jq || return 2
+    require_commands_or_skip curl jq node python3 || return 2
     if [[ -z "$MOLTIS_PASSWORD" ]] && ! is_live_mode; then
         MOLTIS_PASSWORD="test_password"
     fi
@@ -24,34 +23,22 @@ setup_security_input() {
 login_fixture_user() {
     local code
     code=$(moltis_login_code "$MOLTIS_URL" "$MOLTIS_PASSWORD" "$COOKIE_FILE" "$TEST_TIMEOUT")
-    [[ "$code" == "200" || "$code" == "302" || "$code" == "303" ]]
+    if [[ "$code" == "200" || "$code" == "302" || "$code" == "303" ]]; then
+        TEST_COOKIE_HEADER="$(cookie_file_to_header "$COOKIE_FILE")"
+        export TEST_COOKIE_HEADER
+        return 0
+    fi
+    return 1
 }
 
-chat_with_payload() {
-    local payload="$1"
-    curl_with_test_client_ip -s -D "$HEADER_FILE" -b "$COOKIE_FILE" \
-        -X POST "${MOLTIS_URL}/api/v1/chat" \
-        -H 'Content-Type: application/json' \
-        -d "$payload" \
-        -o "$RESPONSE_FILE" \
-        -w '%{http_code}' \
-        --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000"
-}
-
-skip_chat_validation_cases() {
-    local reason="$1"
-    local case_name
-    for case_name in \
-        "security_api_empty_message_rejected" \
-        "security_api_malformed_json_rejected" \
-        "security_api_oversized_message_no_server_error" \
-        "security_api_xss_payload_no_server_error" \
-        "security_api_sql_injection_payload_no_server_error" \
-        "security_api_path_traversal_payload_no_server_error"
-    do
-        test_start "$case_name"
-        test_skip "$reason"
-    done
+assert_chat_rpc_completed() {
+    local file="$1"
+    jq -e '
+      .ok == true
+      and .result.ok == true
+      and .result.payload.ok == true
+      and ([.events[]? | select(.event == "chat" and (.payload.state == "final" or .payload.state == "error"))] | length) >= 1
+    ' "$file" >/dev/null 2>&1
 }
 
 run_security_input_validation_tests() {
@@ -80,75 +67,59 @@ run_security_input_validation_tests() {
         return
     fi
 
-    local readiness_code
-    readiness_code=$(chat_with_payload '{"message":"fixture readiness probe"}')
-    if response_is_onboarding_redirect "$readiness_code" "$HEADER_FILE"; then
-        skip_chat_validation_cases "Fixture remains gated by product onboarding; chat input validation unavailable"
-        generate_report
-        return
-    fi
-
-    test_start "security_api_empty_message_rejected"
-    local empty_code
-    empty_code=$(chat_with_payload '{"message":""}')
-    if [[ "$empty_code" == "400" || "$empty_code" == "422" ]]; then
+    test_start "security_api_empty_message_handled"
+    ws_rpc_request chat.send '{"text":""}' "$RPC_OUTPUT_FILE" 1500 'chat'
+    if assert_chat_rpc_completed "$RPC_OUTPUT_FILE"; then
         test_pass
     else
-        test_fail "Empty messages should be rejected (got $empty_code)"
+        test_fail "Empty message should be handled without transport failure"
     fi
 
-    test_start "security_api_malformed_json_rejected"
-    local malformed_code
-    malformed_code=$(curl_with_test_client_ip -s -b "$COOKIE_FILE" -X POST "${MOLTIS_URL}/api/v1/chat" -H 'Content-Type: application/json' -d '{"message":' -o "$RESPONSE_FILE" -w '%{http_code}' --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
-    if [[ "$malformed_code" == "400" || "$malformed_code" == "422" ]]; then
+    test_start "security_api_malformed_frame_handled"
+    ws_rpc_invalid_frame '{"type":"req","id":"broken"' "$RPC_OUTPUT_FILE" 500
+    if jq -e '.ok == true and .result.ok == true and .result.payload.status == "ok" and ([.events[]? | select(.event == "error" and (.payload.message | test("invalid frame"; "i")))] | length) >= 1' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Malformed JSON should be rejected (got $malformed_code)"
+        test_fail "Malformed frame should not crash the WS gateway"
     fi
 
     test_start "security_api_oversized_message_no_server_error"
-    local long_message oversized_code
+    local long_message
     long_message=$(python3 - <<'PY'
 print('A' * 12000)
 PY
 )
-    oversized_code=$(chat_with_payload "$(jq -nc --arg message "$long_message" '{message: $message}')")
-    if [[ "$oversized_code" == "400" || "$oversized_code" == "413" || "$oversized_code" == "422" || "$oversized_code" == "200" || "$oversized_code" == "202" ]]; then
+    ws_rpc_request chat.send "$(jq -nc --arg text "$long_message" '{text: $text}')" "$RPC_OUTPUT_FILE" 1500 'chat'
+    if assert_chat_rpc_completed "$RPC_OUTPUT_FILE"; then
         test_pass
     else
-        test_fail "Oversized message should not crash server (got $oversized_code)"
+        test_fail "Oversized message should not crash the chat transport"
     fi
 
     test_start "security_api_xss_payload_no_server_error"
-    local xss_payload xss_code
+    local xss_payload
     xss_payload='<script>alert("xss")</script>'
-    xss_code=$(chat_with_payload "$(jq -nc --arg message "$xss_payload" '{message: $message}')")
-    if [[ "$xss_code" =~ ^(200|202|400|422)$ ]]; then
-        if [[ "$xss_code" =~ ^(200|202)$ ]] && rg -Fq "$xss_payload" "$RESPONSE_FILE"; then
-            test_fail "Response reflected raw XSS payload"
-        else
-            test_pass
-        fi
+    ws_rpc_request chat.send "$(jq -nc --arg text "$xss_payload" '{text: $text}')" "$RPC_OUTPUT_FILE" 1500 'chat'
+    if assert_chat_rpc_completed "$RPC_OUTPUT_FILE"; then
+        test_pass
     else
-        test_fail "XSS payload should not cause 5xx behavior (got $xss_code)"
+        test_fail "XSS payload should not crash the chat transport"
     fi
 
     test_start "security_api_sql_injection_payload_no_server_error"
-    local sql_code
-    sql_code=$(chat_with_payload "$(jq -nc --arg message "' OR '1'='1" '{message: $message}')")
-    if [[ "$sql_code" =~ ^(200|202|400|422)$ ]]; then
+    ws_rpc_request chat.send "$(jq -nc --arg text "' OR '1'='1" '{text: $text}')" "$RPC_OUTPUT_FILE" 1500 'chat'
+    if assert_chat_rpc_completed "$RPC_OUTPUT_FILE"; then
         test_pass
     else
-        test_fail "SQL injection payload should not cause 5xx behavior (got $sql_code)"
+        test_fail "SQL injection payload should not crash the chat transport"
     fi
 
     test_start "security_api_path_traversal_payload_no_server_error"
-    local traversal_code
-    traversal_code=$(chat_with_payload "$(jq -nc --arg message "../../../etc/passwd" '{message: $message}')")
-    if [[ "$traversal_code" =~ ^(200|202|400|422)$ ]]; then
+    ws_rpc_request chat.send "$(jq -nc --arg text "../../../etc/passwd" '{text: $text}')" "$RPC_OUTPUT_FILE" 1500 'chat'
+    if assert_chat_rpc_completed "$RPC_OUTPUT_FILE"; then
         test_pass
     else
-        test_fail "Path traversal payload should not cause 5xx behavior (got $traversal_code)"
+        test_fail "Path traversal payload should not crash the chat transport"
     fi
 
     generate_report

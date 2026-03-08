@@ -74,6 +74,8 @@ Exit contract:
 - внутренняя test network без `traefik-net`
 - service DNS вместо зависимости от host `localhost`
 - ephemeral test volumes
+- writable config volume для Moltis поверх seed-конфига из `tests/fixtures/config`
+- автоматический bootstrap product onboarding до chat-ready состояния перед `integration_local`, `security_api` и `e2e_browser`
 - отдельный `test-runner` container с pinned toolchain (`bash`, `curl`, `jq`, `coreutils`, Playwright base image)
 - отсутствие зависимости от `/opt/moltinger/.env` и production bind-mounts
 
