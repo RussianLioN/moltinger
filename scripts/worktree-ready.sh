@@ -99,6 +99,7 @@ environment_probe_path=""
 environment_state="unknown"
 handoff_support_state="unknown"
 handoff_fallback_reason=""
+handoff_launch_command=""
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
@@ -368,6 +369,7 @@ reset_environment_probe() {
 reset_handoff_selection() {
   handoff_support_state="unknown"
   handoff_fallback_reason=""
+  handoff_launch_command=""
 }
 
 map_bd_beads_state() {
@@ -979,6 +981,92 @@ select_handoff_mode() {
   esac
 }
 
+apple_script_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+build_terminal_session_command() {
+  case "${report_handoff_mode}" in
+    terminal)
+      printf 'cd %s\n' "$(shell_quote "${report_worktree_path}")"
+      ;;
+    codex)
+      printf 'cd %s && codex\n' "$(shell_quote "${report_worktree_path}")"
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+build_terminal_automation_command() {
+  local session_command="$1"
+  local escaped_command=""
+
+  escaped_command="$(apple_script_escape "${session_command}")"
+  printf 'osascript -e '\''tell application "Terminal" to activate'\'' -e '\''tell application "Terminal" to do script "%s"'\''\n' "${escaped_command}"
+}
+
+launch_terminal_handoff() {
+  local session_command="$1"
+  local escaped_command=""
+
+  escaped_command="$(apple_script_escape "${session_command}")"
+  osascript \
+    -e 'tell application "Terminal" to activate' \
+    -e "tell application \"Terminal\" to do script \"${escaped_command}\""
+}
+
+apply_selected_handoff() {
+  local session_command=""
+  local exit_code=0
+
+  if [[ "${report_handoff_mode}" == "manual" ]]; then
+    return 0
+  fi
+
+  session_command="$(build_terminal_session_command)"
+  handoff_launch_command="$(build_terminal_automation_command "${session_command}")"
+
+  if [[ "${WORKTREE_READY_DRY_RUN:-0}" == "1" ]]; then
+    report_next_steps=()
+    add_next_step "${handoff_launch_command}"
+    add_warning "Dry-run mode enabled; handoff command was not executed."
+    return 0
+  fi
+
+  set +e
+  launch_terminal_handoff "${session_command}"
+  exit_code=$?
+  set -e
+
+  if [[ "${exit_code}" -ne 0 ]]; then
+    report_handoff_mode="manual"
+    add_warning "Automatic ${report_requested_handoff_mode} handoff failed. Falling back to manual steps."
+    add_warning "Launch command: ${handoff_launch_command}"
+    return 0
+  fi
+
+  report_next_steps=()
+  case "${report_handoff_mode}" in
+    terminal)
+      add_next_step "Terminal.app opened at ${report_worktree_path}"
+      case "${report_status}" in
+        needs_env_approval)
+          add_next_step "Run direnv allow in the new terminal"
+          add_next_step "Launch codex when the environment is ready"
+          ;;
+        created)
+          add_next_step "If direnv prompts in the new terminal, approve the environment before launching codex"
+          ;;
+      esac
+      ;;
+    codex)
+      add_next_step "Codex launch requested in a new Terminal.app tab at ${report_worktree_path}"
+      ;;
+  esac
+}
+
 render_mode_placeholder() {
   local mode_name="$1"
 
@@ -986,13 +1074,10 @@ render_mode_placeholder() {
   set_readiness_status
   select_handoff_mode
   set_readiness_next_steps "${mode_name}"
+  apply_selected_handoff
 
   if [[ "${report_env_state}" == "unknown" ]]; then
     add_warning "Environment readiness has not been probed yet."
-  fi
-
-  if [[ "${mode_name}" == "handoff" && "${report_handoff_mode}" != "manual" ]]; then
-    add_warning "Requested handoff profile selected. Launch execution lands in T018."
   fi
 
   render_readiness_report
