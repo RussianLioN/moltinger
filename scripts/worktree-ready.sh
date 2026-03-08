@@ -467,7 +467,9 @@ discover_target_state() {
 
   if [[ -n "${target_path}" ]]; then
     git_record="$(find_git_worktree_by_path "${target_path}" || true)"
-  elif [[ -n "${branch}" ]]; then
+  fi
+
+  if [[ -z "${git_record}" && -n "${branch}" ]]; then
     git_record="$(find_git_worktree_by_branch "${branch}" || true)"
   fi
 
@@ -608,7 +610,9 @@ set_report_target() {
 }
 
 apply_discovery_to_report() {
-  if [[ -n "${discovered_worktree_path}" && "${discovered_worktree_path}" == "${target_path}" ]]; then
+  if [[ "${branch_resolution_state}" == "resolved" && -n "${discovered_worktree_path}" ]]; then
+    report_worktree_path="${discovered_worktree_path}"
+  elif [[ -n "${discovered_worktree_path}" && "${discovered_worktree_path}" == "${target_path}" ]]; then
     report_worktree_path="${discovered_worktree_path}"
   fi
 
@@ -621,7 +625,11 @@ apply_discovery_to_report() {
   fi
 
   if [[ -n "${discovered_worktree_path}" && -n "${target_path}" && "${discovered_worktree_path}" != "${target_path}" ]]; then
-    add_warning "Discovery found an existing worktree at ${discovered_worktree_path}"
+    if [[ "${branch_resolution_state}" == "resolved" ]]; then
+      add_warning "Branch '${report_branch_name}' is already attached at ${discovered_worktree_path}"
+    else
+      add_warning "Discovery found an existing worktree at ${discovered_worktree_path}"
+    fi
   fi
 
   if [[ -n "${discovered_redirect_target}" ]]; then
@@ -653,6 +661,10 @@ target_path_exists() {
   [[ -n "${target_path}" && -d "${target_path}" ]]
 }
 
+report_worktree_path_exists() {
+  [[ -n "${report_worktree_path}" && "${report_worktree_path}" != "n/a" && -d "${report_worktree_path}" ]]
+}
+
 set_readiness_status() {
   report_env_state="unknown"
 
@@ -666,7 +678,7 @@ set_readiness_status() {
     return 0
   fi
 
-  if target_path_exists; then
+  if report_worktree_path_exists; then
     if [[ "${report_beads_state}" == "missing" && -n "${discovered_worktree_path}" ]]; then
       report_status="action_required"
       add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
@@ -703,7 +715,12 @@ set_readiness_next_steps() {
     action_required)
       case "${mode_name}" in
         create|attach)
-          add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
+          if [[ -n "${discovered_worktree_path}" ]]; then
+            add_next_step "cd $(shell_quote "${report_worktree_path}")"
+            add_next_step "Inspect the existing worktree and fix the reported prerequisites"
+          else
+            add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
+          fi
           ;;
         doctor|handoff)
           if [[ "${report_worktree_path}" != "n/a" ]]; then
