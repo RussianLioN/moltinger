@@ -56,6 +56,8 @@ services:
       # Telegram bot configuration
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       # Tavily API for MCP server
       TAVILY_API_KEY: ${TAVILY_API_KEY}
       # GLM-5 API key for Z.ai Coding Plan (OpenAI-compatible)
@@ -90,10 +92,16 @@ services:
       - "traefik.http.routers.moltis.rule=Host(`${MOLTIS_DOMAIN:-moltis.ainetic.tech}`)"
       - "traefik.http.routers.moltis.entrypoints=websecure"
       - "traefik.http.routers.moltis.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.moltis.middlewares=moltis-proxy-headers@docker"
+      # Ensure Moltis consistently sees HTTPS-originated requests behind Traefik.
+      - "traefik.http.middlewares.moltis-proxy-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.moltis-proxy-headers.headers.customrequestheaders.X-Forwarded-Host=${MOLTIS_DOMAIN:-moltis.ainetic.tech}"
+      - "traefik.http.middlewares.moltis-proxy-headers.headers.customrequestheaders.X-Forwarded-Port=443"
       - "traefik.http.services.moltis.loadbalancer.server.port=13131"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.moltis.loadbalancer.healthcheck.interval=30s"
-      - "com.centurylinklabs.watchtower.enable=true"
+      # Keep Moltis updates deterministic via CI/CD, not watchtower
+      - "com.centurylinklabs.watchtower.enable=false"
       # Monitoring labels
       - "prometheus.io/scrape=true"
       - "prometheus.io/port=13131"

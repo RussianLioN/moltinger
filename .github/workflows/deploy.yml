@@ -79,6 +79,7 @@ jobs:
         run: |
           echo "::group::GitOps Compliance Check"
           DRIFT_FOUND=false
+          SERVER_DIRTY=false
 
           # Function to compare files
           compare_files() {
@@ -137,18 +138,50 @@ jobs:
             done
           fi
 
+          # Check 5: systemd/ directory
+          echo "=== Check 5: systemd/ directory ==="
+          if [ -d "systemd" ] && [ "$(ls -A systemd 2>/dev/null)" ]; then
+            for UNIT in systemd/*; do
+              if [ -f "$UNIT" ]; then
+                UNIT_NAME=$(basename "$UNIT")
+                if ! compare_files "$UNIT" "${{ env.DEPLOY_PATH }}/systemd/$UNIT_NAME" "systemd/$UNIT_NAME"; then
+                  DRIFT_FOUND=true
+                fi
+              fi
+            done
+          fi
+
+          # Check 6: server worktree cleanliness (hard block)
+          echo "=== Check 6: server git status --porcelain ==="
+          SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
+          if [ -n "$SERVER_STATUS" ]; then
+            echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
+            echo "$SERVER_STATUS"
+            SERVER_DIRTY=true
+            DRIFT_FOUND=true
+          else
+            echo "::notice::Server working tree is clean ✅"
+          fi
+
           # Output results
           if [ "$DRIFT_FOUND" = true ]; then
-            echo "::warning::GitOps drift detected - files will be synced during deployment"
+            echo "::error::GitOps drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
             echo "compliant=false" >> $GITHUB_OUTPUT
+            echo "server_dirty=$SERVER_DIRTY" >> $GITHUB_OUTPUT
           else
             echo "::notice::All GitOps checks passed ✅"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
             echo "compliant=true" >> $GITHUB_OUTPUT
+            echo "server_dirty=false" >> $GITHUB_OUTPUT
           fi
           echo "::endgroup::"
 
+      - name: Block deployment on GitOps drift
+        if: steps.check.outputs.drift_detected == 'true'
+        run: |
+          echo "::error::Deployment blocked: GitOps drift or dirty server worktree detected."
+          exit 1
       - name: Compliance summary
         if: always()
         run: |
@@ -157,9 +190,10 @@ jobs:
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Drift Detected | \`${{ steps.check.outputs.drift_detected }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server Dirty | \`${{ steps.check.outputs.server_dirty }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliant | \`${{ steps.check.outputs.compliant }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> Note: Drift will be auto-corrected during deployment" >> $GITHUB_STEP_SUMMARY
+          echo "> Drift now blocks deployment until server and git state are aligned." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
   # Pre-flight checks and validation (P2-6)
@@ -338,11 +372,11 @@ jobs:
           sudo apt-get install -y -qq docker-compose
 
           # Validate compose file syntax (without pulling images)
-          if docker-compose config --quiet 2>/dev/null; then
-            echo "::notice::docker-compose.yml syntax valid ✅"
+          if docker-compose -f docker-compose.prod.yml config --quiet 2>/dev/null; then
+            echo "::notice::docker-compose.prod.yml syntax valid ✅"
           else
-            echo "::error::docker-compose.yml has syntax errors"
-            docker-compose config
+            echo "::error::docker-compose.prod.yml has syntax errors"
+            docker-compose -f docker-compose.prod.yml config
             exit 1
           fi
 
@@ -367,6 +401,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight, gitops-compliance]
     if: needs.preflight.outputs.should_deploy == 'true' && github.event.inputs.rollback != 'true'
+    outputs:
+      backup_file: ${{ steps.backup.outputs.backup_file }}
 
     steps:
       - name: Setup SSH
@@ -388,45 +424,82 @@ jobs:
             set -e
 
             BACKUP_DIR="${{ env.BACKUP_PATH }}"
-            CONFIG_DIR="${{ env.DEPLOY_PATH }}/config"
-            DATA_DIR="${{ env.DEPLOY_PATH }}/data"
-            COMPOSE_FILE="${{ env.DEPLOY_PATH }}/docker-compose.yml"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
+            CONFIG_DIR="$DEPLOY_DIR/config"
+            DATA_DIR="$DEPLOY_DIR/data"
+            ENV_FILE="$DEPLOY_DIR/.env"
+            COMPOSE_FILE="$DEPLOY_DIR/docker-compose.prod.yml"
 
             mkdir -p "$BACKUP_DIR"
 
             # Get current image version for backup metadata
             CURRENT_IMAGE=$(docker inspect moltis --format='{{.Config.Image}}' 2>/dev/null || echo "unknown")
 
-            # Create backup (includes docker-compose.yml for full rollback)
+            # Create backup (includes config/data/.env for full rollback)
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
             BACKUP_FILE="$BACKUP_DIR/pre_deploy_$TIMESTAMP.tar.gz"
 
-            if [ -d "$CONFIG_DIR" ] && [ -d "$DATA_DIR" ]; then
-              tar -czf "$BACKUP_FILE" \
-                -C "$(dirname $CONFIG_DIR)" "$(basename $CONFIG_DIR)" \
-                -C "$(dirname $DATA_DIR)" "$(basename $DATA_DIR)" \
-                2>/dev/null || true
-
-              # Backup docker-compose.yml separately (for GitOps rollback)
-              if [ -f "$COMPOSE_FILE" ]; then
-                cp "$COMPOSE_FILE" "$BACKUP_FILE.compose"
-              fi
-
-              # Save image version metadata
-              echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
-
-              echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
-            else
-              echo "::warning::Config or data directories not found, skipping backup"
+            BACKUP_ITEMS=""
+            if [ -d "$CONFIG_DIR" ]; then
+              BACKUP_ITEMS="$BACKUP_ITEMS config"
             fi
+            if [ -d "$DATA_DIR" ]; then
+              BACKUP_ITEMS="$BACKUP_ITEMS data"
+            fi
+            if [ -f "$ENV_FILE" ]; then
+              BACKUP_ITEMS="$BACKUP_ITEMS .env"
+            fi
+
+            if [ -n "$BACKUP_ITEMS" ]; then
+              tar -czf "$BACKUP_FILE" -C "$DEPLOY_DIR" $BACKUP_ITEMS
+            else
+              tar -czf "$BACKUP_FILE" --files-from /dev/null
+              echo "::warning::No config/data/.env found, created metadata-only backup archive"
+            fi
+
+            # Backup docker-compose.prod.yml separately (for GitOps rollback)
+            if [ -f "$COMPOSE_FILE" ]; then
+              cp "$COMPOSE_FILE" "$BACKUP_FILE.compose"
+            else
+              echo "::error::Missing compose file for rollback: $COMPOSE_FILE"
+              exit 1
+            fi
+
+            # Save image version metadata
+            echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
+
+            if [ ! -f "$BACKUP_FILE" ]; then
+              echo "::error::Backup archive was not created"
+              exit 1
+            fi
+
+            if [ ! -f "$BACKUP_FILE.version" ]; then
+              echo "::error::Backup version metadata missing"
+              exit 1
+            fi
+
+            if [ ! -f "$BACKUP_FILE.compose" ]; then
+              echo "::error::Backup compose metadata missing"
+              exit 1
+            fi
+
+            echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
 
             # Rotate old backups (keep last 10)
             cd "$BACKUP_DIR"
             ls -t pre_deploy_*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
             ls -t pre_deploy_*.compose 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+            ls -t pre_deploy_*.version 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
           EOF
 
+          LATEST_BACKUP=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "ls -t ${{ env.BACKUP_PATH }}/pre_deploy_*.tar.gz 2>/dev/null | head -1")
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "::error::Failed to resolve latest backup artifact"
+            exit 1
+          fi
+
           echo "backup_timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "backup_file=$LATEST_BACKUP" >> $GITHUB_OUTPUT
 
   # ===========================================
   # Deploy Moltis container
@@ -434,11 +507,13 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [preflight, backup, test]
-    if: always() && needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success'
+    needs: [preflight, backup, test, gitops-compliance]
+    if: needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success' && needs.backup.result == 'success' && needs.gitops-compliance.result == 'success'
     environment:
       name: production
       url: https://moltis.ainetic.tech
+    outputs:
+      auto_rollback_performed: ${{ steps.rollback_auto.outputs.rolled_back }}
 
     steps:
       - name: Checkout code
@@ -484,7 +559,11 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
 
-          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/)"
+          # Sync systemd units (scheduler as code)
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/systemd"
+          scp -r systemd/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/systemd/ 2>/dev/null || echo "No systemd units to sync"
+
+          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/ + systemd/)"
           echo "::endgroup::"
 
       # ===========================================
@@ -531,6 +610,31 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Install systemd timer (primary monitor scheduler)
+        run: |
+          echo "::group::Installing systemd timer for telegram web user monitor"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'SYSTEMDEOF'
+            set -e
+
+            SERVICE_SRC="/opt/moltinger/systemd/moltis-telegram-web-user-monitor.service"
+            TIMER_SRC="/opt/moltinger/systemd/moltis-telegram-web-user-monitor.timer"
+
+            if [ ! -f "$SERVICE_SRC" ] || [ ! -f "$TIMER_SRC" ]; then
+              echo "::error::systemd units not found in /opt/moltinger/systemd"
+              exit 1
+            fi
+
+            cp "$SERVICE_SRC" /etc/systemd/system/moltis-telegram-web-user-monitor.service
+            cp "$TIMER_SRC" /etc/systemd/system/moltis-telegram-web-user-monitor.timer
+            chmod 644 /etc/systemd/system/moltis-telegram-web-user-monitor.service
+            chmod 644 /etc/systemd/system/moltis-telegram-web-user-monitor.timer
+            systemctl daemon-reload
+            systemctl enable --now moltis-telegram-web-user-monitor.timer
+            systemctl is-active --quiet moltis-telegram-web-user-monitor.timer
+            echo "systemd timer active: moltis-telegram-web-user-monitor.timer"
+          SYSTEMDEOF
+          echo "::endgroup::"
+
       # ===========================================
       # GitOps Step 1.5: Generate .env from Secrets
       # ===========================================
@@ -539,6 +643,7 @@ jobs:
       # ===========================================
       - name: Generate .env from Secrets
         run: |
+          VERSION="${{ needs.preflight.outputs.version }}"
           echo "::group::Generating .env file from GitHub Secrets"
 
           # Create .env file content with secrets expanded
@@ -561,9 +666,14 @@ jobs:
           # Telegram Bot
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALLOWED_USERS=${{ secrets.TELEGRAM_ALLOWED_USERS }}
+          TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
+          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
 
           # Domain
           MOLTIS_DOMAIN=moltis.ainetic.tech
+
+          # Deployment
+          MOLTIS_VERSION=$VERSION
           EOF
 
           # Copy to server
@@ -623,15 +733,17 @@ jobs:
       - name: Deploy container
         id: deploy
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
-          echo "::group::Deploying Moltis $VERSION"
+          echo "::group::Deploying Moltis ${{ needs.preflight.outputs.version }}"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
+            VERSION="${{ needs.preflight.outputs.version }}"
+            EXPECTED_IMAGE="${{ env.MOLTIS_IMAGE }}:${{ needs.preflight.outputs.version }}"
+
             cd ${{ env.DEPLOY_PATH }}
 
-            # Pull latest image (use production compose file)
-            docker compose -f docker-compose.prod.yml pull moltis
+            # Pull pinned image version (use production compose file)
+            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml pull moltis
 
             # Stop container gracefully
             echo "Stopping current container..."
@@ -639,7 +751,14 @@ jobs:
 
             # Start new container
             echo "Starting new container..."
-            docker compose -f docker-compose.prod.yml up -d moltis
+            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml up -d moltis
+
+            # Verify expected image is running
+            RUNNING_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo "unknown")
+            if [ "$RUNNING_IMAGE" != "$EXPECTED_IMAGE" ]; then
+              echo "::error::Running image mismatch. Expected: $EXPECTED_IMAGE, actual: $RUNNING_IMAGE"
+              exit 1
+            fi
 
             # Remove old images
             docker image prune -f
@@ -684,23 +803,104 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Auto rollback on health check failure
+        id: rollback_auto
+        if: steps.health.outcome == 'failure'
+        run: |
+          echo "::group::Auto rollback on failed deploy health gate"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            BACKUP_FILE="${{ needs.backup.outputs.backup_file }}"
+            if [ -z "$BACKUP_FILE" ]; then
+              echo "::error::Auto rollback requires backup_file output"
+              exit 1
+            fi
+
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Stop failed deployment
+            docker compose -f docker-compose.prod.yml stop moltis || true
+
+            # Restore pre-deploy state
+            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
+
+            if [ -f "${BACKUP_FILE}.compose" ]; then
+              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
+            else
+              echo "::error::Rollback compose metadata missing: ${BACKUP_FILE}.compose"
+              exit 1
+            fi
+
+            BACKUP_VERSION=$(cat "${BACKUP_FILE}.version" 2>/dev/null || echo "unknown")
+            if [ "$BACKUP_VERSION" != "unknown" ]; then
+              docker pull "$BACKUP_VERSION" || true
+            fi
+
+            docker compose -f docker-compose.prod.yml up -d moltis
+          EOF
+          echo "rolled_back=true" >> $GITHUB_OUTPUT
+          echo "::endgroup::"
+
+      - name: Verify auto rollback health
+        if: steps.rollback_auto.outcome == 'success'
+        run: |
+          echo "::group::Verifying auto rollback health"
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+              "docker inspect --format='{{.State.Health.Status}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'not_found'")
+
+            if [ "$HEALTH" = "healthy" ]; then
+              break
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            sleep 5
+          done
+
+          if [ "$HEALTH" != "healthy" ]; then
+            echo "::error::Auto rollback health check failed"
+            exit 1
+          fi
+
+          HTTP_CODE=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "curl -sk -o /dev/null -w '%{http_code}' https://moltis.ainetic.tech/health")
+
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "401" ]; then
+            echo "::error::Auto rollback external health check failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+          echo "::notice::Auto rollback completed and service is healthy"
+          echo "::endgroup::"
+
       - name: Verify external access
         if: success()
         run: |
           echo "::group::Verifying external access"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            # Check Traefik routing
-            curl -sf https://moltis.ainetic.tech/health -o /dev/null && \
-              echo "::notice::External access verified via Traefik" || \
-              echo "::warning::External access check failed"
+            set -e
+            # Check Traefik routing (401 = auth required, valid behavior)
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://moltis.ainetic.tech/health)
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+              echo "::notice::External access verified via Traefik (HTTP $HTTP_CODE)"
+            else
+              echo "::error::External access check failed (HTTP $HTTP_CODE)"
+              exit 1
+            fi
           EOF
           echo "::endgroup::"
-
       - name: Deployment summary
         if: always()
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
           STATUS="${{ steps.health.outputs.status }}"
+          ROLLED_BACK="${{ steps.rollback_auto.outputs.rolled_back }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+          [ -z "$ROLLED_BACK" ] && ROLLED_BACK="false"
 
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -708,8 +908,51 @@ jobs:
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auto Rollback | $ROLLED_BACK |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runbook | $RUNBOOK_URL |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify auto rollback event (Slack)
+        if: steps.rollback_auto.outputs.rolled_back == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping auto-rollback notification"
+            exit 0
+          fi
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \":warning: Auto rollback executed in Deploy Moltis\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {\"type\": \"plain_text\", \"text\": \"⚠️ Auto Rollback Executed\"}
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {\"type\": \"mrkdwn\", \"text\": \"*Repo:*\\n${{ github.repository }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\\n${{ github.ref_name }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Commit:*\\n${{ github.sha }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Actor:*\\n${{ github.actor }}\"}
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Run\"}, \"url\": \"$RUN_URL\"},
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"Runbook\"}, \"url\": \"$RUNBOOK_URL\"}
+                  ]
+                }
+              ]
+            }" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Failed to send auto-rollback Slack notification"
 
       # ===========================================
       # GitOps Step 3: Record deployed git SHA
@@ -724,14 +967,14 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             cd ${{ env.DEPLOY_PATH }}
 
-            # Record the git commit SHA that was deployed
-            # This enables audit trail and drift detection
-            git log -1 --format="%H" > .deployed-sha 2>/dev/null || echo "${{ github.sha }}" > .deployed-sha
+            # Record the exact commit from the CI workflow context.
+            # Do not read local git state on server: deployment uses file sync, not git pull.
+            echo "${{ github.sha }}" > .deployed-sha
 
             # Also record deployment metadata
             cat > .deployment-info << INFO
           deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          git_sha=$(cat .deployed-sha)
+          git_sha=${{ github.sha }}
           workflow_run=${{ github.run_id }}
           version=${{ needs.preflight.outputs.version }}
           INFO
@@ -809,8 +1052,8 @@ jobs:
             # Stop container (use production compose file)
             docker compose -f docker-compose.prod.yml stop moltis || true
 
-            # Restore data (config + data directories)
-            tar -xzf $BACKUP_FILE -C /
+            # Restore config/data/.env to deployment directory
+            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
 
             # Restore docker-compose.prod.yml from backup (GitOps: exact config restore)
             if [ -f "${BACKUP_FILE}.compose" ]; then
@@ -870,7 +1113,7 @@ jobs:
     name: Post-deployment Verification
     runs-on: ubuntu-latest
     needs: [deploy, rollback]
-    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success')
+    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success' || needs.deploy.outputs.auto_rollback_performed == 'true')
 
     steps:
       - name: Setup SSH
@@ -917,16 +1160,19 @@ jobs:
               echo "Main endpoint: HTTP $HTTP_CODE (non-critical - Traefik middleware may cause delays)"
             fi
 
-            # Test 5: GitOps - verify docker-compose.yml has correct Traefik labels
+            # Test 5: GitOps - verify docker-compose.prod.yml has correct Traefik labels
             echo "Test 5: GitOps configuration check..."
             cd ${{ env.DEPLOY_PATH }}
-            if grep -q 'traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)' docker-compose.yml; then
-              echo "GitOps: Traefik Host rule correct (moltis.ainetic.tech)"
+            if grep -qE 'traefik\.http\.routers\.moltis\.rule=Host\(`(\$\{MOLTIS_DOMAIN(:-[^}]*)?\}|moltis\.ainetic\.tech)`\)' docker-compose.prod.yml; then
+              echo "GitOps: Traefik Host rule check passed (literal or MOLTIS_DOMAIN template)"
             else
-              echo "::error::GitOps violation: Traefik Host rule mismatch in docker-compose.yml"
-              echo "Expected: Host(\`moltis.ainetic.tech\`)"
+              echo "::error::GitOps violation: Traefik Host rule mismatch in docker-compose.prod.yml"
+              echo "Expected one of:"
+              echo "  - Host(\`moltis.ainetic.tech\`)"
+              echo "  - Host(\`\${MOLTIS_DOMAIN:-moltis.ainetic.tech}\`)"
+              echo "  - Host(\`\${MOLTIS_DOMAIN}\`)"
               echo "Found in file:"
-              grep "traefik.http.routers.moltis.rule" docker-compose.yml || echo "(not found)"
+              grep "traefik.http.routers.moltis.rule" docker-compose.prod.yml || echo "(not found)"
               exit 1
             fi
 
@@ -969,9 +1215,9 @@ jobs:
             set -e
             cd ${{ env.DEPLOY_PATH }}
 
-            # Check if Ollama is configured in docker-compose
-            if grep -q 'ollama:' docker-compose.yml; then
-              echo "Ollama service found in docker-compose.yml"
+            # Check if Ollama is configured in docker-compose.prod.yml
+            if grep -q 'ollama:' docker-compose.prod.yml; then
+              echo "Ollama service found in docker-compose.prod.yml"
 
               # Check if Ollama container is running
               if docker ps --filter "name=ollama" --filter "status=running" | grep -q ollama; then
@@ -988,7 +1234,7 @@ jobs:
                 echo "::warning::Ollama container is not running (may be intentional)"
               fi
             else
-              echo "::notice::Ollama service not configured in docker-compose.yml"
+              echo "::notice::Ollama service not configured in docker-compose.prod.yml"
             fi
           EOF
           echo "::endgroup::"
@@ -1062,12 +1308,19 @@ jobs:
 
     steps:
       - name: Send failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
+
           echo "::warning::Deployment failed! Check the logs for details."
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Deployment Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The deployment to production has failed. Please check the logs above." >> $GITHUB_STEP_SUMMARY
+          echo "Auto rollback is attempted automatically when the deploy health gate fails." >> $GITHUB_STEP_SUMMARY
+          echo "Runbook: $RUNBOOK_URL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Rollback Instructions" >> $GITHUB_STEP_SUMMARY
           echo "1. Go to Actions tab" >> $GITHUB_STEP_SUMMARY
@@ -1075,3 +1328,36 @@ jobs:
           echo "3. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
           echo "4. Check 'Rollback to previous version'" >> $GITHUB_STEP_SUMMARY
           echo "5. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping failure Slack notification"
+            exit 0
+          fi
+
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \":x: Deploy Moltis failed\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {\"type\": \"plain_text\", \"text\": \"❌ Deploy Moltis Failed\"}
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {\"type\": \"mrkdwn\", \"text\": \"*Repo:*\\n${{ github.repository }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\\n${{ github.ref_name }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Commit:*\\n${{ github.sha }}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*Actor:*\\n${{ github.actor }}\"}
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Run\"}, \"url\": \"$RUN_URL\"},
+                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"Runbook\"}, \"url\": \"$RUNBOOK_URL\"}
+                  ]
+                }
+              ]
+            }" \
+            "$SLACK_WEBHOOK_URL" || echo "::warning::Failed to send deploy failure Slack notification"

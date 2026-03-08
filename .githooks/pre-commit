@@ -3,8 +3,16 @@
 # GitOps-compliant: Non-blocking, adds metadata only
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
 SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
+
+# Enforce branch/worktree session consistency before commit.
+if [[ -x "$GUARD_SCRIPT" ]]; then
+    if ! "$GUARD_SCRIPT" --check --hook pre-commit; then
+        exit 1
+    fi
+fi
 
 # Create log directory if needed
 mkdir -p "$(dirname "$LOG_FILE")"

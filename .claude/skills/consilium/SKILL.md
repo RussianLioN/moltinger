@@ -1,93 +1,110 @@
 ---
-description: Launch expert consilium for discuss a question in parallel, Each expert works independently in isolated worktree
+description: Multi-expert consilium analysis with graceful degradation across environments (parallel if possible, reliable single-agent otherwise).
 argument-hint: "[question]"
 ---
 
 # Consilium Skill
-Launch expert consilium for panel discussion of problem
 
-## Instructions
-1. **Receive the Question**
-   - Parse the question from user input
-   - Identify key aspects (technical, architectural, operational, strategic)
+Run a structured multi-expert analysis and always return a full `Consilium Report`, even when parallel sub-agents are unavailable.
 
-2. **Launch 19 Expert Agents in Parallel**
-   - Spawn all 19 expert agents using Task tool
-   - Each agent works in isolated worktree (`isolation: worktree`)
-   - Each agent works in background (`background: true`)
-   - Agents run independently and not sequentially
+## Execution Modes
 
-3. **Wait for All Opinions**
-   - Monitor completion of all agents
-   - Collect results
-   - Handle timeouts gracefully
+1. **Mode A: Parallel Sub-Agents**
+   - Use when `Task`/sub-agent tooling is available.
+   - Launch expert roles in parallel and aggregate results.
 
-4. **Coordinate Discussion**
-   - Use SendMessage to enable expert communication
-   - Experts can send messages to each other
-   - Facilitate cross-expert discussion
-   - Architect (Team Lead) moderates discussion
+2. **Mode B: Tool-Parallel Evidence + Expert Matrix**
+   - Use when sub-agents are unavailable but parallel tool calls are available.
+   - Collect evidence in parallel (git, configs, logs), then evaluate via expert roles.
 
-   - Synthesize opinions
-   - Identify agreements
-   - Highlight conflicts
-   - Build consensus
+3. **Mode C: Autonomous Expert Matrix**
+   - Use when neither Mode A nor Mode B is available.
+   - Run an explicit multi-role reasoning pass in one agent.
+   - Do not label output as "fallback"; present a normal Consilium report with declared execution mode.
 
-5. **Generate Final Report**
-   - Compile all expert opinions
-   - Create summary of consensus
-   - Provide final recommendation
-   - Include confidence level
+## Required Behavior
 
-## Expert Agent Types
-Use `subagent_type: "general-purpose"` for all experts
+1. Parse the question and restate the target decision.
+2. Gather concrete evidence first:
+   - If repository is available: inspect git history, recent diffs, relevant config/code paths.
+   - If runtime/server context is available: inspect service state and logs.
+   - If context is missing: state assumptions explicitly.
+3. Evaluate findings through expert lenses (minimum 7 roles):
+   - Architect, SRE, DevOps, Security, QA, Domain Specialist, Delivery/GitOps.
+4. Identify root cause candidates and rank by likelihood.
+5. Propose at least 5 elegant solutions with trade-offs.
+6. Recommend one primary plan with rollback strategy.
 
-## Communication Protocol
-Experts use SendMessage tool:
-- Send messages to other experts
-- Respond to messages from other experts
-- Architect coordinates discussion
-- Tag relevant experts in messages content
+## Quality Rules
 
-- Use short, focused messages
-- Keep discussion productive
+1. Prioritize evidence over speculation.
+2. If uncertain, mark uncertainty and show what would validate it.
+3. Keep recommendations executable (owner, action, expected signal).
+4. For incident/debug tasks, include short verification checklist.
 
 ## Output Format
+
 ```markdown
 # Consilium Report
 
 ## Question
-[The question being discussed]
+[Restated question]
+
+## Execution Mode
+Mode A / Mode B / Mode C
+
+## Evidence
+- [Fact 1 with source/path/command]
+- [Fact 2]
+- [Fact 3]
 
 ## Expert Opinions
+### Architect
+- Opinion: ...
+- Key points: ...
 
-### Architect (Team Lead)
-- Opinion: [Summary]
-- Status: Lead
+### SRE
+- Opinion: ...
+- Key points: ...
 
-### [Expert Name]
-- **Key Points:**
-  - [Point 1]
-  - [Point 2]
-  - [Point 3]
-- **Opinion:** [Summary]
-- **Status:** ✅ Agreed / ⚠️ Disagreed / ❌ Blocked
+### DevOps
+- Opinion: ...
+- Key points: ...
 
-[... repeat for all 19 experts opinions]
+### Security
+- Opinion: ...
+- Key points: ...
 
-## Consensus
-- **Agreed Points:** [List]
-- **Disagreements:** [List]
-- **Resolution:** [How conflicts were resolved]
+### QA
+- Opinion: ...
+- Key points: ...
 
-## Final Recommendation
-[Unified recommendation]
+### [Additional roles...]
+- Opinion: ...
+- Key points: ...
 
-## Confidence Level
-- High / Medium / Low
-- **Consensus Strength:** Unanimous / Strong / Weak
+## Root Cause Analysis
+- Primary root cause: ...
+- Contributing factors: ...
+- Confidence: High / Medium / Low
 
-## Next Steps
-1. [Next step 1]
-2. [Next step 2]
-3. [Next step 3]
+## Solution Options (>=5)
+1. [Option] — Pros / Cons / Risk / Effort
+2. [Option] — Pros / Cons / Risk / Effort
+3. [Option] — Pros / Cons / Risk / Effort
+4. [Option] — Pros / Cons / Risk / Effort
+5. [Option] — Pros / Cons / Risk / Effort
+
+## Recommended Plan
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+## Rollback Plan
+- [How to revert safely]
+
+## Verification Checklist
+- [ ] [Check 1]
+- [ ] [Check 2]
+- [ ] [Check 3]
+```

@@ -1,27 +1,29 @@
 name: Claude Interactive Assistant
 
-# 🤖 INTERACTIVE CLAUDE CODE ASSISTANT
-#
-# Features:
-# - Responds to @claude mentions in PR/issue comments
-# - Can answer questions, explain code, suggest fixes
-# - Uses sticky comments (updates same comment)
-# - Access to CI results for debugging
-#
-# Usage:
-# - Comment on PR/issue: "@claude Can you explain this function?"
-# - Comment on PR: "@claude Please add error handling here"
-# - Review comment: "@claude Why is this test failing?"
-#
-# Authentication:
-# - Uses CLAUDE_CODE_OAUTH_TOKEN (secure GitHub app)
-# - OIDC enabled (id-token: write required)
-#
-# Documentation:
-# - https://github.com/anthropics/claude-code-action
-# - https://docs.claude.com/en/docs/claude-code
+# Interactive assistant workflow powered by Z.ai Coding Plan.
+# Triggered by @claude or @zai mentions in issues/PR comments/reviews.
 
 on:
+  workflow_dispatch:
+    inputs:
+      target_number:
+        description: "Issue/PR number for assistant response"
+        required: true
+        type: number
+      target_kind:
+        description: "Target type"
+        required: true
+        default: "pr"
+        type: choice
+        options:
+          - pr
+          - issue
+      message:
+        description: "Assistant request (include @zai or @claude)"
+        required: true
+        default: "@zai Please summarize risks in this change."
+        type: string
+
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -35,45 +37,249 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
-  id-token: write      # Required for OIDC authentication
-  actions: read        # Allows Claude to read CI results
+  actions: read
 
 jobs:
   claude-assistant:
     name: Claude Assistant
-    # Only run if @claude is mentioned
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@zai'))) ||
+      (github.event_name == 'pull_request_review_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@zai'))) ||
+      (github.event_name == 'pull_request_review' && (contains(github.event.review.body, '@claude') || contains(github.event.review.body, '@zai'))) ||
+      (github.event_name == 'issues' && (
+        contains(github.event.issue.body, '@claude') ||
+        contains(github.event.issue.body, '@zai') ||
+        contains(github.event.issue.title, '@claude') ||
+        contains(github.event.issue.title, '@zai')
+      ))
 
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GLM_API_BASE: https://api.z.ai/api/coding/paas/v4
+      GLM_MODEL: glm-5
+      AI_ASSISTANT_MAX_CONTEXT_CHARS: "35000"
+      AI_REVIEW_PROVIDER: ${{ vars.AI_REVIEW_PROVIDER }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for context
+          fetch-depth: 0
 
-      - name: Run Claude Code
-        uses: anthropics/claude-code-action@v1
+      - name: Ensure required tools
+        run: |
+          command -v gh >/dev/null 2>&1 || (echo "::error::gh CLI is required" && exit 1)
+          command -v jq >/dev/null 2>&1 || (echo "::error::jq is required" && exit 1)
+          command -v curl >/dev/null 2>&1 || (echo "::error::curl is required" && exit 1)
+
+      - name: Build assistant reply (Z.ai)
+        id: assistant
         env:
           GH_TOKEN: ${{ github.token }}
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          use_sticky_comment: true
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+        run: |
+          set -euo pipefail
 
-          additional_permissions: |
-            actions: read
+          mkdir -p .tmp
 
-          # No explicit prompt - Claude will respond to the comment that mentioned it
-          # This is the "tag mode" - Claude extracts instructions from the comment
+          event_name="${GITHUB_EVENT_NAME}"
+          provider="${AI_REVIEW_PROVIDER:-zai}"
+          event_path="${GITHUB_EVENT_PATH}"
 
-          claude_args: |
-            --model claude-4-0-sonnet-20250805
-            --max-turns 15
-            --system-prompt "You are a helpful code assistant following the repository's CLAUDE.md conventions. Be concise but thorough. Use file:line references when pointing to code. Check CI results if relevant to the question."
-            --allowedTools Read,Write,Edit,Glob,Grep,Bash(gh:*),Bash(git:*),Bash(npm:*),Bash(pnpm:*)
-            --disallowedTools WebSearch,WebFetch
+          issue_number=""
+          request_text=""
+          request_author="unknown"
+          is_pr="false"
+          status="fallback"
+          reason=""
+
+          case "$event_name" in
+            workflow_dispatch)
+              issue_number="${{ inputs.target_number }}"
+              request_text="${{ inputs.message }}"
+              request_author="${GITHUB_ACTOR}"
+              if [[ "${{ inputs.target_kind }}" == "pr" ]]; then
+                is_pr="true"
+              fi
+              ;;
+            issue_comment)
+              issue_number="$(jq -r '.issue.number // empty' "$event_path")"
+              request_text="$(jq -r '.comment.body // ""' "$event_path")"
+              request_author="$(jq -r '.comment.user.login // "unknown"' "$event_path")"
+              if jq -e '.issue.pull_request != null' "$event_path" >/dev/null 2>&1; then
+                is_pr="true"
+              fi
+              ;;
+            pull_request_review_comment)
+              issue_number="$(jq -r '.pull_request.number // empty' "$event_path")"
+              request_text="$(jq -r '.comment.body // ""' "$event_path")"
+              request_author="$(jq -r '.comment.user.login // "unknown"' "$event_path")"
+              is_pr="true"
+              ;;
+            pull_request_review)
+              issue_number="$(jq -r '.pull_request.number // empty' "$event_path")"
+              request_text="$(jq -r '.review.body // ""' "$event_path")"
+              request_author="$(jq -r '.review.user.login // "unknown"' "$event_path")"
+              is_pr="true"
+              ;;
+            issues)
+              issue_number="$(jq -r '.issue.number // empty' "$event_path")"
+              issue_title="$(jq -r '.issue.title // ""' "$event_path")"
+              issue_body="$(jq -r '.issue.body // ""' "$event_path")"
+              request_text="${issue_title}\n\n${issue_body}"
+              request_author="$(jq -r '.issue.user.login // "unknown"' "$event_path")"
+              ;;
+            *)
+              reason="Unsupported event: ${event_name}"
+              ;;
+          esac
+
+          marker="zai-assistant:thread-${issue_number:-unknown}"
+          prompt_path=".tmp/assistant-${issue_number:-unknown}-prompt.md"
+          output_path=".tmp/assistant-${issue_number:-unknown}-output.md"
+          raw_response_path=".tmp/assistant-${issue_number:-unknown}-raw-response.json"
+          comment_path=".tmp/assistant-${issue_number:-unknown}-comment.md"
+          context_path=".tmp/assistant-${issue_number:-unknown}-context.md"
+
+          if [[ -z "$issue_number" ]]; then
+            reason="Unable to determine issue/PR number from event payload."
+          elif [[ "$provider" == "off" ]]; then
+            reason="AI provider disabled by AI_REVIEW_PROVIDER=off."
+          elif [[ -z "${GLM_API_KEY:-}" ]]; then
+            reason="Missing GLM_API_KEY secret."
+          elif ! printf '%s' "$request_text" | grep -Eiq '@(claude|zai)\b'; then
+            reason="Mention not detected in message text."
+          else
+            if [[ "$is_pr" == "true" ]]; then
+              pr_json="$(gh pr view "$issue_number" --json title,body,url,changedFiles,additions,deletions 2>/dev/null || true)"
+              if [[ -z "$pr_json" || "$pr_json" == "null" ]]; then
+                reason="Failed to fetch PR context via gh pr view."
+              else
+                gh pr diff "$issue_number" > "$context_path" 2>/dev/null || true
+                max_chars="${AI_ASSISTANT_MAX_CONTEXT_CHARS:-35000}"
+                context_size="$(wc -c < "$context_path" | tr -d ' ' || echo 0)"
+                if [[ "$context_size" -gt "$max_chars" ]]; then
+                  head -c "$max_chars" "$context_path" > "${context_path}.trimmed"
+                  printf '\n\n[context diff truncated to %s chars]\n' "$max_chars" >> "${context_path}.trimmed"
+                  mv "${context_path}.trimmed" "$context_path"
+                fi
+
+                {
+                  echo "Repository: ${GITHUB_REPOSITORY}"
+                  echo "Event: ${event_name}"
+                  echo "Requester: ${request_author}"
+                  echo "PR Number: ${issue_number}"
+                  echo "PR URL: $(echo "$pr_json" | jq -r '.url // ""')"
+                  echo "PR Title: $(echo "$pr_json" | jq -r '.title // "(no title)"')"
+                  echo "PR Description:"
+                  echo "$(echo "$pr_json" | jq -r '.body // "(no description)"')"
+                  echo ""
+                  echo "User request:"
+                  echo "$request_text"
+                  echo ""
+                  echo "Recent PR diff (possibly truncated):"
+                  cat "$context_path"
+                  echo ""
+                  echo "Instructions:"
+                  echo "- Answer the user's request directly."
+                  echo "- Be concise and actionable."
+                  echo "- Use file:line references when possible."
+                  echo "- Do not claim actions you did not perform."
+                } > "$prompt_path"
+              fi
+            else
+              issue_json="$(gh issue view "$issue_number" --json title,body,url 2>/dev/null || true)"
+              if [[ -z "$issue_json" || "$issue_json" == "null" ]]; then
+                reason="Failed to fetch issue context via gh issue view."
+              else
+                {
+                  echo "Repository: ${GITHUB_REPOSITORY}"
+                  echo "Event: ${event_name}"
+                  echo "Requester: ${request_author}"
+                  echo "Issue Number: ${issue_number}"
+                  echo "Issue URL: $(echo "$issue_json" | jq -r '.url // ""')"
+                  echo "Issue Title: $(echo "$issue_json" | jq -r '.title // "(no title)"')"
+                  echo "Issue Body:"
+                  echo "$(echo "$issue_json" | jq -r '.body // "(no description)"')"
+                  echo ""
+                  echo "User request:"
+                  echo "$request_text"
+                  echo ""
+                  echo "Instructions:"
+                  echo "- Answer the user's request directly."
+                  echo "- Be concise and actionable."
+                  echo "- If data is missing, state exactly what is missing."
+                } > "$prompt_path"
+              fi
+            fi
+
+            if [[ -z "$reason" ]]; then
+              if ZAI_RAW_RESPONSE_FILE="$raw_response_path" scripts/ci/zai_chat_completion.sh \
+                --prompt-file "$prompt_path" \
+                --output-file "$output_path" \
+                --system-prompt "You are the repository assistant. Reply in the same language as the user request. Keep it concise and concrete." \
+                --model "${GLM_MODEL:-glm-5}" \
+                --api-base "${GLM_API_BASE:-https://api.z.ai/api/coding/paas/v4}" \
+                --max-tokens 900 \
+                --temperature 0.3 \
+                --timeout-seconds 90 \
+                --retry-count 1; then
+                status="success"
+                reason="OK"
+              else
+                rc="$?"
+                reason="z.ai request failed (exit code ${rc})."
+              fi
+            fi
+          fi
+
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [[ "$status" == "success" ]]; then
+            reply_body="$(cat "$output_path")"
+            status_line="✅ Completed (z.ai)"
+          else
+            reply_body="Assistant is currently unavailable in active mode. Fallback reason: ${reason}"
+            status_line="⚠️ Fallback"
+          fi
+
+          {
+            echo "<!-- ${marker} -->"
+            echo "### Z.ai Assistant"
+            echo ""
+            echo "${reply_body}"
+            echo ""
+            echo "---"
+            echo "Status: ${status_line}"
+            echo "Triggered by @${request_author} via \`${event_name}\`."
+            echo "[View workflow run](${run_url})"
+          } > "$comment_path"
+
+          {
+            echo "## Interactive Assistant"
+            echo "- Event: ${event_name}"
+            echo "- Target: #${issue_number:-unknown}"
+            echo "- Status: ${status_line}"
+            echo "- Provider: ${provider:-zai}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "issue_number=${issue_number}" >> "$GITHUB_OUTPUT"
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+          echo "marker=${marker}" >> "$GITHUB_OUTPUT"
+          echo "comment_path=${comment_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert sticky thread comment
+        if: steps.assistant.outputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! scripts/ci/upsert_sticky_comment.sh \
+            --repo "${GITHUB_REPOSITORY}" \
+            --issue-number "${{ steps.assistant.outputs.issue_number }}" \
+            --marker "${{ steps.assistant.outputs.marker }}" \
+            --body-file "${{ steps.assistant.outputs.comment_path }}"; then
+            echo "::warning::Unable to publish/update sticky assistant comment."
+          fi

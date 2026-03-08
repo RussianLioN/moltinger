@@ -370,7 +370,7 @@ max_redirects = 3                 # Maximum HTTP redirects to follow
 readability = true                # Use readability extraction for HTML (cleaner output)
 
 [channels.telegram]
-enabled = true                    # Enable Telegram integration
+enabled = true                    # Keep Telegram integration explicitly enabled
 
 # ── Telegram Bot Configuration ────────────────────────────────────────────────
 # Create bot via @BotFather, get token
@@ -378,7 +378,10 @@ enabled = true                    # Enable Telegram integration
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
-allowlist = [262872984]  # Telegram user IDs (integers from @userinfobot)
+allowlist = ["262872984"]  # Telegram user IDs as strings
+# Controlled webhook rollout (keep disabled until endpoint contract is verified).
+# webhook_url = "${TELEGRAM_WEBHOOK_URL}"
+# webhook_secret = "${TELEGRAM_WEBHOOK_SECRET}"
 
 # ── Browser Automation ────────────────────────────────────────────────────────
 # Full browser control via Chrome DevTools Protocol (CDP).

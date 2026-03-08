@@ -1,7 +1,7 @@
 # Secrets Management Policy
 
 **Version**: 1.0
-**Last Updated**: 2026-02-17
+**Last Updated**: 2026-03-07
 
 ---
 
@@ -137,14 +137,34 @@ gh workflow run deploy.yml
 
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
-| `GLM_API_KEY` | GLM/Zhipu AI LLM (Primary) | Moltis config |
+| `GLM_API_KEY` | GLM/Zhipu AI LLM (Primary) | Moltis config + AI workflows |
 | `OLLAMA_API_KEY` | Ollama Cloud Fallback (Optional) | Docker secrets |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
+| `TELEGRAM_WEBHOOK_URL` | Telegram webhook endpoint URL (optional) | Controlled webhook rollout |
+| `TELEGRAM_WEBHOOK_SECRET` | Telegram webhook anti-spoofing token (optional) | Controlled webhook rollout |
+| `TELEGRAM_TEST_API_ID` | Telegram API id (optional) | On-demand E2E `real_user` mode |
+| `TELEGRAM_TEST_API_HASH` | Telegram API hash (optional) | On-demand E2E `real_user` mode |
+| `TELEGRAM_TEST_SESSION` | Serialized Telegram test session (optional) | On-demand E2E `real_user` mode |
+| `TELEGRAM_TEST_BOT_USERNAME` | Target bot username (optional) | On-demand E2E `real_user` mode (default `@moltinger_bot`) |
 | `TAVILY_API_KEY` | Web search | Moltis config |
 | `MOLTIS_PASSWORD` | Authentication | Moltis auth |
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
 | `SSH_HOST` | Server address | GitHub Actions |
 | `SSH_USER` | SSH username | GitHub Actions |
+
+### AI Workflow Secrets (Code Review + Interactive Assistant)
+
+- `.github/workflows/claude-code-review.yml` and `.github/workflows/claude.yml` use `GLM_API_KEY` for Z.ai Coding Plan requests.
+- `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` are not required for current CI workflows.
+- Optional kill-switch: repository variable `AI_REVIEW_PROVIDER=off` disables active AI calls while keeping fallback reports/comments non-blocking.
+- Rollback artifacts for legacy Anthropic workflows are stored in:
+  - `.github/workflows/claude.legacy.yml.disabled`
+  - `.github/workflows/claude-code-review.legacy.yml.disabled`
+
+For on-demand Telegram E2E harness:
+- `synthetic` mode requires only `MOLTIS_PASSWORD`.
+- `real_user` mode requires `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, and `TELEGRAM_TEST_SESSION`; `TELEGRAM_TEST_BOT_USERNAME` is optional.
+- `TELEGRAM_TEST_SESSION` is generated once via `scripts/telegram-real-user-bootstrap.py` (OTP login).
 
 ### LLM Failover Secrets
 

@@ -1,0 +1,29 @@
+# Moltis Telegram Web User Monitor Cron (Fallback Scheduler)
+# ==========================================================
+# Alternative user-mode monitor without API_HASH.
+# Uses Telegram Web authenticated browser state.
+# Primary scheduler is systemd timer:
+#   systemctl enable --now moltis-telegram-web-user-monitor.timer
+# Keep this cron as fallback only.
+#
+# Prerequisites:
+# - node + playwright + chromium installed on server
+# - one-time login state file exists (TELEGRAM_WEB_STATE)
+#
+# One-time login:
+#   node /opt/moltinger/scripts/telegram-web-user-login.mjs --state /opt/moltinger/data/.telegram-web-state.json
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+MOLTIS_ENV_FILE=/opt/moltinger/.env
+TELEGRAM_WEB_STATE=/opt/moltinger/data/.telegram-web-state.json
+TELEGRAM_WEB_TARGET=@moltinger_bot
+TELEGRAM_WEB_PROBE_PROFILE=echo_ping
+TELEGRAM_WEB_MESSAGE=test2
+TELEGRAM_WEB_TIMEOUT_SECONDS=45
+TELEGRAM_WEB_MIN_REPLY_LEN=2
+TELEGRAM_WEB_COMPOSER_RETRIES=2
+
+# Every 10 minutes run browser-based user monitor and append JSON report.
+*/10 * * * * root mkdir -p /var/log/moltis && /opt/moltinger/scripts/telegram-web-user-monitor.sh >> /var/log/moltis/telegram-web-user-monitor.log 2>&1

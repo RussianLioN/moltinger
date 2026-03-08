@@ -9,6 +9,10 @@ on:
     - cron: '0 * * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 env:
   SSH_HOST: ainetic.tech
   SSH_USER: root
@@ -19,6 +23,9 @@ jobs:
   collect-metrics:
     name: Collect GitOps Metrics
     runs-on: ubuntu-latest
+    outputs:
+      compliance: ${{ steps.metrics.outputs.compliance }}
+      tracked_files: ${{ steps.metrics.outputs.tracked_files }}
 
     steps:
       - name: Checkout code
@@ -40,10 +47,10 @@ jobs:
           echo "::group::Collecting GitOps metrics"
 
           # Initialize metrics directory
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
+          ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
 
           # Calculate compliance metrics
-          METRICS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
+          METRICS_RAW=$(ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
             set -e
 
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
@@ -56,20 +63,26 @@ jobs:
 
             # Check docker-compose.yml
             if [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
-              ((TRACKED++))
+              TRACKED=$((TRACKED + 1))
               if grep -q "traefik.enable=true" "$DEPLOY_PATH/docker-compose.yml"; then
-                ((COMPLIANT++))
+                COMPLIANT=$((COMPLIANT + 1))
               fi
             fi
 
             # Check config files exist
             for f in "$DEPLOY_PATH/config"/*; do
-              [ -f "$f" ] && ((TRACKED++)) && ((COMPLIANT++))
+              if [ -f "$f" ]; then
+                TRACKED=$((TRACKED + 1))
+                COMPLIANT=$((COMPLIANT + 1))
+              fi
             done
 
             # Check scripts exist
             for f in "$DEPLOY_PATH/scripts"/*.sh; do
-              [ -f "$f" ] && ((TRACKED++)) && ((COMPLIANT++))
+              if [ -f "$f" ]; then
+                TRACKED=$((TRACKED + 1))
+                COMPLIANT=$((COMPLIANT + 1))
+              fi
             done
 
             # Calculate compliance percentage
@@ -85,21 +98,23 @@ jobs:
             DEPLOY_AGE_MINUTES=$(( (NOW - LAST_DEPLOY) / 60 ))
 
             # Output JSON
-            cat <<EOF
-            {
-              "timestamp": "$TIMESTAMP",
-              "tracked_files": $TRACKED,
-              "compliant_files": $COMPLIANT,
-              "compliance_percentage": $COMPLIANCE_PCT,
-              "last_deploy_age_minutes": $DEPLOY_AGE_MINUTES,
-              "slos": {
-                "compliance_target": 95,
-                "compliance_met": $([[ $COMPLIANCE_PCT -ge 95 ]] && echo "true" || echo "false")
-              }
-            }
-            EOF
+            compliance_met=false
+            if [ "$COMPLIANCE_PCT" -ge 95 ]; then
+              compliance_met=true
+            fi
+
+            printf '{"timestamp":"%s","tracked_files":%s,"compliant_files":%s,"compliance_percentage":%s,"last_deploy_age_minutes":%s,"slos":{"compliance_target":95,"compliance_met":%s}}\n' \
+              "$TIMESTAMP" "$TRACKED" "$COMPLIANT" "$COMPLIANCE_PCT" "$DEPLOY_AGE_MINUTES" "$compliance_met"
           ENDSSH
           )
+
+          # Keep only JSON payload in case remote shell outputs banners/warnings.
+          METRICS=$(printf '%s\n' "$METRICS_RAW" | awk '/^\{/{line=$0} END{print line}')
+          if ! echo "$METRICS" | jq -e . > /dev/null 2>&1; then
+            echo "::error::Failed to parse GitOps metrics JSON"
+            echo "$METRICS_RAW"
+            exit 1
+          fi
 
           echo "$METRICS" > /tmp/gitops-metrics.json
           echo "metrics<<EOF" >> $GITHUB_OUTPUT

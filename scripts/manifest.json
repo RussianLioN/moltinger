@@ -10,31 +10,80 @@
       "version": "3.0.0",
       "description": "Enterprise backup with encryption, offsite backup, integrity verification",
       "entrypoint": true,
-      "requires": ["docker", "tar", "gpg"],
-      "provides": ["backup", "restore", "verify", "list"],
+      "requires": [
+        "docker",
+        "tar",
+        "gpg"
+      ],
+      "provides": [
+        "backup",
+        "restore",
+        "verify",
+        "list"
+      ],
       "cron": "0 2 * * *"
     },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",
       "entrypoint": true,
-      "requires": ["find", "grep", "sed", "cut", "sort"],
-      "provides": ["build-lessons-index"]
+      "requires": [
+        "find",
+        "grep",
+        "sed",
+        "cut",
+        "sort"
+      ],
+      "provides": [
+        "build-lessons-index"
+      ]
     },
     "claude-rate-watch.sh": {
       "version": "1.0.0",
       "description": "Monitor Claude debug logs for rate limit status",
       "entrypoint": true,
-      "requires": ["find", "grep", "awk"],
-      "provides": ["rate-watch", "rate-watch-live", "rate-watch-stats"]
+      "requires": [
+        "find",
+        "grep",
+        "awk"
+      ],
+      "provides": [
+        "rate-watch",
+        "rate-watch-live",
+        "rate-watch-stats"
+      ]
     },
     "deploy.sh": {
       "version": "2.2.0",
       "description": "Blue-green deployment with health checks, rollback, notifications",
       "entrypoint": true,
-      "requires": ["docker", "docker-compose"],
-      "provides": ["deploy", "rollback", "status", "start", "stop", "restart", "logs"],
+      "requires": [
+        "docker",
+        "docker-compose"
+      ],
+      "provides": [
+        "deploy",
+        "rollback",
+        "status",
+        "start",
+        "stop",
+        "restart",
+        "logs"
+      ],
       "gitops": true
+    },
+    "git-session-guard.sh": {
+      "version": "1.0.0",
+      "description": "Guard against accidental branch/worktree drift across parallel sessions",
+      "entrypoint": true,
+      "requires": [
+        "git"
+      ],
+      "provides": [
+        "git-session-guard-check",
+        "git-session-guard-refresh",
+        "git-session-guard-status"
+      ]
     },
     "gitops-guards.sh": {
       "version": "1.0.0",
@@ -56,8 +105,14 @@
       "version": "1.0.0",
       "description": "Collect and report GitOps compliance metrics",
       "entrypoint": true,
-      "requires": ["sha256sum"],
-      "provides": ["metrics", "slo", "report"],
+      "requires": [
+        "sha256sum"
+      ],
+      "provides": [
+        "metrics",
+        "slo",
+        "report"
+      ],
       "slos": {
         "compliance_target": 95,
         "deploy_success_target": 99,
@@ -69,82 +124,455 @@
       "version": "1.0.0",
       "description": "Health monitoring and alerting",
       "entrypoint": true,
-      "requires": ["curl", "docker"],
-      "provides": ["check", "watch", "alert"],
+      "requires": [
+        "curl",
+        "docker"
+      ],
+      "provides": [
+        "check",
+        "watch",
+        "alert"
+      ],
       "cron": "*/5 * * * *"
     },
     "ollama-health.sh": {
       "version": "1.0.0",
       "description": "Health checks for Ollama sidecar and fallback generation",
       "entrypoint": true,
-      "requires": ["curl", "docker", "jq"],
-      "provides": ["ollama-health", "ollama-health-json"]
+      "requires": [
+        "curl",
+        "docker",
+        "jq"
+      ],
+      "provides": [
+        "ollama-health",
+        "ollama-health-json"
+      ]
     },
     "preflight-check.sh": {
       "version": "1.0.0",
       "description": "Pre-deployment validation for compose config and required secrets",
       "entrypoint": true,
-      "requires": ["jq"],
-      "provides": ["preflight-check", "preflight-json", "preflight-ci"],
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "preflight-check",
+        "preflight-json",
+        "preflight-ci"
+      ],
       "ci": true
     },
     "query-lessons.sh": {
       "version": "1.0.0",
       "description": "Query RCA lessons by severity, tag, or category",
       "entrypoint": true,
-      "requires": ["find", "grep", "sed"],
-      "provides": ["query-lessons"]
+      "requires": [
+        "find",
+        "grep",
+        "sed"
+      ],
+      "provides": [
+        "query-lessons"
+      ]
     },
     "rate-check.sh": {
       "version": "1.0.0",
       "description": "Quick rate-limit check from Claude debug logs",
       "entrypoint": true,
-      "requires": ["find", "grep", "awk"],
-      "provides": ["rate-check", "rate-watch", "rate-alarm"]
+      "requires": [
+        "find",
+        "grep",
+        "awk"
+      ],
+      "provides": [
+        "rate-check",
+        "rate-watch",
+        "rate-alarm"
+      ]
     },
     "scripts-verify.sh": {
       "version": "1.0.0",
       "description": "Validate scripts manifest and verify integrity",
       "entrypoint": true,
-      "requires": ["jq", "sha256sum"],
-      "provides": ["verify", "validate"],
+      "requires": [
+        "jq",
+        "sha256sum"
+      ],
+      "provides": [
+        "verify",
+        "validate"
+      ],
       "ci": true
     },
     "setup-git-hooks.sh": {
       "version": "1.0.0",
       "description": "Install repository git hooks for session management automation",
       "entrypoint": true,
-      "requires": ["git"],
-      "provides": ["setup-git-hooks"]
+      "requires": [
+        "git"
+      ],
+      "provides": [
+        "setup-git-hooks"
+      ]
     },
     "sync-agent-instructions.sh": {
       "version": "1.0.0",
       "description": "Regenerate or check AGENTS.md from .ai instruction sources",
       "entrypoint": true,
-      "requires": ["awk"],
-      "provides": ["sync-agent-instructions", "check-agent-instructions"]
+      "requires": [
+        "awk"
+      ],
+      "provides": [
+        "sync-agent-instructions",
+        "check-agent-instructions"
+      ]
     },
     "sync-claude-skills-to-codex.sh": {
       "version": "1.0.0",
       "description": "Sync Claude bridge skills into Codex global skills directory",
       "entrypoint": true,
-      "requires": ["find", "rsync"],
-      "provides": ["sync-skills-install", "sync-skills-check"]
+      "requires": [
+        "find",
+        "rsync"
+      ],
+      "provides": [
+        "sync-skills-install",
+        "sync-skills-check"
+      ]
     },
     "test-moltis-api.sh": {
       "version": "1.0.0",
       "description": "Moltis HTTP API testing script",
       "entrypoint": true,
-      "requires": ["curl", "jq"],
-      "provides": ["test-api"],
-      "env_vars": ["MOLTIS_URL", "MOLTIS_PASSWORD"]
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "test-api"
+      ],
+      "env_vars": [
+        "MOLTIS_URL",
+        "MOLTIS_PASSWORD"
+      ]
     },
     "zai-rate-monitor.sh": {
       "version": "1.0.0",
       "description": "Monitor Z.ai Coding Plan API rate limits and output JSON for CI",
       "entrypoint": true,
-      "requires": ["curl", "jq"],
-      "provides": ["zai-rate-monitor", "zai-rate-watch", "zai-rate-json"]
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "zai-rate-monitor",
+        "zai-rate-watch",
+        "zai-rate-json"
+      ]
+    },
+    "telegram-webhook-rollout.sh": {
+      "version": "1.0.0",
+      "description": "Controlled Telegram webhook enable/verify/disable workflow",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "telegram-webhook-status",
+        "telegram-webhook-enable",
+        "telegram-webhook-verify",
+        "telegram-webhook-disable"
+      ],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_WEBHOOK_URL",
+        "TELEGRAM_WEBHOOK_SECRET",
+        "TELEGRAM_PENDING_MAX",
+        "TELEGRAM_PROBE_TIMEOUT",
+        "TELEGRAM_DROP_PENDING_UPDATES"
+      ]
+    },
+    "telegram-e2e-on-demand.sh": {
+      "version": "1.0.0",
+      "description": "On-demand Telegram/Moltis E2E harness with manual verdict reporting",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "telegram-e2e-on-demand"
+      ],
+      "env_vars": [
+        "MOLTIS_PASSWORD",
+        "TELEGRAM_TEST_API_ID",
+        "TELEGRAM_TEST_API_HASH",
+        "TELEGRAM_TEST_SESSION",
+        "TELEGRAM_TEST_BOT_USERNAME"
+      ]
+    },
+    "telegram-real-user-e2e.py": {
+      "version": "1.0.0",
+      "description": "MTProto helper for real_user mode in telegram-e2e-on-demand.sh",
+      "entrypoint": false,
+      "type": "helper",
+      "requires": [
+        "python3"
+      ],
+      "env_vars": [
+        "TELEGRAM_TEST_API_ID",
+        "TELEGRAM_TEST_API_HASH",
+        "TELEGRAM_TEST_SESSION",
+        "TELEGRAM_TEST_BOT_USERNAME"
+      ]
+    },
+    "telegram-real-user-bootstrap.py": {
+      "version": "1.0.0",
+      "description": "One-time OTP bootstrap helper for TELEGRAM_TEST_SESSION",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "env_vars": [
+        "TELEGRAM_TEST_OTP_CODE",
+        "TELEGRAM_TEST_2FA_PASSWORD"
+      ],
+      "provides": [
+        "telegram-session-bootstrap"
+      ]
+    },
+    "telegram-webhook-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Telegram webhook and response cleanliness monitor",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "monitor",
+        "telegram",
+        "webhook",
+        "quality"
+      ],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "MOLTIS_BASE_URL",
+        "MOLTIS_PASSWORD",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "TELEGRAM_TEST_USER",
+        "TELEGRAM_REQUIRE_WEBHOOK",
+        "TELEGRAM_REQUIRE_HTTPS_WEBHOOK",
+        "TELEGRAM_REQUIRE_TEST_USER",
+        "TELEGRAM_MAX_PENDING_UPDATES",
+        "TELEGRAM_TIMEOUT_SECONDS",
+        "MONITOR_VALIDATE_PREVIEW"
+      ],
+      "cron": "*/15 * * * *"
+    },
+    "telegram-webhook-control.sh": {
+      "version": "1.0.0",
+      "description": "Direct Telegram Bot API webhook management (set/get/delete)",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "telegram",
+        "webhook",
+        "bot-api",
+        "control"
+      ],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-bot-send.sh": {
+      "version": "1.0.0",
+      "description": "Send Telegram messages from CLI as bot",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "telegram",
+        "bot-api",
+        "send-message"
+      ],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-user-send.py": {
+      "version": "1.0.0",
+      "description": "Send Telegram messages from CLI as user via MTProto (Telethon)",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "telegram",
+        "mtproto",
+        "user-send"
+      ],
+      "env_vars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
+    "telegram-user-probe.py": {
+      "version": "1.0.0",
+      "description": "Send probe as Telegram user and validate bot reply quality",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "telegram",
+        "mtproto",
+        "probe",
+        "uat"
+      ],
+      "env_vars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
+    "telegram-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "One-shot user-level monitor wrapper for periodic checks",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "telegram",
+        "user-monitor",
+        "quality-check"
+      ],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_MONITOR_TARGET",
+        "TELEGRAM_MONITOR_MESSAGE",
+        "TELEGRAM_MONITOR_TIMEOUT_SECONDS",
+        "TELEGRAM_MONITOR_POLL_INTERVAL",
+        "TELEGRAM_MONITOR_MIN_REPLY_LEN",
+        "TELEGRAM_SESSION",
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH"
+      ]
+    },
+    "telegram-web-user-login.mjs": {
+      "version": "1.0.0",
+      "description": "One-time Telegram Web user login and storage-state save",
+      "entrypoint": true,
+      "requires": [
+        "node"
+      ],
+      "provides": [
+        "telegram-web",
+        "user-login",
+        "state-bootstrap"
+      ],
+      "env_vars": [
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_LOGIN_TIMEOUT_MS"
+      ]
+    },
+    "telegram-web-user-probe.mjs": {
+      "version": "1.0.0",
+      "description": "Probe bot via Telegram Web as user and validate reply",
+      "entrypoint": true,
+      "requires": [
+        "node"
+      ],
+      "provides": [
+        "telegram-web",
+        "user-probe",
+        "quality-check"
+      ],
+      "env_vars": [
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_MESSAGE",
+        "TELEGRAM_WEB_TIMEOUT_SECONDS",
+        "TELEGRAM_WEB_MIN_REPLY_LEN",
+        "TELEGRAM_WEB_COMPOSER_RETRIES"
+      ]
+    },
+    "telegram-web-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Wrapper for browser-based user monitor without API_HASH",
+      "entrypoint": true,
+      "requires": [
+        "node"
+      ],
+      "provides": [
+        "telegram-web",
+        "user-monitor",
+        "cron-ready"
+      ],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_PROBE_PROFILE",
+        "TELEGRAM_WEB_MESSAGE",
+        "TELEGRAM_WEB_TIMEOUT_SECONDS",
+        "TELEGRAM_WEB_MIN_REPLY_LEN",
+        "TELEGRAM_WEB_COMPOSER_RETRIES"
+      ]
+    },
+    "setup-telegram-web-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Install Playwright/Chromium dependencies for web user monitor",
+      "entrypoint": true,
+      "requires": [
+        "node",
+        "npm"
+      ],
+      "provides": [
+        "telegram-web",
+        "playwright",
+        "setup"
+      ],
+      "env_vars": [
+        "PROJECT_DIR",
+        "INSTALL_SYSTEMD"
+      ]
+    },
+    "setup-telegram-webhook-echo.sh": {
+      "version": "1.0.0",
+      "description": "Deploy lightweight Telegram webhook endpoint behind Traefik",
+      "entrypoint": true,
+      "requires": [
+        "docker"
+      ],
+      "provides": [
+        "telegram",
+        "webhook",
+        "traefik",
+        "endpoint-setup"
+      ],
+      "env_vars": [
+        "DOMAIN",
+        "PATH_PREFIX",
+        "CONTAINER_NAME",
+        "IMAGE",
+        "NETWORK"
+      ]
     }
   },
   "dependencies": {
@@ -156,7 +584,9 @@
       "curl": "any",
       "jq": "any",
       "tar": "any",
-      "gpg": "optional"
+      "gpg": "optional",
+      "python3": "optional",
+      "node": "optional"
     }
   },
   "deploy": {
@@ -174,6 +604,45 @@
       "description": "Weekly backup integrity verification (Sunday 03:00 MSK)",
       "command": "/opt/moltinger/scripts/backup-moltis-enhanced.sh verify",
       "issue": "moltinger-hdn"
+    },
+    "moltis-telegram-webhook-monitor": {
+      "source": "cron.d/moltis-telegram-webhook-monitor",
+      "target": "/etc/cron.d/moltis-telegram-webhook-monitor",
+      "schedule": "*/15 * * * *",
+      "description": "Telegram webhook health and response quality monitoring",
+      "command": "/opt/moltinger/scripts/telegram-webhook-monitor.sh --json",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-user-monitor": {
+      "source": "cron.d/moltis-telegram-user-monitor",
+      "target": "/etc/cron.d/moltis-telegram-user-monitor",
+      "schedule": "*/10 * * * *",
+      "description": "User-level Telegram probe and bot reply quality validation",
+      "command": "/opt/moltinger/scripts/telegram-user-monitor.sh",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-web-user-monitor": {
+      "source": "cron.d/moltis-telegram-web-user-monitor",
+      "target": "/etc/cron.d/moltis-telegram-web-user-monitor",
+      "schedule": "*/10 * * * *",
+      "description": "Browser-based Telegram Web user monitoring without API_HASH (fallback scheduler)",
+      "command": "/opt/moltinger/scripts/telegram-web-user-monitor.sh",
+      "issue": "moltinger-2kj"
+    }
+  },
+  "systemd_units": {
+    "moltis-telegram-web-user-monitor.service": {
+      "source": "systemd/moltis-telegram-web-user-monitor.service",
+      "target": "/etc/systemd/system/moltis-telegram-web-user-monitor.service",
+      "description": "Telegram Web user monitor one-shot service",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-web-user-monitor.timer": {
+      "source": "systemd/moltis-telegram-web-user-monitor.timer",
+      "target": "/etc/systemd/system/moltis-telegram-web-user-monitor.timer",
+      "description": "Primary scheduler for Telegram Web user monitor",
+      "schedule": "OnUnitActiveSec=10min",
+      "issue": "moltinger-2kj"
     }
   }
 }
