@@ -25,6 +25,13 @@ For this project specifically:
 
 Ask the user only if required data is still missing or contradictory after these checks.
 
+## Runtime Target Rule (Mandatory)
+
+Before launching local containers, local port-forwards, or a local app replica, verify whether the authoritative target for the task is a documented remote service or a local fixture stack.
+
+- If the task targets a remote service, do not spin up a local replacement unless the user explicitly asked for local reproduction.
+- If the task targets a local fixture stack, say so and use the hermetic local runtime intentionally.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.

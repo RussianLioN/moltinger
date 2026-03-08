@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-07
-**Total Lessons**: 8
+**Generated**: 2026-03-08
+**Total Lessons**: 9
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P2 (2 lessons)
+#### P2 (3 lessons)
+- [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
@@ -37,7 +38,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (2 lessons)
+#### process (3 lessons)
+- [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
@@ -50,16 +52,16 @@
 
 ### Popular Tags
 
-- `process` (2 lessons)
+- `process` (3 lessons)
 - `instructions` (2 lessons)
 - `token-optimization` (1 lessons)
 - `telegram` (1 lessons)
 - `shell` (1 lessons)
 - `security` (1 lessons)
 - `secrets` (1 lessons)
+- `runtime-target` (1 lessons)
 - `rm-rf` (1 lessons)
-- `recurring-issue` (1 lessons)
-- `protocol` (1 lessons)
+- `remote-service` (1 lessons)
 
 
 ---
@@ -68,10 +70,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 8 |
+| Total Lessons | 9 |
 | Critical (P0/P1) | 1 |
 | Categories | 4 |
-| Unique Tags | 14 |
+| Unique Tags | 19 |
 
 ---
 
