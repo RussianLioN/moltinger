@@ -3,7 +3,7 @@
 # Generates docs/LESSONS-LEARNED.md from all RCA reports
 # Usage: build-lessons-index.sh
 
-set -e
+set -euo pipefail
 
 RCA_DIR="docs/rca"
 OUTPUT_FILE="docs/LESSONS-LEARNED.md"
@@ -18,7 +18,7 @@ find_rca_files() {
 extract_field() {
     local file="$1"
     local field="$2"
-    grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"' || echo ""
+    grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"\r' || echo ""
 }
 
 # Collect lessons into temp files
@@ -34,13 +34,12 @@ mkdir -p /tmp/claude
 : > "$TMP_ALL"
 
 total=0
-for file in $(find_rca_files); do
+while IFS= read -r file; do
     if ! grep -q "^## Уроки" "$file" 2>/dev/null; then
         continue
     fi
 
     title=$(extract_field "$file" "title")
-    date=$(extract_field "$file" "date")
     severity=$(extract_field "$file" "severity" | tr '[:lower:]' '[:upper:]')
     category=$(extract_field "$file" "category")
     tags=$(extract_field "$file" "tags")
@@ -58,14 +57,16 @@ for file in $(find_rca_files); do
 
     # Extract tags
     if [[ -n "$tags" ]]; then
-        for tag in $(echo "$tags" | tr ',' ' ' | tr -d '[]'); do
-            tag=$(echo "$tag" | tr -d ' ')
+        tags_clean=$(echo "$tags" | tr -d '[]\r')
+        IFS=',' read -ra tag_items <<< "$tags_clean"
+        for raw_tag in "${tag_items[@]}"; do
+            tag=$(echo "$raw_tag" | sed 's/^ *//;s/ *$//')
             [[ -n "$tag" ]] && echo "$tag" >> "$TMP_TAGS"
         done
     fi
 
     total=$((total + 1))
-done
+done < <(find_rca_files)
 
 # Build output
 cat > "$OUTPUT_FILE" << 'HEADER'
@@ -91,11 +92,11 @@ cat >> "$OUTPUT_FILE" << 'SECTION'
 SECTION
 
 for sev in P0 P1 P2 P3 P4; do
-    count=$(grep "^$sev|" "$TMP_SEVERITY" | wc -l | tr -d ' ')
+    count=$(awk -F'|' -v sev="$sev" '$1==sev {count++} END {print count+0}' "$TMP_SEVERITY")
     if [[ $count -gt 0 ]]; then
         echo "" >> "$OUTPUT_FILE"
         echo "#### $sev ($count lessons)" >> "$OUTPUT_FILE"
-        grep "^$sev|" "$TMP_SEVERITY" | while read line; do
+        awk -F'|' -v sev="$sev" '$1==sev {print $0}' "$TMP_SEVERITY" | while IFS= read -r line; do
             title=$(echo "$line" | cut -d'|' -f2)
             file=$(echo "$line" | cut -d'|' -f3)
             echo "- [$title](../$file)" >> "$OUTPUT_FILE"
@@ -111,19 +112,19 @@ cat >> "$OUTPUT_FILE" << 'SECTION'
 
 SECTION
 
-cut -d'|' -f1,2,3 "$TMP_CATEGORY" | sort -u | while read line; do
-    cat=$(echo "$line" | cut -d'|' -f1)
-    count=$(grep "^$cat|" "$TMP_CATEGORY" | wc -l | tr -d ' ')
+cut -d'|' -f1 "$TMP_CATEGORY" | tr -d '\r' | sort -u | while IFS= read -r category_name; do
+    [[ -z "$category_name" ]] && continue
+    count=$(awk -F'|' -v cat="$category_name" '$1==cat {count++} END {print count+0}' "$TMP_CATEGORY")
     if [[ $count -gt 0 ]]; then
         echo "" >> "$OUTPUT_FILE"
-        echo "#### $cat ($count lessons)" >> "$OUTPUT_FILE"
-        grep "^$cat|" "$TMP_CATEGORY" | while read l; do
+        echo "#### $category_name ($count lessons)" >> "$OUTPUT_FILE"
+        awk -F'|' -v cat="$category_name" '$1==cat {print $0}' "$TMP_CATEGORY" | while IFS= read -r l; do
             title=$(echo "$l" | cut -d'|' -f2)
             file=$(echo "$l" | cut -d'|' -f3)
             echo "- [$title](../$file)" >> "$OUTPUT_FILE"
         done
     fi
-done 2>/dev/null || true
+done
 
 # By Tag
 cat >> "$OUTPUT_FILE" << 'SECTION'
@@ -133,14 +134,14 @@ cat >> "$OUTPUT_FILE" << 'SECTION'
 
 SECTION
 
-sort "$TMP_TAGS" | uniq -c | sort -rn | head -10 | while read count tag; do
+sort "$TMP_TAGS" | tr -d '\r' | uniq -c | sort -rn | head -10 | while read -r count tag; do
     echo "- \`$tag\` ($count lessons)" >> "$OUTPUT_FILE"
 done
 
 # Statistics
-critical=$(grep -E "^(P0|P1)|" "$TMP_SEVERITY" | wc -l | tr -d ' ')
-categories=$(cut -d'|' -f1 "$TMP_CATEGORY" | sort -u | wc -l | tr -d ' ')
-tags_count=$(sort "$TMP_TAGS" | uniq | wc -l | tr -d ' ')
+critical=$(grep -E '^(P0|P1)\|' "$TMP_SEVERITY" | wc -l | tr -d ' ')
+categories=$(cut -d'|' -f1 "$TMP_CATEGORY" | tr -d '\r' | sort -u | wc -l | tr -d ' ')
+tags_count=$(sort "$TMP_TAGS" | tr -d '\r' | uniq | wc -l | tr -d ' ')
 
 cat >> "$OUTPUT_FILE" << STATISTICS
 

@@ -1,0 +1,71 @@
+[server]
+bind = "0.0.0.0"
+port = 13131
+http_request_logs = false
+ws_request_logs = false
+
+[auth]
+disabled = false
+
+[tls]
+enabled = false
+auto_generate = false
+
+[identity]
+name = "Moltis Test"
+vibe = "technical"
+soul = "Test fixture identity"
+
+[user]
+name = "Fixture"
+timezone = "Europe/Moscow"
+
+[providers]
+offered = ["ollama"]
+
+[providers.ollama]
+enabled = true
+base_url = "http://ollama:11434"
+model = "test-model"
+alias = "ollama"
+api_key = "${OLLAMA_API_KEY}"
+
+[providers.openai]
+enabled = false
+api_key = "${GLM_API_KEY}"
+model = "glm-5"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+alias = "zai"
+
+[chat]
+message_queue_mode = "followup"
+allowed_models = ["ollama::test-model"]
+priority_models = ["ollama::test-model"]
+
+[tools]
+agent_timeout_secs = 15
+max_tool_result_bytes = 50000
+
+[tools.exec]
+default_timeout_secs = 15
+max_output_bytes = 65536
+approval_mode = "never"
+security_level = "permissive"
+allowlist = []
+
+[tools.exec.sandbox]
+mode = "off"
+scope = "session"
+workspace_mount = "none"
+
+[mcp]
+
+[metrics]
+enabled = true
+prometheus_endpoint = true
+
+[heartbeat]
+enabled = false
+
+[failover]
+enabled = false

@@ -26,6 +26,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SECRETS_DIR="$PROJECT_ROOT/secrets"
+TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 
 # Required secrets (from data-model.md)
 REQUIRED_SECRETS=(
@@ -200,12 +201,12 @@ check_compose_valid() {
 }
 
 check_network_exists() {
-    # Check if moltis_network exists or can be created
-    if docker network ls | grep -q "moltis_network" 2>/dev/null; then
-        add_check "network_exists" "pass" "moltis_network exists" "error"
+    # Check if external Traefik network exists or can be created by deploy script
+    if docker network ls --format '{{.Name}}' | grep -qx "$TRAEFIK_NETWORK" 2>/dev/null; then
+        add_check "network_exists" "pass" "Network $TRAEFIK_NETWORK exists" "error"
     else
         # Network will be created by docker compose up, so this is a soft check
-        add_check "network_exists" "pass" "moltis_network will be created on deploy" "warning"
+        add_check "network_exists" "pass" "Network $TRAEFIK_NETWORK will be created on deploy" "warning"
     fi
 }
 

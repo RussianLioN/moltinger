@@ -1,5 +1,7 @@
 # Plan: Comprehensive Automated Tests for Moltis Agent
 
+> Historical note: Этот план фиксирует pre-lane taxonomy (`tests/unit`, `tests/integration`, `tests/security`, `tests/e2e`). Текущий authoritative baseline для тестов описан в `tests/README.md` и `specs/001-docker-deploy-improvements/contracts/test-lanes.md`.
+
 ## Context
 
 **Problem**: Moltis агент развёрнут в production, но отсутствуют комплексные автоматические тесты для проверки работоспособности. Существующие тесты (test-moltis-api.sh, smoke tests) покрывают только базовые сценарии.

@@ -322,6 +322,10 @@ Pipeline syncs to server
 
 **All secrets must go through GitHub Secrets, never hardcoded or manually copied.**
 
+**Before asking user for secret/env values, first check known sources:**
+`MEMORY.md` → `SESSION_SUMMARY.md` → `docs/SECRETS-MANAGEMENT.md` → `.github/workflows/deploy.yml`.
+If found there, do not ask again. Full protocol: `docs/rules/context-discovery-before-questions.md`.
+
 See `docs/SECRETS-MANAGEMENT.md` for:
 - Allowed vs forbidden patterns
 - How to add new secrets

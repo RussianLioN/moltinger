@@ -8,7 +8,7 @@
 #   ./scripts/query-lessons.sh --category deployment
 #   ./scripts/query-lessons.sh --all
 
-set -e
+set -euo pipefail
 
 RCA_DIR="docs/rca"
 
@@ -77,7 +77,7 @@ find_rca_files() {
 extract_field() {
     local file="$1"
     local field="$2"
-    grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"' || echo ""
+    grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"\r' || echo ""
 }
 
 # Extract lessons section
@@ -155,7 +155,7 @@ if [[ "$SHOW_ALL" == true ]]; then
 fi
 
 count=0
-for file in $(find_rca_files); do
+while IFS= read -r file; do
     if [[ "$SHOW_ALL" == true ]] || matches_filters "$file"; then
         # Check if file has lessons section
         if grep -q "^## Уроки" "$file" 2>/dev/null; then
@@ -163,7 +163,7 @@ for file in $(find_rca_files); do
             count=$((count + 1))
         fi
     fi
-done
+done < <(find_rca_files)
 
 if [[ $count -eq 0 ]]; then
     echo -e "${YELLOW}No lessons found matching criteria${NC}"
