@@ -225,12 +225,16 @@ run_test_file() {
     local test_name
     test_name=$(basename "$test_file" .sh)
 
-    # Source and run the test file
-    if source "$test_file"; then
-        log_debug "Test file sourced successfully: $test_file"
+    log_info "Running: $test_name"
+
+    # Source the test file and explicitly call run_all_tests.
+    source "$test_file"
+
+    if declare -f run_all_tests > /dev/null; then
+        run_all_tests
     else
-        log_error "Failed to source test file: $test_file"
-        test_fail "Failed to execute test file: $test_name"
+        log_error "run_all_tests function not found in: $test_file"
+        test_fail "Test file missing run_all_tests function: $test_file"
         return 1
     fi
 }
@@ -294,6 +298,12 @@ run_all_tests_parallel() {
             source "$LIB_DIR/test_helpers.sh"
             set_json_output "$OUTPUT_JSON"
             source "$test_file"
+            if declare -f run_all_tests > /dev/null; then
+                run_all_tests
+            else
+                echo "Missing run_all_tests in $test_file" >&2
+                exit 1
+            fi
         ) &
         pids+=($!)
     done
@@ -344,8 +354,7 @@ main() {
         run_all_tests
     fi
 
-    # Generate report
-    generate_report
+    # Individual test files generate their own report.
 }
 
 # Run main if executed directly

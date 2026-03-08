@@ -137,7 +137,7 @@ find_test_files() {
         fi
     done < <(find "$UNIT_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
 
-    echo "${test_files[@]}"
+    printf '%s\n' "${test_files[@]}"
 }
 
 # Count test files
@@ -178,9 +178,9 @@ run_test_file() {
 # Run all test files
 run_all_tests() {
     local test_files=()
-    while IFS= read -r -d '' file; do
-        test_files+=("$file")
-    done < <(find "$UNIT_DIR" -type f -name "*.sh" -print0 2>/dev/null | sort -z)
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && test_files+=("$line")
+    done < <(find_test_files)
 
     if [[ ${#test_files[@]} -eq 0 ]]; then
         if [[ -n "$FILTER_PATTERN" ]]; then
@@ -226,8 +226,7 @@ main() {
     # Run all tests
     run_all_tests
 
-    # Generate report
-    generate_report
+    # Individual test files generate their own report.
 }
 
 # Run main if executed directly

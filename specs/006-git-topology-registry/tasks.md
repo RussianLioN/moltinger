@@ -46,11 +46,11 @@
 
 **Independent Test**: Run `scripts/git-topology-registry.sh refresh --write-doc` after a topology change and verify the committed registry updates correctly without absolute paths or volatile churn.
 
-- [ ] T011 [US1] Convert `docs/GIT-TOPOLOGY-REGISTRY.md` into the generated, sanitized registry format produced by `scripts/git-topology-registry.sh`
-- [ ] T012 [US1] Render current worktrees, active local branches, and unmerged remote branches into `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T013 [P] [US1] Update `docs/QUICK-REFERENCE.md`, `CLAUDE.md`, `.ai/instructions/shared-core.md`, and `AGENTS.md` to describe the registry as generated and point to the refresh/check path
-- [ ] T014 [P] [US1] Add shell validation coverage for discovery/render determinism in `tests/unit/test_git_topology_registry.sh`
-- [ ] T015 [US1] Add integration validation for sanitized output and no-op refresh behavior in `tests/integration/test_git_topology_registry.sh`
+- [x] T011 [US1] Convert `docs/GIT-TOPOLOGY-REGISTRY.md` into the generated, sanitized registry format produced by `scripts/git-topology-registry.sh`
+- [x] T012 [US1] Render current worktrees, active local branches, and unmerged remote branches into `docs/GIT-TOPOLOGY-REGISTRY.md`
+- [x] T013 [P] [US1] Update `docs/QUICK-REFERENCE.md`, `CLAUDE.md`, `.ai/instructions/shared-core.md`, and `AGENTS.md` to describe the registry as generated and point to the refresh/check path
+- [x] T014 [P] [US1] Add shell validation coverage for discovery/render determinism in `tests/unit/test_git_topology_registry.sh`
+- [x] T015 [US1] Add integration validation for sanitized output and no-op refresh behavior in `tests/integration/test_git_topology_registry.sh`
 
 **Checkpoint**: A refreshed registry provides a trustworthy, sanitized shared topology snapshot.
 

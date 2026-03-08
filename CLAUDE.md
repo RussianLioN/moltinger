@@ -44,7 +44,15 @@ This file contains:
 
 Current branch/worktree registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
 
-Use it before branch cleanup, worktree operations, or when a session needs current git topology without rediscovery.
+It is a generated artifact. Use:
+
+```bash
+scripts/git-topology-registry.sh check
+scripts/git-topology-registry.sh refresh --write-doc
+scripts/git-topology-registry.sh status
+```
+
+Run `check` before branch cleanup, worktree operations, or session handoff. Run `refresh --write-doc` after topology mutations.
 
 ---
 

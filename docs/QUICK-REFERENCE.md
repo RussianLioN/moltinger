@@ -12,7 +12,24 @@
 | **Web UI** | https://moltis.ainetic.tech | Веб-интерфейс |
 | **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
 | **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
-| **Git Topology Registry** | docs/GIT-TOPOLOGY-REGISTRY.md | Актуальные worktree, ветки и cleanup-контекст |
+| **Git Topology Registry** | docs/GIT-TOPOLOGY-REGISTRY.md | Generated snapshot актуальных worktree, веток и cleanup-контекста |
+
+---
+
+## Git Topology Registry
+
+```bash
+# Проверить, что registry не устарел
+scripts/git-topology-registry.sh check
+
+# Обновить committed snapshot после topology mutation
+scripts/git-topology-registry.sh refresh --write-doc
+
+# Посмотреть текущее состояние без записи файлов
+scripts/git-topology-registry.sh status
+```
+
+Использовать перед cleanup worktree/branch и после create/remove/switch flow.
 
 ---
 
