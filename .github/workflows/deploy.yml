@@ -610,28 +610,25 @@ jobs:
 
           echo "::endgroup::"
 
-      - name: Install systemd timer (primary monitor scheduler)
+      - name: Disable Telegram Web auto-monitor scheduler
         run: |
-          echo "::group::Installing systemd timer for telegram web user monitor"
+          echo "::group::Disabling Telegram Web auto-monitor scheduler"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'SYSTEMDEOF'
             set -e
 
-            SERVICE_SRC="/opt/moltinger/systemd/moltis-telegram-web-user-monitor.service"
-            TIMER_SRC="/opt/moltinger/systemd/moltis-telegram-web-user-monitor.timer"
+            rm -f /etc/cron.d/moltis-telegram-web-user-monitor
+            rm -f /opt/moltinger/scripts/cron.d/moltis-telegram-web-user-monitor
 
-            if [ ! -f "$SERVICE_SRC" ] || [ ! -f "$TIMER_SRC" ]; then
-              echo "::error::systemd units not found in /opt/moltinger/systemd"
-              exit 1
+            if command -v systemctl &>/dev/null; then
+              systemctl disable --now moltis-telegram-web-user-monitor.timer 2>/dev/null || true
+              systemctl stop moltis-telegram-web-user-monitor.service 2>/dev/null || true
+              rm -f /etc/systemd/system/moltis-telegram-web-user-monitor.service
+              rm -f /etc/systemd/system/moltis-telegram-web-user-monitor.timer
+              systemctl daemon-reload || true
+              systemctl reset-failed moltis-telegram-web-user-monitor.service moltis-telegram-web-user-monitor.timer 2>/dev/null || true
             fi
 
-            cp "$SERVICE_SRC" /etc/systemd/system/moltis-telegram-web-user-monitor.service
-            cp "$TIMER_SRC" /etc/systemd/system/moltis-telegram-web-user-monitor.timer
-            chmod 644 /etc/systemd/system/moltis-telegram-web-user-monitor.service
-            chmod 644 /etc/systemd/system/moltis-telegram-web-user-monitor.timer
-            systemctl daemon-reload
-            systemctl enable --now moltis-telegram-web-user-monitor.timer
-            systemctl is-active --quiet moltis-telegram-web-user-monitor.timer
-            echo "systemd timer active: moltis-telegram-web-user-monitor.timer"
+            echo "Telegram Web auto-monitor disabled"
           SYSTEMDEOF
           echo "::endgroup::"
 

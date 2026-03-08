@@ -10,8 +10,6 @@ EnvironmentFile=-/opt/moltinger/.env
 Environment=MOLTIS_ENV_FILE=/opt/moltinger/.env
 Environment=TELEGRAM_WEB_STATE=/opt/moltinger/data/.telegram-web-state.json
 Environment=TELEGRAM_WEB_TARGET=@moltinger_bot
-Environment=TELEGRAM_WEB_PROBE_PROFILE=echo_ping
-Environment=TELEGRAM_WEB_MESSAGE=test2
 Environment=TELEGRAM_WEB_TIMEOUT_SECONDS=45
 Environment=TELEGRAM_WEB_MIN_REPLY_LEN=2
 Environment=TELEGRAM_WEB_COMPOSER_RETRIES=2

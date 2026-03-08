@@ -27,7 +27,7 @@ case "${TELEGRAM_WEB_PROBE_PROFILE}" in
         PROBE_TEXT="${TELEGRAM_WEB_MESSAGE:-/status}"
         ;;
     echo_ping)
-        PROBE_TEXT="${TELEGRAM_WEB_MESSAGE:-test2}"
+        PROBE_TEXT="${TELEGRAM_WEB_MESSAGE:-ping}"
         ;;
     *)
         echo "{\"ok\":false,\"status\":\"fail\",\"error\":\"Unknown TELEGRAM_WEB_PROBE_PROFILE\",\"profile\":\"${TELEGRAM_WEB_PROBE_PROFILE}\"}"
