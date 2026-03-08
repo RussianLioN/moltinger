@@ -78,11 +78,11 @@
 
 **Independent Test**: Add reviewed intent for a branch/worktree, make an out-of-band topology change, run `doctor`, and verify the registry and intent are reconciled without losing approved notes.
 
-- [ ] T030 [US3] Implement the reviewed intent schema in `docs/GIT-TOPOLOGY-INTENT.yaml`
-- [ ] T031 [US3] Implement orphan-intent handling and default `needs-decision` behavior in `scripts/git-topology-registry.sh`
-- [ ] T032 [US3] Implement stale-state recovery draft/backup behavior in `scripts/git-topology-registry.sh`
-- [ ] T033 [P] [US3] Document manual reconciliation and recovery flows in `specs/006-git-topology-registry/quickstart.md`
-- [ ] T034 [P] [US3] Add annotation-preservation and doctor-flow coverage in `tests/integration/test_git_topology_registry.sh` and `tests/e2e/test_git_topology_registry_workflow.sh`
+- [x] T030 [US3] Implement the reviewed intent schema in `docs/GIT-TOPOLOGY-INTENT.yaml`
+- [x] T031 [US3] Implement orphan-intent handling and default `needs-decision` behavior in `scripts/git-topology-registry.sh`
+- [x] T032 [US3] Implement stale-state recovery draft/backup behavior in `scripts/git-topology-registry.sh`
+- [x] T033 [P] [US3] Document manual reconciliation and recovery flows in `specs/006-git-topology-registry/quickstart.md`
+- [x] T034 [P] [US3] Add annotation-preservation and doctor-flow coverage in `tests/integration/test_git_topology_registry.sh` and `tests/e2e/test_git_topology_registry_workflow.sh`
 
 **Checkpoint**: The system preserves human intent and recovers cleanly from out-of-band topology drift.
 
@@ -90,11 +90,11 @@
 
 ## Final Phase: Polish & Cross-Cutting Concerns
 
-- [ ] T040 [P] Reconcile `docs/reports/consilium/2026-03-08-git-topology-registry-automation.md` with final implementation decisions and add feature cross-links where needed
-- [ ] T041 Run quality gates for the feature using `tests/unit/test_git_topology_registry.sh`, `tests/integration/test_git_topology_registry.sh`, and `tests/e2e/test_git_topology_registry_workflow.sh`
-- [ ] T042 Refresh `docs/GIT-TOPOLOGY-REGISTRY.md` from the final generator and verify it contains no absolute paths
-- [ ] T043 Verify `scripts/setup-git-hooks.sh` installs hook behavior identical to tracked `.githooks/*`
-- [ ] T044 Prepare merge-ready handoff notes in `specs/006-git-topology-registry/quickstart.md` and `SESSION_SUMMARY.md`
+- [x] T040 [P] Reconcile `docs/reports/consilium/2026-03-08-git-topology-registry-automation.md` with final implementation decisions and add feature cross-links where needed
+- [x] T041 Run quality gates for the feature using `tests/unit/test_git_topology_registry.sh`, `tests/integration/test_git_topology_registry.sh`, and `tests/e2e/test_git_topology_registry_workflow.sh`
+- [x] T042 Refresh `docs/GIT-TOPOLOGY-REGISTRY.md` from the final generator and verify it contains no absolute paths
+- [x] T043 Verify `scripts/setup-git-hooks.sh` installs hook behavior identical to tracked `.githooks/*`
+- [x] T044 Prepare merge-ready handoff notes in `specs/006-git-topology-registry/quickstart.md` and `SESSION_SUMMARY.md`
 
 ---
 

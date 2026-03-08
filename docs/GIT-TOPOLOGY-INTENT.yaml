@@ -1,3 +1,9 @@
+# Reviewed intent sidecar for `docs/GIT-TOPOLOGY-REGISTRY.md`.
+# Keep records sorted by `subject_type`, then `subject_key`.
+# Allowed subject_type: `branch`, `worktree`, `remote`
+# Allowed intent: `active`, `historical`, `extract-only`, `cleanup-candidate`, `protected`, `needs-decision`
+# `subject_key` must match the rendered registry row key exactly.
+# `pr` is optional and stores the related GitHub PR number when it exists.
 version: 1
 defaults:
   missing_intent: needs-decision

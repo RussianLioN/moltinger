@@ -27,10 +27,28 @@ Use when you need to know whether the registry is current without writing files.
 ## Recover After Manual Drift
 
 ```bash
+scripts/git-topology-registry.sh doctor --prune
+```
+
+Use this first when branches or worktrees were changed manually outside managed workflows and you want a recovery draft without mutating the committed registry.
+
+Recovery draft path:
+
+```bash
+.git/topology-registry/registry.draft.md
+```
+
+Then reconcile for real:
+
+```bash
 scripts/git-topology-registry.sh doctor --prune --write-doc
 ```
 
-Use when branches or worktrees were changed manually outside managed workflows.
+This writes the committed registry and preserves the previous committed version under:
+
+```bash
+.git/topology-registry/backups/
+```
 
 ## Expected Workflow Integration
 
@@ -42,3 +60,41 @@ Use when branches or worktrees were changed manually outside managed workflows.
 ## Sidecar Intent Editing
 
 Reviewed intent belongs in the sidecar file, not in the generated registry markdown.
+
+- Edit `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Keep records sorted by `subject_type`, then `subject_key`
+- If a reviewed record no longer matches live topology, the generated registry will surface it under `Reviewed Intent Awaiting Reconciliation`
+- Missing or invalid `intent` values fall back to `needs-decision`
+
+## Manual Reconciliation Flow
+
+1. Edit `docs/GIT-TOPOLOGY-INTENT.yaml` when you have reviewed branch/worktree meaning to preserve.
+2. If topology changed through raw `git` commands, run `scripts/git-topology-registry.sh doctor --prune`.
+3. Inspect `.git/topology-registry/registry.draft.md`.
+4. If the draft is correct, run `scripts/git-topology-registry.sh doctor --prune --write-doc`.
+5. If needed, compare the regenerated registry against the backup in `.git/topology-registry/backups/`.
+
+## Merge-Ready Handoff
+
+Primary files to review before merge:
+
+- `scripts/git-topology-registry.sh`
+- `docs/GIT-TOPOLOGY-INTENT.yaml`
+- `docs/GIT-TOPOLOGY-REGISTRY.md`
+- `.claude/commands/worktree.md`
+- `.claude/commands/session-summary.md`
+- `.claude/commands/git-topology.md`
+- `.githooks/pre-push`
+- `tests/integration/test_git_topology_registry.sh`
+- `tests/e2e/test_git_topology_registry_workflow.sh`
+
+Recommended validation sequence:
+
+```bash
+./tests/unit/test_git_topology_registry.sh
+./tests/integration/test_git_topology_registry.sh
+./tests/e2e/test_git_topology_registry_workflow.sh
+./scripts/setup-git-hooks.sh
+./scripts/git-topology-registry.sh refresh --write-doc
+./scripts/git-topology-registry.sh check
+```

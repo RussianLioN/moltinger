@@ -55,6 +55,33 @@ Implement a hybrid with a clear center of gravity:
 - **Validation only**: `.githooks/*`
 - **Optional future helper**: a thin `/git-topology` command/skill that wraps the script
 
+## Implementation Reconciliation
+
+The implementation now matches the recommendation with only one deliberate extension: recovery artifacts are persisted in `git-common-dir` so that stale-state reconcile can preserve a draft and backup without touching tracked docs until the operator chooses to write.
+
+Delivered artifacts:
+
+- Owner script: [scripts/git-topology-registry.sh](/Users/rl/coding/moltinger-006-git-topology-registry/scripts/git-topology-registry.sh)
+- Reviewed sidecar: [docs/GIT-TOPOLOGY-INTENT.yaml](/Users/rl/coding/moltinger-006-git-topology-registry/docs/GIT-TOPOLOGY-INTENT.yaml)
+- Generated registry: [docs/GIT-TOPOLOGY-REGISTRY.md](/Users/rl/coding/moltinger-006-git-topology-registry/docs/GIT-TOPOLOGY-REGISTRY.md)
+- Workflow wiring:
+  - [worktree.md](/Users/rl/coding/moltinger-006-git-topology-registry/.claude/commands/worktree.md)
+  - [session-summary.md](/Users/rl/coding/moltinger-006-git-topology-registry/.claude/commands/session-summary.md)
+  - [git-topology.md](/Users/rl/coding/moltinger-006-git-topology-registry/.claude/commands/git-topology.md)
+- Validation hooks:
+  - [pre-push](/Users/rl/coding/moltinger-006-git-topology-registry/.githooks/pre-push)
+  - [post-checkout](/Users/rl/coding/moltinger-006-git-topology-registry/.githooks/post-checkout)
+  - [post-merge](/Users/rl/coding/moltinger-006-git-topology-registry/.githooks/post-merge)
+  - [post-rewrite](/Users/rl/coding/moltinger-006-git-topology-registry/.githooks/post-rewrite)
+- Operator handoff: [quickstart.md](/Users/rl/coding/moltinger-006-git-topology-registry/specs/006-git-topology-registry/quickstart.md)
+- Execution log: [tasks.md](/Users/rl/coding/moltinger-006-git-topology-registry/specs/006-git-topology-registry/tasks.md)
+
+Implemented decisions vs proposal:
+
+1. The optional thin wrapper is no longer future work; it exists as `/git-topology`.
+2. Hooks stayed validation-only. They never rewrite tracked markdown; they only surface stale state and block `pre-push` when the registry is outdated.
+3. `doctor --prune` now writes `.git/topology-registry/registry.draft.md`, and `doctor --prune --write-doc` preserves the last committed registry in `.git/topology-registry/backups/`.
+
 ## Proposed Script Contract
 
 - `refresh --write-doc`: reconcile live git topology and render the registry

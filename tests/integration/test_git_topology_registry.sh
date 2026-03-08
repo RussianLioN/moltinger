@@ -20,6 +20,10 @@ defaults:
   missing_intent: needs-decision
 records:
   - subject_type: branch
+    subject_key: 099-retired-feature
+    intent: protected
+    note: Preserve this reviewed note until the sidecar is pruned.
+  - subject_type: branch
     subject_key: main
     intent: active
     note: Canonical source of truth.
@@ -47,6 +51,7 @@ setup_demo_repo() {
     local repo_dir worktree_path
     repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
     git_topology_fixture_add_branch "$repo_dir" "007-demo-feature"
+    git_topology_fixture_add_local_branch "$repo_dir" "008-unreviewed"
     mkdir -p "$repo_dir/docs"
     write_demo_intent "$repo_dir"
     worktree_path="$fixture_root/repo-007-worktree"
@@ -105,6 +110,28 @@ test_refresh_is_noop_when_topology_is_unchanged() {
     test_pass
 }
 
+test_orphan_intent_and_default_needs_decision_are_rendered() {
+    test_start "git_topology_registry_orphan_intent_and_default_needs_decision_are_rendered"
+
+    local fixture_root repo_dir doc
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+
+    (
+        cd "$repo_dir"
+        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
+    )
+
+    doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
+    assert_contains "$doc" '## Reviewed Intent Awaiting Reconciliation' "Registry should surface orphan reviewed intent"
+    assert_contains "$doc" '099-retired-feature' "Registry should list orphan subject key"
+    assert_contains "$doc" 'Preserve this reviewed note until the sidecar is pruned.' "Registry should preserve orphan reviewed note"
+    assert_contains "$doc" '| `008-unreviewed` | `none` | Needs decision |' "Unreviewed local branch should fall back to needs-decision"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -124,6 +151,7 @@ run_all_tests() {
 
     test_refresh_writes_sanitized_registry
     test_refresh_is_noop_when_topology_is_unchanged
+    test_orphan_intent_and_default_needs_decision_are_rendered
 
     generate_report
 }

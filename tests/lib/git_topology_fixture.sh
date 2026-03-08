@@ -42,6 +42,17 @@ git_topology_fixture_add_branch() {
   )
 }
 
+git_topology_fixture_add_local_branch() {
+  local repo_dir="$1"
+  local branch_name="$2"
+  local start_point="${3:-main}"
+
+  (
+    cd "${repo_dir}"
+    git branch "${branch_name}" "${start_point}" >/dev/null
+  )
+}
+
 git_topology_fixture_add_worktree() {
   local repo_dir="$1"
   local worktree_path="$2"

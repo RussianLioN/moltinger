@@ -66,6 +66,8 @@ canonical_root="$(cd "${git_common_dir}" && cd .. && pwd -P)"
 current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
 state_dir="${git_common_dir}/topology-registry"
 state_file="${state_dir}/health.env"
+draft_file="${state_dir}/registry.draft.md"
+backup_dir="${state_dir}/backups"
 lock_dir="${state_dir}/lock"
 intent_file="${git_root}/docs/GIT-TOPOLOGY-INTENT.yaml"
 registry_doc="${git_root}/docs/GIT-TOPOLOGY-REGISTRY.md"
@@ -79,6 +81,7 @@ worktrees_file=""
 worktree_branches_file=""
 local_branches_file=""
 remote_branches_file=""
+orphan_records_file=""
 expected_doc_file=""
 
 cleanup() {
@@ -109,6 +112,7 @@ ensure_tmp_dir() {
   worktree_branches_file="${tmp_dir}/worktree-branches.txt"
   local_branches_file="${tmp_dir}/local-branches.tsv"
   remote_branches_file="${tmp_dir}/remote-branches.tsv"
+  orphan_records_file="${tmp_dir}/orphan-records.tsv"
   expected_doc_file="${tmp_dir}/registry.md"
 
   : > "${intent_records_file}"
@@ -117,6 +121,7 @@ ensure_tmp_dir() {
   : > "${worktree_branches_file}"
   : > "${local_branches_file}"
   : > "${remote_branches_file}"
+  : > "${orphan_records_file}"
 }
 
 ensure_state_dir() {
@@ -163,6 +168,51 @@ normalize_scalar() {
   printf '%s\n' "${value}"
 }
 
+valid_subject_type() {
+  case "$1" in
+    branch|worktree|remote)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+valid_intent() {
+  case "$1" in
+    active|historical|extract-only|cleanup-candidate|protected|needs-decision)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+normalize_missing_intent() {
+  local value="$1"
+
+  if valid_intent "${value}"; then
+    printf '%s\n' "${value}"
+  else
+    printf 'needs-decision\n'
+  fi
+}
+
+normalize_record_intent() {
+  local value="$1"
+  local fallback="$2"
+
+  fallback="$(normalize_missing_intent "${fallback}")"
+
+  if valid_intent "${value}"; then
+    printf '%s\n' "${value}"
+  else
+    printf '%s\n' "${fallback}"
+  fi
+}
+
 slugify() {
   local value="$1"
   printf '%s' "${value}" \
@@ -204,14 +254,22 @@ parse_intent_sidecar() {
   fi
 
   flush_record() {
+    local normalized_intent=""
+
     if [[ -z "${current_type}" || -z "${current_key}" ]]; then
       return
     fi
 
+    if ! valid_subject_type "${current_type}"; then
+      return
+    fi
+
+    normalized_intent="$(normalize_record_intent "${current_intent}" "${default_missing_intent}")"
+
     printf '%s\t%s\t%s\t%s\t%s\n' \
       "${current_type}" \
       "${current_key}" \
-      "${current_intent:-${default_missing_intent}}" \
+      "${normalized_intent}" \
       "${current_note}" \
       "${current_pr}" >> "${intent_records_file}"
   }
@@ -247,6 +305,7 @@ parse_intent_sidecar() {
     esac
   done < "${intent_file}"
 
+  default_missing_intent="$(normalize_missing_intent "${default_missing_intent}")"
   flush_record
   sort -t $'\t' -k1,1 -k2,2 "${intent_records_file}" -o "${intent_records_file}"
 }
@@ -277,8 +336,19 @@ record_seen_subject() {
 }
 
 orphan_intent_count() {
-  if [[ ! -s "${intent_records_file}" ]]; then
+  if [[ ! -s "${orphan_records_file}" ]]; then
     echo 0
+    return
+  fi
+
+  awk 'END { print NR + 0 }' "${orphan_records_file}"
+}
+
+collect_orphan_records() {
+  ensure_tmp_dir
+  : > "${orphan_records_file}"
+
+  if [[ ! -s "${intent_records_file}" ]]; then
     return
   fi
 
@@ -288,12 +358,13 @@ orphan_intent_count() {
       next
     }
     !(($1 FS $2) in seen) {
-      count++
+      print $0
     }
-    END {
-      print count + 0
-    }
-  ' "${seen_subjects_file}" "${intent_records_file}"
+  ' "${seen_subjects_file}" "${intent_records_file}" > "${orphan_records_file}"
+
+  if [[ -s "${orphan_records_file}" ]]; then
+    sort -t $'\t' -k1,1 -k2,2 "${orphan_records_file}" -o "${orphan_records_file}"
+  fi
 }
 
 derive_worktree_id() {
@@ -667,6 +738,11 @@ render_registry_markdown() {
   local has_worktree=""
   local remote_ref=""
   local remote_branch=""
+  local orphan_type=""
+  local orphan_key=""
+  local orphan_intent=""
+  local orphan_note=""
+  local orphan_pr=""
   local policy_line=""
 
   ensure_tmp_dir
@@ -739,11 +815,30 @@ EOF
     done < "${remote_branches_file}"
 
     if [[ "${orphan_count}" -gt 0 ]]; then
+      cat <<'EOF'
+
+## Reviewed Intent Awaiting Reconciliation
+
+| Subject Type | Subject Key | Intent | Note | PR |
+|---|---|---|---|---|
+EOF
+
+      while IFS=$'\t' read -r orphan_type orphan_key orphan_intent orphan_note orphan_pr || [[ -n "${orphan_type}" ]]; do
+        orphan_note="$(note_or_default "${orphan_note}" "Reviewed intent retained until topology or sidecar is reconciled.")"
+        orphan_pr="$(note_or_default "${orphan_pr}" "-")"
+        printf '| `%s` | `%s` | `%s` | %s | %s |\n' \
+          "$(escape_md_cell "${orphan_type}")" \
+          "$(escape_md_cell "${orphan_key}")" \
+          "$(escape_md_cell "${orphan_intent}")" \
+          "$(escape_md_cell "${orphan_note}")" \
+          "$(escape_md_cell "${orphan_pr}")"
+      done < "${orphan_records_file}"
+
       cat <<EOF
 
 ## Registry Warnings
 
-- Reviewed intent contains ${orphan_count} orphan record(s); keep them until topology catches up or the intent is pruned.
+- Reviewed intent contains ${orphan_count} orphan record(s); keep them until topology catches up or the sidecar is reviewed.
 EOF
     fi
 
@@ -769,8 +864,6 @@ EOF
 }
 
 build_snapshot() {
-  local orphan_count=""
-
   ensure_tmp_dir
   : > "${seen_subjects_file}"
 
@@ -778,6 +871,8 @@ build_snapshot() {
   collect_worktrees
   collect_local_branches
   collect_remote_branches
+  collect_orphan_records
+  local orphan_count=""
   orphan_count="$(orphan_intent_count)"
   render_registry_markdown "${orphan_count}"
 }
@@ -794,6 +889,8 @@ compute_current_hash() {
     cat "${local_branches_file}"
     printf '\n[remote_branches]\n'
     cat "${remote_branches_file}"
+    printf '\n[orphan_records]\n'
+    cat "${orphan_records_file}"
   } > "${combined}"
   hash_file "${combined}"
 }
@@ -804,6 +901,46 @@ current_doc_hash() {
   else
     printf 'missing\n'
   fi
+}
+
+write_recovery_draft() {
+  ensure_state_dir
+  cp "${expected_doc_file}" "${draft_file}"
+}
+
+backup_registry_doc() {
+  local backup_file=""
+
+  if [[ ! -f "${registry_doc}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  ensure_state_dir
+  mkdir -p "${backup_dir}"
+  backup_file="${backup_dir}/registry-$(date -u +%Y%m%dT%H%M%SZ).md"
+  cp "${registry_doc}" "${backup_file}"
+  printf '%s\n' "${backup_file}"
+}
+
+install_rendered_registry_doc() {
+  local apply_file="${registry_doc}.tmp.$$"
+  local backup_file=""
+
+  write_recovery_draft
+  backup_file="$(backup_registry_doc)"
+
+  if ! cp "${expected_doc_file}" "${apply_file}"; then
+    rm -f "${apply_file}"
+    return 1
+  fi
+
+  if ! mv "${apply_file}" "${registry_doc}"; then
+    rm -f "${apply_file}"
+    return 1
+  fi
+
+  printf '%s\n' "${backup_file}"
 }
 
 docs_match_expected() {
@@ -857,6 +994,7 @@ prune_state_dir() {
   find "${state_dir}" -mindepth 1 -maxdepth 1 \
     ! -name 'health.env' \
     ! -name 'lock' \
+    ! -name 'backups' \
     -exec rm -rf {} +
 }
 
@@ -925,6 +1063,7 @@ refresh_flow() {
   local orphan_count=""
   local stale=true
   local message=""
+  local backup_file=""
 
   build_snapshot
   current_hash="$(compute_current_hash)"
@@ -959,9 +1098,17 @@ refresh_flow() {
     exit 0
   fi
 
-  cp "${expected_doc_file}" "${registry_doc}"
+  if ! backup_file="$(install_rendered_registry_doc)"; then
+    message="registry refresh failed; recovery draft preserved at ${draft_file}"
+    write_error_state "${message}"
+    echo "[git-topology-registry] ${message}" >&2
+    exit 1
+  fi
   document_hash="$(hash_file "${registry_doc}")"
   message="registry refreshed from live git topology"
+  if [[ -n "${backup_file}" ]]; then
+    message="${message}; backup saved to ${backup_file}"
+  fi
   write_health_state "ok" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
   echo "[git-topology-registry] Registry refreshed."
 }
@@ -972,6 +1119,7 @@ doctor_flow() {
   local document_hash=""
   local orphan_count=""
   local message=""
+  local backup_file=""
 
   acquire_lock
   if [[ "${prune}" == "true" ]]; then
@@ -992,15 +1140,24 @@ doctor_flow() {
   fi
 
   if [[ "${write_doc}" != "true" ]]; then
-    message="doctor detected drift; rerun with --write-doc to reconcile"
+    write_recovery_draft
+    message="doctor detected drift; draft saved to ${draft_file}; rerun with --write-doc to reconcile"
     write_health_state "stale" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
     echo "[git-topology-registry] ${message}" >&2
     exit 1
   fi
 
-  cp "${expected_doc_file}" "${registry_doc}"
+  if ! backup_file="$(install_rendered_registry_doc)"; then
+    message="doctor failed; recovery draft preserved at ${draft_file}"
+    write_error_state "${message}"
+    echo "[git-topology-registry] ${message}" >&2
+    exit 1
+  fi
   document_hash="$(hash_file "${registry_doc}")"
   message="doctor reconciled registry from live git topology"
+  if [[ -n "${backup_file}" ]]; then
+    message="${message}; backup saved to ${backup_file}"
+  fi
   write_health_state "ok" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
   echo "[git-topology-registry] Doctor reconciled registry."
 }
