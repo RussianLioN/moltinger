@@ -11,9 +11,8 @@
 - `scripts/telegram-web-user-login.mjs` — разовая авторизация
 - `scripts/telegram-web-user-probe.mjs` — разовый probe и проверка ответа
 - `scripts/telegram-web-user-monitor.sh` — обёртка для мониторинга
-- `systemd/moltis-telegram-web-user-monitor.service` — one-shot сервис проверки
-- `systemd/moltis-telegram-web-user-monitor.timer` — primary scheduler (каждые 10 минут)
-- `scripts/cron.d/moltis-telegram-web-user-monitor` — fallback scheduler (optional)
+- `systemd/moltis-telegram-web-user-monitor.service` — optional one-shot сервис проверки
+- `systemd/moltis-telegram-web-user-monitor.timer` — optional manual scheduler
 
 ## 1) Установка зависимостей
 
@@ -21,8 +20,7 @@
 ./scripts/setup-telegram-web-user-monitor.sh --project-dir /opt/moltinger
 ```
 
-По умолчанию setup также устанавливает и включает systemd timer:
-`moltis-telegram-web-user-monitor.timer`.
+По умолчанию setup ставит только зависимости. Systemd timer больше не включается автоматически.
 
 ## 2) Разовая авторизация (интерактивно)
 
@@ -48,12 +46,15 @@ scp .telegram-web-state.json root@ainetic.tech:/opt/moltinger/data/.telegram-web
 node scripts/telegram-web-user-probe.mjs \
   --state /opt/moltinger/data/.telegram-web-state.json \
   --target @moltinger_bot \
-  --text "test2"
+  --text "/status"
 ```
 
-## 4) Постоянный режим
+## 4) Периодический режим
 
-### Вариант A (рекомендуется): systemd timer
+Периодический Telegram Web monitor больше не включается в production по умолчанию.
+Если он нужен снова, включайте его только явно и вручную.
+
+### Вариант A: systemd timer (manual opt-in)
 
 ```bash
 cp systemd/moltis-telegram-web-user-monitor.service /etc/systemd/system/
@@ -61,13 +62,6 @@ cp systemd/moltis-telegram-web-user-monitor.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now moltis-telegram-web-user-monitor.timer
 systemctl status moltis-telegram-web-user-monitor.timer --no-pager
-```
-
-### Вариант B (fallback): cron
-
-```bash
-cp scripts/cron.d/moltis-telegram-web-user-monitor /etc/cron.d/
-chmod 644 /etc/cron.d/moltis-telegram-web-user-monitor
 ```
 
 Лог:
@@ -81,13 +75,12 @@ chmod 644 /etc/cron.d/moltis-telegram-web-user-monitor
 `scripts/telegram-web-user-monitor.sh` поддерживает:
 
 - `TELEGRAM_WEB_PROBE_PROFILE=strict_status` — отправляет `/status` (default)
-- `TELEGRAM_WEB_PROBE_PROFILE=echo_ping` — отправляет детерминированный текст (default `test2`)
+- `TELEGRAM_WEB_PROBE_PROFILE=echo_ping` — отправляет детерминированный текст (default `ping`)
 
 Пример:
 
 ```bash
-TELEGRAM_WEB_PROBE_PROFILE=echo_ping \
-TELEGRAM_WEB_MESSAGE=test2 \
+TELEGRAM_WEB_PROBE_PROFILE=strict_status \
 TELEGRAM_WEB_COMPOSER_RETRIES=2 \
 scripts/telegram-web-user-monitor.sh
 ```

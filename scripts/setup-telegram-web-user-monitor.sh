@@ -4,7 +4,7 @@
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/moltinger}"
-INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-true}"
+INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-false}"
 
 show_help() {
     cat <<'EOF'
@@ -14,7 +14,7 @@ Usage:
 Installs:
   - playwright npm package
   - chromium browser with required OS deps
-  - systemd service+timer (enabled by default)
+  - optional systemd service+timer (disabled by default)
 EOF
 }
 
@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --install-systemd)
-            INSTALL_SYSTEMD="${2:-true}"
+            INSTALL_SYSTEMD="${2:-false}"
             shift 2
             ;;
         -h|--help)

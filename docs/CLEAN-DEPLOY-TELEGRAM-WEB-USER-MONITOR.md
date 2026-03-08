@@ -6,7 +6,7 @@
 
 - Единый источник истины: git + CI/CD.
 - Блокировка деплоя при drift (`git status --porcelain` на сервере не пустой).
-- Primary scheduler: systemd timer.
+- Telegram Web monitor доступен как manual/on-demand инструмент, а не как постоянный production scheduler.
 
 ## Предусловия
 
@@ -29,7 +29,7 @@ git status --porcelain
    - проверит `ssh root@ainetic.tech "cd /opt/moltinger && git status --porcelain"`;
    - **заблокирует** деплой при drift.
 
-4. После успешного deploy:
+4. После успешного deploy при ручном opt-in scheduler:
 
 ```bash
 ssh root@ainetic.tech "systemctl status moltis-telegram-web-user-monitor.timer --no-pager"
@@ -49,3 +49,4 @@ ssh root@ainetic.tech "tail -n 50 /var/log/moltis/telegram-web-user-monitor.log"
 
 - Ручной `scp` разрешён только для аварийной диагностики.
 - Любая постоянная настройка должна попадать в git (scripts/config/systemd/cron).
+- Production по умолчанию не включает периодический Telegram Web scheduler.
