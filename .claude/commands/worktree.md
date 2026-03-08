@@ -147,6 +147,7 @@ Process:
    - if the canonical root is not already on `main`, run `git -C <canonical-root> switch main`
    - `git -C <canonical-root> pull --rebase`
    - Do not run `git pull --rebase origin main` for this workflow; rely on the configured upstream of `main`.
+   - In Codex/App, keep this as its own approval step when escalation is required. Do not bundle it with create/refresh/handoff commands.
 7. If issue id exists and the slug was omitted, derive the slug from the issue title using `bd show`, with `--no-db` fallback if needed.
 8. Create or attach the worktree with beads integration:
    - new branch: `bd worktree create ../<repo>-<suffix> --branch <branch>`
@@ -154,6 +155,7 @@ Process:
 9. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before entering the new worktree so the topology mutation is captured immediately.
    - Do not assume `main` already contains the topology script before this feature is merged.
    - In Codex/App sessions, if the shared repo `.git` directory is outside the current writable sandbox, request approval/escalation for this refresh step before running it.
+   - Keep the topology mutation phase separate from the base-sync phase when escalation is required: create/refresh/helper may be grouped together, but do not bundle them with the `fetch/switch/pull` step.
    - If refresh fails on topology lock, wait briefly and retry once.
    - If refresh reports that the shared topology state is not writable from the current session, stop and tell the user to re-run the same refresh command with approval/escalation from the authoritative topology worktree.
    - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
@@ -255,6 +257,7 @@ Process:
 - If topology registry is stale, treat live `git` as authoritative for conflict detection and refresh the registry after the mutation.
 - Fall back to manual instructions if `terminal` or `codex` automation is unavailable.
 - Keep output short and actionable.
+- Do not append speculative troubleshooting after a successful create/attach flow. Report only confirmed facts and exact next steps.
 
 ## Output Format
 
@@ -309,3 +312,5 @@ Optional helper detail lines may also include:
 - `Beads: <shared|redirected|missing>`
 - `Handoff: <manual|terminal|codex>`
 - `Warnings:`
+
+If a managed create/cleanup flow successfully ran `scripts/git-topology-registry.sh refresh --write-doc`, explicitly say that the tracked diff in `docs/GIT-TOPOLOGY-REGISTRY.md` is expected in the invoking worktree until it is committed or discarded.
