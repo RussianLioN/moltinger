@@ -73,6 +73,7 @@ report_env_state="unknown"
 report_guard_state="unknown"
 report_beads_state="missing"
 report_handoff_mode="manual"
+report_requested_handoff_mode="manual"
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
@@ -96,6 +97,8 @@ guard_state="unknown"
 branch_resolution_state="not_required"
 environment_probe_path=""
 environment_state="unknown"
+handoff_support_state="unknown"
+handoff_fallback_reason=""
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
@@ -360,6 +363,11 @@ resolve_existing_branch_state() {
 reset_environment_probe() {
   environment_probe_path=""
   environment_state="unknown"
+}
+
+reset_handoff_selection() {
+  handoff_support_state="unknown"
+  handoff_fallback_reason=""
 }
 
 map_bd_beads_state() {
@@ -659,7 +667,8 @@ reset_report() {
   report_env_state="unknown"
   report_guard_state="unknown"
   report_beads_state="missing"
-  report_handoff_mode="${handoff_profile}"
+  report_handoff_mode="manual"
+  report_requested_handoff_mode="${handoff_profile}"
   report_next_steps=()
   report_warnings=()
 }
@@ -881,6 +890,9 @@ render_readiness_report() {
   printf 'Guard: %s\n' "${report_guard_state}"
   printf 'Beads: %s\n' "${report_beads_state}"
   printf 'Handoff: %s\n' "${report_handoff_mode}"
+  if [[ "${report_requested_handoff_mode}" != "${report_handoff_mode}" ]]; then
+    printf 'Requested Handoff: %s\n' "${report_requested_handoff_mode}"
+  fi
   printf 'Next:\n'
   render_numbered_list "${report_next_steps[@]}"
   render_warning_list "${report_warnings[@]}"
@@ -914,19 +926,73 @@ prepare_report_target() {
   apply_environment_probe_to_report
 }
 
+select_handoff_mode() {
+  reset_handoff_selection
+  report_handoff_mode="manual"
+
+  if [[ "${report_requested_handoff_mode}" == "manual" ]]; then
+    return 0
+  fi
+
+  if [[ ! "$(uname -s)" == "Darwin" ]]; then
+    handoff_support_state="unsupported"
+    handoff_fallback_reason="Automatic handoff is only implemented for macOS Terminal.app."
+    add_warning "${handoff_fallback_reason}"
+    return 0
+  fi
+
+  if ! command -v osascript >/dev/null 2>&1; then
+    handoff_support_state="unsupported"
+    handoff_fallback_reason="Automatic handoff requires osascript on macOS."
+    add_warning "${handoff_fallback_reason}"
+    return 0
+  fi
+
+  case "${report_requested_handoff_mode}" in
+    terminal)
+      case "${report_status}" in
+        ready_for_codex|needs_env_approval|created)
+          report_handoff_mode="terminal"
+          handoff_support_state="available"
+          ;;
+        *)
+          handoff_support_state="unsupported"
+          handoff_fallback_reason="Terminal handoff is only available once the worktree has a usable target path."
+          add_warning "${handoff_fallback_reason}"
+          ;;
+      esac
+      ;;
+    codex)
+      if ! command -v codex >/dev/null 2>&1; then
+        handoff_support_state="unsupported"
+        handoff_fallback_reason="Codex handoff requires the codex CLI to be installed."
+        add_warning "${handoff_fallback_reason}"
+      elif [[ "${report_status}" == "ready_for_codex" ]]; then
+        report_handoff_mode="codex"
+        handoff_support_state="available"
+      else
+        handoff_support_state="unsupported"
+        handoff_fallback_reason="Codex handoff requires status ready_for_codex."
+        add_warning "${handoff_fallback_reason}"
+      fi
+      ;;
+  esac
+}
+
 render_mode_placeholder() {
   local mode_name="$1"
 
   prepare_report_target
   set_readiness_status
+  select_handoff_mode
   set_readiness_next_steps "${mode_name}"
 
   if [[ "${report_env_state}" == "unknown" ]]; then
     add_warning "Environment readiness has not been probed yet."
   fi
 
-  if [[ "${mode_name}" == "handoff" && "${handoff_profile}" != "manual" ]]; then
-    add_warning "Automated terminal or Codex handoff is not implemented until T017-T018."
+  if [[ "${mode_name}" == "handoff" && "${report_handoff_mode}" != "manual" ]]; then
+    add_warning "Requested handoff profile selected. Launch execution lands in T018."
   fi
 
   render_readiness_report
