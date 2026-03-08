@@ -89,32 +89,6 @@ Fallback rules:
 - Manual handoff is always valid, even when `terminal` or `codex` automation is unsupported.
 - Never hide a failed probe behind a generic "created" message.
 
-## Opt-in Handoff
-
-Supported handoff profiles:
-- `manual` (default)
-- `terminal`
-- `codex`
-
-Behavior rules:
-- Only attempt automatic handoff when the user explicitly asks for it via `--handoff ...` or equivalent natural-language intent.
-- Keep `manual` as the default even on supported systems.
-- Treat helper-selected fallback as authoritative. If the helper downgrades the request to `manual`, surface both the effective and requested handoff modes.
-
-Platform limits:
-- Automatic handoff is macOS-first and currently targets `Terminal.app` via `osascript`.
-- If `osascript` is unavailable, fall back to `manual` and keep the exact copy-paste command in `Next`.
-- `terminal` handoff requires a usable target path.
-- `codex` handoff requires both a usable target path and helper status `ready_for_codex`.
-- `codex` handoff also requires the `codex` CLI to be installed; otherwise return a manual fallback with the reason.
-
-Safety boundaries:
-- Never launch Terminal.app or Codex unless the user explicitly requested a non-manual handoff.
-- Never auto-run `direnv allow` or any equivalent environment-approval step on behalf of the user.
-- Never claim an automated handoff succeeded if the helper had to fall back to `manual`.
-- If the worktree is degraded (`needs_env_approval`, `drift_detected`, `action_required`), prefer manual recovery steps over partial automation.
-- Preserve the low-level workflow for advanced users; handoff automation is additive, not mandatory.
-
 ## Handoff Profiles
 
 Supported handoff profiles:
@@ -122,16 +96,23 @@ Supported handoff profiles:
 - `terminal` - opt-in automation for opening a new Terminal.app session at the target worktree
 - `codex` - opt-in automation for opening Terminal.app and launching `codex` in the target worktree
 
+Behavior rules:
+- Only attempt automatic handoff when the user explicitly asks for it via `--handoff ...` or equivalent natural-language intent.
+- Keep `manual` as the default even on supported systems.
+- Treat helper-selected fallback as authoritative. If the helper downgrades the request to `manual`, surface both the effective and requested handoff modes.
+
 Platform limits:
 - Automatic `terminal` and `codex` handoff are currently macOS-first and rely on `osascript` + `Terminal.app`.
-- If macOS automation is unavailable, the response must keep the requested profile visible and fall back to `manual`.
-- `codex` handoff also requires the `codex` CLI to be installed and the readiness status to be `ready_for_codex`.
+- If `osascript` is unavailable, keep the requested profile visible and fall back to `manual`.
+- `terminal` handoff requires a usable target path.
+- `codex` handoff requires a usable target path, the `codex` CLI to be installed, and readiness status `ready_for_codex`.
 
 Safety boundaries:
 - Never run automatic handoff unless the user explicitly requested `--handoff terminal` or `--handoff codex`.
 - Never auto-run `direnv allow` or any other trust-establishing environment command.
+- Never claim success for automatic handoff if the helper had to fall back to `manual`.
 - If readiness is degraded (`needs_env_approval`, `drift_detected`, `action_required`), prefer the exact corrective next step over automation.
-- When automation falls back, preserve the equivalent manual command so the user does not lose context.
+- Preserve the low-level workflow for advanced users; handoff automation is additive, not mandatory.
 
 ## Start Workflow
 
