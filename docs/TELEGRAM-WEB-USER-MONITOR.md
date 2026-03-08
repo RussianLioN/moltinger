@@ -82,14 +82,20 @@ systemctl status moltis-telegram-web-user-monitor.timer --no-pager
 ```bash
 TELEGRAM_WEB_PROBE_PROFILE=strict_status \
 TELEGRAM_WEB_COMPOSER_RETRIES=2 \
+TELEGRAM_WEB_QUIET_WINDOW_MS=3000 \
 scripts/telegram-web-user-monitor.sh
 ```
 
+`TELEGRAM_WEB_QUIET_WINDOW_MS` задаёт обязательное окно тишины в чате перед probe.
+Если в чате продолжают появляться новые сообщения, probe завершается `fail`, а не засчитывает потенциально чужой ответ за текущий цикл.
+
 JSON output `telegram-web-user-probe.mjs` теперь включает:
 
-- `stage`: `login|search|chat_open|composer|send|wait_reply`
+- `stage`: `login|search|chat_open|quiet_window|composer|send|wait_reply`
 - `retries_used`
 - `chat_open_verified`
+- `sent_mid`
+- `correlation`: `quiet_window_ms`, `quiet_window_wait_ms`, `baseline_max_mid`, `sent_message`, `matched_reply`, `latest_seen_incoming`, `last_pre_send_activity`
 
 ## Плюсы/минусы
 

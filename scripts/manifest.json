@@ -509,7 +509,8 @@
         "TELEGRAM_WEB_MESSAGE",
         "TELEGRAM_WEB_TIMEOUT_SECONDS",
         "TELEGRAM_WEB_MIN_REPLY_LEN",
-        "TELEGRAM_WEB_COMPOSER_RETRIES"
+        "TELEGRAM_WEB_COMPOSER_RETRIES",
+        "TELEGRAM_WEB_QUIET_WINDOW_MS"
       ]
     },
     "telegram-web-user-monitor.sh": {
@@ -531,7 +532,8 @@
         "TELEGRAM_WEB_MESSAGE",
         "TELEGRAM_WEB_TIMEOUT_SECONDS",
         "TELEGRAM_WEB_MIN_REPLY_LEN",
-        "TELEGRAM_WEB_COMPOSER_RETRIES"
+        "TELEGRAM_WEB_COMPOSER_RETRIES",
+        "TELEGRAM_WEB_QUIET_WINDOW_MS"
       ]
     },
     "setup-telegram-web-user-monitor.sh": {
