@@ -51,11 +51,11 @@ If command is empty (`/worktree`):
 
 Issue id regex: `[A-Za-z]+-[0-9]+`
 
-## Helper Placeholder
+## Helper Integration
 
 Readiness, path normalization, and handoff generation are being centralized in `scripts/worktree-ready.sh`.
 
-During this setup phase, treat the helper as the intended source of truth for the final status block:
+Treat the helper as the source of truth for readiness-aware status blocks whenever it is available:
 
 ```bash
 scripts/worktree-ready.sh create --branch <branch> --path <path> --handoff manual
@@ -63,7 +63,21 @@ scripts/worktree-ready.sh attach --branch <existing-branch> --handoff manual
 scripts/worktree-ready.sh doctor --branch <branch-or-path>
 ```
 
-The command artifact should continue to own natural-language routing, while the helper will own deterministic readiness reporting once the later tasks land.
+The command artifact continues to own natural-language routing. The helper owns deterministic path normalization, discovery, guard parsing, and readiness reporting.
+
+Canonical readiness vocabulary:
+- `created`
+- `needs_env_approval`
+- `ready_for_codex`
+- `drift_detected`
+- `action_required`
+
+Until environment probes land, the helper may still report `Env: unknown` while using the canonical readiness vocabulary above.
+
+Fallback rules:
+- If the helper is unavailable, return a manual status block using the same readiness vocabulary.
+- Manual handoff is always valid, even when `terminal` or `codex` automation is unsupported.
+- Never hide a failed probe behind a generic "created" message.
 
 ## Start Workflow
 
@@ -87,7 +101,9 @@ Process:
 6. Enter worktree.
 7. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
 8. If script exists: `scripts/git-session-guard.sh --refresh`
-9. Return short status block.
+9. If helper exists, run:
+   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex>`
+10. If helper is unavailable, return a manual fallback status block with exact next steps.
 
 For existing branches, prefer:
 - `/worktree start --existing <branch>`
@@ -102,8 +118,11 @@ Usage:
 
 Intent:
 1. Resolve the branch or worktree target.
-2. Run the helper placeholder flow for readiness diagnostics.
-3. Return the target path, current branch, and the next exact action when something is not ready.
+2. Run the helper diagnostics flow:
+   - `scripts/worktree-ready.sh doctor --branch <branch>`
+   - or `scripts/worktree-ready.sh doctor --path <absolute-path>`
+3. Return the helper report.
+4. If the helper is unavailable, fall back to a manual status block with at least one exact next action.
 
 ## Finish Workflow
 
@@ -153,14 +172,25 @@ Process:
 - Never force-delete branches/worktrees unless user explicitly requests force.
 - Never delete remote branch without merged check against `origin/main`.
 - Stop and report on failed quality gates, rebase conflicts, or push failures.
+- Prefer the helper status over ad hoc prose when both are available.
+- Fall back to manual instructions if `terminal` or `codex` automation is unavailable.
 - Keep output short and actionable.
 
 ## Output Format
 
 ```text
-Worktree: <path>
-Branch: <branch>
+Worktree: <absolute-path>
+Branch: <branch-name>
 Issue: <id or n/a>
-Status: <created|updated|finished|cleaned>
-Next: <one short next action>
+Status: <created|needs_env_approval|ready_for_codex|drift_detected|action_required>
+Next:
+  1. <first exact step>
+  2. <second exact step if needed>
 ```
+
+Optional helper detail lines may also include:
+- `Env: <unknown|no_envrc|approval_needed|approved_or_not_required>`
+- `Guard: <unknown|missing|ok|drift>`
+- `Beads: <shared|redirected|missing>`
+- `Handoff: <manual|terminal|codex>`
+- `Warnings:`
