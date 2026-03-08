@@ -20,8 +20,10 @@ This command supports:
 /worktree start BD-123 auth
 /worktree start --existing codex/gitops-metrics-fix
 /worktree attach codex/gitops-metrics-fix
+/worktree attach codex/gitops-metrics-fix --handoff terminal
 /worktree attach codex/gitops-metrics-fix --handoff codex
 /worktree doctor codex/gitops-metrics-fix
+/worktree doctor /Users/rl/coding/moltinger-codex-gitops-metrics-fix
 /worktree finish BD-123
 /worktree cleanup BD-123 --delete-branch
 /worktree list
@@ -246,19 +248,29 @@ Process:
 - Never delete remote branch without merged check against `origin/main`.
 - Stop and report on failed quality gates, rebase conflicts, or push failures.
 - Prefer the helper status over ad hoc prose when both are available.
-- Fall back to manual instructions if `terminal` or `codex` automation is unavailable.
+- Fall back to manual instructions if `terminal` or `codex` automation is unavailable or unsafe for the current readiness state.
+- Keep `Requested Handoff` visible when an automatic profile falls back to `manual`.
+- Never treat automatic launch as a substitute for a failed readiness probe.
 - Keep output short and actionable.
 
 ## Output Format
 
 ```text
 Worktree: <absolute-path>
+Preview: <derived-or-resolved-path>
 Branch: <branch-name>
 Issue: <id or n/a>
 Status: <created|needs_env_approval|ready_for_codex|drift_detected|action_required>
+Env: <unknown|no_envrc|approval_needed|approved_or_not_required>
+Guard: <unknown|missing|ok|drift>
+Beads: <shared|redirected|missing>
+Handoff: <manual|terminal|codex>
+Requested Handoff: <manual|terminal|codex> # optional when fallback happens
 Next:
   1. <first exact step>
   2. <second exact step if needed>
+Warnings:
+  - <user-facing caveat> # optional
 ```
 
 ## Completion Rules

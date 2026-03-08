@@ -129,7 +129,7 @@
 
 **Purpose**: Finalize docs, validate scenarios, and reconcile the feature package.
 
-- [ ] T023 [EXECUTOR: worker] [SEQUENTIAL] Update quick usage, output format, and safety notes comprehensively in `.claude/commands/worktree.md`
+- [x] T023 [EXECUTOR: worker] [SEQUENTIAL] Update quick usage, output format, and safety notes comprehensively in `.claude/commands/worktree.md` → Artifacts: [worktree.md](../../.claude/commands/worktree.md)
 - [ ] T024 [P] [EXECUTOR: MAIN] [PARALLEL-GROUP-VALIDATION] Validate the scenarios from `specs/005-worktree-ready-flow/quickstart.md` and record results in `specs/005-worktree-ready-flow/validation.md`
 - [ ] T025 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile implementation notes and checkbox state in `specs/005-worktree-ready-flow/tasks.md`
 
