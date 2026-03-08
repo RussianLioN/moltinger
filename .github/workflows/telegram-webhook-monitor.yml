@@ -1,0 +1,93 @@
+name: Telegram Webhook Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      require_webhook:
+        description: "Fail if Telegram inbound mode is not webhook"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  telegram-webhook-monitor:
+    name: Telegram Webhook Monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      MOLTIS_BASE_URL: ${{ vars.MOLTIS_BASE_URL || 'https://moltis.ainetic.tech' }}
+      TELEGRAM_REQUIRE_HTTPS_WEBHOOK: "true"
+      TELEGRAM_REQUIRE_TEST_USER: "true"
+      TELEGRAM_MAX_PENDING_UPDATES: "3"
+      MONITOR_VALIDATE_PREVIEW: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -yqq
+          sudo apt-get install -y -qq jq curl
+          chmod +x scripts/telegram-webhook-monitor.sh
+
+      - name: Run monitor
+        id: monitor
+        env:
+          MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_ALLOWED_USERS }}
+          TELEGRAM_TEST_USER: ${{ secrets.TELEGRAM_TEST_USER }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.require_webhook }}" == "false" ]]; then
+            export TELEGRAM_REQUIRE_WEBHOOK=false
+          else
+            export TELEGRAM_REQUIRE_WEBHOOK=true
+          fi
+
+          mkdir -p monitor-results
+          set -o pipefail
+          ./scripts/telegram-webhook-monitor.sh --json | tee monitor-results/telegram-webhook-monitor.json
+
+          echo "status=$(jq -r '.status' monitor-results/telegram-webhook-monitor.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Add workflow summary
+        if: always()
+        run: |
+          if [[ -f monitor-results/telegram-webhook-monitor.json ]]; then
+            echo "## Telegram Webhook Monitor" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            jq '.' monitor-results/telegram-webhook-monitor.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-webhook-monitor-report
+          path: monitor-results/telegram-webhook-monitor.json
+          retention-days: 30
+
+      - name: Slack alert on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
+            echo "SLACK_WEBHOOK_URL not configured, skipping alert"
+            exit 0
+          fi
+
+          if [[ ! -f monitor-results/telegram-webhook-monitor.json ]]; then
+            summary="Monitor failed before report generation"
+          else
+            summary="$(jq -r '.failures[]?' monitor-results/telegram-webhook-monitor.json | head -5 | sed 's/"/\\"/g')"
+          fi
+
+          payload="$(jq -n \
+            --arg text ":rotating_light: Telegram Webhook Monitor FAILED on ${GITHUB_REPOSITORY} (${GITHUB_REF_NAME})\n${summary}" \
+            '{text: $text}')"
+
+          curl -sS -X POST -H "Content-type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL" >/dev/null

@@ -1,434 +1,367 @@
-# Moltis Test Suite CI/CD Workflow
-# Automated test execution on PR and push to main
-#
-# Features:
-#   - Matrix testing support (multi-OS, multi-shell)
-#   - Test result caching for faster builds
-#   - Slack notification on failure
-#   - Artifact uploads for all test results
-#
-# Part of: 001-docker-deploy-improvements
-
 name: Test Suite
 
 concurrency:
-  group: test-${{ github.ref }}
-  cancel-in-progress: false
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
-      test_suite:
-        description: 'Test suite to run'
+      lane_group:
+        description: Lane group or individual lane to run
         required: false
-        default: 'all'
+        default: pr
         type: choice
-        options: [all, unit, integration, e2e, security]
-      enable_matrix:
-        description: 'Enable matrix testing'
-        type: boolean
+        options:
+          - pr
+          - main
+          - nightly
+          - all
+          - static
+          - component
+          - integration_local
+          - security_api
+          - mcp_fake
+          - e2e_browser
+          - resilience
+          - live_external
+          - security_runtime_smoke
+          - telegram_live
+          - provider_live
+          - mcp_real
+      live_mode:
+        description: Enable live-only suites
+        required: false
         default: false
+        type: boolean
+
+permissions:
+  contents: read
 
 jobs:
-  # ============================================================
-  # Unit Tests with Matrix Support
-  # ============================================================
-  unit-tests:
-    name: Unit Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  resolve-target:
+    name: Resolve lane group
+    runs-on: ubuntu-latest
+    outputs:
+      lane_group: ${{ steps.resolve.outputs.lane_group }}
+      live_mode: ${{ steps.resolve.outputs.live_mode }}
+      artifact_name: ${{ steps.resolve.outputs.artifact_name }}
+      compose_project: ${{ steps.resolve.outputs.compose_project }}
+    steps:
+      - id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_LANE_GROUP: ${{ github.event.inputs.lane_group || '' }}
+          INPUT_LIVE_MODE: ${{ github.event.inputs.live_mode || 'false' }}
+        run: |
+          set -euo pipefail
 
-    # Matrix testing support
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [ubuntu-latest]
-        # Expand matrix when enable_matrix is true
-        include:
-          - os: ubuntu-latest
-            variant: default
-      max-parallel: 4
+          case "$EVENT_NAME" in
+            pull_request)
+              lane_group="pr"
+              live_mode="false"
+              ;;
+            push)
+              lane_group="main"
+              live_mode="false"
+              ;;
+            schedule)
+              lane_group="nightly"
+              live_mode="true"
+              ;;
+            workflow_dispatch)
+              lane_group="${INPUT_LANE_GROUP:-pr}"
+              live_mode="${INPUT_LIVE_MODE:-false}"
+              ;;
+            *)
+              echo "Unsupported event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
 
-    timeout-minutes: 10
+          artifact_name="test-results-${lane_group//[^A-Za-z0-9_-]/-}"
+          compose_project="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
+          {
+            echo "lane_group=$lane_group"
+            echo "live_mode=$live_mode"
+            echo "artifact_name=$artifact_name"
+            echo "compose_project=$compose_project"
+          } >> "$GITHUB_OUTPUT"
+
+  run-tests:
+    name: Run ${{ needs.resolve-target.outputs.lane_group }}
+    runs-on: ubuntu-latest
+    needs: resolve-target
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
-      # Cache test dependencies
-      - name: Cache test dependencies
-        uses: actions/cache@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.cache
-            test-results
-          key: ${{ runner.os }}-test-deps-${{ hashFiles('tests/run_unit.sh', 'tests/lib/*.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-test-deps-
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package.json
 
-      - name: Install dependencies
+      - name: Install OS dependencies
         run: |
           sudo apt-get update -yqq
           sudo apt-get install -y -qq jq
 
-      - name: Make scripts executable
-        run: chmod +x tests/*.sh tests/unit/*.sh tests/lib/*.sh
+      - name: Install npm dependencies
+        run: npm install --no-fund --no-audit
 
-      - name: Run unit tests
-        id: unit
+      - name: Make shell scripts executable
         run: |
+          find tests scripts -type f -name '*.sh' -exec chmod +x {} +
+
+      - name: Run canonical lane group
+        id: run
+        continue-on-error: true
+        env:
+          LANE_GROUP: ${{ needs.resolve-target.outputs.lane_group }}
+          LIVE_MODE: ${{ needs.resolve-target.outputs.live_mode }}
+          COMPOSE_PROJECT: ${{ needs.resolve-target.outputs.compose_project }}
+        run: |
+          set -euo pipefail
           mkdir -p test-results
-          if ./tests/run_unit.sh --json > test-results/unit.json 2>&1; then
-            echo "status=pass" >> $GITHUB_OUTPUT
-          else
-            echo "status=fail" >> $GITHUB_OUTPUT
-            cat test-results/unit.json
-            exit 1
+
+          args=(--lane "$LANE_GROUP" --json --junit --compose-project "$COMPOSE_PROJECT")
+          if [[ "$LIVE_MODE" == "true" ]]; then
+            args+=(--live)
           fi
 
-      - name: Display summary
-        if: always()
-        run: |
-          echo "## Unit Tests (${{ matrix.os }})" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ steps.unit.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          set +e
+          TEST_REPORT_DIR="$PWD/test-results" ./tests/run.sh "${args[@]}" > test-results/runner.stdout 2> test-results/runner.stderr
+          runner_exit_code=$?
+          set -e
 
-      - name: Upload results
-        uses: actions/upload-artifact@v4
+          printf '%s\n' "$runner_exit_code" > test-results/runner-exit-code.txt
+          echo "runner_exit_code=$runner_exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Collect diagnostics
         if: always()
+        env:
+          COMPOSE_PROJECT: ${{ needs.resolve-target.outputs.compose_project }}
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/diagnostics
+
+          docker compose -f compose.test.yml -p "$COMPOSE_PROJECT" ps > test-results/diagnostics/compose-ps.txt 2>&1 || true
+          docker compose -f compose.test.yml -p "$COMPOSE_PROJECT" logs --no-color > test-results/diagnostics/compose-logs.txt 2>&1 || true
+          docker ps -a > test-results/diagnostics/docker-ps.txt 2>&1 || true
+
+          container_ids=$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")
+          if [[ -n "$container_ids" ]]; then
+            docker inspect $container_ids > test-results/diagnostics/docker-inspect.json 2>&1 || true
+          else
+            echo "No compose containers found for $COMPOSE_PROJECT" > test-results/diagnostics/docker-inspect.json
+          fi
+
+      - name: Publish runner summary
+        if: always()
+        env:
+          LANE_GROUP: ${{ needs.resolve-target.outputs.lane_group }}
+          LIVE_MODE: ${{ needs.resolve-target.outputs.live_mode }}
+        run: |
+          set -euo pipefail
+          echo "## Canonical Runner" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Lane/group: \`$LANE_GROUP\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Live mode: \`$LIVE_MODE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Runner exit code: \`$(cat test-results/runner-exit-code.txt 2>/dev/null || echo missing)\`" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f test-results/summary.json ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '
+              "| Metric | Value |",
+              "| --- | --- |",
+              "| Aggregate status | `" + .status + "` |",
+              "| Total suites | `" + ((.summary.total_suites // 0)|tostring) + "` |",
+              "| Total cases | `" + ((.summary.total_cases // 0)|tostring) + "` |",
+              "| Passed | `" + ((.summary.passed // 0)|tostring) + "` |",
+              "| Failed | `" + ((.summary.failed // 0)|tostring) + "` |",
+              "| Skipped | `" + ((.summary.skipped // 0)|tostring) + "` |"
+            ' test-results/summary.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "`summary.json` was not produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: unit-test-results-${{ matrix.variant }}
+          name: ${{ needs.resolve-target.outputs.artifact_name }}
           path: test-results/
-          retention-days: 7
+          if-no-files-found: error
+          retention-days: 14
 
-  # ============================================================
-  # Integration Tests
-  # ============================================================
-  integration-tests:
-    name: Integration Tests
+  gate:
+    name: Gate
     runs-on: ubuntu-latest
-    needs: unit-tests
-    timeout-minutes: 15
-
-    services:
-      moltis:
-        image: ghcr.io/moltis-org/moltis:latest
-        ports:
-          - 13131:13131
-        env:
-          MOLTIS_PASSWORD: test_password
-        options: >-
-          --health-cmd "curl -sf http://localhost:13131/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 30s
-
+    needs: [resolve-target, run-tests]
+    if: always()
     steps:
-      - uses: actions/checkout@v4
-
-      # Cache integration dependencies
-      - name: Cache integration dependencies
-        uses: actions/cache@v4
+      - name: Download canonical test artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ~/.cache
-            integration-results
-          key: ${{ runner.os }}-integration-${{ hashFiles('tests/run_integration.sh', 'tests/integration/*.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-integration-
+          name: ${{ needs.resolve-target.outputs.artifact_name }}
+          path: test-artifacts
 
-      - name: Install dependencies
+      - name: Evaluate summary.json
         run: |
-          sudo apt-get update -yqq
-          sudo apt-get install -y -qq jq curl
+          set -euo pipefail
 
-      - name: Make scripts executable
-        run: chmod +x tests/*.sh tests/integration/*.sh tests/lib/*.sh
-
-      - name: Wait for Moltis
-        run: |
-          for i in {1..30}; do
-            if curl -sf http://localhost:13131/health; then
-              echo "Moltis is ready"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "Moltis failed to start"
-          exit 1
-
-      - name: Run integration tests
-        id: integration
-        env:
-          MOLTIS_URL: http://localhost:13131
-          MOLTIS_PASSWORD: test_password
-        run: |
-          mkdir -p integration-results
-          if ./tests/run_integration.sh --json > integration-results/integration.json 2>&1; then
-            echo "status=pass" >> $GITHUB_OUTPUT
-          else
-            echo "status=fail" >> $GITHUB_OUTPUT
-            cat integration-results/integration.json
+          summary_file=$(find test-artifacts -name summary.json -print -quit)
+          if [[ -z "$summary_file" || ! -s "$summary_file" ]]; then
+            echo "Missing summary.json artifact" >&2
             exit 1
           fi
 
-      - name: Display summary
-        if: always()
-        run: |
-          echo "## Integration Tests" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ steps.integration.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          jq -e '
+            (.lane | type == "string") and
+            ((.status == "passed") or (.status == "failed") or (.status == "skipped")) and
+            (.summary.total_cases | type == "number") and
+            (.summary.passed | type == "number") and
+            (.summary.failed | type == "number") and
+            (.summary.skipped | type == "number") and
+            (.cases | type == "array")
+          ' "$summary_file" >/dev/null
 
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: integration-test-results
-          path: integration-results/
-          retention-days: 7
+          lane=$(jq -r '.lane' "$summary_file")
+          status=$(jq -r '.status' "$summary_file")
+          total_cases=$(jq -r '.summary.total_cases' "$summary_file")
+          passed=$(jq -r '.summary.passed' "$summary_file")
+          failed=$(jq -r '.summary.failed' "$summary_file")
+          skipped=$(jq -r '.summary.skipped' "$summary_file")
 
-  # ============================================================
-  # Security Tests
-  # ============================================================
-  security-tests:
-    name: Security Tests
-    runs-on: ubuntu-latest
-    needs: unit-tests
-    timeout-minutes: 10
+          echo "## Gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Lane/group | \`$lane\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Aggregate status | \`$status\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total cases | \`$total_cases\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Passed | \`$passed\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Failed | \`$failed\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Skipped | \`$skipped\` |" >> "$GITHUB_STEP_SUMMARY"
 
-    steps:
-      - uses: actions/checkout@v4
-
-      # Cache security dependencies
-      - name: Cache security dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache
-            security-results
-          key: ${{ runner.os }}-security-${{ hashFiles('tests/run_security.sh', 'tests/security/*.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-security-
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -yqq
-          sudo apt-get install -y -qq jq
-
-      - name: Make scripts executable
-        run: chmod +x tests/*.sh tests/security/*.sh tests/lib/*.sh
-
-      - name: Run security tests
-        id: security
-        run: |
-          mkdir -p security-results
-          if ./tests/run_security.sh --json > security-results/security.json 2>&1; then
-            echo "status=pass" >> $GITHUB_OUTPUT
-          else
-            echo "status=fail" >> $GITHUB_OUTPUT
-            # Security warnings don't block
-            echo "security_issues=true" >> $GITHUB_OUTPUT
+          if jq -e '.cases | map(select(.status == "failed" or .status == "error")) | length > 0' "$summary_file" >/dev/null; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Failed cases" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '
+              .cases
+              | map(select(.status == "failed" or .status == "error"))
+              | .[:20]
+              | map("- `" + .id + "`: " + (.message // .status))
+              | .[]
+            ' "$summary_file" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Display summary
-        if: always()
-        run: |
-          echo "## Security Tests" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ steps.security.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-test-results
-          path: security-results/
-          retention-days: 30
-
-  # ============================================================
-  # E2E Tests (main branch only)
-  # ============================================================
-  e2e-tests:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    needs: [integration-tests, security-tests]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # Cache E2E dependencies
-      - name: Cache E2E dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache
-            e2e-results
-          key: ${{ runner.os }}-e2e-${{ hashFiles('tests/run_e2e.sh', 'tests/e2e/*.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-e2e-
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -yqq
-          sudo apt-get install -y -qq jq docker-compose
-
-      - name: Make scripts executable
-        run: chmod +x tests/*.sh tests/e2e/*.sh tests/lib/*.sh
-
-      - name: Prepare Docker test environment
-        run: |
-          mkdir -p config data
-          chmod -R ugo+rwX config data
-
-          mkdir -p secrets
-          printf '%s\n' "test_password" > secrets/moltis_password.txt
-          printf '%s\n' "test_telegram_bot_token" > secrets/telegram_bot_token.txt
-          printf '%s\n' "test_tavily_api_key" > secrets/tavily_api_key.txt
-          printf '%s\n' "test_glm_api_key" > secrets/glm_api_key.txt
-
-          docker network inspect ainetic_net > /dev/null 2>&1 || docker network create ainetic_net
-
-      - name: Start Docker stack
-        run: |
-          docker-compose -f docker-compose.yml up -d moltis
-          for i in {1..24}; do
-            if curl -sf http://localhost:13131/health; then
-              echo "Stack is ready"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "Stack failed to start"
-          docker-compose -f docker-compose.yml logs
-          exit 1
-
-      - name: Run E2E tests
-        id: e2e
-        env:
-          MOLTIS_URL: http://localhost:13131
-          MOLTIS_PASSWORD: test_password
-        run: |
-          mkdir -p e2e-results
-          if ./tests/run_e2e.sh --json --timeout 300 > e2e-results/e2e.json 2>&1; then
-            echo "status=pass" >> $GITHUB_OUTPUT
-          else
-            echo "status=fail" >> $GITHUB_OUTPUT
-            cat e2e-results/e2e.json
+          if [[ "$total_cases" -le 0 ]]; then
+            echo "summary.json contains no test cases" >&2
             exit 1
           fi
 
-      - name: Stop Docker stack
-        if: always()
-        run: docker-compose -f docker-compose.yml down -v || true
+          if [[ "$status" != "passed" ]]; then
+            echo "Gate failed because summary.json status is $status" >&2
+            exit 1
+          fi
 
-      - name: Display summary
-        if: always()
-        run: |
-          echo "## E2E Tests" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ steps.e2e.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: e2e-test-results
-          path: e2e-results/
-          retention-days: 7
-
-  # ============================================================
-  # Slack Notification on Failure
-  # ============================================================
   notify-slack:
     name: Slack Notification
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, security-tests, e2e-tests]
-    # Only notify on main branch failures
-    if: failure() && github.ref == 'refs/heads/main'
-
+    needs: [resolve-target, gate]
+    if: always() && github.ref == 'refs/heads/main' && needs.gate.result == 'failure'
     steps:
+      - name: Download canonical test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.resolve-target.outputs.artifact_name }}
+          path: test-artifacts
+
       - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+          set -euo pipefail
+
+          if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
             echo "SLACK_WEBHOOK_URL not configured, skipping"
             exit 0
           fi
 
-          # Build failed tests list
-          FAILED=""
-          [ "${{ needs.unit-tests.result }}" != "success" ] && FAILED+="Unit Tests, "
-          [ "${{ needs.integration-tests.result }}" != "success" ] && [ "${{ needs.integration-tests.result }}" != "skipped" ] && FAILED+="Integration Tests, "
-          [ "${{ needs.e2e-tests.result }}" != "success" ] && [ "${{ needs.e2e-tests.result }}" != "skipped" ] && FAILED+="E2E Tests, "
-          FAILED=${FAILED%, }
+          summary_file=$(find test-artifacts -name summary.json -print -quit)
+          if [[ -z "$summary_file" || ! -s "$summary_file" ]]; then
+            echo "summary.json missing, skipping Slack payload generation"
+            exit 0
+          fi
 
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{
-              \"text\": ':x: Test Suite Failed on *${{ github.ref_name }}*',
-              \"blocks\": [
+          lane=$(jq -r '.lane' "$summary_file")
+          status=$(jq -r '.status' "$summary_file")
+          passed=$(jq -r '.summary.passed' "$summary_file")
+          failed=$(jq -r '.summary.failed' "$summary_file")
+          skipped=$(jq -r '.summary.skipped' "$summary_file")
+          failed_cases=$(jq -r '
+            .cases
+            | map(select(.status == "failed" or .status == "error"))
+            | .[:10]
+            | map("- " + .id + ": " + (.message // .status))
+            | if length == 0 then "- no failed cases recorded" else join("\n") end
+          ' "$summary_file")
+
+          payload=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg lane "$lane" \
+            --arg status "$status" \
+            --arg passed "$passed" \
+            --arg failed "$failed" \
+            --arg skipped "$skipped" \
+            --arg failed_cases "$failed_cases" \
+            '{
+              text: (":x: Test gate failed for " + $repo + " on " + $branch),
+              blocks: [
                 {
-                  \"type\": \"header\",
-                  \"text\": {\"type\": \"plain_text\", \"text\": ':x: Test Suite Failed'}
+                  type: "header",
+                  text: {type: "plain_text", text: ":x: Test gate failed"}
                 },
                 {
-                  \"type\": \"section\",
-                  \"fields\": [
-                    {\"type\": \"mrkdwn\", \"text\": \"*Repo:*\\n${{ github.repository }}\"},
-                    {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\\n${{ github.ref_name }}\"},
-                    {\"type\": \"mrkdwn\", \"text\": \"*Commit:*\\n${{ github.sha }}\"},
-                    {\"type\": \"mrkdwn\", \"text\": \"*Actor:*\\n${{ github.actor }}\"}
+                  type: "section",
+                  fields: [
+                    {type: "mrkdwn", text: "*Repo:*\n" + $repo},
+                    {type: "mrkdwn", text: "*Branch:*\n" + $branch},
+                    {type: "mrkdwn", text: "*Actor:*\n" + $actor},
+                    {type: "mrkdwn", text: "*Lane/group:*\n" + $lane}
                   ]
                 },
                 {
-                  \"type\": \"section\",
-                  \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Failed:*\\n$FAILED\"}
+                  type: "section",
+                  fields: [
+                    {type: "mrkdwn", text: "*Aggregate status:*\n`" + $status + "`"},
+                    {type: "mrkdwn", text: "*Passed / Failed / Skipped:*\n`" + $passed + " / " + $failed + " / " + $skipped + "`"}
+                  ]
                 },
                 {
-                  \"type\": \"actions\",
-                  \"elements\": [
-                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Run\"}, \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"},
-                    {\"type\": \"button\", \"text\": {\"type\": \"plain_text\", \"text\": \"View Commit\"}, \"url\": \"${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}\"}
+                  type: "section",
+                  text: {type: "mrkdwn", text: "*Failed cases:*\n" + $failed_cases}
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {type: "button", text: {type: "plain_text", text: "View run"}, url: $run_url}
                   ]
                 }
               ]
-            }" \
-            "$SLACK_WEBHOOK_URL"
+            }')
 
-  # ============================================================
-  # Test Summary
-  # ============================================================
-  test-summary:
-    name: Test Summary
-    runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, security-tests, e2e-tests]
-    if: always()
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: test-artifacts
-
-      - name: Generate summary
-        run: |
-          echo "# Test Suite Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Unit | ${{ needs.unit-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Integration | ${{ needs.integration-tests.result == 'success' && '✅' || needs.integration-tests.result == 'skipped' && '⊘' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security | ${{ needs.security-tests.result == 'success' && '✅' || needs.security-tests.result == 'skipped' && '⊘' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| E2E | ${{ needs.e2e-tests.result == 'success' && '✅' || needs.e2e-tests.result == 'skipped' && '⊘' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Check status
-        run: |
-          [ "${{ needs.unit-tests.result }}" != "success" ] && exit 1 || true
-          [ "${{ needs.integration-tests.result }}" != "success" ] && [ "${{ needs.integration-tests.result }}" != "skipped" ] && exit 1 || true
-          [ "${{ needs.e2e-tests.result }}" != "success" ] && [ "${{ needs.e2e-tests.result }}" != "skipped" ] && exit 1 || true
-          echo "All critical tests passed"
+          curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"

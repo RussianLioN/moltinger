@@ -129,7 +129,7 @@ services:
     restart: unless-stopped
     privileged: true
     networks:
-      - ainetic_net
+      - traefik-net
     ports:
       - "13131:13131"
       - "13132:13132"
@@ -156,6 +156,7 @@ services:
       <<: *logging              # Anchor: logging config
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
       - "traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)"
       - "com.centurylinklabs.watchtower.enable=true"
 ```

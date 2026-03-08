@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-08
-**Total Lessons**: 11
+**Generated**: 2026-03-09
+**Total Lessons**: 14
 
 ---
 
@@ -14,8 +14,13 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P2 (2 lessons)
+#### P1 (1 lessons)
+- [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
+
+#### P2 (4 lessons)
+- [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
+- [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### P3 (7 lessons)
@@ -34,7 +39,8 @@
 ### By Category
 
 
-#### cicd (2 lessons)
+#### cicd (3 lessons)
+- [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
@@ -45,8 +51,10 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (2 lessons)
+#### process (4 lessons)
+- [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
+- [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### security (1 lessons)
@@ -58,16 +66,16 @@
 
 ### Popular Tags
 
-- `github-actions` (2 lessons)
-- `drift-detection` (2 lessons)
+- `process` (3 lessons)
+- `github-actions` (3 lessons)
+- `drift-detection` (3 lessons)
+- `instructions` (2 lessons)
+- `gitops` (2 lessons)
+- `deploy` (2 lessons)
 - `token-optimization` (1 lessons)
+- `telegram` (1 lessons)
 - `ssh` (1 lessons)
 - `signal-noise` (1 lessons)
-- `shell` (1 lessons)
-- `security` (1 lessons)
-- `sandbox` (1 lessons)
-- `rm-rf` (1 lessons)
-- `recurring-issue` (1 lessons)
 
 
 ---
@@ -76,10 +84,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 11 |
-| Critical (P0/P1) | 1 |
+| Total Lessons | 14 |
+| Critical (P0/P1) | 2 |
 | Categories | 5 |
-| Unique Tags | 25 |
+| Unique Tags | 34 |
 
 ---
 
