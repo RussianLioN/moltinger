@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-09
-**Total Lessons**: 13
+**Total Lessons**: 17
 
 ---
 
@@ -11,15 +11,23 @@
 ### By Severity
 
 
-#### P1 (1 lessons)
-- [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
+#### P0 (1 lessons)
+- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P2 (3 lessons)
+#### P1 (2 lessons)
+- [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
+- [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
+
+#### P2 (6 lessons)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
+- [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
+- [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
+- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (6 lessons)
+#### P3 (7 lessons)
+- [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -34,14 +42,11 @@
 ### By Category
 
 
-#### cicd (2 lessons)
+#### cicd (3 lessons)
+- [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### cicd (2 lessons)
-- [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
-- [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
-
 #### generic (5 lessons)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -49,57 +54,14 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
+#### process (4 lessons)
+- [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
+- [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
+- [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
+- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### process (1 lessons)
-- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
-
-#### security (1 lessons)
-- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
-
-#### shell (4 lessons)
-- [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
-- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
-- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
-- [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
-
-#### shell (4 lessons)
-- [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
-- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
-- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
-- [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
-
-#### shell (4 lessons)
-- [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
-- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
-- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
-- [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
+#### security (1 lessons)
+- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
 #### shell (4 lessons)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
@@ -113,13 +75,13 @@
 - `rca` (4 lessons)
 - `ux` (3 lessons)
 - `topology-registry` (3 lessons)
+- `process` (3 lessons)
+- `github-actions` (3 lessons)
 - `git-worktree` (3 lessons)
+- `drift-detection` (3 lessons)
+- `sandbox` (2 lessons)
 - `permissions` (2 lessons)
-- `github-actions` (2 lessons)
-- `drift-detection` (2 lessons)
-- `worktree-identity` (1 lessons)
-- `token-optimization` (1 lessons)
-- `signal-noise` (1 lessons)
+- `instructions` (2 lessons)
 
 
 ---
@@ -128,10 +90,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 13 |
-| Critical (P0/P1) | 2 |
+| Total Lessons | 17 |
+| Critical (P0/P1) | 3 |
 | Categories | 5 |
-| Unique Tags | 26 |
+| Unique Tags | 40 |
 
 ---
 

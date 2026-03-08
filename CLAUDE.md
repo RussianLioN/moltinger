@@ -78,6 +78,8 @@ bd sync               # Sync with git
 
 **When using Speckit workflows**: apply `docs/rules/speckit-artifact-reconcile.md` before runtime code changes and before push.
 
+**When GitHub auth or SSH fails from Codex**: apply `docs/rules/codex-github-auth-debugging.md` before concluding the host credentials are broken.
+
 ---
 
 ## ⚠️ Pre-Work Checklist (RCA-003)
@@ -337,6 +339,10 @@ Pipeline syncs to server
 ### Secrets Management
 
 **All secrets must go through GitHub Secrets, never hardcoded or manually copied.**
+
+**Before asking user for secret/env values, first check known sources:**
+`MEMORY.md` → `SESSION_SUMMARY.md` → `docs/SECRETS-MANAGEMENT.md` → `.github/workflows/deploy.yml`.
+If found there, do not ask again. Full protocol: `docs/rules/context-discovery-before-questions.md`.
 
 See `docs/SECRETS-MANAGEMENT.md` for:
 - Allowed vs forbidden patterns

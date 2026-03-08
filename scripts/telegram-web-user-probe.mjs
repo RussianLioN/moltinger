@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_STATE = process.env.TELEGRAM_WEB_STATE || ".telegram-web-state.json";
 const DEFAULT_TARGET = process.env.TELEGRAM_WEB_TARGET || "@moltinger_bot";
@@ -16,6 +17,7 @@ const DEFAULT_MESSAGE = process.env.TELEGRAM_WEB_MESSAGE || "/status";
 const DEFAULT_TIMEOUT_SEC = Number(process.env.TELEGRAM_WEB_TIMEOUT_SECONDS || 45);
 const DEFAULT_MIN_REPLY_LEN = Number(process.env.TELEGRAM_WEB_MIN_REPLY_LEN || 2);
 const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIES || 2);
+const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
 
 function getArg(name, fallback = "") {
   const idx = process.argv.indexOf(name);
@@ -33,6 +35,7 @@ const text = getArg("--text", DEFAULT_MESSAGE);
 const timeoutSec = Number(getArg("--timeout", String(DEFAULT_TIMEOUT_SEC)));
 const minReplyLen = Number(getArg("--min-reply-len", String(DEFAULT_MIN_REPLY_LEN)));
 const composerRetries = Math.max(0, Number(getArg("--composer-retries", String(DEFAULT_COMPOSER_RETRIES))) || 0);
+const quietWindowMs = Math.max(500, Number(getArg("--quiet-window-ms", String(DEFAULT_QUIET_WINDOW_MS))) || 0);
 const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
@@ -42,6 +45,73 @@ const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 let stage = "login";
 let retriesUsed = 0;
 let chatOpenVerified = false;
+
+function normalizeMessageText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function safeMid(value) {
+  const mid = Number(value || 0);
+  return Number.isFinite(mid) ? mid : 0;
+}
+
+function normalizeProbeMessage(message) {
+  return {
+    mid: safeMid(message?.mid),
+    direction: String(message?.direction || "unknown"),
+    text: normalizeMessageText(message?.text),
+  };
+}
+
+function maxObservedMid(messages) {
+  return messages.reduce((max, message) => {
+    const mid = safeMid(message?.mid);
+    return mid > max ? mid : max;
+  }, 0);
+}
+
+export function findOutgoingProbeMessage(messages, probeText, minMidExclusive = 0) {
+  const normalizedProbeText = normalizeMessageText(probeText);
+  let latest = null;
+
+  for (const rawMessage of messages) {
+    const message = normalizeProbeMessage(rawMessage);
+    if (message.direction !== "out") continue;
+    if (message.mid <= minMidExclusive) continue;
+    if (message.text !== normalizedProbeText) continue;
+    if (!latest || message.mid > latest.mid) {
+      latest = message;
+    }
+  }
+
+  return latest;
+}
+
+export function findAttributedReply(messages, sentMid) {
+  let earliest = null;
+
+  for (const rawMessage of messages) {
+    const message = normalizeProbeMessage(rawMessage);
+    if (message.direction !== "in") continue;
+    if (message.mid <= sentMid) continue;
+    if (!message.text) continue;
+    if (!earliest || message.mid < earliest.mid) {
+      earliest = message;
+    }
+  }
+
+  return earliest;
+}
+
+function summarizeMessage(message) {
+  if (!message) return null;
+  const normalized = normalizeProbeMessage(message);
+  return {
+    mid: normalized.mid,
+    direction: normalized.direction,
+    text: normalized.text,
+  };
+}
 
 function normalizeTarget(value) {
   const normalized = (value || "").toLowerCase().trim();
@@ -61,19 +131,19 @@ function withDiagnostics(base, stats) {
   };
 }
 
-let chromium;
-try {
-  ({ chromium } = await import("playwright"));
-} catch {
-  console.log(
-    JSON.stringify({
-      ok: false,
-      status: "fail",
-      error: "Playwright is not installed",
-      hint: "npm install playwright && npx playwright install chromium",
-    })
-  );
-  process.exit(1);
+function buildCorrelationWindow(details) {
+  return {
+    strategy: "quiet_window_then_first_incoming_after_sent_mid",
+    quiet_window_ms: details.quietWindowMs,
+    quiet_window_wait_ms: details.quietWindowWaitMs,
+    baseline_max_mid: details.baselineMaxMid,
+    sent_observed_at_ms: details.sentObservedAtMs || null,
+    reply_observed_at_ms: details.replyObservedAtMs || null,
+    sent_message: summarizeMessage(details.sentMessage),
+    matched_reply: summarizeMessage(details.replyMessage),
+    latest_seen_incoming: summarizeMessage(details.latestIncoming),
+    last_pre_send_activity: details.lastPreSendActivity || null,
+  };
 }
 
 async function locateSearchInput(page) {
@@ -161,6 +231,60 @@ async function collectMessages(page) {
   return Array.isArray(messages) ? messages : [];
 }
 
+export async function waitForQuietWindowWithCollector({ collectMessagesFn, sleepFn, quietMs, maxWaitMs, baselineMaxMid }) {
+  const startedAt = Date.now();
+  let quietStartedAt = Date.now();
+  let observedBaselineMaxMid = baselineMaxMid;
+  let lastActivity = null;
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    const messages = await collectMessagesFn();
+    const newMessages = messages
+      .map(normalizeProbeMessage)
+      .filter((message) => message.mid > observedBaselineMaxMid)
+      .sort((left, right) => left.mid - right.mid);
+
+    if (newMessages.length > 0) {
+      observedBaselineMaxMid = newMessages[newMessages.length - 1].mid;
+      quietStartedAt = Date.now();
+      lastActivity = {
+        observed_max_mid: observedBaselineMaxMid,
+        messages: newMessages.slice(-5).map(summarizeMessage),
+      };
+    }
+
+    if (Date.now() - quietStartedAt >= quietMs) {
+      return {
+        ok: true,
+        quietWindowWaitMs: Date.now() - startedAt,
+        baselineMaxMid: observedBaselineMaxMid,
+        lastActivity,
+      };
+    }
+
+    await sleepFn(Math.min(1000, Math.max(250, Math.floor(quietMs / 3))));
+  }
+
+  const finalMessages = await collectMessagesFn();
+  return {
+    ok: false,
+    quietWindowWaitMs: Date.now() - startedAt,
+    baselineMaxMid: maxObservedMid(finalMessages),
+    lastActivity,
+    recentMessages: finalMessages.slice(-8).map(normalizeProbeMessage).map(summarizeMessage),
+  };
+}
+
+async function waitForQuietWindow(page, quietMs, maxWaitMs, baselineMaxMid) {
+  return waitForQuietWindowWithCollector({
+    collectMessagesFn: () => collectMessages(page),
+    sleepFn: (ms) => page.waitForTimeout(ms),
+    quietMs,
+    maxWaitMs,
+    baselineMaxMid,
+  });
+}
+
 async function findTargetChat(page, targetValue) {
   const targetParts = normalizeTarget(targetValue);
   const candidates = [
@@ -173,12 +297,12 @@ async function findTargetChat(page, targetValue) {
   let best = null;
   let bestScore = 0;
 
-  const getScore = (text) => {
-    const t = text.toLowerCase().replace(/\s+/g, " ").trim();
-    if (!t) return 0;
-    if (targetParts.raw && t.includes(targetParts.raw)) return 3;
-    if (targetParts.noAt && t.includes(`@${targetParts.noAt}`)) return 2;
-    if (targetParts.noAt && t.includes(targetParts.noAt)) return 1;
+  const getScore = (textValue) => {
+    const normalized = textValue.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!normalized) return 0;
+    if (targetParts.raw && normalized.includes(targetParts.raw)) return 3;
+    if (targetParts.noAt && normalized.includes(`@${targetParts.noAt}`)) return 2;
+    if (targetParts.noAt && normalized.includes(targetParts.noAt)) return 1;
     return 0;
   };
 
@@ -267,200 +391,323 @@ async function pageStats(page) {
     .catch(() => ({ url: "", peers: 0, chats: 0, skeletons: 0, hasSearch: false }));
 }
 
-const browser = await chromium.launch({ headless: !headed });
-if (!fs.existsSync(statePath)) {
-  console.log(
-    JSON.stringify(
-      withDiagnostics({
+async function main() {
+  let chromium;
+  try {
+    ({ chromium } = await import("playwright"));
+  } catch {
+    console.log(
+      JSON.stringify({
         ok: false,
         status: "fail",
-        error: "Telegram Web state file not found",
-        state: statePath,
-        hint: "Run: node scripts/telegram-web-user-login.mjs --state " + statePath,
+        error: "Playwright is not installed",
+        hint: "npm install playwright && npx playwright install chromium",
       })
-    )
-  );
-  await browser.close();
-  process.exit(2);
+    );
+    process.exit(1);
+  }
+
+  const browser = await chromium.launch({ headless: !headed });
+  if (!fs.existsSync(statePath)) {
+    console.log(
+      JSON.stringify(
+        withDiagnostics({
+          ok: false,
+          status: "fail",
+          error: "Telegram Web state file not found",
+          state: statePath,
+          hint: `Run: node scripts/telegram-web-user-login.mjs --state ${statePath}`,
+        })
+      )
+    );
+    await browser.close();
+    process.exit(2);
+  }
+
+  const context = await browser.newContext({ storageState: statePath });
+  const page = await context.newPage();
+
+  try {
+    await page.goto("https://web.telegram.org/k/", { waitUntil: "domcontentloaded", timeout: 60_000 });
+
+    stage = "login";
+    const ready = await waitForTelegramUi(page);
+    if (!ready.ready) {
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Telegram Web UI did not become ready in time",
+            stats: ready.stats,
+            hint: `Run: node scripts/telegram-web-user-login.mjs --state ${statePath}`,
+          })
+        )
+      );
+      process.exit(2);
+    }
+
+    stage = "search";
+    const search = await locateSearchInput(page);
+    if (!search) {
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Telegram Web is not logged in or UI not detected",
+            hint: "Run: scripts/telegram-web-user-login.mjs",
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(2);
+    }
+
+    stage = "chat_open";
+    const chatOpened = await openTargetChat(page, search, target, 2);
+    if (!chatOpened) {
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Cannot locate or open target chat in Telegram Web UI",
+            target,
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(3);
+    }
+
+    const initialMessages = await collectMessages(page);
+    const initialBaselineMaxMid = maxObservedMid(initialMessages);
+
+    stage = "quiet_window";
+    const quietWindow = await waitForQuietWindow(
+      page,
+      quietWindowMs,
+      Math.min(timeoutSec * 1000, Math.max(quietWindowMs * 4, 12_000)),
+      initialBaselineMaxMid
+    );
+
+    if (!quietWindow.ok) {
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Chat did not become quiet before probe",
+            target,
+            quiet_window_ms: quietWindowMs,
+            correlation: buildCorrelationWindow({
+              quietWindowMs,
+              quietWindowWaitMs: quietWindow.quietWindowWaitMs,
+              baselineMaxMid: quietWindow.baselineMaxMid,
+              sentObservedAtMs: null,
+              replyObservedAtMs: null,
+              sentMessage: null,
+              replyMessage: null,
+              latestIncoming: null,
+              lastPreSendActivity: quietWindow.lastActivity,
+            }),
+            recent_messages: quietWindow.recentMessages,
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(3);
+    }
+
+    const beforeMessages = await collectMessages(page);
+    const beforeMaxMid = maxObservedMid(beforeMessages);
+    const priorVerificationPrompt = beforeMessages.some(
+      (message) => message.direction === "in" && /verification code|enter the verification code/i.test(message.text)
+    );
+    const quietWindowWaitMs = quietWindow.quietWindowWaitMs;
+    const lastPreSendActivity = quietWindow.lastActivity;
+
+    stage = "composer";
+    let composer = await locateComposer(page);
+    for (let attempt = 0; !composer && attempt < composerRetries; attempt += 1) {
+      retriesUsed += 1;
+      await page.waitForTimeout(500 * (attempt + 1));
+      await openTargetChat(page, search, target, 0);
+      composer = await locateComposer(page);
+    }
+
+    if (!composer) {
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Cannot find message composer in Telegram Web UI",
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(3);
+    }
+
+    stage = "send";
+    await composer.focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(text, { delay: 20 });
+    await page.keyboard.press("Enter");
+
+    const sentObservedAtMs = Date.now();
+    let sentMessage = null;
+    const sendObservedDeadline = Date.now() + Math.min(timeoutSec * 1000, 12_000);
+    while (!sentMessage && Date.now() < sendObservedDeadline) {
+      await page.waitForTimeout(500);
+      const nowMessages = await collectMessages(page);
+      sentMessage = findOutgoingProbeMessage(nowMessages, text, beforeMaxMid);
+    }
+
+    if (!sentMessage) {
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Probe message was not observed in chat after send",
+            target,
+            sent_text: text,
+            correlation: buildCorrelationWindow({
+              quietWindowMs,
+              quietWindowWaitMs,
+              baselineMaxMid: beforeMaxMid,
+              sentObservedAtMs,
+              replyObservedAtMs: null,
+              sentMessage: null,
+              replyMessage: null,
+              latestIncoming: null,
+              lastPreSendActivity,
+            }),
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(4);
+    }
+
+    stage = "wait_reply";
+    const deadline = Date.now() + timeoutSec * 1000;
+    let replyMessage = null;
+    let latestIncoming = null;
+    let replyObservedAtMs = null;
+
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(1500);
+      const nowMessages = await collectMessages(page);
+      const incomingMessages = nowMessages
+        .map(normalizeProbeMessage)
+        .filter((message) => message.direction === "in" && message.text.length > 0)
+        .sort((left, right) => left.mid - right.mid);
+      latestIncoming = incomingMessages.length > 0 ? incomingMessages[incomingMessages.length - 1] : null;
+      replyMessage = findAttributedReply(nowMessages, sentMessage.mid);
+      if (replyMessage) {
+        replyObservedAtMs = Date.now();
+        break;
+      }
+    }
+
+    if (!replyMessage) {
+      const nowMessages = await collectMessages(page);
+      const outgoingSent = nowMessages.some(
+        (message) => message.direction === "out" && normalizeMessageText(message.text) === normalizeMessageText(text)
+      );
+      const currentLatestIncoming = nowMessages
+        .map(normalizeProbeMessage)
+        .filter((message) => message.direction === "in" && message.text.length > 0)
+        .slice(-1)[0];
+      const verificationBlocked =
+        priorVerificationPrompt ||
+        Boolean(currentLatestIncoming && /verification code|enter the verification code/i.test(currentLatestIncoming.text));
+
+      console.log(
+        JSON.stringify(
+          withDiagnostics({
+            ok: false,
+            status: "fail",
+            error: "Timeout waiting for attributed reply",
+            target,
+            sent_text: text,
+            timeout_seconds: timeoutSec,
+            outgoing_sent: outgoingSent,
+            possible_reason: verificationBlocked ? "bot_requires_verification_code" : undefined,
+            correlation: buildCorrelationWindow({
+              quietWindowMs,
+              quietWindowWaitMs,
+              baselineMaxMid: beforeMaxMid,
+              sentObservedAtMs,
+              replyObservedAtMs: null,
+              sentMessage,
+              replyMessage: null,
+              latestIncoming: currentLatestIncoming,
+              lastPreSendActivity,
+            }),
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(5);
+    }
+
+    const replyText = replyMessage.text;
+    const checks = {
+      non_empty: replyText.length > 0,
+      min_length: replyText.length >= minReplyLen,
+      error_signature_clean: !ERROR_RE.test(replyText),
+      sensitive_signature_clean: !SENSITIVE_RE.test(replyText),
+    };
+    const failures = Object.entries(checks)
+      .filter(([, ok]) => !ok)
+      .map(([name]) => name);
+
+    const ok = failures.length === 0;
+    const payload = withDiagnostics({
+      ok,
+      status: ok ? "pass" : "fail",
+      target,
+      sent_text: text,
+      sent_mid: sentMessage.mid,
+      reply_text: replyText,
+      reply_mid: replyMessage.mid,
+      correlation: buildCorrelationWindow({
+        quietWindowMs,
+        quietWindowWaitMs,
+        baselineMaxMid: beforeMaxMid,
+        sentObservedAtMs,
+        replyObservedAtMs,
+        sentMessage,
+        replyMessage,
+        latestIncoming,
+        lastPreSendActivity,
+      }),
+      checks,
+      failures,
+    });
+
+    if (debug && !payload.stats) {
+      payload.stats = await pageStats(page);
+    }
+
+    console.log(JSON.stringify(payload));
+    process.exit(ok ? 0 : 6);
+  } finally {
+    await browser.close();
+  }
 }
 
-const context = await browser.newContext({ storageState: statePath });
-const page = await context.newPage();
+function isEntrypoint() {
+  if (!process.argv[1]) return false;
+  return import.meta.url === pathToFileURL(process.argv[1]).href;
+}
 
-try {
-  await page.goto("https://web.telegram.org/k/", { waitUntil: "domcontentloaded", timeout: 60_000 });
-
-  stage = "login";
-  const ready = await waitForTelegramUi(page);
-  if (!ready.ready) {
-    console.log(
-      JSON.stringify(
-        withDiagnostics({
-          ok: false,
-          status: "fail",
-          error: "Telegram Web UI did not become ready in time",
-          stats: ready.stats,
-          hint: "Run: node scripts/telegram-web-user-login.mjs --state " + statePath,
-        })
-      )
-    );
-    process.exit(2);
-  }
-
-  stage = "search";
-  const search = await locateSearchInput(page);
-  if (!search) {
-    console.log(
-      JSON.stringify(
-        withDiagnostics({
-          ok: false,
-          status: "fail",
-          error: "Telegram Web is not logged in or UI not detected",
-          hint: "Run: scripts/telegram-web-user-login.mjs",
-          stats: await pageStats(page),
-        })
-      )
-    );
-    process.exit(2);
-  }
-
-  stage = "chat_open";
-  const chatOpened = await openTargetChat(page, search, target, 2);
-  if (!chatOpened) {
-    console.log(
-      JSON.stringify(
-        withDiagnostics({
-          ok: false,
-          status: "fail",
-          error: "Cannot locate or open target chat in Telegram Web UI",
-          target,
-          stats: await pageStats(page),
-        })
-      )
-    );
-    process.exit(3);
-  }
-
-  const beforeMessages = await collectMessages(page);
-  const beforeMaxMid = beforeMessages.reduce((max, m) => {
-    const mid = Number.isFinite(m.mid) ? m.mid : 0;
-    return mid > max ? mid : max;
-  }, 0);
-  const priorVerificationPrompt = beforeMessages.some(
-    (m) => m.direction === "in" && /verification code|enter the verification code/i.test(m.text)
-  );
-
-  stage = "composer";
-  let composer = await locateComposer(page);
-  for (let attempt = 0; !composer && attempt < composerRetries; attempt += 1) {
-    retriesUsed += 1;
-    await page.waitForTimeout(500 * (attempt + 1));
-    await openTargetChat(page, search, target, 0);
-    composer = await locateComposer(page);
-  }
-
-  if (!composer) {
-    console.log(
-      JSON.stringify(
-        withDiagnostics({
-          ok: false,
-          status: "fail",
-          error: "Cannot find message composer in Telegram Web UI",
-          stats: await pageStats(page),
-        })
-      )
-    );
-    process.exit(3);
-  }
-
-  stage = "send";
-  await composer.focus();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.type(text, { delay: 20 });
-  await page.keyboard.press("Enter");
-
-  stage = "wait_reply";
-  const deadline = Date.now() + timeoutSec * 1000;
-  let replyText = "";
-  let replyMid = 0;
-
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(1500);
-    const nowMessages = await collectMessages(page);
-    const incoming = nowMessages.filter(
-      (m) =>
-        m.direction === "in" &&
-        typeof m.text === "string" &&
-        m.text.length > 0 &&
-        (Number.isFinite(m.mid) ? m.mid > beforeMaxMid : false)
-    );
-    if (incoming.length > 0) {
-      const msg = incoming[incoming.length - 1];
-      replyText = msg.text;
-      replyMid = Number(msg.mid || 0);
-      break;
-    }
-  }
-
-  if (!replyText) {
-    const nowMessages = await collectMessages(page);
-    const outgoingSent = nowMessages.some((m) => m.direction === "out" && m.text.includes(text));
-    const latestIncoming = nowMessages
-      .filter((m) => m.direction === "in" && typeof m.text === "string" && m.text.length > 0)
-      .slice(-1)[0];
-    const verificationBlocked =
-      priorVerificationPrompt ||
-      Boolean(latestIncoming && /verification code|enter the verification code/i.test(latestIncoming.text));
-
-    console.log(
-      JSON.stringify(
-        withDiagnostics({
-          ok: false,
-          status: "fail",
-          error: "Timeout waiting for reply",
-          target,
-          sent_text: text,
-          timeout_seconds: timeoutSec,
-          outgoing_sent: outgoingSent,
-          possible_reason: verificationBlocked ? "bot_requires_verification_code" : undefined,
-          stats: await pageStats(page),
-        })
-      )
-    );
-    process.exit(4);
-  }
-
-  const checks = {
-    non_empty: replyText.length > 0,
-    min_length: replyText.length >= minReplyLen,
-    error_signature_clean: !ERROR_RE.test(replyText),
-    sensitive_signature_clean: !SENSITIVE_RE.test(replyText),
-  };
-  const failures = Object.entries(checks)
-    .filter(([, ok]) => !ok)
-    .map(([name]) => name);
-
-  const ok = failures.length === 0;
-  const payload = withDiagnostics({
-    ok,
-    status: ok ? "pass" : "fail",
-    target,
-    sent_text: text,
-    reply_text: replyText,
-    reply_mid: replyMid,
-    checks,
-    failures,
-  });
-
-  if (debug && !payload.stats) {
-    payload.stats = await pageStats(page);
-  }
-
-  console.log(
-    JSON.stringify(payload)
-  );
-  process.exit(ok ? 0 : 5);
-} finally {
-  await browser.close();
+if (isEntrypoint()) {
+  await main();
 }

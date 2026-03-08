@@ -17,8 +17,8 @@ docker-compose.yml:    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v1.7.0
 docker-compose.prod.yml:    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v1.7.0}
 
 Watchtower version:
-docker-compose.yml:    image: containrrr/watchtower:v1.7.1
-docker-compose.prod.yml:    image: containrrr/watchtower:v1.7.1
+docker-compose.yml:    image: containrrr/watchtower:1.7.1
+docker-compose.prod.yml:    image: containrrr/watchtower:1.7.1
 ```
 
 ## Updating Moltis Version

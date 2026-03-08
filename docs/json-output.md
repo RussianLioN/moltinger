@@ -312,7 +312,7 @@ All JSON responses follow a consistent structure:
     {
       "name": "secrets_exist",
       "status": "pass",
-      "message": "All 5 secrets found",
+      "message": "All 4 required secrets found",
       "severity": "error"
     },
     {
@@ -330,7 +330,7 @@ All JSON responses follow a consistent structure:
     {
       "name": "network_exists",
       "status": "pass",
-      "message": "Network ainetic_net exists",
+      "message": "Network traefik-net exists",
       "severity": "error"
     },
     {

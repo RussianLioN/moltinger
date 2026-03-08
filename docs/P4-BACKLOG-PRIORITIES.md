@@ -53,6 +53,7 @@
 
 > **Source**: Ветка `003-testing-infrastructure` (1 неслитый коммит), spec `specs/003-testing-infrastructure/`
 > **Context**: Тесты написаны, но НЕ интегрированы в CI/CD и имеют баги
+> **Historical note**: Ниже перечислены pre-lane пути (`tests/unit`, `tests/integration`, `tests/security`, `tests/e2e`). Canonical test model теперь описан в `tests/README.md` и `specs/001-docker-deploy-improvements/contracts/test-lanes.md`.
 
 ### Current State
 

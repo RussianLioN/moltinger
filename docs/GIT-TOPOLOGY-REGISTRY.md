@@ -60,7 +60,6 @@
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/gitops-metrics-fix` | Active replacement PR #18. |
-| `origin/codex/gpt54-agents-split` | Needs decision |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/gpt-5-moltis` | Active feature branch. |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
