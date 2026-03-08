@@ -81,6 +81,21 @@ Exit contract:
 
 Все suites, требующие hermetic stack, поднимаются через `./tests/run.sh`; не вызывайте `docker compose -f compose.test.yml` напрямую как новый public interface.
 
+## Runtime Policy
+
+Разрешено:
+
+- PR/main CI: только hermetic blocking lanes.
+- Remote smoke/UAT: только для ответа на вопрос, работает ли удалённый сервис сейчас.
+- Hermetic fixture: для ответа на вопрос, корректен ли refactor, branch или test contract.
+- `resilience` и другие destructive проверки: только на isolated remote target.
+
+Запрещено:
+
+- считать hermetic local result доказательством того, что shared remote service работает сейчас;
+- считать remote smoke/UAT главным доказательством корректности ветки или refactor;
+- запускать `resilience` или другие destructive проверки на shared production.
+
 ## Live Mode
 
 Blocking lanes не должны неявно читать `/opt/moltinger/.env`.

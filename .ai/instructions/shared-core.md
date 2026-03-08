@@ -32,6 +32,19 @@ Before launching local containers, local port-forwards, or a local app replica, 
 - If the task targets a remote service, do not spin up a local replacement unless the user explicitly asked for local reproduction.
 - If the task targets a local fixture stack, say so and use the hermetic local runtime intentionally.
 
+### Test Target Policy (Mandatory)
+
+Allowed:
+- PR/main CI may use only hermetic blocking lanes and local fixture stacks.
+- Remote smoke/UAT may be used only to answer whether the remote service works now.
+- Hermetic fixtures may be used to answer whether a branch, refactor, or test contract is correct.
+- Resilience or destructive checks may run only against an isolated remote target.
+
+Forbidden:
+- Do not treat hermetic local results as proof that the shared remote service works now.
+- Do not treat remote smoke/UAT as the primary proof that a branch or refactor is correct.
+- Do not run resilience or destructive checks against shared production.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
