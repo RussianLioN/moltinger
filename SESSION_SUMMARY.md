@@ -149,21 +149,30 @@ GitOps Compliance: Enforced ✅
 - `./tests/run_e2e.sh --filter git_topology_registry_workflow`
 - `./scripts/setup-git-hooks.sh`
 - `./scripts/git-topology-registry.sh check`
+- Manual smoke-test:
+  - created issue `moltinger-jb6` for GPT-5.4 primary provider-chain evaluation
+  - created sibling worktree `/Users/rl/coding/moltinger-jb6-gpt54-primary`
+  - confirmed `doctor --prune` writes a recovery draft after raw topology change
+  - confirmed `pre-push` blocks stale topology before publishing a new parallel branch
+  - promoted the new branch/worktree from `needs-decision` to reviewed `active` intent in the sidecar
 
 #### Handoff
 
 - Active branch: `006-git-topology-registry`
 - Authoritative worktree: `/Users/rl/coding/moltinger-006-git-topology-registry`
+- Parallel task worktree for field test: `/Users/rl/coding/moltinger-jb6-gpt54-primary`
 - Primary operator docs:
   - `specs/006-git-topology-registry/quickstart.md`
   - `docs/GIT-TOPOLOGY-REGISTRY.md`
   - `docs/reports/consilium/2026-03-08-git-topology-registry-automation.md`
+  - `docs/QUICK-REFERENCE.md`
 
 #### Next Step
 
 1. Open/update PR for `006-git-topology-registry`
 2. Review merge diff around hooks and command wiring
 3. Merge after final human review of generated registry and sidecar intent
+4. Backlog follow-up: `moltinger-k89` — reusable installer skill for arbitrary repositories (P4 / nice-to-have)
 
 ---
 

@@ -60,6 +60,10 @@ records:
     intent: active
     note: Active documentation and research branch; dedicated worktree exists.
   - subject_type: branch
+    subject_key: feat/moltinger-jb6-gpt54-primary
+    intent: active
+    note: Active parallel task branch for GPT-5.4 primary provider-chain evaluation.
+  - subject_type: branch
     subject_key: main
     intent: active
     note: Canonical source of truth; checked out in the primary root worktree.
@@ -132,6 +136,10 @@ records:
     subject_key: gpt-5-moltis
     intent: active
     note: Active research and documentation worktree.
+  - subject_type: worktree
+    subject_key: moltinger-jb6-gpt54-primary
+    intent: active
+    note: Active sibling worktree for the GPT-5.4 primary provider-chain task.
   - subject_type: worktree
     subject_key: parallel-feature-005
     intent: active
