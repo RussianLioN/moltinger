@@ -38,7 +38,7 @@
 **Purpose**: Create the helper entrypoint and validation artifacts used by all stories.
 
 - [x] T001 [EXECUTOR: worker] [SEQUENTIAL] Create `scripts/worktree-ready.sh` with CLI usage, mode dispatch, and shell safety guards → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
-- [ ] T002 [EXECUTOR: MAIN] [PARALLEL-GROUP-SETUP] Create `specs/005-worktree-ready-flow/validation.md` as the implementation validation log for quickstart scenarios
+- [x] T002 [EXECUTOR: MAIN] [PARALLEL-GROUP-SETUP] Create `specs/005-worktree-ready-flow/validation.md` as the implementation validation log for quickstart scenarios → Artifacts: [validation.md](./validation.md)
 - [ ] T003 [P] [EXECUTOR: worker] [PARALLEL-GROUP-SETUP] Add a helper invocation placeholder and updated quick-usage skeleton to `.claude/commands/worktree.md`
 
 ---
