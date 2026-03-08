@@ -1,6 +1,6 @@
 # Telegram Web User Monitor Bug Hunting Report
 
-Date: 2026-03-07  
+Date: 2026-03-07
 Workflow: `health-bugs` (adapted: detection via E2E + infra/runtime checks)
 
 ## Detection Baseline
