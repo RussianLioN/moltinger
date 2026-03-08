@@ -627,6 +627,66 @@ apply_guard_probe_to_report() {
   fi
 }
 
+target_path_exists() {
+  [[ -n "${target_path}" && -d "${target_path}" ]]
+}
+
+set_readiness_status() {
+  report_env_state="unknown"
+
+  if [[ "${report_guard_state}" == "drift" ]]; then
+    report_status="drift_detected"
+    return 0
+  fi
+
+  if target_path_exists; then
+    if [[ "${report_beads_state}" == "missing" && -n "${discovered_worktree_path}" ]]; then
+      report_status="action_required"
+      add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
+      return 0
+    fi
+
+    report_status="created"
+    return 0
+  fi
+
+  report_status="action_required"
+}
+
+set_readiness_next_steps() {
+  local mode_name="$1"
+
+  case "${report_status}" in
+    drift_detected)
+      if [[ "${report_worktree_path}" != "n/a" ]]; then
+        add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      fi
+      add_next_step "./scripts/git-session-guard.sh --refresh"
+      ;;
+    created)
+      add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      add_next_step "direnv allow # if prompted"
+      add_next_step "codex"
+      ;;
+    action_required)
+      case "${mode_name}" in
+        create|attach)
+          add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
+          ;;
+        doctor|handoff)
+          if [[ "${report_worktree_path}" != "n/a" ]]; then
+            add_next_step "cd $(shell_quote "${report_worktree_path}")"
+          fi
+          add_next_step "Inspect the target and retry once prerequisites are fixed"
+          ;;
+        *)
+          add_next_step "Inspect the target inputs and retry the command"
+          ;;
+      esac
+      ;;
+  esac
+}
+
 add_next_step() {
   local step_text="$1"
 
@@ -716,26 +776,16 @@ render_mode_placeholder() {
   local mode_name="$1"
 
   prepare_report_target
-  add_warning "Mode '${mode_name}' is still using placeholder readiness values until T007 is implemented."
+  set_readiness_status
+  set_readiness_next_steps "${mode_name}"
 
-  case "${mode_name}" in
-    create|attach)
-      report_status="action_required"
-      add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
-      ;;
-    doctor)
-      report_status="action_required"
-      add_next_step "Re-run doctor after final readiness mapping lands in T007"
-      ;;
-    handoff)
-      report_status="action_required"
-      add_next_step "Use manual handoff until T017-T018 implement terminal or Codex launch support"
-      ;;
-    *)
-      report_status="action_required"
-      add_next_step "Complete the remaining implementation tasks for ${mode_name}"
-      ;;
-  esac
+  if [[ "${report_env_state}" == "unknown" ]]; then
+    add_warning "Environment readiness has not been probed yet."
+  fi
+
+  if [[ "${mode_name}" == "handoff" && "${handoff_profile}" != "manual" ]]; then
+    add_warning "Automated terminal or Codex handoff is not implemented until T017-T018."
+  fi
 
   render_readiness_report
 }
