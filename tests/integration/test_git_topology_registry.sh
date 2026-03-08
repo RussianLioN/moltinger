@@ -166,6 +166,43 @@ test_check_is_observer_independent_across_sibling_worktrees() {
     test_pass
 }
 
+test_lock_timeout_reports_owner_diagnostics() {
+    test_start "git_topology_registry_lock_timeout_reports_owner_diagnostics"
+
+    local fixture_root repo_dir output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+
+    mkdir -p "$repo_dir/.git/topology-registry/lock"
+    cat > "$repo_dir/.git/topology-registry/lock/owner.env" <<'EOF'
+pid=999999
+ppid=1
+action=refresh
+branch=uat/006-git-topology-registry
+cwd=/tmp/fake-lock-owner
+git_root=/tmp/fake-repo
+host=unknown
+started_at=2026-03-09T00:00:00Z
+EOF
+
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        GIT_TOPOLOGY_REGISTRY_LOCK_WAIT_ATTEMPTS=1 "$REGISTRY_SCRIPT" refresh --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "1" "$rc" "Refresh should fail fast when the topology lock is already held"
+    assert_contains "$output" 'Lock owner action: refresh' "Timeout diagnostics should report the owner action"
+    assert_contains "$output" 'Lock owner branch: uat/006-git-topology-registry' "Timeout diagnostics should report the owner branch"
+    assert_contains "$output" 'Lock owner cwd: /tmp/fake-lock-owner' "Timeout diagnostics should report the owner worktree path"
+    assert_contains "$output" 'stale lock is likely' "Timeout diagnostics should distinguish a dead owner from an active sibling process"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -187,6 +224,7 @@ run_all_tests() {
     test_refresh_is_noop_when_topology_is_unchanged
     test_orphan_intent_and_default_needs_decision_are_rendered
     test_check_is_observer_independent_across_sibling_worktrees
+    test_lock_timeout_reports_owner_diagnostics
 
     generate_report
 }

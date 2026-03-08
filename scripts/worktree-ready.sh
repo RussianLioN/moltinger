@@ -997,13 +997,18 @@ discover_environment_state() {
   exit_code=$?
   set -e
 
-  if [[ "${exit_code}" -eq 0 ]]; then
-    environment_state="approved_or_not_required"
+  if [[ "${output}" == *"is blocked. Run \`direnv allow\` to approve its content"* ]]; then
+    environment_state="approval_needed"
     return 0
   fi
 
-  if [[ "${output}" == *"is blocked. Run `direnv allow` to approve its content"* ]]; then
+  if [[ "${output}" == *"/direnv/allow/"* && ( "${output}" == *"operation not permitted"* || "${output}" == *"permission denied"* ) ]]; then
     environment_state="approval_needed"
+    return 0
+  fi
+
+  if [[ "${exit_code}" -eq 0 ]]; then
+    environment_state="approved_or_not_required"
     return 0
   fi
 

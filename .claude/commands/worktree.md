@@ -160,6 +160,11 @@ Process:
    - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex>`
 14. Return the helper status block.
 
+Handoff default:
+- Default to `manual`.
+- Do not choose `--handoff codex` or `--handoff terminal` just because the user is already inside Codex or Terminal.
+- Only select `terminal` or `codex` handoff when the user explicitly asks to open a terminal, launch Codex, or continue immediately in the new worktree.
+
 Rules for ambiguity:
 - Do not ask the user to restate the whole request.
 - Do not ask about branch naming if the helper already produced a safe default.

@@ -40,6 +40,28 @@ run_worktree_plan() {
     PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" plan --repo "$repo_dir" "$@"
 }
 
+create_fake_direnv_permission_denied_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/direnv-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/direnv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "export" && "${2:-}" == "json" ]]; then
+  printf 'direnv: error open /Users/test/.local/share/direnv/allow/demo: operation not permitted\n' >&2
+  exit 1
+fi
+
+printf 'unsupported fake direnv invocation\n' >&2
+exit 1
+EOF
+    chmod +x "${fake_bin}/direnv"
+
+    printf '%s\n' "${fake_bin}"
+}
+
 test_plan_creates_clean_slug_without_issue() {
     test_start "worktree_ready_plan_creates_clean_slug_without_issue"
 
@@ -132,6 +154,30 @@ test_plan_asks_once_when_similar_branch_exists() {
     test_pass
 }
 
+test_create_treats_direnv_permission_denied_as_needs_env_approval() {
+    test_start "worktree_ready_create_treats_direnv_permission_denied_as_needs_env_approval"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-remote-uat-hardening"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/remote-uat-hardening --path "$probe_dir"
+    )"
+
+    assert_contains "$output" 'Status: needs_env_approval' "Permission-denied direnv probe should still guide the user through env approval"
+    assert_contains "$output" 'direnv allow' "Permission-denied direnv probe should suggest the safe recovery step"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -154,6 +200,7 @@ run_all_tests() {
     test_plan_reuses_existing_attached_worktree
     test_plan_attaches_existing_local_branch
     test_plan_asks_once_when_similar_branch_exists
+    test_create_treats_direnv_permission_denied_as_needs_env_approval
     generate_report
 }
 

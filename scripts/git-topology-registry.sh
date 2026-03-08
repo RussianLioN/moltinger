@@ -69,6 +69,7 @@ state_file="${state_dir}/health.env"
 draft_file="${state_dir}/registry.draft.md"
 backup_dir="${state_dir}/backups"
 lock_dir="${state_dir}/lock"
+lock_owner_file="${lock_dir}/owner.env"
 lock_wait_attempts="${GIT_TOPOLOGY_REGISTRY_LOCK_WAIT_ATTEMPTS:-150}"
 intent_file="${git_root}/docs/GIT-TOPOLOGY-INTENT.yaml"
 registry_doc="${git_root}/docs/GIT-TOPOLOGY-REGISTRY.md"
@@ -87,6 +88,7 @@ expected_doc_file=""
 
 cleanup() {
   if [[ "${lock_held}" == "true" ]]; then
+    rm -f "${lock_owner_file}" 2>/dev/null || true
     rmdir "${lock_dir}" 2>/dev/null || true
     lock_held=false
   fi
@@ -129,6 +131,70 @@ ensure_state_dir() {
   mkdir -p "${state_dir}"
 }
 
+write_lock_metadata() {
+  local host_name=""
+
+  host_name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
+
+  cat > "${lock_owner_file}" <<EOF
+pid=$$
+ppid=${PPID:-unknown}
+action=${action}
+branch=${current_branch:-detached}
+cwd=${PWD}
+git_root=${git_root}
+host=${host_name}
+started_at=$(now_utc)
+EOF
+}
+
+lock_owner_value() {
+  local key="$1"
+
+  if [[ ! -f "${lock_owner_file}" ]]; then
+    return 1
+  fi
+
+  awk -F= -v key="${key}" '$1 == key { sub($1 FS, ""); print; exit }' "${lock_owner_file}"
+}
+
+print_lock_diagnostics() {
+  local owner_pid=""
+  local owner_branch=""
+  local owner_cwd=""
+  local owner_action=""
+  local owner_host=""
+  local owner_started_at=""
+
+  if [[ ! -f "${lock_owner_file}" ]]; then
+    echo "[git-topology-registry] Lock owner metadata is unavailable." >&2
+    return 0
+  fi
+
+  owner_pid="$(lock_owner_value pid || true)"
+  owner_branch="$(lock_owner_value branch || true)"
+  owner_cwd="$(lock_owner_value cwd || true)"
+  owner_action="$(lock_owner_value action || true)"
+  owner_host="$(lock_owner_value host || true)"
+  owner_started_at="$(lock_owner_value started_at || true)"
+
+  [[ -n "${owner_pid}" ]] && echo "[git-topology-registry] Lock owner pid: ${owner_pid}" >&2
+  [[ -n "${owner_action}" ]] && echo "[git-topology-registry] Lock owner action: ${owner_action}" >&2
+  [[ -n "${owner_branch}" ]] && echo "[git-topology-registry] Lock owner branch: ${owner_branch}" >&2
+  [[ -n "${owner_cwd}" ]] && echo "[git-topology-registry] Lock owner cwd: ${owner_cwd}" >&2
+  [[ -n "${owner_host}" ]] && echo "[git-topology-registry] Lock owner host: ${owner_host}" >&2
+  [[ -n "${owner_started_at}" ]] && echo "[git-topology-registry] Lock owner started_at: ${owner_started_at}" >&2
+
+  if [[ -n "${owner_pid}" && ( -z "${owner_host}" || "${owner_host}" == "unknown" || "${owner_host}" == "$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')" ) ]]; then
+    if kill -0 "${owner_pid}" 2>/dev/null; then
+      echo "[git-topology-registry] Lock owner process is still alive." >&2
+    else
+      echo "[git-topology-registry] Lock owner pid is not running; stale lock is likely." >&2
+      echo "[git-topology-registry] After verifying no sibling refresh/doctor is active, remove: ${lock_dir}" >&2
+    fi
+  fi
+}
+
 acquire_lock() {
   local attempts=0
   ensure_state_dir
@@ -138,12 +204,14 @@ acquire_lock() {
     if [[ "${attempts}" -ge "${lock_wait_attempts}" ]]; then
       echo "[git-topology-registry] Timed out waiting for lock: ${lock_dir}" >&2
       echo "[git-topology-registry] Another refresh/doctor operation may still be running in a sibling worktree." >&2
+      print_lock_diagnostics
       exit 1
     fi
     sleep 0.1
   done
 
   lock_held=true
+  write_lock_metadata
 }
 
 hash_file() {
