@@ -203,7 +203,7 @@ host = "0.0.0.0"           # Listen address
 
 [agent]
 name = "Moltis"             # Agent display name
-model = "gpt-5.2-codex"     # Default model
+model = "gpt-5.4"     # Default model
 timeout = 600               # Agent run timeout (seconds)
 max_iterations = 25          # Max tool call iterations per run
 ```
@@ -214,9 +214,9 @@ max_iterations = 25          # Max tool call iterations per run
 
 ```toml
 [providers]
-default = "openai-codex"     # Default provider
+default = "openai"     # Default provider
 
-[providers.openai-codex]
+[providers.openai]
 enabled = true
 
 [providers.github-copilot]
@@ -228,7 +228,7 @@ model = "qwen2.5-coder-7b-q4_k_m"
 ```
 
 **Available Providers**:
-- **OpenAI Codex** - OAuth-based, Codex-focused cloud models
+- **OpenAI** - API-based, frontier GPT models
 - **GitHub Copilot** - OAuth-based, requires active Copilot subscription
 - **Local LLM** - Runs models on your machine
 
@@ -392,12 +392,12 @@ host = "0.0.0.0"
 
 [agent]
 name = "Atlas"
-model = "gpt-5.2-codex"
+model = "gpt-5.4"
 timeout = 600
 max_iterations = 25
 
 [providers]
-default = "openai-codex"
+default = "openai"
 
 [tools.exec.sandbox]
 enabled = true

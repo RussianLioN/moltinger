@@ -62,6 +62,8 @@ bd sync               # Sync with git
 
 **When using Speckit workflows**: apply `docs/rules/speckit-artifact-reconcile.md` before runtime code changes and before push.
 
+**When GitHub auth or SSH fails from Codex**: apply `docs/rules/codex-github-auth-debugging.md` before concluding the host credentials are broken.
+
 ---
 
 ## ⚠️ Pre-Work Checklist (RCA-003)

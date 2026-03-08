@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-08
-**Total Lessons**: 13
+**Generated**: 2026-03-09
+**Total Lessons**: 14
 
 ---
 
@@ -23,7 +23,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (6 lessons)
+#### P3 (7 lessons)
+- [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -50,8 +51,9 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (3 lessons)
+#### process (4 lessons)
 - [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
+- [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
@@ -72,8 +74,8 @@
 - `deploy` (2 lessons)
 - `token-optimization` (1 lessons)
 - `telegram` (1 lessons)
+- `ssh` (1 lessons)
 - `signal-noise` (1 lessons)
-- `shell` (1 lessons)
 
 
 ---
@@ -82,10 +84,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 13 |
+| Total Lessons | 14 |
 | Critical (P0/P1) | 2 |
 | Categories | 5 |
-| Unique Tags | 28 |
+| Unique Tags | 34 |
 
 ---
 

@@ -106,7 +106,7 @@ offered = [
 # All available providers:
 #   "anthropic", "openai", "gemini", "groq", "xai", "deepseek",
 #   "mistral", "openrouter", "cerebras", "minimax", "moonshot",
-#   "venice", "ollama", "local-llm", "openai-codex", "github-copilot",
+#   "venice", "ollama", "local-llm", "github-copilot",
 #   "kimi-code"
 
 # ── Anthropic (Claude) ────────────────────────────────────────
@@ -188,8 +188,8 @@ alias = "groq"
 message_queue_mode = "followup"   # How to handle messages during an active agent run:
                                   #   "followup" - Queue messages, replay one-by-one after run
                                   #   "collect"  - Buffer messages, concatenate as single message
-# priority_models = ["claude-opus-4-5", "gpt-5.2", "gemini-3-flash"]  # Optional: models to pin first in selectors
-# allowed_models = ["opus", "gpt 5.2", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
+# priority_models = ["claude-opus-4-5", "gpt-5.4", "gemini-3-flash"]  # Optional: models to pin first in selectors
+# allowed_models = ["opus", "gpt 5.4", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
 # Z.ai models + Ollama fallback + Gemini fallback for rate limit resilience
 allowed_models = [
     "zai::glm-5", "zai::glm-4.7", "zai::glm-4.5-air",  # Primary: Z.ai GLM

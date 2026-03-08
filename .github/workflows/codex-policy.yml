@@ -1,0 +1,67 @@
+name: codex-policy
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - '.ai/**'
+      - '.beads/AGENTS.md'
+      - '.claude/**'
+      - '.github/workflows/codex-policy.yml'
+      - '.specify/**'
+      - 'Makefile'
+      - 'config/AGENTS.md'
+      - 'docs/AGENTS.md'
+      - 'docs/CODEX-OPERATING-MODEL.md'
+      - 'docs/GIT-TOPOLOGY-REGISTRY.md'
+      - 'docs/plans/codex-rollout-rollback.md'
+      - 'knowledge/AGENTS.md'
+      - 'scripts/AGENTS.md'
+      - 'scripts/codex-check.sh'
+      - 'scripts/codex-profile-launch.sh'
+      - 'scripts/manifest.json'
+      - 'scripts/sync-agent-instructions.sh'
+      - 'scripts/sync-claude-skills-to-codex.sh'
+      - 'specs/AGENTS.md'
+      - 'tests/AGENTS.md'
+  push:
+    branches:
+      - main
+      - 'codex/**'
+      - 'docs/**'
+    paths:
+      - 'AGENTS.md'
+      - '.ai/**'
+      - '.beads/AGENTS.md'
+      - '.claude/**'
+      - '.github/workflows/codex-policy.yml'
+      - '.specify/**'
+      - 'Makefile'
+      - 'config/AGENTS.md'
+      - 'docs/AGENTS.md'
+      - 'docs/CODEX-OPERATING-MODEL.md'
+      - 'docs/GIT-TOPOLOGY-REGISTRY.md'
+      - 'docs/plans/codex-rollout-rollback.md'
+      - 'knowledge/AGENTS.md'
+      - 'scripts/AGENTS.md'
+      - 'scripts/codex-check.sh'
+      - 'scripts/codex-profile-launch.sh'
+      - 'scripts/manifest.json'
+      - 'scripts/sync-agent-instructions.sh'
+      - 'scripts/sync-claude-skills-to-codex.sh'
+      - 'specs/AGENTS.md'
+      - 'tests/AGENTS.md'
+
+permissions:
+  contents: read
+
+jobs:
+  codex-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run Codex governance checks
+        shell: bash
+        run: make codex-check-ci
