@@ -697,16 +697,15 @@ apply_discovery_to_report() {
   fi
 
   if [[ -n "${discovered_worktree_path}" && -n "${target_path}" && "${discovered_worktree_path}" != "${target_path}" ]]; then
-    if [[ "${branch_resolution_state}" == "resolved" ]]; then
+    if [[ "${mode}" == "doctor" && "${path_preview}" != "${target_path}" ]]; then
+      :
+    elif [[ "${branch_resolution_state}" == "resolved" ]]; then
       add_warning "Branch '${report_branch_name}' is already attached at ${discovered_worktree_path}"
     else
       add_warning "Discovery found an existing worktree at ${discovered_worktree_path}"
     fi
   fi
 
-  if [[ -n "${discovered_redirect_target}" ]]; then
-    add_warning "Discovery found beads redirect metadata for the target worktree"
-  fi
 }
 
 apply_guard_probe_to_report() {
@@ -734,6 +733,8 @@ apply_environment_probe_to_report() {
 
   if [[ "${environment_state}" == "approval_needed" ]]; then
     add_warning "Environment approval is required before launching the session."
+  elif [[ "${environment_state}" == "unknown" && -n "${environment_probe_path}" ]]; then
+    add_warning "Environment readiness could not be confirmed automatically for the target."
   fi
 }
 
@@ -778,6 +779,46 @@ set_readiness_status() {
   fi
 
   report_status="action_required"
+}
+
+set_doctor_status() {
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if ! report_worktree_path_exists; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "drift" ]]; then
+    report_status="drift_detected"
+    return 0
+  fi
+
+  if [[ "${report_beads_state}" == "missing" ]]; then
+    report_status="action_required"
+    add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "missing" ]]; then
+    report_status="action_required"
+    return 0
+  fi
+
+  case "${report_env_state}" in
+    approval_needed)
+      report_status="needs_env_approval"
+      ;;
+    approved_or_not_required|no_envrc)
+      report_status="ready_for_codex"
+      ;;
+    *)
+      report_status="created"
+      ;;
+  esac
 }
 
 set_readiness_next_steps() {
@@ -834,6 +875,71 @@ set_readiness_next_steps() {
           add_next_step "Inspect the target inputs and retry the command"
           ;;
       esac
+      ;;
+  esac
+}
+
+set_doctor_next_steps() {
+  local worktree_target=""
+  local refspec=""
+
+  worktree_target="${report_worktree_path}"
+
+  if [[ "${report_requested_handoff_mode}" != "manual" ]]; then
+    add_warning "Doctor mode ignores automatic handoff requests and returns diagnostics only."
+  fi
+
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    refspec="${branch}:${branch}"
+    add_next_step "git fetch origin $(shell_quote "${refspec}")"
+    return 0
+  fi
+
+  if ! report_worktree_path_exists; then
+    if [[ -n "${branch}" ]]; then
+      add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
+    elif [[ -n "${target_path}" ]]; then
+      add_next_step "bd worktree list"
+    else
+      add_next_step "Inspect the current repository context and retry doctor with --branch or --path"
+    fi
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "drift" || "${report_guard_state}" == "missing" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
+  fi
+
+  if [[ "${report_beads_state}" == "missing" ]]; then
+    add_next_step "bd worktree list"
+  fi
+
+  case "${report_env_state}" in
+    approval_needed)
+      add_next_step "cd $(shell_quote "${worktree_target}") && direnv allow"
+      ;;
+    unknown)
+      if [[ -f "${worktree_target}/.envrc" ]]; then
+        add_next_step "cd $(shell_quote "${worktree_target}") && direnv status"
+      fi
+      ;;
+  esac
+
+  if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
+    return 0
+  fi
+
+  case "${report_status}" in
+    ready_for_codex)
+      add_next_step "cd $(shell_quote "${worktree_target}") && codex"
+      ;;
+    created)
+      add_next_step "cd $(shell_quote "${worktree_target}")"
+      add_next_step "Run the reported prerequisite checks and then launch codex"
+      ;;
+    *)
+      add_next_step "cd $(shell_quote "${worktree_target}")"
+      add_next_step "Inspect the reported warnings and retry doctor once they are fixed"
       ;;
   esac
 }
@@ -1083,6 +1189,14 @@ render_mode_placeholder() {
   render_readiness_report
 }
 
+render_doctor_report() {
+  prepare_report_target
+  set_doctor_status
+  report_handoff_mode="manual"
+  set_doctor_next_steps
+  render_readiness_report
+}
+
 prepare_create_context() {
   require_git_repo
   branch_resolution_state="not_required"
@@ -1194,7 +1308,7 @@ handle_attach() {
 
 handle_doctor() {
   prepare_doctor_context
-  render_mode_placeholder "doctor"
+  render_doctor_report
 }
 
 handle_handoff() {

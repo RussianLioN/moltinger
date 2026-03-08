@@ -117,7 +117,7 @@
 
 ### Implementation for User Story 4
 
-- [ ] T020 [US4] [EXECUTOR: worker] [SEQUENTIAL] Implement `doctor` mode with branch, beads, guard, and environment checks in `scripts/worktree-ready.sh`
+- [x] T020 [US4] [EXECUTOR: worker] [SEQUENTIAL] Implement `doctor` mode with branch, beads, guard, and environment checks in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
 - [x] T021 [US4] [EXECUTOR: worker] [SEQUENTIAL] Route `/worktree doctor` and related diagnostics in `.claude/commands/worktree.md` → Artifacts: [worktree.md](../../.claude/commands/worktree.md)
 - [x] T022 [US4] [EXECUTOR: worker] [SEQUENTIAL] Add occupied-branch and recovery-guidance examples to `.claude/commands/worktree.md` → Artifacts: [worktree.md](../../.claude/commands/worktree.md)
 
