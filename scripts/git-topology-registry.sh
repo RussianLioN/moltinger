@@ -11,7 +11,7 @@ Usage:
 
 Description:
   Owner script for the sanitized git topology registry and reviewed intent sidecar.
-  Phase 1 provides the command skeleton and shared path discovery only.
+  Live git topology is the source of truth; the intent sidecar adds reviewed notes and lifecycle intent.
 EOF
 }
 
@@ -62,58 +62,960 @@ if [[ -z "${git_root}" ]]; then
 fi
 
 git_common_dir="$(git rev-parse --git-common-dir)"
+canonical_root="$(cd "${git_common_dir}" && cd .. && pwd -P)"
+current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
 state_dir="${git_common_dir}/topology-registry"
 state_file="${state_dir}/health.env"
+lock_dir="${state_dir}/lock"
 intent_file="${git_root}/docs/GIT-TOPOLOGY-INTENT.yaml"
 registry_doc="${git_root}/docs/GIT-TOPOLOGY-REGISTRY.md"
+tmp_dir=""
+lock_held=false
+default_missing_intent="needs-decision"
 
-print_context() {
-  echo "repo_root=${git_root}"
-  echo "git_common_dir=${git_common_dir}"
-  echo "intent_file=${intent_file}"
-  echo "registry_doc=${registry_doc}"
-  echo "state_file=${state_file}"
+intent_records_file=""
+seen_subjects_file=""
+worktrees_file=""
+worktree_branches_file=""
+local_branches_file=""
+remote_branches_file=""
+expected_doc_file=""
+
+cleanup() {
+  if [[ "${lock_held}" == "true" ]]; then
+    rmdir "${lock_dir}" 2>/dev/null || true
+    lock_held=false
+  fi
+  if [[ -n "${tmp_dir}" && -d "${tmp_dir}" ]]; then
+    rm -rf "${tmp_dir}"
+  fi
+}
+
+trap cleanup EXIT
+
+now_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+ensure_tmp_dir() {
+  if [[ -n "${tmp_dir}" && -d "${tmp_dir}" ]]; then
+    return
+  fi
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/git-topology-registry.XXXXXX")"
+  intent_records_file="${tmp_dir}/intent-records.tsv"
+  seen_subjects_file="${tmp_dir}/seen-subjects.tsv"
+  worktrees_file="${tmp_dir}/worktrees.tsv"
+  worktree_branches_file="${tmp_dir}/worktree-branches.txt"
+  local_branches_file="${tmp_dir}/local-branches.tsv"
+  remote_branches_file="${tmp_dir}/remote-branches.tsv"
+  expected_doc_file="${tmp_dir}/registry.md"
+
+  : > "${intent_records_file}"
+  : > "${seen_subjects_file}"
+  : > "${worktrees_file}"
+  : > "${worktree_branches_file}"
+  : > "${local_branches_file}"
+  : > "${remote_branches_file}"
 }
 
 ensure_state_dir() {
   mkdir -p "${state_dir}"
 }
 
-not_implemented() {
-  local feature="$1"
-  echo "[git-topology-registry] ${feature} is not implemented yet." >&2
-  echo "[git-topology-registry] Phase 1 skeleton only; finish T006-T010 next." >&2
-  exit 3
+acquire_lock() {
+  local attempts=0
+  ensure_state_dir
+
+  while ! mkdir "${lock_dir}" 2>/dev/null; do
+    attempts=$((attempts + 1))
+    if [[ "${attempts}" -ge 50 ]]; then
+      echo "[git-topology-registry] Timed out waiting for lock: ${lock_dir}" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+
+  lock_held=true
+}
+
+hash_file() {
+  local target="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "${target}" | awk '{print $1}'
+  else
+    shasum -a 256 "${target}" | awk '{print $1}'
+  fi
+}
+
+trim_leading_spaces() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  printf '%s\n' "${value}"
+}
+
+normalize_scalar() {
+  local value="$1"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
+  printf '%s\n' "${value}"
+}
+
+slugify() {
+  local value="$1"
+  printf '%s' "${value}" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's|/|-|g; s|[^a-z0-9._-]+|-|g; s|-+|-|g; s|^-||; s|-$||'
+}
+
+escape_md_cell() {
+  local value="$1"
+  value="${value//$'\n'/ }"
+  value="${value//|/\\|}"
+  printf '%s\n' "${value}"
+}
+
+note_or_default() {
+  local note="$1"
+  local fallback="$2"
+  if [[ -n "${note}" ]]; then
+    printf '%s\n' "${note}"
+  else
+    printf '%s\n' "${fallback}"
+  fi
+}
+
+parse_intent_sidecar() {
+  local current_type=""
+  local current_key=""
+  local current_intent=""
+  local current_note=""
+  local current_pr=""
+  local line=""
+
+  ensure_tmp_dir
+  : > "${intent_records_file}"
+  default_missing_intent="needs-decision"
+
+  if [[ ! -f "${intent_file}" ]]; then
+    return
+  fi
+
+  flush_record() {
+    if [[ -z "${current_type}" || -z "${current_key}" ]]; then
+      return
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "${current_type}" \
+      "${current_key}" \
+      "${current_intent:-${default_missing_intent}}" \
+      "${current_note}" \
+      "${current_pr}" >> "${intent_records_file}"
+  }
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      defaults:|records:|"")
+        continue
+        ;;
+      "  missing_intent:"*)
+        default_missing_intent="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        ;;
+      "  - subject_type:"*)
+        flush_record
+        current_type="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        current_key=""
+        current_intent=""
+        current_note=""
+        current_pr=""
+        ;;
+      "    subject_key:"*)
+        current_key="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        ;;
+      "    intent:"*)
+        current_intent="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        ;;
+      "    note:"*)
+        current_note="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        ;;
+      "    pr:"*)
+        current_pr="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        ;;
+    esac
+  done < "${intent_file}"
+
+  flush_record
+  sort -t $'\t' -k1,1 -k2,2 "${intent_records_file}" -o "${intent_records_file}"
+}
+
+lookup_intent_field() {
+  local subject_type="$1"
+  local subject_key="$2"
+  local field_index="$3"
+
+  awk -F '\t' -v subject_type="${subject_type}" -v subject_key="${subject_key}" -v field_index="${field_index}" '
+    $1 == subject_type && $2 == subject_key {
+      print $field_index
+      found = 1
+      exit 0
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+    }
+  ' "${intent_records_file}"
+}
+
+record_seen_subject() {
+  local subject_type="$1"
+  local subject_key="$2"
+  printf '%s\t%s\n' "${subject_type}" "${subject_key}" >> "${seen_subjects_file}"
+}
+
+orphan_intent_count() {
+  if [[ ! -s "${intent_records_file}" ]]; then
+    echo 0
+    return
+  fi
+
+  awk -F '\t' '
+    NR == FNR {
+      seen[$1 FS $2] = 1
+      next
+    }
+    !(($1 FS $2) in seen) {
+      count++
+    }
+    END {
+      print count + 0
+    }
+  ' "${seen_subjects_file}" "${intent_records_file}"
+}
+
+derive_worktree_id() {
+  local raw_path="$1"
+  local branch="$2"
+
+  if [[ "${raw_path}" == "${canonical_root}" ]]; then
+    printf 'primary-root\n'
+    return
+  fi
+
+  if [[ "${branch}" =~ ^([0-9]{3})- ]]; then
+    if [[ "${branch}" == "${current_branch}" ]]; then
+      printf 'primary-feature-%s\n' "${BASH_REMATCH[1]}"
+    else
+      printf 'parallel-feature-%s\n' "${BASH_REMATCH[1]}"
+    fi
+    return
+  fi
+
+  if [[ "${branch}" == codex/* ]]; then
+    slugify "${branch}"
+    return
+  fi
+
+  if [[ "${branch}" == feat/* ]]; then
+    slugify "${branch#feat/}"
+    return
+  fi
+
+  if [[ "${branch}" == test/* ]]; then
+    slugify "${branch}"
+    return
+  fi
+
+  slugify "$(basename "${raw_path}")"
+}
+
+derive_location_class() {
+  local raw_path="$1"
+  local branch="$2"
+
+  if [[ "${raw_path}" == "${canonical_root}" ]]; then
+    printf 'primary\n'
+    return
+  fi
+
+  if [[ "${raw_path}" == *"/.codex/worktrees/"* ]]; then
+    printf 'codex-managed\n'
+    return
+  fi
+
+  if [[ "${branch}" =~ ^([0-9]{3})- && "${branch}" == "${current_branch}" ]]; then
+    printf 'dedicated-feature-worktree\n'
+    return
+  fi
+
+  printf 'sibling-worktree\n'
+}
+
+default_worktree_note() {
+  local intent="$1"
+  local branch="$2"
+  local location_class="$3"
+
+  case "${intent}" in
+    active)
+      if [[ "${location_class}" == "primary" ]]; then
+        printf 'Canonical root worktree\n'
+      elif [[ "${location_class}" == "dedicated-feature-worktree" ]]; then
+        printf 'Active authoritative worktree for %s\n' "${branch}"
+      else
+        printf 'Active worktree for %s\n' "${branch}"
+      fi
+      ;;
+    protected)
+      printf 'Protected worktree; exclude from cleanup\n'
+      ;;
+    historical)
+      printf 'Historical worktree\n'
+      ;;
+    cleanup-candidate)
+      printf 'Review before cleanup\n'
+      ;;
+    extract-only)
+      printf 'Source-only worktree\n'
+      ;;
+    *)
+      printf 'Needs decision\n'
+      ;;
+  esac
+}
+
+default_branch_note() {
+  local branch="$1"
+  local tracking_state="$2"
+  local has_worktree="$3"
+  local intent="$4"
+
+  case "${intent}" in
+    active)
+      if [[ "${branch}" == "main" ]]; then
+        printf 'Canonical source of truth\n'
+      elif [[ "${has_worktree}" == "true" ]]; then
+        printf 'Dedicated worktree exists\n'
+      else
+        printf 'Active branch\n'
+      fi
+      ;;
+    protected)
+      printf 'Protected branch; review before cleanup\n'
+      ;;
+    historical)
+      if [[ "${tracking_state}" == "gone" ]]; then
+        printf 'Historical branch with missing upstream\n'
+      else
+        printf 'Historical branch\n'
+      fi
+      ;;
+    cleanup-candidate)
+      printf 'Cleanup candidate\n'
+      ;;
+    extract-only)
+      printf 'Extraction source only\n'
+      ;;
+    *)
+      if [[ "${tracking_state}" == "gone" ]]; then
+        printf 'Tracking ref is gone; needs decision\n'
+      else
+        printf 'Needs decision\n'
+      fi
+      ;;
+  esac
+}
+
+default_remote_note() {
+  local remote_ref="$1"
+  local intent="$2"
+
+  case "${intent}" in
+    active)
+      printf 'Active remote branch\n'
+      ;;
+    protected)
+      printf 'Protected remote branch; exclude from cleanup\n'
+      ;;
+    historical)
+      printf 'Historical remote branch\n'
+      ;;
+    cleanup-candidate)
+      printf 'Cleanup candidate remote branch\n'
+      ;;
+    extract-only)
+      printf 'Extraction source remote branch\n'
+      ;;
+    *)
+      printf 'Needs decision\n'
+      ;;
+  esac
+}
+
+collect_worktrees() {
+  local line=""
+  local raw_path=""
+  local branch=""
+
+  ensure_tmp_dir
+  : > "${worktrees_file}"
+  : > "${worktree_branches_file}"
+
+  flush_worktree() {
+    local worktree_id=""
+    local location_class=""
+    local intent=""
+    local note=""
+    local pr=""
+
+    if [[ -z "${raw_path}" ]]; then
+      return
+    fi
+
+    if [[ -z "${branch}" ]]; then
+      branch="DETACHED"
+    fi
+
+    worktree_id="$(derive_worktree_id "${raw_path}" "${branch}")"
+    location_class="$(derive_location_class "${raw_path}" "${branch}")"
+    intent="$(lookup_intent_field "worktree" "${worktree_id}" 3 2>/dev/null || true)"
+    note="$(lookup_intent_field "worktree" "${worktree_id}" 4 2>/dev/null || true)"
+    pr="$(lookup_intent_field "worktree" "${worktree_id}" 5 2>/dev/null || true)"
+
+    if [[ -z "${intent}" ]]; then
+      intent="${default_missing_intent}"
+    fi
+    note="$(note_or_default "${note}" "$(default_worktree_note "${intent}" "${branch}" "${location_class}")")"
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${worktree_id}" \
+      "${branch}" \
+      "${location_class}" \
+      "${note}" \
+      "${raw_path}" \
+      "${intent}" \
+      "${pr}" >> "${worktrees_file}"
+
+    record_seen_subject "worktree" "${worktree_id}"
+
+    if [[ "${branch}" != "DETACHED" ]]; then
+      printf '%s\n' "${branch}" >> "${worktree_branches_file}"
+    fi
+  }
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      "")
+        flush_worktree
+        raw_path=""
+        branch=""
+        ;;
+      worktree\ *)
+        raw_path="${line#worktree }"
+        ;;
+      branch\ refs/heads/*)
+        branch="${line#branch refs/heads/}"
+        ;;
+      branch\ *)
+        branch="${line#branch }"
+        ;;
+    esac
+  done < <(git worktree list --porcelain; printf '\n')
+
+  sort -t $'\t' -k1,1 "${worktrees_file}" -o "${worktrees_file}"
+  sort -u "${worktree_branches_file}" -o "${worktree_branches_file}"
+}
+
+branch_has_worktree() {
+  local branch="$1"
+  if [[ ! -s "${worktree_branches_file}" ]]; then
+    return 1
+  fi
+  grep -Fxq "${branch}" "${worktree_branches_file}"
+}
+
+tracking_state_for() {
+  local upstream="$1"
+
+  if [[ -z "${upstream}" ]]; then
+    printf 'none\n'
+    return
+  fi
+
+  if git show-ref --verify --quiet "refs/remotes/${upstream}"; then
+    printf 'tracking\n'
+    return
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/${upstream}"; then
+    printf 'tracking\n'
+    return
+  fi
+
+  printf 'gone\n'
+}
+
+collect_local_branches() {
+  local branch=""
+  local upstream=""
+  local tracking_state=""
+  local has_worktree=""
+  local intent=""
+  local note=""
+  local pr=""
+  local sort_group=""
+
+  ensure_tmp_dir
+  : > "${local_branches_file}"
+
+  while IFS=' ' read -r branch upstream || [[ -n "${branch}" ]]; do
+    tracking_state="$(tracking_state_for "${upstream}")"
+    has_worktree="false"
+    if branch_has_worktree "${branch}"; then
+      has_worktree="true"
+    fi
+
+    intent="$(lookup_intent_field "branch" "${branch}" 3 2>/dev/null || true)"
+    note="$(lookup_intent_field "branch" "${branch}" 4 2>/dev/null || true)"
+    pr="$(lookup_intent_field "branch" "${branch}" 5 2>/dev/null || true)"
+
+    if [[ -z "${intent}" ]]; then
+      intent="${default_missing_intent}"
+    fi
+    note="$(note_or_default "${note}" "$(default_branch_note "${branch}" "${tracking_state}" "${has_worktree}" "${intent}")")"
+
+    if [[ "${branch}" == "main" ]]; then
+      sort_group="0"
+    elif [[ "${branch}" == "${current_branch}" ]]; then
+      sort_group="1"
+    elif [[ "${has_worktree}" == "true" ]]; then
+      sort_group="2"
+    else
+      sort_group="3"
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${sort_group}" \
+      "${branch}" \
+      "${upstream}" \
+      "${tracking_state}" \
+      "${has_worktree}" \
+      "${note}" \
+      "${intent}" >> "${local_branches_file}"
+
+    record_seen_subject "branch" "${branch}"
+  done < <(git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads)
+
+  sort -t $'\t' -k1,1 -k2,2 "${local_branches_file}" -o "${local_branches_file}"
+}
+
+collect_remote_branches() {
+  local remote_ref=""
+  local branch=""
+  local intent=""
+  local note=""
+  local pr=""
+
+  ensure_tmp_dir
+  : > "${remote_branches_file}"
+
+  while IFS= read -r remote_ref || [[ -n "${remote_ref}" ]]; do
+    if [[ -z "${remote_ref}" || "${remote_ref}" == "origin/HEAD" || "${remote_ref}" == "origin/main" ]]; then
+      continue
+    fi
+
+    if git merge-base --is-ancestor "${remote_ref}" "refs/remotes/origin/main" 2>/dev/null; then
+      continue
+    fi
+
+    branch="${remote_ref#origin/}"
+    intent="$(lookup_intent_field "remote" "${remote_ref}" 3 2>/dev/null || true)"
+    note="$(lookup_intent_field "remote" "${remote_ref}" 4 2>/dev/null || true)"
+    pr="$(lookup_intent_field "remote" "${remote_ref}" 5 2>/dev/null || true)"
+
+    if [[ -z "${intent}" ]]; then
+      intent="${default_missing_intent}"
+    fi
+    note="$(note_or_default "${note}" "$(default_remote_note "${remote_ref}" "${intent}")")"
+
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "${remote_ref}" \
+      "${branch}" \
+      "${note}" \
+      "${intent}" \
+      "${pr}" >> "${remote_branches_file}"
+
+    record_seen_subject "remote" "${remote_ref}"
+  done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin)
+
+  sort -t $'\t' -k1,1 "${remote_branches_file}" -o "${remote_branches_file}"
+}
+
+render_registry_markdown() {
+  local orphan_count="$1"
+  local worktree_id=""
+  local branch=""
+  local location_class=""
+  local note=""
+  local raw_path=""
+  local intent=""
+  local tracking=""
+  local tracking_state=""
+  local has_worktree=""
+  local remote_ref=""
+  local remote_branch=""
+  local policy_line=""
+
+  ensure_tmp_dir
+
+  {
+    cat <<'EOF'
+# Git Topology Registry
+
+**Status**: Generated artifact from live git topology and reviewed intent sidecar
+**Scope**: Canonical maintainer workstation snapshot
+**Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
+**Refresh**: `scripts/git-topology-registry.sh refresh --write-doc`
+**Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
+
+## Current Worktrees
+
+| Worktree ID | Branch | Location Class | Status |
+|---|---|---|---|
+EOF
+
+    while IFS=$'\t' read -r worktree_id branch location_class note raw_path intent pr || [[ -n "${worktree_id}" ]]; do
+      printf '| `%s` | `%s` | `%s` | %s |\n' \
+        "$(escape_md_cell "${worktree_id}")" \
+        "$(escape_md_cell "${branch}")" \
+        "$(escape_md_cell "${location_class}")" \
+        "$(escape_md_cell "${note}")"
+    done < "${worktrees_file}"
+
+    cat <<'EOF'
+
+## Active Local Branches
+
+| Branch | Tracking | Status |
+|---|---|---|
+EOF
+
+    while IFS= read -r local_branch_row || [[ -n "${local_branch_row}" ]]; do
+      branch="$(printf '%s\n' "${local_branch_row}" | cut -f2)"
+      tracking="$(printf '%s\n' "${local_branch_row}" | cut -f3)"
+      tracking_state="$(printf '%s\n' "${local_branch_row}" | cut -f4)"
+      note="$(printf '%s\n' "${local_branch_row}" | cut -f6)"
+
+      case "${tracking_state}" in
+        gone)
+          tracking="gone"
+          ;;
+        none)
+          tracking="none"
+          ;;
+      esac
+
+      printf '| `%s` | `%s` | %s |\n' \
+        "$(escape_md_cell "${branch}")" \
+        "$(escape_md_cell "${tracking}")" \
+        "$(escape_md_cell "${note}")"
+    done < "${local_branches_file}"
+
+    cat <<'EOF'
+
+## Remote Branches Not Merged Into `origin/main`
+
+| Remote Branch | Current Intent |
+|---|---|
+EOF
+
+    while IFS=$'\t' read -r remote_ref remote_branch note intent pr || [[ -n "${remote_ref}" ]]; do
+      printf '| `%s` | %s |\n' \
+        "$(escape_md_cell "${remote_ref}")" \
+        "$(escape_md_cell "${note}")"
+    done < "${remote_branches_file}"
+
+    if [[ "${orphan_count}" -gt 0 ]]; then
+      cat <<EOF
+
+## Registry Warnings
+
+- Reviewed intent contains ${orphan_count} orphan record(s); keep them until topology catches up or the intent is pruned.
+EOF
+    fi
+
+    cat <<'EOF'
+
+## Operating Rules
+
+1. `main` remains the only operational source of truth.
+2. If a branch has a dedicated worktree, treat that worktree as the authoritative place for edits.
+3. Before deleting or merging branches, verify this registry and then verify live `git` state again.
+4. If branch/worktree state changes, this artifact must be refreshed in the same session or at the next session boundary.
+5. Live `git` state wins over this document if they diverge; refresh the registry instead of forcing git to match the doc.
+
+## Source Commands
+
+```bash
+git worktree list --porcelain
+git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads
+git for-each-ref --format='%(refname:short)' refs/remotes/origin
+```
+EOF
+  } > "${expected_doc_file}"
+}
+
+build_snapshot() {
+  local orphan_count=""
+
+  ensure_tmp_dir
+  : > "${seen_subjects_file}"
+
+  parse_intent_sidecar
+  collect_worktrees
+  collect_local_branches
+  collect_remote_branches
+  orphan_count="$(orphan_intent_count)"
+  render_registry_markdown "${orphan_count}"
+}
+
+compute_current_hash() {
+  local combined="${tmp_dir}/combined-snapshot.txt"
+  {
+    printf 'default_missing_intent=%s\n' "${default_missing_intent}"
+    printf '\n[intent]\n'
+    cat "${intent_records_file}"
+    printf '\n[worktrees]\n'
+    cat "${worktrees_file}"
+    printf '\n[local_branches]\n'
+    cat "${local_branches_file}"
+    printf '\n[remote_branches]\n'
+    cat "${remote_branches_file}"
+  } > "${combined}"
+  hash_file "${combined}"
+}
+
+current_doc_hash() {
+  if [[ -f "${registry_doc}" ]]; then
+    hash_file "${registry_doc}"
+  else
+    printf 'missing\n'
+  fi
+}
+
+docs_match_expected() {
+  if [[ ! -f "${registry_doc}" ]]; then
+    return 1
+  fi
+  cmp -s "${expected_doc_file}" "${registry_doc}"
+}
+
+write_health_state() {
+  local health_status="$1"
+  local current_hash="$2"
+  local rendered_hash="$3"
+  local document_hash="$4"
+  local orphan_count="$5"
+  local message="$6"
+
+  ensure_state_dir
+  cat > "${state_file}" <<EOF
+status=${health_status}
+current_hash=${current_hash}
+rendered_hash=${rendered_hash}
+document_hash=${document_hash}
+orphan_records_count=${orphan_count}
+last_success_at=$(now_utc)
+last_error=
+message=${message}
+EOF
+}
+
+write_error_state() {
+  local message="$1"
+  ensure_state_dir
+  cat > "${state_file}" <<EOF
+status=error
+current_hash=
+rendered_hash=
+document_hash=
+orphan_records_count=
+last_success_at=
+last_error=${message}
+message=${message}
+EOF
+}
+
+prune_state_dir() {
+  if [[ ! -d "${state_dir}" ]]; then
+    return
+  fi
+
+  find "${state_dir}" -mindepth 1 -maxdepth 1 \
+    ! -name 'health.env' \
+    ! -name 'lock' \
+    -exec rm -rf {} +
+}
+
+status_flow() {
+  local current_hash=""
+  local rendered_hash=""
+  local document_hash=""
+  local orphan_count=""
+  local health_status="ok"
+  local message="registry matches rendered topology"
+
+  build_snapshot
+  current_hash="$(compute_current_hash)"
+  rendered_hash="$(hash_file "${expected_doc_file}")"
+  document_hash="$(current_doc_hash)"
+  orphan_count="$(orphan_intent_count)"
+
+  if ! docs_match_expected; then
+    health_status="stale"
+    message="registry document is stale; run scripts/git-topology-registry.sh refresh --write-doc"
+  fi
+
+  echo "repo_root=${git_root}"
+  echo "git_common_dir=${git_common_dir}"
+  echo "intent_file=${intent_file}"
+  echo "registry_doc=${registry_doc}"
+  echo "state_file=${state_file}"
+  echo "status=${health_status}"
+  echo "current_hash=${current_hash}"
+  echo "rendered_hash=${rendered_hash}"
+  echo "document_hash=${document_hash}"
+  echo "orphan_records_count=${orphan_count}"
+  echo "message=${message}"
+}
+
+check_flow() {
+  local current_hash=""
+  local rendered_hash=""
+  local document_hash=""
+
+  build_snapshot
+  current_hash="$(compute_current_hash)"
+  rendered_hash="$(hash_file "${expected_doc_file}")"
+  document_hash="$(current_doc_hash)"
+
+  if docs_match_expected; then
+    echo "status=ok"
+    echo "current_hash=${current_hash}"
+    echo "rendered_hash=${rendered_hash}"
+    echo "document_hash=${document_hash}"
+    exit 0
+  fi
+
+  echo "status=stale"
+  echo "current_hash=${current_hash}"
+  echo "rendered_hash=${rendered_hash}"
+  echo "document_hash=${document_hash}"
+  echo "Run: scripts/git-topology-registry.sh refresh --write-doc"
+  exit 1
+}
+
+refresh_flow() {
+  local current_hash=""
+  local rendered_hash=""
+  local document_hash=""
+  local orphan_count=""
+  local stale=true
+  local message=""
+
+  build_snapshot
+  current_hash="$(compute_current_hash)"
+  rendered_hash="$(hash_file "${expected_doc_file}")"
+  document_hash="$(current_doc_hash)"
+  orphan_count="$(orphan_intent_count)"
+
+  if docs_match_expected; then
+    stale=false
+  fi
+
+  if [[ "${write_doc}" != "true" ]]; then
+    if [[ "${stale}" == "true" ]]; then
+      echo "[git-topology-registry] Registry is stale. Run: scripts/git-topology-registry.sh refresh --write-doc" >&2
+      exit 1
+    fi
+    echo "[git-topology-registry] Registry already matches live topology."
+    exit 0
+  fi
+
+  acquire_lock
+  build_snapshot
+  current_hash="$(compute_current_hash)"
+  rendered_hash="$(hash_file "${expected_doc_file}")"
+  document_hash="$(current_doc_hash)"
+  orphan_count="$(orphan_intent_count)"
+
+  if docs_match_expected; then
+    message="registry already current"
+    write_health_state "ok" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
+    echo "[git-topology-registry] Registry already current."
+    exit 0
+  fi
+
+  cp "${expected_doc_file}" "${registry_doc}"
+  document_hash="$(hash_file "${registry_doc}")"
+  message="registry refreshed from live git topology"
+  write_health_state "ok" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
+  echo "[git-topology-registry] Registry refreshed."
+}
+
+doctor_flow() {
+  local current_hash=""
+  local rendered_hash=""
+  local document_hash=""
+  local orphan_count=""
+  local message=""
+
+  acquire_lock
+  if [[ "${prune}" == "true" ]]; then
+    prune_state_dir
+  fi
+
+  build_snapshot
+  current_hash="$(compute_current_hash)"
+  rendered_hash="$(hash_file "${expected_doc_file}")"
+  document_hash="$(current_doc_hash)"
+  orphan_count="$(orphan_intent_count)"
+
+  if docs_match_expected; then
+    message="doctor found no drift"
+    write_health_state "ok" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
+    echo "[git-topology-registry] Doctor found no drift."
+    exit 0
+  fi
+
+  if [[ "${write_doc}" != "true" ]]; then
+    message="doctor detected drift; rerun with --write-doc to reconcile"
+    write_health_state "stale" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
+    echo "[git-topology-registry] ${message}" >&2
+    exit 1
+  fi
+
+  cp "${expected_doc_file}" "${registry_doc}"
+  document_hash="$(hash_file "${registry_doc}")"
+  message="doctor reconciled registry from live git topology"
+  write_health_state "ok" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
+  echo "[git-topology-registry] Doctor reconciled registry."
 }
 
 case "${action}" in
   status)
-    print_context
-    if [[ -f "${state_file}" ]]; then
-      cat "${state_file}"
-    else
-      echo "status=unconfigured"
-      echo "message=topology registry has not written health state yet"
-    fi
-    ;;
-  refresh)
-    ensure_state_dir
-    if [[ "${write_doc}" == "true" ]]; then
-      not_implemented "refresh --write-doc"
-    fi
-    not_implemented "refresh"
+    status_flow
     ;;
   check)
-    not_implemented "check"
+    check_flow
+    ;;
+  refresh)
+    refresh_flow
     ;;
   doctor)
-    ensure_state_dir
-    if [[ "${prune}" == "true" ]]; then
-      echo "[git-topology-registry] doctor will support --prune after Phase 2." >&2
-    fi
-    if [[ "${write_doc}" == "true" ]]; then
-      echo "[git-topology-registry] doctor will support --write-doc after Phase 2." >&2
-    fi
-    not_implemented "doctor"
+    doctor_flow
     ;;
 esac

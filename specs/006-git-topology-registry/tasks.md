@@ -30,11 +30,11 @@
 
 **Purpose**: Build the shared generator/check/recovery foundation before wiring any user story workflow.
 
-- [ ] T006 Implement live topology discovery in `scripts/git-topology-registry.sh` using `git worktree list --porcelain` and `git for-each-ref`
-- [ ] T007 Implement repo-shared lock and health-state handling under `$(git rev-parse --git-common-dir)` in `scripts/git-topology-registry.sh`
-- [ ] T008 Implement deterministic markdown rendering for `docs/GIT-TOPOLOGY-REGISTRY.md` in `scripts/git-topology-registry.sh`
-- [ ] T009 Implement sidecar merge/default-intent logic in `scripts/git-topology-registry.sh`
-- [ ] T010 Implement `refresh`, `check`, `status`, and `doctor` command paths in `scripts/git-topology-registry.sh`
+- [x] T006 Implement live topology discovery in `scripts/git-topology-registry.sh` using `git worktree list --porcelain` and `git for-each-ref`
+- [x] T007 Implement repo-shared lock and health-state handling under `$(git rev-parse --git-common-dir)` in `scripts/git-topology-registry.sh`
+- [x] T008 Implement deterministic markdown rendering for `docs/GIT-TOPOLOGY-REGISTRY.md` in `scripts/git-topology-registry.sh`
+- [x] T009 Implement sidecar merge/default-intent logic in `scripts/git-topology-registry.sh`
+- [x] T010 Implement `refresh`, `check`, `status`, and `doctor` command paths in `scripts/git-topology-registry.sh`
 
 **Checkpoint**: The repo can now compute normalized topology, render a deterministic registry, and detect/recover stale state.
 

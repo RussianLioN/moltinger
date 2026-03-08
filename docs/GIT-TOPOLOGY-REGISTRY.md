@@ -1,57 +1,57 @@
 # Git Topology Registry
 
-**Status**: Seed artifact, pending generator ownership  
-**Captured**: 2026-03-08  
-**Scope**: Canonical maintainer workstation snapshot  
-**Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.  
+**Status**: Generated artifact from live git topology and reviewed intent sidecar
+**Scope**: Canonical maintainer workstation snapshot
+**Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
+**Refresh**: `scripts/git-topology-registry.sh refresh --write-doc`
 **Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
 
 ## Current Worktrees
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges |
-| `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation |
-| `parallel-feature-005` | `005-worktree-ready-flow` | `sibling-worktree` | Active parallel Speckit feature worktree |
-| `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup |
-| `codex-gitops-metrics-fix` | `codex/gitops-metrics-fix` | `sibling-worktree` | Active replacement branch for closed PR `#3`; open PR `#18` |
-| `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research/documentation worktree |
+| `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
+| `codex-gitops-metrics-fix` | `codex/gitops-metrics-fix` | `sibling-worktree` | Active replacement branch for closed PR #3; open PR #18. |
+| `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
+| `parallel-feature-005` | `005-worktree-ready-flow` | `sibling-worktree` | Active parallel Speckit feature worktree. |
+| `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
+| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
 
 | Branch | Tracking | Status |
 |---|---|---|
-| `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree |
-| `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists |
-| `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists |
-| `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists |
-| `codex/gitops-metrics-fix` | `origin/codex/gitops-metrics-fix` | Fresh replacement branch with open PR `#18` |
-| `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation/research branch |
-| `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target |
-| `codex/fix-bot` | `origin/codex/fix-bot` | PR `#8` already merged, but branch still contains extra commits; do not merge raw |
-| `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively |
-| `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch |
-| `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch |
-| `001-moltis-docker-deploy` | `origin/001-moltis-docker-deploy` | Historical branch with local drift |
-| `003-testing-infrastructure` | `origin/003-testing-infrastructure` | Historical planning branch |
-| `test/rca-guard-uat-20260307-0004` | none | Local-only test branch |
-| `test/rca-guard-uat-20260307-0015` | gone | Local-only stale test branch |
+| `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
+| `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
+| `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
+| `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
+| `codex/gitops-metrics-fix` | `origin/codex/gitops-metrics-fix` | Fresh replacement branch with open PR #18. |
+| `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
+| `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
+| `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
+| `001-moltis-docker-deploy` | `origin/001-moltis-docker-deploy` | Historical branch with local drift. |
+| `003-testing-infrastructure` | `origin/003-testing-infrastructure` | Historical planning branch. |
+| `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
+| `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
+| `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
+| `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
+| `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 
 ## Remote Branches Not Merged Into `origin/main`
 
 | Remote Branch | Current Intent |
 |---|---|
-| `origin/001-frontend` | Review later; currently dangling |
-| `origin/001-moltis-docker-deploy` | Historical; review before cleanup |
-| `origin/003-testing-infrastructure` | Historical planning branch |
-| `origin/005-worktree-ready-flow` | Active parallel feature branch |
-| `origin/006-git-topology-registry` | Active topology-registry feature branch |
-| `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation |
-| `origin/codex/fix-bot` | Source for future Telegram consolidation |
-| `origin/codex/full-review` | Active parallel session; exclude from automated cleanup |
-| `origin/codex/gitops-metrics-fix` | Active replacement PR `#18` |
-| `origin/codex/webhook-moltinger` | Source for future Telegram consolidation |
-| `origin/feat/gpt-5-moltis` | Active feature branch |
+| `origin/001-frontend` | Review later; currently dangling. |
+| `origin/001-moltis-docker-deploy` | Historical; review before cleanup. |
+| `origin/003-testing-infrastructure` | Historical planning branch. |
+| `origin/005-worktree-ready-flow` | Active parallel feature branch. |
+| `origin/006-git-topology-registry` | Active topology-registry feature branch. |
+| `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
+| `origin/codex/fix-bot` | Source for future Telegram consolidation. |
+| `origin/codex/full-review` | Active parallel session; exclude from automated cleanup. |
+| `origin/codex/gitops-metrics-fix` | Active replacement PR #18. |
+| `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
+| `origin/feat/gpt-5-moltis` | Active feature branch. |
 
 ## Operating Rules
 
@@ -65,6 +65,6 @@
 
 ```bash
 git worktree list --porcelain
-git branch -vv
-git branch -r --no-merged origin/main
+git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads
+git for-each-ref --format='%(refname:short)' refs/remotes/origin
 ```

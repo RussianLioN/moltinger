@@ -13,7 +13,7 @@
 
 - `worktree_id` (string, required): sanitized stable identifier used in the committed registry
 - `branch` (string, required)
-- `location_class` (enum, required): `primary` | `codex-managed` | `sibling-worktree` | `local-only` | `unknown`
+- `location_class` (enum, required): `primary` | `dedicated-feature-worktree` | `codex-managed` | `sibling-worktree` | `local-only` | `unknown`
 - `status` (enum, required): `active` | `protected-from-cleanup` | `review-before-cleanup` | `historical` | `unknown`
 - `is_current` (boolean, required)
 - `raw_path` (string, optional, non-committed state only)
