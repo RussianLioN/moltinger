@@ -11,8 +11,12 @@
 ### By Severity
 
 
-#### P2 (1 lessons)
+#### P0 (1 lessons)
+- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
+
+#### P2 (2 lessons)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
+- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### P3 (7 lessons)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
@@ -34,10 +38,6 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### cicd (2 lessons)
-- [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
-- [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
-
 #### generic (5 lessons)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -45,42 +45,12 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### generic (5 lessons)
-- [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
-- [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
-- [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
-- [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
-- [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
-
-#### process (1 lessons)
-- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
-
-#### process (1 lessons)
+#### process (2 lessons)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
+- [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### security (1 lessons)
-- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
+#### security (1 lessons)
+- [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
 #### shell (1 lessons)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
@@ -96,8 +66,8 @@
 - `shell` (1 lessons)
 - `security` (1 lessons)
 - `sandbox` (1 lessons)
-- `rm-rf` (1 lessons)
-- `recurring-issue` (1 lessons)
+- `rm-rf` (1 lessons)
+- `recurring-issue` (1 lessons)
 
 
 ---
@@ -107,8 +77,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Lessons | 11 |
-| Critical (P0/P1) | 0 |
-| Categories | 6 |
+| Critical (P0/P1) | 1 |
+| Categories | 5 |
 | Unique Tags | 25 |
 
 ---

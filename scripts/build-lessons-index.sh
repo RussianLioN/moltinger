@@ -18,7 +18,7 @@ find_rca_files() {
 extract_field() {
     local file="$1"
     local field="$2"
-    grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"' || echo ""
+    grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"\r' || echo ""
 }
 
 # Collect lessons into temp files
@@ -111,8 +111,7 @@ cat >> "$OUTPUT_FILE" << 'SECTION'
 
 SECTION
 
-cut -d'|' -f1,2,3 "$TMP_CATEGORY" | sort -u | while read line; do
-    cat=$(echo "$line" | cut -d'|' -f1)
+cut -d'|' -f1 "$TMP_CATEGORY" | sort -u | while read cat; do
     count=$(grep "^$cat|" "$TMP_CATEGORY" | wc -l | tr -d ' ')
     if [[ $count -gt 0 ]]; then
         echo "" >> "$OUTPUT_FILE"
@@ -138,7 +137,7 @@ sort "$TMP_TAGS" | uniq -c | sort -rn | head -10 | while read count tag; do
 done
 
 # Statistics
-critical=$(grep -E "^(P0|P1)|" "$TMP_SEVERITY" | wc -l | tr -d ' ')
+critical=$(grep -E '^(P0|P1)\|' "$TMP_SEVERITY" | wc -l | tr -d ' ')
 categories=$(cut -d'|' -f1 "$TMP_CATEGORY" | sort -u | wc -l | tr -d ' ')
 tags_count=$(sort "$TMP_TAGS" | uniq | wc -l | tr -d ' ')
 
