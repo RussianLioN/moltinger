@@ -235,6 +235,25 @@ Next:
 - If the helper returns `drift_detected` or `action_required`, the response must include the concrete corrective next step instead of a generic success message.
 - Do not downgrade `ready_for_codex` or `needs_env_approval` back to a vague `created` summary in prose.
 
+## Manual Handoff Examples
+
+Ready environment:
+
+```text
+Status: ready_for_codex
+Next:
+  1. cd /Users/rl/coding/moltinger-codex-gitops-metrics-fix && codex
+```
+
+Blocked environment:
+
+```text
+Status: needs_env_approval
+Next:
+  1. cd /Users/rl/coding/moltinger-codex-gitops-metrics-fix && direnv allow
+  2. codex
+```
+
 Optional helper detail lines may also include:
 - `Env: <unknown|no_envrc|approval_needed|approved_or_not_required>`
 - `Guard: <unknown|missing|ok|drift>`
