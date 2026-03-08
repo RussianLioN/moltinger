@@ -19,10 +19,17 @@
 
 **Purpose**: Lock the implementation surface and ensure the feature package is ready for execution.
 
-- [x] P001 Analyze the implementation surface across `.claude/commands/worktree.md`, `scripts/git-session-guard.sh`, and `specs/005-worktree-ready-flow/plan.md`
-- [x] P002 Record library and workflow decisions in `specs/005-worktree-ready-flow/research.md`
-- [x] P003 Define the UX and readiness contracts in `specs/005-worktree-ready-flow/contracts/worktree-command-interface.md` and `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md`
-- [x] P004 Break the feature into implementation phases in `specs/005-worktree-ready-flow/tasks.md`
+- [x] P001 [EXECUTOR: MAIN] [SEQUENTIAL] Analyze the implementation surface across `.claude/commands/worktree.md`, `scripts/git-session-guard.sh`, and `specs/005-worktree-ready-flow/plan.md`
+- [x] P002 [EXECUTOR: MAIN] [SEQUENTIAL] Record library and workflow decisions in `specs/005-worktree-ready-flow/research.md`
+- [x] P003 [EXECUTOR: MAIN] [SEQUENTIAL] Define the UX and readiness contracts in `specs/005-worktree-ready-flow/contracts/worktree-command-interface.md` and `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md`
+- [x] P004 [EXECUTOR: MAIN] [SEQUENTIAL] Break the feature into implementation phases in `specs/005-worktree-ready-flow/tasks.md`
+
+**Executor Summary**:
+
+- Existing agent inventory is sufficient; no new agent definitions are required for this feature.
+- Use `worker` for non-trivial implementation and command-artifact edits.
+- Use `MAIN` only for trivial documentation/validation bookkeeping and final verification.
+- Override earlier `[P]` assumptions whenever tasks target the same file; file ownership wins over nominal parallelism.
 
 ---
 
@@ -30,9 +37,9 @@
 
 **Purpose**: Create the helper entrypoint and validation artifacts used by all stories.
 
-- [ ] T001 Create `scripts/worktree-ready.sh` with CLI usage, mode dispatch, and shell safety guards
-- [ ] T002 Create `specs/005-worktree-ready-flow/validation.md` as the implementation validation log for quickstart scenarios
-- [ ] T003 [P] Add a helper invocation placeholder and updated quick-usage skeleton to `.claude/commands/worktree.md`
+- [ ] T001 [EXECUTOR: worker] [SEQUENTIAL] Create `scripts/worktree-ready.sh` with CLI usage, mode dispatch, and shell safety guards
+- [ ] T002 [EXECUTOR: MAIN] [PARALLEL-GROUP-SETUP] Create `specs/005-worktree-ready-flow/validation.md` as the implementation validation log for quickstart scenarios
+- [ ] T003 [P] [EXECUTOR: worker] [PARALLEL-GROUP-SETUP] Add a helper invocation placeholder and updated quick-usage skeleton to `.claude/commands/worktree.md`
 
 ---
 
@@ -42,11 +49,11 @@
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete.
 
-- [ ] T004 Implement path normalization, branch/path formatting, and reusable output rendering in `scripts/worktree-ready.sh`
-- [ ] T005 [P] Implement worktree/beads discovery using `bd worktree list` and `git worktree list` in `scripts/worktree-ready.sh`
-- [ ] T006 [P] Implement `scripts/git-session-guard.sh --status` integration and status parsing in `scripts/worktree-ready.sh`
-- [ ] T007 Implement readiness report generation matching `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md` in `scripts/worktree-ready.sh`
-- [ ] T008 Wire foundational helper usage, readiness vocabulary, and fallback rules into `.claude/commands/worktree.md`
+- [ ] T004 [EXECUTOR: worker] [SEQUENTIAL] Implement path normalization, branch/path formatting, and reusable output rendering in `scripts/worktree-ready.sh`
+- [ ] T005 [EXECUTOR: worker] [SEQUENTIAL] Implement worktree/beads discovery using `bd worktree list` and `git worktree list` in `scripts/worktree-ready.sh`
+- [ ] T006 [EXECUTOR: worker] [SEQUENTIAL] Implement `scripts/git-session-guard.sh --status` integration and status parsing in `scripts/worktree-ready.sh`
+- [ ] T007 [EXECUTOR: worker] [SEQUENTIAL] Implement readiness report generation matching `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md` in `scripts/worktree-ready.sh`
+- [ ] T008 [EXECUTOR: worker] [SEQUENTIAL] Wire foundational helper usage, readiness vocabulary, and fallback rules into `.claude/commands/worktree.md`
 
 **Checkpoint**: The helper can classify a worktree and render a consistent readiness block.
 
@@ -60,10 +67,10 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Implement existing-branch resolution and target-path derivation in `scripts/worktree-ready.sh`
-- [ ] T010 [US1] Implement already-attached-branch detection with existing-path reporting in `scripts/worktree-ready.sh`
-- [ ] T011 [US1] Add `attach` and `start --existing` routing rules to `.claude/commands/worktree.md`
-- [ ] T012 [US1] Add sanitized path preview and existing-branch output examples to `.claude/commands/worktree.md`
+- [ ] T009 [US1] [EXECUTOR: worker] [SEQUENTIAL] Implement existing-branch resolution and target-path derivation in `scripts/worktree-ready.sh`
+- [ ] T010 [US1] [EXECUTOR: worker] [SEQUENTIAL] Implement already-attached-branch detection with existing-path reporting in `scripts/worktree-ready.sh`
+- [ ] T011 [US1] [EXECUTOR: worker] [SEQUENTIAL] Add `attach` and `start --existing` routing rules to `.claude/commands/worktree.md`
+- [ ] T012 [US1] [EXECUTOR: worker] [SEQUENTIAL] Add sanitized path preview and existing-branch output examples to `.claude/commands/worktree.md`
 
 **Checkpoint**: A user with an existing branch can get the right worktree without low-level command knowledge.
 
@@ -77,10 +84,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Implement environment-readiness probes and next-step generation in `scripts/worktree-ready.sh`
-- [ ] T014 [US2] Map helper outcomes to `created`, `needs_env_approval`, `ready_for_codex`, and `action_required` in `scripts/worktree-ready.sh`
-- [ ] T015 [US2] Update the final status block and completion rules in `.claude/commands/worktree.md`
-- [ ] T016 [US2] Add manual copy-paste handoff examples for blocked and ready environments to `.claude/commands/worktree.md`
+- [ ] T013 [US2] [EXECUTOR: worker] [SEQUENTIAL] Implement environment-readiness probes and next-step generation in `scripts/worktree-ready.sh`
+- [ ] T014 [US2] [EXECUTOR: worker] [SEQUENTIAL] Map helper outcomes to `created`, `needs_env_approval`, `ready_for_codex`, and `action_required` in `scripts/worktree-ready.sh`
+- [ ] T015 [US2] [EXECUTOR: worker] [SEQUENTIAL] Update the final status block and completion rules in `.claude/commands/worktree.md`
+- [ ] T016 [US2] [EXECUTOR: worker] [SEQUENTIAL] Add manual copy-paste handoff examples for blocked and ready environments to `.claude/commands/worktree.md`
 
 **Checkpoint**: The command no longer overstates readiness and always tells the user the exact next step.
 
@@ -94,9 +101,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Implement `--handoff manual|terminal|codex` parsing and fallback selection in `scripts/worktree-ready.sh`
-- [ ] T018 [US3] Implement macOS terminal/Codex launch commands plus manual fallback output in `scripts/worktree-ready.sh`
-- [ ] T019 [US3] Document opt-in handoff behavior, platform limits, and safety boundaries in `.claude/commands/worktree.md`
+- [ ] T017 [US3] [EXECUTOR: worker] [SEQUENTIAL] Implement `--handoff manual|terminal|codex` parsing and fallback selection in `scripts/worktree-ready.sh`
+- [ ] T018 [US3] [EXECUTOR: worker] [SEQUENTIAL] Implement macOS terminal/Codex launch commands plus manual fallback output in `scripts/worktree-ready.sh`
+- [ ] T019 [US3] [EXECUTOR: worker] [SEQUENTIAL] Document opt-in handoff behavior, platform limits, and safety boundaries in `.claude/commands/worktree.md`
 
 **Checkpoint**: Handoff automation is useful when requested and harmless when unavailable.
 
@@ -110,9 +117,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T020 [US4] Implement `doctor` mode with branch, beads, guard, and environment checks in `scripts/worktree-ready.sh`
-- [ ] T021 [US4] Route `/worktree doctor` and related diagnostics in `.claude/commands/worktree.md`
-- [ ] T022 [US4] Add occupied-branch and recovery-guidance examples to `.claude/commands/worktree.md`
+- [ ] T020 [US4] [EXECUTOR: worker] [SEQUENTIAL] Implement `doctor` mode with branch, beads, guard, and environment checks in `scripts/worktree-ready.sh`
+- [ ] T021 [US4] [EXECUTOR: worker] [SEQUENTIAL] Route `/worktree doctor` and related diagnostics in `.claude/commands/worktree.md`
+- [ ] T022 [US4] [EXECUTOR: worker] [SEQUENTIAL] Add occupied-branch and recovery-guidance examples to `.claude/commands/worktree.md`
 
 **Checkpoint**: Doctor mode provides a compact readiness diagnosis and concrete recovery steps.
 
@@ -122,9 +129,9 @@
 
 **Purpose**: Finalize docs, validate scenarios, and reconcile the feature package.
 
-- [ ] T023 Update quick usage, output format, and safety notes comprehensively in `.claude/commands/worktree.md`
-- [ ] T024 [P] Validate the scenarios from `specs/005-worktree-ready-flow/quickstart.md` and record results in `specs/005-worktree-ready-flow/validation.md`
-- [ ] T025 Reconcile implementation notes and checkbox state in `specs/005-worktree-ready-flow/tasks.md`
+- [ ] T023 [EXECUTOR: worker] [SEQUENTIAL] Update quick usage, output format, and safety notes comprehensively in `.claude/commands/worktree.md`
+- [ ] T024 [P] [EXECUTOR: MAIN] [PARALLEL-GROUP-VALIDATION] Validate the scenarios from `specs/005-worktree-ready-flow/quickstart.md` and record results in `specs/005-worktree-ready-flow/validation.md`
+- [ ] T025 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile implementation notes and checkbox state in `specs/005-worktree-ready-flow/tasks.md`
 
 ---
 
@@ -148,7 +155,7 @@
 ### Parallel Opportunities
 
 - T002 and T003 can proceed in parallel after T001
-- T005 and T006 can proceed in parallel after T004
+- T005 through T007 stay sequential because they all modify `scripts/worktree-ready.sh`
 - US1 and US2 can proceed in parallel after Phase 2 if separate owners avoid editing the same command artifact simultaneously
 - T024 can run in parallel with final documentation cleanup once the implementation stabilizes
 
