@@ -12,6 +12,7 @@
 | **Web UI** | https://moltis.ainetic.tech | Веб-интерфейс |
 | **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
 | **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
+| **Git Topology Registry** | docs/GIT-TOPOLOGY-REGISTRY.md | Актуальные worktree, ветки и cleanup-контекст |
 
 ---
 
@@ -102,4 +103,4 @@ Workflow variable:
 
 ---
 
-*Last updated: 2026-02-18*
+*Last updated: 2026-03-08*

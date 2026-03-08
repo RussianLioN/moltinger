@@ -1,5 +1,15 @@
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Git Topology Reference
+
+Current branch/worktree registry lives in:
+
+```bash
+docs/GIT-TOPOLOGY-REGISTRY.md
+```
+
+Use it when branch/worktree context matters or before cleanup actions.
+
 ## Quick Reference
 
 ```bash

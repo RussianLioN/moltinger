@@ -40,6 +40,14 @@ This file contains:
 
 ---
 
+## ⚠️ MANDATORY: Use Git Topology Registry for Branch/Worktree Context
+
+Current branch/worktree registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+
+Use it before branch cleanup, worktree operations, or when a session needs current git topology without rediscovery.
+
+---
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
