@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-07
-**Total Lessons**: 10
+**Generated**: 2026-03-08
+**Total Lessons**: 11
 
 ---
 
@@ -14,7 +14,8 @@
 #### P2 (1 lessons)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### P3 (6 lessons)
+#### P3 (7 lessons)
+- [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -75,6 +76,9 @@
 #### process (1 lessons)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
+#### process (1 lessons)
+- [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
+
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
@@ -87,13 +91,13 @@
 - `github-actions` (2 lessons)
 - `drift-detection` (2 lessons)
 - `token-optimization` (1 lessons)
+- `ssh` (1 lessons)
 - `signal-noise` (1 lessons)
 - `shell` (1 lessons)
 - `security` (1 lessons)
+- `sandbox` (1 lessons)
 - `rm-rf` (1 lessons)
 - `recurring-issue` (1 lessons)
-- `rca` (1 lessons)
-- `protocol` (1 lessons)
 
 
 ---
@@ -102,10 +106,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 10 |
+| Total Lessons | 11 |
 | Critical (P0/P1) | 0 |
-| Categories | 5 |
-| Unique Tags | 19 |
+| Categories | 6 |
+| Unique Tags | 25 |
 
 ---
 

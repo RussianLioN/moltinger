@@ -147,6 +147,13 @@ Use the nearest local `AGENTS.md` for directory-specific rules.
 3. Keep workflow, script, and documentation contracts aligned.
 4. Finish with `make codex-check` plus any targeted workflow/script validation.
 
+### GitHub Auth Or Push Failure
+
+1. Record whether the failure happened inside the sandbox or outside it.
+2. Do not treat sandbox-only auth failures as proof that host credentials are broken.
+3. Re-run `ssh -T git@github.com`, `gh auth status`, and the relevant `git` transport command outside the sandbox before concluding root cause.
+4. Follow `docs/rules/codex-github-auth-debugging.md`.
+
 ### Spec-Driven Feature Work
 
 1. Reconcile `specs/<feature>/spec.md`, `plan.md`, and `tasks.md` before runtime edits.
@@ -170,3 +177,4 @@ Use the nearest local `AGENTS.md` for directory-specific rules.
 5. Treat `config/`, `.github/`, `scripts/`, deploy-related artifacts, and `.claude/hooks/`, `.claude/scripts/`, `.claude/settings*.json` as production-adjacent.
 6. Prefer small, reversible change sets.
 7. Run `make codex-check` before landing the plane when Codex governance artifacts changed.
+8. For GitHub auth incidents from Codex, compare sandbox and non-sandbox diagnostics before concluding user credentials are broken.
