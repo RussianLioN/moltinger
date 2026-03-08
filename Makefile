@@ -7,6 +7,11 @@
 .PHONY: backup-enable backup-disable backup-status version-check
 .PHONY: test test-unit test-integration test-e2e test-security test-all
 .PHONY: instructions-sync instructions-check skills-sync skills-check
+.PHONY: codex-bootstrap codex-check codex-check-ci
+.PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
+
+CODEX_MODEL ?= gpt-5.4
+CODEX_BASE_BRANCH ?= main
 
 # Default target
 help:
@@ -61,6 +66,19 @@ help:
 	@echo "  instructions-check - Verify AGENTS.md is in sync"
 	@echo "  skills-sync        - Sync .claude skills into \$$CODEX_HOME/skills"
 	@echo "  skills-check       - Verify Codex skills sync state"
+	@echo ""
+	@echo "Codex workflows:"
+	@echo "  codex-bootstrap - Verify local Codex prerequisites and repo policy state"
+	@echo "  codex-check     - Run repo-specific Codex governance checks"
+	@echo "  codex-check-ci  - Run Codex governance checks in CI-safe mode"
+	@echo "  codex-research  - Launch Codex in read-only research mode"
+	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
+	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
+	@echo "  codex-assets    - Launch Codex for .ai/.claude asset work"
+	@echo "  codex-review    - Run codex review against \$$CODEX_BASE_BRANCH"
+	@echo "  codex-hotfix    - Launch Codex for bounded hotfix work"
+	@echo ""
+	@echo "  Override defaults with CODEX_MODEL=<model> CODEX_BASE_BRANCH=<branch>"
 
 # ========================================================================
 # DEPLOYMENT
@@ -242,3 +260,36 @@ skills-sync:
 
 skills-check:
 	@./scripts/sync-claude-skills-to-codex.sh --check
+
+# ========================================================================
+# CODEX WORKFLOWS
+# ========================================================================
+
+codex-bootstrap:
+	@command -v codex >/dev/null 2>&1 || { echo "ERROR: codex CLI not found in PATH"; exit 1; }
+	@./scripts/codex-check.sh
+	@echo "Codex local setup looks ready"
+
+codex-check:
+	@./scripts/codex-check.sh
+
+codex-check-ci:
+	@./scripts/codex-check.sh --ci
+
+codex-research:
+	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh research
+
+codex-docs:
+	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh docs
+
+codex-runtime:
+	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh runtime
+
+codex-assets:
+	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh assets
+
+codex-review:
+	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh review
+
+codex-hotfix:
+	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh hotfix

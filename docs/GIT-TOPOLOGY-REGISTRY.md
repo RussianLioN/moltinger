@@ -1,8 +1,9 @@
 # Git Topology Registry
 
-**Status**: Seed artifact, to be auto-maintained  
+**Status**: Manual reference snapshot; live `git` state wins  
 **Captured**: 2026-03-08  
 **Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
+**Portability**: Contains machine-local absolute paths; sanitize before sharing outside the core repo team.
 
 ## Current Worktrees
 
@@ -12,7 +13,7 @@
 | `/Users/rl/.codex/worktrees/da4f/moltinger` | `codex/full-review` | `38114a6` | Parallel Codex session; do not touch without explicit coordination |
 | `/Users/rl/coding/moltinger-codex-gitops-metrics-fix` | `codex/gitops-metrics-fix` | `b0e242f` | Replacement branch for closed PR `#3`; current open PR `#18` |
 | `/Users/rl/coding/moltinger-gpt-5-moltis` | `feat/gpt-5-moltis` | `59f432a` | Separate research/documentation worktree |
-| `/tmp/moltinger-codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `3662467` | Dedicated rollout worktree for gpt-5.4 policy and Codex operating model |
+| `/tmp/moltinger-codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `3662467` | Disposable rollout worktree for gpt-5.4 policy and Codex operating model; migrate to sibling path if it becomes long-lived |
 
 ## Active Local Branches
 
@@ -53,7 +54,9 @@
 1. `main` remains the only operational source of truth.
 2. If a branch has a dedicated worktree, treat that worktree as the authoritative place for edits.
 3. Before deleting or merging branches, verify this registry and then verify live `git` state again.
-4. If branch/worktree state changes, this artifact must be refreshed in the same session or at the next session boundary.
+4. If branch/worktree state changes, refresh this artifact in the same session or at the next session boundary.
+5. HEAD hashes here are snapshot values, not a live guarantee.
+6. If this document and live `git` disagree, trust live `git`.
 
 ## Source Commands
 

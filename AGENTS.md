@@ -26,6 +26,16 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Speckit Artifact Guard
+
+If work is driven by a Speckit package (`specs/<feature>/`):
+
+1. Before changing runtime code, reconcile spec artifacts:
+   - `git status --short specs/<feature>/`
+   - ensure `spec.md`, `plan.md`, and `tasks.md` are tracked and present in the branch
+2. Update `specs/<feature>/tasks.md` checkboxes as tasks are completed.
+3. Before push, verify implementation and spec artifacts are synchronized (no hidden untracked Speckit files).
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
@@ -68,7 +78,15 @@ Repo-specific Codex profiles, worktree naming, and local instruction split are d
 docs/CODEX-OPERATING-MODEL.md
 ```
 
-When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, or `knowledge/`, follow the nearest local `AGENTS.md` in addition to the root file.
+When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, `knowledge/`, `.beads/`, or `.specify/`, follow the nearest local `AGENTS.md` in addition to the root file.
+
+## Codex Governance Check
+
+If you change Codex operating-model docs, source instructions, local `AGENTS.md` files, the skill bridge, or Codex launcher/check scripts, run:
+
+```bash
+make codex-check
+```
 
 ## Claude Skill Bridge
 

@@ -20,6 +20,7 @@ Important areas:
 3. Do not break hook or schema contracts casually.
 4. Keep command, skill, and agent boundaries clear.
 5. Prefer updating the real source asset instead of patching generated or copied outputs elsewhere.
+6. Treat `.claude/hooks/`, `.claude/scripts/`, and `.claude/settings*.json` as high-risk runtime-adjacent assets.
 
 ## Skill Sync
 
@@ -40,6 +41,15 @@ Be careful with:
 - any permission, sandbox, or hook-related settings
 
 These files can change runtime behavior significantly.
+
+## Stop And Ask
+
+Stop and ask before:
+- changing hook execution order or invocation contracts
+- changing sandbox, approval, permission, or auto-execution behavior
+- changing `.claude/settings*.json`
+- changing scripts used by hooks or bridge automation
+- removing a skill, command, hook, agent, or schema that may be referenced elsewhere
 
 ## Validation
 

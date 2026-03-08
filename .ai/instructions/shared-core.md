@@ -20,6 +20,16 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Speckit Artifact Guard
+
+If work is driven by a Speckit package (`specs/<feature>/`):
+
+1. Before changing runtime code, reconcile spec artifacts:
+   - `git status --short specs/<feature>/`
+   - ensure `spec.md`, `plan.md`, and `tasks.md` are tracked and present in the branch
+2. Update `specs/<feature>/tasks.md` checkboxes as tasks are completed.
+3. Before push, verify implementation and spec artifacts are synchronized (no hidden untracked Speckit files).
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.

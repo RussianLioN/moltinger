@@ -6,6 +6,28 @@
   "maintainer": "DevOps Team",
   "repository": "https://github.com/RussianLioN/moltinger",
   "scripts": {
+    "codex-check.sh": {
+      "version": "1.0.0",
+      "description": "Validate repo-specific Codex operating model and instruction governance",
+      "entrypoint": true,
+      "requires": ["bash"],
+      "provides": ["codex-check"],
+      "ci": true
+    },
+    "codex-profile-launch.sh": {
+      "version": "1.0.0",
+      "description": "Launch Codex with repo-specific sandbox and approval defaults",
+      "entrypoint": true,
+      "requires": ["codex"],
+      "provides": [
+        "codex-research",
+        "codex-docs",
+        "codex-runtime",
+        "codex-assets",
+        "codex-review",
+        "codex-hotfix"
+      ]
+    },
     "deploy.sh": {
       "version": "2.1.0",
       "description": "Blue-green deployment with health checks, rollback, notifications",

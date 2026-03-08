@@ -14,7 +14,15 @@ Repo-specific Codex profiles, worktree naming, and local instruction split are d
 docs/CODEX-OPERATING-MODEL.md
 ```
 
-When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, or `knowledge/`, follow the nearest local `AGENTS.md` in addition to the root file.
+When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, `knowledge/`, `.beads/`, or `.specify/`, follow the nearest local `AGENTS.md` in addition to the root file.
+
+## Codex Governance Check
+
+If you change Codex operating-model docs, source instructions, local `AGENTS.md` files, the skill bridge, or Codex launcher/check scripts, run:
+
+```bash
+make codex-check
+```
 
 ## Claude Skill Bridge
 
