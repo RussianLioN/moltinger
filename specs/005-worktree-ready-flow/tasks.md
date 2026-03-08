@@ -103,7 +103,7 @@
 
 - [x] T017 [US3] [EXECUTOR: worker] [SEQUENTIAL] Implement `--handoff manual|terminal|codex` parsing and fallback selection in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
 - [x] T018 [US3] [EXECUTOR: worker] [SEQUENTIAL] Implement macOS terminal/Codex launch commands plus manual fallback output in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
-- [ ] T019 [US3] [EXECUTOR: worker] [SEQUENTIAL] Document opt-in handoff behavior, platform limits, and safety boundaries in `.claude/commands/worktree.md`
+- [x] T019 [US3] [EXECUTOR: worker] [SEQUENTIAL] Document opt-in handoff behavior, platform limits, and safety boundaries in `.claude/commands/worktree.md` → Artifacts: [worktree.md](../../.claude/commands/worktree.md)
 
 **Checkpoint**: Handoff automation is useful when requested and harmless when unavailable.
 
