@@ -5,6 +5,22 @@ compose_cmd() {
     docker compose -f "$1" ${2:+-p "$2"} ${3:+$3}
 }
 
+compose_service_health_from_ps_json() {
+    local service="$1"
+
+    jq -sr --arg service "$service" '
+        def rows:
+            if length == 0 then []
+            elif length == 1 and (.[0] | type) == "array" then .[0]
+            else .
+            end;
+
+        rows
+        | map(select(.Service == $service))
+        | .[0].Health // ""
+    '
+}
+
 compose_wait_healthy() {
     local compose_file="$1"
     local project_name="$2"
@@ -14,7 +30,7 @@ compose_wait_healthy() {
     local status=""
 
     while [[ "$waited" -lt "$timeout_seconds" ]]; do
-        status=$(docker compose -f "$compose_file" -p "$project_name" ps --format json 2>/dev/null | jq -r --arg service "$service" '.[] | select(.Service == $service) | .Health' | head -n1)
+        status=$(docker compose -f "$compose_file" -p "$project_name" ps --format json 2>/dev/null | compose_service_health_from_ps_json "$service" 2>/dev/null | tr -d '\r')
         if [[ "$status" == "healthy" ]]; then
             return 0
         fi

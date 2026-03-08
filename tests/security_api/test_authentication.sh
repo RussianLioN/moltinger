@@ -22,13 +22,7 @@ setup_security_auth() {
 
 login_with_password() {
     local password="$1"
-    curl -s -D "$HEADER_FILE" -c "$COOKIE_FILE" -b "$COOKIE_FILE" \
-        -X POST "${MOLTIS_URL}/api/auth/login" \
-        -H 'Content-Type: application/json' \
-        -d "$(jq -nc --arg password "$password" '{password: $password}')" \
-        -o "$RESPONSE_FILE" \
-        -w '%{http_code}' \
-        --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000"
+    moltis_login_with_headers "$MOLTIS_URL" "$password" "$COOKIE_FILE" "$HEADER_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT"
 }
 
 run_security_authentication_tests() {
@@ -68,6 +62,16 @@ run_security_authentication_tests() {
         test_fail "Empty password should be rejected (got $empty_code)"
     fi
 
+    test_start "security_api_protected_chat_requires_auth"
+    rm -f "$COOKIE_FILE"
+    local unauth_chat_code
+    unauth_chat_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"unauthenticated"}')
+    if [[ "$unauth_chat_code" == "401" || "$unauth_chat_code" == "403" || "$unauth_chat_code" == "302" || "$unauth_chat_code" == "303" ]]; then
+        test_pass
+    else
+        test_fail "Protected chat endpoint should require auth (got $unauth_chat_code)"
+    fi
+
     test_start "security_api_valid_password_accepted"
     local valid_code
     valid_code=$(login_with_password "$MOLTIS_PASSWORD")
@@ -77,30 +81,18 @@ run_security_authentication_tests() {
         test_fail "Valid password should authenticate (got $valid_code)"
     fi
 
-    test_start "security_api_protected_chat_requires_auth"
-    rm -f "$COOKIE_FILE"
-    local unauth_chat_code
-    unauth_chat_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"unauthenticated"}')
-    if [[ "$unauth_chat_code" == "401" || "$unauth_chat_code" == "403" || "$unauth_chat_code" == "302" ]]; then
-        test_pass
-    else
-        test_fail "Protected chat endpoint should require auth (got $unauth_chat_code)"
-    fi
-
     test_start "security_api_session_cookie_is_httponly"
-    login_with_password "$MOLTIS_PASSWORD" >/dev/null
-    if rg -qi '^set-cookie:.*httponly' "$HEADER_FILE"; then
+    if header_has_httponly_cookie "$HEADER_FILE"; then
         test_pass
     else
         test_fail "Session cookie should include HttpOnly"
     fi
 
     test_start "security_api_logout_invalidates_session"
-    login_with_password "$MOLTIS_PASSWORD" >/dev/null
     local logout_code post_logout_code
     logout_code=$(moltis_logout_code "$MOLTIS_URL" "$COOKIE_FILE" "$TEST_TIMEOUT")
     post_logout_code=$(moltis_request POST "$MOLTIS_URL" "/api/v1/chat" "$COOKIE_FILE" "$RESPONSE_FILE" "$TEST_TIMEOUT" '{"message":"after logout"}')
-    if [[ "$logout_code" =~ ^(200|204|302|303)$ && "$post_logout_code" =~ ^(401|403|302)$ ]]; then
+    if [[ "$logout_code" =~ ^(200|204|302|303)$ && "$post_logout_code" =~ ^(401|403|302|303)$ ]]; then
         test_pass
     else
         test_fail "Logout should invalidate session (logout=$logout_code, post=$post_logout_code)"

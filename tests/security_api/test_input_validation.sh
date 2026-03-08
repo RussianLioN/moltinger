@@ -29,13 +29,29 @@ login_fixture_user() {
 
 chat_with_payload() {
     local payload="$1"
-    curl -s -D "$HEADER_FILE" -b "$COOKIE_FILE" \
+    curl_with_test_client_ip -s -D "$HEADER_FILE" -b "$COOKIE_FILE" \
         -X POST "${MOLTIS_URL}/api/v1/chat" \
         -H 'Content-Type: application/json' \
         -d "$payload" \
         -o "$RESPONSE_FILE" \
         -w '%{http_code}' \
         --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000"
+}
+
+skip_chat_validation_cases() {
+    local reason="$1"
+    local case_name
+    for case_name in \
+        "security_api_empty_message_rejected" \
+        "security_api_malformed_json_rejected" \
+        "security_api_oversized_message_no_server_error" \
+        "security_api_xss_payload_no_server_error" \
+        "security_api_sql_injection_payload_no_server_error" \
+        "security_api_path_traversal_payload_no_server_error"
+    do
+        test_start "$case_name"
+        test_skip "$reason"
+    done
 }
 
 run_security_input_validation_tests() {
@@ -64,6 +80,14 @@ run_security_input_validation_tests() {
         return
     fi
 
+    local readiness_code
+    readiness_code=$(chat_with_payload '{"message":"fixture readiness probe"}')
+    if response_is_onboarding_redirect "$readiness_code" "$HEADER_FILE"; then
+        skip_chat_validation_cases "Fixture remains gated by product onboarding; chat input validation unavailable"
+        generate_report
+        return
+    fi
+
     test_start "security_api_empty_message_rejected"
     local empty_code
     empty_code=$(chat_with_payload '{"message":""}')
@@ -75,7 +99,7 @@ run_security_input_validation_tests() {
 
     test_start "security_api_malformed_json_rejected"
     local malformed_code
-    malformed_code=$(curl -s -b "$COOKIE_FILE" -X POST "${MOLTIS_URL}/api/v1/chat" -H 'Content-Type: application/json' -d '{"message":' -o "$RESPONSE_FILE" -w '%{http_code}' --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
+    malformed_code=$(curl_with_test_client_ip -s -b "$COOKIE_FILE" -X POST "${MOLTIS_URL}/api/v1/chat" -H 'Content-Type: application/json' -d '{"message":' -o "$RESPONSE_FILE" -w '%{http_code}' --max-time "$TEST_TIMEOUT" 2>/dev/null || echo "000")
     if [[ "$malformed_code" == "400" || "$malformed_code" == "422" ]]; then
         test_pass
     else

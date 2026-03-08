@@ -16,7 +16,7 @@ setup_auth_rate_limit() {
 }
 
 attempt_invalid_login() {
-    curl -s -D "$HEADER_FILE" \
+    curl_with_test_client_ip -s -D "$HEADER_FILE" \
         -X POST "${MOLTIS_URL}/api/auth/login" \
         -H 'Content-Type: application/json' \
         -d '{"password":"definitely-wrong-password"}' \

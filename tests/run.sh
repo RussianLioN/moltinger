@@ -160,6 +160,7 @@ LIST
 bash|component_circuit_breaker|Circuit breaker component|$SCRIPT_DIR/component/test_circuit_breaker.sh
 bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/component/test_prometheus_metrics.sh
 bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_llm_failover_component.sh
+bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh
 LIST
             ;;
         integration_local)
@@ -274,6 +275,15 @@ write_suite_json() {
         }' > "$suite_json_file"
 }
 
+suite_client_ip() {
+    local suite_id="$1"
+    local checksum third_octet fourth_octet
+    checksum=$(printf '%s' "$suite_id" | cksum | awk '{print $1}')
+    third_octet=$((((checksum / 250) % 250) + 1))
+    fourth_octet=$(((checksum % 250) + 1))
+    printf '10.250.%s.%s\n' "$third_octet" "$fourth_octet"
+}
+
 execute_suite() {
     local runtime="$1"
     local lane_name="$2"
@@ -284,6 +294,9 @@ execute_suite() {
     local suite_log_file="$7"
     local suite_junit_file="$8"
     local stdout_file="$suite_log_file.stdout"
+    local client_ip
+
+    client_ip=$(suite_client_ip "$suite_id")
 
     mkdir -p "$(dirname "$suite_json_file")" "$(dirname "$suite_log_file")"
     : > "$suite_log_file"
@@ -305,6 +318,7 @@ execute_suite() {
             TEST_LIVE="$TEST_LIVE" \
             TEST_TIMEOUT="$TEST_TIMEOUT" \
             TEST_BASE_URL="$base_url" \
+            TEST_CLIENT_IP="$client_ip" \
             bash "$suite_path" >"$stdout_file" 2>"$suite_log_file"
             exit_code=$?
             set -e
@@ -317,6 +331,7 @@ execute_suite() {
             TEST_LIVE="$TEST_LIVE" \
             TEST_TIMEOUT="$TEST_TIMEOUT" \
             TEST_BASE_URL="$base_url" \
+            TEST_CLIENT_IP="$client_ip" \
             node "$suite_path" >"$suite_json_file" 2>"$suite_log_file"
             exit_code=$?
             set -e
