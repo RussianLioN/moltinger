@@ -128,6 +128,14 @@
       },
       "cron": "0 * * * *"
     },
+    "worktree-ready.sh": {
+      "version": "1.0.0",
+      "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, and handoff generation",
+      "entrypoint": true,
+      "requires": ["git"],
+      "provides": ["worktree-plan", "worktree-readiness", "worktree-doctor", "worktree-handoff"],
+      "optional_requires": ["bd", "direnv", "jq", "osascript", "codex"]
+    },
     "telegram-webhook-monitor.sh": {
       "version": "1.0.0",
       "description": "Telegram webhook and response cleanliness monitor",

@@ -41,9 +41,11 @@ scripts/git-topology-registry.sh status
 
 **Обычный сценарий**
 1. В Claude-style клиентах используйте `/worktree`; в Codex CLI используйте skill `command-worktree`
-2. Для topology-проверок в Codex CLI используйте `scripts/git-topology-registry.sh check`
-3. Если topology менялась через managed flow, registry обычно обновится сам
-4. Если topology менялась вручную через raw `git`, запускайте recovery flow
+2. Для one-shot старта можно писать коротко: `Используй command-worktree и создай новый worktree remote-uat-hardening`
+3. Workflow сам проверит exact/similar branch/worktree collisions по live `git` и задаст один короткий вопрос только при реальной неоднозначности
+4. Для topology-проверок в Codex CLI используйте `scripts/git-topology-registry.sh check`
+5. Если topology менялась через managed flow, registry обычно обновится сам
+6. Если topology менялась вручную через raw `git`, запускайте recovery flow
 
 **Recovery flow после ручных git-операций**
 ```bash
