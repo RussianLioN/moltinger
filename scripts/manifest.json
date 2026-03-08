@@ -128,6 +128,162 @@
       },
       "cron": "0 * * * *"
     },
+    "telegram-webhook-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Telegram webhook and response cleanliness monitor",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["monitor", "telegram", "webhook", "quality"],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "MOLTIS_BASE_URL",
+        "MOLTIS_PASSWORD",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "TELEGRAM_TEST_USER",
+        "TELEGRAM_REQUIRE_WEBHOOK",
+        "TELEGRAM_REQUIRE_HTTPS_WEBHOOK",
+        "TELEGRAM_REQUIRE_TEST_USER",
+        "TELEGRAM_MAX_PENDING_UPDATES",
+        "TELEGRAM_TIMEOUT_SECONDS",
+        "MONITOR_VALIDATE_PREVIEW"
+      ],
+      "cron": "*/15 * * * *"
+    },
+    "telegram-webhook-control.sh": {
+      "version": "1.0.0",
+      "description": "Direct Telegram Bot API webhook management (set/get/delete)",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["telegram", "webhook", "bot-api", "control"],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-bot-send.sh": {
+      "version": "1.0.0",
+      "description": "Send Telegram messages from CLI as bot",
+      "entrypoint": true,
+      "requires": ["curl", "jq"],
+      "provides": ["telegram", "bot-api", "send-message"],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-user-send.py": {
+      "version": "1.0.0",
+      "description": "Send Telegram messages from CLI as user via MTProto (Telethon)",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "provides": ["telegram", "mtproto", "user-send"],
+      "env_vars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
+    "telegram-user-probe.py": {
+      "version": "1.0.0",
+      "description": "Send probe as Telegram user and validate bot reply quality",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "provides": ["telegram", "mtproto", "probe", "uat"],
+      "env_vars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
+    "telegram-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "One-shot user-level monitor wrapper for periodic checks",
+      "entrypoint": true,
+      "requires": ["python3"],
+      "provides": ["telegram", "user-monitor", "quality-check"],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_MONITOR_TARGET",
+        "TELEGRAM_MONITOR_MESSAGE",
+        "TELEGRAM_MONITOR_TIMEOUT_SECONDS",
+        "TELEGRAM_MONITOR_POLL_INTERVAL",
+        "TELEGRAM_MONITOR_MIN_REPLY_LEN",
+        "TELEGRAM_SESSION",
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH"
+      ]
+    },
+    "telegram-web-user-login.mjs": {
+      "version": "1.0.0",
+      "description": "One-time Telegram Web user login and storage-state save",
+      "entrypoint": true,
+      "requires": ["node"],
+      "provides": ["telegram-web", "user-login", "state-bootstrap"],
+      "env_vars": [
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_LOGIN_TIMEOUT_MS"
+      ]
+    },
+    "telegram-web-user-probe.mjs": {
+      "version": "1.0.0",
+      "description": "Probe bot via Telegram Web as user and validate reply",
+      "entrypoint": true,
+      "requires": ["node"],
+      "provides": ["telegram-web", "user-probe", "quality-check"],
+      "env_vars": [
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_MESSAGE",
+        "TELEGRAM_WEB_TIMEOUT_SECONDS",
+        "TELEGRAM_WEB_MIN_REPLY_LEN",
+        "TELEGRAM_WEB_COMPOSER_RETRIES"
+      ]
+    },
+    "telegram-web-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Wrapper for browser-based user monitor without API_HASH (manual/on-demand)",
+      "entrypoint": true,
+      "requires": ["node"],
+      "provides": ["telegram-web", "user-monitor"],
+      "env_vars": [
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_WEB_STATE",
+        "TELEGRAM_WEB_TARGET",
+        "TELEGRAM_WEB_PROBE_PROFILE",
+        "TELEGRAM_WEB_MESSAGE",
+        "TELEGRAM_WEB_TIMEOUT_SECONDS",
+        "TELEGRAM_WEB_MIN_REPLY_LEN",
+        "TELEGRAM_WEB_COMPOSER_RETRIES"
+      ]
+    },
+    "setup-telegram-web-user-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Install Playwright/Chromium dependencies for web user monitor with optional systemd timer",
+      "entrypoint": true,
+      "requires": ["node", "npm"],
+      "provides": ["telegram-web", "playwright", "setup"],
+      "env_vars": [
+        "PROJECT_DIR",
+        "INSTALL_SYSTEMD"
+      ]
+    },
+    "setup-telegram-webhook-echo.sh": {
+      "version": "1.0.0",
+      "description": "Deploy lightweight Telegram webhook endpoint behind Traefik",
+      "entrypoint": true,
+      "requires": ["docker"],
+      "provides": ["telegram", "webhook", "traefik", "endpoint-setup"],
+      "env_vars": [
+        "DOMAIN",
+        "PATH_PREFIX",
+        "CONTAINER_NAME",
+        "IMAGE",
+        "NETWORK"
+      ]
+    },
     "git-topology-registry.sh": {
       "version": "0.1.0",
       "description": "Owner script for the sanitized git topology registry and reviewed intent sidecar",
@@ -146,7 +302,9 @@
       "curl": "any",
       "jq": "any",
       "tar": "any",
-      "gpg": "optional"
+      "gpg": "optional",
+      "python3": "optional",
+      "node": "optional"
     }
   },
   "deploy": {
@@ -156,6 +314,7 @@
     "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
     "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
   },
+  "systemd_units": {},
   "cron_jobs": {
     "moltis-backup-verify": {
       "source": "cron.d/moltis-backup-verify",
@@ -164,6 +323,22 @@
       "description": "Weekly backup integrity verification (Sunday 03:00 MSK)",
       "command": "/opt/moltinger/scripts/backup-moltis-enhanced.sh verify",
       "issue": "moltinger-hdn"
+    },
+    "moltis-telegram-webhook-monitor": {
+      "source": "cron.d/moltis-telegram-webhook-monitor",
+      "target": "/etc/cron.d/moltis-telegram-webhook-monitor",
+      "schedule": "*/15 * * * *",
+      "description": "Telegram webhook health and response quality monitoring",
+      "command": "/opt/moltinger/scripts/telegram-webhook-monitor.sh --json",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-user-monitor": {
+      "source": "cron.d/moltis-telegram-user-monitor",
+      "target": "/etc/cron.d/moltis-telegram-user-monitor",
+      "schedule": "*/10 * * * *",
+      "description": "User-level Telegram probe and bot reply quality validation",
+      "command": "/opt/moltinger/scripts/telegram-user-monitor.sh",
+      "issue": "moltinger-2kj"
     }
   }
 }

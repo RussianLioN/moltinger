@@ -13,6 +13,8 @@ secrets/ollama_api_key.txt
 
 # Moltis sensitive files
 config/provider_keys.json
+.telegram-web-state.json
+data/.telegram-web-state.json
 
 # Beads local (but track issues.jsonl for sync)
 .beads/*
@@ -39,6 +41,7 @@ node_modules/
 # Temporary
 .tmp/
 *.tmp
+scripts/.scripts-hashes
 
 # Claude Code Local Overrides (Not Shared)
 .claude/settings.local.json

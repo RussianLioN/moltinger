@@ -15,6 +15,7 @@
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
+| `moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `sibling-worktree` | Needs decision |
 | `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
@@ -30,7 +31,8 @@
 | `codex/gitops-metrics-fix` | `origin/codex/gitops-metrics-fix` | Fresh replacement branch with open PR #18. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
-| `feat/moltinger-jb6-gpt54-primary` | `none` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
+| `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
+| `uat/006-git-topology-registry` | `origin/main` | Needs decision |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
 | `001-moltis-docker-deploy` | `origin/001-moltis-docker-deploy` | Historical branch with local drift. |
@@ -58,6 +60,7 @@
 | `origin/codex/gpt54-agents-split` | Needs decision |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/gpt-5-moltis` | Active feature branch. |
+| `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 
 ## Operating Rules
 
