@@ -83,6 +83,17 @@ discovered_branch_name=""
 discovered_beads_state=""
 discovered_redirect_target=""
 
+guard_probe_path=""
+guard_state_file=""
+guard_expected_branch=""
+guard_expected_worktree=""
+guard_created_at=""
+guard_updated_at=""
+guard_current_branch=""
+guard_current_worktree=""
+guard_raw_status=""
+guard_state="unknown"
+
 parse_args() {
   if [[ $# -eq 0 ]]; then
     usage >&2
@@ -315,6 +326,19 @@ reset_discovery() {
   discovered_redirect_target=""
 }
 
+reset_guard_probe() {
+  guard_probe_path=""
+  guard_state_file=""
+  guard_expected_branch=""
+  guard_expected_worktree=""
+  guard_created_at=""
+  guard_updated_at=""
+  guard_current_branch=""
+  guard_current_worktree=""
+  guard_raw_status=""
+  guard_state="unknown"
+}
+
 map_bd_beads_state() {
   local raw_state="$1"
 
@@ -457,6 +481,96 @@ discover_target_state() {
   fi
 }
 
+resolve_guard_probe_path() {
+  if [[ -n "${discovered_worktree_path}" && -d "${discovered_worktree_path}" ]]; then
+    printf '%s\n' "${discovered_worktree_path}"
+    return 0
+  fi
+
+  if [[ -n "${target_path}" && -d "${target_path}" ]]; then
+    printf '%s\n' "${target_path}"
+    return 0
+  fi
+
+  return 1
+}
+
+parse_guard_probe_output() {
+  local output="$1"
+  local line=""
+  local key=""
+  local value=""
+
+  while IFS= read -r line; do
+    case "${line}" in
+      *=*)
+        key="${line%%=*}"
+        value="${line#*=}"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    case "${key}" in
+      state_file) guard_state_file="${value}" ;;
+      expected_branch) guard_expected_branch="${value}" ;;
+      expected_worktree) guard_expected_worktree="${value}" ;;
+      created_at) guard_created_at="${value}" ;;
+      updated_at) guard_updated_at="${value}" ;;
+      current_branch) guard_current_branch="${value}" ;;
+      current_worktree) guard_current_worktree="${value}" ;;
+      status) guard_raw_status="${value}" ;;
+    esac
+  done <<< "${output}"
+
+  case "${guard_raw_status}" in
+    ok)
+      guard_state="ok"
+      ;;
+    drift|detached_head)
+      guard_state="drift"
+      ;;
+    "")
+      if [[ "${output}" == *"No guard state yet"* ]]; then
+        guard_state="missing"
+      fi
+      ;;
+    *)
+      guard_state="unknown"
+      ;;
+  esac
+}
+
+discover_guard_state() {
+  local output=""
+  local exit_code=0
+
+  reset_guard_probe
+
+  if ! guard_probe_path="$(resolve_guard_probe_path)"; then
+    return 0
+  fi
+
+  if [[ ! -x "${guard_probe_path}/scripts/git-session-guard.sh" ]]; then
+    guard_state="missing"
+    return 0
+  fi
+
+  set +e
+  output="$(
+    cd "${guard_probe_path}" && ./scripts/git-session-guard.sh --status 2>&1
+  )"
+  exit_code=$?
+  set -e
+
+  parse_guard_probe_output "${output}"
+
+  if [[ -z "${guard_raw_status}" && "${exit_code}" -ne 0 ]]; then
+    guard_state="unknown"
+  fi
+}
+
 reset_report() {
   report_worktree_path=""
   report_path_preview=""
@@ -496,6 +610,20 @@ apply_discovery_to_report() {
 
   if [[ -n "${discovered_redirect_target}" ]]; then
     add_warning "Discovery found beads redirect metadata for the target worktree"
+  fi
+}
+
+apply_guard_probe_to_report() {
+  if [[ -n "${guard_state}" ]]; then
+    report_guard_state="${guard_state}"
+  fi
+
+  if [[ "${guard_state}" == "drift" ]]; then
+    add_warning "Guard probe detected branch/worktree drift for the target"
+  fi
+
+  if [[ "${guard_state}" == "missing" ]]; then
+    add_warning "Guard probe found no session guard state for the target"
   fi
 }
 
@@ -581,13 +709,14 @@ prepare_report_target() {
   reset_report
   set_report_target
   apply_discovery_to_report
+  apply_guard_probe_to_report
 }
 
 render_mode_placeholder() {
   local mode_name="$1"
 
   prepare_report_target
-  add_warning "Mode '${mode_name}' is still using placeholder readiness values until T006-T007 are implemented."
+  add_warning "Mode '${mode_name}' is still using placeholder readiness values until T007 is implemented."
 
   case "${mode_name}" in
     create|attach)
@@ -596,7 +725,7 @@ render_mode_placeholder() {
       ;;
     doctor)
       report_status="action_required"
-      add_next_step "Re-run doctor after guard and readiness probes land in T006-T007"
+      add_next_step "Re-run doctor after final readiness mapping lands in T007"
       ;;
     handoff)
       report_status="action_required"
@@ -629,6 +758,7 @@ prepare_create_context() {
   fi
 
   discover_target_state
+  discover_guard_state
 }
 
 prepare_attach_context() {
@@ -645,6 +775,7 @@ prepare_attach_context() {
   fi
 
   discover_target_state
+  discover_guard_state
 }
 
 prepare_doctor_context() {
@@ -664,6 +795,7 @@ prepare_doctor_context() {
   fi
 
   discover_target_state
+  discover_guard_state
 }
 
 prepare_handoff_context() {
@@ -682,6 +814,7 @@ prepare_handoff_context() {
   fi
 
   discover_target_state
+  discover_guard_state
 }
 
 handle_create() {
