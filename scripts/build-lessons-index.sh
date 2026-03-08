@@ -138,7 +138,7 @@ sort "$TMP_TAGS" | uniq -c | sort -rn | head -10 | while read count tag; do
 done
 
 # Statistics
-critical=$(grep -E "^(P0|P1)|" "$TMP_SEVERITY" | wc -l | tr -d ' ')
+critical=$(grep -E "^(P0|P1)" "$TMP_SEVERITY" | wc -l | tr -d ' ')
 categories=$(cut -d'|' -f1 "$TMP_CATEGORY" | sort -u | wc -l | tr -d ' ')
 tags_count=$(sort "$TMP_TAGS" | uniq | wc -l | tr -d ' ')
 

@@ -158,6 +158,24 @@ lock_owner_value() {
   awk -F= -v key="${key}" '$1 == key { sub($1 FS, ""); print; exit }' "${lock_owner_file}"
 }
 
+lock_dir_last_modified() {
+  if [[ ! -d "${lock_dir}" ]]; then
+    return 1
+  fi
+
+  if stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ' "${lock_dir}" >/dev/null 2>&1; then
+    stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ' "${lock_dir}"
+    return 0
+  fi
+
+  if stat -c '%y' "${lock_dir}" >/dev/null 2>&1; then
+    stat -c '%y' "${lock_dir}"
+    return 0
+  fi
+
+  return 1
+}
+
 print_lock_diagnostics() {
   local owner_pid=""
   local owner_branch=""
@@ -165,9 +183,16 @@ print_lock_diagnostics() {
   local owner_action=""
   local owner_host=""
   local owner_started_at=""
+  local lock_modified_at=""
 
   if [[ ! -f "${lock_owner_file}" ]]; then
     echo "[git-topology-registry] Lock owner metadata is unavailable." >&2
+    lock_modified_at="$(lock_dir_last_modified || true)"
+    if [[ -n "${lock_modified_at}" ]]; then
+      echo "[git-topology-registry] Lock directory last modified: ${lock_modified_at}" >&2
+    fi
+    echo "[git-topology-registry] This usually means a sibling worktree is running an older topology script or a previous refresh/doctor exited before writing owner metadata." >&2
+    echo "[git-topology-registry] Verify active refresh/doctor commands in sibling worktrees; if none are active, remove: ${lock_dir}" >&2
     return 0
   fi
 

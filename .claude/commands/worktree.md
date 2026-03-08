@@ -141,9 +141,12 @@ Process:
    - `needs_clarification`: ask exactly one short question that includes:
      - the clean new branch option
      - the top similar candidates
-6. Refresh the base branch from the canonical root worktree:
+6. Refresh the base branch from the canonical root worktree using this exact sequence:
    - `git -C <canonical-root> fetch origin`
-   - `git -C <canonical-root> switch main && git -C <canonical-root> pull --rebase` (if `main` exists)
+   - `git -C <canonical-root> branch --show-current`
+   - if the canonical root is not already on `main`, run `git -C <canonical-root> switch main`
+   - `git -C <canonical-root> pull --rebase`
+   - Do not run `git pull --rebase origin main` for this workflow; rely on the configured upstream of `main`.
 7. If issue id exists and the slug was omitted, derive the slug from the issue title using `bd show`, with `--no-db` fallback if needed.
 8. Create or attach the worktree with beads integration:
    - new branch: `bd worktree create ../<repo>-<suffix> --branch <branch>`

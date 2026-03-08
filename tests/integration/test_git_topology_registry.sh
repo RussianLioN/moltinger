@@ -203,6 +203,37 @@ EOF
     test_pass
 }
 
+test_lock_timeout_without_owner_metadata_reports_actionable_fallback() {
+    test_start "git_topology_registry_lock_timeout_without_owner_metadata_reports_actionable_fallback"
+
+    local fixture_root repo_dir output rc expected_lock_dir common_dir
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+    common_dir="$(cd "$repo_dir" && git rev-parse --git-common-dir)"
+    expected_lock_dir="${common_dir}/topology-registry/lock"
+
+    (
+        cd "$repo_dir"
+        mkdir -p "$expected_lock_dir"
+    )
+
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        GIT_TOPOLOGY_REGISTRY_LOCK_WAIT_ATTEMPTS=1 "$REGISTRY_SCRIPT" refresh --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "1" "$rc" "Refresh should fail fast when the topology lock directory exists without metadata"
+    assert_contains "$output" 'Lock owner metadata is unavailable.' "Timeout diagnostics should report missing owner metadata explicitly"
+    assert_contains "$output" 'older topology script or a previous refresh/doctor exited before writing owner metadata' "Missing metadata diagnostics should explain the most likely causes"
+    assert_contains "$output" "remove: ${expected_lock_dir}" "Missing metadata diagnostics should include the exact cleanup path"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -225,6 +256,7 @@ run_all_tests() {
     test_orphan_intent_and_default_needs_decision_are_rendered
     test_check_is_observer_independent_across_sibling_worktrees
     test_lock_timeout_reports_owner_diagnostics
+    test_lock_timeout_without_owner_metadata_reports_actionable_fallback
 
     generate_report
 }

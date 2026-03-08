@@ -387,10 +387,30 @@ format_request_worktree_dirname() {
   printf '%s-%s\n' "${canonical_repo_name}" "${effective_slug}"
 }
 
+derive_worktree_suffix_from_branch() {
+  local branch_name="$1"
+  local stripped_branch=""
+  local normalized_suffix=""
+
+  stripped_branch="$(strip_common_branch_prefix "${branch_name}")"
+  if [[ -z "${stripped_branch}" ]]; then
+    printf '%s\n' "$(sanitize_branch_name "${branch_name}")"
+    return 0
+  fi
+
+  normalized_suffix="$(normalize_slug_token "${stripped_branch}")"
+  if [[ -z "${normalized_suffix}" || "${normalized_suffix}" == "task" ]]; then
+    printf '%s\n' "$(sanitize_branch_name "${branch_name}")"
+    return 0
+  fi
+
+  printf '%s\n' "${normalized_suffix}"
+}
+
 format_worktree_dirname() {
   local branch_name="$1"
 
-  printf '%s-%s\n' "${canonical_repo_name}" "$(sanitize_branch_name "${branch_name}")"
+  printf '%s-%s\n' "${canonical_repo_name}" "$(derive_worktree_suffix_from_branch "${branch_name}")"
 }
 
 format_path_preview() {

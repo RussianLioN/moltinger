@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-07
-**Total Lessons**: 10
+**Generated**: 2026-03-09
+**Total Lessons**: 12
 
 ---
 
@@ -11,7 +11,9 @@
 ### By Severity
 
 
-#### P2 (1 lessons)
+#### P2 (3 lessons)
+- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
+- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
 #### P3 (6 lessons)
@@ -78,22 +80,34 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (1 lessons)
+#### shell (3 lessons)
+- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
+- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
+- [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
+
+#### shell (3 lessons)
+- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
+- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
+- [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
+
+#### shell (3 lessons)
+- [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
+- [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
 
 ### Popular Tags
 
+- `rca` (3 lessons)
+- `ux` (2 lessons)
+- `topology-registry` (2 lessons)
 - `github-actions` (2 lessons)
+- `git-worktree` (2 lessons)
 - `drift-detection` (2 lessons)
+- `worktree-identity` (1 lessons)
 - `token-optimization` (1 lessons)
 - `signal-noise` (1 lessons)
 - `shell` (1 lessons)
-- `security` (1 lessons)
-- `rm-rf` (1 lessons)
-- `recurring-issue` (1 lessons)
-- `rca` (1 lessons)
-- `protocol` (1 lessons)
 
 
 ---
@@ -102,10 +116,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 10 |
-| Critical (P0/P1) | 0 |
+| Total Lessons | 12 |
+| Critical (P0/P1) | 1 |
 | Categories | 5 |
-| Unique Tags | 19 |
+| Unique Tags | 25 |
 
 ---
 

@@ -40,6 +40,14 @@ run_worktree_plan() {
     PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" plan --repo "$repo_dir" "$@"
 }
 
+run_worktree_attach() {
+    local repo_dir="$1"
+    local fake_bin="$2"
+    shift 2
+
+    PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" "$@"
+}
+
 create_fake_direnv_permission_denied_bin() {
     local fixture_root="$1"
     local fake_bin="${fixture_root}/direnv-bin"
@@ -112,6 +120,25 @@ test_plan_reuses_existing_attached_worktree() {
 
     assert_contains "$output" 'Decision: reuse_existing' "Exact attached branch should be reused instead of duplicated"
     assert_contains "$output" "$existing_path" "Plan should point to the existing worktree path"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_attach_reports_clean_preview_for_existing_feature_branch() {
+    test_start "worktree_ready_attach_reports_clean_preview_for_existing_feature_branch"
+
+    local fixture_root repo_dir fake_bin output existing_path
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+
+    output="$(run_worktree_attach "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening --handoff manual)"
+
+    assert_contains "$output" 'Preview: ../moltinger-remote-uat-hardening' "Attach flow should reuse the normalized sibling preview for feature branches"
+    assert_contains "$output" "$existing_path" "Attach flow should report the already-attached worktree path"
 
     rm -rf "$fixture_root"
     test_pass
@@ -198,6 +225,7 @@ run_all_tests() {
     test_plan_creates_clean_slug_without_issue
     test_plan_normalizes_issue_short_in_worktree_path
     test_plan_reuses_existing_attached_worktree
+    test_attach_reports_clean_preview_for_existing_feature_branch
     test_plan_attaches_existing_local_branch
     test_plan_asks_once_when_similar_branch_exists
     test_create_treats_direnv_permission_denied_as_needs_env_approval
