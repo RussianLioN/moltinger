@@ -56,7 +56,14 @@ Inputs:
 Defaults:
 - `base branch`: `main` (fallback: current default branch)
 - `branch`: `feat/<issue-lower>-<slug>`
-- `worktree dir`: `../<repo>-<issue-lower>-<slug>`
+- `worktree dir`: `../<repo>-<issue-short>-<slug>`
+
+Naming rules:
+- `issue-lower` = lowercased issue id exactly as resolved, for example `moltinger-dmi`
+- `issue-short` = `issue-lower` with a leading `<repo>-` prefix removed when present, for example `dmi`
+- Result:
+  - branch: `feat/moltinger-dmi-telegram-webhook-rollout`
+  - worktree dir: `../moltinger-dmi-telegram-webhook-rollout`
 
 Process:
 1. Verify git repository, invoking worktree, and canonical root worktree.
@@ -66,14 +73,16 @@ Process:
    - `git -C <canonical-root> switch main && git -C <canonical-root> pull --rebase` (if `main` exists)
 5. Build slug:
    - from explicit argument, else from issue title via `bd show <ISSUE_ID>`, else `task`
+   - if `bd show <ISSUE_ID>` fails because SQLite is readonly/locked/unavailable, retry with `bd show --no-db <ISSUE_ID>` from the canonical root worktree
 6. Create worktree with beads integration:
-   - `bd worktree create ../<repo>-<issue-lower>-<slug> --branch <branch>`
+   - `bd worktree create ../<repo>-<issue-short>-<slug> --branch <branch>`
 7. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before entering the new worktree so the topology mutation is captured immediately.
    - Do not assume `main` already contains the topology script before this feature is merged.
    - If refresh fails on topology lock, wait briefly and retry once.
    - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
 8. Enter worktree.
 9. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
+   - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
 10. If script exists: `scripts/git-session-guard.sh --refresh`
 11. Return short status block.
 
@@ -100,6 +109,7 @@ Process:
 8. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
    - if stale, report: `Run /session-summary or scripts/git-topology-registry.sh refresh --write-doc from the authoritative worktree before ending the session`
 9. `bd close <ISSUE_ID> --reason "<reason>"`
+   - if direct DB access fails in the current environment, retry with `bd close --no-db <ISSUE_ID> --reason "<reason>"`
 10. Print final status including push result and topology status.
 
 Do not auto-delete branch/worktree in `finish` unless user explicitly asks `cleanup`.
