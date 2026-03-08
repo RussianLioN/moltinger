@@ -139,6 +139,33 @@ test_orphan_intent_and_default_needs_decision_are_rendered() {
     test_pass
 }
 
+test_check_is_observer_independent_across_sibling_worktrees() {
+    test_start "git_topology_registry_check_is_observer_independent_across_sibling_worktrees"
+
+    local fixture_root repo_dir worktree_path
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+    worktree_path="$fixture_root/repo-007-worktree"
+
+    (
+        cd "$repo_dir"
+        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
+    )
+
+    (
+        cd "$worktree_path"
+        mkdir -p docs
+        cp "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md" docs/GIT-TOPOLOGY-REGISTRY.md
+        cp "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" docs/GIT-TOPOLOGY-INTENT.yaml
+        git add docs/GIT-TOPOLOGY-REGISTRY.md docs/GIT-TOPOLOGY-INTENT.yaml
+        git commit -m "fixture: record registry snapshot from sibling observer" >/dev/null
+        "$REGISTRY_SCRIPT" check >/dev/null
+    )
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -159,6 +186,7 @@ run_all_tests() {
     test_refresh_writes_sanitized_registry
     test_refresh_is_noop_when_topology_is_unchanged
     test_orphan_intent_and_default_needs_decision_are_rendered
+    test_check_is_observer_independent_across_sibling_worktrees
 
     generate_report
 }

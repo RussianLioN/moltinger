@@ -669,12 +669,10 @@ collect_local_branches() {
 
     if [[ "${branch}" == "main" ]]; then
       sort_group="0"
-    elif [[ "${branch}" == "${current_branch}" ]]; then
-      sort_group="1"
     elif [[ "${has_worktree}" == "true" ]]; then
-      sort_group="2"
+      sort_group="1"
     else
-      sort_group="3"
+      sort_group="2"
     fi
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
