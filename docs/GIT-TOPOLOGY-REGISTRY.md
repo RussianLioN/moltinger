@@ -15,7 +15,7 @@
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
-| `parallel-feature-005` | `005-worktree-ready-flow` | `sibling-worktree` | Active parallel Speckit feature worktree. |
+| `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 

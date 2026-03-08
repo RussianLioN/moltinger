@@ -141,7 +141,7 @@ records:
     intent: active
     note: Active sibling worktree for the GPT-5.4 primary provider-chain task.
   - subject_type: worktree
-    subject_key: parallel-feature-005
+    subject_key: primary-feature-005
     intent: active
     note: Active parallel Speckit feature worktree.
   - subject_type: worktree

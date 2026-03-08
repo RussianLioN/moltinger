@@ -12,6 +12,7 @@
 ## Entity: WorktreeEntry
 
 - `worktree_id` (string, required): sanitized stable identifier used in the committed registry
+- Numeric feature worktrees canonically render as `primary-feature-NNN` regardless of which worktree runs reconciliation; legacy `parallel-feature-NNN` sidecar keys normalize onto the canonical identifier.
 - `branch` (string, required)
 - `location_class` (enum, required): `primary` | `dedicated-feature-worktree` | `codex-managed` | `sibling-worktree` | `local-only` | `unknown`
 - `status` (enum, required): `active` | `protected-from-cleanup` | `review-before-cleanup` | `historical` | `unknown`

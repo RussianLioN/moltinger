@@ -30,7 +30,7 @@ Thin wrapper around `scripts/git-topology-registry.sh`.
 2. Route the request directly to the owner script without hand-editing `docs/GIT-TOPOLOGY-REGISTRY.md`.
 3. Return the script output verbatim unless the user asked for explanation.
 4. If `check` or `doctor` reports stale state, recommend `/session-summary` or `scripts/git-topology-registry.sh refresh --write-doc`.
-5. If `refresh` or `doctor --write-doc` changed the registry, say so explicitly in the final status.
+5. If `refresh` or `doctor --write-doc` changed the registry, say so explicitly in the final status and note that a tracked diff in `docs/GIT-TOPOLOGY-REGISTRY.md` is expected after real topology drift.
 
 ## Safety Rules
 

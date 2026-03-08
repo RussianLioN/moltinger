@@ -33,7 +33,7 @@ EOF
 }
 
 append_out_of_band_reviewed_intent() {
-    local repo_dir="$1"
+  local repo_dir="$1"
 
     cat >> "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
   - subject_type: branch
@@ -48,6 +48,33 @@ append_out_of_band_reviewed_intent() {
     subject_key: parallel-feature-008
     intent: protected
     note: Reviewed worktree note retained across doctor.
+EOF
+}
+
+write_feature_authority_intent() {
+    local repo_dir="$1"
+
+    cat > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
+version: 1
+defaults:
+  missing_intent: needs-decision
+records:
+  - subject_type: branch
+    subject_key: main
+    intent: active
+    note: Canonical source of truth.
+  - subject_type: branch
+    subject_key: 006-demo-feature
+    intent: active
+    note: Active demo feature branch.
+  - subject_type: worktree
+    subject_key: primary-feature-006
+    intent: active
+    note: Authoritative worktree for demo feature.
+  - subject_type: worktree
+    subject_key: primary-root
+    intent: active
+    note: Canonical root worktree.
 EOF
 }
 
@@ -97,7 +124,7 @@ test_managed_start_and_cleanup_refresh_registry() {
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_contains "$doc" '`007-demo-feature`' "Managed start should refresh branch entry"
-    assert_contains "$doc" '`parallel-feature-007`' "Managed start should refresh worktree entry"
+    assert_contains "$doc" '`primary-feature-007`' "Managed start should refresh worktree entry"
     assert_contains "$doc" '`origin/007-demo-feature`' "Managed start should refresh remote entry"
 
     git_topology_fixture_remove_worktree "$repo_dir" "$worktree_path"
@@ -110,7 +137,7 @@ test_managed_start_and_cleanup_refresh_registry() {
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_not_contains_literal "$doc" '`007-demo-feature`' "Cleanup should remove deleted branch from registry"
-    assert_not_contains_literal "$doc" '`parallel-feature-007`' "Cleanup should remove deleted worktree from registry"
+    assert_not_contains_literal "$doc" '`primary-feature-007`' "Cleanup should remove deleted worktree from registry"
     assert_not_contains_literal "$doc" '`origin/007-demo-feature`' "Cleanup should remove deleted remote branch from registry"
 
     rm -rf "$fixture_root"
@@ -181,12 +208,63 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     assert_contains "$doc" 'Reviewed remote note retained across doctor.' "Doctor reconciliation should preserve reviewed remote annotation"
     assert_contains "$doc" 'Reviewed worktree note retained across doctor.' "Doctor reconciliation should preserve reviewed worktree annotation"
     assert_contains "$doc" '`008-out-of-band`' "Doctor reconciliation should refresh branch entry"
-    assert_contains "$doc" '`parallel-feature-008`' "Doctor reconciliation should refresh worktree entry"
+    assert_contains "$doc" '`primary-feature-008`' "Doctor reconciliation should refresh worktree entry"
     assert_not_contains_literal "$doc" '`branch` | `008-out-of-band`' "Reconciled branch should no longer appear in orphan intent table"
     assert_dir_exists "$backup_dir" "Doctor reconciliation should create backup directory"
     latest_backup="$(find "$backup_dir" -type f -name 'registry-*.md' | sort | tail -1)"
     assert_file_exists "$latest_backup" "Doctor reconciliation should save a backup of the previous registry"
     assert_eq "$doc_before_doctor" "$(cat "$latest_backup")" "Backup should preserve the last good committed registry"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_child_branch_doctor_preserves_authoritative_feature_identity() {
+    test_start "git_topology_registry_child_branch_doctor_preserves_authoritative_feature_identity"
+
+    local fixture_root repo_dir feature_worktree child_worktree doc
+    fixture_root="$(mktemp -d /tmp/git-topology-e2e.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
+    git_topology_fixture_seed_registry_assets "$repo_dir" "$PROJECT_ROOT"
+    mkdir -p "$repo_dir/docs"
+    write_feature_authority_intent "$repo_dir"
+
+    (
+        cd "$repo_dir"
+        git add docs scripts .githooks
+        git commit -m "fixture: seed topology registry assets" >/dev/null
+        git switch -c 006-demo-feature >/dev/null
+        printf 'demo\n' > demo-feature.txt
+        git add demo-feature.txt
+        git commit -m "fixture: add demo feature branch" >/dev/null
+        git push -u origin 006-demo-feature >/dev/null
+        git switch main >/dev/null
+    )
+
+    feature_worktree="$fixture_root/repo-006-worktree"
+    child_worktree="$fixture_root/repo-child-worktree"
+    git_topology_fixture_add_worktree "$repo_dir" "$feature_worktree" "006-demo-feature"
+
+    (
+        cd "$feature_worktree"
+        ./scripts/git-topology-registry.sh refresh --write-doc >/dev/null
+        git add docs/GIT-TOPOLOGY-REGISTRY.md
+        git commit -m "fixture: commit authoritative feature registry" >/dev/null
+    )
+
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$child_worktree" "feat/demo-child" "006-demo-feature"
+
+    (
+        cd "$child_worktree"
+        ./scripts/git-topology-registry.sh doctor --prune --write-doc >/dev/null
+    )
+
+    doc="$(cat "$child_worktree/docs/GIT-TOPOLOGY-REGISTRY.md")"
+    assert_contains "$doc" '`primary-feature-006`' "Child-branch reconcile should preserve canonical authoritative feature worktree id"
+    assert_contains "$doc" 'Authoritative worktree for demo feature.' "Child-branch reconcile should preserve authoritative worktree note"
+    assert_contains "$doc" '`demo-child`' "Child-branch reconcile should include the new task worktree"
+    assert_not_contains_literal "$doc" '`parallel-feature-006`' "Child-branch reconcile must not downgrade authoritative feature worktree to a parallel id"
+    assert_not_contains_literal "$doc" '| `worktree` | `primary-feature-006` |' "Canonical authoritative worktree must not be rendered as orphan intent"
 
     rm -rf "$fixture_root"
     test_pass
@@ -211,6 +289,7 @@ run_all_tests() {
 
     test_managed_start_and_cleanup_refresh_registry
     test_hooks_and_session_boundary_reconcile_out_of_band_drift
+    test_child_branch_doctor_preserves_authoritative_feature_identity
 
     generate_report
 }

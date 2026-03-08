@@ -75,6 +75,8 @@ test_refresh_writes_sanitized_registry() {
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_contains "$doc" 'Generated artifact from live git topology' "Registry should be rendered by generator"
     assert_contains "$doc" 'Demo feature branch.' "Registry should merge reviewed branch intent"
+    assert_contains "$doc" '`primary-feature-007`' "Registry should canonicalize numeric feature worktree identifiers"
+    assert_contains "$doc" 'Demo feature worktree.' "Canonical feature row should preserve legacy reviewed note"
 
     if [[ "$doc" == *"$fixture_root"* ]] || [[ "$doc" == *"$repo_dir"* ]]; then
         test_fail "Registry leaked absolute integration fixture paths"
@@ -127,6 +129,11 @@ test_orphan_intent_and_default_needs_decision_are_rendered() {
     assert_contains "$doc" '099-retired-feature' "Registry should list orphan subject key"
     assert_contains "$doc" 'Preserve this reviewed note until the sidecar is pruned.' "Registry should preserve orphan reviewed note"
     assert_contains "$doc" '| `008-unreviewed` | `none` | Needs decision |' "Unreviewed local branch should fall back to needs-decision"
+    if [[ "$doc" == *"parallel-feature-007"* ]]; then
+        test_fail "Legacy numeric feature alias should not render as a separate orphan record"
+        rm -rf "$fixture_root"
+        return 1
+    fi
 
     rm -rf "$fixture_root"
     test_pass

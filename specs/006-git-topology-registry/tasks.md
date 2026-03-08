@@ -98,6 +98,15 @@
 
 ---
 
+## Post-UAT Regression Hardening
+
+- [x] T045 [US3] Add regression coverage for child worktree reconciliation preserving authoritative numbered-feature worktree identity in `tests/e2e/test_git_topology_registry_workflow.sh`
+- [x] T046 [US3] Canonicalize numbered feature worktree identifiers independently of the calling branch and preserve legacy sidecar aliases in `scripts/git-topology-registry.sh`
+- [x] T047 [US2] Clarify user-facing docs that `doctor --write-doc` intentionally updates the tracked registry snapshot when topology changed in `docs/QUICK-REFERENCE.md` and `specs/006-git-topology-registry/quickstart.md`
+- [x] T048 [P] Document the regression RCA and update the generated registry/intent snapshot after the hardening pass
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

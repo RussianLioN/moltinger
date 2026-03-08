@@ -62,6 +62,7 @@ The team can keep reviewed branch/worktree intent separately from generated git 
 - How does the system behave when a worktree is detached, stale, or otherwise incomplete?
 - What happens when reviewed intent exists for a branch or worktree that no longer exists?
 - How does the system behave when two topology refreshes are attempted at nearly the same time?
+- What happens when a new task branch/worktree is created from inside another numbered feature worktree and reconciliation is run from the child branch?
 
 ## Requirements *(mandatory)*
 
@@ -81,6 +82,7 @@ The team can keep reviewed branch/worktree intent separately from generated git 
 - **FR-012**: System MUST preserve useful coordination context for active, historical, protected, and undecided branches/worktrees.
 - **FR-013**: System MUST degrade gracefully when expected remote topology context is unavailable.
 - **FR-014**: System MUST NOT change git topology itself as part of registry maintenance.
+- **FR-015**: System MUST keep canonical worktree identity for numbered feature branches stable regardless of which sibling or child worktree runs reconciliation.
 
 ### Key Entities *(include if feature involves data)*
 

@@ -54,6 +54,11 @@ cat .git/topology-registry/registry.draft.md
 scripts/git-topology-registry.sh doctor --prune --write-doc
 ```
 
+Важно:
+- `doctor --prune` не меняет tracked files; он пишет только recovery draft в `.git/`
+- `doctor --prune --write-doc` намеренно переписывает `docs/GIT-TOPOLOGY-REGISTRY.md`, если live topology изменилась
+- поэтому `git status` с `M docs/GIT-TOPOLOGY-REGISTRY.md` после `--write-doc` при реальном topology drift это ожидаемое поведение, а не сбой команды
+
 **Где хранить ручные пометки**
 - Редактировать только `docs/GIT-TOPOLOGY-INTENT.yaml`
 - Не редактировать вручную `docs/GIT-TOPOLOGY-REGISTRY.md`

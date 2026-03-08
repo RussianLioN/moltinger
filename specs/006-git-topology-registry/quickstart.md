@@ -50,6 +50,12 @@ This writes the committed registry and preserves the previous committed version 
 .git/topology-registry/backups/
 ```
 
+Expected result after a real topology mutation:
+
+- `doctor --prune` is read-only for tracked files and only writes the draft under `.git/topology-registry/`
+- `doctor --prune --write-doc` updates `docs/GIT-TOPOLOGY-REGISTRY.md`
+- seeing `M docs/GIT-TOPOLOGY-REGISTRY.md` in `git status` after `--write-doc` is expected whenever the committed snapshot had to catch up with live git state
+
 ## Expected Workflow Integration
 
 - `/worktree start` should refresh the registry after successful creation.

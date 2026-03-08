@@ -19,6 +19,10 @@ Turn `docs/GIT-TOPOLOGY-REGISTRY.md` from a hand-seeded note into a deterministi
 **Constraints**: deterministic output, sanitized committed state, no destructive topology mutation, low diff churn  
 **Scale/Scope**: single repository, multiple parallel worktrees, local and remote branch coordination
 
+## Post-UAT Hardening Note
+
+- Canonical worktree identity for numbered feature branches must be observer-independent. Running `doctor` from a child task branch may add new topology rows, but it must not rename or orphan the authoritative feature worktree for the parent `NNN-*` branch.
+
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*

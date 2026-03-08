@@ -156,6 +156,15 @@ GitOps Compliance: Enforced ✅
   - confirmed `pre-push` blocks stale topology before publishing a new parallel branch
   - promoted the new branch/worktree from `needs-decision` to reviewed `active` intent in the sidecar
 
+#### Post-UAT Hardening
+
+- reproduced a real child-worktree drift case where `doctor --write-doc` from a child branch renamed the authoritative `006-*` worktree
+- fixed canonical numbered-feature worktree identity so it no longer depends on the caller branch
+- preserved legacy sidecar aliases `parallel-feature-NNN` as canonical `primary-feature-NNN`
+- clarified in user docs that `doctor --prune --write-doc` intentionally dirties `docs/GIT-TOPOLOGY-REGISTRY.md` after real topology drift
+- added RCA: `docs/rca/2026-03-08-topology-child-worktree-identity-drift.md`
+- added regression coverage in `tests/e2e/test_git_topology_registry_workflow.sh`
+
 #### Handoff
 
 - Active branch: `006-git-topology-registry`

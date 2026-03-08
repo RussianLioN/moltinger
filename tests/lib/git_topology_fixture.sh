@@ -64,6 +64,18 @@ git_topology_fixture_add_worktree() {
   )
 }
 
+git_topology_fixture_add_worktree_branch_from() {
+  local repo_dir="$1"
+  local worktree_path="$2"
+  local new_branch="$3"
+  local start_point="$4"
+
+  (
+    cd "${repo_dir}"
+    git worktree add -b "${new_branch}" "${worktree_path}" "${start_point}" >/dev/null
+  )
+}
+
 git_topology_fixture_seed_registry_assets() {
   local repo_dir="$1"
   local project_root="$2"

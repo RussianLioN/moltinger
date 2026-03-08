@@ -75,7 +75,8 @@ test_registry_refresh_is_deterministic_and_sanitized() {
     second_hash="$(hash_file "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
 
     assert_eq "$first_hash" "$second_hash" "Repeated refresh should render identical registry content"
-    assert_contains "$doc" '`parallel-feature-007`' "Registry should include generated worktree row"
+    assert_contains "$doc" '`primary-feature-007`' "Registry should include generated worktree row"
+    assert_contains "$doc" 'Demo feature worktree.' "Legacy feature-worktree intent should normalize onto the canonical row"
     assert_contains "$doc" '`origin/007-demo-feature`' "Registry should include unmerged remote branch row"
 
     if [[ "$doc" == *"$fixture_root"* ]] || [[ "$doc" == *"$repo_dir"* ]] || [[ "$doc" == *"$worktree_path"* ]]; then

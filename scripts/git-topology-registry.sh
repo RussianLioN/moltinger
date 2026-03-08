@@ -168,6 +168,18 @@ normalize_scalar() {
   printf '%s\n' "${value}"
 }
 
+normalize_subject_key() {
+  local subject_type="$1"
+  local subject_key="$2"
+
+  if [[ "${subject_type}" == "worktree" && "${subject_key}" =~ ^parallel-feature-([0-9]{3})$ ]]; then
+    printf 'primary-feature-%s\n' "${BASH_REMATCH[1]}"
+    return
+  fi
+
+  printf '%s\n' "${subject_key}"
+}
+
 valid_subject_type() {
   case "$1" in
     branch|worktree|remote)
@@ -292,6 +304,7 @@ parse_intent_sidecar() {
         ;;
       "    subject_key:"*)
         current_key="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
+        current_key="$(normalize_subject_key "${current_type}" "${current_key}")"
         ;;
       "    intent:"*)
         current_intent="$(normalize_scalar "$(trim_leading_spaces "${line#*:}")")"
@@ -377,11 +390,7 @@ derive_worktree_id() {
   fi
 
   if [[ "${branch}" =~ ^([0-9]{3})- ]]; then
-    if [[ "${branch}" == "${current_branch}" ]]; then
-      printf 'primary-feature-%s\n' "${BASH_REMATCH[1]}"
-    else
-      printf 'parallel-feature-%s\n' "${BASH_REMATCH[1]}"
-    fi
+    printf 'primary-feature-%s\n' "${BASH_REMATCH[1]}"
     return
   fi
 
@@ -417,7 +426,7 @@ derive_location_class() {
     return
   fi
 
-  if [[ "${branch}" =~ ^([0-9]{3})- && "${branch}" == "${current_branch}" ]]; then
+  if [[ "${branch}" =~ ^([0-9]{3})- ]]; then
     printf 'dedicated-feature-worktree\n'
     return
   fi

@@ -43,5 +43,6 @@
 
 - Records sort by `subject_type`, then `subject_key`
 - `subject_key` must match the rendered row key used in the registry
+- Legacy worktree keys of the form `parallel-feature-NNN` normalize to the canonical rendered key `primary-feature-NNN`
 - Notes must stay short and safe to commit
 - Unknown or missing records must not block rendering; they fall back to `needs-decision`
