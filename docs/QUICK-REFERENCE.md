@@ -19,6 +19,9 @@
 ## Git Topology Registry
 
 ```bash
+# Короткая команда-обёртка
+/git-topology
+
 # Проверить, что registry не устарел
 scripts/git-topology-registry.sh check
 
@@ -30,6 +33,58 @@ scripts/git-topology-registry.sh status
 ```
 
 Использовать перед cleanup worktree/branch и после create/remove/switch flow.
+
+### Как пользоваться
+
+**Обычный сценарий**
+1. Создавайте и убирайте worktree через `/worktree`
+2. Перед handoff или cleanup запускайте `/git-topology check`
+3. Если topology менялась через managed flow, registry обычно обновится сам
+4. Если topology менялась вручную через raw `git`, запускайте recovery flow
+
+**Recovery flow после ручных git-операций**
+```bash
+# Построить recovery draft без изменения committed registry
+scripts/git-topology-registry.sh doctor --prune
+
+# Посмотреть draft
+cat .git/topology-registry/registry.draft.md
+
+# Если draft корректен, применить reconcile
+scripts/git-topology-registry.sh doctor --prune --write-doc
+```
+
+**Где хранить ручные пометки**
+- Редактировать только `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Не редактировать вручную `docs/GIT-TOPOLOGY-REGISTRY.md`
+
+### Что происходит автоматически
+
+- `/worktree start` и `/worktree cleanup` обновляют registry после topology mutation
+- `/session-summary` использует registry как session-boundary reconcile point
+- `pre-push` блокирует push, если registry stale
+- `post-checkout`, `post-merge`, `post-rewrite` ничего молча не переписывают, только сигналят о stale-state
+
+### Что под капотом
+
+- Источник правды: live `git`, а не markdown
+- Скрипт читает:
+  - `git worktree list --porcelain`
+  - `git for-each-ref ... refs/heads`
+  - `git for-each-ref ... refs/remotes/origin`
+- Потом он:
+  - нормализует worktree/branch topology
+  - подмешивает reviewed intent из `docs/GIT-TOPOLOGY-INTENT.yaml`
+  - рендерит deterministic snapshot в `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Recovery artifacts живут в `.git/topology-registry/`:
+  - `registry.draft.md`
+  - `backups/`
+
+### Полезные ссылки
+
+- User/merge handoff: `specs/006-git-topology-registry/quickstart.md`
+- Live committed registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Reviewed intent sidecar: `docs/GIT-TOPOLOGY-INTENT.yaml`
 
 ---
 
