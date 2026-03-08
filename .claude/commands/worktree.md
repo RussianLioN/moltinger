@@ -127,6 +127,29 @@ Routing rules for these flows:
 3. Use the helper result as authoritative when the branch is already attached to another worktree.
 4. Only fall back to `bd worktree create` when the branch exists locally and no existing attachment is reported.
 
+Examples:
+
+```text
+/worktree attach codex/gitops-metrics-fix
+Preview: ../moltinger-codex-gitops-metrics-fix
+Worktree: /Users/rl/coding/moltinger-codex-gitops-metrics-fix
+Status: created
+Next:
+  1. cd /Users/rl/coding/moltinger-codex-gitops-metrics-fix
+  2. direnv allow # if prompted
+  3. codex
+```
+
+```text
+/worktree attach codex/full-review
+Preview: ../moltinger-codex-full-review
+Worktree: /Users/rl/.codex/worktrees/da4f/moltinger
+Status: action_required
+Next:
+  1. cd /Users/rl/.codex/worktrees/da4f/moltinger
+  2. Inspect the existing worktree and fix the reported prerequisites
+```
+
 ## Doctor Workflow
 
 Usage:
