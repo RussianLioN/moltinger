@@ -288,6 +288,33 @@ Next:
   2. codex
 ```
 
+Recovery guidance:
+
+Occupied branch:
+
+```text
+/worktree attach codex/full-review
+Worktree: /Users/rl/.codex/worktrees/da4f/moltinger
+Status: action_required
+Next:
+  1. cd /Users/rl/.codex/worktrees/da4f/moltinger
+  2. Inspect the existing worktree and fix the reported prerequisites
+Warnings:
+  - Branch 'codex/full-review' is already attached at /Users/rl/.codex/worktrees/da4f/moltinger
+```
+
+Guard drift during doctor:
+
+```text
+/worktree doctor /Users/rl/coding/moltinger-codex-gitops-metrics-fix
+Status: drift_detected
+Next:
+  1. cd /Users/rl/coding/moltinger-codex-gitops-metrics-fix
+  2. ./scripts/git-session-guard.sh --refresh
+Warnings:
+  - Guard probe detected branch/worktree drift for the target
+```
+
 Optional helper detail lines may also include:
 - `Env: <unknown|no_envrc|approval_needed|approved_or_not_required>`
 - `Guard: <unknown|missing|ok|drift>`
