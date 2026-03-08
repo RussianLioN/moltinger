@@ -12,6 +12,7 @@
 |---|---|---|---|
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gitops-metrics-fix` | `codex/gitops-metrics-fix` | `sibling-worktree` | Active replacement branch for closed PR #3; open PR #18. |
+| `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
 | `parallel-feature-005` | `005-worktree-ready-flow` | `sibling-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
@@ -26,6 +27,7 @@
 | `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gitops-metrics-fix` | `origin/codex/gitops-metrics-fix` | Fresh replacement branch with open PR #18. |
+| `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
@@ -50,6 +52,7 @@
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/full-review` | Active parallel session; exclude from automated cleanup. |
 | `origin/codex/gitops-metrics-fix` | Active replacement PR #18. |
+| `origin/codex/gpt54-agents-split` | Needs decision |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/gpt-5-moltis` | Active feature branch. |
 

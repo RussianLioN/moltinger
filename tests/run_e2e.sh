@@ -165,6 +165,37 @@ find_test_files() {
     printf '%s\n' "${test_files[@]}"
 }
 
+tests_require_containers() {
+    local test_file="$1"
+
+    if grep -Eq '^[[:space:]]*# E2E_REQUIRES_CONTAINERS=false[[:space:]]*$' "$test_file"; then
+        return 1
+    fi
+
+    return 0
+}
+
+selected_suite_requires_containers() {
+    local test_files=()
+    local test_file
+
+    while IFS= read -r test_file; do
+        [[ -n "$test_file" ]] && test_files+=("$test_file")
+    done < <(find_test_files)
+
+    if [[ ${#test_files[@]} -eq 0 ]]; then
+        return 1
+    fi
+
+    for test_file in "${test_files[@]}"; do
+        if tests_require_containers "$test_file"; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # ==============================================================================
 # CONTAINER MANAGEMENT
 # ==============================================================================
@@ -247,6 +278,42 @@ trap cleanup EXIT INT TERM
 # TEST EXECUTION
 # ==============================================================================
 
+run_with_timeout() {
+    local timeout_seconds="$1"
+    shift
+
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$timeout_seconds" "$@"
+        return
+    fi
+
+    if command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$timeout_seconds" "$@"
+        return
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$timeout_seconds" "$@" <<'PY'
+import subprocess
+import sys
+
+timeout_seconds = int(sys.argv[1])
+command = sys.argv[2:]
+
+try:
+    completed = subprocess.run(command, timeout=timeout_seconds)
+except subprocess.TimeoutExpired:
+    sys.exit(124)
+
+sys.exit(completed.returncode)
+PY
+        return
+    fi
+
+    echo "No timeout command available (need timeout, gtimeout, or python3)" >&2
+    return 127
+}
+
 # Run a single test file with timeout
 run_test_file() {
     local test_file="$1"
@@ -254,21 +321,34 @@ run_test_file() {
     test_name=$(basename "$test_file" .sh)
 
     log_info "Running: $test_name (timeout: ${TIMEOUT}s)"
+    test_start "$test_name"
 
     # Run with timeout
     local output
     local exit_code
 
-    output=$(timeout "$TIMEOUT" bash -c "
+    output=$(run_with_timeout "$TIMEOUT" bash -c "
         source '$LIB_DIR/test_helpers.sh'
+        set -euo pipefail
         set_json_output '$OUTPUT_JSON'
         source '$test_file'
+        if declare -F run_all_tests >/dev/null 2>&1; then
+            run_all_tests
+        else
+            echo 'Missing run_all_tests in $test_file' >&2
+            exit 2
+        fi
     " 2>&1) || exit_code=$?
 
     if [[ ${exit_code:-0} -eq 124 ]]; then
         log_error "Test timed out after ${TIMEOUT}s: $test_name"
         test_fail "Test timed out: $test_name"
         return 1
+    elif [[ ${exit_code:-0} -eq 2 ]]; then
+        log_warn "Test skipped due to unmet dependencies: $test_name"
+        [[ -n "$output" ]] && echo "$output"
+        test_skip "Test skipped: $test_name"
+        return 0
     elif [[ ${exit_code:-0} -ne 0 ]]; then
         log_error "Test failed with exit code $exit_code: $test_name"
         echo "$output"
@@ -276,7 +356,12 @@ run_test_file() {
         return 1
     fi
 
+    if [[ "$VERBOSE" == "true" && -n "$output" ]]; then
+        echo "$output"
+    fi
+
     log_debug "Test completed: $test_name"
+    test_pass
 }
 
 # Run all test files
@@ -347,8 +432,11 @@ main() {
         echo ""
     fi
 
-    # Start containers
-    start_containers
+    if selected_suite_requires_containers; then
+        start_containers
+    else
+        log_info "Skipping container startup: selected E2E tests declared E2E_REQUIRES_CONTAINERS=false"
+    fi
 
     # Run all tests
     run_all_tests

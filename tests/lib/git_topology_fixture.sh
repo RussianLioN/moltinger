@@ -52,3 +52,44 @@ git_topology_fixture_add_worktree() {
     git worktree add "${worktree_path}" "${branch_name}" >/dev/null
   )
 }
+
+git_topology_fixture_seed_registry_assets() {
+  local repo_dir="$1"
+  local project_root="$2"
+
+  mkdir -p "${repo_dir}/docs" "${repo_dir}/scripts" "${repo_dir}/.githooks"
+
+  cp "${project_root}/scripts/git-topology-registry.sh" "${repo_dir}/scripts/git-topology-registry.sh"
+  cp "${project_root}/.githooks/pre-push" "${repo_dir}/.githooks/pre-push"
+  cp "${project_root}/.githooks/post-checkout" "${repo_dir}/.githooks/post-checkout"
+  cp "${project_root}/.githooks/post-merge" "${repo_dir}/.githooks/post-merge"
+  cp "${project_root}/.githooks/post-rewrite" "${repo_dir}/.githooks/post-rewrite"
+
+  chmod +x \
+    "${repo_dir}/scripts/git-topology-registry.sh" \
+    "${repo_dir}/.githooks/pre-push" \
+    "${repo_dir}/.githooks/post-checkout" \
+    "${repo_dir}/.githooks/post-merge" \
+    "${repo_dir}/.githooks/post-rewrite"
+}
+
+git_topology_fixture_remove_worktree() {
+  local repo_dir="$1"
+  local worktree_path="$2"
+
+  (
+    cd "${repo_dir}"
+    git worktree remove "${worktree_path}" --force >/dev/null
+  )
+}
+
+git_topology_fixture_delete_branch() {
+  local repo_dir="$1"
+  local branch_name="$2"
+
+  (
+    cd "${repo_dir}"
+    git branch -D "${branch_name}" >/dev/null
+    git push origin --delete "${branch_name}" >/dev/null 2>&1 || true
+  )
+}

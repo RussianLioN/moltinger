@@ -5,9 +5,19 @@ set -euo pipefail
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
+REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
 
 if [[ -x "$GUARD_SCRIPT" ]]; then
   "$GUARD_SCRIPT" --check --hook pre-push
+fi
+
+if [[ -x "$REGISTRY_SCRIPT" ]]; then
+  if ! output="$("$REGISTRY_SCRIPT" check 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    echo "[git-topology-registry] Push blocked until docs/GIT-TOPOLOGY-REGISTRY.md matches live git state." >&2
+    echo "[git-topology-registry] Run /session-summary or scripts/git-topology-registry.sh refresh --write-doc." >&2
+    exit 1
+  fi
 fi
 
 exit 0

@@ -54,16 +54,20 @@ Defaults:
 
 Process:
 1. Verify git repository and project root.
-2. `git fetch origin`
-3. `git switch main && git pull --rebase` (if `main` exists)
-4. Build slug:
+2. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh doctor --prune` as a non-blocking preflight.
+3. `git fetch origin`
+4. `git switch main && git pull --rebase` (if `main` exists)
+5. Build slug:
    - from explicit argument, else from issue title via `bd show <ISSUE_ID>`, else `task`
-5. Create worktree with beads integration:
+6. Create worktree with beads integration:
    - `bd worktree create ../<repo>-<issue-lower>-<slug> --branch <branch>`
-6. Enter worktree.
-7. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
-8. If script exists: `scripts/git-session-guard.sh --refresh`
-9. Return short status block.
+7. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh refresh --write-doc` before entering the new worktree so the topology mutation is captured immediately.
+8. Enter worktree.
+9. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
+10. If script exists: `scripts/git-session-guard.sh --refresh`
+11. Return short status block.
+
+If the registry refresh fails, stop and report the exact command needed to reconcile it. Do not hand-edit `docs/GIT-TOPOLOGY-REGISTRY.md`.
 
 ## Finish Workflow
 
@@ -83,8 +87,10 @@ Process:
 5. `git pull --rebase`
 6. `bd sync`
 7. `git push -u origin <current-branch>`
-8. `bd close <ISSUE_ID> --reason "<reason>"`
-9. Print final status including push result.
+8. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
+   - if stale, report: `Run /session-summary or scripts/git-topology-registry.sh refresh --write-doc from the authoritative worktree before ending the session`
+9. `bd close <ISSUE_ID> --reason "<reason>"`
+10. Print final status including push result and topology status.
 
 Do not auto-delete branch/worktree in `finish` unless user explicitly asks `cleanup`.
 
@@ -99,7 +105,8 @@ Process:
 3. If `--delete-branch`:
    - verify branch is merged into `origin/main`
    - delete local + remote branch
-4. Print cleanup report.
+4. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh refresh --write-doc`
+5. Print cleanup report.
 
 ## Legacy Commands
 

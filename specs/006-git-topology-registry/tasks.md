@@ -62,11 +62,11 @@
 
 **Independent Test**: Run `/worktree start`, `/worktree cleanup`, and `/session-summary` paths in a temp repo/worktree setup and verify the registry is refreshed or the user receives actionable stale-state guidance.
 
-- [ ] T020 [US2] Integrate registry refresh/check into `.claude/commands/worktree.md` for `start`, `finish`, and `cleanup`
-- [ ] T021 [US2] Integrate registry check/refresh into `.claude/commands/session-summary.md`
-- [ ] T022 [US2] Wire validation/backstop logic into `.githooks/pre-push`, `.githooks/post-checkout`, `.githooks/post-merge`, and `.githooks/post-rewrite`
-- [ ] T023 [P] [US2] Create a thin command wrapper in `.claude/commands/git-topology.md` for `refresh`, `check`, `status`, and `doctor`
-- [ ] T024 [P] [US2] Add workflow integration coverage for managed topology mutations in `tests/e2e/test_git_topology_registry_workflow.sh`
+- [x] T020 [US2] Integrate registry refresh/check into `.claude/commands/worktree.md` for `start`, `finish`, and `cleanup`
+- [x] T021 [US2] Integrate registry check/refresh into `.claude/commands/session-summary.md`
+- [x] T022 [US2] Wire validation/backstop logic into `.githooks/pre-push`, `.githooks/post-checkout`, `.githooks/post-merge`, and `.githooks/post-rewrite`
+- [x] T023 [P] [US2] Create a thin command wrapper in `.claude/commands/git-topology.md` for `refresh`, `check`, `status`, and `doctor`
+- [x] T024 [P] [US2] Add workflow integration coverage for managed topology mutations in `tests/e2e/test_git_topology_registry_workflow.sh`
 
 **Checkpoint**: Managed repo workflows keep registry freshness aligned with topology changes.
 

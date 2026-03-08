@@ -1,6 +1,6 @@
 # Session Summary Command
 
-Updates SESSION_SUMMARY.md with current session progress.
+Updates `SESSION_SUMMARY.md` with current session progress and reconciles the generated git-topology registry at session boundaries.
 
 ## Usage
 
@@ -10,24 +10,32 @@ Updates SESSION_SUMMARY.md with current session progress.
 
 ## Workflow
 
-1. **Analyze current session**:
+1. **Reconcile topology state first**:
+   - If `scripts/git-topology-registry.sh` exists, run:
+     - `scripts/git-topology-registry.sh doctor --prune --write-doc`
+   - If reconciliation changes `docs/GIT-TOPOLOGY-REGISTRY.md`, include that file in the session update.
+
+2. **Analyze current session**:
    - Git commits since last update (`git log --oneline -10`)
    - Tasks completed/updated
    - Files modified
    - Beads issues status
    - GitHub Secrets status (`gh secret list`)
+   - Registry status (`scripts/git-topology-registry.sh status`, when available)
 
-2. **Update SESSION_SUMMARY.md**:
+3. **Update `SESSION_SUMMARY.md`**:
    - Current Status section (git commits)
    - Secrets Status table (update ✅/❌ flags)
    - Session History section (add new entry)
    - Next Steps section
    - Last updated timestamp
+   - Quick Links section should include `docs/GIT-TOPOLOGY-REGISTRY.md` when present
 
-3. **Commit changes**:
-   - Auto-commit SESSION_SUMMARY.md updates
+4. **Commit changes**:
+   - Auto-commit `SESSION_SUMMARY.md` updates
+   - Include `docs/GIT-TOPOLOGY-REGISTRY.md` if it was regenerated during reconciliation
 
-4. **Report**:
+5. **Report**:
    - Summary of changes made
    - Link to updated file
 
@@ -62,6 +70,8 @@ This command should be run:
 - Before major context switches
 - When completing phases
 - Before creating PRs
+
+When topology changed outside `/worktree`, this command is the preferred session-boundary reconciliation point.
 
 ## Example Output
 
