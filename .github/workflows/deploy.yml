@@ -964,19 +964,22 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             cd ${{ env.DEPLOY_PATH }}
 
+            mkdir -p data
+
             # Record the exact commit from the CI workflow context.
-            # Do not read local git state on server: deployment uses file sync, not git pull.
-            echo "${{ github.sha }}" > .deployed-sha
+            # Keep audit markers in ignored state storage, not repo root, so GitOps drift
+            # checks stay truthful across repeated deploys.
+            echo "${{ github.sha }}" > data/.deployed-sha
 
             # Also record deployment metadata
-            cat > .deployment-info << INFO
+            cat > data/.deployment-info << INFO
           deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git_sha=${{ github.sha }}
           workflow_run=${{ github.run_id }}
           version=${{ needs.preflight.outputs.version }}
           INFO
 
-            echo "Git SHA recorded: $(cat .deployed-sha)"
+            echo "Git SHA recorded: $(cat data/.deployed-sha)"
           EOF
           echo "::endgroup::"
 
