@@ -80,6 +80,7 @@ jobs:
           echo "::group::GitOps Compliance Check"
           DRIFT_FOUND=false
           SERVER_DIRTY=false
+          PENDING_SYNC=false
 
           # Function to compare files
           compare_files() {
@@ -92,9 +93,9 @@ jobs:
               REMOTE_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum $REMOTE_FILE 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
 
               if [ "$REMOTE_HASH" = "NOT_FOUND" ]; then
-                echo "::notice::$DESCRIPTION not found on server (will be created)"
+                echo "::notice::$DESCRIPTION not found on server (will be created during deploy)"
               elif [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
-                echo "::warning::$DESCRIPTION DRIFT DETECTED (local != server)"
+                echo "::notice::$DESCRIPTION pending sync (git desired state differs from deployed server file)"
                 echo "  Local:  $LOCAL_HASH"
                 echo "  Server: $REMOTE_HASH"
                 return 1
@@ -108,20 +109,20 @@ jobs:
           # Check 1: docker-compose.yml
           echo "=== Check 1: docker-compose.yml ==="
           if ! compare_files "docker-compose.yml" "${{ env.DEPLOY_PATH }}/docker-compose.yml" "docker-compose.yml"; then
-            DRIFT_FOUND=true
+            PENDING_SYNC=true
           fi
 
           # Check 2: config/moltis.toml
           echo "=== Check 2: config/moltis.toml ==="
           if ! compare_files "config/moltis.toml" "${{ env.DEPLOY_PATH }}/config/moltis.toml" "moltis.toml"; then
-            DRIFT_FOUND=true
+            PENDING_SYNC=true
           fi
 
           # Check 3: config/mcp-servers.json (if exists)
           echo "=== Check 3: config/mcp-servers.json ==="
           if [ -f "config/mcp-servers.json" ]; then
             if ! compare_files "config/mcp-servers.json" "${{ env.DEPLOY_PATH }}/config/mcp-servers.json" "mcp-servers.json"; then
-              DRIFT_FOUND=true
+              PENDING_SYNC=true
             fi
           fi
 
@@ -132,7 +133,7 @@ jobs:
               if [ -f "$SCRIPT" ]; then
                 SCRIPT_NAME=$(basename "$SCRIPT")
                 if ! compare_files "$SCRIPT" "${{ env.DEPLOY_PATH }}/scripts/$SCRIPT_NAME" "scripts/$SCRIPT_NAME"; then
-                  DRIFT_FOUND=true
+                  PENDING_SYNC=true
                 fi
               fi
             done
@@ -145,7 +146,7 @@ jobs:
               if [ -f "$UNIT" ]; then
                 UNIT_NAME=$(basename "$UNIT")
                 if ! compare_files "$UNIT" "${{ env.DEPLOY_PATH }}/systemd/$UNIT_NAME" "systemd/$UNIT_NAME"; then
-                  DRIFT_FOUND=true
+                  PENDING_SYNC=true
                 fi
               fi
             done
@@ -169,11 +170,17 @@ jobs:
             echo "drift_detected=true" >> $GITHUB_OUTPUT
             echo "compliant=false" >> $GITHUB_OUTPUT
             echo "server_dirty=$SERVER_DIRTY" >> $GITHUB_OUTPUT
+            echo "pending_sync=$PENDING_SYNC" >> $GITHUB_OUTPUT
           else
-            echo "::notice::All GitOps checks passed ✅"
+            if [ "$PENDING_SYNC" = true ]; then
+              echo "::notice::Server is clean; deploy-managed files differ and will be synced during this run"
+            else
+              echo "::notice::All GitOps checks passed ✅"
+            fi
             echo "drift_detected=false" >> $GITHUB_OUTPUT
             echo "compliant=true" >> $GITHUB_OUTPUT
             echo "server_dirty=false" >> $GITHUB_OUTPUT
+            echo "pending_sync=$PENDING_SYNC" >> $GITHUB_OUTPUT
           fi
           echo "::endgroup::"
 
@@ -191,9 +198,10 @@ jobs:
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Drift Detected | \`${{ steps.check.outputs.drift_detected }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Server Dirty | \`${{ steps.check.outputs.server_dirty }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pending Sync | \`${{ steps.check.outputs.pending_sync }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliant | \`${{ steps.check.outputs.compliant }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> Drift now blocks deployment until server and git state are aligned." >> $GITHUB_STEP_SUMMARY
+          echo "> Hard block applies only to dirty server worktree. Deploy-managed file deltas are treated as pending sync." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
   # Pre-flight checks and validation (P2-6)
@@ -964,19 +972,35 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             cd ${{ env.DEPLOY_PATH }}
 
+            mkdir -p data
+
             # Record the exact commit from the CI workflow context.
-            # Do not read local git state on server: deployment uses file sync, not git pull.
-            echo "${{ github.sha }}" > .deployed-sha
+            # Keep audit markers in ignored state storage, not repo root, so GitOps drift
+            # checks stay truthful across repeated deploys.
+            echo "${{ github.sha }}" > data/.deployed-sha
 
             # Also record deployment metadata
-            cat > .deployment-info << INFO
+            cat > data/.deployment-info << INFO
           deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git_sha=${{ github.sha }}
           workflow_run=${{ github.run_id }}
           version=${{ needs.preflight.outputs.version }}
           INFO
 
-            echo "Git SHA recorded: $(cat .deployed-sha)"
+            echo "Git SHA recorded: $(cat data/.deployed-sha)"
+          EOF
+          echo "::endgroup::"
+
+      - name: Align server git checkout to deployed commit
+        if: success()
+        run: |
+          echo "::group::Aligning server git checkout"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            git fetch --depth=1 origin "${{ github.ref_name }}"
+            git checkout --force "${{ github.ref_name }}"
+            git reset --hard "${{ github.sha }}"
+            git status --short
           EOF
           echo "::endgroup::"
 

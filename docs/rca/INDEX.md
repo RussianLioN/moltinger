@@ -1,31 +1,32 @@
 # RCA Index
 
 **Last Updated**: 2026-03-08
-**Version**: 1.2.0
+**Version**: 1.3.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 9 |
+| Total RCA | 10 |
 | Avg Resolution Time | N/A |
-| This Month | 9 |
+| This Month | 10 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 50% |
-| process | 3 | 33% |
-| security | 1 | 11% |
-| shell | 1 | 11% |
+| generic | 4 | 40% |
+| process | 3 | 30% |
+| cicd | 1 | 10% |
+| security | 1 | 10% |
+| shell | 1 | 10% |
 
 ## By Severity
 
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 0 | High - production impact |
+| P1 | 1 | High - production impact |
 | P2 | 3 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -34,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-010 | 2026-03-08 | cicd | P1 | resolved | Deploy workflow wrote audit markers into repo root and then detected them as drift | moved markers to `data/` + static guard |
 | RCA-009 | 2026-03-08 | process | P2 | resolved | No mandatory target-boundary check before local runtime actions | added runtime-target guardrail |
 | RCA-008 | 2026-03-07 | process | P2 | resolved | No mandatory context-first lookup before asking for secret values | added context-first protocol |
 | RCA-007 | 2026-03-07 | shell | P4 | resolved | Misinterpreted non-zero code from diagnostic command | protocol note added |

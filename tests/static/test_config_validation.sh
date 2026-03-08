@@ -90,6 +90,37 @@ run_static_config_validation_tests() {
         test_fail "Fixture config should target internal ollama service DNS"
     fi
 
+    test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
+    if rg -q 'data/\.deployed-sha' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'data/\.deployment-info' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow should write audit markers under data/"
+    fi
+
+    test_start "static_deploy_audit_markers_not_written_to_repo_root"
+    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$PROJECT_ROOT/.github/workflows/deploy.yml" >/dev/null 2>&1; then
+        test_fail "Deploy workflow still writes audit markers to repo root"
+    else
+        test_pass
+    fi
+
+    test_start "static_deploy_server_git_checkout_aligned_after_success"
+    if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -Fq 'git reset --hard "${{ github.sha }}"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow should align server git checkout after successful sync"
+    fi
+
+    test_start "static_deploy_pending_sync_is_not_treated_as_hard_drift"
+    if rg -q 'Pending Sync' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Hard block applies only to dirty server worktree' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
+    fi
+
     generate_report
 }
 

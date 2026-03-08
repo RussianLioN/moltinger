@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-08
-**Total Lessons**: 12
+**Total Lessons**: 13
 
 ---
 
@@ -13,6 +13,9 @@
 
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
+
+#### P1 (1 lessons)
+- [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
 #### P2 (4 lessons)
 - [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
@@ -35,7 +38,8 @@
 ### By Category
 
 
-#### cicd (2 lessons)
+#### cicd (3 lessons)
+- [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
@@ -61,15 +65,15 @@
 ### Popular Tags
 
 - `process` (3 lessons)
+- `github-actions` (3 lessons)
+- `drift-detection` (3 lessons)
 - `instructions` (2 lessons)
-- `github-actions` (2 lessons)
-- `drift-detection` (2 lessons)
+- `gitops` (2 lessons)
+- `deploy` (2 lessons)
 - `token-optimization` (1 lessons)
 - `telegram` (1 lessons)
 - `signal-noise` (1 lessons)
 - `shell` (1 lessons)
-- `security` (1 lessons)
-- `secrets` (1 lessons)
 
 
 ---
@@ -78,10 +82,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 12 |
-| Critical (P0/P1) | 1 |
+| Total Lessons | 13 |
+| Critical (P0/P1) | 2 |
 | Categories | 5 |
-| Unique Tags | 27 |
+| Unique Tags | 28 |
 
 ---
 
