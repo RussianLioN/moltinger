@@ -86,7 +86,7 @@
 
 - [x] T013 [US2] [EXECUTOR: worker] [SEQUENTIAL] Implement environment-readiness probes and next-step generation in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
 - [x] T014 [US2] [EXECUTOR: worker] [SEQUENTIAL] Map helper outcomes to `created`, `needs_env_approval`, `ready_for_codex`, and `action_required` in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
-- [ ] T015 [US2] [EXECUTOR: worker] [SEQUENTIAL] Update the final status block and completion rules in `.claude/commands/worktree.md`
+- [x] T015 [US2] [EXECUTOR: worker] [SEQUENTIAL] Update the final status block and completion rules in `.claude/commands/worktree.md` → Artifacts: [worktree.md](../../.claude/commands/worktree.md)
 - [ ] T016 [US2] [EXECUTOR: worker] [SEQUENTIAL] Add manual copy-paste handoff examples for blocked and ready environments to `.claude/commands/worktree.md`
 
 **Checkpoint**: The command no longer overstates readiness and always tells the user the exact next step.

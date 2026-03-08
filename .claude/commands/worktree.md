@@ -227,6 +227,14 @@ Next:
   2. <second exact step if needed>
 ```
 
+## Completion Rules
+
+- Do not treat the workflow as complete until the final reply includes a readiness status from the canonical helper vocabulary.
+- If the helper returns `ready_for_codex`, keep the response short and provide the direct launch command.
+- If the helper returns `needs_env_approval`, the response must show `direnv allow` before any Codex launch step.
+- If the helper returns `drift_detected` or `action_required`, the response must include the concrete corrective next step instead of a generic success message.
+- Do not downgrade `ready_for_codex` or `needs_env_approval` back to a vague `created` summary in prose.
+
 Optional helper detail lines may also include:
 - `Env: <unknown|no_envrc|approval_needed|approved_or_not_required>`
 - `Guard: <unknown|missing|ok|drift>`
