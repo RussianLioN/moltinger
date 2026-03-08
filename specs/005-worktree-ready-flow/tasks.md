@@ -49,7 +49,7 @@
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete.
 
-- [ ] T004 [EXECUTOR: worker] [SEQUENTIAL] Implement path normalization, branch/path formatting, and reusable output rendering in `scripts/worktree-ready.sh`
+- [x] T004 [EXECUTOR: worker] [SEQUENTIAL] Implement path normalization, branch/path formatting, and reusable output rendering in `scripts/worktree-ready.sh` → Artifacts: [worktree-ready.sh](../../scripts/worktree-ready.sh)
 - [ ] T005 [EXECUTOR: worker] [SEQUENTIAL] Implement worktree/beads discovery using `bd worktree list` and `git worktree list` in `scripts/worktree-ready.sh`
 - [ ] T006 [EXECUTOR: worker] [SEQUENTIAL] Implement `scripts/git-session-guard.sh --status` integration and status parsing in `scripts/worktree-ready.sh`
 - [ ] T007 [EXECUTOR: worker] [SEQUENTIAL] Implement readiness report generation matching `specs/005-worktree-ready-flow/contracts/worktree-readiness-schema.md` in `scripts/worktree-ready.sh`
