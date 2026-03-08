@@ -153,7 +153,9 @@ Process:
    - existing local branch: create the worktree for that branch instead of inventing a new branch name
 9. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before entering the new worktree so the topology mutation is captured immediately.
    - Do not assume `main` already contains the topology script before this feature is merged.
+   - In Codex/App sessions, if the shared repo `.git` directory is outside the current writable sandbox, request approval/escalation for this refresh step before running it.
    - If refresh fails on topology lock, wait briefly and retry once.
+   - If refresh reports that the shared topology state is not writable from the current session, stop and tell the user to re-run the same refresh command with approval/escalation from the authoritative topology worktree.
    - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
 10. Enter the target worktree.
 11. If issue id exists: `bd update <ISSUE_ID> --status in_progress`

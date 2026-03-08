@@ -222,9 +222,28 @@ print_lock_diagnostics() {
 
 acquire_lock() {
   local attempts=0
+  local mkdir_error=""
   ensure_state_dir
 
-  while ! mkdir "${lock_dir}" 2>/dev/null; do
+  while true; do
+    mkdir_error=""
+    if mkdir_error="$(mkdir "${lock_dir}" 2>&1)"; then
+      lock_held=true
+      write_lock_metadata
+      return 0
+    fi
+
+    if [[ ! -d "${lock_dir}" ]]; then
+      echo "[git-topology-registry] Cannot create lock directory: ${lock_dir}" >&2
+      if [[ -n "${mkdir_error}" ]]; then
+        echo "[git-topology-registry] mkdir error: ${mkdir_error}" >&2
+      fi
+      echo "[git-topology-registry] The shared topology state is not writable from this session." >&2
+      echo "[git-topology-registry] This usually means the repo common .git directory is outside the current sandbox or permission boundary." >&2
+      echo "[git-topology-registry] Re-run this command with approval/escalation or from a worktree that can write ${git_common_dir}." >&2
+      exit 1
+    fi
+
     attempts=$((attempts + 1))
     if [[ "${attempts}" -ge "${lock_wait_attempts}" ]]; then
       echo "[git-topology-registry] Timed out waiting for lock: ${lock_dir}" >&2
@@ -234,9 +253,6 @@ acquire_lock() {
     fi
     sleep 0.1
   done
-
-  lock_held=true
-  write_lock_metadata
 }
 
 hash_file() {

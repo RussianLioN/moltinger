@@ -234,6 +234,43 @@ test_lock_timeout_without_owner_metadata_reports_actionable_fallback() {
     test_pass
 }
 
+test_lock_permission_boundary_reports_non_lock_failure() {
+    test_start "git_topology_registry_lock_permission_boundary_reports_non_lock_failure"
+
+    local fixture_root repo_dir output rc common_dir state_dir
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+    common_dir="$(cd "$repo_dir" && git rev-parse --git-common-dir)"
+    state_dir="${common_dir}/topology-registry"
+
+    (
+        cd "$repo_dir"
+        mkdir -p "$state_dir"
+        chmod 0555 "$state_dir"
+    )
+
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        GIT_TOPOLOGY_REGISTRY_LOCK_WAIT_ATTEMPTS=1 "$REGISTRY_SCRIPT" refresh --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    (
+        cd "$repo_dir"
+        chmod 0755 "$state_dir"
+    )
+
+    assert_eq "1" "$rc" "Refresh should fail when the shared topology state is not writable"
+    assert_contains "$output" 'Cannot create lock directory:' "Permission-boundary failure should not masquerade as a held lock"
+    assert_contains "$output" 'The shared topology state is not writable from this session.' "Permission-boundary failure should explain the actual class of problem"
+    assert_contains "$output" 'outside the current sandbox or permission boundary' "Permission-boundary failure should point to sandbox-style restrictions"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -257,6 +294,7 @@ run_all_tests() {
     test_check_is_observer_independent_across_sibling_worktrees
     test_lock_timeout_reports_owner_diagnostics
     test_lock_timeout_without_owner_metadata_reports_actionable_fallback
+    test_lock_permission_boundary_reports_non_lock_failure
 
     generate_report
 }

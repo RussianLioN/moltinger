@@ -46,6 +46,7 @@ scripts/git-topology-registry.sh status
 4. Для topology-проверок в Codex CLI используйте `scripts/git-topology-registry.sh check`
 5. Если topology менялась через managed flow, registry обычно обновится сам
 6. Если topology менялась вручную через raw `git`, запускайте recovery flow
+7. В Codex/App refresh после topology mutation может потребовать approval, если shared `.git` находится вне writable boundary текущей сессии
 
 **Recovery flow после ручных git-операций**
 ```bash
