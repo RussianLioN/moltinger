@@ -1,0 +1,44 @@
+version: 1
+defaults:
+  missing_intent: needs-decision
+records:
+  - subject_type: worktree
+    subject_key: primary-root
+    intent: active
+    note: Canonical root worktree for triage, cleanup, and merge preparation.
+  - subject_type: worktree
+    subject_key: primary-feature-006
+    intent: active
+    note: Authoritative worktree for topology-registry implementation.
+  - subject_type: worktree
+    subject_key: parallel-feature-005
+    intent: active
+    note: Parallel Speckit feature worktree.
+  - subject_type: worktree
+    subject_key: codex-full-review
+    intent: protected
+    note: Parallel Codex session. Exclude from automated cleanup.
+    pr: 6
+  - subject_type: worktree
+    subject_key: codex-gitops-metrics-fix
+    intent: active
+    note: Narrow replacement branch with open PR 18.
+    pr: 18
+  - subject_type: branch
+    subject_key: main
+    intent: active
+    note: Canonical operational source of truth.
+  - subject_type: branch
+    subject_key: 006-git-topology-registry
+    intent: active
+    note: Active Speckit feature branch for topology registry automation.
+  - subject_type: remote
+    subject_key: origin/codex/full-review
+    intent: protected
+    note: Active parallel session. Do not auto-clean up while review is in progress.
+    pr: 6
+  - subject_type: remote
+    subject_key: origin/codex/gitops-metrics-fix
+    intent: active
+    note: Active replacement PR for gitops metrics workflow stabilization.
+    pr: 18

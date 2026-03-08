@@ -233,6 +233,17 @@ set_verbose true
 4. **Safety**: `set -euo pipefail` для обработки ошибок
 5. **Source helpers**: Всегда sourcing `test_helpers.sh` в начале
 
+## Git Topology Registry Fixture Strategy
+
+Для фичи `006-git-topology-registry` тесты используют отдельный fixture layer:
+
+1. Временный репозиторий создаётся через `mktemp -d`
+2. Локальный bare repo используется как offline `origin`
+3. Topology mutations покрываются и raw `git`, и tracked hooks flow
+4. Общие helpers живут в `tests/lib/git_topology_fixture.sh`
+5. Unit тесты проверяют discovery/render helpers на минимальном fixture
+6. Integration/E2E тесты проверяют refresh/check/workflow wiring на полноценном multi-worktree fixture
+
 ## CI/CD интеграция
 
 ```yaml

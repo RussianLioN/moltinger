@@ -9,20 +9,20 @@
 
 ## Phase 0: Planning (Executor Assignment)
 
-- [ ] P001 Review `docs/reports/consilium/2026-03-08-git-topology-registry-automation.md` and freeze v1 scope in `specs/006-git-topology-registry/plan.md`
-- [ ] P002 Analyze all implementation tasks and assign executors across `scripts/`, `.githooks/`, `.claude/commands/`, `docs/`, and `tests/`
-- [ ] P003 Decide the final sidecar filename/schema and record it in `specs/006-git-topology-registry/contracts/registry-document.md`
-- [ ] P004 Prepare shell fixture strategy for topology discovery and hook validation in `tests/`
+- [x] P001 Review `docs/reports/consilium/2026-03-08-git-topology-registry-automation.md` and freeze v1 scope in `specs/006-git-topology-registry/plan.md`
+- [x] P002 Analyze all implementation tasks and assign executors across `scripts/`, `.githooks/`, `.claude/commands/`, `docs/`, and `tests/`
+- [x] P003 Decide the final sidecar filename/schema and record it in `specs/006-git-topology-registry/contracts/registry-document.md`
+- [x] P004 Prepare shell fixture strategy for topology discovery and hook validation in `tests/`
 
 ---
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create sidecar intent file in `docs/GIT-TOPOLOGY-INTENT.yaml`
-- [ ] T002 Create owner script skeleton in `scripts/git-topology-registry.sh`
-- [ ] T003 [P] Create tracked hook placeholders in `.githooks/post-checkout`, `.githooks/post-merge`, and `.githooks/post-rewrite`
-- [ ] T004 Update `scripts/setup-git-hooks.sh` to install tracked hook files instead of regenerating hook bodies inline
-- [ ] T005 [P] Add script metadata entry for the new topology tool in `scripts/manifest.json`
+- [x] T001 Create sidecar intent file in `docs/GIT-TOPOLOGY-INTENT.yaml`
+- [x] T002 Create owner script skeleton in `scripts/git-topology-registry.sh`
+- [x] T003 [P] Create tracked hook placeholders in `.githooks/post-checkout`, `.githooks/post-merge`, and `.githooks/post-rewrite`
+- [x] T004 Update `scripts/setup-git-hooks.sh` to install tracked hook files instead of regenerating hook bodies inline
+- [x] T005 [P] Add script metadata entry for the new topology tool in `scripts/manifest.json`
 
 ---
 

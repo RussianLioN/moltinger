@@ -79,3 +79,37 @@ tests/
 - Generate atomic tasks grouped by user story.
 - Keep implementation centered on one owner script.
 - Ensure final validation covers parser, renderer, annotation preservation, and topology mutation workflows.
+
+## V1 Scope Freeze
+
+### In Scope
+
+- One owner script at `scripts/git-topology-registry.sh` for discovery, render, check, status, and doctor flows.
+- One committed intent sidecar at `docs/GIT-TOPOLOGY-INTENT.yaml`.
+- One generated committed registry at `docs/GIT-TOPOLOGY-REGISTRY.md`.
+- Managed workflow integration through `/worktree`, `/session-summary`, and tracked git hooks.
+- Shell-based unit, integration, and workflow validation.
+
+### Out of Scope
+
+- Long-running topology maintainer agents.
+- Hooks that silently rewrite tracked markdown.
+- Auto-delete or auto-merge behavior for branches/worktrees.
+- CI-only topology freshness enforcement for local worktrees.
+- Committing absolute local paths or volatile per-commit worktree HEAD data.
+
+## Executor Lanes
+
+| Lane | Scope | Primary owner |
+|---|---|---|
+| `shell-core` | `scripts/git-topology-registry.sh`, `scripts/setup-git-hooks.sh`, `scripts/manifest.json` | main implementer |
+| `workflow-hooks` | `.githooks/*`, `.claude/commands/*` | main implementer, can delegate after Phase 2 |
+| `docs-registry` | `docs/GIT-TOPOLOGY-REGISTRY.md`, `docs/GIT-TOPOLOGY-INTENT.yaml`, shared docs/instructions | main implementer |
+| `test-fixtures` | `tests/lib/`, `tests/unit/`, `tests/integration/`, `tests/e2e/` | main implementer, can parallelize after script skeleton lands |
+
+## Test Fixture Strategy
+
+- Build topology tests around temporary throwaway repositories created under `mktemp -d`.
+- Use a local bare repo as `origin` so remote-tracking and unmerged-branch scenarios stay deterministic and offline.
+- Create topology mutations through both raw `git` commands and tracked hook installation to cover managed and unmanaged flows.
+- Centralize helpers in `tests/lib/git_topology_fixture.sh` so unit, integration, and e2e suites share the same fixture API.

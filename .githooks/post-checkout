@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Placeholder for topology freshness backstop.
+# Wiring lands in T022 after the registry script can compute real freshness.
+exit 0

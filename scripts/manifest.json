@@ -127,6 +127,14 @@
         "drift_detection_sla_minutes": 360
       },
       "cron": "0 * * * *"
+    },
+    "git-topology-registry.sh": {
+      "version": "0.1.0",
+      "description": "Owner script for the sanitized git topology registry and reviewed intent sidecar",
+      "entrypoint": true,
+      "requires": ["git"],
+      "provides": ["git-topology-refresh", "git-topology-check", "git-topology-status", "git-topology-doctor"],
+      "gitops": true
     }
   },
   "dependencies": {

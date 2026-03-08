@@ -23,3 +23,25 @@
 - Reviewed intent comes from the sidecar file
 - Missing sidecar entries default to `needs-decision`
 - Orphaned sidecar entries must be preserved or surfaced explicitly until reviewed
+
+## Final Sidecar Contract
+
+- **Filename**: `docs/GIT-TOPOLOGY-INTENT.yaml`
+- **Encoding**: UTF-8 YAML with deterministic key order
+- **Top-level keys**:
+  - `version` (integer, required)
+  - `defaults.missing_intent` (enum, required)
+  - `records` (array, required)
+- **Record shape**:
+  - `subject_type` (`branch` | `worktree` | `remote`)
+  - `subject_key` (stable sanitized identifier or remote ref)
+  - `intent` (`active` | `historical` | `extract-only` | `cleanup-candidate` | `protected` | `needs-decision`)
+  - `note` (short reviewed note, optional)
+  - `pr` (integer, optional)
+
+## Sidecar Determinism Rules
+
+- Records sort by `subject_type`, then `subject_key`
+- `subject_key` must match the rendered row key used in the registry
+- Notes must stay short and safe to commit
+- Unknown or missing records must not block rendering; they fall back to `needs-decision`
