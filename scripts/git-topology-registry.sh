@@ -69,6 +69,7 @@ state_file="${state_dir}/health.env"
 draft_file="${state_dir}/registry.draft.md"
 backup_dir="${state_dir}/backups"
 lock_dir="${state_dir}/lock"
+lock_wait_attempts="${GIT_TOPOLOGY_REGISTRY_LOCK_WAIT_ATTEMPTS:-150}"
 intent_file="${git_root}/docs/GIT-TOPOLOGY-INTENT.yaml"
 registry_doc="${git_root}/docs/GIT-TOPOLOGY-REGISTRY.md"
 tmp_dir=""
@@ -134,8 +135,9 @@ acquire_lock() {
 
   while ! mkdir "${lock_dir}" 2>/dev/null; do
     attempts=$((attempts + 1))
-    if [[ "${attempts}" -ge 50 ]]; then
+    if [[ "${attempts}" -ge "${lock_wait_attempts}" ]]; then
       echo "[git-topology-registry] Timed out waiting for lock: ${lock_dir}" >&2
+      echo "[git-topology-registry] Another refresh/doctor operation may still be running in a sibling worktree." >&2
       exit 1
     fi
     sleep 0.1

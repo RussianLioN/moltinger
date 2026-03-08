@@ -2,6 +2,12 @@
 
 Updates `SESSION_SUMMARY.md` with current session progress and reconciles the generated git-topology registry at session boundaries.
 
+## Codex Note
+
+- In Claude-style clients, examples below use `/session-summary`.
+- In Codex CLI, invoke this workflow via the bridged skill `command-session-summary`.
+- Do not assume `/session-summary` is registered as a native Codex slash command.
+
 ## Usage
 
 ```bash

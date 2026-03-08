@@ -148,7 +148,7 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     test_start "git_topology_registry_hooks_and_session_boundary_reconcile_out_of_band_drift"
 
     local fixture_root repo_dir worktree_path health_file draft_file backup_dir latest_backup
-    local status_after_hook status_after_doctor doc doc_before_doctor pre_push_output pre_push_rc doctor_output doctor_rc
+    local status_after_hook status_after_doctor doc doc_before_doctor post_checkout_output post_checkout_rc pre_push_output pre_push_rc doctor_output doctor_rc
     fixture_root="$(mktemp -d /tmp/git-topology-e2e.XXXXXX)"
     repo_dir="$(setup_workflow_repo "$fixture_root")"
     worktree_path="$fixture_root/repo-008-worktree"
@@ -160,16 +160,23 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
 
     git_topology_fixture_add_branch "$repo_dir" "008-out-of-band"
     git_topology_fixture_add_worktree "$repo_dir" "$worktree_path" "008-out-of-band"
+    rm -f "$draft_file"
 
     doc_before_doctor="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
 
-    (
-        cd "$repo_dir"
-        ./.githooks/post-checkout >/dev/null 2>&1 || true
-    )
-
+    post_checkout_output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        ./.githooks/post-checkout 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    post_checkout_rc="$(printf '%s\n' "$post_checkout_output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+    assert_eq "0" "$post_checkout_rc" "Post-checkout hook should remain non-blocking"
+    assert_contains "$post_checkout_output" 'status=stale' "Post-checkout hook should surface stale topology"
+    assert_contains "$post_checkout_output" 'post-checkout detected topology drift.' "Post-checkout hook should print actionable stale guidance"
+    assert_false "$(test -f "$draft_file"; printf '%s' "$?")" "Post-checkout hook should not create a recovery draft"
     status_after_hook="$(grep '^status=' "$health_file" | cut -d'=' -f2)"
-    assert_eq "stale" "$status_after_hook" "Post-checkout hook should mark stale topology"
+    assert_eq "ok" "$status_after_hook" "Read-only hook check should preserve the last successful health state"
 
     pre_push_output="$(
         cd "$repo_dir" &&

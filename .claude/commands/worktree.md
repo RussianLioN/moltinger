@@ -7,6 +7,12 @@ argument-hint: "[start|finish|create|remove|list|cleanup] [issue-or-name] [optio
 
 Fast worktree lifecycle for Codex CLI/App with minimal typing.
 
+## Codex Note
+
+- In Claude-style clients, examples below use `/worktree`.
+- In Codex CLI, invoke this workflow via the bridged skill `command-worktree`.
+- Do not assume `/worktree` is registered as a native Codex slash command.
+
 This command supports:
 - Empty input (`/worktree`) to suggest or auto-start from context.
 - Natural language input (`/worktree создай для BD-123 auth`).
@@ -53,15 +59,19 @@ Defaults:
 - `worktree dir`: `../<repo>-<issue-lower>-<slug>`
 
 Process:
-1. Verify git repository and project root.
-2. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh doctor --prune` as a non-blocking preflight.
-3. `git fetch origin`
-4. `git switch main && git pull --rebase` (if `main` exists)
+1. Verify git repository, invoking worktree, and canonical root worktree.
+2. If `scripts/git-topology-registry.sh` exists in the invoking worktree, run `scripts/git-topology-registry.sh check` as a non-blocking preflight.
+3. Refresh the base branch from the canonical root worktree:
+   - `git -C <canonical-root> fetch origin`
+   - `git -C <canonical-root> switch main && git -C <canonical-root> pull --rebase` (if `main` exists)
 5. Build slug:
    - from explicit argument, else from issue title via `bd show <ISSUE_ID>`, else `task`
 6. Create worktree with beads integration:
    - `bd worktree create ../<repo>-<issue-lower>-<slug> --branch <branch>`
-7. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh refresh --write-doc` before entering the new worktree so the topology mutation is captured immediately.
+7. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before entering the new worktree so the topology mutation is captured immediately.
+   - Do not assume `main` already contains the topology script before this feature is merged.
+   - If refresh fails on topology lock, wait briefly and retry once.
+   - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
 8. Enter worktree.
 9. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
 10. If script exists: `scripts/git-session-guard.sh --refresh`

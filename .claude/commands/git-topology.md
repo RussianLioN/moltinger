@@ -7,6 +7,12 @@ argument-hint: "[status|check|refresh|doctor] [--write-doc] [--prune]"
 
 Thin wrapper around `scripts/git-topology-registry.sh`.
 
+## Codex Note
+
+- In Claude-style clients, examples below use `/git-topology`.
+- In Codex CLI, prefer calling `scripts/git-topology-registry.sh` directly.
+- Do not assume `/git-topology` is registered as a native Codex slash command.
+
 ## Quick Usage
 
 ```bash

@@ -95,3 +95,5 @@ After installing or updating skills, restart Codex to refresh skill discovery.
 - `.claude/skills/*` are imported as Codex skills.
 - `.claude/commands/*` and `.claude/agents/*` stay in-repo as reference workflows.
 - When both a command and a skill describe the same workflow, prefer the skill.
+- In Codex CLI, bridged Claude commands are usually invoked via `command-*` skills, not native slash commands.
+- Example: use `command-worktree` and `command-session-summary` in Codex; do not assume `/worktree` or `/session-summary` are registered as CLI slash commands.

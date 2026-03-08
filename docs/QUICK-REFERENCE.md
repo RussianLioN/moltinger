@@ -19,8 +19,11 @@
 ## Git Topology Registry
 
 ```bash
-# Короткая команда-обёртка
+# Claude-style shorthand
 /git-topology
+
+# Codex CLI
+scripts/git-topology-registry.sh status
 
 # Проверить, что registry не устарел
 scripts/git-topology-registry.sh check
@@ -37,8 +40,8 @@ scripts/git-topology-registry.sh status
 ### Как пользоваться
 
 **Обычный сценарий**
-1. Создавайте и убирайте worktree через `/worktree`
-2. Перед handoff или cleanup запускайте `/git-topology check`
+1. В Claude-style клиентах используйте `/worktree`; в Codex CLI используйте skill `command-worktree`
+2. Для topology-проверок в Codex CLI используйте `scripts/git-topology-registry.sh check`
 3. Если topology менялась через managed flow, registry обычно обновится сам
 4. Если topology менялась вручную через raw `git`, запускайте recovery flow
 
@@ -65,10 +68,10 @@ scripts/git-topology-registry.sh doctor --prune --write-doc
 
 ### Что происходит автоматически
 
-- `/worktree start` и `/worktree cleanup` обновляют registry после topology mutation
-- `/session-summary` использует registry как session-boundary reconcile point
+- `command-worktree` в Codex и `/worktree` в Claude-style клиентах обновляют registry после topology mutation
+- `command-session-summary` в Codex и `/session-summary` в Claude-style клиентах используют registry как session-boundary reconcile point
 - `pre-push` блокирует push, если registry stale
-- `post-checkout`, `post-merge`, `post-rewrite` ничего молча не переписывают, только сигналят о stale-state
+- `post-checkout`, `post-merge`, `post-rewrite` выполняют read-only stale check и не берут reconcile lock
 
 ### Что под капотом
 
