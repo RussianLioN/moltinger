@@ -6,6 +6,16 @@ This file is Codex-specific and is merged into `AGENTS.md` by:
 ./scripts/sync-agent-instructions.sh --write
 ```
 
+## Codex Operating Model
+
+Repo-specific Codex profiles, worktree naming, and local instruction split are documented in:
+
+```bash
+docs/CODEX-OPERATING-MODEL.md
+```
+
+When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, or `knowledge/`, follow the nearest local `AGENTS.md` in addition to the root file.
+
 ## Claude Skill Bridge
 
 Claude project skills are stored in:
