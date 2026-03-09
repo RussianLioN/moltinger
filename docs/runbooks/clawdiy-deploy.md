@@ -13,6 +13,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 - `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json` are present
 - DNS for `clawdiy.ainetic.tech` exists
 - Clawdiy GitHub Secrets exist and are distinct from Moltinger secrets
+- `docker-compose.clawdiy.yml` keeps the runtime config and registry mounts in explicit bind long syntax; short syntax may be misrendered by server-side Docker Compose into the old directory bind contract
 - Shared host networks required for phase 1 are healthy:
   - `traefik-net`
   - `moltinger_monitoring`

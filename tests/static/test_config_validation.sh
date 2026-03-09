@@ -194,6 +194,17 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must keep a dedicated env path separate from /opt/moltinger/.env"
     fi
 
+    test_start "static_clawdiy_compose_uses_explicit_bind_syntax_for_runtime_paths"
+    if rg -q 'type: bind' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./config/clawdiy/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./config/fleet' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw/registry' "$COMPOSE_CLAWDIY"; then
+        test_pass
+    else
+        test_fail "Clawdiy compose must use explicit bind syntax for runtime config and registry so server-side docker compose does not misrender them"
+    fi
+
     test_start "static_clawdiy_deploy_script_stores_runtime_markers_under_ignored_data_dir"
     if rg -q 'TARGET_LAST_IMAGE_FILE="\$PROJECT_ROOT/data/clawdiy/\.last-deployed-image"' "$DEPLOY_SCRIPT" && \
        rg -q 'TARGET_LAST_BACKUP_FILE="\$PROJECT_ROOT/data/clawdiy/\.last-backup"' "$DEPLOY_SCRIPT" && \
@@ -201,6 +212,16 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Clawdiy deploy script must keep last-image and backup markers under ignored data/clawdiy state"
+    fi
+
+    test_start "static_deploy_script_keeps_json_stdout_clean"
+    if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \
+       rg -q 'if \[\[ "\$OUTPUT_JSON" != "true" \]\]; then' "$DEPLOY_SCRIPT" && \
+       rg -q 'echo -n "\."' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "deploy.sh must keep docker compose progress, docker logs, and wait dots out of JSON stdout"
     fi
 
     test_start "static_clawdiy_workflow_validates_auth_rendering_rules"
@@ -255,7 +276,8 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_security_hardening"
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
-       rg -q '\./config/clawdiy/openclaw\.json:/home/node/\.openclaw/openclaw\.json:ro' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./config/clawdiy/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
        rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
        rg -q '/tmp:rw,noexec,nosuid,nodev,size=64m' "$COMPOSE_CLAWDIY" && \
