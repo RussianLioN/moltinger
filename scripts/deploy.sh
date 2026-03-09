@@ -274,8 +274,8 @@ configure_target() {
             ENV_FILE="${CLAWDIY_ENV_FILE:-$PROJECT_ROOT/.env.clawdiy}"
             TARGET_CONTAINER="clawdiy"
             TARGET_SERVICE="clawdiy"
-            TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/.last-deployed-clawdiy-image"
-            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/.last-clawdiy-backup"
+            TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/data/clawdiy/.last-deployed-image"
+            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/data/clawdiy/.last-backup"
             TARGET_NOTIFICATION_NAME="Clawdiy"
             TARGET_REQUIRED_NETWORKS=(
                 "$TRAEFIK_NETWORK"
@@ -318,6 +318,7 @@ ensure_required_networks() {
 
 ensure_clawdiy_runtime_paths() {
     local required_paths=(
+        "$PROJECT_ROOT/data/clawdiy"
         "$PROJECT_ROOT/config/clawdiy"
         "$PROJECT_ROOT/config/fleet"
         "$PROJECT_ROOT/data/clawdiy/state"
