@@ -41,7 +41,7 @@
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
-| `feat/moltinger-ejy-beads-redirect-fix` | `none` | Needs decision |
+| `feat/moltinger-ejy-beads-redirect-fix` | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
 | `feat/pr17-webhook-extraction` | `origin/feat/pr17-webhook-extraction` | Needs decision |
 | `uat/006-git-topology-registry` | `origin/006-git-topology-registry` | Needs decision |
@@ -74,6 +74,7 @@
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
+| `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
