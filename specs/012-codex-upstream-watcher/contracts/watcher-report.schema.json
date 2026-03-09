@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moltinger/specs/012-codex-upstream-watcher/contracts/watcher-report.schema.json",
+  "title": "Codex Upstream Watcher Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checked_at",
+    "snapshot",
+    "fingerprint",
+    "decision",
+    "state",
+    "notes"
+  ],
+  "properties": {
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/snapshot"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "$ref": "#/$defs/decision"
+    },
+    "state": {
+      "$ref": "#/$defs/state"
+    },
+    "telegram_target": {
+      "$ref": "#/$defs/telegram_target"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ok", "investigate", "unavailable"]
+        },
+        "url": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latest_version",
+        "release_status",
+        "primary_source",
+        "advisory_sources",
+        "highlights"
+      ],
+      "properties": {
+        "latest_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "release_status": {
+          "type": "string",
+          "enum": ["new", "known", "investigate", "unavailable"]
+        },
+        "primary_source": {
+          "$ref": "#/$defs/source"
+        },
+        "advisory_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "highlights": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "changed"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["deliver", "suppress", "retry", "investigate"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "changed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "last_status",
+        "notes"
+      ],
+      "properties": {
+        "last_seen_fingerprint": {
+          "type": "string"
+        },
+        "last_delivered_fingerprint": {
+          "type": "string"
+        },
+        "last_status": {
+          "type": "string",
+          "enum": ["delivered", "suppressed", "failed", "investigate", "unknown"]
+        },
+        "last_checked_at": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "telegram_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "chat_id": {
+          "type": "string"
+        },
+        "silent": {
+          "type": "boolean"
+        },
+        "env_file": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
