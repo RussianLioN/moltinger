@@ -67,6 +67,7 @@
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup. |
 | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `origin/005-worktree-ready-flow` | Active parallel feature branch. |
+| `origin/006-git-topology-registry` | Active topology-registry feature branch. |
 | `origin/007-codex-update-monitor` | Needs decision |
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
@@ -80,7 +81,6 @@
 | Subject Type | Subject Key | Intent | Note | PR |
 |---|---|---|---|---|
 | `branch` | `codex/gitops-metrics-fix` | `active` | Fresh replacement branch with open PR #18. | 18 |
-| `remote` | `origin/006-git-topology-registry` | `active` | Active topology-registry feature branch. | - |
 | `remote` | `origin/codex/full-review` | `protected` | Active parallel session; exclude from automated cleanup. | 6 |
 | `remote` | `origin/codex/gitops-metrics-fix` | `active` | Active replacement PR #18. | 18 |
 | `remote` | `origin/feat/gpt-5-moltis` | `active` | Active feature branch. | - |
@@ -88,7 +88,7 @@
 
 ## Registry Warnings
 
-- Reviewed intent contains 6 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
+- Reviewed intent contains 5 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
 
 ## Operating Rules
 
