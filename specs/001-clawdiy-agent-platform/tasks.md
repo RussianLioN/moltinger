@@ -100,8 +100,10 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] [EXECUTOR: traefik-expert] [PARALLEL-GROUP-US1-A] Add Traefik routing, healthchecks, networks, and distinct persistent mounts in `docker-compose.clawdiy.yml`
-- [ ] T013 [P] [US1] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US1-A] Finalize Clawdiy runtime identity, endpoints, and state paths in `config/clawdiy/openclaw.json`
+- [X] T012 [P] [US1] [EXECUTOR: traefik-expert] [PARALLEL-GROUP-US1-A] Add Traefik routing, healthchecks, networks, and distinct persistent mounts in `docker-compose.clawdiy.yml`
+  → Artifacts: [docker-compose.clawdiy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/docker-compose.clawdiy.yml)
+- [X] T013 [P] [US1] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US1-A] Finalize Clawdiy runtime identity, endpoints, and state paths in `config/clawdiy/openclaw.json`
+  → Artifacts: [openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json)
 - [ ] T014 [US1] [EXECUTOR: deployment-engineer] [SEQUENTIAL] Wire remote sync and deploy steps for the Clawdiy stack in `.github/workflows/deploy-clawdiy.yml` and `scripts/deploy.sh`
 - [ ] T015 [US1] [EXECUTOR: bash-master] [SEQUENTIAL] Implement `same-host` and `restart-isolation` verification stages in `scripts/clawdiy-smoke.sh`
 - [ ] T016 [US1] [EXECUTOR: technical-writer] [SEQUENTIAL] Document deploy, restart, disable, and ownership procedures in `docs/runbooks/clawdiy-deploy.md` and `docs/INFRASTRUCTURE.md`

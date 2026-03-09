@@ -6,7 +6,7 @@
     "role": "coder",
     "runtime_engine": "openclaw",
     "owner": "platform-ops",
-    "lifecycle_state": "planned"
+    "lifecycle_state": "ready-for-deploy"
   },
   "server": {
     "bind": "0.0.0.0",
@@ -17,8 +17,9 @@
   },
   "paths": {
     "config_root": "/home/node/.openclaw",
-    "state_root": "/home/node/.openclaw-data",
-    "audit_root": "/home/node/.openclaw-audit"
+    "registry_root": "/home/node/.openclaw/registry",
+    "state_root": "/home/node/.openclaw-data/state",
+    "audit_root": "/home/node/.openclaw-data/audit"
   },
   "identity": {
     "domain": "clawdiy.ainetic.tech",

@@ -29,6 +29,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SECRETS_DIR="$PROJECT_ROOT/secrets"
 TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
+MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
 
 # Output format
@@ -163,6 +164,7 @@ configure_target() {
             REQUIRED_NETWORKS=(
                 "$TRAEFIK_NETWORK"
                 "$FLEET_INTERNAL_NETWORK"
+                "$MONITORING_NETWORK"
             )
             RUNTIME_CONFIG_PATH="$PROJECT_ROOT/config/clawdiy/openclaw.json"
             REGISTRY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/agents-registry.json"

@@ -23,17 +23,23 @@ services:
     image: ${CLAWDIY_IMAGE:?set CLAWDIY_IMAGE in CI or deployment env}
     container_name: clawdiy
     restart: unless-stopped
-    privileged: true
     read_only: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     ports:
-      - "${CLAWDIY_PORT:-18789}:${CLAWDIY_INTERNAL_PORT:-18789}"
+      - "127.0.0.1:${CLAWDIY_PORT:-18789}:${CLAWDIY_INTERNAL_PORT:-18789}"
 
     volumes:
       - ./config/clawdiy:/home/node/.openclaw:ro
-      - clawdiy-state:/home/node/.openclaw-data
-      - clawdiy-audit:/home/node/.openclaw-audit
+      - ./config/fleet:/home/node/.openclaw/registry:ro
+      - clawdiy-state:/home/node/.openclaw-data/state
+      - clawdiy-audit:/home/node/.openclaw-data/audit
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /tmp
 
     environment:
       NODE_ENV: production
@@ -41,8 +47,9 @@ services:
       CLAWDIY_DOMAIN: ${CLAWDIY_DOMAIN:-clawdiy.ainetic.tech}
       CLAWDIY_INTERNAL_PORT: ${CLAWDIY_INTERNAL_PORT:-18789}
       OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
-      OPENCLAW_STATE_ROOT: /home/node/.openclaw-data
-      OPENCLAW_AUDIT_ROOT: /home/node/.openclaw-audit
+      OPENCLAW_REGISTRY_ROOT: /home/node/.openclaw/registry
+      OPENCLAW_STATE_ROOT: /home/node/.openclaw-data/state
+      OPENCLAW_AUDIT_ROOT: /home/node/.openclaw-data/audit
       # Secret and provider env wiring lands in T003/T024 after inventory is defined.
 
     healthcheck:
@@ -58,7 +65,9 @@ services:
       - "traefik.docker.network=traefik-net"
       - "traefik.http.routers.clawdiy.rule=Host(`${CLAWDIY_DOMAIN:-clawdiy.ainetic.tech}`)"
       - "traefik.http.routers.clawdiy.entrypoints=websecure"
+      - "traefik.http.routers.clawdiy.tls=true"
       - "traefik.http.routers.clawdiy.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.clawdiy.service=clawdiy"
       - "traefik.http.routers.clawdiy.middlewares=clawdiy-proxy-headers@docker"
       - "traefik.http.middlewares.clawdiy-proxy-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.clawdiy-proxy-headers.headers.customrequestheaders.X-Forwarded-Host=${CLAWDIY_DOMAIN:-clawdiy.ainetic.tech}"
@@ -66,6 +75,7 @@ services:
       - "traefik.http.services.clawdiy.loadbalancer.server.port=${CLAWDIY_INTERNAL_PORT:-18789}"
       - "traefik.http.services.clawdiy.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.clawdiy.loadbalancer.healthcheck.interval=30s"
+      - "com.centurylinklabs.watchtower.enable=false"
       - "prometheus.io/scrape=true"
       - "prometheus.io/port=${CLAWDIY_INTERNAL_PORT:-18789}"
       - "prometheus.io/path=/metrics"
@@ -73,6 +83,7 @@ services:
     networks:
       - traefik-net
       - fleet-internal
+      - monitoring
 
 volumes:
   clawdiy-state:
@@ -93,4 +104,7 @@ networks:
     external: true
   fleet-internal:
     name: ${FLEET_INTERNAL_NETWORK:-fleet-internal}
+    external: true
+  monitoring:
+    name: ${MONITORING_NETWORK:-moltinger_monitoring}
     external: true
