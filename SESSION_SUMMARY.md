@@ -133,6 +133,24 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
+### 2026-03-09: RCA On Remote Rollout Diagnosis Order
+
+**Статус**: ✅ RCA-010 captured and codified
+
+- During initial Clawdiy rollout preparation, a missing `fleet-internal` network on `ainetic.tech` was treated too early as the primary blocker, before re-running the project’s existing Traefik-first production lessons and operator artifacts.
+- The correction was procedural, not infrastructural: re-read `MEMORY.md`, `docs/LESSONS-LEARNED.md`, `docs/INFRASTRUCTURE.md`, and the historical Traefik notes before changing deployment reasoning or workflow automation.
+- Added `docs/rules/remote-rollout-diagnosis-traefik-first.md` and a short pointer in `MEMORY.md` so future remote deploy triage starts with ingress/routing invariants, then only later considers new private networks such as `fleet-internal`.
+
+**Validated**
+
+- `bash .claude/skills/rca-5-whys/lib/context-collector.sh generic`
+- `./scripts/build-lessons-index.sh`
+- `./scripts/query-lessons.sh --tag traefik`
+
+**Next**
+
+- Resume Clawdiy rollout reasoning only after applying the Traefik-first remote diagnosis protocol to the live `ainetic.tech` baseline.
+
 ### 2026-03-09: Clawdiy Rebase And Mainline Reconcile
 
 **Статус**: ✅ branch rebased onto `origin/main`, PR conflicts cleared
