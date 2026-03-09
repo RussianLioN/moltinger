@@ -1,112 +1,127 @@
 # Quickstart: Clawdiy Agent Platform
 
-**Feature**: 001-clawdiy-agent-platform  
-**Date**: 2026-03-09
+- **Feature**: `001-clawdiy-agent-platform`
+- **Date**: 2026-03-09
 
-This quickstart is the operator path expected after implementation. It is intentionally staged so the platform can stop safely after each gate.
+This is the operator validation path after implementation. Each stage is a stop/go gate.
 
 ## Prerequisites
 
-- Current Moltinger production runtime is healthy on `moltis.ainetic.tech`
-- DNS prepared for `clawdiy.ainetic.tech`
-- Dedicated Telegram bot created for Clawdiy
-- GitHub Secrets populated for Clawdiy human auth, service auth, Telegram bot, and optional provider auth
-- Existing Traefik shared network and monitoring baseline remain healthy
+- Moltinger production runtime is healthy on `https://moltis.ainetic.tech`
+- DNS exists for `clawdiy.ainetic.tech`
+- dedicated Telegram bot exists for Clawdiy
+- GitHub Secrets exist for Clawdiy human auth, service auth, Telegram, and optional provider auth
+- shared host networks remain healthy: `traefik-net`, `fleet-internal`, `moltinger_monitoring`
 
-## Stage 1: Prepare Registry and Runtime Config
+## Stage 1: Validate Config And Registry
 
 ```bash
-# Validate the new fleet registry and Clawdiy runtime config exist
+test -f config/clawdiy/openclaw.json
 test -f config/fleet/agents-registry.json
 test -f config/fleet/policy.json
-test -f config/clawdiy/openclaw.json
 test -f docker-compose.clawdiy.yml
 ```
 
 Expected outcome:
-- Clawdiy has its own canonical `agent_id`
-- Clawdiy domain and Telegram bot identity are unique
-- service auth and human auth secret refs are distinct from Moltinger
 
-## Stage 2: Preflight Validation
+- Clawdiy has a unique `agent_id`
+- Clawdiy has a unique subdomain and Telegram identity
+- service auth is distinct from Moltinger auth
+
+## Stage 2: Preflight
 
 ```bash
-./scripts/preflight-check.sh --target clawdiy
+./scripts/preflight-check.sh --ci --target clawdiy --json
 docker compose -f docker-compose.clawdiy.yml config --quiet
 ```
 
 Expected outcome:
-- no duplicate identity/domain/bot collisions
-- all required Clawdiy secrets present
-- compose config renders successfully
 
-## Stage 3: Deploy Same-Host Clawdiy Stack
+- no identity collisions
+- no missing Clawdiy baseline secrets
+- compose renders cleanly
+
+## Stage 3: Deploy Same-Host Runtime
 
 ```bash
-./scripts/deploy.sh clawdiy deploy
-./scripts/clawdiy-smoke.sh --stage same-host
+./scripts/deploy.sh --json clawdiy deploy
+./scripts/clawdiy-smoke.sh --json --stage same-host
 ```
 
 Expected outcome:
-- Clawdiy is reachable on `https://clawdiy.ainetic.tech`
-- Moltinger remains healthy on `https://moltis.ainetic.tech`
-- per-agent health endpoints and metrics are distinguishable
 
-## Stage 4: Verify Authoritative Inter-Agent Handoff
+- this is the first live OpenClaw launch for Clawdiy
+- Clawdiy responds on `https://clawdiy.ainetic.tech`
+- Moltinger remains healthy
+- Clawdiy config/state/audit roots stay isolated
+
+## Stage 4: Verify Inter-Agent Handoff
 
 ```bash
-./scripts/clawdiy-smoke.sh --stage handoff
+./scripts/clawdiy-smoke.sh --json --stage handoff
 ```
 
 Expected outcome:
-- submit -> accept -> start -> terminal flow works for a sample handoff
-- correlation id and audit events are created
-- reject and timeout paths are observable and non-silent
 
-## Stage 5: Enable Telegram Human Ingress
+- accepted, rejected, duplicate, timeout, and late-completion evidence is visible
+- authoritative handoff path is still private HTTP JSON
+
+## Stage 5: Verify Telegram And Baseline Auth
 
 ```bash
-./scripts/clawdiy-smoke.sh --stage telegram-polling
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider telegram --json
+./scripts/clawdiy-smoke.sh --json --stage auth
 ```
 
 Expected outcome:
-- Clawdiy bot receives messages in polling mode
-- Telegram events remain human-facing only
-- machine-to-machine handoff still uses the private internal path
 
-## Stage 6: Gate OpenAI Codex OAuth Separately
+- Telegram polling credentials validate cleanly
+- Telegram remains in long-polling mode for phase 1
+- missing/invalid auth fails closed
+- baseline Clawdiy runtime health does not depend on provider OAuth
+
+## Stage 6: Verify Codex OAuth Gate
 
 ```bash
-./scripts/clawdiy-auth-check.sh --provider openai-codex
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider openai-codex --json
 ```
 
 Expected outcome:
-- provider auth is explicitly validated after login
-- missing scopes or bad auth fail closed
-- Clawdiy platform health does not depend on successful Codex OAuth
 
-## Stage 7: Rollback
+- provider profile is JSON
+- required scopes include `api.responses.write`
+- allowed models include `gpt-5.4`
+- if the check fails, Clawdiy remains healthy and Codex-backed capability stays disabled
+
+## Stage 7: Verify Recovery Path
 
 ```bash
-./scripts/deploy.sh clawdiy rollback
+./scripts/deploy.sh --json clawdiy rollback
+./scripts/clawdiy-smoke.sh --json --stage rollback-evidence
 ```
 
 Expected outcome:
-- Clawdiy returns to last-known-good state or is disabled cleanly
+
+- Clawdiy returns to last-known-good state or disables cleanly
 - Moltinger remains unaffected
-- rollback evidence is preserved in audit/log artifacts
+- rollback evidence references a real backup archive
 
-## Stage 8: Future-Node Readiness Check
+## Stage 8: Verify Future-Node Readiness
 
 ```bash
-./scripts/clawdiy-smoke.sh --stage extraction-readiness
+./scripts/clawdiy-smoke.sh --json --stage extraction-readiness
 ```
 
 Expected outcome:
-- canonical `agent_id`, registry shape, and handoff envelope remain unchanged
-- only endpoint placement and private routing details differ from same-host stage
+
+- `agent_id`, logical address, and handoff paths remain unchanged
+- only endpoint placement changes between `same_host` and `remote_node`
+- future permanent roles can reuse the same registry/policy model
 
 ## Operator Notes
 
-- If a planning-stage scope blocker emerges, use a narrow `speckit.clarify` only for that blocker.
-- Do not promote webhook mode or Codex-backed coding role until same-host baseline and rollback drill are green.
+- same-host deployment is the first production target
+- remote-node extraction is a later placement change, not a topology rewrite
+- Telegram is not the authoritative machine transport and stays on polling in phase 1
+- webhook mode is a later rollout, not part of this baseline quickstart
+- Codex OAuth and `gpt-5.4` are explicit rollout gates, not MVP blockers

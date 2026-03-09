@@ -1,261 +1,127 @@
-# Moltis Deployment Strategy
+# Deployment Strategy
 
-## Overview
+## Purpose
 
-This document describes the deployment strategy for Moltis to ainetic.tech using GitHub Actions.
+This document is the operator summary for deploying the two-agent platform:
 
-## Architecture
+- `Moltinger` remains the primary production runtime.
+- `Clawdiy` is the second long-lived agent, deployed same-host first and designed for later remote-node extraction.
 
-```
-+------------------+     SSH      +------------------+
-|  GitHub Actions  |------------>|   ainetic.tech   |
-|    Workflow      |             |   (Production)   |
-+------------------+             +------------------+
-                                        |
-                                        v
-                                 +-------------+
-                                 |   Traefik   |
-                                 | (Reverse    |
-                                 |   Proxy)    |
-                                 +-------------+
-                                        |
-                    +-------------------+-------------------+
-                    |                   |                   |
-                    v                   v                   v
-              +----------+       +------------+       +------------+
-              |  Moltis  |       | Watchtower |       |  Backups   |
-              | :13131   |       | (Auto-     |       | /var/      |
-              |          |       |  update)   |       | backups/   |
-              +----------+       +------------+       +------------+
-```
+## Deployment Units
 
-## Deployment Methods
+| Unit | Workflow / entrypoint | Scope |
+|------|------------------------|-------|
+| Moltinger baseline | `.github/workflows/deploy.yml` | Main application deploy and shared platform baseline |
+| Clawdiy same-host rollout | `.github/workflows/deploy-clawdiy.yml` | Clawdiy-only deploy, smoke, auth rendering, restore-readiness checks |
+| Rollback drill | `.github/workflows/rollback-drill.yml` | Backup integrity and restore-readiness verification |
 
-### 1. Automatic Deployment (Push to main)
+## Current Strategy
 
-Triggered automatically on push to `main` branch:
+### 1. Same-host first
 
-```yaml
-on:
-  push:
-    branches: [main]
-```
+Clawdiy starts on the same server in its own compose stack:
 
-### 2. Tag-based Deployment
+- compose: `docker-compose.clawdiy.yml`
+- runtime config: `config/clawdiy/openclaw.json`
+- control-plane registry/policy: `config/fleet/agents-registry.json`, `config/fleet/policy.json`
+- persistent state: `data/clawdiy/state`
+- audit evidence: `data/clawdiy/audit`
 
-Deploy specific versions using git tags:
+### 2. Private machine handoff
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
+Authoritative inter-agent transport is:
 
-### 3. Manual Deployment
+- private authenticated HTTP JSON
+- stable `/internal/v1/agent-handoffs*` contract
+- bearer service auth bound to `X-Agent-Id`
 
-Use GitHub UI or CLI:
+Telegram is human ingress only. It is not the authoritative machine transport.
 
-```bash
-gh workflow run deploy.yml \
-  -f environment=production \
-  -f version=v1.0.0
-```
+### 3. Telegram ingress stays in polling mode
 
-### 4. Rollback
+Phase 1 keeps Telegram in long-polling mode:
 
-Rollback to previous version:
+- dedicated Clawdiy bot identity
+- fail-closed token and allowlist checks
+- webhook rollout remains later and does not block same-host launch
+
+### 4. Rollout-gated provider auth
+
+`gpt-5.4` via OpenAI Codex OAuth is a later capability gate:
+
+- baseline Clawdiy deploy does not depend on it
+- provider auth stays fail-closed
+- Clawdiy can remain healthy while Codex-backed capability is disabled
+
+## Operator Flow
+
+### 1. Same-host launch
 
 ```bash
-gh workflow run deploy.yml -f rollback=true
+./scripts/preflight-check.sh --ci --target clawdiy --json
+./scripts/deploy.sh --json clawdiy deploy
+./scripts/clawdiy-smoke.sh --json --stage same-host
 ```
 
-## GitHub Secrets Required
+This is the first live OpenClaw launch step for Clawdiy.
 
-Configure these secrets in repository Settings > Secrets and variables > Actions:
-
-| Secret | Description | How to Generate |
-|--------|-------------|-----------------|
-| `SSH_PRIVATE_KEY` | Private SSH key for ainetic.tech | `ssh-keygen -t ed25519 -C "deploy@ainetic.tech"` |
-
-### Setup SSH Key
+### 2. Handoff verification
 
 ```bash
-# Generate key pair
-ssh-keygen -t ed25519 -C "deploy@ainetic.tech" -f ~/.ssh/ainetic_deploy
-
-# Copy public key to server
-ssh-copy-id -i ~/.ssh/ainetic_deploy.pub root@ainetic.tech
-
-# Add private key to GitHub Secrets
-cat ~/.ssh/ainetic_deploy | pbcopy
-# Paste into SSH_PRIVATE_KEY secret
+./scripts/clawdiy-smoke.sh --json --stage handoff
 ```
 
-## Deployment Workflow
-
-### Phase 1: Pre-flight Checks
-
-- Validate SSH credentials
-- Determine deployment version
-- Check prerequisites
-
-### Phase 2: Backup
-
-- Create backup of `/opt/moltinger/config` and `/opt/moltinger/data`
-- Store current image version
-- Rotate old backups (keep last 10)
-
-### Phase 3: Deploy
-
-1. Pull new image: `ghcr.io/moltis-org/moltis:$VERSION`
-2. Update `docker-compose.yml` with new version
-3. Stop container gracefully
-4. Start new container
-5. Wait for health check (max 3 minutes)
-
-### Phase 4: Verify
-
-- Container running check
-- Health endpoint test: `http://localhost:13131/health`
-- Traefik routing test: `https://ainetic.tech/health`
-- WebSocket endpoint availability
-
-## Health Checks
-
-### Container Health Check
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:13131/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 10s
-```
-
-### External Health Check
+### 3. Telegram and baseline auth verification
 
 ```bash
-# Via Traefik
-curl https://ainetic.tech/health
-
-# Expected response
-{"status": "ok"}
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider telegram --json
+./scripts/clawdiy-smoke.sh --json --stage auth
 ```
 
-## Rollback Procedure
-
-### Automatic Rollback
+### 4. Codex OAuth rollout gate
 
 ```bash
-gh workflow run deploy.yml -f rollback=true
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider openai-codex --json
 ```
 
-### Manual Rollback
+### 5. Recovery verification
 
 ```bash
-# SSH to server
-ssh root@ainetic.tech
-
-# Find backup
-ls -lt /var/backups/moltis/pre_deploy_*.tar.gz
-
-# Restore
-cd /opt/moltinger
-docker compose stop moltis
-tar -xzf /var/backups/moltis/pre_deploy_YYYYMMDD_HHMMSS.tar.gz -C /
-docker compose up -d moltis
+./scripts/deploy.sh --json clawdiy rollback
+./scripts/clawdiy-smoke.sh --json --stage rollback-evidence
 ```
 
-## Monitoring
-
-### Container Status
+### 6. Future-node readiness
 
 ```bash
-docker ps --filter "name=moltis"
-docker inspect --format='{{.State.Health.Status}}' moltis
+./scripts/clawdiy-smoke.sh --json --stage extraction-readiness
 ```
 
-### Logs
+## Required Secrets
 
-```bash
-docker logs moltis --tail 100 -f
-```
+| Scope | Secret refs |
+|-------|-------------|
+| Moltinger | `MOLTIS_PASSWORD`, `MOLTINGER_SERVICE_TOKEN`, `TELEGRAM_BOT_TOKEN` |
+| Clawdiy baseline | `CLAWDIY_PASSWORD`, `CLAWDIY_SERVICE_TOKEN`, `CLAWDIY_TELEGRAM_BOT_TOKEN`, `CLAWDIY_TELEGRAM_ALLOWED_USERS` |
+| Clawdiy rollout gate | `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` |
 
-### Traefik Routing
+Canonical source of truth is GitHub Secrets. The server runtime copy is generated into `/opt/moltinger/.env` and `/opt/moltinger/clawdiy/.env` by CI.
 
-```bash
-docker logs traefik --tail 100 -f
-```
+## Rollout Gates
 
-## Troubleshooting
+| Gate | Must be true before continuing |
+|------|--------------------------------|
+| Same-host deploy | Clawdiy health is green and Moltinger remains healthy |
+| Handoff | sample accept/reject/timeout evidence exists |
+| Telegram polling | token and allowlist checks pass or capability stays degraded |
+| Codex OAuth | required scopes include `api.responses.write` and allowed models include `gpt-5.4` |
+| Recovery | rollback evidence and restore-readiness checks pass |
+| Extraction readiness | identity, registry, and handoff paths stay stable across topology profiles |
 
-### Container not starting
+## Non-Negotiable Rules
 
-1. Check logs: `docker logs moltis`
-2. Check config: `ls -la /opt/moltinger/config/`
-3. Check permissions: `docker exec moltis ls -la /home/moltis/.config/moltis/`
-
-### Health check failing
-
-1. Test manually: `curl http://localhost:13131/health`
-2. Check Traefik: `docker logs traefik`
-3. Check network: `docker network ls`
-
-### Traefik not routing
-
-1. Check labels: `docker inspect moltis | grep -A 20 Labels`
-2. Check Traefik dashboard: http://localhost:8080
-3. Check certificates: `docker logs traefik 2>&1 | grep -i acme`
-
-## Security Considerations
-
-1. **SSH Key**: Use dedicated deploy key with limited permissions
-2. **Environment Protection**: Production environment requires approval (optional)
-3. **Secret Management**: Never commit secrets to repository
-4. **Image Verification**: Pull from trusted registry only (ghcr.io/moltis-org)
-
-## Directory Structure on Server
-
-```
-/opt/moltinger/
-├── docker-compose.yml
-├── .env                    # MOLTIS_PASSWORD
-├── config/
-│   └── ...                 # Moltis configuration
-└── data/
-    └── ...                 # Sessions, memory, logs
-
-/var/backups/moltis/
-├── pre_deploy_20240101_120000.tar.gz
-├── pre_deploy_20240101_120000.tar.gz.version
-└── ...
-```
-
-## CI/CD Pipeline
-
-```
-Push/Tag/Manual
-       |
-       v
-+-------------+
-|  Preflight  | ----> Validate SSH, Determine version
-+-------------+
-       |
-       v
-+-------------+
-|   Backup    | ----> Backup config + data
-+-------------+
-       |
-       v
-+-------------+
-|   Deploy    | ----> Pull image, Update compose, Restart
-+-------------+
-       |
-       v
-+-------------+
-|   Verify    | ----> Health checks, Smoke tests
-+-------------+
-       |
-       v
-   Success!
-```
+- Do not reuse Moltinger secrets for Clawdiy.
+- Do not expose machine handoffs through the public subdomain.
+- Do not treat Telegram success as proof that machine handoff works.
+- Do not enable Codex-backed capability before the OAuth gate passes.
+- Do not move Clawdiy to another node until `extraction-readiness` passes.
