@@ -49,6 +49,21 @@
       ],
       "ci": true
     },
+    "codex-cli-update-delivery.sh": {
+      "version": "1.0.0",
+      "description": "Deliver Codex update awareness across on-demand, launcher, and Telegram surfaces",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-update-delivery",
+        "codex-update-alert",
+        "codex-update-telegram"
+      ],
+      "ci": true
+    },
     "backup-moltis-enhanced.sh": {
       "version": "3.0.0",
       "description": "Enterprise backup with encryption, offsite backup, integrity verification",
