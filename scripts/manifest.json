@@ -645,8 +645,13 @@
       "version": "1.0.0",
       "description": "Wrapper for browser-based user monitor without API_HASH (manual/on-demand)",
       "entrypoint": true,
-      "requires": ["node"],
-      "provides": ["telegram-web", "user-monitor"],
+      "requires": [
+        "node"
+      ],
+      "provides": [
+        "telegram-web",
+        "user-monitor"
+      ],
       "env_vars": [
         "MOLTIS_ENV_FILE",
         "TELEGRAM_WEB_STATE",
@@ -702,9 +707,30 @@
       "version": "0.1.0",
       "description": "Owner script for the sanitized git topology registry and reviewed intent sidecar",
       "entrypoint": true,
-      "requires": ["git"],
-      "provides": ["git-topology-refresh", "git-topology-check", "git-topology-status", "git-topology-doctor"],
+      "requires": [
+        "git"
+      ],
+      "provides": [
+        "git-topology-refresh",
+        "git-topology-check",
+        "git-topology-status",
+        "git-topology-doctor"
+      ],
       "gitops": true
+    },
+    "codex-cli-update-advisor.sh": {
+      "version": "1.0.0",
+      "description": "Wrap the Codex update monitor with low-noise notifications and repository change suggestions",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-update-advisor",
+        "codex-update-suggest"
+      ],
+      "ci": true
     }
   },
   "dependencies": {
@@ -726,7 +752,7 @@
     "permissions": "755",
     "owner": "root",
     "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
-    "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
+    "note": "Manual scp disabled. All script changes must go through git push \u2192 CI/CD"
   },
   "systemd_units": {},
   "cron_jobs": {

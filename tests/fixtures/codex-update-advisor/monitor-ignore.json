@@ -1,0 +1,43 @@
+{
+  "checked_at": "2026-03-09T09:00:00Z",
+  "local_version": "0.112.0",
+  "latest_version": "0.112.0",
+  "version_status": "current",
+  "local_features": [
+    "feature.multi_agent",
+    "feature.js_repl"
+  ],
+  "repo_workflow_traits": [
+    "worktree-discipline",
+    "agents-surface",
+    "js-repl-surface"
+  ],
+  "sources": {
+    "release_source": "fixture:releases",
+    "issue_signals_included": false
+  },
+  "relevant_changes": [],
+  "non_relevant_changes": [
+    {
+      "id": "release:0.112.0:1",
+      "summary": "Plugin metadata cleanup",
+      "relevance": "low",
+      "reason": "No strong link to current repo workflow traits was detected.",
+      "evidence": [
+        "Release 0.112.0 published 2026-03-09"
+      ]
+    }
+  ],
+  "recommendation": "ignore",
+  "evidence": [
+    "Local Codex CLI already matches the latest verified upstream release.",
+    "No repository-relevant changes were found."
+  ],
+  "issue_action": {
+    "mode": "none",
+    "requested": false,
+    "notes": [
+      "Fixture only"
+    ]
+  }
+}

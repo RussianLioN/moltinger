@@ -1,0 +1,81 @@
+{
+  "checked_at": "2026-03-09T09:00:00Z",
+  "local_version": "0.110.0",
+  "latest_version": "0.112.0",
+  "version_status": "behind",
+  "local_features": [
+    "feature.multi_agent",
+    "feature.js_repl",
+    "approval_policy.on-request"
+  ],
+  "repo_workflow_traits": [
+    "worktree-discipline",
+    "approval-boundaries",
+    "agents-surface",
+    "js-repl-surface",
+    "agents-md-boundaries"
+  ],
+  "sources": {
+    "release_source": "fixture:releases",
+    "issue_signals_included": true,
+    "issue_sources": [
+      "fixture:issues"
+    ]
+  },
+  "relevant_changes": [
+    {
+      "id": "release:0.111.0:1",
+      "summary": "Worktree command now preserves nested workspaces more safely",
+      "relevance": "high",
+      "reason": "Relevant because this repo relies on dedicated worktrees and topology checks.",
+      "evidence": [
+        "Release 0.111.0 published 2026-03-08",
+        "Matched repo trait: worktree-discipline"
+      ]
+    },
+    {
+      "id": "release:0.111.0:2",
+      "summary": "js_repl sessions now resume more reliably after long agent runs",
+      "relevance": "high",
+      "reason": "Relevant because the repo actively uses js_repl-backed workflows.",
+      "evidence": [
+        "Release 0.111.0 published 2026-03-08",
+        "Matched repo trait: js-repl-surface"
+      ]
+    },
+    {
+      "id": "release:0.112.0:1",
+      "summary": "Permission profile updates improve approval prompts for workspace-write sessions",
+      "relevance": "high",
+      "reason": "Relevant because repo instructions enforce explicit approval and sandbox boundaries.",
+      "evidence": [
+        "Release 0.112.0 published 2026-03-09",
+        "Matched repo trait: approval-boundaries"
+      ]
+    }
+  ],
+  "non_relevant_changes": [
+    {
+      "id": "release:0.112.0:2",
+      "summary": "Plugin metadata cleanup",
+      "relevance": "low",
+      "reason": "No strong link to current repo workflow traits was detected.",
+      "evidence": [
+        "Release 0.112.0 published 2026-03-09"
+      ]
+    }
+  ],
+  "recommendation": "upgrade-now",
+  "evidence": [
+    "Local Codex CLI is behind the latest verified upstream release.",
+    "Repository-relevant changes were found in worktree, js_repl, and approval flows.",
+    "Optional issue signals were reviewed as advisory items only."
+  ],
+  "issue_action": {
+    "mode": "suggested",
+    "requested": false,
+    "notes": [
+      "Fixture only"
+    ]
+  }
+}
