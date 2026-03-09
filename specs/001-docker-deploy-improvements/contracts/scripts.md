@@ -35,6 +35,11 @@ COMMANDS:
   logs [-f]        Show target logs
 ```
 
+Compatibility notes:
+- Omitting `TARGET` keeps the previous Moltis behavior: `./scripts/deploy.sh deploy` still means `moltis deploy`.
+- `clawdiy` deploy/start requires `CLAWDIY_IMAGE` via environment, env file, or previous deployment state.
+- `clawdiy rollback` may resolve to a clean disable when no last-known-good image exists yet.
+
 ### Exit Codes
 
 | Code | Meaning |

@@ -123,6 +123,11 @@ All JSON responses follow a consistent structure:
 | `restart` | Restart target services |
 | `logs` | Show target logs |
 
+Compatibility notes:
+- `./scripts/deploy.sh deploy` still targets Moltis by default.
+- `./scripts/deploy.sh --json clawdiy status` is the canonical target-aware JSON form.
+- `clawdiy rollback` may report `details.health = "disabled"` when there is no previous image yet and the safe action is to disable the stack.
+
 ---
 
 ## 2. backup-moltis-enhanced.sh JSON Output

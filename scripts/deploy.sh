@@ -549,7 +549,11 @@ cmd_deploy() {
 
         if [[ "$ROLLBACK_ENABLED" == "true" ]]; then
             rollback
-            health_status="rolled_back"
+            if [[ "$TARGET" == "clawdiy" ]] && ! docker ps --format '{{.Names}}' | grep -qx "$TARGET_CONTAINER"; then
+                health_status="disabled"
+            else
+                health_status="rolled_back"
+            fi
             send_notification "failure" "${TARGET_DISPLAY} deployment failed and rollback was triggered"
         fi
 
