@@ -11,6 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
+.PHONY: codex-update-monitor codex-update-advisor
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -88,6 +89,8 @@ help:
 	@echo "  codex-bootstrap - Verify local Codex prerequisites and repo policy state"
 	@echo "  codex-check     - Run repo-specific Codex governance checks"
 	@echo "  codex-check-ci  - Run Codex governance checks in CI-safe mode"
+	@echo "  codex-update-monitor - Run the Codex update monitor"
+	@echo "  codex-update-advisor - Run the advisor layer over the Codex update monitor"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -343,6 +346,14 @@ codex-update-monitor:
 	@./scripts/codex-cli-update-monitor.sh \
 		--json-out .tmp/current/codex-update-report.json \
 		--summary-out .tmp/current/codex-update-summary.md \
+		--stdout summary
+
+codex-update-advisor:
+	@mkdir -p .tmp/current
+	@./scripts/codex-cli-update-advisor.sh \
+		--json-out .tmp/current/codex-update-advisor-report.json \
+		--summary-out .tmp/current/codex-update-advisor-summary.md \
+		--state-file .tmp/current/codex-cli-update-advisor-state.json \
 		--stdout summary
 
 codex-research:

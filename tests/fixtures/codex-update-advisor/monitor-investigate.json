@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-03-09T09:00:00Z",
+  "local_version": "0.110.0",
+  "latest_version": "unknown",
+  "version_status": "unknown",
+  "local_features": [
+    "feature.multi_agent"
+  ],
+  "repo_workflow_traits": [
+    "worktree-discipline",
+    "agents-surface"
+  ],
+  "sources": {
+    "release_source": "fixture:missing",
+    "issue_signals_included": false
+  },
+  "relevant_changes": [],
+  "non_relevant_changes": [],
+  "recommendation": "investigate",
+  "evidence": [
+    "Primary upstream release source was unavailable.",
+    "The monitor could not verify the latest Codex release."
+  ],
+  "issue_action": {
+    "mode": "none",
+    "requested": false,
+    "notes": [
+      "Fixture only"
+    ]
+  }
+}

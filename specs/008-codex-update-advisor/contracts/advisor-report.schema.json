@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moltinger/specs/008-codex-update-advisor/contracts/advisor-report.schema.json",
+  "title": "Codex CLI Update Advisor Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checked_at",
+    "monitor_snapshot",
+    "notification",
+    "project_change_suggestions",
+    "implementation_brief",
+    "issue_action"
+  ],
+  "properties": {
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "monitor_snapshot": {
+      "$ref": "#/$defs/monitor_snapshot"
+    },
+    "notification": {
+      "$ref": "#/$defs/notification"
+    },
+    "project_change_suggestions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/suggestion"
+      }
+    },
+    "implementation_brief": {
+      "$ref": "#/$defs/implementation_brief"
+    },
+    "issue_action": {
+      "$ref": "#/$defs/issue_action"
+    }
+  },
+  "$defs": {
+    "monitor_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "summary",
+        "relevance",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relevance": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "none"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "monitor_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_version",
+        "latest_version",
+        "version_status",
+        "recommendation",
+        "repo_workflow_traits",
+        "relevant_changes",
+        "evidence"
+      ],
+      "properties": {
+        "local_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "latest_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version_status": {
+          "type": "string",
+          "enum": [
+            "ahead",
+            "current",
+            "behind",
+            "unknown"
+          ]
+        },
+        "recommendation": {
+          "type": "string",
+          "enum": [
+            "upgrade-now",
+            "upgrade-later",
+            "ignore",
+            "investigate"
+          ]
+        },
+        "repo_workflow_traits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "relevant_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/monitor_change"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "changed",
+        "threshold",
+        "fingerprint",
+        "reason",
+        "notes"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "notify",
+            "suppressed",
+            "none",
+            "investigate"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "threshold": {
+          "type": "string",
+          "enum": [
+            "ignore",
+            "upgrade-later",
+            "upgrade-now",
+            "investigate"
+          ]
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "priority",
+        "category",
+        "rationale",
+        "impacted_paths",
+        "next_steps"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "impacted_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "next_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "implementation_brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "top_priorities",
+        "impacted_paths",
+        "notes"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "top_priorities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "impacted_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "issue_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "requested",
+        "notes"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "suggested",
+            "created",
+            "updated",
+            "skipped"
+          ]
+        },
+        "requested": {
+          "type": "boolean"
+        },
+        "target": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

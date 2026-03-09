@@ -19,6 +19,7 @@
 | `/Users/rl/coding/moltinger-gpt-5-moltis` | `feat/gpt-5-moltis` | `786079a` | Separate research/documentation worktree |
 | `/Users/rl/coding/moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `9bdecfd` | GPT-5.4 primary-model planning lane |
 | `/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new` | `007-codex-update-monitor` | `c529023` | Speckit package and implementation-prep lane for Codex CLI update monitor |
+| `/Users/rl/coding/moltinger-008-codex-update-advisor` | `008-codex-update-advisor` | `351cc4a` | Dedicated Speckit lane for the Codex update advisor UX |
 | `/Users/rl/coding/moltinger-openclaw-control-plane` | `001-clawdiy-agent-platform` | `3bbc4c8` | OpenClaw control-plane feature lane |
 | `/Users/rl/coding/moltinger-pr17-webhook-extraction` | `feat/pr17-webhook-extraction` | `e17a956` | PR17 webhook extraction lane |
 | `/Users/rl/coding/moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `06701a4` | UAT mirror for git-topology-registry |
@@ -29,6 +30,7 @@
 |---|---|---|
 | `main` | `origin/main` | Canonical source of truth |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Active Speckit-aligned branch for Codex update monitor |
+| `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Active Speckit-aligned branch for the advisor layer on top of the Codex update monitor |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Legacy issue-named branch retained as the pre-alignment source for `007-codex-update-monitor` |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active feature branch; dedicated worktree exists |
 | `uat/006-git-topology-registry` | `origin/006-git-topology-registry` | UAT mirror branch for the same feature package |
