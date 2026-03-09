@@ -220,17 +220,17 @@ run_integration_local_clawdiy_handoff_tests() {
     load_handoff_contract
 
     test_start "integration_local_clawdiy_handoff_config_alignment"
-    assert_eq "$HANDOFF_SUBMIT_PATH" "$(jq -r '.control_plane.submit_path' "$CLAWDIY_CONFIG_FILE")" "Handoff submit path must match Clawdiy runtime config"
-    assert_eq "$HANDOFF_ACK_PATH_TEMPLATE" "$(jq -r '.control_plane.ack_path_template' "$CLAWDIY_CONFIG_FILE")" "Handoff ack path template must match Clawdiy runtime config"
-    assert_eq "$HANDOFF_STATUS_PATH_TEMPLATE" "$(jq -r '.control_plane.status_path_template' "$CLAWDIY_CONFIG_FILE")" "Handoff status path template must match Clawdiy runtime config"
-    assert_eq "$HANDOFF_AUTHORIZATION_HEADER" "$(jq -r '.control_plane.correlation_headers.authorization' "$CLAWDIY_CONFIG_FILE")" "Authorization header must match Clawdiy runtime config"
-    assert_eq "$HANDOFF_AGENT_HEADER" "$(jq -r '.control_plane.correlation_headers.agent_id' "$CLAWDIY_CONFIG_FILE")" "Agent header must match Clawdiy runtime config"
-    assert_eq "$HANDOFF_CORRELATION_HEADER" "$(jq -r '.control_plane.correlation_headers.correlation_id' "$CLAWDIY_CONFIG_FILE")" "Correlation header must match Clawdiy runtime config"
-    assert_eq "$HANDOFF_IDEMPOTENCY_HEADER" "$(jq -r '.control_plane.correlation_headers.idempotency_key' "$CLAWDIY_CONFIG_FILE")" "Idempotency header must match Clawdiy runtime config"
-    assert_eq "$(jq -r '.MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.control_plane.delivery_ack_deadline_seconds' "$CLAWDIY_CONFIG_FILE")" "Delivery ack deadline must match"
-    assert_eq "$(jq -r '.MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.control_plane.start_ack_deadline_seconds' "$CLAWDIY_CONFIG_FILE")" "Start ack deadline must match"
-    assert_eq "$(jq -r '.MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.control_plane.progress_heartbeat_seconds' "$CLAWDIY_CONFIG_FILE")" "Progress heartbeat must match"
-    assert_eq "$(jq -r '.MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.control_plane.terminal_timeout_seconds' "$CLAWDIY_CONFIG_FILE")" "Terminal timeout must match"
+    assert_eq "$HANDOFF_SUBMIT_PATH" "$(jq -r '.routes[] | select(.caller == "moltinger" and .recipient == "clawdiy") | .endpoint' "$POLICY_FILE" | sed 's/^POST //')" "Handoff submit path must match fleet policy"
+    assert_eq "$HANDOFF_ACK_PATH_TEMPLATE" "$(jq -r '.routes[] | select(.caller == "moltinger" and .recipient == "clawdiy") | .ack_endpoint' "$POLICY_FILE" | sed 's/^POST //')" "Handoff ack path template must match fleet policy"
+    assert_eq "$HANDOFF_STATUS_PATH_TEMPLATE" "$(jq -r '.routes[] | select(.caller == "moltinger" and .recipient == "clawdiy") | .status_endpoint' "$POLICY_FILE" | sed 's/^GET //')" "Handoff status path template must match fleet policy"
+    assert_eq "$HANDOFF_AUTHORIZATION_HEADER" "$(jq -r '.service_auth.authorization_header' "$POLICY_FILE")" "Authorization header must match fleet policy"
+    assert_eq "$HANDOFF_AGENT_HEADER" "$(jq -r '.service_auth.required_headers[0]' "$POLICY_FILE")" "Agent header must match fleet policy ordering"
+    assert_eq "$HANDOFF_CORRELATION_HEADER" "$(jq -r '.service_auth.required_headers[1]' "$POLICY_FILE")" "Correlation header must match fleet policy ordering"
+    assert_eq "$HANDOFF_IDEMPOTENCY_HEADER" "$(jq -r '.service_auth.required_headers[2]' "$POLICY_FILE")" "Idempotency header must match fleet policy ordering"
+    assert_eq "$(jq -r '.MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .delivery_ack_deadline_seconds' "$POLICY_FILE")" "Delivery ack deadline must match"
+    assert_eq "$(jq -r '.MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .start_ack_deadline_seconds' "$POLICY_FILE")" "Start ack deadline must match"
+    assert_eq "$(jq -r '.MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .progress_heartbeat_seconds' "$POLICY_FILE")" "Progress heartbeat must match"
+    assert_eq "$(jq -r '.MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .terminal_timeout_seconds' "$POLICY_FILE")" "Terminal timeout must match"
     if ! diff -u <(jq -S . "$MAIN_ENV_FILE") <(jq -S . "$FIXTURE_ENV_FILE") >/dev/null; then
         test_fail "Fixture moltis.toml must mirror handoff env metadata from config/moltis.toml"
     fi
@@ -242,6 +242,15 @@ run_integration_local_clawdiy_handoff_tests() {
         and .service_auth.authorization_header == $auth
       ' "$POLICY_FILE" >/dev/null 2>&1; then
         test_fail "Fleet policy service auth headers must align with Moltinger/Clawdiy handoff config"
+    fi
+    if ! jq -e '
+        .agents[] | select(.agent_id == "clawdiy")
+        | .endpoint_paths.handoff_submit == "POST /internal/v1/agent-handoffs"
+        and .endpoint_paths.handoff_ack == "POST /internal/v1/agent-handoffs/{correlation_id}/acks"
+        and .endpoint_paths.handoff_status == "GET /internal/v1/agent-handoffs/{correlation_id}"
+        and .endpoint_paths.handoff_cancel == "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+      ' "$REGISTRY_FILE" >/dev/null 2>&1; then
+        test_fail "Fleet registry must expose the same authoritative handoff endpoints for Clawdiy"
     fi
     if [[ -n "${TEST_CURRENT:-}" ]]; then
         test_pass

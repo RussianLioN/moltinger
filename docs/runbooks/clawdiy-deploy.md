@@ -11,6 +11,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 
 - `docker-compose.clawdiy.yml` exists and renders with `docker compose config --quiet`
 - `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json` are present
+- `config/clawdiy/openclaw.json` is treated as the tracked runtime template, and `data/clawdiy/runtime/openclaw.json` is the rendered deployable artifact
 - DNS for `clawdiy.ainetic.tech` exists
 - Clawdiy GitHub Secrets exist and are distinct from Moltinger secrets
 - `docker-compose.clawdiy.yml` keeps the runtime config and registry mounts in explicit bind long syntax; short syntax may be misrendered by server-side Docker Compose into the old directory bind contract
@@ -27,14 +28,18 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:latest docker compose -f docker-compose.clawdiy.yml config --quiet
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
-2. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
+2. Render the deployable OpenClaw runtime config from the tracked template plus the dedicated Clawdiy env file:
+   ```bash
+   ./scripts/render-clawdiy-runtime-config.sh --env-file /opt/moltinger/clawdiy/.env --json | jq .
+   ```
+3. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
    For the GitHub Actions path, the remote SSH deploy command must propagate `GITHUB_ACTIONS=true` and `GITHUB_RUN_ID` so `scripts/deploy.sh` is treated as CI, not as an ad-hoc manual SSH rollout.
    The workflow also migrates legacy root-level Clawdiy marker files into ignored `data/clawdiy/` state before enforcing the clean-worktree GitOps gate.
-3. Deploy Clawdiy:
+4. Deploy Clawdiy:
    ```bash
    ./scripts/deploy.sh clawdiy deploy
    ```
-4. Run same-host smoke verification:
+5. Run same-host smoke verification:
    ```bash
    ./scripts/clawdiy-smoke.sh --stage same-host
    ./scripts/clawdiy-smoke.sh --stage restart-isolation
@@ -50,9 +55,11 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 ## Ownership Boundary
 
 - Git-managed control-plane config:
-  - `config/clawdiy/openclaw.json`
+  - `config/clawdiy/openclaw.json` (tracked template)
   - `config/fleet/agents-registry.json`
   - `config/fleet/policy.json`
+- Rendered runtime artifact:
+  - `data/clawdiy/runtime/openclaw.json`
 - Distinct persistent host paths:
   - `data/clawdiy/state`
   - `data/clawdiy/audit`
@@ -77,6 +84,7 @@ Stop rollout if any of the following happens:
 
 - `docker compose -f docker-compose.clawdiy.yml config --quiet`
 - preflight output
+- `./scripts/render-clawdiy-runtime-config.sh --env-file /opt/moltinger/clawdiy/.env --json`
 - remote `/tmp/clawdiy-deploy-result.json` rendered by `deploy-clawdiy.yml` even when deploy exits non-zero
 - `./scripts/clawdiy-smoke.sh --stage same-host --json`
 - `./scripts/clawdiy-smoke.sh --stage restart-isolation --json`

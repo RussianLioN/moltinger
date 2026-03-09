@@ -196,7 +196,7 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_uses_explicit_bind_syntax_for_runtime_paths"
     if rg -q 'type: bind' "$COMPOSE_CLAWDIY" && \
-       rg -q 'source: \./config/clawdiy/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
        rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
        rg -q 'source: \./config/fleet' "$COMPOSE_CLAWDIY" && \
        rg -q 'target: /home/node/\.openclaw/registry' "$COMPOSE_CLAWDIY"; then
@@ -276,7 +276,7 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_security_hardening"
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
-       rg -q 'source: \./config/clawdiy/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
        rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
        rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
