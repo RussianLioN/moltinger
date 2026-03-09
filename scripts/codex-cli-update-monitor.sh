@@ -20,6 +20,8 @@ LOCAL_VERSION_OVERRIDE="${CODEX_UPDATE_MONITOR_LOCAL_VERSION:-}"
 MAX_RELEASES="${CODEX_UPDATE_MONITOR_MAX_RELEASES:-3}"
 ISSUE_ACTION="none"
 ISSUE_TARGET=""
+ISSUE_THRESHOLD="${CODEX_UPDATE_MONITOR_ISSUE_THRESHOLD:-upgrade-now}"
+BEADS_DB="${CODEX_UPDATE_MONITOR_BEADS_DB:-}"
 
 TEMP_DIR=""
 REPORT_PATH=""
@@ -48,8 +50,11 @@ Options:
   --include-issue-signals   Include optional upstream issue-signal analysis
   --issue-signals-file PATH Read issue-signal JSON from a local file
   --issue-signals-url URL   Read issue-signal JSON from URL
-  --issue-action MODE       Record requested issue action: none|upsert
+  --issue-action MODE       Issue sync mode: none|upsert
   --issue-target ID         Optional tracker target identifier
+  --issue-threshold VALUE   Minimum recommendation for tracker action:
+                            ignore|upgrade-later|upgrade-now|investigate
+  --beads-db PATH           Explicit Beads database path for local tracker sync
   -h, --help                Show this help text
 
 Environment overrides:
@@ -60,6 +65,8 @@ Environment overrides:
   CODEX_UPDATE_MONITOR_ISSUE_SIGNALS_FILE
   CODEX_UPDATE_MONITOR_ISSUE_SIGNALS_URL
   CODEX_UPDATE_MONITOR_MAX_RELEASES
+  CODEX_UPDATE_MONITOR_ISSUE_THRESHOLD
+  CODEX_UPDATE_MONITOR_BEADS_DB
 EOF
 }
 
@@ -96,6 +103,243 @@ normalize_version() {
         return 0
     fi
     return 1
+}
+
+recommendation_meets_threshold() {
+    local recommendation="$1"
+    local threshold="$2"
+    case "$threshold" in
+        ignore)
+            return 0
+            ;;
+        upgrade-later)
+            [[ "$recommendation" == "upgrade-later" || "$recommendation" == "upgrade-now" ]]
+            ;;
+        upgrade-now)
+            [[ "$recommendation" == "upgrade-now" ]]
+            ;;
+        investigate)
+            [[ "$recommendation" == "investigate" ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+resolve_beads_db() {
+    local redirect_file resolved_path
+
+    if [[ -n "$BEADS_DB" ]]; then
+        [[ -f "$BEADS_DB" ]] || return 1
+        printf '%s\n' "$BEADS_DB"
+        return 0
+    fi
+
+    redirect_file="${PROJECT_ROOT}/.beads/redirect"
+    if [[ -f "$redirect_file" ]]; then
+        resolved_path="$(<"$redirect_file")"
+        if [[ -n "$resolved_path" ]]; then
+            if [[ "$resolved_path" == /* ]]; then
+                resolved_path="${resolved_path}/beads.db"
+            else
+                resolved_path="${PROJECT_ROOT}/${resolved_path}/beads.db"
+            fi
+            if [[ -f "$resolved_path" ]]; then
+                printf '%s\n' "$resolved_path"
+                return 0
+            fi
+        fi
+    fi
+
+    if [[ -f "${PROJECT_ROOT}/.beads/beads.db" ]]; then
+        printf '%s\n' "${PROJECT_ROOT}/.beads/beads.db"
+        return 0
+    fi
+
+    return 1
+}
+
+issue_priority_for_recommendation() {
+    case "${1:-}" in
+        investigate) printf '1\n' ;;
+        upgrade-now) printf '2\n' ;;
+        upgrade-later) printf '3\n' ;;
+        *) printf '4\n' ;;
+    esac
+}
+
+build_issue_title() {
+    local recommendation local_version latest_version
+    recommendation="$(jq -r '.recommendation' "$REPORT_PATH")"
+    local_version="$(jq -r '.local_version' "$REPORT_PATH")"
+    latest_version="$(jq -r '.latest_version' "$REPORT_PATH")"
+
+    case "$recommendation" in
+        investigate)
+            printf 'Investigate Codex CLI update monitor findings (%s -> %s)\n' "$local_version" "$latest_version"
+            ;;
+        *)
+            printf 'Review Codex CLI update %s -> %s (%s)\n' "$local_version" "$latest_version" "$recommendation"
+            ;;
+    esac
+}
+
+build_issue_description() {
+    jq -r '
+      def fmt_list(items):
+        if (items | length) == 0 then "- none"
+        else items[] | "- \(.)"
+        end;
+      def fmt_changes(items):
+        if (items | length) == 0 then "- none"
+        else items[] | "- [\(.relevance)] \(.summary) -- \(.reason)"
+        end;
+
+      [
+        "Codex CLI update monitor follow-up created from an explicit `--issue-action upsert` run.",
+        "",
+        "## Status",
+        "- Recommendation: \(.recommendation)",
+        "- Local version: \(.local_version)",
+        "- Latest checked version: \(.latest_version)",
+        "- Version status: \(.version_status)",
+        "- Checked at: \(.checked_at)",
+        "",
+        "## Relevant Changes",
+        (fmt_changes(.relevant_changes)),
+        "",
+        "## Evidence",
+        (fmt_list(.evidence)),
+        "",
+        "## Suggested Next Steps",
+        "- Review the relevant changes listed above.",
+        "- Decide whether to upgrade the local Codex CLI now or defer intentionally.",
+        "- Re-run `scripts/codex-cli-update-monitor.sh` after any upgrade or workflow adjustment."
+      ] | flatten | join("\n")
+    ' "$REPORT_PATH"
+}
+
+build_issue_note() {
+    jq -r '
+      [
+        "Codex CLI update monitor sync",
+        "- Recommendation: \(.recommendation)",
+        "- Local version: \(.local_version)",
+        "- Latest checked version: \(.latest_version)",
+        "- Checked at: \(.checked_at)",
+        "- Relevant changes: \(.relevant_changes | length)",
+        "- Evidence:",
+        (.evidence[] | "  - \(.)")
+      ] | join("\n")
+    ' "$REPORT_PATH"
+}
+
+set_issue_action_json() {
+    local mode="$1"
+    local requested="$2"
+    local target="${3:-}"
+    shift 3
+    local notes_json
+
+    if [[ $# -gt 0 ]]; then
+        notes_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+    else
+        notes_json='[]'
+    fi
+
+    jq \
+        --arg mode "$mode" \
+        --argjson requested "$requested" \
+        --argjson notes "$notes_json" \
+        --arg target "$target" \
+        '.issue_action = (
+            {
+                mode: $mode,
+                requested: $requested,
+                notes: $notes
+            }
+            + (if $target == "" then {} else {target: $target} end)
+        )' \
+        "$REPORT_PATH" > "${REPORT_PATH}.tmp"
+    mv "${REPORT_PATH}.tmp" "$REPORT_PATH"
+}
+
+perform_issue_sync() {
+    local recommendation threshold_notes threshold_target beads_db_path issue_title issue_description issue_note created_id priority
+    recommendation="$(jq -r '.recommendation' "$REPORT_PATH")"
+
+    if [[ "$ISSUE_ACTION" == "none" ]]; then
+        if recommendation_meets_threshold "$recommendation" "$ISSUE_THRESHOLD"; then
+            threshold_notes=(
+                "Tracker sync was not requested."
+                "Recommendation meets the issue threshold '${ISSUE_THRESHOLD}'."
+                "Re-run with --issue-action upsert to create or update a Beads follow-up."
+            )
+            set_issue_action_json "suggested" "false" "${ISSUE_TARGET:-}" "${threshold_notes[@]}"
+        else
+            set_issue_action_json "none" "false" "${ISSUE_TARGET:-}" "Tracker sync not requested."
+        fi
+        return 0
+    fi
+
+    if ! recommendation_meets_threshold "$recommendation" "$ISSUE_THRESHOLD"; then
+        threshold_notes=(
+            "Explicit issue sync was requested."
+            "Recommendation '${recommendation}' does not meet threshold '${ISSUE_THRESHOLD}'."
+            "No tracker mutation was performed."
+        )
+        set_issue_action_json "skipped" "true" "${ISSUE_TARGET:-}" "${threshold_notes[@]}"
+        return 0
+    fi
+
+    if ! command -v bd >/dev/null 2>&1; then
+        set_issue_action_json "skipped" "true" "${ISSUE_TARGET:-}" \
+            "Explicit issue sync was requested." \
+            "The bd CLI is not available in PATH." \
+            "No tracker mutation was performed."
+        return 0
+    fi
+
+    if ! beads_db_path="$(resolve_beads_db)"; then
+        set_issue_action_json "skipped" "true" "${ISSUE_TARGET:-}" \
+            "Explicit issue sync was requested." \
+            "Could not resolve a Beads database path for this worktree." \
+            "No tracker mutation was performed."
+        return 0
+    fi
+
+    issue_title="$(build_issue_title)"
+    issue_description="$(build_issue_description)"
+    issue_note="$(build_issue_note)"
+    priority="$(issue_priority_for_recommendation "$recommendation")"
+
+    if [[ -n "$ISSUE_TARGET" ]]; then
+        if bd update --db "$beads_db_path" "$ISSUE_TARGET" --status open --priority "$priority" --append-notes "$issue_note" >/dev/null 2>&1; then
+            set_issue_action_json "updated" "true" "$ISSUE_TARGET" \
+                "Explicit issue sync was requested." \
+                "Updated Beads issue '${ISSUE_TARGET}' with the latest monitor evidence."
+            return 0
+        fi
+
+        set_issue_action_json "skipped" "true" "$ISSUE_TARGET" \
+            "Explicit issue sync was requested." \
+            "Failed to update Beads issue '${ISSUE_TARGET}'." \
+            "No tracker mutation was completed."
+        return 0
+    fi
+
+    if created_id="$(bd create "$issue_title" --db "$beads_db_path" --type task --priority "$priority" --labels codex-update,backlog --description "$issue_description" --silent 2>/dev/null)"; then
+        set_issue_action_json "created" "true" "$created_id" \
+            "Explicit issue sync was requested." \
+            "Created a new Beads follow-up from the monitor report."
+        return 0
+    fi
+
+    set_issue_action_json "skipped" "true" "${ISSUE_TARGET:-}" \
+        "Explicit issue sync was requested." \
+        "Failed to create a Beads follow-up issue." \
+        "No tracker mutation was completed."
 }
 
 collect_local_config_json() {
@@ -335,6 +579,14 @@ parse_args() {
                 ISSUE_TARGET="${2:?missing value for --issue-target}"
                 shift 2
                 ;;
+            --issue-threshold)
+                ISSUE_THRESHOLD="${2:?missing value for --issue-threshold}"
+                shift 2
+                ;;
+            --beads-db)
+                BEADS_DB="${2:?missing value for --beads-db}"
+                shift 2
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -359,6 +611,14 @@ parse_args() {
         none|upsert) ;;
         *)
             printf 'Invalid --issue-action mode: %s\n' "$ISSUE_ACTION" >&2
+            exit 2
+            ;;
+    esac
+
+    case "$ISSUE_THRESHOLD" in
+        ignore|upgrade-later|upgrade-now|investigate) ;;
+        *)
+            printf 'Invalid --issue-threshold value: %s\n' "$ISSUE_THRESHOLD" >&2
             exit 2
             ;;
     esac
@@ -828,6 +1088,7 @@ if issue_sources:
 print(json.dumps(report, indent=2))
 PY
 
+    perform_issue_sync
     render_summary > "$SUMMARY_PATH"
 
     if [[ -n "$JSON_OUT" ]]; then

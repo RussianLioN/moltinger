@@ -44,8 +44,8 @@ Expected result:
 
 Expected result:
 
-- In the first implementation slice, the request is recorded as `issue_action.mode=skipped` without mutating Beads
-- A later User Story 3 slice will turn the same explicit flags into real Beads create/update behavior
+- If the recommendation crosses the issue threshold, the local run creates or updates a Beads issue
+- The JSON report records whether the issue action was `created`, `updated`, `suggested`, or `skipped`
 
 ## Manual Workflow Run
 
@@ -55,7 +55,7 @@ Expected result:
 
 - Workflow uploads JSON and Markdown artifacts with the same core fields as the local run
 - Workflow does not self-upgrade Codex
-- Workflow leaves tracker state unchanged unless explicit sync inputs are provided
+- Workflow currently stays read-only for tracker state because GitHub runners do not share the local Beads DB path used by this repository
 
 ## Validation Checklist
 
@@ -63,4 +63,4 @@ Expected result:
 2. Confirm the JSON report conforms to `contracts/monitor-report.schema.json`.
 3. Confirm the summary clearly explains why the recommendation was chosen.
 4. Run the manual workflow path and verify artifact parity with the local path.
-5. Run the explicit issue-sync path and confirm the issue action is auditable in the report, even before US3 lands real tracker mutation.
+5. Run the explicit issue-sync path locally and confirm the issue action is auditable as `created` or `updated` in the report.
