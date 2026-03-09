@@ -7,10 +7,56 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 MONITOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-monitor.sh"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-update-monitor"
+FAKE_BD_BIN_DIR=""
+FAKE_BD_STATE_DIR=""
+FAKE_BD_DB=""
 
 setup_component_codex_update_monitor() {
     require_commands_or_skip jq python3 || return 2
     return 0
+}
+
+setup_fake_bd_fixture() {
+    FAKE_BD_BIN_DIR="$(secure_temp_dir fake-bd-bin)"
+    FAKE_BD_STATE_DIR="$(secure_temp_dir fake-bd-state)"
+    FAKE_BD_DB="$FAKE_BD_STATE_DIR/beads.db"
+    : > "$FAKE_BD_DB"
+
+    cat > "$FAKE_BD_BIN_DIR/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_dir="${FAKE_BD_STATE_DIR:?}"
+mkdir -p "$state_dir"
+printf '%s\n' "$*" >> "$state_dir/calls.log"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    create)
+        if [[ "${FAKE_BD_CREATE_FAIL:-0}" == "1" ]]; then
+            echo "fake bd create failure" >&2
+            exit 1
+        fi
+        printf '%s\n' "$*" > "$state_dir/last_create_args.txt"
+        printf '%s\n' "${FAKE_BD_CREATE_ID:-moltinger-test-created}"
+        ;;
+    update)
+        if [[ "${FAKE_BD_UPDATE_FAIL:-0}" == "1" ]]; then
+            echo "fake bd update failure" >&2
+            exit 1
+        fi
+        printf '%s\n' "$*" > "$state_dir/last_update_args.txt"
+        echo "updated"
+        ;;
+    *)
+        echo "unsupported fake bd command: $cmd" >&2
+        exit 1
+        ;;
+esac
+EOF
+    chmod +x "$FAKE_BD_BIN_DIR/bd"
 }
 
 run_monitor_fixture() {
@@ -41,7 +87,7 @@ run_component_codex_cli_update_monitor_tests() {
         return
     fi
 
-    local work_dir report summary stdout_capture
+    local work_dir report summary stdout_capture original_path
     work_dir="$(secure_temp_dir codex-update-monitor)"
 
     test_start "component_codex_update_monitor_emits_schema_shape_for_current_version"
@@ -131,15 +177,81 @@ run_component_codex_cli_update_monitor_tests() {
         test_fail "stdout json mode should emit valid machine-readable JSON"
     fi
 
-    test_start "component_codex_update_monitor_records_non_mutating_issue_request"
+    test_start "component_codex_update_monitor_suggests_issue_without_mutation_by_default"
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture "0.110.0" "$work_dir"
+    report="$work_dir/report.json"
+    assert_eq "suggested" "$(jq -r '.issue_action.mode' "$report")" "Upgrade-worthy results should suggest a follow-up without explicit sync"
+    assert_eq "false" "$(jq -r '.issue_action.requested' "$report")" "Suggestion path should remain non-mutating"
+    assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "Re-run with --issue-action upsert" "Suggestion path should explain the opt-in sync step"
+    test_pass
+
+    test_start "component_codex_update_monitor_creates_issue_when_explicit_upsert_requested"
+    setup_fake_bd_fixture
+    original_path="$PATH"
+    export PATH="$FAKE_BD_BIN_DIR:$PATH"
+    export FAKE_BD_STATE_DIR
+    export FAKE_BD_CREATE_ID="moltinger-test-created"
     work_dir="$(secure_temp_dir codex-update-monitor)"
     run_monitor_fixture "0.111.0" "$work_dir" \
         --issue-action upsert \
-        --issue-target moltinger-222
+        --beads-db "$FAKE_BD_DB"
     report="$work_dir/report.json"
-    assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Forward-compatible issue action should remain non-mutating in the first slice"
+    assert_eq "created" "$(jq -r '.issue_action.mode' "$report")" "Explicit upsert without target should create a follow-up"
     assert_eq "true" "$(jq -r '.issue_action.requested' "$report")" "Issue action request should be recorded"
+    assert_eq "moltinger-test-created" "$(jq -r '.issue_action.target' "$report")" "Created issue id should be preserved in the report"
+    assert_contains "$(cat "$FAKE_BD_STATE_DIR/calls.log")" "create" "Beads create should be invoked"
+    test_pass
+
+    test_start "component_codex_update_monitor_updates_target_issue_when_requested"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    unset FAKE_BD_CREATE_ID
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture "0.111.0" "$work_dir" \
+        --issue-action upsert \
+        --issue-target moltinger-222 \
+        --beads-db "$FAKE_BD_DB"
+    report="$work_dir/report.json"
+    assert_eq "updated" "$(jq -r '.issue_action.mode' "$report")" "Explicit upsert with a target should update the existing issue"
     assert_eq "moltinger-222" "$(jq -r '.issue_action.target' "$report")" "Requested issue target should be preserved"
+    assert_contains "$(cat "$FAKE_BD_STATE_DIR/calls.log")" "update" "Beads update should be invoked"
+    test_pass
+
+    test_start "component_codex_update_monitor_skips_tracker_mutation_below_threshold"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture "0.112.0" "$work_dir" \
+        --issue-action upsert \
+        --issue-threshold upgrade-now \
+        --beads-db "$FAKE_BD_DB"
+    report="$work_dir/report.json"
+    assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Below-threshold recommendations should not mutate tracker state"
+    assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "does not meet threshold" "Skip path should explain why tracker sync did not run"
+    if [[ -f "$FAKE_BD_STATE_DIR/calls.log" ]]; then
+        test_fail "No bd call should be made when recommendation is below threshold"
+    else
+        test_pass
+    fi
+
+    test_start "component_codex_update_monitor_reports_update_failure"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    export FAKE_BD_UPDATE_FAIL=1
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture "0.111.0" "$work_dir" \
+        --issue-action upsert \
+        --issue-target moltinger-222 \
+        --beads-db "$FAKE_BD_DB"
+    report="$work_dir/report.json"
+    assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Failed tracker update should be surfaced as skipped"
+    assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "Failed to update Beads issue" "Failure path should be explicit in the report"
+    unset FAKE_BD_UPDATE_FAIL
+    export PATH="$original_path"
     test_pass
 
     generate_report

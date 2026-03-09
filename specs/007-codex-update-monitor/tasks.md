@@ -67,10 +67,10 @@
 
 **Independent Test**: Run the monitor once without issue flags and once with explicit Beads sync flags, then confirm the report records the correct issue action behavior in both cases.
 
-- [ ] T030 [US3] Add explicit issue-sync flags and dry-run-safe defaults in `scripts/codex-cli-update-monitor.sh`
-- [ ] T031 [US3] Implement Beads issue payload creation/update flow in `scripts/codex-cli-update-monitor.sh`
-- [ ] T032 [P] [US3] Add tracker-action fixture coverage in `tests/component/test_codex_cli_update_monitor.sh`
-- [ ] T033 [US3] Document Beads sync usage and safety boundaries in `docs/codex-cli-update-monitor.md`
+- [x] T030 [US3] Add explicit issue-sync flags and dry-run-safe defaults in `scripts/codex-cli-update-monitor.sh`
+- [x] T031 [US3] Implement Beads issue payload creation/update flow in `scripts/codex-cli-update-monitor.sh`
+- [x] T032 [P] [US3] Add tracker-action fixture coverage in `tests/component/test_codex_cli_update_monitor.sh`
+- [x] T033 [US3] Document Beads sync usage and safety boundaries in `docs/codex-cli-update-monitor.md`
 
 ---
 
@@ -92,7 +92,7 @@
 - [x] T051 [P] Validate Bash syntax for `scripts/codex-cli-update-monitor.sh` and referenced helpers
 - [x] T052 Run targeted component validation for `tests/component/test_codex_cli_update_monitor.sh`
 - [x] T053 Verify the manual workflow and runbook stay aligned with the script contract
-- [ ] T054 Update Beads status and package notes after the first implementation slice lands
+- [x] T054 Update Beads status and package notes after the first implementation slice lands
 
 ---
 

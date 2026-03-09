@@ -108,7 +108,7 @@
   - `features.js_repl = true`
   - `features.prevent_idle_sleep = true`
 - Confirmed the Speckit implementation prerequisites with `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`.
-- Confirmed optional Beads sync remains available from this worktree via the shared DB path `/Users/rl/coding/moltinger/.beads/beads.db`, but tracker mutation stays out of the first runtime slice.
+- Confirmed optional Beads sync remains available from this worktree via the shared DB path `/Users/rl/coding/moltinger/.beads/beads.db`; User Story 3 can now use that path for explicit local tracker mutation.
 - Chosen runtime defaults for the first slice:
   - primary release source: official Codex changelog URL
   - optional advisory issue source: `openai/codex` GitHub issues API
