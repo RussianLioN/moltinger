@@ -183,6 +183,28 @@ The Ollama fallback system requires the following secret:
 gh secret set OLLAMA_API_KEY --repo RussianLioN/moltinger
 ```
 
+### Clawdiy Reserved Secret Inventory (Phase 1)
+
+These secrets are reserved for the separate Clawdiy runtime and must stay distinct from the current Moltinger secret set.
+
+| Secret | Required for first Clawdiy deploy | Purpose | Planned mapping |
+|--------|-----------------------------------|---------|-----------------|
+| `CLAWDIY_PASSWORD` | Yes | Human/web auth for Clawdiy | `CLAWDIY_PASSWORD` in Clawdiy-only env file |
+| `CLAWDIY_SERVICE_TOKEN` | Yes | Private HTTP bearer auth for inter-agent handoff | `CLAWDIY_SERVICE_TOKEN` in Clawdiy-only env file |
+| `CLAWDIY_TELEGRAM_BOT_TOKEN` | Yes | Dedicated Telegram bot identity for Clawdiy | `CLAWDIY_TELEGRAM_BOT_TOKEN` in Clawdiy-only env file |
+| `CLAWDIY_TELEGRAM_ALLOWED_USERS` | Optional | Dedicated Telegram allowlist for Clawdiy bot | `CLAWDIY_TELEGRAM_ALLOWED_USERS` in Clawdiy-only env file |
+| `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` | No | Rollout-gated provider auth profile for Codex/GPT-5.4 workflows | provider auth artifact consumed only after post-auth verification gate |
+
+Rules:
+- Do not reuse `MOLTIS_PASSWORD`, `TELEGRAM_BOT_TOKEN`, or any existing Moltinger provider auth material for Clawdiy.
+- Do not render Clawdiy secrets into the current `/opt/moltinger/.env`.
+- The current `deploy.yml` remains Moltinger-only; a later `deploy-clawdiy.yml` will generate and sync a separate Clawdiy env/runtime secret set.
+
+Current mapping intent:
+- Moltinger runtime env file: `/opt/moltinger/.env`
+- Planned Clawdiy runtime env file: `/opt/moltinger/clawdiy/.env` or equivalent stack-local env path defined by `deploy-clawdiy.yml`
+- GitHub Secrets remains the source of truth for both agents
+
 ---
 
 ## 🔄 Workflow: Adding New Secret

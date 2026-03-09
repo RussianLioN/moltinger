@@ -645,6 +645,15 @@ jobs:
       # ===========================================
       # CRITICAL: .env file is generated from GitHub Secrets, never committed to git
       # This ensures secrets are synced to server without exposing in repo
+      # NOTE: This workflow renders only the Moltinger runtime env file.
+      # Reserved Clawdiy secret inventory is documented here for future split-stack rollout:
+      #   CLAWDIY_PASSWORD -> future Clawdiy human auth
+      #   CLAWDIY_SERVICE_TOKEN -> future Clawdiy internal handoff bearer
+      #   CLAWDIY_TELEGRAM_BOT_TOKEN -> future Clawdiy Telegram bot token
+      #   CLAWDIY_TELEGRAM_ALLOWED_USERS -> future Clawdiy Telegram allowlist
+      #   CLAWDIY_OPENAI_CODEX_AUTH_PROFILE -> rollout-gated provider auth artifact
+      # These values must not be appended to /opt/moltinger/.env by this workflow.
+      # They will be rendered by a dedicated deploy-clawdiy workflow into a separate Clawdiy env path.
       # ===========================================
       - name: Generate .env from Secrets
         run: |

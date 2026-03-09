@@ -58,7 +58,8 @@
   → Artifacts: [docker-compose.clawdiy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/docker-compose.clawdiy.yml)
 - [X] T002 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-SETUP-A] Create the Clawdiy runtime and fleet config skeletons in `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json`
   → Artifacts: [openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json), [agents-registry.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/agents-registry.json), [policy.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/policy.json)
-- [ ] T003 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-SETUP-A] Add Clawdiy secret inventory placeholders and deployment env mapping notes in `.github/workflows/deploy.yml` and `docs/SECRETS-MANAGEMENT.md`
+- [X] T003 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-SETUP-A] Add Clawdiy secret inventory placeholders and deployment env mapping notes in `.github/workflows/deploy.yml` and `docs/SECRETS-MANAGEMENT.md`
+  → Artifacts: [deploy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/.github/workflows/deploy.yml), [SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md)
 - [ ] T004 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-SETUP-A] Create the Clawdiy runbook directory and initial documents in `docs/runbooks/clawdiy-deploy.md`, `docs/runbooks/clawdiy-repeat-auth.md`, `docs/runbooks/clawdiy-rollback.md`, and `docs/runbooks/fleet-handoff-incident.md`
 
 ---
