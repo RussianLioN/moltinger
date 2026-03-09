@@ -66,6 +66,34 @@
         "build-lessons-index"
       ]
     },
+    "beads-recover-issue.sh": {
+      "version": "1.0.0",
+      "description": "Safely recover one leaked Beads issue into the localized tracker of the owner worktree",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq",
+        "mktemp"
+      ],
+      "provides": [
+        "beads-recover-issue"
+      ]
+    },
+    "beads-worktree-localize.sh": {
+      "version": "1.0.0",
+      "description": "Remove stale Beads redirect metadata and bootstrap a worktree-local tracker database",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git"
+      ],
+      "provides": [
+        "beads-worktree-localize"
+      ]
+    },
     "clawdiy-auth-check.sh": {
       "version": "1.0.0",
       "description": "Validate Clawdiy Telegram and provider auth boundaries with fail-closed repeat-auth guidance",
