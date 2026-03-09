@@ -27,6 +27,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
 2. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
+   For the GitHub Actions path, the remote SSH deploy command must propagate `GITHUB_ACTIONS=true` and `GITHUB_RUN_ID` so `scripts/deploy.sh` is treated as CI, not as an ad-hoc manual SSH rollout.
 3. Deploy Clawdiy:
    ```bash
    ./scripts/deploy.sh clawdiy deploy
@@ -74,6 +75,7 @@ Stop rollout if any of the following happens:
 
 - `docker compose -f docker-compose.clawdiy.yml config --quiet`
 - preflight output
+- remote `/tmp/clawdiy-deploy-result.json` rendered by `deploy-clawdiy.yml` even when deploy exits non-zero
 - `./scripts/clawdiy-smoke.sh --stage same-host --json`
 - `./scripts/clawdiy-smoke.sh --stage restart-isolation --json`
 - Traefik router/service labels for Clawdiy

@@ -264,14 +264,45 @@ jobs:
             set -euo pipefail
             cd ${{ env.DEPLOY_PATH }}
             chmod +x scripts/deploy.sh
+            export GITHUB_ACTIONS=true
+            export GITHUB_RUN_ID="${{ github.run_id }}"
+            export GITHUB_REPOSITORY="${{ github.repository }}"
+            export GITHUB_ACTOR="${{ github.actor }}"
+            export GITHUB_SHA="${{ github.sha }}"
+
+            deploy_rc=0
+            set +e
 
             if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
               CLAWDIY_ENV_FILE="${{ env.CLAWDIY_ENV_PATH }}" ./scripts/deploy.sh --json clawdiy rollback > /tmp/clawdiy-deploy-result.json
             else
               CLAWDIY_ENV_FILE="${{ env.CLAWDIY_ENV_PATH }}" ./scripts/deploy.sh --json clawdiy deploy > /tmp/clawdiy-deploy-result.json
             fi
+            deploy_rc=$?
 
-            cat /tmp/clawdiy-deploy-result.json | jq .
+            set -e
+
+            if [ -f /tmp/clawdiy-deploy-result.json ]; then
+              cat /tmp/clawdiy-deploy-result.json | jq .
+            else
+              jq -n \
+                --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{
+                  status: "failure",
+                  target: "clawdiy",
+                  timestamp: $timestamp,
+                  action: "deploy",
+                  details: {},
+                  errors: [
+                    {
+                      code: "missing_result",
+                      message: "deploy.sh exited before writing /tmp/clawdiy-deploy-result.json"
+                    }
+                  ]
+                }'
+            fi
+
+            exit "$deploy_rc"
           EOF
           echo "::endgroup::"
 
