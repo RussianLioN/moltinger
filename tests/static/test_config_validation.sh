@@ -219,6 +219,13 @@ run_static_config_validation_tests() {
         test_fail "Backup config must default to fail-closed partial restore protection for Clawdiy"
     fi
 
+    test_start "static_backup_config_uses_unix_line_endings"
+    if LC_ALL=C grep -q $'\r' "$BACKUP_CONFIG"; then
+        test_fail "Backup config must use LF line endings because backup-moltis-enhanced.sh sources it directly"
+    else
+        test_pass
+    fi
+
     test_start "static_clawdiy_compose_security_hardening"
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
