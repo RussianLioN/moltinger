@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# telegram-bot-send-remote.sh - Send Telegram message by delegating to the Moltinger server runtime.
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+SSH_BIN="${MOLTINGER_TELEGRAM_SSH_BIN:-ssh}"
+SSH_TARGET="${MOLTINGER_TELEGRAM_SSH_TARGET:-root@ainetic.tech}"
+SSH_CONNECT_TIMEOUT="${MOLTINGER_TELEGRAM_SSH_CONNECT_TIMEOUT:-20}"
+REMOTE_ROOT="${MOLTINGER_TELEGRAM_REMOTE_ROOT:-/opt/moltinger}"
+REMOTE_ENV_FILE="${MOLTINGER_TELEGRAM_REMOTE_ENV_FILE:-/opt/moltinger/.env}"
+
+show_help() {
+    cat <<'EOF'
+Usage:
+  telegram-bot-send-remote.sh --chat-id CHAT --text "message" [options]
+
+Required:
+  --chat-id CHAT_ID           Target Telegram chat id
+  --text MESSAGE              Message text
+
+Optional:
+  --parse-mode MODE           MarkdownV2 | HTML
+  --disable-notification      Send silently
+  --reply-to MESSAGE_ID       Reply to a specific message
+  --json                      JSON output (default)
+  -h, --help                  Show help
+
+Environment:
+  MOLTINGER_TELEGRAM_SSH_BIN              SSH client binary (default: ssh)
+  MOLTINGER_TELEGRAM_SSH_TARGET           SSH target (default: root@ainetic.tech)
+  MOLTINGER_TELEGRAM_SSH_CONNECT_TIMEOUT  SSH connect timeout seconds (default: 20)
+  MOLTINGER_TELEGRAM_REMOTE_ROOT          Remote repo root (default: /opt/moltinger)
+  MOLTINGER_TELEGRAM_REMOTE_ENV_FILE      Remote env file with TELEGRAM_BOT_TOKEN
+EOF
+}
+
+CHAT_ID=""
+TEXT=""
+PARSE_MODE=""
+DISABLE_NOTIFICATION=false
+REPLY_TO=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            CHAT_ID="${2:-}"
+            shift 2
+            ;;
+        --text)
+            TEXT="${2:-}"
+            shift 2
+            ;;
+        --parse-mode)
+            PARSE_MODE="${2:-}"
+            shift 2
+            ;;
+        --disable-notification)
+            DISABLE_NOTIFICATION=true
+            shift
+            ;;
+        --reply-to)
+            REPLY_TO="${2:-}"
+            shift 2
+            ;;
+        --json)
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "{\"ok\":false,\"error\":\"Unknown argument: $1\",\"script\":\"$SCRIPT_NAME\"}"
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -z "$CHAT_ID" || -z "$TEXT" ]]; then
+    echo "{\"ok\":false,\"error\":\"--chat-id and --text are required\",\"script\":\"$SCRIPT_NAME\"}"
+    exit 2
+fi
+
+"$SSH_BIN" -o BatchMode=yes -o ConnectTimeout="$SSH_CONNECT_TIMEOUT" "$SSH_TARGET" /bin/bash -s -- \
+    "$REMOTE_ROOT" \
+    "$REMOTE_ENV_FILE" \
+    "$CHAT_ID" \
+    "$TEXT" \
+    "$PARSE_MODE" \
+    "$DISABLE_NOTIFICATION" \
+    "$REPLY_TO" <<'EOF'
+set -euo pipefail
+
+remote_root="$1"
+remote_env_file="$2"
+chat_id="$3"
+text="$4"
+parse_mode="$5"
+disable_notification="$6"
+reply_to="$7"
+
+cd "$remote_root"
+
+cmd=(
+  ./scripts/telegram-bot-send.sh
+  --chat-id "$chat_id"
+  --text "$text"
+  --json
+)
+
+if [[ -n "$parse_mode" ]]; then
+  cmd+=(--parse-mode "$parse_mode")
+fi
+
+if [[ "$disable_notification" == "true" ]]; then
+  cmd+=(--disable-notification)
+fi
+
+if [[ -n "$reply_to" ]]; then
+  cmd+=(--reply-to "$reply_to")
+fi
+
+MOLTIS_ENV_FILE="$remote_env_file" "${cmd[@]}"
+EOF

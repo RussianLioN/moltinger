@@ -36,6 +36,7 @@ A user launching Codex through the repository launcher sees a short startup aler
 1. **Given** a fresh actionable update exists, **When** the user launches Codex through the repo launcher, **Then** the launcher prints a short pre-session alert summarizing the change and next action.
 2. **Given** the same actionable state was already delivered earlier, **When** the user launches Codex again, **Then** the launcher avoids repeating the same alert.
 3. **Given** the delivery check fails or the advisor returns investigate, **When** the user launches Codex, **Then** the launch continues and the alert degrades gracefully instead of blocking Codex startup.
+4. **Given** launch-time Telegram delivery is enabled with a configured chat target, **When** the user launches Codex through the repo launcher, **Then** the launcher also triggers background Telegram delivery without delaying Codex startup.
 
 ---
 
@@ -72,6 +73,7 @@ A maintainer can rely on one delivery state model so on-demand reports, startup 
 
 - What happens when the user asks for a plain-language report but the advisor report does not yet exist?
 - What happens when launch-time delivery is enabled but the launcher is not the path used to start Codex?
+- What happens when launch-time Telegram is enabled locally but the bot token only exists on the Moltinger host?
 - What happens when Telegram delivery is enabled but the chat target is missing?
 - What happens when on-demand delivery succeeded but Telegram failed for the same fingerprint?
 - What happens when the user wants a fresh report even though the notification is suppressed?
@@ -96,6 +98,7 @@ A maintainer can rely on one delivery state model so on-demand reports, startup 
 - **FR-013**: The feature MUST avoid inventing a second recommendation engine; it only decides how and where to deliver the advisor result.
 - **FR-014**: Delivery state corruption or absence MUST degrade safely to a fresh evaluation rather than a silent failure.
 - **FR-015**: The design MUST remain compatible with future schedulers or background automation.
+- **FR-016**: The repository launcher MUST be able to trigger Telegram delivery in the background when launch-time Telegram automation is enabled.
 
 ### Key Entities
 
@@ -111,6 +114,7 @@ A maintainer can rely on one delivery state model so on-demand reports, startup 
 - `scripts/codex-cli-update-advisor.sh` remains the advisor source of truth for recommendation and suggestions.
 - `scripts/codex-profile-launch.sh` is the supported launcher path for repository-managed Codex sessions.
 - `scripts/telegram-bot-send.sh` remains the delivery primitive for Telegram in v1.
+- Launch-time Telegram automation may delegate the actual send to the Moltinger server runtime when the local machine does not hold the bot token.
 - In-session push inside an already running Codex TUI is out of scope for v1; launch-time and asynchronous delivery are the practical supported surfaces.
 
 ## Success Criteria *(mandatory)*

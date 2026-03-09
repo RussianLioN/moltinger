@@ -5,12 +5,12 @@
 
 ## Summary
 
-Deliver the user-facing delivery layer on top of the completed advisor so users can ask for Codex update status in plain language, see a short alert when launching Codex through the repo launcher, and optionally receive Telegram notifications through the existing Moltinger bot path.
+Deliver the user-facing delivery layer on top of the completed advisor so users can ask for Codex update status in plain language, see a short alert when launching Codex through the repo launcher, and optionally receive Telegram notifications through the existing Moltinger bot path, including launcher-triggered background delivery.
 
 ## Technical Context
 
 **Language/Version**: Bash plus existing repository command and launcher docs
-**Primary Dependencies**: `bash`, `jq`, `python3`, `scripts/codex-cli-update-advisor.sh`, `scripts/codex-profile-launch.sh`, `scripts/telegram-bot-send.sh`
+**Primary Dependencies**: `bash`, `jq`, `python3`, `scripts/codex-cli-update-advisor.sh`, `scripts/codex-profile-launch.sh`, `scripts/telegram-bot-send.sh`, `scripts/telegram-bot-send-remote.sh`
 **Storage**: JSON delivery report, per-surface delivery state file, shell fixtures, command or skill docs
 **Testing**: Bash syntax checks plus targeted component tests under `tests/component/`
 **Target Platform**: Linux/macOS shell for local launch flows and Telegram bot delivery through existing repo automation
@@ -60,6 +60,7 @@ scripts/
 |-- codex-cli-update-delivery.sh
 |-- codex-profile-launch.sh
 |-- telegram-bot-send.sh
+|-- telegram-bot-send-remote.sh
 `-- manifest.json
 
 .claude/
@@ -84,8 +85,8 @@ docs/
 
 1. Use the completed advisor as the only recommendation source and add delivery logic on top.
 2. Support natural-language Codex usage through a repo command or skill wrapper instead of raw script flags.
-3. Hook launch-time alerts into `scripts/codex-profile-launch.sh` as a non-blocking pre-session check.
-4. Reuse `scripts/telegram-bot-send.sh` and existing Moltinger bot configuration for Telegram delivery.
+3. Hook launch-time alerts and optional background Telegram sends into `scripts/codex-profile-launch.sh` as non-blocking pre-session checks.
+4. Reuse `scripts/telegram-bot-send.sh` and existing Moltinger bot configuration for Telegram delivery, adding a remote bridge when local bot secrets are absent.
 5. Keep one shared delivery state model so on-demand, launcher, and Telegram surfaces do not spam independently.
 
 ## Phase 1: Design Artifacts
@@ -100,4 +101,5 @@ docs/
 - One delivery script becomes the shared runtime entrypoint.
 - Launcher integration stays fail-open and does not block Codex startup.
 - Telegram delivery stays opt-in and state-aware.
+- Launcher-triggered Telegram automation stays fail-open and can delegate transport to the Moltinger host.
 - Command or skill docs provide a user-facing plain-language entrypoint instead of forcing direct script use.

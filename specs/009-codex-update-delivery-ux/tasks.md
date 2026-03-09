@@ -53,6 +53,7 @@
 - [x] T021 [US2] Integrate non-blocking pre-session delivery checks into `scripts/codex-profile-launch.sh`
 - [x] T022 [P] [US2] Add launcher alert and fail-open coverage in `tests/component/test_codex_cli_update_delivery.sh`
 - [x] T023 [US2] Document launch-time alert behavior in `docs/codex-update-delivery.md`
+- [x] T024 [US2] Add optional background Telegram delivery at launch in `scripts/codex-profile-launch.sh` and `tests/component/test_codex_profile_launch.sh`
 
 ---
 
@@ -66,6 +67,7 @@
 - [x] T031 [US3] Reuse `scripts/telegram-bot-send.sh` for Telegram transport from the delivery flow
 - [x] T032 [P] [US3] Add Telegram delivery and duplicate-suppression tests in `tests/component/test_codex_cli_update_delivery.sh`
 - [x] T033 [US3] Document Telegram setup and safety boundaries in `docs/codex-update-delivery.md`
+- [x] T034 [US3] Add the remote transport bridge in `scripts/telegram-bot-send-remote.sh` and `tests/component/test_telegram_bot_send_remote.sh`
 
 ---
 
@@ -88,6 +90,7 @@
 - [x] T052 Run targeted component validation for `tests/component/test_codex_cli_update_delivery.sh`
 - [x] T053 Verify delivery docs, command or skill wrappers, and launcher integration stay aligned
 - [x] T054 Update `docs/GIT-TOPOLOGY-REGISTRY.md` for the new `009-codex-update-delivery-ux` worktree
+- [x] T055 Validate launcher-triggered Telegram automation and script inventory alignment
 ## Dependencies & Execution Order
 
 - Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7

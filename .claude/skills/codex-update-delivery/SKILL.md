@@ -1,3 +1,8 @@
+---
+name: codex-update-delivery
+description: Use this skill when the user asks in plain language to check Codex CLI updates for the current repository, wants a short repository-specific report, or asks to send the result to Telegram.
+---
+
 # Codex Update Delivery
 
 Use this skill when the user asks in plain language to check Codex CLI updates for the current repository, wants a short repository-specific report, or asks to send the result to Telegram.
