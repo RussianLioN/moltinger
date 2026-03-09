@@ -154,6 +154,19 @@
 
 ---
 
+## Phase 7B: UAT Hardening Follow-Up
+
+**Purpose**: Close the stop-and-handoff gap found in manual UAT so `command-worktree` does not continue downstream work from the originating session.
+
+- [x] T032 [EXECUTOR: MAIN] [SEQUENTIAL] Extend `specs/005-worktree-ready-flow/spec.md`, `plan.md`, `data-model.md`, and `contracts/` with stop-and-handoff boundary semantics and a machine-readable handoff contract
+- [x] T033 [EXECUTOR: worker] [SEQUENTIAL] Add machine-readable `key=value` handoff output, terminal final states, and stable exit-code mapping to `scripts/worktree-ready.sh`
+- [x] T034 [EXECUTOR: worker] [SEQUENTIAL] Rewrite `.claude/commands/worktree.md` so create/attach flows are explicitly Phase A only (`prepare -> handoff -> stop`) and may not continue downstream task execution in the originating session
+- [x] T035 [EXECUTOR: worker] [SEQUENTIAL] Add unit regression coverage for boundary-aware handoff output and blocked/clarification exit codes in `tests/unit/test_worktree_ready.sh`
+- [x] T036 [EXECUTOR: MAIN] [SEQUENTIAL] Update `specs/005-worktree-ready-flow/quickstart.md` and `validation.md` with the new UAT stop-boundary scenarios and expected handoff block
+- [x] T037 [EXECUTOR: MAIN] [SEQUENTIAL] Run targeted validation (`make codex-check`, relevant worktree tests, manual/UAT notes) and mark the follow-up tasks complete in `specs/005-worktree-ready-flow/tasks.md`
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

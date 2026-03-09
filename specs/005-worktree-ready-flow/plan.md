@@ -7,6 +7,8 @@
 
 Улучшение навыка `worktree` должно довести пользователя до состояния `developer ready`, а не останавливаться на факте создания git worktree. Технический подход: расширить [`worktree.md`](/Users/rl/coding/moltinger/.claude/commands/worktree.md) новым first-class flow для существующей ветки и one-shot slug-only start, ввести явный readiness contract и вынести повторяемую shell-логику в один детерминированный helper-скрипт для path normalization, live topology conflict detection, readiness/doctor статусов и next-step handoff.
 
+Дополнительный design slice для текущего UAT-дефекта: `command-worktree` должен стать двухфазным. Phase A подготавливает dedicated worktree (`plan -> mutate -> reconcile -> classify -> emit handoff`), после чего workflow обязан остановиться. Phase B выполняется только уже из созданного worktree или в новой handoff-сессии. Для этого helper получает machine-readable handoff contract (`key=value`) и явные terminal handoff states, а `worktree.md` закрепляет hard stop-and-handoff boundary.
+
 Ключевой design choice: не автоматизировать доверительные действия вроде одобрения `.envrc` по умолчанию. Вместо этого команда должна заранее выявлять, что для текущего worktree потребуется дополнительный шаг, и возвращать точные инструкции или opt-in handoff. Для one-shot start authoritative проверкой конфликтов считается live `git`, а committed topology registry используется как shared snapshot и должен refresh-иться сразу после mutation.
 
 ## Technical Context
@@ -14,12 +16,12 @@
 **Language/Version**: Markdown command artifacts + Bash/Zsh shell helpers
 **Primary Dependencies**: `bd` CLI, `git worktree`, `git for-each-ref`, [`scripts/git-session-guard.sh`](/Users/rl/coding/moltinger/scripts/git-session-guard.sh), [`scripts/git-topology-registry.sh`](/Users/rl/coding/moltinger/scripts/git-topology-registry.sh), `direnv`, Codex CLI, optional `osascript` / terminal integrations
 **Storage**: File-based command/spec documents + git worktree metadata
-**Testing**: Shell smoke checks, manual workflow validation for blocked/approved environment states, output-contract verification against quickstart scenarios
+**Testing**: Shell smoke checks, manual workflow validation for blocked/approved environment states, output-contract verification against quickstart scenarios, unit coverage for machine-readable handoff contract and stop-boundary states
 **Target Platform**: macOS-first terminal workflows with graceful fallback on non-macOS systems
 **Project Type**: Single (CLI/skill workflow enhancement)
 **Performance Goals**: Readiness classification and next-step generation complete in under 2 seconds after worktree creation; zero follow-up explanation needed for primary flows
 **Constraints**: Preserve trust boundary for environment approval, stay additive over existing low-level `bd worktree` usage, avoid destructive cleanup behavior changes, degrade gracefully when terminal automation is unavailable
-**Scale/Scope**: 5 user stories, 28 functional requirements, one command artifact update plus one helper script and supporting docs/contracts
+**Scale/Scope**: 6 user stories, 39 functional requirements, one command artifact update plus one helper script and supporting docs/contracts
 
 ## Constitution Check
 
@@ -86,7 +88,7 @@ Research findings are documented in [research.md](./research.md). The main outco
 Phase 1 artifacts define:
 
 - the data entities and status model in [data-model.md](./data-model.md)
-- the command, planning, and readiness contracts in [contracts/worktree-command-interface.md](./contracts/worktree-command-interface.md), [contracts/worktree-planning-schema.md](./contracts/worktree-planning-schema.md), and [contracts/worktree-readiness-schema.md](./contracts/worktree-readiness-schema.md)
+- the command, planning, readiness, and handoff contracts in [contracts/worktree-command-interface.md](./contracts/worktree-command-interface.md), [contracts/worktree-planning-schema.md](./contracts/worktree-planning-schema.md), [contracts/worktree-readiness-schema.md](./contracts/worktree-readiness-schema.md), and `contracts/worktree-handoff-schema.md`
 - the end-to-end validation scenarios in [quickstart.md](./quickstart.md)
 
 ## Complexity Tracking

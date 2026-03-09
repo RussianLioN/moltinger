@@ -20,7 +20,10 @@
 - May derive issue, slug, branch, and path automatically.
 - May accept slug-only natural-language input without an issue id.
 - Must consult live `git` state before deciding whether the request is a clean create, an attach/reuse, or an ambiguity that needs one short clarification.
-- Must conclude with a readiness report and next-step handoff.
+- Must conclude with a readiness report, machine-readable handoff contract, and a hard stop boundary.
+- Must split mixed requests into:
+  - **Phase A**: prepare worktree, refresh topology, classify readiness, emit handoff
+  - **Phase B**: deferred downstream work executed only from the created worktree or an explicit handoff session
 
 ### `start --existing` / `attach`
 
@@ -41,6 +44,13 @@
 
 If explicit flags are not used, natural-language requests such as "открой в новой вкладке" or "сразу запусти codex" may map to the corresponding handoff mode.
 
+## Stop-and-Handoff Boundary
+
+- `start`, `create`, and `attach` are **boundary commands**.
+- After the managed create/attach flow completes, the command must stop after returning a handoff block.
+- The originating session must not continue the broader user task after this point unless the user explicitly overrides the boundary.
+- Requests that say "работай из нового worktree", "там подтверди cwd/branch", or "после перехода продолжи" must still stop after Phase A unless a supported automatic handoff actually launches.
+
 ## Output Block
 
 ```text
@@ -48,16 +58,26 @@ Worktree: <absolute-path>
 Branch: <branch-name>
 Issue: <issue-id-or-n/a>
 Status: <created|needs_env_approval|ready_for_codex|action_required>
+Boundary: <stop_after_create|stop_after_attach|stop_after_handoff|none>
+Final State: <handoff_ready|handoff_needs_env_approval|handoff_needs_manual_readiness|handoff_launched|blocked_*>
 Next:
   1. <first exact step>
   2. <second exact step if needed>
 ```
 
+## Machine-Readable Contract
+
+- `scripts/worktree-ready.sh` must support `--format env`.
+- For `create`, `attach`, and `handoff`, the helper emits shell-safe `key=value` lines with schema `worktree-handoff/v1`.
+- The command workflow may use this contract for automation, but even without machine parsing the human-facing behavior must respect the same boundary.
+
 ## Behavioral Guarantees
 
 - The final `Status` must reflect actual readiness, not just successful filesystem creation.
+- `Final State` is authoritative for boundary decisions; `Status` is retained for legacy human compatibility.
 - `Next` must always contain at least one exact action when `Status` is not `ready_for_codex`.
 - Manual handoff must remain available even if terminal/Codex automation is unsupported.
 - Existing low-level `bd worktree` semantics remain valid under the hood.
 - Slug-only start flows must derive a safe default branch/path template automatically.
 - The workflow must not ask more than one clarification question when exact or similar-name collisions are detected.
+- The command must not prove "we are already in the new worktree" via `git -C` or path-targeted commands from the originating session.

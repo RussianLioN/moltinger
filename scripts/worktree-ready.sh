@@ -11,7 +11,7 @@ Modes:
   create    Prepare a new worktree flow for a new or derived branch
   attach    Prepare a worktree flow for an existing branch
   doctor    Diagnose readiness for an existing worktree
-  handoff   Render or execute a handoff profile for a prepared worktree
+handoff   Render or execute a handoff profile for a prepared worktree
 
 Common Options:
   --branch <name>            Target git branch
@@ -20,6 +20,7 @@ Common Options:
   --path <path>              Explicit worktree path override
   --repo <path>              Repository root override
   --handoff <profile>        Handoff profile (manual|terminal|codex)
+  --format <kind>            Output format (human|env)
   --existing <branch>        Existing branch hint for create flows
   -h, --help                 Show this help
 
@@ -66,6 +67,7 @@ target_path=""
 repo_root=""
 handoff_profile="manual"
 existing_branch=""
+output_format="human"
 path_preview=""
 resolved_repo_root=""
 resolved_common_dir=""
@@ -82,6 +84,14 @@ report_beads_state="missing"
 report_handoff_mode="manual"
 report_requested_handoff_mode="manual"
 report_topology_state="unavailable"
+report_phase="unknown"
+report_boundary="none"
+report_final_state="blocked_action_required"
+report_approval_required="false"
+report_launch_command=""
+report_repair_command=""
+report_pending_work=""
+report_worktree_action="unchanged"
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
@@ -112,6 +122,7 @@ topology_registry_state="unavailable"
 topology_registry_message=""
 planning_decision="action_required"
 planning_question=""
+command_exit_code=0
 
 declare -a planning_candidates=()
 declare -a planning_next_steps=()
@@ -178,6 +189,13 @@ parse_args() {
         existing_branch="${2:-}"
         if [[ -z "${existing_branch}" ]]; then
           die "--existing requires a value"
+        fi
+        shift 2
+        ;;
+      --format)
+        output_format="${2:-}"
+        if [[ -z "${output_format}" ]]; then
+          die "--format requires a value"
         fi
         shift 2
         ;;
@@ -1047,6 +1065,14 @@ reset_report() {
   report_handoff_mode="manual"
   report_requested_handoff_mode="${handoff_profile}"
   report_topology_state="${topology_registry_state}"
+  report_phase="unknown"
+  report_boundary="none"
+  report_final_state="blocked_action_required"
+  report_approval_required="false"
+  report_launch_command=""
+  report_repair_command=""
+  report_pending_work=""
+  report_worktree_action="unchanged"
   report_next_steps=()
   report_warnings=()
 }
@@ -1142,9 +1168,7 @@ set_readiness_status() {
 
   if report_worktree_path_exists; then
     if [[ "${report_beads_state}" == "missing" && -n "${discovered_worktree_path}" ]]; then
-      report_status="action_required"
       add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
-      return 0
     fi
 
     case "${report_env_state}" in
@@ -1162,6 +1186,107 @@ set_readiness_status() {
   fi
 
   report_status="action_required"
+}
+
+set_handoff_contract() {
+  local mode_name="$1"
+
+  report_phase="${mode_name}"
+  report_approval_required="false"
+  report_launch_command=""
+  report_repair_command=""
+  report_pending_work=""
+
+  case "${mode_name}" in
+    create)
+      report_boundary="stop_after_create"
+      report_worktree_action="created"
+      ;;
+    attach)
+      report_boundary="stop_after_attach"
+      if [[ -n "${discovered_worktree_path}" ]]; then
+        report_worktree_action="reused"
+      else
+        report_worktree_action="attached"
+      fi
+      ;;
+    handoff)
+      report_boundary="stop_after_handoff"
+      report_worktree_action="unchanged"
+      ;;
+    *)
+      report_boundary="none"
+      report_worktree_action="unchanged"
+      ;;
+  esac
+
+  case "${report_status}" in
+    ready_for_codex)
+      report_final_state="handoff_ready"
+      if [[ "${report_worktree_path}" != "n/a" ]]; then
+        report_launch_command="cd $(shell_quote "${report_worktree_path}") && codex"
+      fi
+      ;;
+    needs_env_approval)
+      report_final_state="handoff_needs_env_approval"
+      report_approval_required="true"
+      if [[ "${report_worktree_path}" != "n/a" ]]; then
+        report_launch_command="cd $(shell_quote "${report_worktree_path}") && direnv allow"
+      fi
+      ;;
+    created)
+      report_final_state="handoff_needs_manual_readiness"
+      if [[ "${report_worktree_path}" != "n/a" ]]; then
+        report_launch_command="cd $(shell_quote "${report_worktree_path}")"
+      fi
+      ;;
+    drift_detected)
+      report_final_state="blocked_guard_drift"
+      report_repair_command="./scripts/git-session-guard.sh --refresh"
+      ;;
+    action_required)
+      if [[ "${branch_resolution_state}" == "missing" ]]; then
+        report_final_state="blocked_missing_branch"
+        report_repair_command="Create or fetch the branch '${branch}' before using attach or start --existing"
+      else
+        report_final_state="blocked_action_required"
+      fi
+      ;;
+    *)
+      report_final_state="blocked_action_required"
+      ;;
+  esac
+
+  if [[ "${report_handoff_mode}" != "manual" && -n "${handoff_launch_command}" ]]; then
+    report_final_state="handoff_launched"
+    report_launch_command="${handoff_launch_command}"
+  fi
+
+  case "${mode_name}" in
+    create|attach|handoff)
+      report_pending_work="Continue the requested downstream task from the target worktree after handoff."
+      ;;
+  esac
+}
+
+set_command_exit_code_from_readiness() {
+  case "${report_final_state}" in
+    handoff_ready|handoff_needs_env_approval|handoff_needs_manual_readiness|handoff_launched)
+      command_exit_code=0
+      ;;
+    blocked_guard_drift)
+      command_exit_code=21
+      ;;
+    blocked_missing_branch)
+      command_exit_code=22
+      ;;
+    blocked_action_required)
+      command_exit_code=23
+      ;;
+    *)
+      command_exit_code=30
+      ;;
+  esac
 }
 
 set_readiness_next_steps() {
@@ -1222,6 +1347,20 @@ set_readiness_next_steps() {
   esac
 }
 
+set_command_exit_code_from_plan() {
+  case "${planning_decision}" in
+    create_clean|attach_existing_branch|reuse_existing)
+      command_exit_code=0
+      ;;
+    needs_clarification)
+      command_exit_code=10
+      ;;
+    *)
+      command_exit_code=30
+      ;;
+  esac
+}
+
 add_next_step() {
   local step_text="$1"
 
@@ -1266,6 +1405,25 @@ render_warning_list() {
   done
 }
 
+render_env_kv() {
+  local key="$1"
+  local value="${2:-}"
+  printf '%s=%q\n' "${key}" "${value}"
+}
+
+render_env_array() {
+  local prefix="$1"
+  shift
+  local items=("$@")
+  local index=1
+
+  render_env_kv "${prefix}_count" "${#items[@]}"
+  for item in "${items[@]}"; do
+    render_env_kv "${prefix}_${index}" "${item}"
+    index=$((index + 1))
+  done
+}
+
 render_plan_candidates() {
   local candidate=""
   local index=1
@@ -1295,6 +1453,25 @@ render_plan_candidates() {
 }
 
 render_plan_report() {
+  if [[ "${output_format}" == "env" ]]; then
+    render_env_kv "schema" "worktree-plan/v1"
+    render_env_kv "mode" "plan"
+    render_env_kv "slug" "${request_slug:-n/a}"
+    render_env_kv "issue" "${issue_id:-n/a}"
+    render_env_kv "branch" "${branch:-n/a}"
+    render_env_kv "preview" "${path_preview:-n/a}"
+    render_env_kv "worktree" "${target_path:-n/a}"
+    render_env_kv "decision" "${planning_decision}"
+    render_env_kv "topology" "${topology_registry_state}"
+    if [[ -n "${planning_question}" ]]; then
+      render_env_kv "question" "${planning_question}"
+    fi
+    render_env_array "next" "${planning_next_steps[@]}"
+    render_env_array "warning" "${planning_warnings[@]}"
+    render_env_array "candidate" "${planning_candidates[@]}"
+    return 0
+  fi
+
   printf 'Mode: plan\n'
   printf 'Slug: %s\n' "${request_slug:-n/a}"
   printf 'Issue: %s\n' "${issue_id:-n/a}"
@@ -1313,18 +1490,63 @@ render_plan_report() {
 }
 
 render_readiness_report() {
+  if [[ "${output_format}" == "env" ]]; then
+    render_env_kv "schema" "worktree-handoff/v1"
+    render_env_kv "phase" "${report_phase}"
+    render_env_kv "boundary" "${report_boundary}"
+    render_env_kv "final_state" "${report_final_state}"
+    render_env_kv "worktree_action" "${report_worktree_action}"
+    render_env_kv "worktree" "${report_worktree_path:-n/a}"
+    render_env_kv "preview" "${report_path_preview:-n/a}"
+    render_env_kv "branch" "${report_branch_name:-n/a}"
+    render_env_kv "issue" "${report_issue_id:-n/a}"
+    render_env_kv "status" "${report_status}"
+    render_env_kv "topology_state" "${report_topology_state}"
+    render_env_kv "env_state" "${report_env_state}"
+    render_env_kv "guard_state" "${report_guard_state}"
+    render_env_kv "beads_state" "${report_beads_state}"
+    render_env_kv "handoff_mode" "${report_handoff_mode}"
+    render_env_kv "requested_handoff" "${report_requested_handoff_mode}"
+    render_env_kv "approval_required" "${report_approval_required}"
+    if [[ -n "${report_launch_command}" ]]; then
+      render_env_kv "launch_command" "${report_launch_command}"
+    fi
+    if [[ -n "${report_repair_command}" ]]; then
+      render_env_kv "repair_command" "${report_repair_command}"
+    fi
+    if [[ -n "${report_pending_work}" ]]; then
+      render_env_kv "pending" "${report_pending_work}"
+    fi
+    render_env_array "next" "${report_next_steps[@]}"
+    render_env_array "warning" "${report_warnings[@]}"
+    return 0
+  fi
+
   printf 'Worktree: %s\n' "${report_worktree_path:-n/a}"
   printf 'Preview: %s\n' "${report_path_preview:-n/a}"
   printf 'Branch: %s\n' "${report_branch_name:-n/a}"
   printf 'Issue: %s\n' "${report_issue_id:-n/a}"
   printf 'Status: %s\n' "${report_status}"
+  printf 'Phase: %s\n' "${report_phase}"
+  printf 'Boundary: %s\n' "${report_boundary}"
+  printf 'Final State: %s\n' "${report_final_state}"
   printf 'Topology: %s\n' "${report_topology_state}"
   printf 'Env: %s\n' "${report_env_state}"
   printf 'Guard: %s\n' "${report_guard_state}"
   printf 'Beads: %s\n' "${report_beads_state}"
   printf 'Handoff: %s\n' "${report_handoff_mode}"
+  printf 'Approval Required: %s\n' "${report_approval_required}"
   if [[ "${report_requested_handoff_mode}" != "${report_handoff_mode}" ]]; then
     printf 'Requested Handoff: %s\n' "${report_requested_handoff_mode}"
+  fi
+  if [[ -n "${report_launch_command}" ]]; then
+    printf 'Launch Command: %s\n' "${report_launch_command}"
+  fi
+  if [[ -n "${report_repair_command}" ]]; then
+    printf 'Repair Command: %s\n' "${report_repair_command}"
+  fi
+  if [[ -n "${report_pending_work}" ]]; then
+    printf 'Pending: %s\n' "${report_pending_work}"
   fi
   printf 'Next:\n'
   render_numbered_list "${report_next_steps[@]}"
@@ -1332,6 +1554,14 @@ render_readiness_report() {
 }
 
 normalize_mode_inputs() {
+  case "${output_format}" in
+    human|env)
+      ;;
+    *)
+      die "Unsupported output format: ${output_format}"
+      ;;
+  esac
+
   case "${handoff_profile}" in
     manual|terminal|codex)
       ;;
@@ -1600,12 +1830,14 @@ render_mode_placeholder() {
   select_handoff_mode
   set_readiness_next_steps "${mode_name}"
   apply_selected_handoff
+  set_handoff_contract "${mode_name}"
 
   if [[ "${report_env_state}" == "unknown" ]]; then
     add_warning "Environment readiness has not been probed yet."
   fi
 
   render_readiness_report
+  set_command_exit_code_from_readiness
 }
 
 prepare_create_context() {
@@ -1773,6 +2005,7 @@ handle_handoff() {
 handle_plan() {
   prepare_plan_context
   render_plan_report
+  set_command_exit_code_from_plan
 }
 
 main() {
@@ -1800,6 +2033,8 @@ main() {
       die "Unknown mode: ${mode}"
       ;;
   esac
+
+  exit "${command_exit_code}"
 }
 
 main "$@"

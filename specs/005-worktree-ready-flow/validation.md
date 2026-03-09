@@ -16,6 +16,8 @@
 | Doctor mode | `quickstart.md` Scenario 6 | pending | |
 | Stale registry during start flow | `quickstart.md` Scenario 7 | pending | |
 | Opt-in terminal or Codex handoff | `quickstart.md` Scenario 8 | pending | |
+| Stop-and-handoff boundary after create | `quickstart.md` Scenario 9 | pending | |
+| Machine-readable handoff contract | `quickstart.md` Scenario 10 | pending | |
 
 ## Execution Notes
 
@@ -36,3 +38,16 @@
   - helper switches to `needs_clarification` when only similar names exist
 - Follow-up:
   - manual UAT from `uat/006-git-topology-registry` still pending for end-to-end Codex skill behavior
+
+### 2026-03-09 - Stop-and-handoff contract regression pass
+
+- Commands:
+  - `./tests/unit/test_worktree_ready.sh`
+  - `./tests/run_unit.sh --filter worktree_ready`
+- Observed:
+  - helper emits `boundary` and `final_state` fields for create/attach flows
+  - helper exports shell-safe `key=value` handoff output via `--format env`
+  - ambiguous plan requests return exit code `10`
+  - missing attach branch returns `blocked_missing_branch`
+- Follow-up:
+  - manual UAT still required to confirm that `command-worktree` now stops after Phase A instead of continuing downstream work in the originating session

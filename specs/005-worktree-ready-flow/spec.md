@@ -3,11 +3,11 @@
 **Feature Branch**: `005-worktree-ready-flow`
 **Created**: 2026-03-08
 **Status**: Draft
-**Input**: User description: "Улучшить UX навыка worktree, чтобы сценарий создания worktree для новой или существующей ветки доводил пользователя до состояния ready to work: first-class flow для existing branch, next steps block, direnv preflight, status ready_for_codex, sanitized path preview, optional terminal/codex handoff, worktree doctor. Дополнительно: one-shot start по короткому slug без issue id, live topology + registry conflict check, одно краткое уточнение только при реальной неоднозначности."
+**Input**: User description: "Улучшить UX навыка worktree, чтобы сценарий создания worktree для новой или существующей ветки доводил пользователя до состояния ready to work: first-class flow для existing branch, next steps block, direnv preflight, status ready_for_codex, sanitized path preview, optional terminal/codex handoff, worktree doctor. Дополнительно: one-shot start по короткому slug без issue id, live topology + registry conflict check, одно краткое уточнение только при реальной неоднозначности. После managed create/attach workflow должен останавливаться на handoff boundary и не продолжать downstream task в исходной сессии."
 
 ## Executive Summary
 
-Навык `worktree` должен перестать завершать сценарий на состоянии "дерево создано" и начать завершать его на состоянии "разработчик понимает следующий шаг и может сразу начать работу". Улучшение охватывает три основных пути: создание worktree для уже существующей ветки, запуск нового рабочего дерева для новой задачи по issue id и one-shot старт по короткому slug без знания шаблонов branch/path. В каждом случае результатом должен стать предсказуемый путь, честный статус готовности среды, live-проверка конфликтов по `git worktree` и ref'ам, точные следующие команды и, при явном запросе, прямой handoff в терминал и Codex.
+Навык `worktree` должен перестать завершать сценарий на состоянии "дерево создано" и начать завершать его на состоянии "разработчик понимает следующий шаг и может сразу начать работу". Улучшение охватывает три основных пути: создание worktree для уже существующей ветки, запуск нового рабочего дерева для новой задачи по issue id и one-shot старт по короткому slug без знания шаблонов branch/path. В каждом случае результатом должен стать предсказуемый путь, честный статус готовности среды, live-проверка конфликтов по `git worktree` и ref'ам, точные следующие команды и, при явном запросе, прямой handoff в терминал и Codex. После create/attach workflow обязан завершаться handoff-блоком и останавливаться, чтобы downstream работа продолжалась уже из нового worktree, а не из исходной сессии.
 
 ## Assumptions
 
@@ -15,6 +15,7 @@
 - Шаг одобрения среды остается явным действием пользователя, если пользователь отдельно не выбрал автоматизированный handoff.
 - Навык должен обслуживать как опытных пользователей, так и пользователей, которые не помнят внутренние команды `bd`, `direnv` или запуск Codex.
 - При конфликте между committed registry и live `git` для create/start flow authoritative источником считается live `git`, а registry должен быть reconciled сразу после мутации topology.
+- Managed create/attach flow считается завершенным только после readiness classification и handoff boundary, а не после сырого `bd worktree create`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -107,6 +108,25 @@
 3. **Given** система находит похожие branch/worktree names, **When** точного совпадения нет, **Then** она задает один короткий уточняющий вопрос, в котором явно присутствует вариант "создать clean worktree" и top similar candidates.
 4. **Given** registry stale, **When** запускается one-shot start, **Then** система использует live `git` как источник правды для коллизий и затем выполняет reconcile registry после topology mutation.
 
+---
+
+### User Story 6 - Stop-and-Handoff Boundary (Priority: P1)
+
+Как разработчик, создающий новый worktree для отдельной линии работы,
+Я хочу, чтобы workflow после managed create/attach явно останавливался и передавал мне или новой сессии точный handoff block,
+Чтобы дальнейшая работа не продолжалась в исходном shell/Codex-контексте и не нарушала branch-owned worktree discipline.
+
+**Why this priority**: UAT показал split-brain failure mode: workflow создаёт правильный worktree, но затем продолжает анализ/экстракцию из старой сессии. Это ломает доверие к dedicated worktree и противоречит operating model.
+
+**Independent Test**: Пользователь даёт запрос, где после создания нужно работать "из нового worktree". Workflow создаёт worktree, возвращает boundary-aware handoff block и не продолжает downstream task в originating session без явного opt-in handoff.
+
+**Acceptance Scenarios**:
+
+1. **Given** пользователь просит создать worktree и затем продолжить работу в нём, **When** create/attach flow успешно завершён, **Then** workflow возвращает handoff block и останавливается вместо продолжения downstream task в исходной сессии.
+2. **Given** пользователь выбрал ручной handoff, **When** helper сформировал readiness status, **Then** результат содержит absolute path, branch, final state, boundary и точные next commands для запуска новой сессии.
+3. **Given** пользователь явно запросил `terminal` или `codex` handoff, **When** launch поддержан и выполнен, **Then** текущая сессия всё равно завершает команду на handoff boundary и не делает follow-up work locally.
+4. **Given** create/attach flow не может подтвердить readiness или topology refresh блокируется, **When** helper завершает классификацию, **Then** workflow останавливается на blocked handoff state и возвращает точную repair command вместо продолжения задачи.
+
 ### Edge Cases
 
 - Ветка содержит `/`, пробелы или другие символы, неудобные для имени каталога.
@@ -118,6 +138,7 @@
 - Пользователь задает slug-only запрос без issue id, а в проекте уже есть похожие branch/worktree names.
 - Точное совпадение существует только на `origin`, но не локально.
 - Registry отстал и не должен блокировать conflict detection для live start flow.
+- Пользователь в одном запросе просит и создать worktree, и выполнить downstream task из него; workflow не должен продолжать Phase B в originating session.
 
 ## Requirements *(mandatory)*
 
@@ -151,6 +172,17 @@
 - **FR-026**: Если найдены похожие names без точного совпадения, система ДОЛЖНА задать не более одного короткого уточняющего вопроса.
 - **FR-027**: Уточняющий вопрос ДОЛЖЕН содержать clean-new option и перечисление top similar candidates.
 - **FR-028**: Если issue id не передан, workflow НЕ ДОЛЖЕН требовать от пользователя ручного выбора naming template, если clean default уже безопасен.
+- **FR-029**: Для `start`, `create` и `attach` workflow ДОЛЖЕН завершаться только после handoff classification и НЕ ДОЛЖЕН продолжать downstream task в originating session.
+- **FR-030**: Workflow ДОЛЖЕН возвращать явный handoff boundary для managed create/attach flow.
+- **FR-031**: Для ручного handoff workflow ДОЛЖЕН включать absolute worktree path, branch, final state и точные next commands, достаточные для запуска новой сессии.
+- **FR-032**: Если пользователь просит продолжить работу "из нового worktree", workflow ДОЛЖЕН интерпретировать это как `stop_after_create` boundary, если только не выбран явный автоматический handoff.
+- **FR-033**: Workflow НЕ ДОЛЖЕН подтверждать `cwd`/branch "из нового worktree" через `git -C`, path-targeted команды или иные доказательства из старой сессии.
+- **FR-034**: Helper ДОЛЖЕН поддерживать machine-readable handoff contract как минимум в формате shell-safe `key=value`.
+- **FR-035**: Helper ДОЛЖЕН различать terminal handoff states `handoff_ready`, `handoff_needs_env_approval`, `handoff_launched`, `blocked_guard_drift`, `blocked_missing_branch`, `blocked_action_required`.
+- **FR-036**: Terminal handoff state `created` НЕ ДОЛЖЕН использоваться как финальный результат managed create/attach flow; он может сохраняться только как legacy compatibility status.
+- **FR-037**: Если handoff launch не поддержан или падает, workflow ДОЛЖЕН деградировать в manual handoff и всё равно останавливаться на boundary.
+- **FR-038**: Handoff contract ДОЛЖЕН включать `phase`, `boundary`, `final_state`, `handoff_mode` и при необходимости `launch_command` или `repair_command`.
+- **FR-039**: Helper ДОЛЖЕН возвращать blocked handoff states через стабильные exit codes, пригодные для orchestration.
 
 ### Key Entities
 
@@ -177,3 +209,5 @@
 - **SC-009**: При точном совпадении branch/worktree workflow не создает дубликат ни в одном проверенном сценарии.
 - **SC-010**: При похожих именах workflow задает не более одного уточняющего вопроса и всегда включает clean-new option.
 - **SC-011**: В проверенных stale-registry сценариях conflict detection использует live `git` и не расходится с фактическим состоянием worktree/refs.
+- **SC-012**: В 100% проверенных create/attach UAT-сценариев workflow завершает команду на handoff boundary и не продолжает downstream task в originating session.
+- **SC-013**: Machine-readable handoff contract стабилен и покрыт тестами как минимум для ready/env-approval/blocked scenarios.

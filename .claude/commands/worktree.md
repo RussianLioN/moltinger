@@ -90,6 +90,7 @@ Helper responsibilities:
 - similar-name discovery
 - readiness status and next-step generation
 - honest environment and handoff reporting
+- machine-readable handoff contract for boundary-safe orchestration
 
 Canonical readiness vocabulary:
 - `created`
@@ -97,6 +98,15 @@ Canonical readiness vocabulary:
 - `ready_for_codex`
 - `drift_detected`
 - `action_required`
+
+Canonical handoff final states:
+- `handoff_ready`
+- `handoff_needs_env_approval`
+- `handoff_needs_manual_readiness`
+- `handoff_launched`
+- `blocked_guard_drift`
+- `blocked_missing_branch`
+- `blocked_action_required`
 
 Planning decisions from `scripts/worktree-ready.sh plan`:
 - `create_clean`
@@ -108,6 +118,23 @@ If `scripts/git-topology-registry.sh` exists:
 - run `scripts/git-topology-registry.sh check` as a non-blocking preflight
 - if registry is `stale`, do not block the start flow on the markdown snapshot
 - use live `git` for collision detection and refresh the registry after the mutation
+
+## Scope Boundary
+
+`start`, `create`, and `attach` are **two-phase workflows**:
+
+- **Phase A**: plan -> mutate -> reconcile -> classify -> emit handoff
+- **Phase B**: downstream task work executed from the created worktree or an explicit handoff session
+
+For `command-worktree`, you own **only Phase A**.
+
+Rules:
+- After a successful managed `create` or `attach`, stop after returning the helper handoff block.
+- Do not continue the broader user task in the originating session.
+- Do not claim "we are now working from the new worktree" unless the handoff actually launched a new session and the downstream work happens there.
+- Do not prove the new context via `git -C ...`, path-targeted commands, or ad hoc `cd` in the old session.
+- If the user asks for later work "из нового worktree", treat that as deferred Phase B and include it in `Pending`, not as permission to continue locally.
+- If explicit `--handoff terminal` or `--handoff codex` is requested and succeeds, stop the current session immediately after reporting the launched handoff.
 
 ## Start Workflow
 
@@ -152,20 +179,20 @@ Process:
 8. Create or attach the worktree with beads integration:
    - new branch: `bd worktree create ../<repo>-<suffix> --branch <branch>`
    - existing local branch: create the worktree for that branch instead of inventing a new branch name
-9. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before entering the new worktree so the topology mutation is captured immediately.
+9. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before any handoff so the topology mutation is captured immediately.
    - Do not assume `main` already contains the topology script before this feature is merged.
    - In Codex/App sessions, if the shared repo `.git` directory is outside the current writable sandbox, request approval/escalation for this refresh step before running it.
    - Keep the topology mutation phase separate from the base-sync phase when escalation is required: create/refresh/helper may be grouped together, but do not bundle them with the `fetch/switch/pull` step.
    - If refresh fails on topology lock, wait briefly and retry once.
    - If refresh reports that the shared topology state is not writable from the current session, stop and tell the user to re-run the same refresh command with approval/escalation from the authoritative topology worktree.
    - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
-10. Enter the target worktree.
-11. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
+10. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
    - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
-12. If `scripts/git-session-guard.sh` exists, run `scripts/git-session-guard.sh --refresh`
-13. If the helper exists, run:
+11. If `scripts/git-session-guard.sh` exists, run `scripts/git-session-guard.sh --refresh`
+12. If the helper exists, run:
    - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex>`
-14. Return the helper status block.
+13. Return the helper status block.
+14. Stop. Do not continue downstream task execution in the originating session.
 
 Handoff default:
 - Default to `manual`.
@@ -267,6 +294,13 @@ Preview: <path-preview>
 Branch: <branch-name>
 Issue: <id or n/a>
 Status: <created|needs_env_approval|ready_for_codex|drift_detected|action_required>
+Phase: <create|attach|doctor|handoff>
+Boundary: <stop_after_create|stop_after_attach|stop_after_handoff|none>
+Final State: <handoff_ready|handoff_needs_env_approval|handoff_needs_manual_readiness|handoff_launched|blocked_*>
+Approval Required: <true|false>
+Launch Command: <exact command when present>
+Repair Command: <exact repair command when present>
+Pending: <deferred downstream work after handoff>
 Next:
   1. <first exact step>
   2. <second exact step if needed>
@@ -275,10 +309,14 @@ Next:
 ## Completion Rules
 
 - Do not treat the workflow as complete until the final reply includes a readiness status from the canonical helper vocabulary.
+- For `start`, `create`, and `attach`, do not treat the workflow as complete until the final reply includes a handoff boundary and final state from the helper contract.
 - If the helper returns `ready_for_codex`, keep the response short and provide the direct launch command.
 - If the helper returns `needs_env_approval`, the response must show `direnv allow` before any Codex launch step.
 - If the helper returns `drift_detected` or `action_required`, the response must include the concrete corrective next step instead of a generic success message.
 - Do not downgrade `ready_for_codex` or `needs_env_approval` back to a vague `created` summary in prose.
+- Treat `Final State` as the authoritative terminal result for create/attach flows; `Status` is compatibility-only.
+- For manual handoff, the final assistant message must end at the handoff block. Do not continue the user’s downstream task.
+- For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
 
 ## Manual Handoff Examples
 

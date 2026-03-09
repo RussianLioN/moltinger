@@ -40,11 +40,17 @@
 - **Purpose**: The authoritative user-facing state after creation or diagnosis.
 - **Fields**:
   - `status`: `created` | `needs_env_approval` | `ready_for_codex` | `drift_detected` | `action_required`
+  - `phase`: `create` | `attach` | `doctor` | `handoff`
+  - `boundary`: `stop_after_create` | `stop_after_attach` | `stop_after_handoff` | `none`
+  - `final_state`: `handoff_ready` | `handoff_needs_env_approval` | `handoff_needs_manual_readiness` | `handoff_launched` | `blocked_guard_drift` | `blocked_missing_branch` | `blocked_action_required`
   - `branch_name`: resolved branch
   - `worktree_path`: resolved path
   - `env_state`: `unknown` | `no_envrc` | `approval_needed` | `approved_or_not_required`
   - `guard_state`: `unknown` | `missing` | `ok` | `drift`
   - `beads_state`: `shared` | `redirected` | `missing`
+  - `approval_required`: boolean
+  - `launch_command`: optional exact launch command or automation command
+  - `repair_command`: optional exact recovery command for blocked states
   - `next_steps`: ordered list of user-facing actions
   - `warnings`: optional list of caveats or degraded capabilities
 
@@ -56,6 +62,25 @@
   - `platform_support`: `available` | `unsupported` | `unknown`
   - `launch_command`: shell command or platform-specific automation command
   - `fallback_command`: manual equivalent if automation is unavailable
+  - `stop_after_handoff`: boolean; must remain `true` for managed create/attach flows
+
+## HandoffContract
+
+- **Purpose**: Shell-safe machine-readable block emitted after create/attach classification so wrappers or higher-level workflows can stop cleanly.
+- **Fields**:
+  - `schema`: `worktree-handoff/v1`
+  - `phase`: `create` | `attach` | `handoff`
+  - `decision`: optional planning decision such as `create_clean` or `attach_existing_branch`
+  - `worktree_action`: `created` | `attached` | `reused` | `unchanged`
+  - `final_state`: same enum as `ReadinessReport.final_state`
+  - `branch`: resolved branch
+  - `worktree`: absolute worktree path
+  - `handoff_mode`: `manual` | `terminal` | `codex`
+  - `approval_required`: boolean
+  - `launch_command`: optional exact launch command
+  - `repair_command`: optional exact repair command
+  - `next_N`: ordered shell-safe next steps
+  - `warning_N`: ordered warnings
 
 ## DoctorCheck
 

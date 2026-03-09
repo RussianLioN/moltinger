@@ -48,6 +48,14 @@ run_worktree_attach() {
     PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" "$@"
 }
 
+run_worktree_create() {
+    local repo_dir="$1"
+    local fake_bin="$2"
+    shift 2
+
+    PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" "$@"
+}
+
 create_fake_direnv_permission_denied_bin() {
     local fixture_root="$1"
     local fake_bin="${fixture_root}/direnv-bin"
@@ -165,14 +173,20 @@ test_plan_attaches_existing_local_branch() {
 test_plan_asks_once_when_similar_branch_exists() {
     test_start "worktree_ready_plan_asks_once_when_similar_branch_exists"
 
-    local fixture_root repo_dir fake_bin output
+    local fixture_root repo_dir fake_bin output rc
     fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     fake_bin="$(create_fake_bd_bin "$fixture_root")"
     git_topology_fixture_add_local_branch "$repo_dir" "feat/remote-uat-hardening-v2" "main"
 
-    output="$(run_worktree_plan "$repo_dir" "$fake_bin" --slug remote-uat-hardening)"
+    output="$(
+        set +e
+        run_worktree_plan "$repo_dir" "$fake_bin" --slug remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
 
+    assert_eq "10" "$rc" "Similar branch names should now return the clarification exit code"
     assert_contains "$output" 'Decision: needs_clarification' "Similar branch names should trigger one clarification instead of silent duplication"
     assert_contains "$output" 'clean worktree' "Clarification question should keep the clean-new option explicit"
     assert_contains "$output" 'feat/remote-uat-hardening-v2' "Clarification output should include the strongest similar candidate"
@@ -205,6 +219,82 @@ test_create_treats_direnv_permission_denied_as_needs_env_approval() {
     test_pass
 }
 
+test_create_env_format_emits_handoff_boundary_contract() {
+    test_start "worktree_ready_create_env_format_emits_handoff_boundary_contract"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-remote-uat-hardening"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/remote-uat-hardening --path "$probe_dir" --format env
+    )"
+
+    assert_contains "$output" 'schema=worktree-handoff/v1' "Create env output should expose the handoff schema"
+    assert_contains "$output" 'phase=create' "Create env output should declare the create phase"
+    assert_contains "$output" 'boundary=stop_after_create' "Create env output should declare the hard handoff boundary"
+    assert_contains "$output" 'final_state=handoff_needs_env_approval' "Blocked env approval should map to the env-approval final state"
+    assert_contains "$output" 'approval_required=true' "Blocked env approval should require approval explicitly"
+    assert_contains "$output" 'handoff_mode=manual' "Default handoff mode should remain manual"
+    assert_contains "$output" 'pending=Continue' "Handoff contract should defer downstream work to the target worktree"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_plan_needs_clarification_returns_exit_code_10() {
+    test_start "worktree_ready_plan_needs_clarification_returns_exit_code_10"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    git_topology_fixture_add_local_branch "$repo_dir" "feat/remote-uat-hardening-v2" "main"
+
+    output="$(
+        set +e
+        run_worktree_plan "$repo_dir" "$fake_bin" --slug remote-uat-hardening --format env 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "10" "$rc" "Ambiguous plan output should return the clarification exit code"
+    assert_contains "$output" 'schema=worktree-plan/v1' "Plan env output should expose the planning schema"
+    assert_contains "$output" 'decision=needs_clarification' "Plan env output should preserve the clarification decision"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_attach_missing_branch_returns_blocked_missing_branch() {
+    test_start "worktree_ready_attach_missing_branch_returns_blocked_missing_branch"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+
+    output="$(
+        set +e
+        run_worktree_attach "$repo_dir" "$fake_bin" --branch feat/missing-line --format env 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "22" "$rc" "Missing existing branch should return the blocked-missing-branch exit code"
+    assert_contains "$output" 'final_state=blocked_missing_branch' "Missing existing branch should map to the blocked missing branch final state"
+    assert_contains "$output" 'repair_command=Create\ or\ fetch\ the\ branch' "Missing existing branch should emit an exact repair command"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -229,6 +319,9 @@ run_all_tests() {
     test_plan_attaches_existing_local_branch
     test_plan_asks_once_when_similar_branch_exists
     test_create_treats_direnv_permission_denied_as_needs_env_approval
+    test_create_env_format_emits_handoff_boundary_contract
+    test_plan_needs_clarification_returns_exit_code_10
+    test_attach_missing_branch_returns_blocked_missing_branch
     generate_report
 }
 
