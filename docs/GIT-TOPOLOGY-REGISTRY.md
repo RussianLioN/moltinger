@@ -69,7 +69,6 @@
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/codex-cli-upgrade-watch` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
-| `origin/feat/pr17-webhook-extraction` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
