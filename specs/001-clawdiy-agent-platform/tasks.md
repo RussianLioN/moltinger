@@ -218,10 +218,14 @@
 
 **Purpose**: Reconcile documentation, test lanes, and hardening across all user stories.
 
-- [ ] T040 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-POLISH-A] Reconcile operator docs and quick references in `docs/deployment-strategy.md`, `docs/QUICK-REFERENCE.md`, and `specs/001-clawdiy-agent-platform/quickstart.md`
-- [ ] T041 [P] [EXECUTOR: integration-tester] [PARALLEL-GROUP-POLISH-A] Wire Clawdiy validation into umbrella test runners in `tests/run.sh`, `tests/run_integration.sh`, and `tests/run_security.sh`
-- [ ] T042 [P] [EXECUTOR: security-expert] [PARALLEL-GROUP-POLISH-A] Perform final security hardening across `docker-compose.clawdiy.yml`, `config/fleet/policy.json`, and `scripts/preflight-check.sh`
-- [ ] T043 [EXECUTOR: MAIN] [SEQUENTIAL] Run the quickstart validation flow from `specs/001-clawdiy-agent-platform/quickstart.md` and capture rollout notes in `SESSION_SUMMARY.md`
+- [X] T040 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-POLISH-A] Reconcile operator docs and quick references in `docs/deployment-strategy.md`, `docs/QUICK-REFERENCE.md`, and `specs/001-clawdiy-agent-platform/quickstart.md`
+  → Artifacts: [deployment-strategy.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/deployment-strategy.md), [QUICK-REFERENCE.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/QUICK-REFERENCE.md), [quickstart.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/quickstart.md)
+- [X] T041 [P] [EXECUTOR: integration-tester] [PARALLEL-GROUP-POLISH-A] Wire Clawdiy validation into umbrella test runners in `tests/run.sh`, `tests/run_integration.sh`, and `tests/run_security.sh`
+  → Artifacts: [run.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/run.sh), [run_integration.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/run_integration.sh), [run_security.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/run_security.sh)
+- [X] T042 [P] [EXECUTOR: security-expert] [PARALLEL-GROUP-POLISH-A] Perform final security hardening across `docker-compose.clawdiy.yml`, `config/fleet/policy.json`, and `scripts/preflight-check.sh`
+  → Artifacts: [docker-compose.clawdiy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/docker-compose.clawdiy.yml), [policy.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/policy.json), [preflight-check.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/preflight-check.sh), [test_config_validation.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/static/test_config_validation.sh)
+- [X] T043 [EXECUTOR: MAIN] [SEQUENTIAL] Run the quickstart validation flow from `specs/001-clawdiy-agent-platform/quickstart.md` and capture rollout notes in `SESSION_SUMMARY.md`
+  → Artifacts: [quickstart.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/quickstart.md), [SESSION_SUMMARY.md](/Users/rl/coding/moltinger-openclaw-control-plane/SESSION_SUMMARY.md)
 
 ---
 

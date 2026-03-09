@@ -171,6 +171,7 @@ LIST
             cat <<LIST
 bash|integration_local_api_endpoints|Local API endpoints|$SCRIPT_DIR/integration_local/test_api_endpoints.sh
 bash|integration_local_clawdiy_handoff|Clawdiy handoff contract|$SCRIPT_DIR/integration_local/test_clawdiy_handoff.sh
+bash|integration_local_clawdiy_extraction_readiness|Clawdiy extraction readiness|$SCRIPT_DIR/integration_local/test_clawdiy_extraction_readiness.sh
 LIST
             ;;
         security_api)

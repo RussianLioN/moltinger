@@ -69,6 +69,7 @@ CLAWDIY_SERVICE_AUTH_REF=""
 CLAWDIY_TELEGRAM_TOKEN_REF=""
 CLAWDIY_TELEGRAM_ALLOWLIST_REF=""
 CLAWDIY_PROVIDER_AUTH_REF=""
+CLAWDIY_LOGICAL_ADDRESS=""
 CLAWDIY_REGISTRY_WEB=""
 CLAWDIY_REGISTRY_TELEGRAM=""
 CLAWDIY_POLICY_SERVICE_REF=""
@@ -467,6 +468,13 @@ check_clawdiy_runtime_config() {
         and (.server.base_url | type == "string" and length > 0)
         and (.identity.domain | type == "string" and length > 0)
         and (.identity.telegram_bot | type == "string" and length > 0)
+        and (.topology.active_profile == "same_host")
+        and (.topology.logical_address == .control_plane.reply_to)
+        and ((.topology.supported_profiles | index("same_host")) != null)
+        and ((.topology.supported_profiles | index("remote_node")) != null)
+        and (.topology.placement_profiles.same_host.internal_endpoint == .identity.internal_endpoint)
+        and (.topology.placement_profiles.remote_node.internal_endpoint != .topology.placement_profiles.same_host.internal_endpoint)
+        and (.topology.placement_profiles.remote_node.network_plane == "private-overlay")
         and (.control_plane.authoritative_transport == "http-json")
         and (.auth.human_auth_secret_ref | type == "string" and length > 0)
         and (.auth.service_auth.mode == "bearer")
@@ -492,6 +500,7 @@ check_clawdiy_runtime_config() {
     CLAWDIY_DOMAIN="$(jq -r '.identity.domain' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_BASE_URL="$(jq -r '.server.base_url' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_BOT="$(jq -r '.identity.telegram_bot' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_LOGICAL_ADDRESS="$(jq -r '.topology.logical_address' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_HUMAN_AUTH_REF="$(jq -r '.auth.human_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_SERVICE_AUTH_REF="$(jq -r '.auth.service_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_TOKEN_REF="$(jq -r '.auth.telegram_token_ref' "$RUNTIME_CONFIG_PATH")"
@@ -536,12 +545,16 @@ check_fleet_registry_config() {
         | select(.agent_id == $target)
         | (.display_name | type == "string" and length > 0)
         and (.role | type == "string" and length > 0)
+        and (.logical_address | type == "string" and length > 0)
         and (.runtime_engine | type == "string" and length > 0)
         and (.internal_endpoint | type == "string" and length > 0)
         and (.public_endpoints.web | type == "string" and length > 0)
         and (.public_endpoints.telegram | type == "string" and length > 0)
         and (.capabilities | type == "array" and length > 0)
         and (.allowed_callers | type == "array" and length > 0)
+        and (.topology.active_profile == "same_host")
+        and ((.topology.supported_profiles | index("same_host")) != null)
+        and ((.topology.supported_profiles | index("remote_node")) != null)
         and (.policy_version | type == "string" and length > 0)
     ' "$REGISTRY_CONFIG_PATH" >/dev/null 2>&1; then
         add_check "fleet_registry_shape" "fail" "Fleet registry target entry is missing required fields for $TARGET" "error"
@@ -568,9 +581,16 @@ check_fleet_policy_config() {
         and .defaults.allow_unknown_capabilities == false
         and .defaults.allow_public_machine_handoffs == false
         and .defaults.fail_closed_on_auth_error == true
+        and .defaults.require_topology_profile_alignment == true
         and .service_auth.mode == "bearer"
         and .service_auth.authorization_header == "Authorization"
         and (.service_auth.required_headers | type == "array" and length > 0)
+        and .service_auth.reject_on_missing_required_headers == true
+        and .service_auth.reject_on_agent_header_mismatch == true
+        and .topology_profiles.same_host.transport == "http-json"
+        and .topology_profiles.same_host.allow_public_machine_handoffs == false
+        and .topology_profiles.remote_node.transport == "http-json"
+        and .topology_profiles.remote_node.allow_public_machine_handoffs == false
         and (.secret_refs.clawdiy_human_auth | type == "string" and length > 0)
         and (.secret_refs.clawdiy_telegram_auth | type == "string" and length > 0)
         and (.secret_refs.clawdiy_telegram_allowlist | type == "string" and length > 0)
@@ -702,6 +722,37 @@ check_clawdiy_secret_isolation() {
     add_check "fleet_secret_isolation" "pass" "Clawdiy auth, Telegram, and provider auth refs are isolated from Moltinger and aligned with fleet policy" "error"
 }
 
+check_clawdiy_topology_alignment() {
+    if [[ -z "$CLAWDIY_LOGICAL_ADDRESS" ]]; then
+        add_check "fleet_topology_alignment" "fail" "Clawdiy topology alignment could not be evaluated because runtime parsing did not complete" "error"
+        return
+    fi
+
+    if ! jq -e --slurpfile runtime "$RUNTIME_CONFIG_PATH" --slurpfile registry "$REGISTRY_CONFIG_PATH" --slurpfile policy "$POLICY_CONFIG_PATH" '
+        ($runtime[0]) as $rt
+        | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
+        | ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $to_clawdiy
+        | ($policy[0].routes[] | select(.caller == "clawdiy" and .recipient == "moltinger")) as $to_moltinger
+        | $rt.topology.logical_address == $rt.control_plane.reply_to
+        and $cl.logical_address == $rt.topology.logical_address
+        and $cl.topology.active_profile == $rt.topology.active_profile
+        and ($cl.topology.supported_profiles | index("same_host")) != null
+        and ($cl.topology.supported_profiles | index("remote_node")) != null
+        and $cl.topology.placement_profiles.same_host.internal_endpoint == $rt.identity.internal_endpoint
+        and ($cl.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
+        and ($to_clawdiy.supported_topology_profiles | index("same_host")) != null
+        and ($to_clawdiy.supported_topology_profiles | index("remote_node")) != null
+        and ($to_moltinger.supported_topology_profiles | index("same_host")) != null
+        and ($to_moltinger.supported_topology_profiles | index("remote_node")) != null
+        and $policy[0].defaults.require_topology_profile_alignment == true
+      ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "fleet_topology_alignment" "fail" "Clawdiy runtime, registry, and policy must keep topology-profile and logical-address alignment fail-closed" "error"
+        return
+    fi
+
+    add_check "fleet_topology_alignment" "pass" "Clawdiy runtime, registry, and policy stay aligned on same_host/remote_node topology profiles" "error"
+}
+
 check_target_specific_config() {
     case "$TARGET" in
         clawdiy)
@@ -710,6 +761,7 @@ check_target_specific_config() {
             check_fleet_policy_config
             check_clawdiy_identity_alignment
             check_clawdiy_secret_isolation
+            check_clawdiy_topology_alignment
             ;;
     esac
 }

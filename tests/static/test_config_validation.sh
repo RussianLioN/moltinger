@@ -13,6 +13,8 @@ COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
+FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
+PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -197,6 +199,36 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Backup config must default to fail-closed partial restore protection for Clawdiy"
+    fi
+
+    test_start "static_clawdiy_compose_security_hardening"
+    if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
+       rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
+       rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
+       rg -q '/tmp:rw,noexec,nosuid,nodev,size=64m' "$COMPOSE_CLAWDIY" && \
+       ! rg -q '/var/run/docker\.sock' "$COMPOSE_CLAWDIY"; then
+        test_pass
+    else
+        test_fail "Clawdiy compose file must keep init, privilege drops, hardened tmpfs, and no docker socket mount"
+    fi
+
+    test_start "static_clawdiy_policy_header_binding_fail_closed"
+    if jq -e '
+        .defaults.require_topology_profile_alignment == true
+        and .service_auth.reject_on_missing_required_headers == true
+        and .service_auth.reject_on_agent_header_mismatch == true
+      ' "$FLEET_POLICY" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must fail closed on missing required headers, agent mismatch, and topology profile drift"
+    fi
+
+    test_start "static_preflight_enforces_clawdiy_topology_alignment"
+    if rg -q 'require_topology_profile_alignment' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'fleet_topology_alignment' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must validate Clawdiy topology-profile alignment against runtime, registry, and policy"
     fi
 
     generate_report

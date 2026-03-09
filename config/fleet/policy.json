@@ -6,6 +6,7 @@
     "allow_unknown_capabilities": false,
     "allow_public_machine_handoffs": false,
     "fail_closed_on_auth_error": true,
+    "require_topology_profile_alignment": true,
     "deny_on_reachability": [
       "unreachable",
       "auth_required",
@@ -20,7 +21,9 @@
       "X-Correlation-Id",
       "Idempotency-Key"
     ],
-    "bind_token_to_agent_header": true
+    "bind_token_to_agent_header": true,
+    "reject_on_missing_required_headers": true,
+    "reject_on_agent_header_mismatch": true
   },
   "topology_profiles": {
     "same_host": {
