@@ -117,7 +117,7 @@ A future maintainer can wrap the monitor in a skill or other thin orchestration 
 ### Measurable Outcomes
 
 - **SC-001**: An operator can determine whether action is needed in under 5 minutes without manually browsing upstream release pages.
-- **SC-002**: Every successful run reports the local version, latest checked version, recommendation, and top workflow-relevant changes for this repository.
+- **SC-002**: Every successful run reports the local version, latest checked version, recommendation, and either the workflow-relevant changes for this repository or an explicit statement that none were found.
 - **SC-003**: When the recommendation is `upgrade-now` or `investigate`, the report includes enough evidence to open or update a follow-up task without additional source gathering.
 - **SC-004**: Default runs do not mutate tracker state or repository runtime behavior.
 - **SC-005**: When no workflow-relevant change exists, the workflow recommends `ignore` or `upgrade-later` instead of generating noisy follow-up work.
