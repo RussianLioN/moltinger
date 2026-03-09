@@ -114,7 +114,101 @@ The following points are not direct quotes from the sources above. They are the 
 - Audit trail requirements must include user-visible outcomes, machine-visible acknowledgements, and operator interventions under a shared correlation model.
 - Backup and restore should be scoped per agent, so one compromised or misconfigured agent can be recovered without rewriting the rest of the platform.
 
-## 6. Recommended Planning Decisions
+## 6. Phase 0 Decision Log
+
+### 6.1 Authoritative Inter-Agent Transport
+
+**Decision**: Use a private authenticated HTTP JSON handoff path between agents as the authoritative machine-to-machine transport in phase 1.
+
+**Rationale**:
+- Supports correlation IDs, acknowledgements, retries, and timeout control directly.
+- Keeps authoritative handoff independent from Telegram delivery behavior.
+- Reuses platform-native request/response semantics without adding a broker on the current host.
+
+**Alternatives considered**:
+- Telegram as authoritative handoff: rejected due to duplicate, delayed, and user-visible delivery failure modes.
+- Shared database queue: rejected for phase 1 because it adds new stateful infrastructure and schema migration burden.
+- External broker: rejected for phase 1 because it exceeds current host and rollout complexity budget.
+
+**Library/Platform**: Reuse OpenClaw/Moltis HTTP or gateway-style JSON exchange patterns, Docker private networking, and existing GitOps deployment flow. No new transport library or broker in phase 1.
+
+### 6.2 Phase-1 Registry and Discovery
+
+**Decision**: Use a version-controlled static registry file for permanent agents, deployed read-only with each runtime.
+
+**Rationale**:
+- Aligns with GitOps and auditability requirements already enforced in this repo.
+- Keeps same-host and future-node routing semantics consistent.
+- Avoids premature service-discovery infrastructure.
+
+**Alternatives considered**:
+- Dynamic service discovery: rejected as premature for phase 1.
+- Database-backed registry: rejected because it adds operational state before agent count justifies it.
+
+**Library/Platform**: Reuse repo-managed JSON configuration and existing deployment synchronization patterns.
+
+### 6.3 Internal Auth and Trust Boundary
+
+**Decision**: Use per-agent service bearer secrets on private network paths, separate from human login credentials.
+
+**Rationale**:
+- Prevents implicit trust based only on host locality.
+- Keeps service auth separate from user cookies/passwords and Telegram tokens.
+- Preserves a clean upgrade path to stronger transport security later.
+
+**Alternatives considered**:
+- Implicit same-host trust: rejected as too weak for long-lived fleet operation.
+- Shared human session/auth state: rejected as a cross-agent blast-radius problem.
+- Day-one mTLS: rejected as too heavy for phase 1 relative to host budget and rollout speed.
+
+**Library/Platform**: Reuse GitHub Secrets, CI-generated env material, private Docker networking, and policy allowlists.
+
+### 6.4 Initial Telegram Mode
+
+**Decision**: Start Clawdiy in long-polling mode for phase 1 and stage webhook mode behind a later rollout gate.
+
+**Rationale**:
+- Keeps the first production rollout focused on runtime isolation and authoritative handoff.
+- Avoids coupling the same-host MVP to public webhook rollout and secret rotation complexity.
+- Still satisfies the requirement for a dedicated Clawdiy Telegram bot.
+
+**Alternatives considered**:
+- Webhook from day one: rejected as higher ingress and operator complexity before baseline stability.
+- No Telegram in phase 1: rejected because dedicated Telegram ingress is part of the requested feature.
+
+**Library/Platform**: Reuse built-in Telegram channel support and existing repo webhook-monitoring/rollout patterns as later-stage references.
+
+### 6.5 OpenAI Codex OAuth Criticality
+
+**Decision**: Treat OpenAI Codex OAuth as rollout-gated capability rather than platform MVP-critical dependency.
+
+**Rationale**:
+- Fresh repo evidence shows unresolved OAuth scope and login instability.
+- The user wants a durable second platform agent, not a platform blocked by a single provider auth path.
+- This preserves GPT-5.4/Codex readiness as a staged capability rather than a day-one dependency.
+
+**Alternatives considered**:
+- MVP requires Codex OAuth: rejected because it makes platform rollout hostage to unstable provider auth.
+- Exclude Codex entirely: rejected because GPT-5.4/Codex-backed work remains in target scope.
+
+**Library/Platform**: Reuse existing provider-chain patterns and explicit post-auth verification scripts/runbooks.
+
+### 6.6 Audit Artifact Storage
+
+**Decision**: Store authoritative handoff/audit artifacts in append-only JSONL event files inside each agent's persistent state root, with logs/metrics as observability overlays rather than source of truth.
+
+**Rationale**:
+- Keeps evidence local to the agent runtime for backup, restore, and rollback.
+- Avoids introducing a central database before phase 1 needs it.
+- Supports correlation between handoff events, auth events, and operator actions.
+
+**Alternatives considered**:
+- Logs only: rejected because logs are insufficient as authoritative state.
+- Central audit database: rejected as premature for current rollout scope.
+
+**Library/Platform**: Reuse file-based state boundaries and existing monitoring/logging stack.
+
+## 7. Recommended Planning Decisions
 
 These are the decisions this research recommends handing into the implementation planning phase.
 
@@ -126,7 +220,7 @@ These are the decisions this research recommends handing into the implementation
 6. Ship staged rollout and rollback from day one: same-host Clawdiy first, protocol handoff second, remote-node extraction later.
 7. Make the implementation epic include documentation ownership for protocol docs, deployment docs, secrets docs, and topology registry updates.
 
-## 7. Planning Inputs For The Next Phase
+## 8. Planning Inputs For The Next Phase
 
 The next `speckit.plan` phase should treat the following as required inputs:
 
