@@ -17,10 +17,36 @@
 
 **Purpose**: Prepare implementation staffing, research handling, and execution order before touching runtime code.
 
-- [ ] P001 Analyze all tasks in `specs/001-clawdiy-agent-platform/tasks.md` and identify required agent types and capabilities
-- [ ] P002 Create any missing delivery agents via meta-agent flow and register them for this feature branch/worktree
-- [ ] P003 Assign executors to all implementation tasks in `specs/001-clawdiy-agent-platform/tasks.md`
-- [ ] P004 Resolve any new research blockers in `specs/001-clawdiy-agent-platform/research.md` and create narrow clarify prompts only if a true scope blocker appears
+- [X] P001 [EXECUTOR: MAIN] [SEQUENTIAL] Analyze all tasks in `specs/001-clawdiy-agent-platform/tasks.md` and identify required agent types and capabilities
+- [X] P002 [EXECUTOR: MAIN] [SEQUENTIAL] Create any missing delivery agents via meta-agent flow and register them for this feature branch/worktree
+- [X] P003 [EXECUTOR: MAIN] [SEQUENTIAL] Assign executors to all implementation tasks in `specs/001-clawdiy-agent-platform/tasks.md`
+- [X] P004 [EXECUTOR: MAIN] [SEQUENTIAL] Resolve any new research blockers in `specs/001-clawdiy-agent-platform/research.md` and create narrow clarify prompts only if a true scope blocker appears
+
+**Required Capabilities**
+
+- `deployment-engineer`: compose topology, state boundaries, deploy/rollback orchestration, GitHub Actions rollout wiring
+- `bash-master`: `preflight`, `smoke`, `auth-check`, and operational shell flows
+- `cicd-architect`: isolated deploy workflow structure and rollout gates
+- `traefik-expert`: subdomain routing, labels, and ingress isolation for `clawdiy.ainetic.tech`
+- `prometheus-expert`: scrape targets, alert rules, and per-agent observability labels
+- `sre-engineer`: health ownership, alert semantics, and operational diagnostics
+- `backup-specialist`: backup/restore scope, rollback evidence retention, and disaster recovery drills
+- `security-expert`: service auth, allowlists, fail-closed behavior, and secret isolation
+- `toml-specialist`: Moltinger-side handoff and auth config in `config/moltis.toml`
+- `gitops-guardian`: registry/policy lifecycle, topology invariants, and Git-managed control-plane posture
+- `integration-tester`: static, integration, resilience, and live validation scripts
+- `technical-writer`: deploy/runbook/disaster-recovery/operator docs
+
+**Agent Creation Result**
+
+- No new repo-local agents are required for this feature.
+- Existing profiles in `.claude/agents/` already cover the needed delivery roles: `deployment-engineer`, `bash-master`, `cicd-architect`, `traefik-expert`, `prometheus-expert`, `sre-engineer`, `backup-specialist`, `security-expert`, `toml-specialist`, `gitops-guardian`, `integration-tester`, and `technical-writer`.
+- `P002` is therefore closed as `not needed`, with no restart gate required before implementation.
+
+**Research Resolution**
+
+- `research.md`, `plan.md`, and `protocol.md` already resolve the planning-time blockers for transport, Telegram mode, registry placement, auth boundary, and Codex OAuth criticality.
+- No narrow `speckit.clarify` prompt is needed at this stage.
 
 ---
 
@@ -28,10 +54,10 @@
 
 **Purpose**: Create the Clawdiy-specific file skeletons and operator documentation entry points.
 
-- [ ] T001 Create the Clawdiy compose stack skeleton in `docker-compose.clawdiy.yml`
-- [ ] T002 [P] Create the Clawdiy runtime and fleet config skeletons in `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json`
-- [ ] T003 [P] Add Clawdiy secret inventory placeholders and deployment env mapping notes in `.github/workflows/deploy.yml` and `docs/SECRETS-MANAGEMENT.md`
-- [ ] T004 [P] Create the Clawdiy runbook directory and initial documents in `docs/runbooks/clawdiy-deploy.md`, `docs/runbooks/clawdiy-repeat-auth.md`, `docs/runbooks/clawdiy-rollback.md`, and `docs/runbooks/fleet-handoff-incident.md`
+- [ ] T001 [EXECUTOR: deployment-engineer] [SEQUENTIAL] Create the Clawdiy compose stack skeleton in `docker-compose.clawdiy.yml`
+- [ ] T002 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-SETUP-A] Create the Clawdiy runtime and fleet config skeletons in `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json`
+- [ ] T003 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-SETUP-A] Add Clawdiy secret inventory placeholders and deployment env mapping notes in `.github/workflows/deploy.yml` and `docs/SECRETS-MANAGEMENT.md`
+- [ ] T004 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-SETUP-A] Create the Clawdiy runbook directory and initial documents in `docs/runbooks/clawdiy-deploy.md`, `docs/runbooks/clawdiy-repeat-auth.md`, `docs/runbooks/clawdiy-rollback.md`, and `docs/runbooks/fleet-handoff-incident.md`
 
 ---
 
@@ -41,12 +67,12 @@
 
 **⚠️ CRITICAL**: No user story work should be considered done until this phase is complete.
 
-- [ ] T005 Extend target-aware validation, duplicate identity checks, and fleet config parsing in `scripts/preflight-check.sh`
-- [ ] T006 [P] Extend multi-target deploy and rollback orchestration for Clawdiy in `scripts/deploy.sh`
-- [ ] T007 [P] Create isolated GitOps deployment workflow for Clawdiy in `.github/workflows/deploy-clawdiy.yml`
-- [ ] T008 [P] Add fleet registry and policy static validation in `tests/static/test_fleet_registry.sh` and `tests/static/test_config_validation.sh`
-- [ ] T009 [P] Add per-agent scrape targets, labels, and alerts in `config/prometheus/prometheus.yml`, `config/prometheus/alert-rules.yml`, and `config/alertmanager/alertmanager.yml`
-- [ ] T010 [P] Extend backup inventory and restore hooks for Clawdiy config/state/audit data in `config/backup/backup.conf` and `scripts/backup-moltis-enhanced.sh`
+- [ ] T005 [EXECUTOR: bash-master] [SEQUENTIAL] Extend target-aware validation, duplicate identity checks, and fleet config parsing in `scripts/preflight-check.sh`
+- [ ] T006 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-FOUNDATION-A] Extend multi-target deploy and rollback orchestration for Clawdiy in `scripts/deploy.sh`
+- [ ] T007 [P] [EXECUTOR: cicd-architect] [PARALLEL-GROUP-FOUNDATION-A] Create isolated GitOps deployment workflow for Clawdiy in `.github/workflows/deploy-clawdiy.yml`
+- [ ] T008 [P] [EXECUTOR: integration-tester] [PARALLEL-GROUP-FOUNDATION-A] Add fleet registry and policy static validation in `tests/static/test_fleet_registry.sh` and `tests/static/test_config_validation.sh`
+- [ ] T009 [P] [EXECUTOR: prometheus-expert] [PARALLEL-GROUP-FOUNDATION-A] Add per-agent scrape targets, labels, and alerts in `config/prometheus/prometheus.yml`, `config/prometheus/alert-rules.yml`, and `config/alertmanager/alertmanager.yml`
+- [ ] T010 [P] [EXECUTOR: backup-specialist] [PARALLEL-GROUP-FOUNDATION-A] Extend backup inventory and restore hooks for Clawdiy config/state/audit data in `config/backup/backup.conf` and `scripts/backup-moltis-enhanced.sh`
 
 **Checkpoint**: Deployment tooling, validation, monitoring, and backup primitives are ready for feature work.
 
@@ -60,15 +86,15 @@
 
 ### Validation for User Story 1
 
-- [ ] T011 [P] [US1] Create same-host deployment smoke coverage in `tests/live_external/test_clawdiy_deploy_smoke.sh`
+- [ ] T011 [P] [US1] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US1-A] Create same-host deployment smoke coverage in `tests/live_external/test_clawdiy_deploy_smoke.sh`
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Add Traefik routing, healthchecks, networks, and distinct persistent mounts in `docker-compose.clawdiy.yml`
-- [ ] T013 [P] [US1] Finalize Clawdiy runtime identity, endpoints, and state paths in `config/clawdiy/openclaw.json`
-- [ ] T014 [US1] Wire remote sync and deploy steps for the Clawdiy stack in `.github/workflows/deploy-clawdiy.yml` and `scripts/deploy.sh`
-- [ ] T015 [US1] Implement `same-host` and `restart-isolation` verification stages in `scripts/clawdiy-smoke.sh`
-- [ ] T016 [US1] Document deploy, restart, disable, and ownership procedures in `docs/runbooks/clawdiy-deploy.md` and `docs/INFRASTRUCTURE.md`
+- [ ] T012 [P] [US1] [EXECUTOR: traefik-expert] [PARALLEL-GROUP-US1-A] Add Traefik routing, healthchecks, networks, and distinct persistent mounts in `docker-compose.clawdiy.yml`
+- [ ] T013 [P] [US1] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US1-A] Finalize Clawdiy runtime identity, endpoints, and state paths in `config/clawdiy/openclaw.json`
+- [ ] T014 [US1] [EXECUTOR: deployment-engineer] [SEQUENTIAL] Wire remote sync and deploy steps for the Clawdiy stack in `.github/workflows/deploy-clawdiy.yml` and `scripts/deploy.sh`
+- [ ] T015 [US1] [EXECUTOR: bash-master] [SEQUENTIAL] Implement `same-host` and `restart-isolation` verification stages in `scripts/clawdiy-smoke.sh`
+- [ ] T016 [US1] [EXECUTOR: technical-writer] [SEQUENTIAL] Document deploy, restart, disable, and ownership procedures in `docs/runbooks/clawdiy-deploy.md` and `docs/INFRASTRUCTURE.md`
 
 **Checkpoint**: Clawdiy exists as a separate long-lived runtime and can be operated without mutating Moltinger state.
 
@@ -82,15 +108,15 @@
 
 ### Validation for User Story 2
 
-- [ ] T017 [P] [US2] Create handoff accept/reject/timeout/idempotency coverage in `tests/integration_local/test_clawdiy_handoff.sh`
+- [ ] T017 [P] [US2] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US2-A] Create handoff accept/reject/timeout/idempotency coverage in `tests/integration_local/test_clawdiy_handoff.sh`
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] Populate canonical Moltinger and Clawdiy registry entries with capability metadata in `config/fleet/agents-registry.json`
-- [ ] T019 [P] [US2] Implement caller allowlists and capability authorization rules in `config/fleet/policy.json`
-- [ ] T020 [US2] Configure internal handoff endpoints, correlation metadata, and acknowledgement callbacks in `config/moltis.toml` and `config/clawdiy/openclaw.json`
-- [ ] T021 [US2] Implement `handoff` smoke stages and audit artifact assertions in `scripts/clawdiy-smoke.sh`
-- [ ] T022 [US2] Document operator response for rejected, timed-out, duplicate, and late handoffs in `docs/runbooks/fleet-handoff-incident.md`
+- [ ] T018 [P] [US2] [EXECUTOR: gitops-guardian] [PARALLEL-GROUP-US2-A] Populate canonical Moltinger and Clawdiy registry entries with capability metadata in `config/fleet/agents-registry.json`
+- [ ] T019 [P] [US2] [EXECUTOR: security-expert] [PARALLEL-GROUP-US2-A] Implement caller allowlists and capability authorization rules in `config/fleet/policy.json`
+- [ ] T020 [US2] [EXECUTOR: toml-specialist] [SEQUENTIAL] Configure internal handoff endpoints, correlation metadata, and acknowledgement callbacks in `config/moltis.toml` and `config/clawdiy/openclaw.json`
+- [ ] T021 [US2] [EXECUTOR: bash-master] [SEQUENTIAL] Implement `handoff` smoke stages and audit artifact assertions in `scripts/clawdiy-smoke.sh`
+- [ ] T022 [US2] [EXECUTOR: technical-writer] [SEQUENTIAL] Document operator response for rejected, timed-out, duplicate, and late handoffs in `docs/runbooks/fleet-handoff-incident.md`
 
 **Checkpoint**: Cross-agent work exchange is explicit, auditable, and non-silent on failure.
 
@@ -104,15 +130,15 @@
 
 ### Validation for User Story 3
 
-- [ ] T023 [P] [US3] Create auth-boundary regression coverage for missing tokens, bad scopes, and cross-agent secret reuse in `tests/security_api/test_clawdiy_auth_boundaries.sh`
+- [ ] T023 [P] [US3] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US3-A] Create auth-boundary regression coverage for missing tokens, bad scopes, and cross-agent secret reuse in `tests/security_api/test_clawdiy_auth_boundaries.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T024 [P] [US3] Add distinct Clawdiy secret refs and runtime env rendering rules in `.github/workflows/deploy-clawdiy.yml` and `docs/SECRETS-MANAGEMENT.md`
-- [ ] T025 [P] [US3] Configure service bearer auth, Telegram token isolation, and provider auth profiles in `config/clawdiy/openclaw.json`, `config/moltis.toml`, and `config/fleet/policy.json`
-- [ ] T026 [P] [US3] Implement Telegram and provider repeat-auth validation in `scripts/clawdiy-auth-check.sh`
-- [ ] T027 [US3] Extend auth failure smoke coverage and fail-closed escalation checks in `scripts/preflight-check.sh` and `scripts/clawdiy-smoke.sh`
-- [ ] T028 [US3] Document Clawdiy credential rotation and repeat-auth procedures in `docs/runbooks/clawdiy-repeat-auth.md`
+- [ ] T024 [P] [US3] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US3-A] Add distinct Clawdiy secret refs and runtime env rendering rules in `.github/workflows/deploy-clawdiy.yml` and `docs/SECRETS-MANAGEMENT.md`
+- [ ] T025 [P] [US3] [EXECUTOR: security-expert] [PARALLEL-GROUP-US3-A] Configure service bearer auth, Telegram token isolation, and provider auth profiles in `config/clawdiy/openclaw.json`, `config/moltis.toml`, and `config/fleet/policy.json`
+- [ ] T026 [P] [US3] [EXECUTOR: bash-master] [PARALLEL-GROUP-US3-A] Implement Telegram and provider repeat-auth validation in `scripts/clawdiy-auth-check.sh`
+- [ ] T027 [US3] [EXECUTOR: security-expert] [SEQUENTIAL] Extend auth failure smoke coverage and fail-closed escalation checks in `scripts/preflight-check.sh` and `scripts/clawdiy-smoke.sh`
+- [ ] T028 [US3] [EXECUTOR: technical-writer] [SEQUENTIAL] Document Clawdiy credential rotation and repeat-auth procedures in `docs/runbooks/clawdiy-repeat-auth.md`
 
 **Checkpoint**: Auth state is isolated per agent, and degraded auth paths are explicitly surfaced and contained.
 
@@ -126,15 +152,15 @@
 
 ### Validation for User Story 4
 
-- [ ] T029 [P] [US4] Create rollback and restore resilience coverage in `tests/resilience/test_clawdiy_rollback.sh`
+- [ ] T029 [P] [US4] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US4-A] Create rollback and restore resilience coverage in `tests/resilience/test_clawdiy_rollback.sh`
 
 ### Implementation for User Story 4
 
-- [ ] T030 [P] [US4] Extend per-agent health, log correlation, and evidence checks in `scripts/health-monitor.sh` and `scripts/clawdiy-smoke.sh`
-- [ ] T031 [P] [US4] Extend backup scope for Clawdiy config, state, and audit artifacts in `scripts/backup-moltis-enhanced.sh` and `config/backup/backup.conf`
-- [ ] T032 [P] [US4] Extend Clawdiy rollback and restore validation in `.github/workflows/rollback-drill.yml` and `.github/workflows/deploy-clawdiy.yml`
-- [ ] T033 [US4] Preserve audit evidence during Clawdiy rollback and disable paths in `scripts/deploy.sh` and `scripts/clawdiy-smoke.sh`
-- [ ] T034 [US4] Document single-agent disaster recovery and rollback procedures in `docs/disaster-recovery.md` and `docs/runbooks/clawdiy-rollback.md`
+- [ ] T030 [P] [US4] [EXECUTOR: sre-engineer] [PARALLEL-GROUP-US4-A] Extend per-agent health, log correlation, and evidence checks in `scripts/health-monitor.sh` and `scripts/clawdiy-smoke.sh`
+- [ ] T031 [P] [US4] [EXECUTOR: backup-specialist] [PARALLEL-GROUP-US4-A] Extend backup scope for Clawdiy config, state, and audit artifacts in `scripts/backup-moltis-enhanced.sh` and `config/backup/backup.conf`
+- [ ] T032 [P] [US4] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US4-A] Extend Clawdiy rollback and restore validation in `.github/workflows/rollback-drill.yml` and `.github/workflows/deploy-clawdiy.yml`
+- [ ] T033 [US4] [EXECUTOR: bash-master] [SEQUENTIAL] Preserve audit evidence during Clawdiy rollback and disable paths in `scripts/deploy.sh` and `scripts/clawdiy-smoke.sh`
+- [ ] T034 [US4] [EXECUTOR: technical-writer] [SEQUENTIAL] Document single-agent disaster recovery and rollback procedures in `docs/disaster-recovery.md` and `docs/runbooks/clawdiy-rollback.md`
 
 **Checkpoint**: Clawdiy can be observed, restored, and rolled back as a separate production service with preserved evidence.
 
@@ -148,14 +174,14 @@
 
 ### Validation for User Story 5
 
-- [ ] T035 [P] [US5] Create extraction-readiness validation coverage in `tests/integration_local/test_clawdiy_extraction_readiness.sh`
+- [ ] T035 [P] [US5] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US5-A] Create extraction-readiness validation coverage in `tests/integration_local/test_clawdiy_extraction_readiness.sh`
 
 ### Implementation for User Story 5
 
-- [ ] T036 [P] [US5] Extend future-role and remote-node friendly registry examples in `config/fleet/agents-registry.json` and `config/fleet/policy.json`
-- [ ] T037 [P] [US5] Implement `extraction-readiness` verification in `scripts/clawdiy-smoke.sh`
-- [ ] T038 [US5] Document future permanent-agent onboarding and Clawdiy node extraction path in `docs/plans/agent-factory-lifecycle.md` and `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T039 [US5] Document same-host versus remote-node routing, trust, and discovery posture in `docs/INFRASTRUCTURE.md`
+- [ ] T036 [P] [US5] [EXECUTOR: gitops-guardian] [PARALLEL-GROUP-US5-A] Extend future-role and remote-node friendly registry examples in `config/fleet/agents-registry.json` and `config/fleet/policy.json`
+- [ ] T037 [P] [US5] [EXECUTOR: bash-master] [PARALLEL-GROUP-US5-A] Implement `extraction-readiness` verification in `scripts/clawdiy-smoke.sh`
+- [ ] T038 [US5] [EXECUTOR: technical-writer] [SEQUENTIAL] Document future permanent-agent onboarding and Clawdiy node extraction path in `docs/plans/agent-factory-lifecycle.md` and `docs/GIT-TOPOLOGY-REGISTRY.md`
+- [ ] T039 [US5] [EXECUTOR: technical-writer] [SEQUENTIAL] Document same-host versus remote-node routing, trust, and discovery posture in `docs/INFRASTRUCTURE.md`
 
 **Checkpoint**: The platform contract scales beyond the first two agents without topology rewrite.
 
@@ -165,10 +191,10 @@
 
 **Purpose**: Reconcile documentation, test lanes, and hardening across all user stories.
 
-- [ ] T040 [P] Reconcile operator docs and quick references in `docs/deployment-strategy.md`, `docs/QUICK-REFERENCE.md`, and `specs/001-clawdiy-agent-platform/quickstart.md`
-- [ ] T041 [P] Wire Clawdiy validation into umbrella test runners in `tests/run.sh`, `tests/run_integration.sh`, and `tests/run_security.sh`
-- [ ] T042 [P] Perform final security hardening across `docker-compose.clawdiy.yml`, `config/fleet/policy.json`, and `scripts/preflight-check.sh`
-- [ ] T043 Run the quickstart validation flow from `specs/001-clawdiy-agent-platform/quickstart.md` and capture rollout notes in `SESSION_SUMMARY.md`
+- [ ] T040 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-POLISH-A] Reconcile operator docs and quick references in `docs/deployment-strategy.md`, `docs/QUICK-REFERENCE.md`, and `specs/001-clawdiy-agent-platform/quickstart.md`
+- [ ] T041 [P] [EXECUTOR: integration-tester] [PARALLEL-GROUP-POLISH-A] Wire Clawdiy validation into umbrella test runners in `tests/run.sh`, `tests/run_integration.sh`, and `tests/run_security.sh`
+- [ ] T042 [P] [EXECUTOR: security-expert] [PARALLEL-GROUP-POLISH-A] Perform final security hardening across `docker-compose.clawdiy.yml`, `config/fleet/policy.json`, and `scripts/preflight-check.sh`
+- [ ] T043 [EXECUTOR: MAIN] [SEQUENTIAL] Run the quickstart validation flow from `specs/001-clawdiy-agent-platform/quickstart.md` and capture rollout notes in `SESSION_SUMMARY.md`
 
 ---
 
