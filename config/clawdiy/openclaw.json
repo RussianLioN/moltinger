@@ -28,9 +28,37 @@
   },
   "control_plane": {
     "authoritative_transport": "http-json",
+    "agent_id": "clawdiy",
+    "reply_to": "agent://clawdiy",
+    "submit_path": "/internal/v1/agent-handoffs",
+    "ack_path_template": "/internal/v1/agent-handoffs/{correlation_id}/acks",
+    "status_path_template": "/internal/v1/agent-handoffs/{correlation_id}",
+    "cancel_path_template": "/internal/v1/agent-handoffs/{correlation_id}/cancel",
+    "correlation_headers": {
+      "authorization": "Authorization",
+      "agent_id": "X-Agent-Id",
+      "correlation_id": "X-Correlation-Id",
+      "idempotency_key": "Idempotency-Key"
+    },
+    "acknowledgement_callbacks": {
+      "delivery": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "accept": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "start": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "progress": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "terminal": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "cancel": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+    },
+    "required_ack_types": [
+      "delivery",
+      "accept",
+      "start",
+      "terminal"
+    ],
     "registry_path": "/home/node/.openclaw/registry/agents-registry.json",
     "policy_path": "/home/node/.openclaw/registry/policy.json",
-    "ack_deadline_seconds": 10,
+    "delivery_ack_deadline_seconds": 10,
+    "start_ack_deadline_seconds": 60,
+    "progress_heartbeat_seconds": 300,
     "terminal_timeout_seconds": 900
   },
   "auth": {

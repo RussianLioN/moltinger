@@ -7,6 +7,24 @@ ws_request_logs = false
 [auth]
 disabled = false
 
+[env]
+MOLTIS_FLEET_AGENT_ID = "moltinger"
+MOLTIS_FLEET_INTERNAL_ENDPOINT = "http://moltis:13131/internal/v1"
+MOLTIS_FLEET_REPLY_TO = "agent://moltinger"
+MOLTIS_FLEET_HANDOFF_SUBMIT_PATH = "/internal/v1/agent-handoffs"
+MOLTIS_FLEET_HANDOFF_ACK_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}/acks"
+MOLTIS_FLEET_HANDOFF_STATUS_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}"
+MOLTIS_FLEET_HANDOFF_CANCEL_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}/cancel"
+MOLTIS_FLEET_AGENT_HEADER = "X-Agent-Id"
+MOLTIS_FLEET_CORRELATION_HEADER = "X-Correlation-Id"
+MOLTIS_FLEET_IDEMPOTENCY_HEADER = "Idempotency-Key"
+MOLTIS_FLEET_ACK_CALLBACK_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}/acks"
+MOLTIS_FLEET_REQUIRED_ACKS = "delivery,accept,start,terminal"
+MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
+MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
+MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
+MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
+
 [tls]
 enabled = false
 auto_generate = false
