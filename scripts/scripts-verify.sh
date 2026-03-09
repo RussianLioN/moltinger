@@ -142,7 +142,7 @@ verify_hashes() {
         local changed=0
         while IFS=: read -r script hash; do
             local stored_hash
-            stored_hash=$(grep "^$script:" "$HASHES_FILE" | cut -d: -f2)
+            stored_hash="$(grep "^$script:" "$HASHES_FILE" | cut -d: -f2 || true)"
 
             if [[ "$hash" != "$stored_hash" ]]; then
                 if [[ -n "$stored_hash" ]]; then

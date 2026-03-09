@@ -8,6 +8,8 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 ENVRC_FILE="$PROJECT_ROOT/.envrc"
 PHASE_A_SCRIPT="$PROJECT_ROOT/scripts/worktree-phase-a.sh"
 LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
+BATCH_SCRIPT="$PROJECT_ROOT/scripts/beads-recovery-batch.sh"
+OWNERSHIP_MAP="$PROJECT_ROOT/docs/beads-recovery-ownership.json"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -33,6 +35,15 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "Managed worktree creation must call the Beads localization helper"
+    fi
+
+    test_start "static_batch_recovery_contract_exists"
+    if [[ -x "$BATCH_SCRIPT" ]] && [[ -f "$OWNERSHIP_MAP" ]] && \
+       rg -q 'beads-worktree-localize\.sh' "$BATCH_SCRIPT" && \
+       rg -q 'beads-recover-issue\.sh' "$BATCH_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Batch recovery automation must use the localized worktree and single-issue recovery helpers"
     fi
 
     generate_report

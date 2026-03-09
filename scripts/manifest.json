@@ -81,6 +81,21 @@
         "beads-recover-issue"
       ]
     },
+    "beads-recovery-batch.sh": {
+      "version": "1.0.0",
+      "description": "Audit and apply safe batch recovery of leaked Beads issues into owner worktrees",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq",
+        "mktemp"
+      ],
+      "provides": [
+        "beads-recovery-batch"
+      ]
+    },
     "beads-worktree-localize.sh": {
       "version": "1.0.0",
       "description": "Remove stale Beads redirect metadata and bootstrap a worktree-local tracker database",

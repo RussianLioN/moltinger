@@ -111,6 +111,9 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 3. `.envrc` is the default selector for this contract and must export `BEADS_DB="$(git rev-parse --show-toplevel)/.beads/beads.db"`.
 4. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
 5. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
+6. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
+7. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
+8. Canonical root cleanup is a separate gated action and must not happen in the same command that performs recovery apply.
 
 ### Preferred Branch Prefixes
 
