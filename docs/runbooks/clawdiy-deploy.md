@@ -15,8 +15,8 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 - Clawdiy GitHub Secrets exist and are distinct from Moltinger secrets
 - Shared host networks required for phase 1 are healthy:
   - `traefik-net`
-  - `fleet-internal`
   - `moltinger_monitoring`
+- `fleet-internal` may be absent before the very first rollout; it is bootstrap-capable and should be created by `deploy-clawdiy.yml` or `./scripts/deploy.sh`, not by ad-hoc manual SSH changes
 
 ## Target Deploy Flow
 
@@ -25,6 +25,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ./scripts/preflight-check.sh --target clawdiy
    env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:latest docker compose -f docker-compose.clawdiy.yml config --quiet
    ```
+   Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
 2. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
 3. Deploy Clawdiy:
    ```bash
@@ -66,7 +67,7 @@ Stop rollout if any of the following happens:
 - duplicate `agent_id`, domain, or Telegram bot identity detected
 - Clawdiy deploy path tries to reuse Moltinger state or password material
 - Traefik routes Clawdiy through the wrong network
-- Clawdiy is missing `moltinger_monitoring` or `fleet-internal`
+- Clawdiy is missing `moltinger_monitoring`, or `fleet-internal` is still absent after the deploy flow had a chance to bootstrap it
 - Moltinger health regresses during Clawdiy deploy
 
 ## Evidence To Capture

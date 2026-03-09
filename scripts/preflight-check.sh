@@ -55,6 +55,7 @@ REQUIRED_SECRETS=()
 OPTIONAL_SECRETS=()
 COMPOSE_FILES=()
 REQUIRED_NETWORKS=()
+BOOTSTRAP_NETWORKS=()
 RUNTIME_CONFIG_PATH=""
 REGISTRY_CONFIG_PATH=""
 POLICY_CONFIG_PATH=""
@@ -156,6 +157,7 @@ configure_target() {
                 )
             fi
             REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
+            BOOTSTRAP_NETWORKS=()
             ;;
         clawdiy)
             REQUIRED_SECRETS=(
@@ -170,9 +172,9 @@ configure_target() {
             COMPOSE_FILES=("$PROJECT_ROOT/docker-compose.clawdiy.yml")
             REQUIRED_NETWORKS=(
                 "$TRAEFIK_NETWORK"
-                "$FLEET_INTERNAL_NETWORK"
                 "$MONITORING_NETWORK"
             )
+            BOOTSTRAP_NETWORKS=("$FLEET_INTERNAL_NETWORK")
             RUNTIME_CONFIG_PATH="$PROJECT_ROOT/config/clawdiy/openclaw.json"
             REGISTRY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/agents-registry.json"
             POLICY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/policy.json"
@@ -331,6 +333,31 @@ check_network_exists() {
         add_check "network_exists" "pass" "Required external networks exist for target $TARGET: ${REQUIRED_NETWORKS[*]}" "error"
     else
         add_check "network_exists" "fail" "Missing external networks for target $TARGET: ${missing_networks[*]}" "error"
+    fi
+}
+
+check_bootstrap_networks() {
+    local missing_bootstrap_networks=()
+
+    if [[ ${#BOOTSTRAP_NETWORKS[@]} -eq 0 ]]; then
+        return
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        add_check "network_bootstrap" "warning" "Docker CLI is required to validate bootstrap-capable networks for target $TARGET" "warning"
+        return
+    fi
+
+    for network_name in "${BOOTSTRAP_NETWORKS[@]}"; do
+        if ! docker network ls --format '{{.Name}}' | grep -qx "$network_name" 2>/dev/null; then
+            missing_bootstrap_networks+=("$network_name")
+        fi
+    done
+
+    if [[ ${#missing_bootstrap_networks[@]} -eq 0 ]]; then
+        add_check "network_bootstrap" "pass" "Bootstrap-capable networks already exist for target $TARGET: ${BOOTSTRAP_NETWORKS[*]}" "warning"
+    else
+        add_check "network_bootstrap" "warning" "Bootstrap-capable networks missing for target $TARGET: ${missing_bootstrap_networks[*]}; they will be created during Clawdiy deploy via GitOps" "warning"
     fi
 }
 
@@ -946,6 +973,7 @@ main() {
         check_secrets_exist
         check_docker_available
         check_network_exists
+        check_bootstrap_networks
         check_s3_credentials
         check_disk_space
 

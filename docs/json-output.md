@@ -407,6 +407,7 @@ Compatibility notes:
 | `docker_available` | Docker daemon running | error |
 | `compose_valid` | Target-specific compose syntax | error |
 | `network_exists` | Required networks exist | error |
+| `network_bootstrap` | Bootstrap-capable networks are present or can be created during deploy | warning |
 | `s3_credentials` | S3 credentials configured | warning |
 | `disk_space` | Sufficient disk space | warning |
 
@@ -424,7 +425,7 @@ Compatibility notes:
 | `errors` | array | Error messages accumulated during validation |
 | `warnings` | array | Warning messages accumulated during validation |
 
-`preflight-check.sh --target clawdiy` also emits target-specific checks such as `runtime_config_shape`, `fleet_registry_shape`, `fleet_policy_shape`, `fleet_identity_alignment`, and `fleet_secret_isolation`.
+`preflight-check.sh --target clawdiy` also emits target-specific checks such as `runtime_config_shape`, `fleet_registry_shape`, `fleet_policy_shape`, `fleet_identity_alignment`, `fleet_secret_isolation`, and `network_bootstrap` for first-rollout fleet network creation.
 
 ### Options
 

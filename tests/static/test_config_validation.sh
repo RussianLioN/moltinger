@@ -150,6 +150,14 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must use target-aware preflight and deploy/rollback entrypoints"
     fi
 
+    test_start "static_clawdiy_workflow_bootstraps_fleet_network"
+    if rg -q 'Bootstrap Clawdiy fleet network' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'docker network create \$\{\{ env\.FLEET_INTERNAL_NETWORK \}\}' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must bootstrap fleet-internal through CI instead of requiring manual server setup"
+    fi
+
     test_start "static_clawdiy_workflow_uses_dedicated_env_path"
     if rg -q 'CLAWDIY_ENV_PATH: /opt/moltinger/clawdiy/\.env' "$CLAWDIY_WORKFLOW" && \
        ! rg -q '/opt/moltinger/\.env[^[:alnum:]_]' "$CLAWDIY_WORKFLOW"; then
@@ -229,6 +237,15 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Preflight must validate Clawdiy topology-profile alignment against runtime, registry, and policy"
+    fi
+
+    test_start "static_preflight_allows_clawdiy_fleet_bootstrap"
+    if rg -q 'BOOTSTRAP_NETWORKS' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'network_bootstrap' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'created during Clawdiy deploy via GitOps' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must distinguish bootstrap-capable Clawdiy networks from blocking external network failures"
     fi
 
     generate_report

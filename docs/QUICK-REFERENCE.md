@@ -41,6 +41,7 @@ Use the topology registry before cleanup worktree/branch actions and after manua
 ```
 
 This is the first live OpenClaw launch step for Clawdiy.
+If `fleet-internal` is missing on the first rollout, use `deploy-clawdiy.yml` or `deploy.sh` to create it through GitOps; do not bootstrap it manually over SSH.
 
 ### Inter-agent handoff
 
