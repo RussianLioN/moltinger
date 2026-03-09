@@ -13,6 +13,7 @@
 | **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
 | **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
 | **Git Topology Registry** | docs/GIT-TOPOLOGY-REGISTRY.md | Generated snapshot актуальных worktree, веток и cleanup-контекста |
+| **Worktree Hotfix Playbook** | docs/WORKTREE-HOTFIX-PLAYBOOK.md | Что делать, если после merge `command-worktree` работает не так, как ожидается |
 
 ---
 
@@ -96,6 +97,7 @@ scripts/git-topology-registry.sh doctor --prune --write-doc
 - User/merge handoff: `specs/006-git-topology-registry/quickstart.md`
 - Live committed registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
 - Reviewed intent sidecar: `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Post-merge hotfix playbook: `docs/WORKTREE-HOTFIX-PLAYBOOK.md`
 
 ---
 
