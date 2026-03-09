@@ -28,7 +28,7 @@
 |---|---|---|
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Needs decision |
-| `008-clawdiy-rollout-bootstrap-fix` | `gone` | Tracking ref is gone; needs decision |
+| `008-clawdiy-rollout-bootstrap-fix` | `origin/008-clawdiy-rollout-bootstrap-fix` | Needs decision |
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `010-beads-recovery-batch` | `none` | Needs decision |
@@ -60,6 +60,7 @@
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup. |
 | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `origin/007-codex-update-monitor` | Needs decision |
+| `origin/008-clawdiy-rollout-bootstrap-fix` | Needs decision |
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
