@@ -9,6 +9,8 @@ TOML_CONFIG="$PROJECT_ROOT/config/moltis.toml"
 TEST_FIXTURE_CONFIG="$PROJECT_ROOT/tests/fixtures/config/moltis.toml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
+COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
+CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 
 validate_toml() {
     local file_path="$1"
@@ -60,6 +62,13 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "docker-compose.prod.yml does not render cleanly"
+    fi
+
+    test_start "static_compose_clawdiy_valid"
+    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"
     fi
 
     test_start "static_config_uses_env_substitution"
@@ -119,6 +128,30 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
+    fi
+
+    test_start "static_clawdiy_workflow_exists"
+    if [[ -f "$CLAWDIY_WORKFLOW" ]]; then
+        test_pass
+    else
+        test_fail "Missing .github/workflows/deploy-clawdiy.yml"
+    fi
+
+    test_start "static_clawdiy_workflow_uses_targeted_preflight_and_deploy"
+    if rg -q 'preflight-check\.sh --ci --target clawdiy' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'deploy\.sh --json clawdiy deploy' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'deploy\.sh --json clawdiy rollback' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must use target-aware preflight and deploy/rollback entrypoints"
+    fi
+
+    test_start "static_clawdiy_workflow_uses_dedicated_env_path"
+    if rg -q 'CLAWDIY_ENV_PATH: /opt/moltinger/clawdiy/\.env' "$CLAWDIY_WORKFLOW" && \
+       ! rg -q '/opt/moltinger/\.env[^[:alnum:]_]' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must keep a dedicated env path separate from /opt/moltinger/.env"
     fi
 
     generate_report
