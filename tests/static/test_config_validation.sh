@@ -15,6 +15,7 @@ ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
+DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -168,6 +169,15 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must bootstrap fleet-internal through CI instead of requiring manual server setup"
     fi
 
+    test_start "static_clawdiy_workflow_migrates_legacy_root_markers_before_gitops_check"
+    if rg -q 'Migrate legacy Clawdiy deploy markers' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'mv \.last-clawdiy-backup data/clawdiy/\.last-backup' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'mv \.last-deployed-clawdiy-image data/clawdiy/\.last-deployed-image' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must migrate legacy repo-root marker files before enforcing the clean-worktree GitOps gate"
+    fi
+
     test_start "static_clawdiy_workflow_syncs_backup_config_dependencies"
     if rg -q '\$\{\{ env\.DEPLOY_PATH \}\}/config/backup' "$CLAWDIY_WORKFLOW" && \
        rg -q 'scp -r config/backup/\*' "$CLAWDIY_WORKFLOW"; then
@@ -182,6 +192,15 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Clawdiy deploy workflow must keep a dedicated env path separate from /opt/moltinger/.env"
+    fi
+
+    test_start "static_clawdiy_deploy_script_stores_runtime_markers_under_ignored_data_dir"
+    if rg -q 'TARGET_LAST_IMAGE_FILE="\$PROJECT_ROOT/data/clawdiy/\.last-deployed-image"' "$DEPLOY_SCRIPT" && \
+       rg -q 'TARGET_LAST_BACKUP_FILE="\$PROJECT_ROOT/data/clawdiy/\.last-backup"' "$DEPLOY_SCRIPT" && \
+       ! rg -q 'TARGET_LAST_IMAGE_FILE="\$PROJECT_ROOT/\.last-deployed-clawdiy-image"|TARGET_LAST_BACKUP_FILE="\$PROJECT_ROOT/\.last-clawdiy-backup"' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy script must keep last-image and backup markers under ignored data/clawdiy state"
     fi
 
     test_start "static_clawdiy_workflow_validates_auth_rendering_rules"

@@ -176,6 +176,27 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Migrate legacy Clawdiy deploy markers
+        run: |
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            mkdir -p data/clawdiy
+
+            if [ -f .last-clawdiy-backup ] && [ ! -f data/clawdiy/.last-backup ]; then
+              mv .last-clawdiy-backup data/clawdiy/.last-backup
+            fi
+            if [ -f .last-deployed-clawdiy-image ] && [ ! -f data/clawdiy/.last-deployed-image ]; then
+              mv .last-deployed-clawdiy-image data/clawdiy/.last-deployed-image
+            fi
+            if [ -f .last-clawdiy-backup ]; then
+              rm -f .last-clawdiy-backup
+            fi
+            if [ -f .last-deployed-clawdiy-image ]; then
+              rm -f .last-deployed-clawdiy-image
+            fi
+          "
+
       - name: Verify server worktree is clean
         run: |
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)

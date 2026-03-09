@@ -28,6 +28,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
 2. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
    For the GitHub Actions path, the remote SSH deploy command must propagate `GITHUB_ACTIONS=true` and `GITHUB_RUN_ID` so `scripts/deploy.sh` is treated as CI, not as an ad-hoc manual SSH rollout.
+   The workflow also migrates legacy root-level Clawdiy marker files into ignored `data/clawdiy/` state before enforcing the clean-worktree GitOps gate.
 3. Deploy Clawdiy:
    ```bash
    ./scripts/deploy.sh clawdiy deploy
