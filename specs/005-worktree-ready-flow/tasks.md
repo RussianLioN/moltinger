@@ -167,6 +167,16 @@
 
 ---
 
+## Phase 7C: Invoking-Branch Landing and Copy-Paste UX
+
+**Purpose**: Ensure topology registry mutations are landed in the invoking branch before handoff and that manual next steps are rendered in copy-paste-friendly code blocks.
+
+- [x] T038 [EXECUTOR: MAIN] [SEQUENTIAL] Extend `specs/005-worktree-ready-flow/spec.md`, `plan.md`, `quickstart.md`, and `validation.md` with invoking-branch landing semantics and fenced-command UX
+- [x] T039 [EXECUTOR: worker] [SEQUENTIAL] Update `.claude/commands/worktree.md` so managed create/attach flows land topology registry mutations in the invoking branch before handoff and render manual next steps inside fenced `bash` blocks
+- [x] T040 [EXECUTOR: MAIN] [SEQUENTIAL] Validate the new guidance against the latest UAT findings and mark the follow-up tasks complete in `specs/005-worktree-ready-flow/tasks.md`
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

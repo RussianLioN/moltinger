@@ -135,6 +135,7 @@ Rules:
 - Do not prove the new context via `git -C ...`, path-targeted commands, or ad hoc `cd` in the old session.
 - If the user asks for later work "из нового worktree", treat that as deferred Phase B and include it in `Pending`, not as permission to continue locally.
 - If explicit `--handoff terminal` or `--handoff codex` is requested and succeeds, stop the current session immediately after reporting the launched handoff.
+- If Phase A mutates `docs/GIT-TOPOLOGY-REGISTRY.md` in the invoking branch, land that mutation before the handoff block. Do not leave it as an unpushed local diff unless the user explicitly asked for a dirty local-only test flow.
 
 ## Start Workflow
 
@@ -186,13 +187,24 @@ Process:
    - If refresh fails on topology lock, wait briefly and retry once.
    - If refresh reports that the shared topology state is not writable from the current session, stop and tell the user to re-run the same refresh command with approval/escalation from the authoritative topology worktree.
    - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
-10. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
+10. If the refresh changed committed files in the invoking branch, landing the plane is part of Phase A:
+   - `git status --short docs/GIT-TOPOLOGY-REGISTRY.md`
+   - if changed, run:
+     - `git add docs/GIT-TOPOLOGY-REGISTRY.md`
+     - `git commit -m "docs(topology): refresh registry after worktree mutation"`
+     - `git pull --rebase`
+     - `bd sync`
+     - `git push`
+   - If this landing sequence fails, stop and report the exact blocking command/result instead of continuing to handoff.
+   - Treat the committed registry mutation as owned by the invoking branch, not by the target worktree branch.
+11. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
    - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
-11. If `scripts/git-session-guard.sh` exists, run `scripts/git-session-guard.sh --refresh`
-12. If the helper exists, run:
+-12. If `scripts/git-session-guard.sh` exists, run `scripts/git-session-guard.sh --refresh`
+-13. If the helper exists, run:
    - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex>`
-13. Return the helper status block.
-14. Stop. Do not continue downstream task execution in the originating session.
+14. Return the helper status block.
+15. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order.
+16. Stop. Do not continue downstream task execution in the originating session.
 
 Handoff default:
 - Default to `manual`.
@@ -306,6 +318,13 @@ Next:
   2. <second exact step if needed>
 ```
 
+For manual handoff, also render:
+
+```bash
+cd /absolute/path && direnv allow
+codex
+```
+
 ## Completion Rules
 
 - Do not treat the workflow as complete until the final reply includes a readiness status from the canonical helper vocabulary.
@@ -317,6 +336,8 @@ Next:
 - Treat `Final State` as the authoritative terminal result for create/attach flows; `Status` is compatibility-only.
 - For manual handoff, the final assistant message must end at the handoff block. Do not continue the user’s downstream task.
 - For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
+- If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
+- Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.
 
 ## Manual Handoff Examples
 
@@ -328,6 +349,10 @@ Next:
   1. cd /Users/rl/coding/moltinger-remote-uat-hardening && codex
 ```
 
+```bash
+cd /Users/rl/coding/moltinger-remote-uat-hardening && codex
+```
+
 Blocked environment:
 
 ```text
@@ -335,6 +360,11 @@ Status: needs_env_approval
 Next:
   1. cd /Users/rl/coding/moltinger-remote-uat-hardening && direnv allow
   2. codex
+```
+
+```bash
+cd /Users/rl/coding/moltinger-remote-uat-hardening && direnv allow
+codex
 ```
 
 Ambiguous naming:

@@ -81,6 +81,7 @@
    - helper output includes `Boundary: stop_after_create` or `Boundary: stop_after_attach`
    - helper output includes `Final State: ...`
    - the workflow stops at the handoff block and does not continue Phase B in the originating session
+   - if `docs/GIT-TOPOLOGY-REGISTRY.md` changed in the invoking branch, the workflow lands and pushes that mutation before the handoff block
 
 ## Scenario 10: Machine-readable handoff contract
 
@@ -91,3 +92,11 @@
    - `boundary=stop_after_create`
    - `final_state=<handoff_*|blocked_*>`
    - shell-safe `next_1`, `next_2`, and warnings if applicable
+
+## Scenario 11: Manual next steps are copy-paste friendly
+
+1. Run a managed create/attach flow with `manual` handoff.
+2. Expect:
+   - the human-facing response still contains the structured status block
+   - exact next-step commands are also rendered in a fenced `bash` block
+   - the user can copy the block without reconstructing commands from prose

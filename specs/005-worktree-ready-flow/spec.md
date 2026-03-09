@@ -52,6 +52,7 @@
 1. **Given** в worktree требуется одобрение окружения, **When** система выводит результат создания, **Then** она заранее сообщает, что среда требует одобрения, и показывает точную команду для этого шага.
 2. **Given** окружение уже готово, **When** система завершает создание worktree, **Then** она помечает состояние как готовое к запуску и показывает команду запуска Codex.
 3. **Given** пользователь предпочитает ручной сценарий, **When** система завершает создание worktree, **Then** она показывает короткий блок следующих шагов без попытки скрыто изменить окружение от имени пользователя.
+4. **Given** ручной сценарий выведен пользователю, **When** система показывает следующие шаги, **Then** точные команды рендерятся в готовом fenced `bash` block для copy-paste без ручной сборки из prose.
 
 ---
 
@@ -126,6 +127,7 @@
 2. **Given** пользователь выбрал ручной handoff, **When** helper сформировал readiness status, **Then** результат содержит absolute path, branch, final state, boundary и точные next commands для запуска новой сессии.
 3. **Given** пользователь явно запросил `terminal` или `codex` handoff, **When** launch поддержан и выполнен, **Then** текущая сессия всё равно завершает команду на handoff boundary и не делает follow-up work locally.
 4. **Given** create/attach flow не может подтвердить readiness или topology refresh блокируется, **When** helper завершает классификацию, **Then** workflow останавливается на blocked handoff state и возвращает точную repair command вместо продолжения задачи.
+5. **Given** topology mutation изменила committed registry в invoking branch, **When** create/attach flow завершает Phase A, **Then** workflow сначала landing-the-plane’ит registry mutation в invoking branch, и только после этого возвращает handoff block.
 
 ### Edge Cases
 
@@ -183,6 +185,10 @@
 - **FR-037**: Если handoff launch не поддержан или падает, workflow ДОЛЖЕН деградировать в manual handoff и всё равно останавливаться на boundary.
 - **FR-038**: Handoff contract ДОЛЖЕН включать `phase`, `boundary`, `final_state`, `handoff_mode` и при необходимости `launch_command` или `repair_command`.
 - **FR-039**: Helper ДОЛЖЕН возвращать blocked handoff states через стабильные exit codes, пригодные для orchestration.
+- **FR-040**: Если `scripts/git-topology-registry.sh refresh --write-doc` изменил committed registry в invoking branch, workflow ДОЛЖЕН stage/commit/pull-rebase/bd-sync/push эту mutation до возврата финального handoff block, если пользователь явно не запросил локальный тестовый dirty flow.
+- **FR-041**: Workflow ДОЛЖЕН считать committed registry mutation собственностью invoking branch, а не target worktree branch.
+- **FR-042**: Для ручного handoff human-facing output ДОЛЖЕН рендерить точные next-step команды в fenced `bash` block.
+- **FR-043**: В human-facing output workflow ДОЛЖЕН явно обозначать, что topology registry update — это ожидаемый managed diff и что он уже landed/ pushed, если landing-the-plane был выполнен.
 
 ### Key Entities
 
@@ -211,3 +217,5 @@
 - **SC-011**: В проверенных stale-registry сценариях conflict detection использует live `git` и не расходится с фактическим состоянием worktree/refs.
 - **SC-012**: В 100% проверенных create/attach UAT-сценариев workflow завершает команду на handoff boundary и не продолжает downstream task в originating session.
 - **SC-013**: Machine-readable handoff contract стабилен и покрыт тестами как минимум для ready/env-approval/blocked scenarios.
+- **SC-014**: В 100% проверенных managed create/attach сценариев committed topology mutation не остаётся незапушенным локальным diff в invoking branch.
+- **SC-015**: В 100% проверенных ручных handoff сценариев пользователь получает готовый fenced `bash` block с точными next-step командами.

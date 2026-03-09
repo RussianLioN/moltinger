@@ -18,6 +18,7 @@
 | Opt-in terminal or Codex handoff | `quickstart.md` Scenario 8 | pending | |
 | Stop-and-handoff boundary after create | `quickstart.md` Scenario 9 | pending | |
 | Machine-readable handoff contract | `quickstart.md` Scenario 10 | pending | |
+| Manual next steps are copy-paste friendly | `quickstart.md` Scenario 11 | pending | |
 
 ## Execution Notes
 
@@ -51,3 +52,12 @@
   - missing attach branch returns `blocked_missing_branch`
 - Follow-up:
   - manual UAT still required to confirm that `command-worktree` now stops after Phase A instead of continuing downstream work in the originating session
+
+### 2026-03-09 - UAT follow-up requirements
+
+- Latest UAT confirmed that:
+  - managed create-flow now stops at the handoff boundary
+  - topology refresh succeeds from the invoking branch
+- New follow-up expectations:
+  - if topology refresh changed `docs/GIT-TOPOLOGY-REGISTRY.md`, the invoking branch should land and push that mutation before returning the final handoff block
+  - manual next-step commands should be duplicated in a fenced `bash` block for easier copy-paste
