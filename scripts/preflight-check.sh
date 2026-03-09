@@ -485,12 +485,12 @@ check_clawdiy_runtime_config() {
         and (.auth.telegram_allowed_users_ref | type == "string" and length > 0)
         and (.channels.telegram.allowlist_secret_ref == .auth.telegram_allowed_users_ref)
         and (.channels.telegram.fail_closed_on_token_error == true)
-        and (.auth.provider_auth_profiles["openai-codex"].secret_ref | type == "string" and length > 0)
-        and (.auth.provider_auth_profiles["openai-codex"].profile_format == "json")
-        and (.auth.provider_auth_profiles["openai-codex"].auth_type == "oauth")
-        and (.auth.provider_auth_profiles["openai-codex"].required_scopes | index("api.responses.write") != null)
-        and (.auth.provider_auth_profiles["openai-codex"].allowed_models | index("gpt-5.4") != null)
-        and (.auth.provider_auth_profiles["openai-codex"].fail_closed_on_scope_error == true)
+        and (.auth.provider_auth_profiles["codex-oauth"].secret_ref | type == "string" and length > 0)
+        and (.auth.provider_auth_profiles["codex-oauth"].profile_format == "json")
+        and (.auth.provider_auth_profiles["codex-oauth"].auth_type == "oauth")
+        and (.auth.provider_auth_profiles["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.auth.provider_auth_profiles["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and (.auth.provider_auth_profiles["codex-oauth"].fail_closed_on_scope_error == true)
     ' "$RUNTIME_CONFIG_PATH" >/dev/null 2>&1; then
         add_check "runtime_config_shape" "fail" "Clawdiy runtime config is missing required identity, transport, or auth fields" "error"
         return
@@ -505,7 +505,7 @@ check_clawdiy_runtime_config() {
     CLAWDIY_SERVICE_AUTH_REF="$(jq -r '.auth.service_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_TOKEN_REF="$(jq -r '.auth.telegram_token_ref' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_ALLOWLIST_REF="$(jq -r '.auth.telegram_allowed_users_ref' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_PROVIDER_AUTH_REF="$(jq -r '.auth.provider_auth_profiles["openai-codex"].secret_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_PROVIDER_AUTH_REF="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].secret_ref' "$RUNTIME_CONFIG_PATH")"
 
     add_check "runtime_config_shape" "pass" "Clawdiy runtime config fields parsed successfully" "error"
 }
@@ -599,12 +599,12 @@ check_fleet_policy_config() {
         and (.telegram_auth.clawdiy.allowlist_secret_ref == .secret_refs.clawdiy_telegram_allowlist)
         and (.telegram_auth.clawdiy.mode == "polling")
         and (.telegram_auth.clawdiy.fail_closed_on_token_error == true)
-        and (.provider_auth.clawdiy["openai-codex"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
-        and (.provider_auth.clawdiy["openai-codex"].profile_format == "json")
-        and (.provider_auth.clawdiy["openai-codex"].auth_type == "oauth")
-        and (.provider_auth.clawdiy["openai-codex"].required_scopes | index("api.responses.write") != null)
-        and (.provider_auth.clawdiy["openai-codex"].allowed_models | index("gpt-5.4") != null)
-        and (.provider_auth.clawdiy["openai-codex"].fail_closed_on_scope_error == true)
+        and (.provider_auth.clawdiy["codex-oauth"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
+        and (.provider_auth.clawdiy["codex-oauth"].profile_format == "json")
+        and (.provider_auth.clawdiy["codex-oauth"].auth_type == "oauth")
+        and (.provider_auth.clawdiy["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].fail_closed_on_scope_error == true)
     ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
         add_check "fleet_policy_shape" "fail" "Fleet policy must stay fail-closed with bearer service auth defaults" "error"
         return

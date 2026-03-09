@@ -143,16 +143,16 @@ run_fleet_registry_tests() {
 
     test_start "fleet_provider_auth_gate_defined"
     if jq -e '
-        .provider_auth.clawdiy["openai-codex"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile
-        and .provider_auth.clawdiy["openai-codex"].profile_format == "json"
-        and .provider_auth.clawdiy["openai-codex"].auth_type == "oauth"
-        and (.provider_auth.clawdiy["openai-codex"].required_scopes | index("api.responses.write") != null)
-        and (.provider_auth.clawdiy["openai-codex"].allowed_models | index("gpt-5.4") != null)
-        and .provider_auth.clawdiy["openai-codex"].fail_closed_on_scope_error == true
+        .provider_auth.clawdiy["codex-oauth"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile
+        and .provider_auth.clawdiy["codex-oauth"].profile_format == "json"
+        and .provider_auth.clawdiy["codex-oauth"].auth_type == "oauth"
+        and (.provider_auth.clawdiy["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and .provider_auth.clawdiy["codex-oauth"].fail_closed_on_scope_error == true
       ' "$POLICY_FILE" >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Fleet policy must define the fail-closed openai-codex rollout gate for Clawdiy"
+        test_fail "Fleet policy must define the fail-closed codex-oauth rollout gate for Clawdiy"
     fi
 
     test_start "fleet_registry_topology_profiles_defined"

@@ -475,8 +475,8 @@ verify_auth_stage() {
     local positive_env="$tmpdir/auth-pass.env"
     local missing_telegram_env="$tmpdir/auth-missing-telegram.env"
     local bad_scope_env="$tmpdir/auth-bad-scope.env"
-    local positive_profile='{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}'
-    local bad_scope_profile='{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["profile.read"],"allowed_models":["gpt-5.4"]}'
+    local positive_profile='{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}'
+    local bad_scope_profile='{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["profile.read"],"allowed_models":["gpt-5.4"]}'
 
     {
         printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
@@ -521,8 +521,8 @@ verify_auth_stage() {
         add_check "auth_smoke_telegram_fail_closed" "fail" "Missing Telegram token must fail closed with repeat-auth guidance" "error"
     fi
 
-    if "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider openai-codex --env-file "$positive_env" --json >"$tmpdir/provider-pass.json"; then
-        if jq -e '.status == "pass" and any(.capabilities[]; .capability == "openai-codex" and .status == "pass")' "$tmpdir/provider-pass.json" >/dev/null 2>&1; then
+    if "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider codex-oauth --env-file "$positive_env" --json >"$tmpdir/provider-pass.json"; then
+        if jq -e '.status == "pass" and any(.capabilities[]; .capability == "codex-oauth" and .status == "pass")' "$tmpdir/provider-pass.json" >/dev/null 2>&1; then
             add_check "auth_smoke_provider_pass" "pass" "OpenAI Codex auth validation passes with required scope and model authorization" "error"
         else
             add_check "auth_smoke_provider_pass" "fail" "OpenAI Codex auth validation did not report a passing capability state" "error"
@@ -532,7 +532,7 @@ verify_auth_stage() {
     fi
 
     set +e
-    "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider openai-codex --env-file "$bad_scope_env" --json >"$tmpdir/provider-fail.json"
+    "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider codex-oauth --env-file "$bad_scope_env" --json >"$tmpdir/provider-fail.json"
     local provider_fail_code=$?
     set -e
     if [[ $provider_fail_code -ne 0 ]] && jq -e '.status == "fail" and ([.errors[] | test("quarantined|quarantine|repeat-auth"; "i")] | any)' "$tmpdir/provider-fail.json" >/dev/null 2>&1; then

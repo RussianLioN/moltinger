@@ -83,7 +83,7 @@ Expected outcome:
 ## Stage 6: Verify Codex OAuth Gate
 
 ```bash
-./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider openai-codex --json
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth --json
 ```
 
 Expected outcome:

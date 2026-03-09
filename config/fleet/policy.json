@@ -93,7 +93,7 @@
   },
   "provider_auth": {
     "clawdiy": {
-      "openai-codex": {
+      "codex-oauth": {
         "secret_ref": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE",
         "profile_format": "json",
         "auth_type": "oauth",

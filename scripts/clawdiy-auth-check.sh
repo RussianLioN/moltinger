@@ -201,12 +201,12 @@ parse_runtime_config() {
         and (.channels.telegram.mode == "polling")
         and (.channels.telegram.allowlist_secret_ref == .auth.telegram_allowed_users_ref)
         and (.channels.telegram.fail_closed_on_token_error == true)
-        and (.auth.provider_auth_profiles["openai-codex"].secret_ref | type == "string" and length > 0)
-        and (.auth.provider_auth_profiles["openai-codex"].profile_format == "json")
-        and (.auth.provider_auth_profiles["openai-codex"].auth_type == "oauth")
-        and (.auth.provider_auth_profiles["openai-codex"].required_scopes | index("api.responses.write") != null)
-        and (.auth.provider_auth_profiles["openai-codex"].allowed_models | index("gpt-5.4") != null)
-        and (.auth.provider_auth_profiles["openai-codex"].fail_closed_on_scope_error == true)
+        and (.auth.provider_auth_profiles["codex-oauth"].secret_ref | type == "string" and length > 0)
+        and (.auth.provider_auth_profiles["codex-oauth"].profile_format == "json")
+        and (.auth.provider_auth_profiles["codex-oauth"].auth_type == "oauth")
+        and (.auth.provider_auth_profiles["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.auth.provider_auth_profiles["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and (.auth.provider_auth_profiles["codex-oauth"].fail_closed_on_scope_error == true)
     ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
         add_check "runtime_auth_shape" "fail" "Clawdiy runtime config is missing required service, Telegram, or provider auth boundary fields" "error"
         return 1
@@ -222,11 +222,11 @@ parse_runtime_config() {
     TELEGRAM_ENABLED="$(jq -r '.channels.telegram.enabled' "$CLAWDIY_CONFIG_FILE")"
     TELEGRAM_MODE="$(jq -r '.channels.telegram.mode' "$CLAWDIY_CONFIG_FILE")"
     TELEGRAM_FAIL_CLOSED="$(jq -r '.channels.telegram.fail_closed_on_token_error' "$CLAWDIY_CONFIG_FILE")"
-    PROVIDER_SECRET_REF="$(jq -r '.auth.provider_auth_profiles["openai-codex"].secret_ref' "$CLAWDIY_CONFIG_FILE")"
-    PROVIDER_PROFILE_FORMAT="$(jq -r '.auth.provider_auth_profiles["openai-codex"].profile_format' "$CLAWDIY_CONFIG_FILE")"
-    PROVIDER_AUTH_TYPE="$(jq -r '.auth.provider_auth_profiles["openai-codex"].auth_type' "$CLAWDIY_CONFIG_FILE")"
-    PROVIDER_ROLLOUT_GATE="$(jq -r '.auth.provider_auth_profiles["openai-codex"].rollout_gate' "$CLAWDIY_CONFIG_FILE")"
-    PROVIDER_ENABLED="$(jq -r '.auth.provider_auth_profiles["openai-codex"].enabled' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_SECRET_REF="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].secret_ref' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_PROFILE_FORMAT="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].profile_format' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_AUTH_TYPE="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].auth_type' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_ROLLOUT_GATE="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].rollout_gate' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_ENABLED="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].enabled' "$CLAWDIY_CONFIG_FILE")"
 
     add_check "runtime_auth_shape" "pass" "Clawdiy runtime auth boundary fields parsed successfully" "error"
     return 0
@@ -256,12 +256,12 @@ parse_policy_config() {
         and (.telegram_auth.clawdiy.allowlist_secret_ref == .secret_refs.clawdiy_telegram_allowlist)
         and (.telegram_auth.clawdiy.mode == "polling")
         and (.telegram_auth.clawdiy.fail_closed_on_token_error == true)
-        and (.provider_auth.clawdiy["openai-codex"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
-        and (.provider_auth.clawdiy["openai-codex"].auth_type == "oauth")
-        and (.provider_auth.clawdiy["openai-codex"].profile_format == "json")
-        and (.provider_auth.clawdiy["openai-codex"].required_scopes | index("api.responses.write") != null)
-        and (.provider_auth.clawdiy["openai-codex"].allowed_models | index("gpt-5.4") != null)
-        and (.provider_auth.clawdiy["openai-codex"].fail_closed_on_scope_error == true)
+        and (.provider_auth.clawdiy["codex-oauth"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
+        and (.provider_auth.clawdiy["codex-oauth"].auth_type == "oauth")
+        and (.provider_auth.clawdiy["codex-oauth"].profile_format == "json")
+        and (.provider_auth.clawdiy["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].fail_closed_on_scope_error == true)
     ' "$FLEET_POLICY_FILE" >/dev/null 2>&1; then
         add_check "policy_auth_shape" "fail" "Fleet policy is missing fail-closed service, Telegram, or provider auth metadata for Clawdiy" "error"
         return 1
@@ -378,55 +378,55 @@ run_openai_codex_check() {
     profile_value="$(lookup_secret_value "$profile_secret" || true)"
 
     if [[ "$PROVIDER_PROFILE_FORMAT" != "json" || "$PROVIDER_AUTH_TYPE" != "oauth" || "$PROVIDER_ROLLOUT_GATE" != "post-auth-verify" ]]; then
-        add_check "openai_codex_contract" "fail" "Clawdiy openai-codex auth must stay JSON/OAuth with the post-auth-verify rollout gate" "error"
-        add_capability_result "openai-codex" "fail" "Fix runtime provider auth metadata before repeating OAuth verification"
+        add_check "openai_codex_contract" "fail" "Clawdiy codex-oauth auth must stay JSON/OAuth with the post-auth-verify rollout gate" "error"
+        add_capability_result "codex-oauth" "fail" "Fix runtime provider auth metadata before repeating OAuth verification"
         return 1
     fi
 
     if [[ "$PROVIDER_ENABLED" == "true" ]]; then
-        add_check "openai_codex_gate" "warning" "Clawdiy openai-codex capability is already enabled; verify the rollout gate before promoting it again" "warning"
+        add_check "openai_codex_gate" "warning" "Clawdiy codex-oauth capability is already enabled; verify the rollout gate before promoting it again" "warning"
     else
-        add_check "openai_codex_gate" "pass" "Clawdiy openai-codex capability remains rollout-gated until post-auth verification passes" "error"
+        add_check "openai_codex_gate" "pass" "Clawdiy codex-oauth capability remains rollout-gated until post-auth verification passes" "error"
     fi
 
-    add_check "openai_codex_contract" "pass" "Clawdiy openai-codex runtime metadata stays JSON/OAuth with an explicit rollout gate" "error"
+    add_check "openai_codex_contract" "pass" "Clawdiy codex-oauth runtime metadata stays JSON/OAuth with an explicit rollout gate" "error"
 
     if [[ -z "$profile_value" ]]; then
-        add_check "openai_codex_profile_present" "fail" "Clawdiy openai-codex auth profile is missing; keep the capability quarantined and run repeat-auth" "error"
-        add_capability_result "openai-codex" "fail" "Refresh CLAWDIY_OPENAI_CODEX_AUTH_PROFILE before enabling Codex-backed capability"
+        add_check "openai_codex_profile_present" "fail" "Clawdiy codex-oauth auth profile is missing; keep the capability quarantined and run repeat-auth" "error"
+        add_capability_result "codex-oauth" "fail" "Refresh CLAWDIY_OPENAI_CODEX_AUTH_PROFILE before enabling Codex-backed capability"
         return 1
     fi
 
     if ! printf '%s' "$profile_value" | jq -e '
-        .provider == "openai-codex"
+        .provider == "codex-oauth"
         and .auth_type == "oauth"
         and (.granted_scopes | type == "array")
         and (.allowed_models | type == "array")
     ' >/dev/null 2>&1; then
-        add_check "openai_codex_profile_json" "fail" "Clawdiy openai-codex auth profile must be compact JSON with provider/auth/scopes/models fields" "error"
-        add_capability_result "openai-codex" "fail" "Rewrite CLAWDIY_OPENAI_CODEX_AUTH_PROFILE as valid compact JSON"
+        add_check "openai_codex_profile_json" "fail" "Clawdiy codex-oauth auth profile must be compact JSON with provider/auth/scopes/models fields" "error"
+        add_capability_result "codex-oauth" "fail" "Rewrite CLAWDIY_OPENAI_CODEX_AUTH_PROFILE as valid compact JSON"
         return 1
     fi
 
-    add_check "openai_codex_profile_json" "pass" "Clawdiy openai-codex auth profile is valid JSON" "error"
+    add_check "openai_codex_profile_json" "pass" "Clawdiy codex-oauth auth profile is valid JSON" "error"
 
-    if ! jq -e --argjson required_scopes "$(jq -c '.auth.provider_auth_profiles["openai-codex"].required_scopes' "$CLAWDIY_CONFIG_FILE")" --argjson allowed_models "$(jq -c '.auth.provider_auth_profiles["openai-codex"].allowed_models' "$CLAWDIY_CONFIG_FILE")" '
+    if ! jq -e --argjson required_scopes "$(jq -c '.auth.provider_auth_profiles["codex-oauth"].required_scopes' "$CLAWDIY_CONFIG_FILE")" --argjson allowed_models "$(jq -c '.auth.provider_auth_profiles["codex-oauth"].allowed_models' "$CLAWDIY_CONFIG_FILE")" '
         (($required_scopes - (.granted_scopes // [])) | length == 0)
         and (($allowed_models - (.allowed_models // [])) | length == 0)
     ' <(printf '%s' "$profile_value") >/dev/null 2>&1; then
-        add_check "openai_codex_scope_gate" "fail" "Clawdiy openai-codex profile is missing required scopes or gpt-5.4 authorization; capability stays quarantined and repeat-auth is required" "error"
-        add_capability_result "openai-codex" "fail" "Repeat OAuth until api.responses.write and gpt-5.4 authorization are present"
+        add_check "openai_codex_scope_gate" "fail" "Clawdiy codex-oauth profile is missing required scopes or gpt-5.4 authorization; capability stays quarantined and repeat-auth is required" "error"
+        add_capability_result "codex-oauth" "fail" "Repeat OAuth until api.responses.write and gpt-5.4 authorization are present"
         return 1
     fi
 
-    add_check "openai_codex_scope_gate" "pass" "Clawdiy openai-codex profile grants api.responses.write and gpt-5.4 authorization" "error"
-    add_capability_result "openai-codex" "pass" "Provider auth profile is valid; capability may be promoted only after the post-auth verification gate"
+    add_check "openai_codex_scope_gate" "pass" "Clawdiy codex-oauth profile grants api.responses.write and gpt-5.4 authorization" "error"
+    add_capability_result "codex-oauth" "pass" "Provider auth profile is valid; capability may be promoted only after the post-auth verification gate"
     return 0
 }
 
 show_help() {
     cat <<EOF
-Usage: $0 [--provider telegram|openai-codex|all] [--env-file path] [--json] [--strict] [--no-color]
+Usage: $0 [--provider telegram|codex-oauth|all] [--env-file path] [--json] [--strict] [--no-color]
 
 Options:
   --provider <name>   Capability to validate (default: all)
@@ -561,7 +561,7 @@ main() {
         telegram)
             run_telegram_check || true
             ;;
-        openai-codex)
+        codex-oauth)
             run_openai_codex_check || true
             ;;
         all)

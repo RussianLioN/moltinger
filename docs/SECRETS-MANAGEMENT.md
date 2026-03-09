@@ -204,7 +204,7 @@ Dedicated Clawdiy env rendering rules:
 - The authoritative Clawdiy runtime env file is `/opt/moltinger/clawdiy/.env`.
 - `CLAWDIY_PASSWORD`, `CLAWDIY_SERVICE_TOKEN`, and `CLAWDIY_TELEGRAM_BOT_TOKEN` must be single-line values because they are rendered verbatim into the dedicated env file.
 - `CLAWDIY_TELEGRAM_ALLOWED_USERS`, when set, must be a comma-separated allowlist without spaces.
-- `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` must be compact single-line JSON and is rejected by CI if it is multiline or missing the required `openai-codex` OAuth markers for `api.responses.write` and `gpt-5.4`.
+- `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` must be compact single-line JSON and is rejected by CI if it is multiline or missing the required `codex-oauth` OAuth markers for `api.responses.write` and `gpt-5.4`.
 - `deploy-clawdiy.yml` also emits non-secret runtime flags such as `CLAWDIY_TELEGRAM_MODE=polling`, `CLAWDIY_AUTH_FAIL_CLOSED=true`, `CLAWDIY_OPENAI_CODEX_AUTH_ENABLED`, `CLAWDIY_OPENAI_CODEX_ROLLOUT_GATE=post-auth-verify`, and the required scope/model metadata used by repeat-auth checks.
 
 Current mapping intent:
@@ -215,7 +215,7 @@ Current mapping intent:
 Suggested `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` JSON shape:
 
 ```json
-{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}
+{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}
 ```
 
 ---

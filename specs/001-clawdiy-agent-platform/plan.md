@@ -147,7 +147,7 @@ tests/
 **Chosen design**: Treat OpenAI Codex OAuth as rollout-gated capability, not as a platform MVP blocker. Clawdiy platform deployment and inter-agent topology must succeed without it.
 
 **Rationale**:
-- Research captured fresh official-repo evidence of OAuth scope and login instability for `openai-codex`.
+- Research captured fresh official-repo evidence of OAuth scope and login instability for `codex-oauth`.
 - The user wants a durable second platform agent, not a control plane that only works when one auth path is healthy.
 - This preserves a path to GPT-5.4 suitability while keeping initial deployment and protocol rollout resilient.
 
@@ -255,7 +255,7 @@ Do not auto-write `AGENTS.md` from `update-agent-context.sh` in this feature. Th
 
 ### Stage 5: Codex OAuth Capability Gate
 
-- Add explicit post-auth verification and fail-closed handling for `openai-codex`.
+- Add explicit post-auth verification and fail-closed handling for `codex-oauth`.
 - Keep Clawdiy healthy without Codex OAuth.
 - Mark GPT-5.4/Codex-backed coding capability as available only after the auth gate passes.
 

@@ -104,7 +104,7 @@
     "telegram_token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
     "telegram_allowed_users_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
     "provider_auth_profiles": {
-      "openai-codex": {
+      "codex-oauth": {
         "enabled": false,
         "rollout_gate": "post-auth-verify",
         "secret_ref": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE",

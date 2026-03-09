@@ -81,7 +81,7 @@ This is the first live OpenClaw launch step for Clawdiy.
 ### 4. Codex OAuth rollout gate
 
 ```bash
-./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider openai-codex --json
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth --json
 ```
 
 ### 5. Recovery verification

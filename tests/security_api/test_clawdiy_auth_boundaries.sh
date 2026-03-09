@@ -7,8 +7,8 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 AUTH_CHECK_SCRIPT="$PROJECT_ROOT/scripts/clawdiy-auth-check.sh"
 RUNTIME_CONFIG="$PROJECT_ROOT/config/clawdiy/openclaw.json"
-GOOD_PROFILE='{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}'
-BAD_SCOPE_PROFILE='{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["profile.read"],"allowed_models":["gpt-5.4"]}'
+GOOD_PROFILE='{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}'
+BAD_SCOPE_PROFILE='{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["profile.read"],"allowed_models":["gpt-5.4"]}'
 
 run_auth_check() {
     local provider="$1"
@@ -66,8 +66,8 @@ run_clawdiy_auth_boundary_tests() {
     sed 's/github-secret:CLAWDIY_SERVICE_TOKEN/github-secret:MOLTINGER_SERVICE_TOKEN/' "$RUNTIME_CONFIG" >"$bad_runtime_config"
 
     test_start "security_api_clawdiy_valid_auth_profile_passes"
-    if run_auth_check openai-codex "$pass_env" "$tmpdir/pass.json" env; then
-        if jq -e '.status == "pass" and any(.capabilities[]; .capability == "openai-codex" and .status == "pass")' "$tmpdir/pass.json" >/dev/null 2>&1; then
+    if run_auth_check codex-oauth "$pass_env" "$tmpdir/pass.json" env; then
+        if jq -e '.status == "pass" and any(.capabilities[]; .capability == "codex-oauth" and .status == "pass")' "$tmpdir/pass.json" >/dev/null 2>&1; then
             test_pass
         else
             test_fail "Valid Clawdiy provider auth profile should produce a passing capability result"
@@ -86,7 +86,7 @@ run_clawdiy_auth_boundary_tests() {
     fi
 
     test_start "security_api_clawdiy_bad_provider_scope_fails_closed"
-    if run_auth_check openai-codex "$bad_scope_env" "$tmpdir/bad-scope.json" env; then
+    if run_auth_check codex-oauth "$bad_scope_env" "$tmpdir/bad-scope.json" env; then
         test_fail "Bad provider scope must fail closed"
     elif jq -e '.status == "fail" and ([.errors[] | test("quarantined|quarantine|repeat-auth"; "i")] | any)' "$tmpdir/bad-scope.json" >/dev/null 2>&1; then
         test_pass
