@@ -248,6 +248,38 @@ test_create_env_format_emits_handoff_boundary_contract() {
     test_pass
 }
 
+test_create_uses_explicit_pending_summary() {
+    test_start "worktree_ready_create_uses_explicit_pending_summary"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-openclaw-control-plane"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/openclaw-control-plane --path "$probe_dir" \
+          --pending-summary "Start Speckit for the OpenClaw Control Plane epic in the target worktree."
+    )"
+
+    assert_contains "$output" 'Pending: Start Speckit for the OpenClaw Control Plane epic in the target worktree.' "Explicit downstream intent should replace the generic pending handoff text"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/openclaw-control-plane --path "$probe_dir" \
+          --pending-summary "Start Speckit for the OpenClaw Control Plane epic in the target worktree." --format env
+    )"
+
+    assert_contains "$output" 'pending=Start\ Speckit\ for\ the\ OpenClaw\ Control\ Plane\ epic\ in\ the\ target\ worktree.' "Env contract should preserve explicit pending handoff intent"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_plan_needs_clarification_returns_exit_code_10() {
     test_start "worktree_ready_plan_needs_clarification_returns_exit_code_10"
 
@@ -320,6 +352,7 @@ run_all_tests() {
     test_plan_asks_once_when_similar_branch_exists
     test_create_treats_direnv_permission_denied_as_needs_env_approval
     test_create_env_format_emits_handoff_boundary_contract
+    test_create_uses_explicit_pending_summary
     test_plan_needs_clarification_returns_exit_code_10
     test_attach_missing_branch_returns_blocked_missing_branch
     generate_report

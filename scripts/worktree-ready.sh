@@ -20,6 +20,7 @@ Common Options:
   --path <path>              Explicit worktree path override
   --repo <path>              Repository root override
   --handoff <profile>        Handoff profile (manual|terminal|codex)
+  --pending-summary <text>   Concrete deferred Phase B summary for handoff output
   --format <kind>            Output format (human|env)
   --existing <branch>        Existing branch hint for create flows
   -h, --help                 Show this help
@@ -68,6 +69,7 @@ repo_root=""
 handoff_profile="manual"
 existing_branch=""
 output_format="human"
+pending_summary=""
 path_preview=""
 resolved_repo_root=""
 resolved_common_dir=""
@@ -182,6 +184,13 @@ parse_args() {
         handoff_profile="${2:-}"
         if [[ -z "${handoff_profile}" ]]; then
           die "--handoff requires a value"
+        fi
+        shift 2
+        ;;
+      --pending-summary)
+        pending_summary="${2:-}"
+        if [[ -z "${pending_summary}" ]]; then
+          die "--pending-summary requires a value"
         fi
         shift 2
         ;;
@@ -1264,7 +1273,11 @@ set_handoff_contract() {
 
   case "${mode_name}" in
     create|attach|handoff)
-      report_pending_work="Continue the requested downstream task from the target worktree after handoff."
+      if [[ -n "${pending_summary}" ]]; then
+        report_pending_work="${pending_summary}"
+      else
+        report_pending_work="Continue the requested downstream task from the target worktree after handoff."
+      fi
       ;;
   esac
 }
@@ -1579,6 +1592,7 @@ render_context_summary() {
   debug "path=${target_path:-<unset>}"
   debug "repo=${repo_root:-<auto>}"
   debug "handoff=${handoff_profile}"
+  debug "pending=${pending_summary:-<unset>}"
   debug "existing=${existing_branch:-<unset>}"
 }
 

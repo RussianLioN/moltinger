@@ -11,6 +11,8 @@
 
 Ещё один UX slice: topology registry mutation должна считаться частью invoking branch и не оставаться грязным локальным diff после managed create-flow. Значит command workflow обязан либо landing-the-plane’ить `docs/GIT-TOPOLOGY-REGISTRY.md` в invoking branch до handoff, либо явно останавливаться в blocked state, если commit/push невозможен. Ручные next-step команды для пользователя должны дублироваться в fenced `bash` block.
 
+Новый follow-up slice для mixed requests: если пользователь в том же запросе описал downstream задачу для target worktree, handoff должен сохранять этот intent конкретно, а не абстрактно. Helper остаётся deterministic и Git/worktree-focused, поэтому он принимает только короткий `pending_summary`, а optional `Phase B Seed Prompt` рендерится на уровне `command-worktree` как advisory handoff metadata после fenced `bash` block.
+
 Ключевой design choice: не автоматизировать доверительные действия вроде одобрения `.envrc` по умолчанию. Вместо этого команда должна заранее выявлять, что для текущего worktree потребуется дополнительный шаг, и возвращать точные инструкции или opt-in handoff. Для one-shot start authoritative проверкой конфликтов считается live `git`, а committed topology registry используется как shared snapshot и должен refresh-иться сразу после mutation.
 
 ## Technical Context

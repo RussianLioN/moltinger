@@ -177,6 +177,16 @@
 
 ---
 
+## Phase 7D: Mixed-Request Handoff Enrichment
+
+**Purpose**: Preserve explicit downstream intent in the handoff payload and provide an optional Phase B starter prompt without weakening the stop-and-handoff boundary.
+
+- [x] T041 [EXECUTOR: MAIN] [SEQUENTIAL] Extend `specs/005-worktree-ready-flow/spec.md`, `plan.md`, `contracts/`, `quickstart.md`, and `validation.md` with mixed-request handoff enrichment semantics
+- [x] T042 [EXECUTOR: worker] [SEQUENTIAL] Extend `scripts/worktree-ready.sh` and `tests/unit/test_worktree_ready.sh` so helper handoff output can carry a concrete `Pending` summary via `--pending-summary`
+- [x] T043 [EXECUTOR: worker] [SEQUENTIAL] Update `.claude/commands/worktree.md` so manual handoff may append an optional `Phase B Seed Prompt (optional, not executed)` after the fenced `bash` block for explicit downstream-intent requests
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

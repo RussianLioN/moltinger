@@ -134,6 +134,7 @@ Rules:
 - Do not claim "we are now working from the new worktree" unless the handoff actually launched a new session and the downstream work happens there.
 - Do not prove the new context via `git -C ...`, path-targeted commands, or ad hoc `cd` in the old session.
 - If the user asks for later work "из нового worktree", treat that as deferred Phase B and include it in `Pending`, not as permission to continue locally.
+- If the user already described concrete downstream work, preserve that exact deferred intent in `Pending` instead of a generic placeholder.
 - If explicit `--handoff terminal` or `--handoff codex` is requested and succeeds, stop the current session immediately after reporting the launched handoff.
 - If Phase A mutates `docs/GIT-TOPOLOGY-REGISTRY.md` in the invoking branch, land that mutation before the handoff block. Do not leave it as an unpushed local diff unless the user explicitly asked for a dirty local-only test flow.
 - If a separate UAT worktree later needs reset/update and carries a newer `docs/GIT-TOPOLOGY-REGISTRY.md` snapshot, preserve/promote that snapshot into the owning branch before treating the UAT branch as disposable.
@@ -200,12 +201,17 @@ Process:
    - Treat the committed registry mutation as owned by the invoking branch, not by the target worktree branch.
 11. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
    - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
--12. If `scripts/git-session-guard.sh` exists, run `scripts/git-session-guard.sh --refresh`
--13. If the helper exists, run:
-   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex>`
+12. If the request contains explicit downstream work for the target worktree, summarize it in one sentence as `pending_summary`.
+13. If the helper exists, run:
+   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex> [--pending-summary "<pending_summary>"]`
 14. Return the helper status block.
 15. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order.
-16. Stop. Do not continue downstream task execution in the originating session.
+16. If the original request contained explicit downstream work, you MAY append one more fenced `text` block labeled `Phase B Seed Prompt (optional, not executed)`:
+   - keep it short and copy-paste friendly
+   - describe only the deferred work for the target worktree session
+   - if the request explicitly mentioned Speckit, tailor the seed prompt for starting Speckit there
+   - never imply that Phase B already started in the originating session
+17. Stop. Do not continue downstream task execution in the originating session.
 
 Handoff default:
 - Default to `manual`.
@@ -326,6 +332,16 @@ cd /absolute/path && direnv allow
 codex
 ```
 
+If the request included explicit downstream work, you MAY also append:
+
+```text
+Phase B Seed Prompt (optional, not executed):
+You are now in worktree <path> on branch <branch>.
+Phase A is complete: worktree create/attach finished, topology refresh succeeded, and any invoking-branch registry mutation was landed/pushed.
+Continue only Phase B for this request: <concrete deferred task>.
+Do not repeat worktree setup unless diagnostics show drift.
+```
+
 ## Completion Rules
 
 - Do not treat the workflow as complete until the final reply includes a readiness status from the canonical helper vocabulary.
@@ -336,6 +352,7 @@ codex
 - Do not downgrade `ready_for_codex` or `needs_env_approval` back to a vague `created` summary in prose.
 - Treat `Final State` as the authoritative terminal result for create/attach flows; `Status` is compatibility-only.
 - For manual handoff, the final assistant message must end at the handoff block. Do not continue the user’s downstream task.
+- If an optional `Phase B Seed Prompt` is rendered, it is advisory handoff metadata only. It must follow the fenced `bash` block and must not contain evidence that Phase B already executed.
 - For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
 - If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
 - Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.

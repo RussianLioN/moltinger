@@ -40,6 +40,11 @@ Provide a shell-safe, machine-readable handoff block for `create`, `attach`, and
 - `warning_count`
 - `warning_<N>`
 
+## Notes
+
+- `pending` should carry the concrete deferred Phase B intent when the originating request already described downstream work.
+- Multiline downstream starter prompts are intentionally **not** part of `worktree-handoff/v1`; if rendered, they remain human-facing handoff metadata outside the machine-readable schema.
+
 ## Example
 
 ```text

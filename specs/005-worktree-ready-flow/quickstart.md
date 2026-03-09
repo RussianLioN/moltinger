@@ -100,3 +100,12 @@
    - the human-facing response still contains the structured status block
    - exact next-step commands are also rendered in a fenced `bash` block
    - the user can copy the block without reconstructing commands from prose
+
+## Scenario 12: Mixed request preserves downstream intent without breaking the boundary
+
+1. Run a managed create/attach flow where the originating request also described explicit downstream work in the target worktree.
+2. Expect:
+   - the workflow still stops after Phase A
+   - `Pending` contains the concrete deferred task instead of generic placeholder text
+   - for manual handoff, the response may append a short `Phase B Seed Prompt (optional, not executed)` after the fenced `bash` block
+   - the seed prompt describes only what to do in the new worktree and does not claim that Phase B already started

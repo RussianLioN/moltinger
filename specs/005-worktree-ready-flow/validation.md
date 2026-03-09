@@ -61,3 +61,12 @@
 - New follow-up expectations:
   - if topology refresh changed `docs/GIT-TOPOLOGY-REGISTRY.md`, the invoking branch should land and push that mutation before returning the final handoff block
   - manual next-step commands should be duplicated in a fenced `bash` block for easier copy-paste
+
+### 2026-03-09 - Mixed-request handoff enrichment
+
+- Goal:
+  - preserve explicit downstream intent in the handoff payload without weakening the hard Phase A/Phase B boundary
+- Checks:
+  - `scripts/worktree-ready.sh create ... --pending-summary "<text>"` replaces the generic `Pending` value
+  - command-worktree guidance allows an optional `Phase B Seed Prompt (optional, not executed)` only after the fenced `bash` block
+  - the seed prompt remains advisory and does not imply Phase B execution in the originating session

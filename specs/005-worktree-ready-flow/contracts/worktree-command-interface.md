@@ -81,3 +81,5 @@ Next:
 - Slug-only start flows must derive a safe default branch/path template automatically.
 - The workflow must not ask more than one clarification question when exact or similar-name collisions are detected.
 - The command must not prove "we are already in the new worktree" via `git -C` or path-targeted commands from the originating session.
+- If the originating request already contains explicit downstream work, `Pending` should preserve that concrete deferred intent instead of generic placeholder text.
+- A manual handoff MAY append an optional `Phase B Seed Prompt` block after the fenced `bash` block, but it must remain advisory and must not imply that Phase B already started.
