@@ -55,6 +55,58 @@ groups:
           description: "Agent timeout rate is elevated ({{ $value }}/sec)."
 
   # ========================================================================
+  # CLAWDIY APPLICATION ALERTS
+  # ========================================================================
+  - name: clawdiy_app
+    rules:
+      - alert: ClawdiyDown
+        expr: up{job="clawdiy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: clawdiy
+          agent_id: clawdiy
+        annotations:
+          summary: "Clawdiy instance is down"
+          description: "Clawdiy has been unreachable for more than 1 minute."
+
+      - alert: ClawdiyContainerHighMemory
+        expr: |
+          (container_memory_usage_bytes{name="clawdiy"} / container_spec_memory_limit_bytes{name="clawdiy"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: clawdiy
+          agent_id: clawdiy
+        annotations:
+          summary: "Clawdiy container memory usage high"
+          description: "Clawdiy container is using more than 90% of its memory limit."
+
+      - alert: ClawdiyContainerHighCPU
+        expr: |
+          rate(container_cpu_usage_seconds_total{name="clawdiy"}[5m]) > 2
+        for: 10m
+        labels:
+          severity: warning
+          service: clawdiy
+          agent_id: clawdiy
+        annotations:
+          summary: "Clawdiy container CPU usage high"
+          description: "Clawdiy container is using high CPU ({{ $value }} cores)."
+
+      - alert: ClawdiyRestartLoop
+        expr: |
+          increase(container_restart_count{name="clawdiy"}[1h]) > 2
+        for: 5m
+        labels:
+          severity: critical
+          service: clawdiy
+          agent_id: clawdiy
+        annotations:
+          summary: "Clawdiy restart loop detected"
+          description: "Clawdiy container has restarted {{ $value }} times in the last hour."
+
+  # ========================================================================
   # CONTAINER RESOURCE ALERTS
   # ========================================================================
   - name: container_resources

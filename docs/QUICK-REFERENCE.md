@@ -1,231 +1,91 @@
-# Moltinger: Quick Reference
+# Quick Reference
 
-**⚠️ ЧИТАТЬ В НАЧАЛЕ КАЖДОЙ СЕССИИ!**
+## Runtime Surface
 
----
+| Surface | Moltinger | Clawdiy |
+|---------|-----------|---------|
+| Web UI | `https://moltis.ainetic.tech` | `https://clawdiy.ainetic.tech` |
+| Telegram | `@moltinger_bot` | `@clawdiy_bot` |
+| Telegram mode | managed by Moltinger runtime | phase-1 long polling |
+| Role | coordinator | coder |
+| Runtime | Moltis | OpenClaw |
 
-## Ключевые артефакты
+## Source Of Truth
 
-| Артефакт | Расположение | Назначение |
-|----------|--------------|------------|
-| **Telegram Bot** | @moltinger_bot | Основной способ взаимодействия |
-| **Web UI** | https://moltis.ainetic.tech | Веб-интерфейс |
-| **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
-| **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
-| **Git Topology Registry** | docs/GIT-TOPOLOGY-REGISTRY.md | Generated snapshot актуальных worktree, веток и cleanup-контекста |
-| **Worktree Hotfix Playbook** | docs/WORKTREE-HOTFIX-PLAYBOOK.md | Что делать, если после merge `command-worktree` работает не так, как ожидается |
+- Secrets: GitHub Secrets
+- Main runtime env mirror: `/opt/moltinger/.env`
+- Clawdiy runtime env mirror: `/opt/moltinger/clawdiy/.env`
+- Agent registry: `config/fleet/agents-registry.json`
+- Fleet policy: `config/fleet/policy.json`
+- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Reviewed topology intent: `docs/GIT-TOPOLOGY-INTENT.yaml`
 
----
-
-## Git Topology Registry
+## Git Topology
 
 ```bash
-# Claude-style shorthand
-/git-topology
-
-# Codex CLI
 scripts/git-topology-registry.sh status
-
-# Проверить, что registry не устарел
 scripts/git-topology-registry.sh check
-
-# Обновить committed snapshot после topology mutation
 scripts/git-topology-registry.sh refresh --write-doc
-
-# Посмотреть текущее состояние без записи файлов
-scripts/git-topology-registry.sh status
 ```
 
-Использовать перед cleanup worktree/branch и после create/remove/switch flow.
+Use the topology registry before cleanup worktree/branch actions and after manual git topology changes.
 
-### Как пользоваться
+## Core Commands
 
-**Обычный сценарий**
-1. В Claude-style клиентах используйте `/worktree`; в Codex CLI используйте skill `command-worktree`
-2. Для one-shot старта можно писать коротко: `Используй command-worktree и создай новый worktree remote-uat-hardening`
-3. Workflow сам проверит exact/similar branch/worktree collisions по live `git` и задаст один короткий вопрос только при реальной неоднозначности
-4. Для topology-проверок в Codex CLI используйте `scripts/git-topology-registry.sh check`
-5. Если topology менялась через managed flow, registry обычно обновится сам
-6. Если topology менялась вручную через raw `git`, запускайте recovery flow
-7. В Codex/App refresh после topology mutation может потребовать approval, если shared `.git` находится вне writable boundary текущей сессии
-
-**Recovery flow после ручных git-операций**
-```bash
-# Построить recovery draft без изменения committed registry
-scripts/git-topology-registry.sh doctor --prune
-
-# Посмотреть draft
-cat .git/topology-registry/registry.draft.md
-
-# Если draft корректен, применить reconcile
-scripts/git-topology-registry.sh doctor --prune --write-doc
-```
-
-Важно:
-- `doctor --prune` не меняет tracked files; он пишет только recovery draft в `.git/`
-- `doctor --prune --write-doc` намеренно переписывает `docs/GIT-TOPOLOGY-REGISTRY.md`, если live topology изменилась
-- поэтому `git status` с `M docs/GIT-TOPOLOGY-REGISTRY.md` после `--write-doc` при реальном topology drift это ожидаемое поведение, а не сбой команды
-
-**Где хранить ручные пометки**
-- Редактировать только `docs/GIT-TOPOLOGY-INTENT.yaml`
-- Не редактировать вручную `docs/GIT-TOPOLOGY-REGISTRY.md`
-
-### Что происходит автоматически
-
-- `command-worktree` в Codex и `/worktree` в Claude-style клиентах обновляют registry после topology mutation
-- `command-session-summary` в Codex и `/session-summary` в Claude-style клиентах используют registry как session-boundary reconcile point
-- `pre-push` блокирует push, если registry stale
-- `post-checkout`, `post-merge`, `post-rewrite` выполняют read-only stale check и не берут reconcile lock
-
-### Что под капотом
-
-- Источник правды: live `git`, а не markdown
-- Скрипт читает:
-  - `git worktree list --porcelain`
-  - `git for-each-ref ... refs/heads`
-  - `git for-each-ref ... refs/remotes/origin`
-- Потом он:
-  - нормализует worktree/branch topology
-  - подмешивает reviewed intent из `docs/GIT-TOPOLOGY-INTENT.yaml`
-  - рендерит deterministic snapshot в `docs/GIT-TOPOLOGY-REGISTRY.md`
-- Recovery artifacts живут в `.git/topology-registry/`:
-  - `registry.draft.md`
-  - `backups/`
-
-### Полезные ссылки
-
-- User/merge handoff: `specs/006-git-topology-registry/quickstart.md`
-- Live committed registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
-- Reviewed intent sidecar: `docs/GIT-TOPOLOGY-INTENT.yaml`
-- Post-merge hotfix playbook: `docs/WORKTREE-HOTFIX-PLAYBOOK.md`
-
----
-
-## Telegram Integration
-
-```
-Bot Username: @moltinger_bot
-Status: ✅ WORKING
-Token: GitHub Secret (TELEGRAM_BOT_TOKEN)
-Allowed Users: GitHub Secret (TELEGRAM_ALLOWED_USERS)
-```
-
-### Как отправить сообщение боту
-
-**Вариант 1: Через Telegram клиент**
-- Найти @moltinger_bot
-- Написать сообщение
-
-**Вариант 2: Через API (для тестирования)**
-```bash
-TOKEN=$(gh secret get TELEGRAM_BOT_TOKEN)
-curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-  -d "chat_id=YOUR_CHAT_ID" \
-  -d "text=Test message"
-```
-
-### Постоянный мониторинг webhook/качества ответов
+### Clawdiy deploy
 
 ```bash
-# Одноразовый запуск (JSON отчёт)
-./scripts/telegram-webhook-monitor.sh --json
-
-# Server-side cron (GitOps): scripts/cron.d/moltis-telegram-webhook-monitor
-# GitHub Actions: manual workflow_dispatch only
+./scripts/preflight-check.sh --ci --target clawdiy --json
+./scripts/deploy.sh --json clawdiy deploy
+./scripts/clawdiy-smoke.sh --json --stage same-host
 ```
 
-### Standalone Telegram CLI (без Moltis)
+This is the first live OpenClaw launch step for Clawdiy.
+
+### Inter-agent handoff
 
 ```bash
-# User-level UAT probe (главный режим)
-./scripts/telegram-user-monitor.sh --env-file .env
-
-# Альтернатива без API_HASH: Telegram Web
-./scripts/setup-telegram-web-user-monitor.sh --project-dir /opt/moltinger --install-systemd false
-node scripts/telegram-web-user-login.mjs --state /opt/moltinger/data/.telegram-web-state.json
-./scripts/telegram-web-user-monitor.sh
-
-# Поднять webhook endpoint (Traefik + echo)
-./scripts/setup-telegram-webhook-echo.sh --domain moltis.ainetic.tech --path /telegram-webhook
-
-# Управление webhook напрямую через Bot API
-./scripts/telegram-webhook-control.sh webhook-info
-./scripts/telegram-webhook-control.sh webhook-set --url "https://YOUR_DOMAIN/HOOK"
-
-# Отправка как бот
-./scripts/telegram-bot-send.sh --chat-id 262872984 --text "/status"
-
-# Отправка как пользователь (MTProto)
-./scripts/telegram-user-send.py --to @some_bot --text "/start"
+./scripts/clawdiy-smoke.sh --json --stage handoff
 ```
 
-Подробно: `docs/TELEGRAM-WEBHOOK-CLI.md`
-User-monitor: `docs/TELEGRAM-USER-MONITOR.md`
-No-API_HASH monitor: `docs/TELEGRAM-WEB-USER-MONITOR.md`
-Clean deploy runbook: `docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md`
-
----
-
-## Skills System
-
-| Skill | Расположение | Назначение |
-|-------|--------------|------------|
-| telegram-learner | skills/telegram-learner/ | Мониторинг Telegram и извлечение знаний |
-
-### Активные skills (auto_load)
-- telegram-learner
-
----
-
-## Knowledge Base
-
-```
-knowledge/
-├── concepts/        # Концепции
-├── tutorials/       # Туториалы
-├── references/      # Справочники
-├── troubleshooting/ # Решение проблем
-└── patterns/        # Паттерны
-```
-
----
-
-## Deployment (GitOps)
+### Auth checks
 
 ```bash
-# Deploy
-git add . && git commit -m "message" && git push
-
-# Manual check
-make status
-
-# Logs
-make logs LOGS_OPTS=-f
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider telegram --json
+./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth --json
+./scripts/clawdiy-smoke.sh --json --stage auth
 ```
 
----
+### Recovery
 
-## Secrets (GitHub Secrets)
+```bash
+./scripts/deploy.sh --json clawdiy rollback
+./scripts/clawdiy-smoke.sh --json --stage rollback-evidence
+./scripts/backup-moltis-enhanced.sh verify /var/backups/moltis/daily/<archive>
+```
 
-| Secret | Status | Purpose |
-|--------|--------|---------|
-| TELEGRAM_BOT_TOKEN | ✅ | Bot token |
-| TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
-| GLM_API_KEY | ✅ | LLM API + AI workflows |
-| SSH_PRIVATE_KEY | ✅ | Deploy |
+### Future-node readiness
 
-Workflow variable:
-- `AI_REVIEW_PROVIDER` (`zai` by default, `off` for emergency fallback-only mode)
+```bash
+./scripts/clawdiy-smoke.sh --json --stage extraction-readiness
+```
 
----
+## Rollout Rules
 
-## Текущие задачи
+- Same-host first, remote-node later.
+- Inter-agent transport is private authenticated HTTP JSON.
+- Telegram is human ingress only and stays in long-polling mode for phase 1.
+- `gpt-5.4` through OpenAI Codex OAuth is a rollout gate, not a baseline deploy prerequisite.
+- Clawdiy must stay healthy even when Codex-backed capability is disabled.
 
-| # | Задача | Статус |
-|---|--------|--------|
-| 18 | Phase 4: Verification & Deploy | ⏳ pending |
-| 20 | Навык самообновления инструкции | 📋 backlog |
+## Operator Pointers
 
----
-
-*Last updated: 2026-03-08*
+- Deploy strategy: `docs/deployment-strategy.md`
+- Validation path: `specs/001-clawdiy-agent-platform/quickstart.md`
+- Clawdiy deploy runbook: `docs/runbooks/clawdiy-deploy.md`
+- Clawdiy repeat-auth runbook: `docs/runbooks/clawdiy-repeat-auth.md`
+- Clawdiy rollback runbook: `docs/runbooks/clawdiy-rollback.md`
+- Handoff incident runbook: `docs/runbooks/fleet-handoff-incident.md`
+- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Worktree hotfix playbook: `docs/WORKTREE-HOTFIX-PLAYBOOK.md`
+- Session context: `SESSION_SUMMARY.md`

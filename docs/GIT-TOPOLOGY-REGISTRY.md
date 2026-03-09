@@ -10,7 +10,6 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `codex-005-doctor-ux-port` | `codex/005-doctor-ux-port` | `sibling-worktree` | Needs decision |
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
@@ -19,11 +18,12 @@
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `sibling-worktree` | Needs decision |
 | `pr17-webhook-extraction` | `feat/pr17-webhook-extraction` | `sibling-worktree` | Needs decision |
-| `primary-feature-001` | `001-clawdiy-agent-platform` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-001` | `001-clawdiy-agent-platform` | `dedicated-feature-worktree` | Active dedicated feature worktree for the Clawdiy permanent-agent platform. |
 | `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-feature-007` | `007-codex-update-monitor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -31,12 +31,12 @@
 | Branch | Tracking | Status |
 |---|---|---|
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
-| `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Needs decision |
+| `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Needs decision |
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
-| `codex/005-doctor-ux-port` | `origin/codex/005-doctor-ux-port` | Needs decision |
+| `009-codex-update-delivery-ux` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
@@ -62,7 +62,7 @@
 
 | Remote Branch | Current Intent |
 |---|---|
-| `origin/001-clawdiy-agent-platform` | Needs decision |
+| `origin/001-clawdiy-agent-platform` | Active rollout branch for Clawdiy permanent-agent platform. |
 | `origin/001-frontend` | Review later; currently dangling. |
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup. |
 | `origin/003-testing-infrastructure` | Historical planning branch. |
@@ -71,7 +71,6 @@
 | `origin/007-codex-update-monitor` | Needs decision |
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
-| `origin/codex/005-doctor-ux-port` | Needs decision |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |

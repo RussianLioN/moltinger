@@ -183,6 +183,41 @@ The Ollama fallback system requires the following secret:
 gh secret set OLLAMA_API_KEY --repo RussianLioN/moltinger
 ```
 
+### Clawdiy Reserved Secret Inventory (Phase 1)
+
+These secrets are reserved for the separate Clawdiy runtime and must stay distinct from the current Moltinger secret set.
+
+| Secret | Required for first Clawdiy deploy | Purpose | Planned mapping |
+|--------|-----------------------------------|---------|-----------------|
+| `CLAWDIY_PASSWORD` | Yes | Human/web auth for Clawdiy | `CLAWDIY_PASSWORD` in Clawdiy-only env file |
+| `CLAWDIY_SERVICE_TOKEN` | Yes | Private HTTP bearer auth for inter-agent handoff | `CLAWDIY_SERVICE_TOKEN` in Clawdiy-only env file |
+| `CLAWDIY_TELEGRAM_BOT_TOKEN` | Yes | Dedicated Telegram bot identity for Clawdiy | `CLAWDIY_TELEGRAM_BOT_TOKEN` in Clawdiy-only env file |
+| `CLAWDIY_TELEGRAM_ALLOWED_USERS` | Optional | Dedicated Telegram allowlist for Clawdiy bot | `CLAWDIY_TELEGRAM_ALLOWED_USERS` in Clawdiy-only env file |
+| `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` | No | Rollout-gated provider auth profile for Codex/GPT-5.4 workflows | compact single-line JSON rendered into `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` only after format validation |
+
+Rules:
+- Do not reuse `MOLTIS_PASSWORD`, `TELEGRAM_BOT_TOKEN`, or any existing Moltinger provider auth material for Clawdiy.
+- Do not render Clawdiy secrets into the current `/opt/moltinger/.env`.
+- `deploy.yml` remains Moltinger-only; `deploy-clawdiy.yml` is the only workflow allowed to render and sync the separate Clawdiy env/runtime secret set.
+
+Dedicated Clawdiy env rendering rules:
+- The authoritative Clawdiy runtime env file is `/opt/moltinger/clawdiy/.env`.
+- `CLAWDIY_PASSWORD`, `CLAWDIY_SERVICE_TOKEN`, and `CLAWDIY_TELEGRAM_BOT_TOKEN` must be single-line values because they are rendered verbatim into the dedicated env file.
+- `CLAWDIY_TELEGRAM_ALLOWED_USERS`, when set, must be a comma-separated allowlist without spaces.
+- `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` must be compact single-line JSON and is rejected by CI if it is multiline or missing the required `codex-oauth` OAuth markers for `api.responses.write` and `gpt-5.4`.
+- `deploy-clawdiy.yml` also emits non-secret runtime flags such as `CLAWDIY_TELEGRAM_MODE=polling`, `CLAWDIY_AUTH_FAIL_CLOSED=true`, `CLAWDIY_OPENAI_CODEX_AUTH_ENABLED`, `CLAWDIY_OPENAI_CODEX_ROLLOUT_GATE=post-auth-verify`, and the required scope/model metadata used by repeat-auth checks.
+
+Current mapping intent:
+- Moltinger runtime env file: `/opt/moltinger/.env`
+- Clawdiy runtime env file: `/opt/moltinger/clawdiy/.env`
+- GitHub Secrets remains the source of truth for both agents
+
+Suggested `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` JSON shape:
+
+```json
+{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}
+```
+
 ---
 
 ## 🔄 Workflow: Adding New Secret

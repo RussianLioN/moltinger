@@ -9,6 +9,12 @@ TOML_CONFIG="$PROJECT_ROOT/config/moltis.toml"
 TEST_FIXTURE_CONFIG="$PROJECT_ROOT/tests/fixtures/config/moltis.toml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
+COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
+CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
+ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
+BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
+FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
+PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -60,6 +66,13 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "docker-compose.prod.yml does not render cleanly"
+    fi
+
+    test_start "static_compose_clawdiy_valid"
+    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"
     fi
 
     test_start "static_config_uses_env_substitution"
@@ -119,6 +132,103 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
+    fi
+
+    test_start "static_clawdiy_workflow_exists"
+    if [[ -f "$CLAWDIY_WORKFLOW" ]]; then
+        test_pass
+    else
+        test_fail "Missing .github/workflows/deploy-clawdiy.yml"
+    fi
+
+    test_start "static_clawdiy_workflow_uses_targeted_preflight_and_deploy"
+    if rg -q 'preflight-check\.sh --ci --target clawdiy' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'deploy\.sh --json clawdiy deploy' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'deploy\.sh --json clawdiy rollback' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must use target-aware preflight and deploy/rollback entrypoints"
+    fi
+
+    test_start "static_clawdiy_workflow_uses_dedicated_env_path"
+    if rg -q 'CLAWDIY_ENV_PATH: /opt/moltinger/clawdiy/\.env' "$CLAWDIY_WORKFLOW" && \
+       ! rg -q '/opt/moltinger/\.env[^[:alnum:]_]' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must keep a dedicated env path separate from /opt/moltinger/.env"
+    fi
+
+    test_start "static_clawdiy_workflow_validates_auth_rendering_rules"
+    if rg -q 'Validate auth material rendering rules' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'api\.responses\.write' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'gpt-5\.4' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must validate auth material rendering rules for Telegram and Codex OAuth"
+    fi
+
+    test_start "static_clawdiy_workflow_renders_fail_closed_auth_flags"
+    if rg -q 'CLAWDIY_AUTH_FAIL_CLOSED=' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'CLAWDIY_OPENAI_CODEX_AUTH_ENABLED' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'CLAWDIY_OPENAI_CODEX_REQUIRED_SCOPES' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must render fail-closed auth flags into the dedicated env file"
+    fi
+
+    test_start "static_clawdiy_workflow_validates_restore_readiness"
+    if rg -q 'Validate Clawdiy restore readiness' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'clawdiy-evidence-manifest\.json' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'has_evidence_manifest' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must validate restore-readiness metadata and evidence inventory"
+    fi
+
+    test_start "static_rollback_drill_covers_clawdiy_inventory"
+    if rg -q 'clawdiy_included' "$ROLLBACK_DRILL_WORKFLOW" && \
+       rg -q 'has_clawdiy_audit' "$ROLLBACK_DRILL_WORKFLOW" && \
+       rg -q 'has_clawdiy_evidence_manifest' "$ROLLBACK_DRILL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Rollback drill workflow must validate Clawdiy config, state, audit, and evidence manifest inventory"
+    fi
+
+    test_start "static_backup_config_guards_partial_clawdiy_restore"
+    if rg -q '^CLAWDIY_ALLOW_PARTIAL_RESTORE=false' "$BACKUP_CONFIG"; then
+        test_pass
+    else
+        test_fail "Backup config must default to fail-closed partial restore protection for Clawdiy"
+    fi
+
+    test_start "static_clawdiy_compose_security_hardening"
+    if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
+       rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
+       rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
+       rg -q '/tmp:rw,noexec,nosuid,nodev,size=64m' "$COMPOSE_CLAWDIY" && \
+       ! rg -q '/var/run/docker\.sock' "$COMPOSE_CLAWDIY"; then
+        test_pass
+    else
+        test_fail "Clawdiy compose file must keep init, privilege drops, hardened tmpfs, and no docker socket mount"
+    fi
+
+    test_start "static_clawdiy_policy_header_binding_fail_closed"
+    if jq -e '
+        .defaults.require_topology_profile_alignment == true
+        and .service_auth.reject_on_missing_required_headers == true
+        and .service_auth.reject_on_agent_header_mismatch == true
+      ' "$FLEET_POLICY" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must fail closed on missing required headers, agent mismatch, and topology profile drift"
+    fi
+
+    test_start "static_preflight_enforces_clawdiy_topology_alignment"
+    if rg -q 'require_topology_profile_alignment' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'fleet_topology_alignment' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must validate Clawdiy topology-profile alignment against runtime, registry, and policy"
     fi
 
     generate_report

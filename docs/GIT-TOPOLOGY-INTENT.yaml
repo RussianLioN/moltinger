@@ -9,6 +9,10 @@ defaults:
   missing_intent: needs-decision
 records:
   - subject_type: branch
+    subject_key: 001-clawdiy-agent-platform
+    intent: active
+    note: Active permanent-agent platform rollout branch; dedicated worktree exists.
+  - subject_type: branch
     subject_key: 001-docker-deploy-improvements
     intent: historical
     note: Historical branch.
@@ -20,6 +24,10 @@ records:
     subject_key: 001-moltis-docker-deploy
     intent: historical
     note: Historical branch with local drift.
+  - subject_type: branch
+    subject_key: 001-clawdiy-agent-platform
+    intent: active
+    note: Active permanent-agent platform rollout branch; dedicated worktree exists.
   - subject_type: branch
     subject_key: 003-testing-infrastructure
     intent: historical
@@ -76,6 +84,10 @@ records:
     intent: cleanup-candidate
     note: Local-only stale test branch with gone upstream.
   - subject_type: remote
+    subject_key: origin/001-clawdiy-agent-platform
+    intent: active
+    note: Active rollout branch for Clawdiy permanent-agent platform.
+  - subject_type: remote
     subject_key: origin/001-frontend
     intent: cleanup-candidate
     note: Review later; currently dangling.
@@ -83,6 +95,10 @@ records:
     subject_key: origin/001-moltis-docker-deploy
     intent: historical
     note: Historical; review before cleanup.
+  - subject_type: remote
+    subject_key: origin/001-clawdiy-agent-platform
+    intent: active
+    note: Active rollout branch for Clawdiy permanent-agent platform.
   - subject_type: remote
     subject_key: origin/003-testing-infrastructure
     intent: historical
@@ -140,6 +156,14 @@ records:
     subject_key: moltinger-jb6-gpt54-primary
     intent: active
     note: Active sibling worktree for the GPT-5.4 primary provider-chain task.
+  - subject_type: worktree
+    subject_key: primary-feature-001
+    intent: active
+    note: Active dedicated feature worktree for the Clawdiy permanent-agent platform.
+  - subject_type: worktree
+    subject_key: primary-feature-001
+    intent: active
+    note: Active dedicated feature worktree for the Clawdiy permanent-agent platform.
   - subject_type: worktree
     subject_key: primary-feature-005
     intent: active

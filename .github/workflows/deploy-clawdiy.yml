@@ -1,0 +1,394 @@
+name: Deploy Clawdiy
+
+concurrency:
+  group: deploy-clawdiy-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+      clawdiy_image:
+        description: OpenClaw image reference for Clawdiy
+        required: true
+        default: ghcr.io/openclaw/openclaw:latest
+        type: string
+      rollback:
+        description: Roll back Clawdiy instead of deploying a new image
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+  CLAWDIY_RUNTIME_PATH: /opt/moltinger/clawdiy
+  CLAWDIY_ENV_PATH: /opt/moltinger/clawdiy/.env
+  CLAWDIY_PUBLIC_URL: https://clawdiy.ainetic.tech
+  FLEET_INTERNAL_NETWORK: fleet-internal
+  MONITORING_NETWORK: moltinger_monitoring
+  BACKUP_PATH: /var/backups/moltis
+
+jobs:
+  preflight:
+    name: Clawdiy Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.mode.outputs.should_deploy }}
+      clawdiy_image: ${{ steps.image.outputs.clawdiy_image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve requested mode
+        id: mode
+        run: |
+          if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Rollback requested for Clawdiy"
+          else
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy requested for Clawdiy"
+          fi
+
+      - name: Resolve Clawdiy image
+        id: image
+        run: |
+          if [ -z "${{ github.event.inputs.clawdiy_image }}" ]; then
+            echo "::error::clawdiy_image input must not be empty"
+            exit 1
+          fi
+          echo "clawdiy_image=${{ github.event.inputs.clawdiy_image }}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate required secrets
+        run: |
+          missing=0
+
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "::error::SSH_PRIVATE_KEY secret not configured"
+            missing=1
+          fi
+          if [ -z "${{ secrets.CLAWDIY_PASSWORD }}" ]; then
+            echo "::error::CLAWDIY_PASSWORD secret not configured"
+            missing=1
+          fi
+          if [ -z "${{ secrets.CLAWDIY_SERVICE_TOKEN }}" ]; then
+            echo "::error::CLAWDIY_SERVICE_TOKEN secret not configured"
+            missing=1
+          fi
+          if [ -z "${{ secrets.CLAWDIY_TELEGRAM_BOT_TOKEN }}" ]; then
+            echo "::error::CLAWDIY_TELEGRAM_BOT_TOKEN secret not configured"
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Validate auth material rendering rules
+        env:
+          CLAWDIY_PASSWORD: ${{ secrets.CLAWDIY_PASSWORD }}
+          CLAWDIY_SERVICE_TOKEN: ${{ secrets.CLAWDIY_SERVICE_TOKEN }}
+          CLAWDIY_TELEGRAM_BOT_TOKEN: ${{ secrets.CLAWDIY_TELEGRAM_BOT_TOKEN }}
+          CLAWDIY_TELEGRAM_ALLOWED_USERS: ${{ secrets.CLAWDIY_TELEGRAM_ALLOWED_USERS }}
+          CLAWDIY_OPENAI_CODEX_AUTH_PROFILE: ${{ secrets.CLAWDIY_OPENAI_CODEX_AUTH_PROFILE }}
+        run: |
+          has_newline() {
+            case "$1" in
+              *$'\n'*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          for key in CLAWDIY_PASSWORD CLAWDIY_SERVICE_TOKEN CLAWDIY_TELEGRAM_BOT_TOKEN; do
+            value="${!key}"
+            if has_newline "$value"; then
+              echo "::error::$key must be single-line so it can be rendered into the dedicated Clawdiy env file"
+              exit 1
+            fi
+          done
+
+          if [ -n "$CLAWDIY_TELEGRAM_ALLOWED_USERS" ] && ! printf '%s' "$CLAWDIY_TELEGRAM_ALLOWED_USERS" | grep -Eq '^[^[:space:],]+(,[^[:space:],]+)*$'; then
+            echo "::error::CLAWDIY_TELEGRAM_ALLOWED_USERS must be a comma-separated allowlist without spaces"
+            exit 1
+          fi
+
+          if [ -n "$CLAWDIY_OPENAI_CODEX_AUTH_PROFILE" ]; then
+            if has_newline "$CLAWDIY_OPENAI_CODEX_AUTH_PROFILE"; then
+              echo "::error::CLAWDIY_OPENAI_CODEX_AUTH_PROFILE must be compact single-line JSON"
+              exit 1
+            fi
+
+            if ! printf '%s' "$CLAWDIY_OPENAI_CODEX_AUTH_PROFILE" | jq -ce '
+              .provider == "codex-oauth"
+              and .auth_type == "oauth"
+              and (.granted_scopes | type == "array" and index("api.responses.write") != null)
+              and (.allowed_models | type == "array" and index("gpt-5.4") != null)
+            ' >/dev/null; then
+              echo "::error::CLAWDIY_OPENAI_CODEX_AUTH_PROFILE must be JSON for Codex OAuth with api.responses.write and gpt-5.4 authorization"
+              exit 1
+            fi
+          else
+            echo "::notice::CLAWDIY_OPENAI_CODEX_AUTH_PROFILE not configured; Codex OAuth remains rollout-gated"
+          fi
+
+      - name: Run local Clawdiy preflight
+        run: |
+          chmod +x scripts/preflight-check.sh
+          ./scripts/preflight-check.sh --ci --target clawdiy --json > /tmp/clawdiy-preflight.json
+          cat /tmp/clawdiy-preflight.json | jq .
+
+      - name: Validate Clawdiy compose render
+        run: |
+          env CLAWDIY_IMAGE="${{ steps.image.outputs.clawdiy_image }}" \
+            docker compose -f docker-compose.clawdiy.yml config --quiet
+
+  deploy:
+    name: Deploy Clawdiy
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    environment:
+      name: ${{ github.event.inputs.environment }}
+      url: https://clawdiy.ainetic.tech
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Verify server worktree is clean
+        run: |
+          SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
+          if [ -n "$SERVER_STATUS" ]; then
+            echo "::error::Server working tree is dirty. Clawdiy deployment blocked by GitOps policy."
+            echo "$SERVER_STATUS"
+            exit 1
+          fi
+          echo "::notice::Server working tree is clean"
+
+      - name: Sync Clawdiy runtime artifacts
+        run: |
+          echo "::group::Sync Clawdiy runtime artifacts"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p \
+            ${{ env.DEPLOY_PATH }}/config/clawdiy \
+            ${{ env.DEPLOY_PATH }}/config/fleet \
+            ${{ env.DEPLOY_PATH }}/data/clawdiy/state \
+            ${{ env.DEPLOY_PATH }}/data/clawdiy/audit \
+            ${{ env.DEPLOY_PATH }}/scripts \
+            ${{ env.CLAWDIY_RUNTIME_PATH }}"
+
+          scp docker-compose.clawdiy.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.clawdiy.yml
+          scp -r config/clawdiy/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/clawdiy/
+          scp -r config/fleet/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/fleet/
+          scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/
+          echo "::endgroup::"
+
+      - name: Render dedicated Clawdiy env file
+        run: |
+          CLAWDIY_OPENAI_CODEX_AUTH_ENABLED=false
+          if [ -n "${{ secrets.CLAWDIY_OPENAI_CODEX_AUTH_PROFILE }}" ]; then
+            CLAWDIY_OPENAI_CODEX_AUTH_ENABLED=true
+          fi
+
+          {
+            printf '%s\n' '# Auto-generated by deploy-clawdiy.yml'
+            printf 'CLAWDIY_IMAGE=%s\n' '${{ needs.preflight.outputs.clawdiy_image }}'
+            printf 'CLAWDIY_PASSWORD=%s\n' '${{ secrets.CLAWDIY_PASSWORD }}'
+            printf 'CLAWDIY_SERVICE_TOKEN=%s\n' '${{ secrets.CLAWDIY_SERVICE_TOKEN }}'
+            printf 'CLAWDIY_TELEGRAM_BOT_TOKEN=%s\n' '${{ secrets.CLAWDIY_TELEGRAM_BOT_TOKEN }}'
+            printf 'CLAWDIY_TELEGRAM_ALLOWED_USERS=%s\n' '${{ secrets.CLAWDIY_TELEGRAM_ALLOWED_USERS }}'
+            printf 'CLAWDIY_TELEGRAM_MODE=%s\n' 'polling'
+            printf 'CLAWDIY_AUTH_FAIL_CLOSED=%s\n' 'true'
+            printf 'CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=%s\n' '${{ secrets.CLAWDIY_OPENAI_CODEX_AUTH_PROFILE }}'
+            printf 'CLAWDIY_OPENAI_CODEX_AUTH_ENABLED=%s\n' "$CLAWDIY_OPENAI_CODEX_AUTH_ENABLED"
+            printf 'CLAWDIY_OPENAI_CODEX_ROLLOUT_GATE=%s\n' 'post-auth-verify'
+            printf 'CLAWDIY_OPENAI_CODEX_REQUIRED_SCOPES=%s\n' 'api.responses.write'
+            printf 'CLAWDIY_OPENAI_CODEX_ALLOWED_MODELS=%s\n' 'gpt-5.4'
+            printf 'CLAWDIY_DOMAIN=%s\n' 'clawdiy.ainetic.tech'
+            printf 'CLAWDIY_INTERNAL_PORT=%s\n' '18789'
+            printf 'CLAWDIY_PORT=%s\n' '18789'
+            printf 'FLEET_INTERNAL_NETWORK=%s\n' '${{ env.FLEET_INTERNAL_NETWORK }}'
+            printf 'MONITORING_NETWORK=%s\n' '${{ env.MONITORING_NETWORK }}'
+          } > /tmp/clawdiy.env
+
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.CLAWDIY_RUNTIME_PATH }}"
+          scp /tmp/clawdiy.env ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.CLAWDIY_ENV_PATH }}
+          rm -f /tmp/clawdiy.env
+
+      - name: Remote Clawdiy preflight
+        run: |
+          echo "::group::Remote Clawdiy preflight"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/preflight-check.sh scripts/deploy.sh
+
+            set -a
+            . "${{ env.CLAWDIY_ENV_PATH }}"
+            set +a
+
+            CLAWDIY_ENV_FILE="${{ env.CLAWDIY_ENV_PATH }}" ./scripts/preflight-check.sh --target clawdiy --json > /tmp/clawdiy-preflight-remote.json
+            cat /tmp/clawdiy-preflight-remote.json | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Deploy or rollback Clawdiy
+        run: |
+          echo "::group::Execute Clawdiy rollout"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/deploy.sh
+
+            if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
+              CLAWDIY_ENV_FILE="${{ env.CLAWDIY_ENV_PATH }}" ./scripts/deploy.sh --json clawdiy rollback > /tmp/clawdiy-deploy-result.json
+            else
+              CLAWDIY_ENV_FILE="${{ env.CLAWDIY_ENV_PATH }}" ./scripts/deploy.sh --json clawdiy deploy > /tmp/clawdiy-deploy-result.json
+            fi
+
+            cat /tmp/clawdiy-deploy-result.json | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Remote Clawdiy smoke
+        run: |
+          echo "::group::Remote Clawdiy smoke"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/clawdiy-smoke.sh
+            ./scripts/clawdiy-smoke.sh --json --stage same-host | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Validate Clawdiy restore readiness
+        id: restore_readiness
+        run: |
+          echo "::group::Validate Clawdiy restore readiness"
+          RESULT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            PROJECT_ROOT="${{ env.DEPLOY_PATH }}"
+            KEY_FILE="/etc/moltis/backup.key"
+            if [ -f config/backup/backup.conf ]; then
+              source config/backup/backup.conf
+            fi
+
+            LATEST=$(ls -t "${{ env.BACKUP_PATH }}"/daily/moltis_* "${{ env.BACKUP_PATH }}"/weekly/moltis_* "${{ env.BACKUP_PATH }}"/monthly/moltis_* 2>/dev/null | head -1)
+            if [ -z "$LATEST" ]; then
+              echo "error=no_backup"
+              exit 1
+            fi
+
+            TMP_DIR=$(mktemp -d /tmp/clawdiy-restore-readiness.XXXXXX)
+            trap 'rm -rf "$TMP_DIR"' EXIT
+
+            EXTRACT_FILE="$LATEST"
+            if printf '%s' "$LATEST" | grep -q '\.aes$'; then
+              openssl enc -aes-256-cbc -d -pbkdf2 -in "$LATEST" -out "$TMP_DIR/archive.tar.gz" -pass "file:${ENCRYPTION_KEY_FILE:-$KEY_FILE}" >/dev/null 2>&1
+              EXTRACT_FILE="$TMP_DIR/archive.tar.gz"
+            fi
+
+            tar -xzf "$EXTRACT_FILE" -C "$TMP_DIR"
+
+            HAS_CONFIG=false
+            HAS_STATE=false
+            HAS_AUDIT=false
+            HAS_EVIDENCE_MANIFEST=false
+            CLAWDIY_INCLUDED=false
+
+            [ -d "$TMP_DIR/config/clawdiy" ] && HAS_CONFIG=true
+            [ -d "$TMP_DIR/data/clawdiy/state" ] && HAS_STATE=true
+            [ -d "$TMP_DIR/data/clawdiy/audit" ] && HAS_AUDIT=true
+            [ -f "$TMP_DIR/clawdiy-evidence-manifest.json" ] && HAS_EVIDENCE_MANIFEST=true
+
+            if [ -f "$TMP_DIR/backup-metadata.json" ] && jq -e '.clawdiy.included == true' "$TMP_DIR/backup-metadata.json" >/dev/null 2>&1; then
+              CLAWDIY_INCLUDED=true
+            fi
+
+            echo "backup_file=$LATEST"
+            echo "clawdiy_included=$CLAWDIY_INCLUDED"
+            echo "has_config=$HAS_CONFIG"
+            echo "has_state=$HAS_STATE"
+            echo "has_audit=$HAS_AUDIT"
+            echo "has_evidence_manifest=$HAS_EVIDENCE_MANIFEST"
+          EOF
+          )
+
+          echo "$RESULT"
+          BACKUP_FILE=$(echo "$RESULT" | grep '^backup_file=' | cut -d= -f2-)
+          CLAWDIY_INCLUDED=$(echo "$RESULT" | grep '^clawdiy_included=' | cut -d= -f2-)
+          HAS_CONFIG=$(echo "$RESULT" | grep '^has_config=' | cut -d= -f2-)
+          HAS_STATE=$(echo "$RESULT" | grep '^has_state=' | cut -d= -f2-)
+          HAS_AUDIT=$(echo "$RESULT" | grep '^has_audit=' | cut -d= -f2-)
+          HAS_EVIDENCE_MANIFEST=$(echo "$RESULT" | grep '^has_evidence_manifest=' | cut -d= -f2-)
+
+          if [ "$CLAWDIY_INCLUDED" != "true" ] || [ "$HAS_CONFIG" != "true" ] || [ "$HAS_STATE" != "true" ] || [ "$HAS_AUDIT" != "true" ] || [ "$HAS_EVIDENCE_MANIFEST" != "true" ]; then
+            echo "::error::Latest backup is not restore-ready for Clawdiy"
+            exit 1
+          fi
+
+          echo "backup_file=$BACKUP_FILE" >> "$GITHUB_OUTPUT"
+          echo "clawdiy_included=$CLAWDIY_INCLUDED" >> "$GITHUB_OUTPUT"
+          echo "has_config=$HAS_CONFIG" >> "$GITHUB_OUTPUT"
+          echo "has_state=$HAS_STATE" >> "$GITHUB_OUTPUT"
+          echo "has_audit=$HAS_AUDIT" >> "$GITHUB_OUTPUT"
+          echo "has_evidence_manifest=$HAS_EVIDENCE_MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+      - name: Validate Clawdiy rollback evidence
+        if: ${{ github.event.inputs.rollback == 'true' }}
+        run: |
+          echo "::group::Validate Clawdiy rollback evidence"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/clawdiy-smoke.sh
+            ./scripts/clawdiy-smoke.sh --json --stage rollback-evidence | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Capture final Clawdiy status
+        if: always()
+        run: |
+          echo "::group::Final Clawdiy status"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/deploy.sh || true
+            CLAWDIY_ENV_FILE="${{ env.CLAWDIY_ENV_PATH }}" ./scripts/deploy.sh --json clawdiy status | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Deploy Clawdiy" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`${{ github.event.inputs.environment }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ needs.preflight.outputs.clawdiy_image }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rollback | \`${{ github.event.inputs.rollback }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| URL | ${{ env.CLAWDIY_PUBLIC_URL }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Restore-ready backup | \`${{ steps.restore_readiness.outputs.backup_file }}\` |" >> "$GITHUB_STEP_SUMMARY"

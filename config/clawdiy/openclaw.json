@@ -1,0 +1,137 @@
+{
+  "schema_version": "v1alpha1",
+  "agent": {
+    "agent_id": "clawdiy",
+    "display_name": "Clawdiy",
+    "role": "coder",
+    "runtime_engine": "openclaw",
+    "owner": "platform-ops",
+    "lifecycle_state": "ready-for-deploy"
+  },
+  "server": {
+    "bind": "0.0.0.0",
+    "port": 18789,
+    "base_url": "https://clawdiy.ainetic.tech",
+    "health_path": "/health",
+    "metrics_path": "/metrics"
+  },
+  "paths": {
+    "config_root": "/home/node/.openclaw",
+    "registry_root": "/home/node/.openclaw/registry",
+    "state_root": "/home/node/.openclaw-data/state",
+    "audit_root": "/home/node/.openclaw-data/audit"
+  },
+  "identity": {
+    "domain": "clawdiy.ainetic.tech",
+    "internal_endpoint": "http://clawdiy:18789/internal/v1",
+    "telegram_bot": "@clawdiy_bot"
+  },
+  "topology": {
+    "active_profile": "same_host",
+    "supported_profiles": [
+      "same_host",
+      "remote_node"
+    ],
+    "logical_address": "agent://clawdiy",
+    "placement_profiles": {
+      "same_host": {
+        "internal_endpoint": "http://clawdiy:18789/internal/v1",
+        "health_endpoint": "http://clawdiy:18789/health",
+        "metrics_endpoint": "http://clawdiy:18789/metrics",
+        "network_plane": "fleet-internal"
+      },
+      "remote_node": {
+        "internal_endpoint": "https://clawdiy-int.ainetic.tech/internal/v1",
+        "health_endpoint": "https://clawdiy-int.ainetic.tech/health",
+        "metrics_endpoint": "https://clawdiy-int.ainetic.tech/metrics",
+        "network_plane": "private-overlay"
+      }
+    },
+    "route_invariants": {
+      "message_envelope_version": "v1",
+      "handoff_submit_path": "POST /internal/v1/agent-handoffs",
+      "handoff_ack_path": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "handoff_status_path": "GET /internal/v1/agent-handoffs/{correlation_id}",
+      "handoff_cancel_path": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+    }
+  },
+  "control_plane": {
+    "authoritative_transport": "http-json",
+    "agent_id": "clawdiy",
+    "reply_to": "agent://clawdiy",
+    "submit_path": "/internal/v1/agent-handoffs",
+    "ack_path_template": "/internal/v1/agent-handoffs/{correlation_id}/acks",
+    "status_path_template": "/internal/v1/agent-handoffs/{correlation_id}",
+    "cancel_path_template": "/internal/v1/agent-handoffs/{correlation_id}/cancel",
+    "correlation_headers": {
+      "authorization": "Authorization",
+      "agent_id": "X-Agent-Id",
+      "correlation_id": "X-Correlation-Id",
+      "idempotency_key": "Idempotency-Key"
+    },
+    "acknowledgement_callbacks": {
+      "delivery": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "accept": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "start": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "progress": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "terminal": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "cancel": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+    },
+    "required_ack_types": [
+      "delivery",
+      "accept",
+      "start",
+      "terminal"
+    ],
+    "registry_path": "/home/node/.openclaw/registry/agents-registry.json",
+    "policy_path": "/home/node/.openclaw/registry/policy.json",
+    "delivery_ack_deadline_seconds": 10,
+    "start_ack_deadline_seconds": 60,
+    "progress_heartbeat_seconds": 300,
+    "terminal_timeout_seconds": 900
+  },
+  "auth": {
+    "human_auth_secret_ref": "github-secret:CLAWDIY_PASSWORD",
+    "service_auth": {
+      "mode": "bearer",
+      "authorization_header": "Authorization",
+      "bind_token_to_agent_header": "X-Agent-Id",
+      "allowed_callers": [
+        "moltinger"
+      ]
+    },
+    "service_auth_secret_ref": "github-secret:CLAWDIY_SERVICE_TOKEN",
+    "telegram_token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+    "telegram_allowed_users_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+    "provider_auth_profiles": {
+      "codex-oauth": {
+        "enabled": false,
+        "rollout_gate": "post-auth-verify",
+        "secret_ref": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE",
+        "profile_format": "json",
+        "auth_type": "oauth",
+        "required_scopes": [
+          "api.responses.write"
+        ],
+        "allowed_models": [
+          "gpt-5.4"
+        ],
+        "fail_closed_on_scope_error": true
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "mode": "polling",
+      "bot_username": "@clawdiy_bot",
+      "token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+      "allowlist_secret_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+      "fail_closed_on_token_error": true
+    }
+  },
+  "storage": {
+    "audit_format": "jsonl",
+    "state_snapshot_prefix": "clawdiy"
+  }
+}

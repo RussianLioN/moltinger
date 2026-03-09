@@ -36,6 +36,24 @@ scrape_configs:
   - job_name: 'moltis'
     static_configs:
       - targets: ['moltis:13131']
+        labels:
+          service: moltis
+          agent_id: moltinger
+          agent_role: coordinator
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # ========================================================================
+  # CLAWDIY APPLICATION
+  # ========================================================================
+  - job_name: 'clawdiy'
+    static_configs:
+      - targets: ['clawdiy:18789']
+        labels:
+          service: clawdiy
+          agent_id: clawdiy
+          agent_role: coder
     metrics_path: /metrics
     scrape_interval: 30s
     scrape_timeout: 10s

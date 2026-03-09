@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-08
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-09
 
 ---
 
@@ -132,6 +132,149 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-09: Clawdiy Rebase And Mainline Reconcile
+
+**Статус**: ✅ branch rebased onto `origin/main`, PR conflicts cleared
+
+- Rebased `001-clawdiy-agent-platform` onto the updated `main` line and resolved the PR conflict set instead of merging stale branch state.
+- Adapted the Clawdiy topology notes to the new generated-registry workflow by updating `docs/GIT-TOPOLOGY-INTENT.yaml` and regenerating `docs/GIT-TOPOLOGY-REGISTRY.md` from live git state.
+- Re-ran the targeted Clawdiy validation set after the rebase to confirm that config, auth, topology, and extraction-readiness behavior stayed intact.
+
+**Validated**
+
+- `make codex-check-ci`
+- `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+- `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
+- `./tests/run.sh --lane integration_local --filter extraction_readiness --json`
+- `./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `./scripts/clawdiy-smoke.sh --json --stage auth`
+
+**Next**
+
+- Force-push the rebased branch to PR `#24`, wait for the rerun checks, and merge if the PR stays green.
+
+### 2026-03-09: Clawdiy PR Governance Follow-Up
+
+**Статус**: ✅ PR policy blocker fixed on branch `001-clawdiy-agent-platform`
+
+- Created PR `#24` for the completed Clawdiy feature branch and observed an immediate `codex-policy` failure caused by deprecated literal Codex profile identifiers in configs, scripts, tests, docs, and spec artifacts.
+- Replaced the deprecated profile identifier with the canonical `codex-oauth` label while preserving the rollout-gated GPT-5.4 / OAuth behavior and the existing secret boundary around `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE`.
+- Revalidated governance and the affected auth/static/preflight paths before re-pushing the branch so CI can rerun against the corrected identifier set.
+
+**Validated**
+
+- `make codex-check-ci`
+- `bash -n scripts/clawdiy-auth-check.sh scripts/clawdiy-smoke.sh scripts/preflight-check.sh tests/security_api/test_clawdiy_auth_boundaries.sh tests/static/test_fleet_registry.sh`
+- `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+- `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
+- `./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `./scripts/clawdiy-smoke.sh --json --stage auth`
+
+**Next**
+
+- Push the governance-fix commit to PR `#24` and confirm that the rerun clears the previous `codex-policy` blocker.
+
+### 2026-03-09: Clawdiy Polish, Hardening, and Quickstart Reconciliation (Phase 8)
+
+**Статус**: ✅ Phase 8 complete on branch `001-clawdiy-agent-platform`
+
+- Reconciled `docs/deployment-strategy.md`, `docs/QUICK-REFERENCE.md`, and `specs/001-clawdiy-agent-platform/quickstart.md` so operator docs explicitly say that the first live OpenClaw launch happens at same-host deploy and `gpt-5.4` via OpenAI Codex OAuth is a later rollout gate.
+- Extended `tests/run.sh` so the `integration_local` lane now includes `test_clawdiy_extraction_readiness.sh`; `tests/run_integration.sh` and `tests/run_security.sh` remain unchanged because they already delegate to the umbrella runner.
+- Hardened `docker-compose.clawdiy.yml`, `config/fleet/policy.json`, `scripts/preflight-check.sh`, and `tests/static/test_config_validation.sh` with init-enabled containers, hardened tmpfs, no Docker socket mount, stricter service-header binding, and fail-closed topology alignment checks.
+- Ran a quickstart-aligned validation pass and captured rollout notes so local verification stays clearly separated from live same-host deploy and destructive rollback gates.
+
+**Validated**
+
+- `CLAWDIY_IMAGE=ghcr.io/example/openclaw:placeholder docker compose -f docker-compose.clawdiy.yml config --quiet`
+- `bash -n scripts/preflight-check.sh`
+- `bash -n tests/run.sh`
+- `bash -n tests/static/test_config_validation.sh`
+- `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+- `./tests/run.sh --lane integration_local --filter extraction_readiness --json`
+- `./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `./scripts/clawdiy-smoke.sh --json --stage auth`
+- `./scripts/clawdiy-smoke.sh --json --stage extraction-readiness`
+
+**Rollout Notes**
+
+- Quickstart Stage 3 (`deploy same-host`) remains the first real OpenClaw launch and was not executed from this workspace-only validation pass.
+- Quickstart Stage 7 (`rollback-evidence`) still depends on a live rollback manifest and backup archive; it remains covered by the dedicated resilience path from US4 rather than a clean-worktree smoke rerun.
+- Direct `./scripts/clawdiy-auth-check.sh --json` without `/opt/moltinger/clawdiy/.env` fails closed as designed, leaving Telegram and Codex-backed capability quarantined until repeat-auth on the real env mirror.
+
+**Next**
+
+- Feature implementation work is complete on this branch; the next step is merge/review plus the real same-host rollout of Clawdiy on the target server.
+- During live rollout, OpenClaw starts at quickstart Stage 3, while `gpt-5.4` via Codex OAuth stays disabled until Stage 6 passes.
+
+### 2026-03-09: Clawdiy Future-Node Extraction Readiness (US5)
+
+**Статус**: ✅ US5 complete on branch `001-clawdiy-agent-platform`
+
+- Extended `config/fleet/agents-registry.json` and `config/fleet/policy.json` with explicit `same_host` and `remote_node` topology profiles plus future permanent-role examples for architect, tester, and researcher.
+- Added `extraction-readiness` contract checks to `scripts/clawdiy-smoke.sh` so remote-node readiness is validated without changing the live topology.
+- Added `tests/integration_local/test_clawdiy_extraction_readiness.sh` and expanded `tests/static/test_fleet_registry.sh` to verify future-role and remote-node invariants.
+- Updated `docs/INFRASTRUCTURE.md`, `docs/plans/agent-factory-lifecycle.md`, and `docs/GIT-TOPOLOGY-REGISTRY.md` so same-host deployment and future remote-node extraction use one stable identity/discovery/handoff model.
+
+**Validated**
+
+- `jq empty config/fleet/agents-registry.json`
+- `jq empty config/fleet/policy.json`
+- `bash -n scripts/clawdiy-smoke.sh`
+- `bash -n tests/integration_local/test_clawdiy_extraction_readiness.sh`
+- `./tests/run.sh --lane static --filter static_fleet_registry --json`
+- `bash tests/integration_local/test_clawdiy_extraction_readiness.sh`
+- `./scripts/clawdiy-smoke.sh --json --stage extraction-readiness`
+
+**Next**
+
+- Move to Phase 8 polish (`T040`-`T043`): reconcile quick references/docs, wire remaining validation into umbrella runners, run final hardening, and capture rollout notes.
+
+### 2026-03-09: Clawdiy Recovery, Backup, and Rollback Safety (US4)
+
+**Статус**: ✅ US4 complete on branch `001-clawdiy-agent-platform`
+
+- Added Clawdiy rollback resilience coverage in `tests/resilience/test_clawdiy_rollback.sh` and registered it in the `resilience` lane.
+- Extended `scripts/health-monitor.sh` and `scripts/clawdiy-smoke.sh` so operators can distinguish Moltinger and Clawdiy health, evidence roots, correlation labels, and rollback manifests.
+- Extended `scripts/backup-moltis-enhanced.sh`, `config/backup/backup.conf`, `.github/workflows/deploy-clawdiy.yml`, and `.github/workflows/rollback-drill.yml` to require Clawdiy config/state/audit inventory and evidence manifests for restore readiness.
+- Updated `scripts/deploy.sh` to capture and finalize rollback evidence under `data/clawdiy/audit/rollback-evidence/`, including backup reference and resulting rollback mode.
+- Reworked `docs/disaster-recovery.md` and `docs/runbooks/clawdiy-rollback.md` into operator-facing recovery procedures for Clawdiy-specific incidents.
+
+**Validated**
+
+- `bash -n scripts/backup-moltis-enhanced.sh`
+- `bash -n scripts/deploy.sh`
+- `bash -n scripts/clawdiy-smoke.sh`
+- `bash -n scripts/health-monitor.sh`
+- `bash -n tests/resilience/test_clawdiy_rollback.sh`
+- `./tests/run.sh --lane static --filter static_config_validation --json`
+- `./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `./scripts/health-monitor.sh --once --json`
+
+**Next**
+
+- Move to US5 (`T035`-`T043`): future-node extraction, agent registry evolution, and rollout path for expanding beyond the same-host topology.
+
+### 2026-03-09: Clawdiy Auth Lifecycle (US3)
+
+**Статус**: ✅ US3 complete on branch `001-clawdiy-agent-platform`
+
+- Added dedicated Clawdiy auth rendering rules in `.github/workflows/deploy-clawdiy.yml` and `docs/SECRETS-MANAGEMENT.md`, including compact JSON policy for `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE`.
+- Extended `config/clawdiy/openclaw.json`, `config/fleet/policy.json`, `config/moltis.toml`, and `tests/fixtures/config/moltis.toml` with explicit bearer auth, Telegram allowlist isolation, and fail-closed `codex-oauth` gate metadata.
+- Created `scripts/clawdiy-auth-check.sh` and added operator smoke coverage via `./scripts/clawdiy-smoke.sh --stage auth`.
+- Added regression suite `tests/security_api/test_clawdiy_auth_boundaries.sh` plus static assertions for workflow/policy auth gates.
+- Updated `docs/runbooks/clawdiy-repeat-auth.md` with concrete repeat-auth commands against `/opt/moltinger/clawdiy/.env`.
+
+**Validated**
+
+- `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+- `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
+- `env CLAWDIY_PASSWORD=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `./scripts/clawdiy-smoke.sh --stage auth --json`
+
+**Next**
+
+- Move to US4 (`T029`-`T034`): rollback, restore, backup scope, and evidence preservation.
 
 ### 2026-03-09: Codex CLI Update Monitoring Research Seed
 

@@ -1,16 +1,17 @@
 #!/bin/bash
 #
 # Pre-flight Validation Script for Docker Deployment
-# Validates all required secrets and configuration before deployment
+# Validates required secrets and configuration before deployment
 #
 # Usage:
 #   ./scripts/preflight-check.sh [OPTIONS]
 #
 # Options:
-#   --json       Output in JSON format
-#   --strict     Fail on warnings (not just errors)
-#   --ci         CI/CD mode (skip Docker/runtime checks)
-#   -h, --help   Show help message
+#   --json             Output in JSON format
+#   --strict           Fail on warnings (not just errors)
+#   --ci               CI/CD mode (skip Docker daemon and runtime checks)
+#   --target <name>    Validation target (moltis|clawdiy)
+#   -h, --help         Show help message
 #
 # Exit Codes:
 #   0 - All checks passed
@@ -27,37 +28,55 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SECRETS_DIR="$PROJECT_ROOT/secrets"
 TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
-
-# Required secrets (from data-model.md)
-REQUIRED_SECRETS=(
-    "moltis_password"
-    "telegram_bot_token"
-    "tavily_api_key"
-    "glm_api_key"
-)
-
-# Optional secrets (warnings only)
-OPTIONAL_SECRETS=(
-    "smtp_password"
-    "ollama_api_key"  # Optional - only needed for Ollama Cloud models
-)
+FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
+MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
+DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
 
 # Output format
 OUTPUT_JSON=false
 STRICT_MODE=false
-CI_MODE="${CI:-false}"  # Auto-detect from CI env var, or use --ci flag
+CI_MODE="${CI:-false}"
+TARGET="${TARGET:-moltis}"
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Results storage (initialize as empty arrays to avoid unbound variable issues)
+# Results storage
 CHECKS=()
 ERRORS=()
 WARNINGS=()
 MISSING_SECRETS=()
+
+# Target-specific state
+REQUIRED_SECRETS=()
+OPTIONAL_SECRETS=()
+COMPOSE_FILES=()
+REQUIRED_NETWORKS=()
+RUNTIME_CONFIG_PATH=""
+REGISTRY_CONFIG_PATH=""
+POLICY_CONFIG_PATH=""
+
+# Clawdiy runtime cache
+CLAWDIY_AGENT_ID=""
+CLAWDIY_DOMAIN=""
+CLAWDIY_BASE_URL=""
+CLAWDIY_TELEGRAM_BOT=""
+CLAWDIY_HUMAN_AUTH_REF=""
+CLAWDIY_SERVICE_AUTH_REF=""
+CLAWDIY_TELEGRAM_TOKEN_REF=""
+CLAWDIY_TELEGRAM_ALLOWLIST_REF=""
+CLAWDIY_PROVIDER_AUTH_REF=""
+CLAWDIY_LOGICAL_ADDRESS=""
+CLAWDIY_REGISTRY_WEB=""
+CLAWDIY_REGISTRY_TELEGRAM=""
+CLAWDIY_POLICY_SERVICE_REF=""
+CLAWDIY_POLICY_HUMAN_REF=""
+CLAWDIY_POLICY_TELEGRAM_REF=""
+CLAWDIY_POLICY_ALLOWLIST_REF=""
+CLAWDIY_POLICY_PROVIDER_REF=""
 
 # Helper functions
 log_info() {
@@ -99,38 +118,163 @@ add_check() {
     fi
 }
 
+to_env_name() {
+    printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+normalize_host() {
+    printf '%s' "$1" \
+        | sed -E 's#^[A-Za-z]+://##' \
+        | sed -E 's#/.*$##' \
+        | sed -E 's/:.*$//' \
+        | tr '[:upper:]' '[:lower:]'
+}
+
+normalize_telegram() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+configure_target() {
+    case "$TARGET" in
+        moltis)
+            REQUIRED_SECRETS=(
+                "moltis_password"
+                "telegram_bot_token"
+                "tavily_api_key"
+                "glm_api_key"
+            )
+            OPTIONAL_SECRETS=(
+                "smtp_password"
+                "ollama_api_key"
+            )
+            if [[ "$CI_MODE" == "true" ]]; then
+                COMPOSE_FILES=("$PROJECT_ROOT/docker-compose.prod.yml")
+            else
+                COMPOSE_FILES=(
+                    "$PROJECT_ROOT/docker-compose.yml"
+                    "$PROJECT_ROOT/docker-compose.prod.yml"
+                )
+            fi
+            REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
+            ;;
+        clawdiy)
+            REQUIRED_SECRETS=(
+                "clawdiy_password"
+                "clawdiy_service_token"
+                "clawdiy_telegram_bot_token"
+            )
+            OPTIONAL_SECRETS=(
+                "clawdiy_telegram_allowed_users"
+                "clawdiy_openai_codex_auth_profile"
+            )
+            COMPOSE_FILES=("$PROJECT_ROOT/docker-compose.clawdiy.yml")
+            REQUIRED_NETWORKS=(
+                "$TRAEFIK_NETWORK"
+                "$FLEET_INTERNAL_NETWORK"
+                "$MONITORING_NETWORK"
+            )
+            RUNTIME_CONFIG_PATH="$PROJECT_ROOT/config/clawdiy/openclaw.json"
+            REGISTRY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/agents-registry.json"
+            POLICY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/policy.json"
+            ;;
+        *)
+            echo "Unsupported target: $TARGET" >&2
+            exit 1
+            ;;
+    esac
+}
+
+secret_present() {
+    local secret="$1"
+    local secret_file="$SECRETS_DIR/${secret}.txt"
+    local env_name
+    env_name="$(to_env_name "$secret")"
+
+    if [[ -f "$secret_file" && -s "$secret_file" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${!env_name:-}" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+validate_json_file() {
+    local file_path="$1"
+    local check_name="$2"
+    local missing_message="$3"
+    local invalid_message="$4"
+
+    if [[ ! -f "$file_path" ]]; then
+        add_check "$check_name" "fail" "$missing_message" "error"
+        return 1
+    fi
+
+    if ! jq empty "$file_path" >/dev/null 2>&1; then
+        add_check "$check_name" "fail" "$invalid_message" "error"
+        return 1
+    fi
+
+    return 0
+}
+
+run_compose_config_check() {
+    local compose_file="$1"
+
+    if [[ "$TARGET" == "clawdiy" ]]; then
+        CLAWDIY_IMAGE="${CLAWDIY_IMAGE:-$DEFAULT_CLAWDIY_IMAGE}" \
+            docker compose -f "$compose_file" config --quiet >/dev/null 2>&1
+    else
+        docker compose -f "$compose_file" config --quiet >/dev/null 2>&1
+    fi
+}
+
+run_yaml_fallback_check() {
+    local compose_file="$1"
+
+    if command -v yq >/dev/null 2>&1 && yq eval '.' "$compose_file" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml; yaml.safe_load(open('$compose_file'))" 2>/dev/null; then
+        return 0
+    fi
+
+    if command -v ruby >/dev/null 2>&1 && ruby -ryaml -e "YAML.load_file('$compose_file')" 2>/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
 # Validation functions
 check_secrets_exist() {
     local all_found=true
-    local count=0
 
     for secret in "${REQUIRED_SECRETS[@]}"; do
-        local secret_file="$SECRETS_DIR/${secret}.txt"
-        if [[ ! -f "$secret_file" ]]; then
+        if ! secret_present "$secret"; then
             MISSING_SECRETS+=("$secret")
             all_found=false
-        else
-            ((count++)) || true
         fi
     done
 
     if [[ "$all_found" == "true" ]]; then
-        add_check "secrets_exist" "pass" "All ${#REQUIRED_SECRETS[@]} required secrets found" "error"
+        add_check "secrets_exist" "pass" "All ${#REQUIRED_SECRETS[@]} required secrets found for target $TARGET" "error"
     else
-        add_check "secrets_exist" "fail" "Missing secrets: ${MISSING_SECRETS[*]}" "error"
+        add_check "secrets_exist" "fail" "Missing secrets for target $TARGET: ${MISSING_SECRETS[*]}" "error"
     fi
 
-    # Check optional secrets
     for secret in "${OPTIONAL_SECRETS[@]}"; do
-        local secret_file="$SECRETS_DIR/${secret}.txt"
-        if [[ ! -f "$secret_file" ]]; then
-            log_warn "Optional secret '$secret' not found"
+        if ! secret_present "$secret"; then
+            log_warn "Optional secret '$secret' not found for target $TARGET"
         fi
     done
 }
 
 check_docker_available() {
-    if command -v docker &> /dev/null && docker info &> /dev/null; then
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         add_check "docker_available" "pass" "Docker daemon is running" "error"
     else
         add_check "docker_available" "fail" "Docker daemon is not available" "error"
@@ -138,81 +282,60 @@ check_docker_available() {
 }
 
 check_compose_valid() {
-    # In CI mode, check docker-compose.prod.yml; locally check both
-    local compose_files=()
-
-    if [[ "$CI_MODE" == "true" ]]; then
-        compose_files+=("$PROJECT_ROOT/docker-compose.prod.yml")
-    else
-        compose_files+=("$PROJECT_ROOT/docker-compose.yml")
-        compose_files+=("$PROJECT_ROOT/docker-compose.prod.yml")
-    fi
-
     local all_valid=true
     local checked_files=()
 
-    for compose_file in "${compose_files[@]}"; do
+    for compose_file in "${COMPOSE_FILES[@]}"; do
         if [[ ! -f "$compose_file" ]]; then
-            if [[ "$CI_MODE" != "true" || "$compose_file" == *"prod"* ]]; then
-                # In CI, only prod is required; locally both are checked
+            all_valid=false
+            add_check "compose_valid" "fail" "$(basename "$compose_file") not found" "error"
+            continue
+        fi
+
+        checked_files+=("$(basename "$compose_file")")
+
+        if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+            if ! run_compose_config_check "$compose_file"; then
                 all_valid=false
-                add_check "compose_valid" "fail" "$(basename $compose_file) not found" "error"
+                add_check "compose_valid" "fail" "$(basename "$compose_file") has compose config errors" "error"
             fi
             continue
         fi
 
-        checked_files+=("$(basename $compose_file)")
-
-        # In CI mode, just check syntax without Docker
-        if [[ "$CI_MODE" == "true" ]]; then
-            # Basic YAML validation (requires yq, python with yaml, or just skip if unavailable)
-            local yaml_valid=false
-
-            if command -v yq &> /dev/null && yq eval '.' "$compose_file" &> /dev/null; then
-                yaml_valid=true
-            elif command -v python3 &> /dev/null && python3 -c "import yaml; yaml.safe_load(open('$compose_file'))" 2>/dev/null; then
-                yaml_valid=true
-            elif command -v ruby &> /dev/null && ruby -ryaml -e "YAML.load_file('$compose_file')" 2>/dev/null; then
-                yaml_valid=true
-            else
-                # No YAML validator available - skip validation (file exists check already passed)
-                add_check "compose_valid" "pass" "$(basename $compose_file) exists (YAML validation skipped - no validator available)" "warning"
-                continue
-            fi
-
-            if [[ "$yaml_valid" != "true" ]]; then
-                all_valid=false
-                add_check "compose_valid" "fail" "$(basename $compose_file) has syntax errors" "error"
-                continue
-            fi
-        else
-            # Full Docker validation
-            if ! docker compose -f "$compose_file" config --quiet 2>/dev/null; then
-                all_valid=false
-                add_check "compose_valid" "fail" "$(basename $compose_file) has syntax errors" "error"
-                continue
-            fi
+        if ! run_yaml_fallback_check "$compose_file"; then
+            all_valid=false
+            add_check "compose_valid" "fail" "$(basename "$compose_file") has syntax errors and no compose validator is available" "error"
         fi
     done
 
     if [[ "$all_valid" == "true" && ${#checked_files[@]} -gt 0 ]]; then
-        add_check "compose_valid" "pass" "Compose files valid: ${checked_files[*]}" "error"
+        add_check "compose_valid" "pass" "Compose files valid for target $TARGET: ${checked_files[*]}" "error"
     fi
 }
 
 check_network_exists() {
-    # Check if external Traefik network exists or can be created by deploy script
-    if docker network ls --format '{{.Name}}' | grep -qx "$TRAEFIK_NETWORK" 2>/dev/null; then
-        add_check "network_exists" "pass" "Network $TRAEFIK_NETWORK exists" "error"
+    local missing_networks=()
+
+    if ! command -v docker >/dev/null 2>&1; then
+        add_check "network_exists" "fail" "Docker CLI is required to validate external networks" "error"
+        return
+    fi
+
+    for network_name in "${REQUIRED_NETWORKS[@]}"; do
+        if ! docker network ls --format '{{.Name}}' | grep -qx "$network_name" 2>/dev/null; then
+            missing_networks+=("$network_name")
+        fi
+    done
+
+    if [[ ${#missing_networks[@]} -eq 0 ]]; then
+        add_check "network_exists" "pass" "Required external networks exist for target $TARGET: ${REQUIRED_NETWORKS[*]}" "error"
     else
-        # Network will be created by docker compose up, so this is a soft check
-        add_check "network_exists" "pass" "Network $TRAEFIK_NETWORK will be created on deploy" "warning"
+        add_check "network_exists" "fail" "Missing external networks for target $TARGET: ${missing_networks[*]}" "error"
     fi
 }
 
 check_s3_credentials() {
-    # Check if rclone is configured for S3 backups
-    if command -v rclone &> /dev/null && rclone config show backup-s3 &> /dev/null 2>&1; then
+    if command -v rclone >/dev/null 2>&1 && rclone config show backup-s3 >/dev/null 2>&1; then
         add_check "s3_credentials" "pass" "S3 credentials configured" "warning"
     else
         add_check "s3_credentials" "warning" "S3 credentials not configured, backup will be local only" "warning"
@@ -221,9 +344,8 @@ check_s3_credentials() {
 
 check_disk_space() {
     local backup_dir="/var/backups/moltis"
-    local required_mb=1024  # 1GB minimum
+    local required_mb=1024
 
-    # Check if backup directory exists or can be created
     if [[ -d "$backup_dir" ]]; then
         local available_kb
         available_kb=$(df -k "$backup_dir" | awk 'NR==2 {print $4}')
@@ -239,10 +361,6 @@ check_disk_space() {
     fi
 }
 
-# ========================================================================
-# LLM FAILOVER CHECKS (Fallback LLM Feature)
-# ========================================================================
-
 check_ollama_config() {
     local moltis_config="$PROJECT_ROOT/config/moltis.toml"
     local ollama_enabled=false
@@ -250,47 +368,40 @@ check_ollama_config() {
     local ollama_model=""
     local failover_enabled=false
 
-    # Check if moltis.toml exists
     if [[ ! -f "$moltis_config" ]]; then
         add_check "ollama_config" "fail" "moltis.toml not found" "error"
         return
     fi
 
-    # Parse Ollama configuration from moltis.toml
-    # Using grep and sed for TOML parsing (basic but works for our use case)
     if grep -q '^\[providers\.ollama\]' "$moltis_config"; then
         ollama_enabled=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'enabled' | sed 's/.*=.*\(true\|false\).*/\1/' | head -1)
         ollama_base_url=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'base_url' | sed 's/.*=.*"\([^"]*\)".*/\1/' | head -1)
         ollama_model=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'model' | sed 's/.*=.*"\([^"]*\)".*/\1/' | head -1)
     fi
 
-    # Check failover configuration
     if grep -q '^\[failover\]' "$moltis_config"; then
         failover_enabled=$(grep -A5 '^\[failover\]' "$moltis_config" | grep 'enabled' | sed 's/.*=.*\(true\|false\).*/\1/' | head -1)
     fi
 
-    # Validate configuration
     if [[ "$ollama_enabled" == "true" ]]; then
-        # Check base URL
         if [[ -n "$ollama_base_url" ]]; then
             add_check "ollama_base_url" "pass" "Ollama base URL configured: $ollama_base_url" "warning"
         else
             add_check "ollama_base_url" "fail" "Ollama enabled but base_url not set" "error"
         fi
 
-        # Check model
         if [[ -n "$ollama_model" ]]; then
             add_check "ollama_model" "pass" "Ollama model configured: $ollama_model" "warning"
         else
             add_check "ollama_model" "fail" "Ollama enabled but model not set" "error"
         fi
 
-        # Check if OLLAMA_API_KEY is needed (cloud models)
         if [[ "$ollama_model" == *":cloud"* ]]; then
             local ollama_key_file="$SECRETS_DIR/ollama_api_key.txt"
-            if [[ -f "$ollama_key_file" ]] && [[ -s "$ollama_key_file" ]]; then
-                # Check if it's not the placeholder
-                if grep -q "PLACEHOLDER" "$ollama_key_file" 2>/dev/null; then
+            local ollama_key_env="${OLLAMA_API_KEY:-}"
+
+            if [[ -n "$ollama_key_env" || (-f "$ollama_key_file" && -s "$ollama_key_file") ]]; then
+                if [[ -f "$ollama_key_file" ]] && grep -q "PLACEHOLDER" "$ollama_key_file" 2>/dev/null; then
                     add_check "ollama_api_key" "fail" "Ollama API key is placeholder - replace with actual key" "warning"
                 else
                     add_check "ollama_api_key" "pass" "Ollama API key configured for cloud model" "warning"
@@ -300,7 +411,6 @@ check_ollama_config() {
             fi
         fi
 
-        # Check failover is enabled
         if [[ "$failover_enabled" == "true" ]]; then
             add_check "failover_config" "pass" "Failover is enabled in moltis.toml" "warning"
         else
@@ -314,10 +424,13 @@ check_ollama_config() {
 check_ollama_secret() {
     local ollama_key_file="$SECRETS_DIR/ollama_api_key.txt"
 
+    if [[ -n "${OLLAMA_API_KEY:-}" ]]; then
+        add_check "ollama_secret_valid" "pass" "Ollama API key provided via environment" "warning"
+        return
+    fi
+
     if [[ -f "$ollama_key_file" ]]; then
-        # Check file is not empty
         if [[ -s "$ollama_key_file" ]]; then
-            # Check file permissions
             local perms
             perms=$(stat -f "%Lp" "$ollama_key_file" 2>/dev/null || stat -c "%a" "$ollama_key_file" 2>/dev/null || echo "unknown")
 
@@ -327,7 +440,6 @@ check_ollama_secret() {
                 add_check "ollama_secret_perms" "warning" "Ollama API key file should have 600 permissions (got: $perms)" "warning"
             fi
 
-            # Check it's not placeholder
             if grep -q "PLACEHOLDER" "$ollama_key_file" 2>/dev/null; then
                 add_check "ollama_secret_valid" "warning" "Ollama API key contains placeholder - replace before deployment" "warning"
             else
@@ -337,9 +449,321 @@ check_ollama_secret() {
             add_check "ollama_secret_valid" "warning" "Ollama API key file is empty" "warning"
         fi
     else
-        # This is optional - only needed for cloud models
         add_check "ollama_secret_valid" "pass" "Ollama API key not configured (optional for local models)" "warning"
     fi
+}
+
+check_clawdiy_runtime_config() {
+    if ! validate_json_file \
+        "$RUNTIME_CONFIG_PATH" \
+        "runtime_config_valid" \
+        "Clawdiy runtime config not found: $(basename "$RUNTIME_CONFIG_PATH")" \
+        "Clawdiy runtime config is not valid JSON: $(basename "$RUNTIME_CONFIG_PATH")"; then
+        return
+    fi
+
+    if ! jq -e '
+        .schema_version == "v1alpha1"
+        and (.agent.agent_id | type == "string" and length > 0)
+        and (.server.base_url | type == "string" and length > 0)
+        and (.identity.domain | type == "string" and length > 0)
+        and (.identity.telegram_bot | type == "string" and length > 0)
+        and (.topology.active_profile == "same_host")
+        and (.topology.logical_address == .control_plane.reply_to)
+        and ((.topology.supported_profiles | index("same_host")) != null)
+        and ((.topology.supported_profiles | index("remote_node")) != null)
+        and (.topology.placement_profiles.same_host.internal_endpoint == .identity.internal_endpoint)
+        and (.topology.placement_profiles.remote_node.internal_endpoint != .topology.placement_profiles.same_host.internal_endpoint)
+        and (.topology.placement_profiles.remote_node.network_plane == "private-overlay")
+        and (.control_plane.authoritative_transport == "http-json")
+        and (.auth.human_auth_secret_ref | type == "string" and length > 0)
+        and (.auth.service_auth.mode == "bearer")
+        and (.auth.service_auth.authorization_header == "Authorization")
+        and (.auth.service_auth.bind_token_to_agent_header == "X-Agent-Id")
+        and (.auth.service_auth_secret_ref | type == "string" and length > 0)
+        and (.auth.telegram_token_ref | type == "string" and length > 0)
+        and (.auth.telegram_allowed_users_ref | type == "string" and length > 0)
+        and (.channels.telegram.allowlist_secret_ref == .auth.telegram_allowed_users_ref)
+        and (.channels.telegram.fail_closed_on_token_error == true)
+        and (.auth.provider_auth_profiles["codex-oauth"].secret_ref | type == "string" and length > 0)
+        and (.auth.provider_auth_profiles["codex-oauth"].profile_format == "json")
+        and (.auth.provider_auth_profiles["codex-oauth"].auth_type == "oauth")
+        and (.auth.provider_auth_profiles["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.auth.provider_auth_profiles["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and (.auth.provider_auth_profiles["codex-oauth"].fail_closed_on_scope_error == true)
+    ' "$RUNTIME_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "runtime_config_shape" "fail" "Clawdiy runtime config is missing required identity, transport, or auth fields" "error"
+        return
+    fi
+
+    CLAWDIY_AGENT_ID="$(jq -r '.agent.agent_id' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_DOMAIN="$(jq -r '.identity.domain' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_BASE_URL="$(jq -r '.server.base_url' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_TELEGRAM_BOT="$(jq -r '.identity.telegram_bot' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_LOGICAL_ADDRESS="$(jq -r '.topology.logical_address' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_HUMAN_AUTH_REF="$(jq -r '.auth.human_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_SERVICE_AUTH_REF="$(jq -r '.auth.service_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_TELEGRAM_TOKEN_REF="$(jq -r '.auth.telegram_token_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_TELEGRAM_ALLOWLIST_REF="$(jq -r '.auth.telegram_allowed_users_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_PROVIDER_AUTH_REF="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].secret_ref' "$RUNTIME_CONFIG_PATH")"
+
+    add_check "runtime_config_shape" "pass" "Clawdiy runtime config fields parsed successfully" "error"
+}
+
+check_fleet_registry_config() {
+    if ! validate_json_file \
+        "$REGISTRY_CONFIG_PATH" \
+        "fleet_registry_valid" \
+        "Fleet registry config not found: $(basename "$REGISTRY_CONFIG_PATH")" \
+        "Fleet registry config is not valid JSON: $(basename "$REGISTRY_CONFIG_PATH")"; then
+        return
+    fi
+
+    if ! jq -e --arg target "$TARGET" '
+        def normweb:
+            tostring
+            | sub("^https?://"; "")
+            | sub("/+$"; "")
+            | split("/")[0]
+            | ascii_downcase;
+        def normtg:
+            tostring | ascii_downcase;
+        .agents as $agents
+        | ($agents | type == "array")
+        and (($agents | length) > 0)
+        and ($agents | any(.agent_id == $target))
+        and (($agents | map(.agent_id) | length) == ($agents | map(.agent_id) | unique | length))
+        and (([$agents[] | .public_endpoints.web? | select(type == "string" and length > 0) | normweb] | length) == ([$agents[] | .public_endpoints.web? | select(type == "string" and length > 0) | normweb] | unique | length))
+        and (([$agents[] | .public_endpoints.telegram? | select(type == "string" and length > 0) | normtg] | length) == ([$agents[] | .public_endpoints.telegram? | select(type == "string" and length > 0) | normtg] | unique | length))
+    ' "$REGISTRY_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "fleet_registry_shape" "fail" "Fleet registry must contain target $TARGET with unique agent_id, web, and Telegram identities" "error"
+        return
+    fi
+
+    if ! jq -e --arg target "$TARGET" '
+        .agents[]
+        | select(.agent_id == $target)
+        | (.display_name | type == "string" and length > 0)
+        and (.role | type == "string" and length > 0)
+        and (.logical_address | type == "string" and length > 0)
+        and (.runtime_engine | type == "string" and length > 0)
+        and (.internal_endpoint | type == "string" and length > 0)
+        and (.public_endpoints.web | type == "string" and length > 0)
+        and (.public_endpoints.telegram | type == "string" and length > 0)
+        and (.capabilities | type == "array" and length > 0)
+        and (.allowed_callers | type == "array" and length > 0)
+        and (.topology.active_profile == "same_host")
+        and ((.topology.supported_profiles | index("same_host")) != null)
+        and ((.topology.supported_profiles | index("remote_node")) != null)
+        and (.policy_version | type == "string" and length > 0)
+    ' "$REGISTRY_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "fleet_registry_shape" "fail" "Fleet registry target entry is missing required fields for $TARGET" "error"
+        return
+    fi
+
+    CLAWDIY_REGISTRY_WEB="$(jq -r --arg target "$TARGET" '.agents[] | select(.agent_id == $target) | .public_endpoints.web' "$REGISTRY_CONFIG_PATH")"
+    CLAWDIY_REGISTRY_TELEGRAM="$(jq -r --arg target "$TARGET" '.agents[] | select(.agent_id == $target) | .public_endpoints.telegram' "$REGISTRY_CONFIG_PATH")"
+
+    add_check "fleet_registry_shape" "pass" "Fleet registry parsed successfully for target $TARGET" "error"
+}
+
+check_fleet_policy_config() {
+    if ! validate_json_file \
+        "$POLICY_CONFIG_PATH" \
+        "fleet_policy_valid" \
+        "Fleet policy config not found: $(basename "$POLICY_CONFIG_PATH")" \
+        "Fleet policy config is not valid JSON: $(basename "$POLICY_CONFIG_PATH")"; then
+        return
+    fi
+
+    if ! jq -e '
+        .defaults.allow_unknown_agents == false
+        and .defaults.allow_unknown_capabilities == false
+        and .defaults.allow_public_machine_handoffs == false
+        and .defaults.fail_closed_on_auth_error == true
+        and .defaults.require_topology_profile_alignment == true
+        and .service_auth.mode == "bearer"
+        and .service_auth.authorization_header == "Authorization"
+        and (.service_auth.required_headers | type == "array" and length > 0)
+        and .service_auth.reject_on_missing_required_headers == true
+        and .service_auth.reject_on_agent_header_mismatch == true
+        and .topology_profiles.same_host.transport == "http-json"
+        and .topology_profiles.same_host.allow_public_machine_handoffs == false
+        and .topology_profiles.remote_node.transport == "http-json"
+        and .topology_profiles.remote_node.allow_public_machine_handoffs == false
+        and (.secret_refs.clawdiy_human_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_telegram_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_telegram_allowlist | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_openai_codex_auth_profile | type == "string" and length > 0)
+        and (.telegram_auth.clawdiy.secret_ref == .secret_refs.clawdiy_telegram_auth)
+        and (.telegram_auth.clawdiy.allowlist_secret_ref == .secret_refs.clawdiy_telegram_allowlist)
+        and (.telegram_auth.clawdiy.mode == "polling")
+        and (.telegram_auth.clawdiy.fail_closed_on_token_error == true)
+        and (.provider_auth.clawdiy["codex-oauth"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
+        and (.provider_auth.clawdiy["codex-oauth"].profile_format == "json")
+        and (.provider_auth.clawdiy["codex-oauth"].auth_type == "oauth")
+        and (.provider_auth.clawdiy["codex-oauth"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].allowed_models | index("gpt-5.4") != null)
+        and (.provider_auth.clawdiy["codex-oauth"].fail_closed_on_scope_error == true)
+    ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "fleet_policy_shape" "fail" "Fleet policy must stay fail-closed with bearer service auth defaults" "error"
+        return
+    fi
+
+    if ! jq -e --arg target "$TARGET" '
+        (.routes | type == "array")
+        and any(.routes[]; .caller == "moltinger" and .recipient == $target and .transport == "http-json")
+        and (.secret_refs.clawdiy_service_auth | type == "string" and length > 0)
+    ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "fleet_policy_shape" "fail" "Fleet policy must define moltinger -> $TARGET HTTP JSON routing and service auth secret refs" "error"
+        return
+    fi
+
+    CLAWDIY_POLICY_HUMAN_REF="$(jq -r '.secret_refs.clawdiy_human_auth' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_SERVICE_REF="$(jq -r '.secret_refs.clawdiy_service_auth' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_TELEGRAM_REF="$(jq -r '.secret_refs.clawdiy_telegram_auth' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_ALLOWLIST_REF="$(jq -r '.secret_refs.clawdiy_telegram_allowlist' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_PROVIDER_REF="$(jq -r '.secret_refs.clawdiy_openai_codex_auth_profile' "$POLICY_CONFIG_PATH")"
+    add_check "fleet_policy_shape" "pass" "Fleet policy parsed successfully for target $TARGET" "error"
+}
+
+check_clawdiy_identity_alignment() {
+    if [[ -z "$CLAWDIY_AGENT_ID" || -z "$CLAWDIY_DOMAIN" || -z "$CLAWDIY_REGISTRY_WEB" ]]; then
+        add_check "fleet_identity_alignment" "fail" "Clawdiy identity alignment could not be evaluated because required config parsing did not complete" "error"
+        return
+    fi
+
+    local runtime_host
+    local registry_host
+    local base_url_host
+    local runtime_tg
+    local registry_tg
+
+    runtime_host="$(normalize_host "$CLAWDIY_DOMAIN")"
+    registry_host="$(normalize_host "$CLAWDIY_REGISTRY_WEB")"
+    base_url_host="$(normalize_host "$CLAWDIY_BASE_URL")"
+    runtime_tg="$(normalize_telegram "$CLAWDIY_TELEGRAM_BOT")"
+    registry_tg="$(normalize_telegram "$CLAWDIY_REGISTRY_TELEGRAM")"
+
+    if [[ "$CLAWDIY_AGENT_ID" != "$TARGET" ]]; then
+        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime agent_id must match target $TARGET" "error"
+        return
+    fi
+
+    if [[ "$runtime_host" != "$registry_host" || "$runtime_host" != "$base_url_host" ]]; then
+        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime domain, registry web endpoint, and base_url must resolve to the same host" "error"
+        return
+    fi
+
+    if [[ "$runtime_tg" != "$registry_tg" ]]; then
+        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime Telegram bot must match the fleet registry entry" "error"
+        return
+    fi
+
+    add_check "fleet_identity_alignment" "pass" "Clawdiy runtime identity matches registry and base URL" "error"
+}
+
+check_clawdiy_secret_isolation() {
+    if [[ -z "$CLAWDIY_HUMAN_AUTH_REF" || -z "$CLAWDIY_SERVICE_AUTH_REF" || -z "$CLAWDIY_TELEGRAM_TOKEN_REF" || -z "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" || -z "$CLAWDIY_PROVIDER_AUTH_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy secret isolation could not be evaluated because runtime config parsing did not complete" "error"
+        return
+    fi
+
+    if [[ "$CLAWDIY_HUMAN_AUTH_REF" == "github-secret:MOLTIS_PASSWORD" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy human auth secret must not reuse MOLTIS_PASSWORD" "error"
+        return
+    fi
+
+    if [[ "$CLAWDIY_SERVICE_AUTH_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy service auth secret must not reuse MOLTINGER_SERVICE_TOKEN" "error"
+        return
+    fi
+
+    if [[ "$CLAWDIY_TELEGRAM_TOKEN_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy Telegram token ref must not reuse TELEGRAM_BOT_TOKEN" "error"
+        return
+    fi
+
+    if [[ "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" == "github-secret:TELEGRAM_ALLOWED_USERS" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy Telegram allowlist ref must not reuse TELEGRAM_ALLOWED_USERS" "error"
+        return
+    fi
+
+    if [[ "$CLAWDIY_PROVIDER_AUTH_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" || "$CLAWDIY_PROVIDER_AUTH_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy provider auth profile ref must stay isolated from Moltinger auth secrets" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_HUMAN_REF" && "$CLAWDIY_HUMAN_AUTH_REF" != "$CLAWDIY_POLICY_HUMAN_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime human auth ref must match fleet policy secret_refs.clawdiy_human_auth" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_SERVICE_REF" && "$CLAWDIY_SERVICE_AUTH_REF" != "$CLAWDIY_POLICY_SERVICE_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime service auth ref must match fleet policy secret_refs.clawdiy_service_auth" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_TELEGRAM_REF" && "$CLAWDIY_TELEGRAM_TOKEN_REF" != "$CLAWDIY_POLICY_TELEGRAM_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime Telegram token ref must match fleet policy secret_refs.clawdiy_telegram_auth" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_ALLOWLIST_REF" && "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" != "$CLAWDIY_POLICY_ALLOWLIST_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime Telegram allowlist ref must match fleet policy secret_refs.clawdiy_telegram_allowlist" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_PROVIDER_REF" && "$CLAWDIY_PROVIDER_AUTH_REF" != "$CLAWDIY_POLICY_PROVIDER_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime provider auth ref must match fleet policy secret_refs.clawdiy_openai_codex_auth_profile" "error"
+        return
+    fi
+
+    add_check "fleet_secret_isolation" "pass" "Clawdiy auth, Telegram, and provider auth refs are isolated from Moltinger and aligned with fleet policy" "error"
+}
+
+check_clawdiy_topology_alignment() {
+    if [[ -z "$CLAWDIY_LOGICAL_ADDRESS" ]]; then
+        add_check "fleet_topology_alignment" "fail" "Clawdiy topology alignment could not be evaluated because runtime parsing did not complete" "error"
+        return
+    fi
+
+    if ! jq -e --slurpfile runtime "$RUNTIME_CONFIG_PATH" --slurpfile registry "$REGISTRY_CONFIG_PATH" --slurpfile policy "$POLICY_CONFIG_PATH" '
+        ($runtime[0]) as $rt
+        | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
+        | ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $to_clawdiy
+        | ($policy[0].routes[] | select(.caller == "clawdiy" and .recipient == "moltinger")) as $to_moltinger
+        | $rt.topology.logical_address == $rt.control_plane.reply_to
+        and $cl.logical_address == $rt.topology.logical_address
+        and $cl.topology.active_profile == $rt.topology.active_profile
+        and ($cl.topology.supported_profiles | index("same_host")) != null
+        and ($cl.topology.supported_profiles | index("remote_node")) != null
+        and $cl.topology.placement_profiles.same_host.internal_endpoint == $rt.identity.internal_endpoint
+        and ($cl.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
+        and ($to_clawdiy.supported_topology_profiles | index("same_host")) != null
+        and ($to_clawdiy.supported_topology_profiles | index("remote_node")) != null
+        and ($to_moltinger.supported_topology_profiles | index("same_host")) != null
+        and ($to_moltinger.supported_topology_profiles | index("remote_node")) != null
+        and $policy[0].defaults.require_topology_profile_alignment == true
+      ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
+        add_check "fleet_topology_alignment" "fail" "Clawdiy runtime, registry, and policy must keep topology-profile and logical-address alignment fail-closed" "error"
+        return
+    fi
+
+    add_check "fleet_topology_alignment" "pass" "Clawdiy runtime, registry, and policy stay aligned on same_host/remote_node topology profiles" "error"
+}
+
+check_target_specific_config() {
+    case "$TARGET" in
+        clawdiy)
+            check_clawdiy_runtime_config
+            check_fleet_registry_config
+            check_fleet_policy_config
+            check_clawdiy_identity_alignment
+            check_clawdiy_secret_isolation
+            check_clawdiy_topology_alignment
+            ;;
+    esac
 }
 
 # Output functions
@@ -348,13 +772,11 @@ output_json() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # Use safe array access to avoid unbound variable errors
     local error_count=0
     local warning_count=0
     local check_count=0
     local missing_count=0
 
-    # Count array elements safely (declare -a creates empty arrays, so this is safe)
     error_count=${#ERRORS[@]}
     warning_count=${#WARNINGS[@]}
     check_count=${#CHECKS[@]}
@@ -368,7 +790,6 @@ output_json() {
         status="warning"
     fi
 
-    # Handle empty arrays gracefully
     local checks_json="[]"
     local missing_json="[]"
     local errors_json="[]"
@@ -390,16 +811,17 @@ output_json() {
         warnings_json=$(printf '%s\n' "${WARNINGS[@]}" | jq -R . | jq -s .)
     fi
 
-    # Build output
     jq -n \
         --arg status "$status" \
         --arg timestamp "$timestamp" \
+        --arg target "$TARGET" \
         --argjson checks "$checks_json" \
         --argjson missing_secrets "$missing_json" \
         --argjson errors "$errors_json" \
         --argjson warnings "$warnings_json" \
         '{
             status: $status,
+            target: $target,
             timestamp: $timestamp,
             checks: $checks,
             missing_secrets: $missing_secrets,
@@ -411,7 +833,7 @@ output_json() {
 output_text() {
     echo ""
     echo "========================================="
-    echo "  Pre-flight Validation Results"
+    echo "  Pre-flight Validation Results ($TARGET)"
     echo "========================================="
     echo ""
 
@@ -448,10 +870,11 @@ Usage:
     $0 [OPTIONS]
 
 Options:
-    --json       Output in JSON format for AI parsing
-    --strict     Fail on warnings (not just errors)
-    --ci         CI/CD mode (skip Docker/runtime checks, use docker-compose.prod.yml)
-    -h, --help   Show this help message
+    --json             Output in JSON format for AI parsing
+    --strict           Fail on warnings (not just errors)
+    --ci               CI mode (skip Docker daemon and runtime checks)
+    --target <name>    Validation target: moltis or clawdiy
+    -h, --help         Show help message
 
 Exit Codes:
     0 - All checks passed
@@ -459,10 +882,11 @@ Exit Codes:
     4 - Pre-flight validation failed
 
 Examples:
-    $0                    # Human-readable output (local)
-    $0 --json             # JSON output for CI/CD
-    $0 --ci --json        # CI mode (GitHub Actions)
-    $0 --json --strict    # Strict mode for production
+    $0
+    $0 --json
+    $0 --ci --json
+    $0 --target clawdiy --json
+    $0 --json --strict
 
 Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
 EOF
@@ -483,6 +907,14 @@ while [[ $# -gt 0 ]]; do
             CI_MODE=true
             shift
             ;;
+        --target)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --target" >&2
+                exit 1
+            fi
+            TARGET="$2"
+            shift 2
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -497,35 +929,38 @@ done
 
 # Main execution
 main() {
-    # In CI mode, only check configuration files (secrets are in GitHub Secrets)
+    configure_target
+
+    if [[ "$CI_MODE" == "true" && "$OUTPUT_JSON" == "false" ]]; then
+        echo "Running in CI mode - skipping Docker daemon and runtime checks" >&2
+    fi
+
+    check_compose_valid
+    check_target_specific_config
+
     if [[ "$CI_MODE" == "true" ]]; then
-        if [[ "$OUTPUT_JSON" == "false" ]]; then
-            echo "Running in CI mode - skipping Docker/runtime checks" >&2
+        if [[ "$TARGET" == "moltis" ]]; then
+            check_ollama_config
         fi
-        check_compose_valid
-        check_ollama_config
     else
-        # Full checks for local/production runtime
         check_secrets_exist
         check_docker_available
-        check_compose_valid
         check_network_exists
         check_s3_credentials
         check_disk_space
 
-        # LLM Failover checks
-        check_ollama_config
-        check_ollama_secret
+        if [[ "$TARGET" == "moltis" ]]; then
+            check_ollama_config
+            check_ollama_secret
+        fi
     fi
 
-    # Output results
     if [[ "$OUTPUT_JSON" == "true" ]]; then
         output_json
     else
         output_text
     fi
 
-    # Determine exit code
     if [[ ${#ERRORS[@]} -gt 0 ]]; then
         exit 4
     elif [[ ${#WARNINGS[@]} -gt 0 && "$STRICT_MODE" == "true" ]]; then

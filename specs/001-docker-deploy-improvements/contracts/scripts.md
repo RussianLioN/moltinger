@@ -14,20 +14,31 @@ This document defines the interface contracts for deployment and backup scripts.
 ### Synopsis
 
 ```bash
-./scripts/deploy.sh [OPTIONS] COMMAND
+./scripts/deploy.sh [OPTIONS] [TARGET] COMMAND [ARGS]
 
 OPTIONS:
   --json           Output in JSON format
   --no-color       Disable colored output
-  --dry-run        Show what would be done without executing
   -h, --help       Show help message
 
+TARGETS:
+  moltis           Default target
+  clawdiy          OpenClaw sidecar stack
+
 COMMANDS:
-  deploy           Deploy the stack
-  rollback         Rollback to previous version
-  status           Show deployment status
-  health           Check health status
+  deploy [env]     Deploy the target stack
+  rollback         Rollback the target stack
+  status           Show target deployment status
+  start            Start target services
+  stop             Stop target services
+  restart          Restart target services
+  logs [-f]        Show target logs
 ```
+
+Compatibility notes:
+- Omitting `TARGET` keeps the previous Moltis behavior: `./scripts/deploy.sh deploy` still means `moltis deploy`.
+- `clawdiy` deploy/start requires `CLAWDIY_IMAGE` via environment, env file, or previous deployment state.
+- `clawdiy rollback` may resolve to a clean disable when no last-known-good image exists yet.
 
 ### Exit Codes
 
@@ -46,13 +57,14 @@ COMMANDS:
 ```json
 {
   "status": "success",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {
-    "image": "ghcr.io/moltis-org/moltis:v1.7.0",
+    "image": "ghcr.io/openclaw/openclaw:latest",
     "duration_ms": 45000,
     "health": "healthy",
-    "services": ["moltis", "watchtower"]
+    "services": ["clawdiy"]
   },
   "errors": []
 }
@@ -62,14 +74,14 @@ COMMANDS:
 ```json
 {
   "status": "failure",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {},
   "errors": [
     {
-      "code": "HEALTH_CHECK_FAILED",
-      "message": "Container unhealthy after 3 retries",
-      "service": "moltis"
+      "code": "DEPLOY_ERROR",
+      "message": "Clawdiy deployment verification failed"
     }
   ]
 }
@@ -197,9 +209,11 @@ OPTIONS:
 ./scripts/preflight-check.sh [OPTIONS]
 
 OPTIONS:
-  --json           Output in JSON format
-  --strict         Fail on warnings (not just errors)
-  -h, --help       Show help message
+  --json             Output in JSON format
+  --strict           Fail on warnings (not just errors)
+  --ci               CI mode (skip Docker daemon and runtime checks)
+  --target <name>    Validation target (moltis|clawdiy)
+  -h, --help         Show help message
 ```
 
 ### Validation Checks
@@ -208,22 +222,28 @@ OPTIONS:
 |-------|-------------|----------|
 | secrets_exist | All required secrets present | error |
 | docker_available | Docker daemon running | error |
-| compose_valid | docker-compose.yml syntax | error |
+| compose_valid | Target-specific compose syntax | error |
 | network_exists | Required networks exist | error |
 | s3_credentials | S3 credentials configured | warning |
 | disk_space | Sufficient disk space | warning |
+
+Target-aware additions:
+- `--target clawdiy` validates `docker-compose.clawdiy.yml`
+- `--target clawdiy` parses `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json`
+- `--target clawdiy` fails on duplicate agent/domain/Telegram identity collisions and on reused Moltinger secret refs
 
 ### JSON Output Format
 
 ```json
 {
   "status": "pass",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "checks": [
     {
       "name": "secrets_exist",
       "status": "pass",
-      "message": "All 5 secrets found",
+      "message": "All required secrets found for target clawdiy",
       "severity": "error"
     },
     {
@@ -235,9 +255,11 @@ OPTIONS:
   ],
   "missing_secrets": [],
   "errors": [],
-  "warnings": ["s3_credentials"]
+  "warnings": ["Optional secret 'smtp_password' not found for target moltis"]
 }
 ```
+
+`errors` and `warnings` contain the emitted validation messages, not just check ids.
 
 ---
 

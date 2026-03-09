@@ -1,0 +1,288 @@
+{
+  "schema_version": "v1",
+  "updated_at": "2026-03-09T16:35:00Z",
+  "defaults": {
+    "allow_unknown_agents": false,
+    "allow_unknown_capabilities": false,
+    "allow_public_machine_handoffs": false,
+    "fail_closed_on_auth_error": true,
+    "require_topology_profile_alignment": true,
+    "deny_on_reachability": [
+      "unreachable",
+      "auth_required",
+      "quarantined"
+    ]
+  },
+  "service_auth": {
+    "mode": "bearer",
+    "authorization_header": "Authorization",
+    "required_headers": [
+      "X-Agent-Id",
+      "X-Correlation-Id",
+      "Idempotency-Key"
+    ],
+    "bind_token_to_agent_header": true,
+    "reject_on_missing_required_headers": true,
+    "reject_on_agent_header_mismatch": true
+  },
+  "topology_profiles": {
+    "same_host": {
+      "transport": "http-json",
+      "network_plane": "fleet-internal",
+      "requires_private_connectivity": true,
+      "allow_public_machine_handoffs": false
+    },
+    "remote_node": {
+      "transport": "http-json",
+      "network_plane": "private-overlay",
+      "requires_private_connectivity": true,
+      "allow_public_machine_handoffs": false,
+      "preferred_controls": [
+        "private-dns",
+        "tailscale-or-equivalent",
+        "mTLS-ready"
+      ]
+    }
+  },
+  "future_role_defaults": [
+    {
+      "role": "architect",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "tester",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "researcher",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    }
+  ],
+  "telegram_auth": {
+    "clawdiy": {
+      "mode": "polling",
+      "secret_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+      "allowlist_secret_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+      "fail_closed_on_token_error": true,
+      "repeat_auth_runbook": "docs/runbooks/clawdiy-repeat-auth.md"
+    }
+  },
+  "provider_auth": {
+    "clawdiy": {
+      "codex-oauth": {
+        "secret_ref": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE",
+        "profile_format": "json",
+        "auth_type": "oauth",
+        "rollout_gate": "post-auth-verify",
+        "required_scopes": [
+          "api.responses.write"
+        ],
+        "allowed_models": [
+          "gpt-5.4"
+        ],
+        "fail_closed_on_scope_error": true,
+        "quarantine_capability": "provider.auth.check"
+      }
+    }
+  },
+  "caller_allowlists": {
+    "moltinger": [
+      "clawdiy"
+    ],
+    "clawdiy": [
+      "moltinger"
+    ]
+  },
+  "capability_authorization": [
+    {
+      "recipient": "clawdiy",
+      "capability": "coding.orchestration",
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 3,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "clawdiy",
+      "capability": "task.execution",
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 3,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "clawdiy",
+      "capability": "provider.auth.check",
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 1,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "moltinger",
+      "capability": "handoff.status.receive",
+      "allowed_callers": [
+        "clawdiy"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 3,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "moltinger",
+      "capability": "operator.escalation",
+      "allowed_callers": [
+        "clawdiy"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 2,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    }
+  ],
+  "routes": [
+    {
+      "caller": "moltinger",
+      "recipient": "clawdiy",
+      "transport": "http-json",
+      "endpoint": "POST /internal/v1/agent-handoffs",
+      "ack_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "status_endpoint": "GET /internal/v1/agent-handoffs/{correlation_id}",
+      "cancel_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel",
+      "capabilities": [
+        "coding.orchestration",
+        "task.execution",
+        "provider.auth.check"
+      ],
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "reachability_required": [
+        "reachable",
+        "degraded"
+      ]
+    },
+    {
+      "caller": "clawdiy",
+      "recipient": "moltinger",
+      "transport": "http-json",
+      "endpoint": "POST /internal/v1/agent-handoffs",
+      "ack_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "status_endpoint": "GET /internal/v1/agent-handoffs/{correlation_id}",
+      "cancel_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel",
+      "capabilities": [
+        "handoff.status.receive",
+        "operator.escalation"
+      ],
+      "allowed_callers": [
+        "clawdiy"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "reachability_required": [
+        "reachable",
+        "degraded"
+      ]
+    }
+  ],
+  "secret_refs": {
+    "moltinger_human_auth": "github-secret:MOLTIS_PASSWORD",
+    "moltinger_service_auth": "github-secret:MOLTINGER_SERVICE_TOKEN",
+    "moltinger_telegram_auth": "github-secret:TELEGRAM_BOT_TOKEN",
+    "clawdiy_human_auth": "github-secret:CLAWDIY_PASSWORD",
+    "clawdiy_service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN",
+    "clawdiy_telegram_auth": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+    "clawdiy_telegram_allowlist": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+    "clawdiy_openai_codex_auth_profile": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE"
+  }
+}

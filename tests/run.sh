@@ -39,6 +39,7 @@ Canonical lanes:
 
 Additional live-only aliases:
   security_runtime_smoke
+  clawdiy_live_deploy
   mcp_real
   telegram_live
   provider_live
@@ -107,7 +108,7 @@ lane_needs_stack() {
 
 lane_is_live_only() {
     case "$1" in
-        resilience|live_external|security_runtime_smoke|mcp_real|telegram_live|provider_live) return 0 ;;
+        resilience|live_external|security_runtime_smoke|clawdiy_live_deploy|mcp_real|telegram_live|provider_live) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -133,13 +134,13 @@ group_to_lanes() {
             printf '%s\n' static component integration_local security_api mcp_fake e2e_browser
             ;;
         nightly)
-            printf '%s\n' resilience security_runtime_smoke telegram_live provider_live mcp_real
+            printf '%s\n' resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         all)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke telegram_live provider_live mcp_real
+            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         live_external)
-            printf '%s\n' telegram_live provider_live mcp_real
+            printf '%s\n' clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         *)
             printf '%s\n' "$1"
@@ -152,6 +153,7 @@ suite_entries_for_lane() {
         static)
             cat <<LIST
 bash|static_config_validation|Config validation|$SCRIPT_DIR/static/test_config_validation.sh
+bash|static_fleet_registry|Fleet registry and policy|$SCRIPT_DIR/static/test_fleet_registry.sh
 bash|static_dev_mcp_smoke|Dev MCP smoke|$SCRIPT_DIR/static/test_dev_mcp_smoke.sh
 LIST
             ;;
@@ -168,6 +170,8 @@ LIST
         integration_local)
             cat <<LIST
 bash|integration_local_api_endpoints|Local API endpoints|$SCRIPT_DIR/integration_local/test_api_endpoints.sh
+bash|integration_local_clawdiy_handoff|Clawdiy handoff contract|$SCRIPT_DIR/integration_local/test_clawdiy_handoff.sh
+bash|integration_local_clawdiy_extraction_readiness|Clawdiy extraction readiness|$SCRIPT_DIR/integration_local/test_clawdiy_extraction_readiness.sh
 LIST
             ;;
         security_api)
@@ -175,6 +179,7 @@ LIST
 bash|security_api_authentication|Authentication security|$SCRIPT_DIR/security_api/test_authentication.sh
 bash|security_api_input_validation|Input validation security|$SCRIPT_DIR/security_api/test_input_validation.sh
 bash|security_api_auth_rate_limit|Authentication rate limit|$SCRIPT_DIR/security_api/test_auth_rate_limit.sh
+bash|security_api_clawdiy_auth_boundaries|Clawdiy auth boundaries|$SCRIPT_DIR/security_api/test_clawdiy_auth_boundaries.sh
 LIST
             ;;
         mcp_fake)
@@ -192,11 +197,17 @@ LIST
 bash|resilience_rate_limiting|Rate limiting resilience|$SCRIPT_DIR/resilience/test_rate_limiting.sh
 bash|resilience_full_failover_chain|Full failover chain|$SCRIPT_DIR/resilience/test_full_failover_chain.sh
 bash|resilience_deployment_recovery|Deployment recovery|$SCRIPT_DIR/resilience/test_deployment_recovery.sh
+bash|resilience_clawdiy_rollback|Clawdiy rollback and restore|$SCRIPT_DIR/resilience/test_clawdiy_rollback.sh
 LIST
             ;;
         security_runtime_smoke)
             cat <<LIST
 bash|security_runtime_smoke|Security runtime smoke|$SCRIPT_DIR/live_external/test_security_runtime_smoke.sh
+LIST
+            ;;
+        clawdiy_live_deploy)
+            cat <<LIST
+bash|live_clawdiy_deploy_smoke|Clawdiy deploy smoke|$SCRIPT_DIR/live_external/test_clawdiy_deploy_smoke.sh
 LIST
             ;;
         mcp_real)

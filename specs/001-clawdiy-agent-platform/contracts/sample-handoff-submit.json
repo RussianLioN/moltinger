@@ -1,0 +1,33 @@
+{
+  "schema_version": "v1",
+  "message_id": "7db88f7f-4d88-4a93-b8d7-73069ab497a1",
+  "idempotency_key": "moltinger-clawdiy-task-20260309-001",
+  "correlation_id": "69bb5125-7948-4669-98ec-7d132c4de6eb",
+  "causation_id": null,
+  "submitted_at": "2026-03-09T12:00:00Z",
+  "expires_at": "2026-03-09T12:30:00Z",
+  "sender": {
+    "agent_id": "moltinger",
+    "run_id": "run-123"
+  },
+  "recipient": {
+    "agent_id": "clawdiy",
+    "capability": "coding.orchestration"
+  },
+  "conversation": {
+    "user_conversation_id": "conv-456",
+    "workflow_id": "wf-789"
+  },
+  "task": {
+    "kind": "delegate_task",
+    "summary": "Investigate and implement a rollback-safe fix",
+    "payload_ref": "artifact://tasks/123",
+    "priority": "high",
+    "requested_timeout_secs": 1800
+  },
+  "delivery": {
+    "attempt": 1,
+    "reply_to": "agent://moltinger",
+    "user_visible": false
+  }
+}
