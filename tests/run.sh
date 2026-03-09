@@ -161,6 +161,7 @@ bash|component_circuit_breaker|Circuit breaker component|$SCRIPT_DIR/component/t
 bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/component/test_prometheus_metrics.sh
 bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_llm_failover_component.sh
 bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh
+bash|component_sync_claude_skills_bridge|Claude skills bridge component|$SCRIPT_DIR/component/test_sync_claude_skills_bridge.sh
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
 LIST
             ;;

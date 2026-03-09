@@ -76,6 +76,26 @@ yaml_escape() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
+append_bundled_source() {
+  local source_rel="$1"
+  local source_file="$2"
+  local output_file="$3"
+
+  cat >> "${output_file}" <<EOF
+
+## Bundled Source Artifact
+
+Origin path: \`${source_rel}\`
+
+The original Claude artifact content is embedded below so this installed skill remains self-contained after sync into \`\$CODEX_HOME/skills\`.
+
+<!-- BEGIN BUNDLED SOURCE -->
+EOF
+
+  cat "${source_file}" >> "${output_file}"
+  printf '\n<!-- END BUNDLED SOURCE -->\n' >> "${output_file}"
+}
+
 write_bridge_skill() {
   local artifact_type="$1"
   local source_rel="$2"
@@ -100,20 +120,22 @@ write_bridge_skill() {
   cat > "${output_file}" <<EOF
 ---
 description: "${escaped_description}"
-source: "${source_rel}"
+origin: "${source_rel}"
 ---
 
 # ${title}
 
-This skill is auto-generated from the Claude ${artifact_type} artifact at \`${source_rel}\`.
+This skill is auto-generated from the Claude ${artifact_type} artifact originally stored at \`${source_rel}\`.
 
 ## Instructions
 
-1. Read the source artifact at \`${source_rel}\` before acting.
-2. Execute the workflow intent and output format defined in that source artifact.
+1. Read the bundled source artifact in the `## Bundled Source Artifact` section below.
+2. Execute the workflow intent and output format defined in that bundled source.
 3. Translate Claude-specific tool names to the closest Codex equivalents when needed.
 4. If a native Codex skill conflicts with this bridge, prefer the native skill and keep behavioral parity.
 EOF
+
+  append_bundled_source "${source_rel}" "${source_file}" "${output_file}"
 }
 
 mode="${1:---install}"
