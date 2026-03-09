@@ -10,7 +10,6 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `codex-cli-upgrade-watch` | `feat/codex-cli-upgrade-watch` | `sibling-worktree` | Needs decision |
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
@@ -29,12 +28,11 @@
 | Branch | Tracking | Status |
 |---|---|---|
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
-| `001-clawdiy-agent-platform` | `none` | Needs decision |
+| `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Needs decision |
 | `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
-| `feat/codex-cli-upgrade-watch` | `none` | Needs decision |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
@@ -49,6 +47,7 @@
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
+| `feat/codex-cli-upgrade-watch` | `origin/feat/codex-cli-upgrade-watch` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
@@ -57,6 +56,7 @@
 
 | Remote Branch | Current Intent |
 |---|---|
+| `origin/001-clawdiy-agent-platform` | Needs decision |
 | `origin/001-frontend` | Review later; currently dangling. |
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup. |
 | `origin/003-testing-infrastructure` | Historical planning branch. |
@@ -65,6 +65,7 @@
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
+| `origin/feat/codex-cli-upgrade-watch` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/pr17-webhook-extraction` | Needs decision |
 
