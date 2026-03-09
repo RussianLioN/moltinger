@@ -125,6 +125,22 @@ run_component_codex_cli_update_monitor_tests() {
     assert_contains "$(cat "$summary")" "Recommendation: ignore" "Summary should include ignore recommendation"
     test_pass
 
+    test_start "component_codex_update_monitor_parses_current_live_html_heading_shape"
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    CODEX_UPDATE_MONITOR_LOCAL_VERSION="0.112.0" \
+        "$MONITOR_SCRIPT" \
+        --config-file "$FIXTURE_DIR/config.toml" \
+        --release-file "$FIXTURE_DIR/releases-live-html.html" \
+        --json-out "$work_dir/report.json" \
+        --summary-out "$work_dir/summary.md" \
+        --stdout none
+    report="$work_dir/report.json"
+    assert_eq "0.112.0" "$(jq -r '.latest_version' "$report")" "HTML changelog fixture should yield the latest version"
+    assert_eq "current" "$(jq -r '.version_status' "$report")" "HTML changelog fixture should compare current version correctly"
+    assert_eq "ignore" "$(jq -r '.recommendation' "$report")" "HTML changelog fixture should not force investigate when the heading shape changes"
+    assert_contains "$(jq -r '.evidence | join("\n")' "$report")" "Compared against latest upstream release 0.112.0" "Evidence should show the parsed latest version from HTML"
+    test_pass
+
     test_start "component_codex_update_monitor_escalates_behind_relevant_changes"
     work_dir="$(secure_temp_dir codex-update-monitor)"
     run_monitor_fixture "0.110.0" "$work_dir" \
