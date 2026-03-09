@@ -242,7 +242,6 @@ test_create_env_format_emits_handoff_boundary_contract() {
     assert_contains "$output" 'final_state=handoff_needs_env_approval' "Blocked env approval should map to the env-approval final state"
     assert_contains "$output" 'approval_required=true' "Blocked env approval should require approval explicitly"
     assert_contains "$output" 'handoff_mode=manual' "Default handoff mode should remain manual"
-    assert_contains "$output" 'pending=Continue' "Handoff contract should defer downstream work to the target worktree"
 
     rm -rf "$fixture_root"
     test_pass

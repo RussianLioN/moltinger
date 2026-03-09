@@ -24,6 +24,8 @@ Provide a shell-safe, machine-readable handoff block for `create`, `attach`, and
 ## Optional Keys
 
 - `decision`
+- `base_ref`
+- `base_sha`
 - `worktree_action`
 - `issue`
 - `status`
@@ -52,6 +54,8 @@ schema=worktree-handoff/v1
 phase=create
 boundary=stop_after_create
 decision=create_clean
+base_ref=main
+base_sha=0123456789abcdef
 worktree_action=created
 final_state=handoff_needs_env_approval
 branch=feat/remote-uat-hardening
@@ -64,11 +68,11 @@ guard_state=missing
 beads_state=shared
 handoff_mode=manual
 approval_required=true
-launch_command=cd\ /Users/rl/coding/moltinger-remote-uat-hardening\ \&\&\ direnv\ allow
-pending=Continue\ the\ requested\ downstream\ task\ from\ the\ target\ worktree\ after\ handoff.
-next_count=2
-next_1=cd\ /Users/rl/coding/moltinger-remote-uat-hardening\ \&\&\ direnv\ allow
-next_2=codex
+pending=Start\ Speckit\ for\ the\ OpenClaw\ Control\ Plane\ epic\ in\ the\ target\ worktree.
+next_count=3
+next_1=cd\ /Users/rl/coding/moltinger-remote-uat-hardening
+next_2=direnv\ allow
+next_3=codex
 warning_count=1
 warning_1=Environment\ approval\ is\ required\ before\ launching\ the\ session.
 ```

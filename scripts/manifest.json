@@ -380,6 +380,13 @@
       "provides": ["worktree-plan", "worktree-readiness", "worktree-doctor", "worktree-handoff"],
       "optional_requires": ["bd", "direnv", "jq", "osascript", "codex"]
     },
+    "worktree-phase-a.sh": {
+      "version": "0.1.0",
+      "description": "Deterministic Phase A executor for creating new worktrees from an explicit base ref",
+      "entrypoint": true,
+      "requires": ["git", "bd"],
+      "provides": ["worktree-phase-a-create"]
+    },
     "telegram-webhook-monitor.sh": {
       "version": "1.0.0",
       "description": "Telegram webhook and response cleanliness monitor",

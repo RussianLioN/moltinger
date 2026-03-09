@@ -190,6 +190,11 @@
 - **FR-041**: Workflow ДОЛЖЕН считать committed registry mutation собственностью invoking branch, а не target worktree branch.
 - **FR-042**: Для ручного handoff human-facing output ДОЛЖЕН рендерить точные next-step команды в fenced `bash` block.
 - **FR-043**: В human-facing output workflow ДОЛЖЕН явно обозначать, что topology registry update — это ожидаемый managed diff и что он уже landed/ pushed, если landing-the-plane был выполнен.
+- **FR-044**: Для clean-create flow workflow ДОЛЖЕН разрешать явный `base_ref` и фиксировать соответствующий `base_sha` до мутаций topology.
+- **FR-045**: Workflow НЕ ДОЛЖЕН считать clean-create успешным, пока target worktree `HEAD` не совпадает с рассчитанным `base_sha`.
+- **FR-046**: Если existing branch уже существует и не совпадает с ожидаемым `base_sha`, workflow ДОЛЖЕН остановиться в blocked state и НЕ ДОЛЖЕН ремонтировать branch in-place внутри Phase A.
+- **FR-047**: Phase A НЕ ДОЛЖЕН создавать или обновлять downstream artifacts, включая Beads issues, specs, plans, checklists и implementation notes.
+- **FR-048**: Managed clean-create flow ДОЛЖЕН делать не более одного topology refresh и не более одного invoking-branch landing cycle.
 
 ### Key Entities
 
@@ -220,3 +225,5 @@
 - **SC-013**: Machine-readable handoff contract стабилен и покрыт тестами как минимум для ready/env-approval/blocked scenarios.
 - **SC-014**: В 100% проверенных managed create/attach сценариев committed topology mutation не остаётся незапушенным локальным diff в invoking branch.
 - **SC-015**: В 100% проверенных ручных handoff сценариев пользователь получает готовый fenced `bash` block с точными next-step командами.
+- **SC-016**: В 100% проверенных clean-create сценариев новая branch рождается от canonical `main` без post-create repair.
+- **SC-017**: В 100% проверенных mixed-request сценариев Phase A не трогает `.beads/issues.jsonl` и не создаёт downstream artifacts.

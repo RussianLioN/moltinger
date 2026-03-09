@@ -13,6 +13,13 @@
 
 Новый follow-up slice для mixed requests: если пользователь в том же запросе описал downstream задачу для target worktree, handoff должен сохранять этот intent конкретно, а не абстрактно. Helper остаётся deterministic и Git/worktree-focused, поэтому он принимает только короткий `pending_summary`, а optional `Phase B Seed Prompt` рендерится на уровне `command-worktree` как advisory handoff metadata после fenced `bash` block.
 
+Новый hardening slice по последнему UAT: deterministic Phase A больше не должен полагаться на implicit branch ancestry. Для clean-create flow нужен явный executor, который:
+- фиксирует `base_ref`/`base_sha` из canonical `main`
+- создаёт локальную branch на этом SHA до `bd worktree create`
+- проверяет, что target worktree `HEAD` совпадает с `base_sha`
+- только после этого разрешает topology refresh и landing-the-plane
+- не ремонтирует неправильную базу in-place внутри Phase A
+
 Ключевой design choice: не автоматизировать доверительные действия вроде одобрения `.envrc` по умолчанию. Вместо этого команда должна заранее выявлять, что для текущего worktree потребуется дополнительный шаг, и возвращать точные инструкции или opt-in handoff. Для one-shot start authoritative проверкой конфликтов считается live `git`, а committed topology registry используется как shared snapshot и должен refresh-иться сразу после mutation.
 
 ## Technical Context
@@ -24,7 +31,7 @@
 **Target Platform**: macOS-first terminal workflows with graceful fallback on non-macOS systems
 **Project Type**: Single (CLI/skill workflow enhancement)
 **Performance Goals**: Readiness classification and next-step generation complete in under 2 seconds after worktree creation; zero follow-up explanation needed for primary flows
-**Constraints**: Preserve trust boundary for environment approval, stay additive over existing low-level `bd worktree` usage, avoid destructive cleanup behavior changes, degrade gracefully when terminal automation is unavailable
+**Constraints**: Preserve trust boundary for environment approval, stay additive over existing low-level `bd worktree` usage, avoid destructive cleanup behavior changes, degrade gracefully when terminal automation is unavailable, keep Phase A single-pass, and never create downstream artifacts during Phase A
 **Scale/Scope**: 6 user stories, 39 functional requirements, one command artifact update plus one helper script and supporting docs/contracts
 
 ## Constitution Check
@@ -69,7 +76,8 @@ specs/005-worktree-ready-flow/
 
 scripts/
 ├── git-session-guard.sh        # Existing guard reused for readiness/doctor
-└── worktree-ready.sh           # New helper for path, readiness, next steps, doctor, handoff
+├── worktree-ready.sh           # Helper for path, readiness, next steps, doctor, handoff
+└── worktree-phase-a.sh         # Deterministic create executor for explicit base-ref Phase A
 
 specs/
 └── 005-worktree-ready-flow/    # Speckit artifacts for this feature

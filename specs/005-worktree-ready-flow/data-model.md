@@ -15,6 +15,8 @@
 
 - **Purpose**: Represents the resolved filesystem and git target for the request.
 - **Fields**:
+  - `base_ref`: resolved base ref for clean-create flows, normally `main`
+  - `base_sha`: resolved commit SHA for `base_ref` at the moment Phase A begins
   - `branch_name`: git branch to attach or create
   - `worktree_path`: absolute path of the target worktree
   - `path_preview`: user-facing sanitized path preview
@@ -70,6 +72,8 @@
 - **Fields**:
   - `schema`: `worktree-handoff/v1`
   - `phase`: `create` | `attach` | `handoff`
+  - `base_ref`: optional explicit create base such as `main`
+  - `base_sha`: optional resolved base commit used for deterministic create
   - `decision`: optional planning decision such as `create_clean` or `attach_existing_branch`
   - `worktree_action`: `created` | `attached` | `reused` | `unchanged`
   - `final_state`: same enum as `ReadinessReport.final_state`

@@ -19,6 +19,8 @@
 | Stop-and-handoff boundary after create | `quickstart.md` Scenario 9 | pending | |
 | Machine-readable handoff contract | `quickstart.md` Scenario 10 | pending | |
 | Manual next steps are copy-paste friendly | `quickstart.md` Scenario 11 | pending | |
+| Clean-create always starts from canonical main | latest mixed-request UAT | pending | Needs deterministic Phase A executor coverage |
+| Mixed request does not create downstream artifacts | latest mixed-request UAT | pending | Must prove no Beads/spec side effects during Phase A |
 
 ## Execution Notes
 
@@ -70,3 +72,14 @@
   - `scripts/worktree-ready.sh create ... --pending-summary "<text>"` replaces the generic `Pending` value
   - command-worktree guidance allows an optional `Phase B Seed Prompt (optional, not executed)` only after the fenced `bash` block
   - the seed prompt remains advisory and does not imply Phase B execution in the originating session
+
+### 2026-03-09 - Deterministic Phase A hardening
+
+- Goal:
+  - prevent wrong-parent branch creation, second refresh cycles, and Phase A leakage into downstream artifacts
+- Checks:
+  - `scripts/worktree-phase-a.sh create-from-base ...` creates the target branch/worktree from explicit `base_ref`/`base_sha`
+  - existing drifted branches return a blocked exit code instead of in-place repair
+  - manual handoff guidance now requires exact fenced `bash` output and optional fixed-template fenced `text`
+- Follow-up:
+  - rerun mixed-request UAT to confirm no `bd create`, no `.beads/issues.jsonl` mutation, and no post-create branch repair

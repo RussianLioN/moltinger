@@ -1232,22 +1232,13 @@ set_handoff_contract() {
   case "${report_status}" in
     ready_for_codex)
       report_final_state="handoff_ready"
-      if [[ "${report_worktree_path}" != "n/a" ]]; then
-        report_launch_command="cd $(shell_quote "${report_worktree_path}") && codex"
-      fi
       ;;
     needs_env_approval)
       report_final_state="handoff_needs_env_approval"
       report_approval_required="true"
-      if [[ "${report_worktree_path}" != "n/a" ]]; then
-        report_launch_command="cd $(shell_quote "${report_worktree_path}") && direnv allow"
-      fi
       ;;
     created)
       report_final_state="handoff_needs_manual_readiness"
-      if [[ "${report_worktree_path}" != "n/a" ]]; then
-        report_launch_command="cd $(shell_quote "${report_worktree_path}")"
-      fi
       ;;
     drift_detected)
       report_final_state="blocked_guard_drift"
@@ -1275,8 +1266,6 @@ set_handoff_contract() {
     create|attach|handoff)
       if [[ -n "${pending_summary}" ]]; then
         report_pending_work="${pending_summary}"
-      else
-        report_pending_work="Continue the requested downstream task from the target worktree after handoff."
       fi
       ;;
   esac
@@ -1318,10 +1307,12 @@ set_readiness_next_steps() {
       add_next_step "./scripts/git-session-guard.sh --refresh"
       ;;
     ready_for_codex)
-      add_next_step "cd $(shell_quote "${report_worktree_path}") && codex"
+      add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      add_next_step "codex"
       ;;
     needs_env_approval)
-      add_next_step "cd $(shell_quote "${report_worktree_path}") && direnv allow"
+      add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      add_next_step "direnv allow"
       add_next_step "codex"
       ;;
     created)

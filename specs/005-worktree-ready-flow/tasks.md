@@ -187,6 +187,18 @@
 
 ---
 
+## Phase 7E: Deterministic Create and Lifecycle Hardening
+
+**Purpose**: Eliminate post-create branch repair, keep Phase A single-pass, and close the remaining finish/cleanup contract gaps found in mixed-request UAT.
+
+- [x] T044 [EXECUTOR: worker] [SEQUENTIAL] Add deterministic create executor `scripts/worktree-phase-a.sh` that resolves `base_ref`/`base_sha`, pre-creates the branch at that commit, and blocks on ancestry mismatch
+- [x] T045 [EXECUTOR: worker] [SEQUENTIAL] Update `.claude/commands/worktree.md` to require explicit base verification before topology refresh, forbid downstream artifact creation during Phase A, and tighten finish/cleanup terminal semantics
+- [x] T046 [EXECUTOR: worker] [SEQUENTIAL] Update `scripts/worktree-ready.sh` so manual handoff next steps are one command per line and generic imperative `Pending` text is removed
+- [x] T047 [EXECUTOR: worker] [SEQUENTIAL] Add unit coverage for deterministic Phase A creation and drifted-branch blocking in `tests/unit/test_worktree_phase_a.sh`
+- [x] T048 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile `spec.md`, `plan.md`, `data-model.md`, `contracts/`, and `validation.md` with the deterministic Phase A contract and lifecycle hardening semantics
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

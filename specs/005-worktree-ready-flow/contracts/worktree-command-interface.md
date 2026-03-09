@@ -24,6 +24,8 @@
 - Must split mixed requests into:
   - **Phase A**: prepare worktree, refresh topology, classify readiness, emit handoff
   - **Phase B**: deferred downstream work executed only from the created worktree or an explicit handoff session
+- For clean-create flows, Phase A must resolve an explicit `base_ref` and `base_sha` before creating the branch.
+- Phase A must verify the new worktree `HEAD` equals the resolved `base_sha` before topology refresh or any landing-the-plane mutation.
 
 ### `start --existing` / `attach`
 
@@ -50,6 +52,8 @@ If explicit flags are not used, natural-language requests such as "открой 
 - After the managed create/attach flow completes, the command must stop after returning a handoff block.
 - The originating session must not continue the broader user task after this point unless the user explicitly overrides the boundary.
 - Requests that say "работай из нового worktree", "там подтверди cwd/branch", or "после перехода продолжи" must still stop after Phase A unless a supported automatic handoff actually launches.
+- Mixed requests do not expand Phase A permissions.
+- During Phase A, the command must not create or update downstream artifacts such as Beads issues, specs, plans, checklists, or implementation notes.
 
 ## Output Block
 
@@ -83,3 +87,4 @@ Next:
 - The command must not prove "we are already in the new worktree" via `git -C` or path-targeted commands from the originating session.
 - If the originating request already contains explicit downstream work, `Pending` should preserve that concrete deferred intent instead of generic placeholder text.
 - A manual handoff MAY append an optional `Phase B Seed Prompt` block after the fenced `bash` block, but it must remain advisory and must not imply that Phase B already started.
+- Clean-create flows must be single-pass: one ancestry verification, one topology refresh, and at most one invoking-branch landing cycle.
