@@ -17,7 +17,6 @@
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-ejy-beads-redirect-fix` | `feat/moltinger-ejy-beads-redirect-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
-| `moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `sibling-worktree` | Needs decision |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-feature-007` | `007-codex-update-monitor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-008` | `008-clawdiy-rollout-bootstrap-fix` | `dedicated-feature-worktree` | Needs decision |
@@ -42,7 +41,6 @@
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-ejy-beads-redirect-fix` | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
-| `uat/006-git-topology-registry` | `origin/006-git-topology-registry` | Needs decision |
 | `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
@@ -54,7 +52,6 @@
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
-| `feat/pr17-webhook-extraction` | `origin/feat/pr17-webhook-extraction` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 
@@ -67,7 +64,6 @@
 | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `origin/006-git-topology-registry` | Active topology-registry feature branch. |
 | `origin/007-codex-update-monitor` | Needs decision |
-| `origin/008-clawdiy-rollout-bootstrap-fix` | Needs decision |
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
