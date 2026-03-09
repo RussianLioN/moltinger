@@ -1,0 +1,237 @@
+# Feature Specification: Worktree Ready UX
+
+**Feature Branch**: `005-worktree-ready-flow`
+**Created**: 2026-03-08
+**Status**: Draft
+**Input**: User description: "Улучшить UX навыка worktree, чтобы сценарий создания worktree для новой или существующей ветки доводил пользователя до состояния ready to work: first-class flow для existing branch, next steps block, direnv preflight, status ready_for_codex, sanitized path preview, optional terminal/codex handoff, worktree doctor. Дополнительно: one-shot start по короткому slug без issue id, live topology + registry conflict check, одно краткое уточнение только при реальной неоднозначности. После managed create/attach workflow должен останавливаться на handoff boundary и не продолжать downstream task в исходной сессии."
+
+## Executive Summary
+
+Навык `worktree` должен перестать завершать сценарий на состоянии "дерево создано" и начать завершать его на состоянии "разработчик понимает следующий шаг и может сразу начать работу". Улучшение охватывает три основных пути: создание worktree для уже существующей ветки, запуск нового рабочего дерева для новой задачи по issue id и one-shot старт по короткому slug без знания шаблонов branch/path. В каждом случае результатом должен стать предсказуемый путь, честный статус готовности среды, live-проверка конфликтов по `git worktree` и ref'ам, точные следующие команды и, при явном запросе, прямой handoff в терминал и Codex. После create/attach workflow обязан завершаться handoff-блоком и останавливаться, чтобы downstream работа продолжалась уже из нового worktree, а не из исходной сессии.
+
+## Assumptions
+
+- Улучшение остается надстройкой над существующим механизмом создания worktree и не отменяет низкоуровневые команды.
+- Шаг одобрения среды остается явным действием пользователя, если пользователь отдельно не выбрал автоматизированный handoff.
+- Навык должен обслуживать как опытных пользователей, так и пользователей, которые не помнят внутренние команды `bd`, `direnv` или запуск Codex.
+- При конфликте между committed registry и live `git` для create/start flow authoritative источником считается live `git`, а registry должен быть reconciled сразу после мутации topology.
+- Managed create/attach flow считается завершенным только после readiness classification и handoff boundary, а не после сырого `bd worktree create`.
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Existing Branch Without Guesswork (Priority: P1)
+
+Как разработчик, у которого ветка уже создана,
+Я хочу попросить новый worktree для этой ветки без выбора низкоуровневой команды,
+Чтобы сразу попасть в правильное дерево и понять, что делать дальше.
+
+**Why this priority**: Это самый болезненный сценарий из реального использования. Сейчас пользователь должен помнить, что для существующей ветки нужен обходной путь через низкоуровневую команду, а затем вручную собирать следующий шаг.
+
+**Independent Test**: Пользователь с существующей веткой запрашивает новый worktree одной командой и получает рабочее дерево, предсказуемый путь, честный статус готовности и точные следующие действия без дополнительных пояснений от ассистента.
+
+**Acceptance Scenarios**:
+
+1. **Given** ветка уже существует и не привязана к другому worktree, **When** пользователь запрашивает создание worktree для этой ветки, **Then** система создает новое рабочее дерево без необходимости вручную выбирать низкоуровневую команду.
+2. **Given** ветка уже существует и имя ветки содержит разделители, **When** система определяет каталог worktree, **Then** путь получается читаемым, безопасным для файловой системы и предсказуемым для пользователя.
+3. **Given** worktree создан для существующей ветки, **When** система завершает выполнение, **Then** она показывает следующий шаг в формате, пригодном для copy-paste.
+
+---
+
+### User Story 2 - Honest Ready-to-Work Handoff (Priority: P1)
+
+Как разработчик, создающий или открывающий новое рабочее дерево,
+Я хочу видеть реальный статус готовности среды и точные команды запуска,
+Чтобы не тратить время на скрытые ручные шаги вроде проверки ветки, одобрения окружения и старта Codex.
+
+**Why this priority**: Даже после успешного создания worktree пользователь все еще может быть не готов к работе. Если среда требует одобрения или дополнительного действия, об этом нужно сообщать сразу, а не после неудачной попытки запуска.
+
+**Independent Test**: После создания worktree пользователь видит один из честных статусов готовности и может либо сразу запустить Codex, либо выполнить ровно один явный корректирующий шаг, указанный системой.
+
+**Acceptance Scenarios**:
+
+1. **Given** в worktree требуется одобрение окружения, **When** система выводит результат создания, **Then** она заранее сообщает, что среда требует одобрения, и показывает точную команду для этого шага.
+2. **Given** окружение уже готово, **When** система завершает создание worktree, **Then** она помечает состояние как готовое к запуску и показывает команду запуска Codex.
+3. **Given** пользователь предпочитает ручной сценарий, **When** система завершает создание worktree, **Then** она показывает короткий блок следующих шагов без попытки скрыто изменить окружение от имени пользователя.
+4. **Given** ручной сценарий выведен пользователю, **When** система показывает следующие шаги, **Then** точные команды рендерятся в готовом fenced `bash` block для copy-paste без ручной сборки из prose.
+5. **Given** пользователь в исходном запросе уже описал downstream работу для target worktree, **When** система завершает Phase A, **Then** handoff сохраняет этот intent как конкретный `Pending`, а при необходимости может дополнительно выдать короткий optional Phase B seed prompt, не продолжая работу в originating session.
+
+---
+
+### User Story 3 - Optional Terminal and Codex Launch (Priority: P2)
+
+Как разработчик, часто создающий worktree,
+Я хочу по явному запросу сразу открыть новую вкладку терминала и запустить рабочую сессию,
+Чтобы сократить рутинный handoff до одного действия.
+
+**Why this priority**: Это ускоряет частый сценарий, но не является обязательным для MVP. Базовая ценность уже появляется после честного статуса готовности и блока следующих шагов.
+
+**Independent Test**: Пользователь запускает сценарий с явным флагом handoff и получает новую терминальную сессию, открытую в правильном worktree, без нарушения безопасных границ среды.
+
+**Acceptance Scenarios**:
+
+1. **Given** пользователь явно выбирает handoff в терминал, **When** worktree готов к использованию, **Then** система открывает новую терминальную сессию в нужном каталоге.
+2. **Given** пользователь явно выбирает запуск Codex, **When** среда готова, **Then** система передает управление в Codex внутри нужного worktree.
+3. **Given** автоматический handoff недоступен в текущей среде, **When** пользователь запрашивает этот режим, **Then** система сообщает ограничение и показывает эквивалентный ручной путь без потери контекста.
+
+---
+
+### User Story 4 - Readiness Diagnosis for Worktrees (Priority: P2)
+
+Как разработчик, возвращающийся к уже созданному worktree,
+Я хочу быстро проверить, почему рабочая сессия еще не готова,
+Чтобы не разбираться вручную в branch mapping, beads, session guard и состоянии окружения.
+
+**Why this priority**: После появления большего количества worktree команде нужен короткий, однозначный способ понять текущее состояние и увидеть точное действие для исправления.
+
+**Independent Test**: Пользователь запускает диагностический режим для worktree и получает компактный отчет с найденными проблемами и конкретным следующим действием.
+
+**Acceptance Scenarios**:
+
+1. **Given** у worktree отсутствует одно из обязательных условий готовности, **When** пользователь запускает диагностику, **Then** система перечисляет проблему и рекомендуемое действие.
+2. **Given** все условия готовности выполнены, **When** пользователь запускает диагностику, **Then** система подтверждает, что worktree готов к запуску рабочей сессии.
+3. **Given** целевая ветка уже привязана к другому worktree, **When** пользователь пытается создать новый worktree для этой ветки, **Then** система сообщает текущий путь существующего дерева и рекомендует безопасный следующий шаг.
+
+---
+
+### User Story 5 - One-Shot Start Without Workflow Knowledge (Priority: P1)
+
+Как разработчик,
+Я хочу написать короткий запрос вроде "создай новый worktree remote-uat-hardening",
+Чтобы система сама вывела branch/path, проверила конфликты по registry и live `git`, и спросила меня только при реальной неоднозначности.
+
+**Why this priority**: Это целевой UX для Codex-сессии. Пока пользователь должен знать слишком много внутреннего workflow: issue id, naming template, разницу между clean-start и attach flow. Это не соответствует best-practice UX.
+
+**Independent Test**: Пользователь вводит короткий slug-only запрос, а система либо автоматически создает clean worktree, либо переиспользует точное совпадение, либо задает один короткий вопрос с clean option и существующими похожими линиями.
+
+**Acceptance Scenarios**:
+
+1. **Given** пользователь передал только slug без issue id, **When** система не находит точных или похожих конфликтов, **Then** она автоматически выводит branch `feat/<slug>` и worktree `../<repo>-<slug>` и продолжает create flow без дополнительного вопроса.
+2. **Given** точная branch или worktree уже существуют, **When** пользователь просит создать worktree по тому же смыслу, **Then** система не создает дубликат, а предлагает reuse/attach уже существующего target.
+3. **Given** система находит похожие branch/worktree names, **When** точного совпадения нет, **Then** она задает один короткий уточняющий вопрос, в котором явно присутствует вариант "создать clean worktree" и top similar candidates.
+4. **Given** registry stale, **When** запускается one-shot start, **Then** система использует live `git` как источник правды для коллизий и затем выполняет reconcile registry после topology mutation.
+
+---
+
+### User Story 6 - Stop-and-Handoff Boundary (Priority: P1)
+
+Как разработчик, создающий новый worktree для отдельной линии работы,
+Я хочу, чтобы workflow после managed create/attach явно останавливался и передавал мне или новой сессии точный handoff block,
+Чтобы дальнейшая работа не продолжалась в исходном shell/Codex-контексте и не нарушала branch-owned worktree discipline.
+
+**Why this priority**: UAT показал split-brain failure mode: workflow создаёт правильный worktree, но затем продолжает анализ/экстракцию из старой сессии. Это ломает доверие к dedicated worktree и противоречит operating model.
+
+**Independent Test**: Пользователь даёт запрос, где после создания нужно работать "из нового worktree". Workflow создаёт worktree, возвращает boundary-aware handoff block и не продолжает downstream task в originating session без явного opt-in handoff.
+
+**Acceptance Scenarios**:
+
+1. **Given** пользователь просит создать worktree и затем продолжить работу в нём, **When** create/attach flow успешно завершён, **Then** workflow возвращает handoff block и останавливается вместо продолжения downstream task в исходной сессии.
+2. **Given** пользователь выбрал ручной handoff, **When** helper сформировал readiness status, **Then** результат содержит absolute path, branch, final state, boundary и точные next commands для запуска новой сессии.
+3. **Given** пользователь явно запросил `terminal` или `codex` handoff, **When** launch поддержан и выполнен, **Then** текущая сессия всё равно завершает команду на handoff boundary и не делает follow-up work locally.
+4. **Given** create/attach flow не может подтвердить readiness или topology refresh блокируется, **When** helper завершает классификацию, **Then** workflow останавливается на blocked handoff state и возвращает точную repair command вместо продолжения задачи.
+5. **Given** topology mutation изменила committed registry в invoking branch, **When** create/attach flow завершает Phase A, **Then** workflow сначала landing-the-plane’ит registry mutation в invoking branch, и только после этого возвращает handoff block.
+6. **Given** issue-aware create flow стартует от `main`, а issue-linked foundation files живут только в invoking branch или его upstream, **When** helper рендерит manual handoff, **Then** он включает точную bootstrap import command до запуска Codex, чтобы target worktree мог подтянуть нужный seed context.
+
+### Edge Cases
+
+- Ветка содержит `/`, пробелы или другие символы, неудобные для имени каталога.
+- Целевая ветка уже занята другим worktree.
+- Worktree создан, но окружение требует явного одобрения.
+- Пользователь запрашивает автоматический handoff в среде, где интеграция с терминалом недоступна.
+- Диагностика находит частично подготовленное состояние: worktree существует, но один или несколько prerequisites отсутствуют.
+- Пользователь хочет ручной сценарий и не должен получать скрытое изменение среды без подтверждения.
+- Пользователь задает slug-only запрос без issue id, а в проекте уже есть похожие branch/worktree names.
+- Точное совпадение существует только на `origin`, но не локально.
+- Registry отстал и не должен блокировать conflict detection для live start flow.
+- Пользователь в одном запросе просит и создать worktree, и выполнить downstream task из него; workflow не должен продолжать Phase B в originating session.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: Система ДОЛЖНА поддерживать явный сценарий создания worktree для уже существующей ветки.
+- **FR-002**: Система ДОЛЖНА различать сценарии "создать новую ветку" и "создать worktree для существующей ветки" без требования к пользователю помнить низкоуровневые команды.
+- **FR-003**: Система ДОЛЖНА формировать для worktree предсказуемый, читаемый и безопасный путь на основе имени ветки или задачи.
+- **FR-004**: Система ДОЛЖНА показывать путь worktree пользователю в итоговом результате.
+- **FR-005**: Система ДОЛЖНА создавать worktree так, чтобы рабочий каталог был связан с правильной веткой и общей системой отслеживания задач проекта.
+- **FR-006**: Система ДОЛЖНА определять, требуется ли после создания worktree дополнительный шаг подготовки окружения.
+- **FR-007**: Система ДОЛЖНА сообщать честный итоговый статус готовности, отличающий как минимум состояния "создано", "требуется одобрение окружения" и "готово к запуску рабочей сессии".
+- **FR-008**: Система ДОЛЖНА показывать компактный блок следующих шагов, пригодный для copy-paste.
+- **FR-009**: Блок следующих шагов ДОЛЖЕН учитывать текущий статус готовности среды и не предлагать заведомо неверный следующий шаг.
+- **FR-010**: Система НЕ ДОЛЖНА автоматически одобрять изменения среды без явного запроса пользователя.
+- **FR-011**: Система ДОЛЖНА по явному запросу поддерживать handoff в новую терминальную сессию.
+- **FR-012**: Система ДОЛЖНА по явному запросу поддерживать запуск Codex внутри подготовленного worktree.
+- **FR-013**: Если автоматический handoff недоступен, система ДОЛЖНА предложить эквивалентный ручной путь.
+- **FR-014**: Система ДОЛЖНА поддерживать диагностический режим проверки готовности существующего worktree.
+- **FR-015**: Диагностический режим ДОЛЖЕН показывать branch mapping, связь с системой задач, статус подготовки сессии и состояние окружения.
+- **FR-016**: Если ветка уже привязана к существующему worktree, система ДОЛЖНА сообщать путь этого дерева вместо молчаливой ошибки.
+- **FR-017**: Улучшенный UX слой ДОЛЖЕН быть добавочным и не ломать текущий низкоуровневый сценарий для опытных пользователей.
+- **FR-018**: Система ДОЛЖНА сообщать конкретное следующее действие при любом неготовом состоянии.
+- **FR-019**: Система ДОЛЖНА одинаково поддерживать ручной сценарий copy-paste и ускоренный сценарий с автоматическим handoff.
+- **FR-020**: Система ДОЛЖНА обеспечивать предсказуемый результат как для нового worktree, так и для повторной работы с уже созданным деревом.
+- **FR-021**: Система ДОЛЖНА поддерживать slug-only start flow без обязательного issue id.
+- **FR-022**: Для slug-only start flow система ДОЛЖНА автоматически выводить branch и worktree path по шаблону проекта.
+- **FR-023**: Перед созданием нового worktree система ДОЛЖНА сверять потенциальные конфликты как минимум по live `git worktree`, локальным branch refs и remote refs.
+- **FR-024**: Если committed registry stale, система НЕ ДОЛЖНА использовать это как основание для отказа в one-shot start и ДОЛЖНА предпочитать live `git` для conflict detection.
+- **FR-025**: Если найдено точное совпадение по branch/worktree, система НЕ ДОЛЖНА молча создавать дубликат.
+- **FR-026**: Если найдены похожие names без точного совпадения, система ДОЛЖНА задать не более одного короткого уточняющего вопроса.
+- **FR-027**: Уточняющий вопрос ДОЛЖЕН содержать clean-new option и перечисление top similar candidates.
+- **FR-028**: Если issue id не передан, workflow НЕ ДОЛЖЕН требовать от пользователя ручного выбора naming template, если clean default уже безопасен.
+- **FR-029**: Для `start`, `create` и `attach` workflow ДОЛЖЕН завершаться только после handoff classification и НЕ ДОЛЖЕН продолжать downstream task в originating session.
+- **FR-030**: Workflow ДОЛЖЕН возвращать явный handoff boundary для managed create/attach flow.
+- **FR-031**: Для ручного handoff workflow ДОЛЖЕН включать absolute worktree path, branch, final state и точные next commands, достаточные для запуска новой сессии.
+- **FR-032**: Если пользователь просит продолжить работу "из нового worktree", workflow ДОЛЖЕН интерпретировать это как `stop_after_create` boundary, если только не выбран явный автоматический handoff.
+- **FR-033**: Workflow НЕ ДОЛЖЕН подтверждать `cwd`/branch "из нового worktree" через `git -C`, path-targeted команды или иные доказательства из старой сессии.
+- **FR-034**: Helper ДОЛЖЕН поддерживать machine-readable handoff contract как минимум в формате shell-safe `key=value`.
+- **FR-035**: Helper ДОЛЖЕН различать terminal handoff states `handoff_ready`, `handoff_needs_env_approval`, `handoff_launched`, `blocked_guard_drift`, `blocked_missing_branch`, `blocked_action_required`.
+- **FR-036**: Terminal handoff state `created` НЕ ДОЛЖЕН использоваться как финальный результат managed create/attach flow; он может сохраняться только как legacy compatibility status.
+- **FR-037**: Если handoff launch не поддержан или падает, workflow ДОЛЖЕН деградировать в manual handoff и всё равно останавливаться на boundary.
+- **FR-038**: Handoff contract ДОЛЖЕН включать `phase`, `boundary`, `final_state`, `handoff_mode` и при необходимости `launch_command` или `repair_command`.
+- **FR-039**: Helper ДОЛЖЕН возвращать blocked handoff states через стабильные exit codes, пригодные для orchestration.
+- **FR-040**: Если `scripts/git-topology-registry.sh refresh --write-doc` изменил committed registry в invoking branch, workflow ДОЛЖЕН stage/commit/pull-rebase/bd-sync/push эту mutation до возврата финального handoff block, если пользователь явно не запросил локальный тестовый dirty flow.
+- **FR-041**: Workflow ДОЛЖЕН считать committed registry mutation собственностью invoking branch, а не target worktree branch.
+- **FR-042**: Для ручного handoff human-facing output ДОЛЖЕН рендерить точные next-step команды в fenced `bash` block.
+- **FR-043**: В human-facing output workflow ДОЛЖЕН явно обозначать, что topology registry update — это ожидаемый managed diff и что он уже landed/ pushed, если landing-the-plane был выполнен.
+- **FR-044**: Для clean-create flow workflow ДОЛЖЕН разрешать явный `base_ref` и фиксировать соответствующий `base_sha` до мутаций topology.
+- **FR-045**: Workflow НЕ ДОЛЖЕН считать clean-create успешным, пока target worktree `HEAD` не совпадает с рассчитанным `base_sha`.
+- **FR-046**: Если existing branch уже существует и не совпадает с ожидаемым `base_sha`, workflow ДОЛЖЕН остановиться в blocked state и НЕ ДОЛЖЕН ремонтировать branch in-place внутри Phase A.
+- **FR-047**: Phase A НЕ ДОЛЖЕН создавать или обновлять downstream artifacts, включая Beads issues, specs, plans, checklists и implementation notes.
+- **FR-048**: Managed clean-create flow ДОЛЖЕН делать не более одного topology refresh и не более одного invoking-branch landing cycle.
+- **FR-049**: Если issue-aware create flow создаёт target branch от `main`, а issue-linked foundation files отсутствуют в target worktree, manual handoff ДОЛЖЕН включать exact bootstrap import command из invoking branch или его upstream до запуска Codex.
+- **FR-050**: Если start/create запрос явно Speckit-oriented или resolved issue metadata указывает на Speckit seed/package, workflow ДОЛЖЕН планировать и создавать numeric feature branch вида `NNN-<slug>` вместо legacy `feat/...`.
+- **FR-051**: Для Speckit-aware create flow workflow ДОЛЖЕН переиспользовать exact existing numeric branch/spec prefix для того же short name, а не создавать parallel legacy branch и не требовать post-create branch normalization.
+- **FR-052**: `doctor` ДОЛЖЕН различать реально отсутствующее readiness state и probe/tool unavailability; helper НЕ ДОЛЖЕН предлагать corrective command, который не может сработать в текущем состоянии (`bd worktree list`, `git-session-guard.sh --refresh`, `direnv status`) только потому, что сам probe не выполнился.
+
+### Key Entities
+
+- **Worktree Request**: Пользовательское намерение создать, открыть или проверить рабочее дерево для новой или существующей ветки.
+- **Worktree Plan**: Детерминированный preflight-результат для one-shot start, включающий derived branch/path, topology state и решение `create_clean|attach_existing_branch|reuse_existing|needs_clarification`.
+- **Worktree Session**: Конкретное рабочее дерево, связанное с каталогом, веткой и проектным контекстом.
+- **Readiness Status**: Пользовательский статус состояния worktree после создания или диагностики.
+- **Environment Approval State**: Состояние окружения, показывающее, требует ли worktree дополнительного шага перед запуском рабочей сессии.
+- **Handoff Profile**: Выбранный пользователем режим перехода в ручной, терминальный или Codex-сценарий.
+- **Ambiguity Candidate**: Похожая branch/worktree линия, которую система показывает пользователю только если автоматический выбор рискован.
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: В сценарии с уже существующей веткой пользователь может получить новый worktree и точный следующий шаг в рамках одного запроса к навыку.
+- **SC-002**: Не менее 90% сценариев с требуемым одобрением окружения сообщают об этом до первой неудачной пользовательской команды.
+- **SC-003**: Пользователь с уже одобренным окружением может перейти от ответа навыка к запуску Codex не более чем за одну ручную команду.
+- **SC-004**: Пользователь с неодобренным окружением может перейти от ответа навыка к запуску Codex не более чем за две ручные команды.
+- **SC-005**: Имена каталогов worktree, созданные из имен веток с разделителями, остаются читаемыми и предсказуемыми в 100% проверенных сценариев.
+- **SC-006**: Диагностический режим в 100% проверенных сценариев сообщает хотя бы одно конкретное следующее действие, если worktree не готов к работе.
+- **SC-007**: Улучшенный workflow снижает потребность в дополнительных поясняющих сообщениях по запуску worktree как минимум на 50% по сравнению с текущим ручным handoff.
+- **SC-008**: В slug-only start сценарии без конфликтов пользователь доходит до готового branch/path плана без дополнительных вопросов в 100% проверенных сценариев.
+- **SC-009**: При точном совпадении branch/worktree workflow не создает дубликат ни в одном проверенном сценарии.
+- **SC-010**: При похожих именах workflow задает не более одного уточняющего вопроса и всегда включает clean-new option.
+- **SC-011**: В проверенных stale-registry сценариях conflict detection использует live `git` и не расходится с фактическим состоянием worktree/refs.
+- **SC-012**: В 100% проверенных create/attach UAT-сценариев workflow завершает команду на handoff boundary и не продолжает downstream task в originating session.
+- **SC-013**: Machine-readable handoff contract стабилен и покрыт тестами как минимум для ready/env-approval/blocked scenarios.
+- **SC-014**: В 100% проверенных managed create/attach сценариев committed topology mutation не остаётся незапушенным локальным diff в invoking branch.
+- **SC-015**: В 100% проверенных ручных handoff сценариев пользователь получает готовый fenced `bash` block с точными next-step командами.
+- **SC-016**: В 100% проверенных clean-create сценариев новая branch рождается от canonical `main` без post-create repair.
+- **SC-017**: В 100% проверенных mixed-request сценариев Phase A не трогает `.beads/issues.jsonl` и не создаёт downstream artifacts.
+- **SC-018**: В 100% проверенных issue-aware create сценариев, где foundation files отсутствуют в target worktree, manual handoff содержит готовую bootstrap import command и перечисляет source ref/files без продолжения Phase B в исходной сессии.
+- **SC-019**: В 100% проверенных Speckit-aware create сценариев helper планирует numeric branch `NNN-<slug>` и не создаёт legacy `feat/...` branch для той же feature line.
+- **SC-020**: В 100% проверенных doctor-сценариев с unavailable probes helper не выдаёт ложные corrective commands и не смешивает probe failure с missing-state.

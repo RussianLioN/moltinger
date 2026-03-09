@@ -12,6 +12,92 @@
 | **Web UI** | https://moltis.ainetic.tech | Веб-интерфейс |
 | **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
 | **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
+| **Git Topology Registry** | docs/GIT-TOPOLOGY-REGISTRY.md | Generated snapshot актуальных worktree, веток и cleanup-контекста |
+| **Worktree Hotfix Playbook** | docs/WORKTREE-HOTFIX-PLAYBOOK.md | Что делать, если после merge `command-worktree` работает не так, как ожидается |
+
+---
+
+## Git Topology Registry
+
+```bash
+# Claude-style shorthand
+/git-topology
+
+# Codex CLI
+scripts/git-topology-registry.sh status
+
+# Проверить, что registry не устарел
+scripts/git-topology-registry.sh check
+
+# Обновить committed snapshot после topology mutation
+scripts/git-topology-registry.sh refresh --write-doc
+
+# Посмотреть текущее состояние без записи файлов
+scripts/git-topology-registry.sh status
+```
+
+Использовать перед cleanup worktree/branch и после create/remove/switch flow.
+
+### Как пользоваться
+
+**Обычный сценарий**
+1. В Claude-style клиентах используйте `/worktree`; в Codex CLI используйте skill `command-worktree`
+2. Для one-shot старта можно писать коротко: `Используй command-worktree и создай новый worktree remote-uat-hardening`
+3. Workflow сам проверит exact/similar branch/worktree collisions по live `git` и задаст один короткий вопрос только при реальной неоднозначности
+4. Для topology-проверок в Codex CLI используйте `scripts/git-topology-registry.sh check`
+5. Если topology менялась через managed flow, registry обычно обновится сам
+6. Если topology менялась вручную через raw `git`, запускайте recovery flow
+7. В Codex/App refresh после topology mutation может потребовать approval, если shared `.git` находится вне writable boundary текущей сессии
+
+**Recovery flow после ручных git-операций**
+```bash
+# Построить recovery draft без изменения committed registry
+scripts/git-topology-registry.sh doctor --prune
+
+# Посмотреть draft
+cat .git/topology-registry/registry.draft.md
+
+# Если draft корректен, применить reconcile
+scripts/git-topology-registry.sh doctor --prune --write-doc
+```
+
+Важно:
+- `doctor --prune` не меняет tracked files; он пишет только recovery draft в `.git/`
+- `doctor --prune --write-doc` намеренно переписывает `docs/GIT-TOPOLOGY-REGISTRY.md`, если live topology изменилась
+- поэтому `git status` с `M docs/GIT-TOPOLOGY-REGISTRY.md` после `--write-doc` при реальном topology drift это ожидаемое поведение, а не сбой команды
+
+**Где хранить ручные пометки**
+- Редактировать только `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Не редактировать вручную `docs/GIT-TOPOLOGY-REGISTRY.md`
+
+### Что происходит автоматически
+
+- `command-worktree` в Codex и `/worktree` в Claude-style клиентах обновляют registry после topology mutation
+- `command-session-summary` в Codex и `/session-summary` в Claude-style клиентах используют registry как session-boundary reconcile point
+- `pre-push` блокирует push, если registry stale
+- `post-checkout`, `post-merge`, `post-rewrite` выполняют read-only stale check и не берут reconcile lock
+
+### Что под капотом
+
+- Источник правды: live `git`, а не markdown
+- Скрипт читает:
+  - `git worktree list --porcelain`
+  - `git for-each-ref ... refs/heads`
+  - `git for-each-ref ... refs/remotes/origin`
+- Потом он:
+  - нормализует worktree/branch topology
+  - подмешивает reviewed intent из `docs/GIT-TOPOLOGY-INTENT.yaml`
+  - рендерит deterministic snapshot в `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Recovery artifacts живут в `.git/topology-registry/`:
+  - `registry.draft.md`
+  - `backups/`
+
+### Полезные ссылки
+
+- User/merge handoff: `specs/006-git-topology-registry/quickstart.md`
+- Live committed registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Reviewed intent sidecar: `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Post-merge hotfix playbook: `docs/WORKTREE-HOTFIX-PLAYBOOK.md`
 
 ---
 
@@ -142,4 +228,4 @@ Workflow variable:
 
 ---
 
-*Last updated: 2026-03-06*
+*Last updated: 2026-03-08*

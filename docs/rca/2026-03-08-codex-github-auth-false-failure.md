@@ -9,8 +9,8 @@ root_cause: "Sandbox-specific auth and network failures were misreported as a ho
 
 # RCA: False GitHub Auth Failure During Codex Push
 
-**Date:** 2026-03-08  
-**Status:** Resolved  
+**Date:** 2026-03-08
+**Status:** Resolved
 **Impact:** False incident signal. I reported that GitHub SSH auth looked broken, even though the host SSH path was healthy and the branch push was recoverable.
 **Context:** Landing rollout branch `codex/gpt54-agents-split` from a Codex tool session
 

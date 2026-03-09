@@ -1,0 +1,154 @@
+# Reviewed intent sidecar for `docs/GIT-TOPOLOGY-REGISTRY.md`.
+# Keep records sorted by `subject_type`, then `subject_key`.
+# Allowed subject_type: `branch`, `worktree`, `remote`
+# Allowed intent: `active`, `historical`, `extract-only`, `cleanup-candidate`, `protected`, `needs-decision`
+# `subject_key` must match the rendered registry row key exactly.
+# `pr` is optional and stores the related GitHub PR number when it exists.
+version: 1
+defaults:
+  missing_intent: needs-decision
+records:
+  - subject_type: branch
+    subject_key: 001-docker-deploy-improvements
+    intent: historical
+    note: Historical branch.
+  - subject_type: branch
+    subject_key: 001-fallback-llm-ollama
+    intent: historical
+    note: Historical branch.
+  - subject_type: branch
+    subject_key: 001-moltis-docker-deploy
+    intent: historical
+    note: Historical branch with local drift.
+  - subject_type: branch
+    subject_key: 003-testing-infrastructure
+    intent: historical
+    note: Historical planning branch.
+  - subject_type: branch
+    subject_key: 005-worktree-ready-flow
+    intent: active
+    note: Valid parallel local feature branch; dedicated worktree exists.
+  - subject_type: branch
+    subject_key: 006-git-topology-registry
+    intent: active
+    note: Active Speckit feature branch; dedicated authoritative worktree exists.
+  - subject_type: branch
+    subject_key: codex/004-telegram-e2e-harness
+    intent: extract-only
+    note: Unmerged source branch; treat as extraction source, not merge target.
+  - subject_type: branch
+    subject_key: codex/fix-bot
+    intent: extract-only
+    note: PR #8 already merged, but branch still contains extra commits; do not merge raw.
+    pr: 8
+  - subject_type: branch
+    subject_key: codex/full-review
+    intent: protected
+    note: Open parallel branch; separate worktree exists.
+    pr: 6
+  - subject_type: branch
+    subject_key: codex/gitops-metrics-fix
+    intent: active
+    note: Fresh replacement branch with open PR #18.
+    pr: 18
+  - subject_type: branch
+    subject_key: codex/webhook-moltinger
+    intent: extract-only
+    note: Valuable but broad operational branch; extract selectively.
+  - subject_type: branch
+    subject_key: feat/gpt-5-moltis
+    intent: active
+    note: Active documentation and research branch; dedicated worktree exists.
+  - subject_type: branch
+    subject_key: feat/moltinger-jb6-gpt54-primary
+    intent: active
+    note: Active parallel task branch for GPT-5.4 primary provider-chain evaluation.
+  - subject_type: branch
+    subject_key: main
+    intent: active
+    note: Canonical source of truth; checked out in the primary root worktree.
+  - subject_type: branch
+    subject_key: test/rca-guard-uat-20260307-0004
+    intent: needs-decision
+    note: Local-only test branch.
+  - subject_type: branch
+    subject_key: test/rca-guard-uat-20260307-0015
+    intent: cleanup-candidate
+    note: Local-only stale test branch with gone upstream.
+  - subject_type: remote
+    subject_key: origin/001-frontend
+    intent: cleanup-candidate
+    note: Review later; currently dangling.
+  - subject_type: remote
+    subject_key: origin/001-moltis-docker-deploy
+    intent: historical
+    note: Historical; review before cleanup.
+  - subject_type: remote
+    subject_key: origin/003-testing-infrastructure
+    intent: historical
+    note: Historical planning branch.
+  - subject_type: remote
+    subject_key: origin/005-worktree-ready-flow
+    intent: active
+    note: Active parallel feature branch.
+  - subject_type: remote
+    subject_key: origin/006-git-topology-registry
+    intent: active
+    note: Active topology-registry feature branch.
+  - subject_type: remote
+    subject_key: origin/codex/004-telegram-e2e-harness
+    intent: extract-only
+    note: Source for future Telegram consolidation.
+  - subject_type: remote
+    subject_key: origin/codex/fix-bot
+    intent: extract-only
+    note: Source for future Telegram consolidation.
+    pr: 8
+  - subject_type: remote
+    subject_key: origin/codex/full-review
+    intent: protected
+    note: Active parallel session; exclude from automated cleanup.
+    pr: 6
+  - subject_type: remote
+    subject_key: origin/codex/gitops-metrics-fix
+    intent: active
+    note: Active replacement PR #18.
+    pr: 18
+  - subject_type: remote
+    subject_key: origin/codex/webhook-moltinger
+    intent: extract-only
+    note: Source for future Telegram consolidation.
+  - subject_type: remote
+    subject_key: origin/feat/gpt-5-moltis
+    intent: active
+    note: Active feature branch.
+  - subject_type: worktree
+    subject_key: codex-full-review
+    intent: protected
+    note: Parallel Codex session; protect from cleanup.
+    pr: 6
+  - subject_type: worktree
+    subject_key: codex-gitops-metrics-fix
+    intent: active
+    note: Active replacement branch for closed PR #3; open PR #18.
+    pr: 18
+  - subject_type: worktree
+    subject_key: gpt-5-moltis
+    intent: active
+    note: Active research and documentation worktree.
+  - subject_type: worktree
+    subject_key: moltinger-jb6-gpt54-primary
+    intent: active
+    note: Active sibling worktree for the GPT-5.4 primary provider-chain task.
+  - subject_type: worktree
+    subject_key: primary-feature-005
+    intent: active
+    note: Active parallel Speckit feature worktree.
+  - subject_type: worktree
+    subject_key: primary-feature-006
+    intent: active
+    note: Active authoritative worktree for topology-registry automation.
+  - subject_type: worktree
+    subject_key: primary-root
+    intent: active
+    note: Canonical root worktree; neutral base for triage, cleanup, and merges.

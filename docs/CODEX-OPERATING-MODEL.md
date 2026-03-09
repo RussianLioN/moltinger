@@ -147,6 +147,17 @@ Use the nearest local `AGENTS.md` for directory-specific rules.
 3. Keep workflow, script, and documentation contracts aligned.
 4. Finish with `make codex-check` plus any targeted workflow/script validation.
 
+### Command-Worktree Follow-Up Fix
+
+If `command-worktree` is already merged but a real session still exposes a bug:
+
+1. Reproduce it once and capture the exact prompt plus output.
+2. Open a follow-up issue.
+3. Create a fresh fix branch from `main`.
+4. Add a regression test before changing behavior.
+5. Use the narrowest fix possible.
+6. Follow `docs/WORKTREE-HOTFIX-PLAYBOOK.md`.
+
 ### GitHub Auth Or Push Failure
 
 1. Record whether the failure happened inside the sandbox or outside it.

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
+
+if [[ -x "$REGISTRY_SCRIPT" ]]; then
+  if ! output="$("$REGISTRY_SCRIPT" check 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    echo "[git-topology-registry] post-rewrite detected topology drift." >&2
+    echo "[git-topology-registry] Reconcile with /session-summary or scripts/git-topology-registry.sh doctor --prune --write-doc." >&2
+  fi
+fi
+
+exit 0

@@ -8,7 +8,16 @@ Current branch/worktree registry lives in:
 docs/GIT-TOPOLOGY-REGISTRY.md
 ```
 
-Use it when branch/worktree context matters or before cleanup actions.
+It is generated from live git topology plus reviewed intent sidecar.
+
+```bash
+scripts/git-topology-registry.sh check
+scripts/git-topology-registry.sh refresh --write-doc
+scripts/git-topology-registry.sh status
+```
+
+Use `check` when branch/worktree context matters or before cleanup actions. Use `refresh --write-doc` after topology mutations.
+In Codex/App sessions, `refresh --write-doc` may require approval if the shared repo `.git` directory is outside the current writable boundary.
 
 ## Quick Reference
 

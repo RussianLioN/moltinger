@@ -41,6 +41,7 @@ node_modules/
 # Temporary
 .tmp/
 *.tmp
+scripts/.scripts-hashes
 
 # Claude Code Local Overrides (Not Shared)
 .claude/settings.local.json

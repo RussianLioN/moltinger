@@ -52,3 +52,7 @@ After installing or updating skills, restart Codex to refresh skill discovery.
 - `.claude/commands/*` are migrated into generated bridge skills under `$CODEX_HOME/skills/claude-bridge/commands/*`.
 - `.claude/agents/*` are migrated into generated bridge skills under `$CODEX_HOME/skills/claude-bridge/agents/*`.
 - When both a command and a skill describe the same workflow, prefer the skill.
+- In Codex CLI, bridged Claude commands are usually invoked via `command-*` skills, not native slash commands.
+- Example: use `command-worktree` and `command-session-summary` in Codex; do not assume `/worktree` or `/session-summary` are registered as CLI slash commands.
+- If the user refers to the "worktree skill" in plain language, map that intent to `command-worktree`.
+- Before resetting or fast-forwarding a UAT worktree, preserve any newer `docs/GIT-TOPOLOGY-REGISTRY.md` snapshot into the owning branch first; see `docs/rules/uat-registry-snapshot-preservation.md`.

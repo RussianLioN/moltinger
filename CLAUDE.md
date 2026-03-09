@@ -40,6 +40,22 @@ This file contains:
 
 ---
 
+## ⚠️ MANDATORY: Use Git Topology Registry for Branch/Worktree Context
+
+Current branch/worktree registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+
+It is a generated artifact. Use:
+
+```bash
+scripts/git-topology-registry.sh check
+scripts/git-topology-registry.sh refresh --write-doc
+scripts/git-topology-registry.sh status
+```
+
+Run `check` before branch cleanup, worktree operations, or session handoff. Run `refresh --write-doc` after topology mutations.
+
+---
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
