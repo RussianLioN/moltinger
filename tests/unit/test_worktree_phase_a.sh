@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/../lib/git_topology_fixture.sh"
 
 WORKTREE_PHASE_A_SCRIPT="$PROJECT_ROOT/scripts/worktree-phase-a.sh"
 
-create_fake_bd_worktree_bin() {
+create_fake_bd_bin() {
     local fixture_root="$1"
     local fake_bin="${fixture_root}/bin"
 
@@ -19,14 +19,15 @@ create_fake_bd_worktree_bin() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${1:-}" == "worktree" && "${2:-}" == "create" ]]; then
-  if [[ $# -ne 5 || "${4:-}" != "--branch" ]]; then
-    printf 'unsupported fake bd worktree create invocation\n' >&2
-    exit 1
+if [[ "${1:-}" == "--no-daemon" ]]; then
+  shift
+fi
+
+if [[ "${1:-}" == "list" ]]; then
+  if [[ -n "${BEADS_DB:-}" ]]; then
+    mkdir -p "$(dirname "${BEADS_DB}")"
+    : > "${BEADS_DB}"
   fi
-  path="$3"
-  branch="$5"
-  git -C "$PWD" worktree add "$path" "$branch" >/dev/null
   exit 0
 fi
 
@@ -58,8 +59,17 @@ test_phase_a_create_from_base_anchors_new_branch_to_main() {
     local fixture_root repo_dir fake_bin target_path base_sha branch_sha worktree_sha output
     fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
-    fake_bin="$(create_fake_bd_worktree_bin "$fixture_root")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
     target_path="${fixture_root}/moltinger-clean-start"
+
+    mkdir -p "${repo_dir}/.beads"
+    printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
+    printf '{"id":"molt-1","title":"fixture"}\n' > "${repo_dir}/.beads/issues.jsonl"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl
+        git commit -m "fixture: track beads state" >/dev/null
+    )
 
     (
         cd "${repo_dir}"
@@ -84,6 +94,10 @@ test_phase_a_create_from_base_anchors_new_branch_to_main() {
     assert_contains "$output" 'result=created_from_base' "Phase A create should report successful base-anchored creation"
     assert_eq "$base_sha" "$branch_sha" "New branch should be created exactly at canonical main"
     assert_eq "$base_sha" "$worktree_sha" "New worktree HEAD should match canonical main"
+    assert_file_missing "${target_path}/.beads/redirect" "Phase A create should not leave redirect metadata in the new worktree"
+    if [[ ! -f "${target_path}/.beads/beads.db" ]]; then
+        test_fail "Phase A create should bootstrap a local beads.db in the new worktree"
+    fi
 
     rm -rf "$fixture_root"
     test_pass
@@ -95,7 +109,7 @@ test_phase_a_create_blocks_existing_branch_on_wrong_base() {
     local fixture_root repo_dir fake_bin target_path output rc
     fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
-    fake_bin="$(create_fake_bd_worktree_bin "$fixture_root")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
     target_path="${fixture_root}/moltinger-drifted-start"
 
     (

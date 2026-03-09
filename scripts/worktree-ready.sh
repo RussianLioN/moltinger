@@ -985,13 +985,16 @@ map_bd_beads_state() {
   local raw_state="$1"
 
   case "${raw_state}" in
+    local)
+      printf 'local\n'
+      ;;
     shared)
       printf 'shared\n'
       ;;
     redirect)
       printf 'redirected\n'
       ;;
-    local|none|"")
+    none|"")
       printf 'missing\n'
       ;;
     *)
@@ -1568,8 +1571,8 @@ apply_discovery_to_report() {
     fi
   fi
 
-  if [[ -n "${discovered_redirect_target}" ]]; then
-    add_warning "Discovery found beads redirect metadata for the target worktree"
+  if [[ -n "${discovered_redirect_target}" || "${discovered_beads_state}" == "redirected" ]]; then
+    add_warning "Discovery found beads redirect metadata for the target worktree; localize it before running bd without BEADS_DB"
   fi
 
   if [[ "${discovered_beads_probe_state}" == "probe_unavailable" ]]; then
@@ -1650,9 +1653,15 @@ set_readiness_status() {
     return 0
   fi
 
+  if [[ "${report_beads_state}" == "redirected" ]]; then
+    report_status="action_required"
+    add_warning "The target worktree still points at a redirected Beads tracker."
+    return 0
+  fi
+
   if report_worktree_path_exists; then
     if [[ "${report_beads_state}" == "missing" && -n "${discovered_worktree_path}" ]]; then
-      add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
+      add_warning "The target worktree exists, but worktree-local Beads ownership could not be confirmed."
     fi
 
     case "${report_env_state}" in
@@ -1693,9 +1702,15 @@ set_doctor_status() {
     return 0
   fi
 
+  if [[ "${report_beads_state}" == "redirected" ]]; then
+    report_status="action_required"
+    add_warning "The target worktree still points at a redirected Beads tracker."
+    return 0
+  fi
+
   if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" ]]; then
     report_status="action_required"
-    add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
+    add_warning "The target worktree exists, but worktree-local Beads ownership could not be confirmed."
     return 0
   fi
 
@@ -1869,9 +1884,13 @@ set_readiness_next_steps() {
         create|attach)
           if [[ -n "${discovered_worktree_path}" ]]; then
             add_next_step "cd $(shell_quote "${report_worktree_path}")"
-            add_next_step "Inspect the existing worktree and fix the reported prerequisites"
+            if [[ "${report_beads_state}" == "redirected" ]]; then
+              add_next_step "./scripts/beads-worktree-localize.sh"
+            else
+              add_next_step "Inspect the existing worktree and fix the reported prerequisites"
+            fi
           else
-            add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
+            add_next_step "git worktree add $(shell_quote "${path_preview}") $(shell_quote "${branch}")"
           fi
           ;;
         doctor|handoff)
@@ -1927,6 +1946,8 @@ set_doctor_next_steps() {
 
   if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" ]]; then
     add_next_step "bd worktree list"
+  elif [[ "${report_beads_state}" == "redirected" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh"
   fi
 
   case "${report_env_state}" in

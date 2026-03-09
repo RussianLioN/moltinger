@@ -203,6 +203,7 @@ Process:
 8. Create or attach the worktree with beads integration:
    - new branch: use the deterministic executor instead of raw `bd worktree create`
      - `scripts/worktree-phase-a.sh create-from-base --canonical-root <canonical-root> --base-ref main --branch <branch> --path <absolute-worktree-path>`
+     - The managed flow must keep Beads ownership local to the target worktree; it must not leave `.beads/redirect` pointing back at the canonical root.
    - existing local branch: create the worktree for that branch instead of inventing a new branch name
 9. For new branches, ancestry verification is mandatory before any topology refresh:
    - if `scripts/worktree-phase-a.sh` reports that the branch already existed on the wrong commit, stop blocked
@@ -463,7 +464,7 @@ Optional helper detail lines may also include:
 - `Topology: <ok|stale|unavailable>`
 - `Env: <unknown|no_envrc|approval_needed|approved_or_not_required>`
 - `Guard: <unknown|missing|ok|drift>`
-- `Beads: <shared|redirected|missing>`
+- `Beads: <local|shared|redirected|missing>`
 - `Handoff: <manual|terminal|codex>`
 - `Warnings:`
 
