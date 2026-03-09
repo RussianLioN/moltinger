@@ -1,0 +1,53 @@
+{
+  "schema_version": "v1",
+  "updated_at": "2026-03-09T00:00:00Z",
+  "agents": [
+    {
+      "agent_id": "moltinger",
+      "display_name": "Moltinger",
+      "role": "coordinator",
+      "runtime_engine": "moltis",
+      "internal_endpoint": "http://moltis:13131/internal/v1",
+      "public_endpoints": {
+        "web": "https://moltis.ainetic.tech",
+        "telegram": "@moltinger_bot"
+      },
+      "capabilities": [
+        "coordination.dispatch",
+        "fleet.registry.read",
+        "handoff.status.receive",
+        "operator.escalation"
+      ],
+      "allowed_callers": [
+        "clawdiy",
+        "coordinator"
+      ],
+      "reachability": "reachable",
+      "policy_version": "git:pending",
+      "last_validated_at": null
+    },
+    {
+      "agent_id": "clawdiy",
+      "display_name": "Clawdiy",
+      "role": "coder",
+      "runtime_engine": "openclaw",
+      "internal_endpoint": "http://clawdiy:18789/internal/v1",
+      "public_endpoints": {
+        "web": "https://clawdiy.ainetic.tech",
+        "telegram": "@clawdiy_bot"
+      },
+      "capabilities": [
+        "coding.orchestration",
+        "task.execution",
+        "provider.auth.check"
+      ],
+      "allowed_callers": [
+        "moltinger",
+        "coordinator"
+      ],
+      "reachability": "degraded",
+      "policy_version": "git:pending",
+      "last_validated_at": null
+    }
+  ]
+}

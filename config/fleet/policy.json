@@ -1,0 +1,48 @@
+{
+  "schema_version": "v1",
+  "updated_at": "2026-03-09T00:00:00Z",
+  "defaults": {
+    "allow_unknown_agents": false,
+    "allow_unknown_capabilities": false,
+    "allow_public_machine_handoffs": false,
+    "fail_closed_on_auth_error": true
+  },
+  "service_auth": {
+    "mode": "bearer",
+    "authorization_header": "Authorization",
+    "required_headers": [
+      "X-Agent-Id",
+      "X-Correlation-Id",
+      "Idempotency-Key"
+    ]
+  },
+  "routes": [
+    {
+      "caller": "moltinger",
+      "recipient": "clawdiy",
+      "transport": "http-json",
+      "endpoint": "POST /internal/v1/agent-handoffs",
+      "ack_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "capabilities": [
+        "coding.orchestration",
+        "task.execution",
+        "provider.auth.check"
+      ]
+    },
+    {
+      "caller": "clawdiy",
+      "recipient": "moltinger",
+      "transport": "http-json",
+      "endpoint": "POST /internal/v1/agent-handoffs",
+      "ack_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "capabilities": [
+        "handoff.status.receive",
+        "operator.escalation"
+      ]
+    }
+  ],
+  "secret_refs": {
+    "moltinger_service_auth": "github-secret:MOLTINGER_SERVICE_TOKEN",
+    "clawdiy_service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN"
+  }
+}

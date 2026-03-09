@@ -1,0 +1,58 @@
+{
+  "schema_version": "v1alpha1",
+  "agent": {
+    "agent_id": "clawdiy",
+    "display_name": "Clawdiy",
+    "role": "coder",
+    "runtime_engine": "openclaw",
+    "owner": "platform-ops",
+    "lifecycle_state": "planned"
+  },
+  "server": {
+    "bind": "0.0.0.0",
+    "port": 18789,
+    "base_url": "https://clawdiy.ainetic.tech",
+    "health_path": "/health",
+    "metrics_path": "/metrics"
+  },
+  "paths": {
+    "config_root": "/home/node/.openclaw",
+    "state_root": "/home/node/.openclaw-data",
+    "audit_root": "/home/node/.openclaw-audit"
+  },
+  "identity": {
+    "domain": "clawdiy.ainetic.tech",
+    "internal_endpoint": "http://clawdiy:18789/internal/v1",
+    "telegram_bot": "@clawdiy_bot"
+  },
+  "control_plane": {
+    "authoritative_transport": "http-json",
+    "registry_path": "/home/node/.openclaw/registry/agents-registry.json",
+    "policy_path": "/home/node/.openclaw/registry/policy.json",
+    "ack_deadline_seconds": 10,
+    "terminal_timeout_seconds": 900
+  },
+  "auth": {
+    "human_auth_secret_ref": "github-secret:CLAWDIY_PASSWORD",
+    "service_auth_secret_ref": "github-secret:CLAWDIY_SERVICE_TOKEN",
+    "telegram_token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+    "provider_auth_profiles": {
+      "openai-codex": {
+        "enabled": false,
+        "rollout_gate": "post-auth-verify"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "mode": "polling",
+      "bot_username": "@clawdiy_bot",
+      "token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN"
+    }
+  },
+  "storage": {
+    "audit_format": "jsonl",
+    "state_snapshot_prefix": "clawdiy"
+  }
+}
