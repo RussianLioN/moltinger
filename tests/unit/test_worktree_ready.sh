@@ -82,10 +82,18 @@ seed_fake_beads_issues() {
     local repo_dir="$1"
 
     mkdir -p "${repo_dir}/.beads"
-    cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
-{"id":"molt-2","title":"Implement Codex CLI update monitor from Speckit seed"}
+cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"molt-2","title":"Implement Codex CLI update monitor from Speckit seed","description":"Create the dedicated feature branch/worktree and run the Speckit workflow using docs/plans/codex-cli-update-monitoring-speckit-seed.md and docs/research/codex-cli-update-monitoring-2026-03-09.md as inputs."}
 {"id":"moltinger-dmi","title":"Controlled Telegram webhook rollout"}
 EOF
+}
+
+seed_fake_issue_artifacts() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/docs/plans" "${repo_dir}/docs/research"
+    printf '# seed\n' > "${repo_dir}/docs/plans/codex-cli-update-monitoring-speckit-seed.md"
+    printf '# research\n' > "${repo_dir}/docs/research/codex-cli-update-monitoring-2026-03-09.md"
 }
 
 test_plan_creates_clean_slug_without_issue() {
@@ -326,6 +334,43 @@ test_create_infers_issue_from_issue_aware_branch_name() {
     test_pass
 }
 
+test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them() {
+    test_start "worktree_ready_create_surfaces_source_only_issue_artifacts_when_target_lacks_them"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-molt-2-codex-update-monitor-new"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+    seed_fake_beads_issues "${repo_dir}"
+    seed_fake_issue_artifacts "${repo_dir}"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/molt-2-codex-update-monitor-new --path "$probe_dir"
+    )"
+
+    assert_contains "$output" 'Issue Title: Implement Codex CLI update monitor from Speckit seed' "Handoff should include the resolved issue title when available"
+    assert_contains "$output" 'Issue Artifacts:' "Handoff should enumerate issue-linked repo artifacts"
+    assert_contains "$output" 'docs/plans/codex-cli-update-monitoring-speckit-seed.md [source only; missing in target]' "Missing seed docs should be called out as source-only context"
+    assert_contains "$output" "Issue 'molt-2' is not present in target worktree Beads state" "Handoff should explain why local bd lookups will fail in the target worktree"
+    assert_contains "$output" "Issue artifact 'docs/research/codex-cli-update-monitoring-2026-03-09.md' is not present in the target worktree." "Handoff should warn when issue artifacts are absent from the target worktree"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/molt-2-codex-update-monitor-new --path "$probe_dir" --format env
+    )"
+
+    assert_contains "$output" 'issue_title=Implement\ Codex\ CLI\ update\ monitor\ from\ Speckit\ seed' "Env handoff should preserve the issue title"
+    assert_contains "$output" 'issue_artifact_count=2' "Env handoff should enumerate linked issue artifacts"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_plan_needs_clarification_returns_exit_code_10() {
     test_start "worktree_ready_plan_needs_clarification_returns_exit_code_10"
 
@@ -400,6 +445,7 @@ run_all_tests() {
     test_create_env_format_emits_handoff_boundary_contract
     test_create_uses_explicit_pending_summary
     test_create_infers_issue_from_issue_aware_branch_name
+    test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them
     test_plan_needs_clarification_returns_exit_code_10
     test_attach_missing_branch_returns_blocked_missing_branch
     generate_report

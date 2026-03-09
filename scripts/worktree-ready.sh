@@ -94,9 +94,11 @@ report_launch_command=""
 report_repair_command=""
 report_pending_work=""
 report_worktree_action="unchanged"
+report_issue_title=""
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
+declare -a report_issue_artifacts=()
 
 discovered_worktree_name=""
 discovered_worktree_path=""
@@ -370,6 +372,121 @@ resolve_report_issue_id() {
   fi
 
   printf '\n'
+}
+
+extract_issue_title_from_jsonl_line() {
+  local issue_line="$1"
+
+  if [[ -z "${issue_line}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  printf '%s\n' "${issue_line}" \
+    | sed -n 's/.*"title":"\([^"]*\)".*/\1/p' \
+    | sed 's/\\"/"/g'
+}
+
+extract_issue_artifact_paths_from_jsonl_line() {
+  local issue_line="$1"
+  local candidate_path=""
+  local normalized_path=""
+  local seen_paths=""
+
+  if [[ -z "${issue_line}" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r candidate_path; do
+    if [[ -z "${candidate_path}" ]]; then
+      continue
+    fi
+
+    normalized_path="${candidate_path#./}"
+    if [[ -z "${normalized_path}" ]]; then
+      continue
+    fi
+
+    if [[ ! -e "${resolved_repo_root}/${normalized_path}" ]]; then
+      continue
+    fi
+
+    case ":${seen_paths}:" in
+      *:"${normalized_path}":*)
+        continue
+        ;;
+    esac
+
+    seen_paths="${seen_paths}:${normalized_path}"
+    printf '%s\n' "${normalized_path}"
+  done < <(
+    printf '%s\n' "${issue_line}" \
+      | grep -oE '([A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+' \
+      || true
+  )
+}
+
+target_has_issue_record() {
+  local issue_key="$1"
+  local worktree_path="$2"
+  local target_issues_file=""
+
+  if [[ -z "${issue_key}" || -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
+    return 1
+  fi
+
+  target_issues_file="${worktree_path}/.beads/issues.jsonl"
+  if [[ ! -f "${target_issues_file}" ]]; then
+    return 1
+  fi
+
+  grep -F "\"id\":\"${issue_key}\"" "${target_issues_file}" >/dev/null 2>&1
+}
+
+discover_issue_context() {
+  local resolved_issue=""
+  local issues_file=""
+  local issue_line=""
+  local artifact_path=""
+  local artifact_report=""
+
+  resolved_issue="${report_issue_id:-}"
+  if [[ -z "${resolved_issue}" || "${resolved_issue}" == "n/a" ]]; then
+    return 0
+  fi
+
+  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
+  if [[ ! -f "${issues_file}" ]]; then
+    return 0
+  fi
+
+  issue_line="$(
+    awk -v issue="${resolved_issue}" 'index($0, "\"id\":\"" issue "\"") { print; exit }' "${issues_file}"
+  )"
+  if [[ -z "${issue_line}" ]]; then
+    return 0
+  fi
+
+  report_issue_title="$(extract_issue_title_from_jsonl_line "${issue_line}")"
+
+  if report_worktree_path_exists && ! target_has_issue_record "${resolved_issue}" "${report_worktree_path}"; then
+    add_warning "Issue '${resolved_issue}' is not present in target worktree Beads state; rely on the handoff context instead of local bd show."
+  fi
+
+  while IFS= read -r artifact_path; do
+    if [[ -z "${artifact_path}" ]]; then
+      continue
+    fi
+
+    if report_worktree_path_exists && [[ -e "${report_worktree_path}/${artifact_path}" ]]; then
+      artifact_report="${artifact_path} [present in target]"
+    else
+      artifact_report="${artifact_path} [source only; missing in target]"
+      add_warning "Issue artifact '${artifact_path}' is not present in the target worktree."
+    fi
+
+    report_issue_artifacts+=("${artifact_report}")
+  done < <(extract_issue_artifact_paths_from_jsonl_line "${issue_line}")
 }
 
 normalize_slug_token() {
@@ -1139,8 +1256,10 @@ reset_report() {
   report_repair_command=""
   report_pending_work=""
   report_worktree_action="unchanged"
+  report_issue_title=""
   report_next_steps=()
   report_warnings=()
+  report_issue_artifacts=()
 }
 
 set_report_target() {
@@ -1590,6 +1709,9 @@ render_readiness_report() {
     render_env_kv "preview" "${report_path_preview:-n/a}"
     render_env_kv "branch" "${report_branch_name:-n/a}"
     render_env_kv "issue" "${report_issue_id:-n/a}"
+    if [[ -n "${report_issue_title}" ]]; then
+      render_env_kv "issue_title" "${report_issue_title}"
+    fi
     render_env_kv "status" "${report_status}"
     render_env_kv "topology_state" "${report_topology_state}"
     render_env_kv "env_state" "${report_env_state}"
@@ -1607,6 +1729,9 @@ render_readiness_report() {
     if [[ -n "${report_pending_work}" ]]; then
       render_env_kv "pending" "${report_pending_work}"
     fi
+    if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
+      render_env_array "issue_artifact" "${report_issue_artifacts[@]}"
+    fi
     render_env_array "next" "${report_next_steps[@]}"
     render_env_array "warning" "${report_warnings[@]}"
     return 0
@@ -1616,6 +1741,13 @@ render_readiness_report() {
   printf 'Preview: %s\n' "${report_path_preview:-n/a}"
   printf 'Branch: %s\n' "${report_branch_name:-n/a}"
   printf 'Issue: %s\n' "${report_issue_id:-n/a}"
+  if [[ -n "${report_issue_title}" ]]; then
+    printf 'Issue Title: %s\n' "${report_issue_title}"
+  fi
+  if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
+    printf 'Issue Artifacts:\n'
+    render_numbered_list "${report_issue_artifacts[@]}"
+  fi
   printf 'Status: %s\n' "${report_status}"
   printf 'Phase: %s\n' "${report_phase}"
   printf 'Boundary: %s\n' "${report_boundary}"
@@ -1776,6 +1908,7 @@ prepare_report_target() {
   apply_branch_resolution_to_report
   apply_topology_probe_to_report
   apply_environment_probe_to_report
+  discover_issue_context
 }
 
 select_handoff_mode() {
