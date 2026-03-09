@@ -68,6 +68,7 @@
 | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `origin/006-git-topology-registry` | Active topology-registry feature branch. |
 | `origin/007-codex-update-monitor` | Needs decision |
+| `origin/008-clawdiy-rollout-bootstrap-fix` | Needs decision |
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
