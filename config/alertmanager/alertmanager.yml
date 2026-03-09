@@ -32,6 +32,13 @@ inhibit_rules:
       - service="moltis"
     equal: ['instance']
 
+  # If Clawdiy is down, suppress follow-on alerts for the same service
+  - source_matchers:
+      - alertname="ClawdiyDown"
+    target_matchers:
+      - service="clawdiy"
+    equal: ['instance']
+
 # Route tree
 route:
   # Default receiver
@@ -60,14 +67,6 @@ route:
       repeat_interval: 1h
       continue: true
 
-    # Warning alerts - less urgent
-    - matchers:
-        - severity="warning"
-      receiver: 'warning-alerts'
-      group_wait: 5m
-      group_interval: 10m
-      repeat_interval: 4h
-
     # Moltis-specific alerts
     - matchers:
         - service="moltis"
@@ -76,6 +75,16 @@ route:
         - matchers:
             - alertname="MoltisDown"
           receiver: 'moltis-critical'
+          group_wait: 10s
+
+    # Clawdiy-specific alerts
+    - matchers:
+        - service="clawdiy"
+      receiver: 'clawdiy-team'
+      routes:
+        - matchers:
+            - alertname="ClawdiyDown"
+          receiver: 'clawdiy-critical'
           group_wait: 10s
 
     # Backup alerts - critical first
@@ -126,6 +135,14 @@ route:
           receiver: 'llm-failover-info'
           group_wait: 10m
           repeat_interval: 24h
+
+    # Warning alerts - fallback for warnings without a more specific route
+    - matchers:
+        - severity="warning"
+      receiver: 'warning-alerts'
+      group_wait: 5m
+      group_interval: 10m
+      repeat_interval: 4h
 
 # Receivers
 receivers:
@@ -190,6 +207,28 @@ receivers:
       - channel: '#moltis-alerts'
         send_resolved: true
         title: 'URGENT: Moltis Service Issue'
+        color: 'danger'
+
+  # Clawdiy team
+  - name: 'clawdiy-team'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+    slack_configs:
+      - channel: '#clawdiy-alerts'
+        send_resolved: true
+
+  # Clawdiy critical (pagerduty/ops can be added here)
+  - name: 'clawdiy-critical'
+    email_configs:
+      - to: '${NOTIFY_EMAIL}'
+        send_resolved: true
+        headers:
+          Subject: '[URGENT] Clawdiy Down'
+    slack_configs:
+      - channel: '#clawdiy-alerts'
+        send_resolved: true
+        title: 'URGENT: Clawdiy Service Issue'
         color: 'danger'
 
   # Backup alerts
