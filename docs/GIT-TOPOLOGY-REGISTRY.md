@@ -35,7 +35,7 @@
 | `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Needs decision |
-| `008-codex-update-advisor` | `none` | Needs decision |
+| `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `codex/005-doctor-ux-port` | `origin/codex/005-doctor-ux-port` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
@@ -69,6 +69,7 @@
 | `origin/005-worktree-ready-flow` | Active parallel feature branch. |
 | `origin/006-git-topology-registry` | Active topology-registry feature branch. |
 | `origin/007-codex-update-monitor` | Needs decision |
+| `origin/008-codex-update-advisor` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/005-doctor-ux-port` | Needs decision |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
