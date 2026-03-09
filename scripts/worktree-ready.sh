@@ -1409,6 +1409,34 @@ render_warning_list() {
   done
 }
 
+render_fenced_bash_block() {
+  local command_text=""
+
+  if [[ "$#" -eq 0 ]]; then
+    return 0
+  fi
+
+  printf '```bash\n'
+  for command_text in "$@"; do
+    printf '%s\n' "${command_text}"
+  done
+  printf '```\n'
+}
+
+render_phase_b_seed_prompt() {
+  if [[ -z "${report_pending_work}" ]]; then
+    return 0
+  fi
+
+  printf '```text\n'
+  printf 'Phase B only.\n'
+  printf 'Worktree: %s\n' "${report_worktree_path:-n/a}"
+  printf 'Branch: %s\n' "${report_branch_name:-n/a}"
+  printf 'Task: %s\n' "${report_pending_work}"
+  printf 'Phase A is complete. Do not repeat worktree setup. Do not create or update issues, specs, or plans unless explicitly requested in the target session.\n'
+  printf '```\n'
+}
+
 render_env_kv() {
   local key="$1"
   local value="${2:-}"
@@ -1555,6 +1583,10 @@ render_readiness_report() {
   printf 'Next:\n'
   render_numbered_list "${report_next_steps[@]}"
   render_warning_list "${report_warnings[@]}"
+  if [[ "${report_handoff_mode}" == "manual" ]]; then
+    render_fenced_bash_block "${report_next_steps[@]}"
+    render_phase_b_seed_prompt
+  fi
 }
 
 normalize_mode_inputs() {

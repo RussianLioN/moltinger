@@ -380,6 +380,7 @@ Phase A is complete. Do not repeat worktree setup. Do not create or update issue
 - For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
 - If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
 - Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.
+- For manual handoff, if the helper produced a human-readable handoff block, relay it verbatim. Do not restyle fields, collapse commands, or convert fenced blocks back into prose.
 - For manual handoff, the final assistant reply must contain exactly:
   1. the helper status block
   2. one fenced `bash` block containing only the exact next-step commands, one command per line
@@ -415,7 +416,8 @@ Next:
 ```
 
 ```bash
-cd /Users/rl/coding/moltinger-remote-uat-hardening && direnv allow
+cd /Users/rl/coding/moltinger-remote-uat-hardening
+direnv allow
 codex
 ```
 

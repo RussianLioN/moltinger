@@ -214,6 +214,9 @@ test_create_treats_direnv_permission_denied_as_needs_env_approval() {
 
     assert_contains "$output" 'Status: needs_env_approval' "Permission-denied direnv probe should still guide the user through env approval"
     assert_contains "$output" 'direnv allow' "Permission-denied direnv probe should suggest the safe recovery step"
+    assert_contains "$output" '```bash' "Manual handoff should render a fenced bash block for copy-paste"
+    assert_contains "$output" "cd ${probe_dir}" "Manual handoff bash block should include the target worktree path"
+    assert_contains "$output" 'codex' "Manual handoff bash block should end with the Codex launch command"
 
     rm -rf "$fixture_root"
     test_pass
@@ -266,6 +269,9 @@ test_create_uses_explicit_pending_summary() {
     )"
 
     assert_contains "$output" 'Pending: Start Speckit for the OpenClaw Control Plane epic in the target worktree.' "Explicit downstream intent should replace the generic pending handoff text"
+    assert_contains "$output" '```text' "Explicit downstream intent should append the advisory Phase B text block"
+    assert_contains "$output" 'Phase B only.' "Explicit downstream intent should use the fixed Phase B seed prompt header"
+    assert_contains "$output" 'Task: Start Speckit for the OpenClaw Control Plane epic in the target worktree.' "Phase B seed prompt should preserve the exact downstream task"
 
     output="$(
         PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
