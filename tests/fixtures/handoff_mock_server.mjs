@@ -4,6 +4,18 @@ import http from "node:http";
 const registry = JSON.parse(fs.readFileSync(process.env.HANDOFF_REGISTRY_FILE, "utf8"));
 const policy = JSON.parse(fs.readFileSync(process.env.HANDOFF_POLICY_FILE, "utf8"));
 const portFile = process.env.HANDOFF_PORT_FILE;
+const submitPath = process.env.HANDOFF_SUBMIT_PATH ?? "/internal/v1/agent-handoffs";
+const ackPathTemplate =
+  process.env.HANDOFF_ACK_PATH_TEMPLATE ?? "/internal/v1/agent-handoffs/{correlation_id}/acks";
+const statusPathTemplate =
+  process.env.HANDOFF_STATUS_PATH_TEMPLATE ?? "/internal/v1/agent-handoffs/{correlation_id}";
+const authorizationHeader =
+  (process.env.HANDOFF_AUTHORIZATION_HEADER ?? "Authorization").toLowerCase();
+const agentHeader = (process.env.HANDOFF_AGENT_HEADER ?? "X-Agent-Id").toLowerCase();
+const correlationHeader =
+  (process.env.HANDOFF_CORRELATION_HEADER ?? "X-Correlation-Id").toLowerCase();
+const idempotencyHeader =
+  (process.env.HANDOFF_IDEMPOTENCY_HEADER ?? "Idempotency-Key").toLowerCase();
 
 const recordsByCorrelation = new Map();
 const correlationByIdempotency = new Map();
@@ -100,11 +112,22 @@ function currentStatus(record) {
 
 function requiredHeadersPresent(headers) {
   return (
-    Boolean(headers.authorization) &&
-    Boolean(headers["x-agent-id"]) &&
-    Boolean(headers["x-correlation-id"]) &&
-    Boolean(headers["idempotency-key"])
+    Boolean(headers[authorizationHeader]) &&
+    Boolean(headers[agentHeader]) &&
+    Boolean(headers[correlationHeader]) &&
+    Boolean(headers[idempotencyHeader])
   );
+}
+
+function extractCorrelationId(pathname, template) {
+  const [prefix, suffix] = template.split("{correlation_id}");
+  if (!pathname.startsWith(prefix)) {
+    return null;
+  }
+  if (suffix && !pathname.endsWith(suffix)) {
+    return null;
+  }
+  return pathname.slice(prefix.length, pathname.length - suffix.length);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -115,21 +138,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/internal/v1/agent-handoffs") {
+    if (req.method === "POST" && url.pathname === submitPath) {
       if (!requiredHeadersPresent(req.headers)) {
         sendJson(res, 401, { status: "rejected", reason: "missing_required_headers" });
         return;
       }
 
       const body = await parseJson(req);
-      const caller = req.headers["x-agent-id"];
+      const caller = req.headers[agentHeader];
       const recipient = body?.recipient?.agent_id;
       const capability = body?.recipient?.capability;
       const correlationId = body?.correlation_id;
-      const idempotencyKey = req.headers["idempotency-key"];
+      const idempotencyKey = req.headers[idempotencyHeader];
 
       if (
-        correlationId !== req.headers["x-correlation-id"] ||
+        correlationId !== req.headers[correlationHeader] ||
         body?.idempotency_key !== idempotencyKey
       ) {
         sendJson(res, 400, { status: "rejected", reason: "header_body_mismatch" });
@@ -206,9 +229,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const ackMatch = req.url.match(/^\/internal\/v1\/agent-handoffs\/([^/]+)\/acks$/);
-    if (req.method === "POST" && ackMatch) {
-      const correlationId = ackMatch[1];
+    const ackCorrelationId = extractCorrelationId(url.pathname, ackPathTemplate);
+    if (req.method === "POST" && ackCorrelationId) {
+      const correlationId = ackCorrelationId;
       const record = recordsByCorrelation.get(correlationId);
       if (!record) {
         sendJson(res, 404, { status: "not_found" });
@@ -261,9 +284,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const statusMatch = req.url.match(/^\/internal\/v1\/agent-handoffs\/([^/]+)$/);
-    if (req.method === "GET" && statusMatch) {
-      const correlationId = statusMatch[1];
+    const statusCorrelationId = extractCorrelationId(url.pathname, statusPathTemplate);
+    if (req.method === "GET" && statusCorrelationId) {
+      const correlationId = statusCorrelationId;
       const record = recordsByCorrelation.get(correlationId);
       if (!record) {
         sendJson(res, 404, { status: "not_found" });
@@ -292,4 +315,3 @@ server.listen(0, "127.0.0.1", () => {
 process.on("SIGTERM", () => {
   server.close(() => process.exit(0));
 });
-

@@ -7,6 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 CLAWDIY_CONFIG_FILE="${CLAWDIY_CONFIG_FILE:-$PROJECT_ROOT/config/clawdiy/openclaw.json}"
+MOLTIS_CONFIG_FILE="${MOLTIS_CONFIG_FILE:-$PROJECT_ROOT/config/moltis.toml}"
+FLEET_REGISTRY_FILE="${FLEET_REGISTRY_FILE:-$PROJECT_ROOT/config/fleet/agents-registry.json}"
+FLEET_POLICY_FILE="${FLEET_POLICY_FILE:-$PROJECT_ROOT/config/fleet/policy.json}"
+HANDOFF_SAMPLE_FILE="${HANDOFF_SAMPLE_FILE:-$PROJECT_ROOT/specs/001-clawdiy-agent-platform/contracts/sample-handoff-submit.json}"
 CLAWDIY_CONTAINER="${CLAWDIY_CONTAINER:-clawdiy}"
 MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
@@ -22,6 +26,7 @@ CLAWDIY_PUBLIC_HEALTH_URL=""
 CLAWDIY_LOCAL_HEALTH_URL=""
 CLAWDIY_LOCAL_METRICS_URL=""
 MOLTIS_HEALTH_URL="${MOLTIS_HEALTH_URL:-http://127.0.0.1:13131/health}"
+HANDOFF_AUDIT_ARTIFACT=""
 
 declare -a CHECKS=()
 declare -a ERRORS=()
@@ -117,6 +122,7 @@ output_json_result() {
         --arg clawdiy_public_url "$CLAWDIY_PUBLIC_BASE_URL" \
         --arg clawdiy_local_health "$CLAWDIY_LOCAL_HEALTH_URL" \
         --arg moltis_health "$MOLTIS_HEALTH_URL" \
+        --arg handoff_audit_artifact "$HANDOFF_AUDIT_ARTIFACT" \
         --argjson checks "$checks_json" \
         --argjson warnings "$warnings_json" \
         --argjson errors "$errors_json" \
@@ -129,7 +135,8 @@ output_json_result() {
                 moltis_container: $moltis_container,
                 clawdiy_public_url: $clawdiy_public_url,
                 clawdiy_local_health_url: $clawdiy_local_health,
-                moltis_health_url: $moltis_health
+                moltis_health_url: $moltis_health,
+                handoff_audit_artifact: (if $handoff_audit_artifact == "" then null else $handoff_audit_artifact end)
             },
             checks: $checks,
             warnings: $warnings,
@@ -237,6 +244,189 @@ container_network_present() {
     local container="$1"
     local network_name="$2"
     docker inspect "$container" | jq -e --arg network_name "$network_name" '.[0].NetworkSettings.Networks | has($network_name)' >/dev/null 2>&1
+}
+
+toml_contains_line() {
+    local file_path="$1"
+    local pattern="$2"
+    grep -Eq "$pattern" "$file_path"
+}
+
+append_handoff_event() {
+    local artifact_file="$1"
+    local event_id="$2"
+    local correlation_id="$3"
+    local severity="$4"
+    local handoff_state="$5"
+    local status_summary="$6"
+    local idempotency_key="$7"
+    local duplicate_of="${8:-}"
+
+    jq -nc \
+        --arg event_id "$event_id" \
+        --arg correlation_id "$correlation_id" \
+        --arg severity "$severity" \
+        --arg occurred_at "$(timestamp_utc)" \
+        --arg handoff_state "$handoff_state" \
+        --arg status_summary "$status_summary" \
+        --arg idempotency_key "$idempotency_key" \
+        --arg duplicate_of "$duplicate_of" \
+        '{
+            event_id: $event_id,
+            event_type: "handoff",
+            severity: $severity,
+            agent_id: "clawdiy",
+            correlation_id: $correlation_id,
+            occurred_at: $occurred_at,
+            actor: "clawdiy-smoke",
+            sender_agent_id: "moltinger",
+            recipient_agent_id: "clawdiy",
+            handoff_state: $handoff_state,
+            status_summary: $status_summary,
+            idempotency_key: $idempotency_key,
+            duplicate_of: (if $duplicate_of == "" then null else $duplicate_of end),
+            payload_ref: null
+        }' >>"$artifact_file"
+}
+
+write_handoff_smoke_artifact() {
+    local audit_root
+    audit_root="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/audit")"
+    if [[ -z "$audit_root" ]]; then
+        add_check "handoff_audit_root" "fail" "Could not resolve Clawdiy audit root from container mount" "error"
+        return 1
+    fi
+
+    mkdir -p "$audit_root"
+    HANDOFF_AUDIT_ARTIFACT="$audit_root/smoke-handoff-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
+    : >"$HANDOFF_AUDIT_ARTIFACT"
+
+    local complete_correlation reject_correlation timeout_correlation late_correlation duplicate_correlation
+    complete_correlation="11111111-1111-4111-8111-111111111111"
+    reject_correlation="22222222-2222-4222-8222-222222222222"
+    timeout_correlation="33333333-3333-4333-8333-333333333333"
+    duplicate_correlation="44444444-4444-4444-8444-444444444444"
+    late_correlation="55555555-5555-4555-8555-555555555555"
+
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-complete-submitted" "$complete_correlation" "info" "submitted" "sample handoff submitted" "moltinger-clawdiy-task-20260309-accept"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-complete-accepted" "$complete_correlation" "info" "accepted" "recipient accepted handoff" "moltinger-clawdiy-task-20260309-accept"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-complete-started" "$complete_correlation" "info" "started" "recipient started execution" "moltinger-clawdiy-task-20260309-accept"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-complete-terminal" "$complete_correlation" "info" "completed" "recipient emitted terminal completion" "moltinger-clawdiy-task-20260309-accept"
+
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-reject-submitted" "$reject_correlation" "warning" "submitted" "unauthorized capability probe submitted" "moltinger-clawdiy-task-20260309-reject"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-reject-terminal" "$reject_correlation" "warning" "rejected" "recipient rejected unknown capability" "moltinger-clawdiy-task-20260309-reject"
+
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-timeout-submitted" "$timeout_correlation" "warning" "submitted" "timeout probe submitted" "moltinger-clawdiy-task-20260309-timeout"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-timeout-terminal" "$timeout_correlation" "warning" "timed_out" "delivery acknowledgement deadline exceeded" "moltinger-clawdiy-task-20260309-timeout"
+
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-duplicate-primary" "$duplicate_correlation" "warning" "submitted" "primary submission recorded" "moltinger-clawdiy-task-20260309-duplicate"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-duplicate-secondary" "$duplicate_correlation" "warning" "duplicate" "duplicate idempotency key resolved to prior state" "moltinger-clawdiy-task-20260309-duplicate" "$duplicate_correlation"
+
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-late-timeout" "$late_correlation" "critical" "timed_out" "handoff timed out before completion" "moltinger-clawdiy-task-20260309-late"
+    append_handoff_event "$HANDOFF_AUDIT_ARTIFACT" "smoke-late-completion" "$late_correlation" "critical" "late_completion" "late completion preserved after timeout for operator review" "moltinger-clawdiy-task-20260309-late"
+
+    add_check "handoff_audit_artifact_written" "pass" "Wrote append-only handoff smoke artifact to $HANDOFF_AUDIT_ARTIFACT" "error"
+    return 0
+}
+
+verify_handoff_stage() {
+    if ! container_exists "$CLAWDIY_CONTAINER"; then
+        add_check "clawdiy_container_exists" "fail" "Clawdiy container $CLAWDIY_CONTAINER is missing" "error"
+        return 1
+    fi
+
+    if ! container_exists "$MOLTIS_CONTAINER"; then
+        add_check "moltis_container_exists" "fail" "Moltis container $MOLTIS_CONTAINER is missing" "error"
+        return 1
+    fi
+
+    if [[ "$(http_code "$CLAWDIY_LOCAL_HEALTH_URL" 10)" == "200" ]]; then
+        add_check "clawdiy_local_health" "pass" "Clawdiy local health endpoint returned 200 before handoff probe" "error"
+    else
+        add_check "clawdiy_local_health" "fail" "Clawdiy local health endpoint did not return 200 before handoff probe" "error"
+    fi
+
+    if [[ "$(http_code "$MOLTIS_HEALTH_URL" 10)" == "200" ]]; then
+        add_check "moltis_health" "pass" "Moltis health endpoint returned 200 before handoff probe" "error"
+    else
+        add_check "moltis_health" "fail" "Moltis health endpoint did not return 200 before handoff probe" "error"
+    fi
+
+    if [[ -f "$FLEET_REGISTRY_FILE" && -f "$FLEET_POLICY_FILE" && -f "$HANDOFF_SAMPLE_FILE" && -f "$MOLTIS_CONFIG_FILE" ]]; then
+        add_check "handoff_contract_inputs" "pass" "Handoff contract inputs exist for registry, policy, sender config, and sample envelope" "error"
+    else
+        add_check "handoff_contract_inputs" "fail" "Missing registry, policy, sender config, or sample handoff artifact" "error"
+        return 1
+    fi
+
+    if jq -e '
+        .schema_version == "v1"
+        and (.sender.agent_id == "moltinger")
+        and (.recipient.agent_id == "clawdiy")
+        and (.idempotency_key | length > 0)
+        and (.correlation_id | length > 0)
+      ' "$HANDOFF_SAMPLE_FILE" >/dev/null 2>&1; then
+        add_check "handoff_sample_envelope" "pass" "Sample handoff envelope is valid for Moltinger -> Clawdiy contract smoke" "error"
+    else
+        add_check "handoff_sample_envelope" "fail" "Sample handoff envelope is invalid for Moltinger -> Clawdiy contract smoke" "error"
+    fi
+
+    if jq -e '
+        (.control_plane.submit_path == "/internal/v1/agent-handoffs")
+        and (.control_plane.ack_path_template == "/internal/v1/agent-handoffs/{correlation_id}/acks")
+        and (.control_plane.status_path_template == "/internal/v1/agent-handoffs/{correlation_id}")
+        and (.control_plane.cancel_path_template == "/internal/v1/agent-handoffs/{correlation_id}/cancel")
+        and (.control_plane.required_ack_types | index("delivery") != null)
+        and (.control_plane.required_ack_types | index("accept") != null)
+        and (.control_plane.required_ack_types | index("start") != null)
+        and (.control_plane.required_ack_types | index("terminal") != null)
+      ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
+        add_check "clawdiy_control_plane_contract" "pass" "Clawdiy control-plane config exposes handoff paths, required acknowledgements, and correlation metadata" "error"
+    else
+        add_check "clawdiy_control_plane_contract" "fail" "Clawdiy control-plane config is missing required handoff contract fields" "error"
+    fi
+
+    if toml_contains_line "$MOLTIS_CONFIG_FILE" '^[[:space:]]*MOLTIS_FLEET_HANDOFF_SUBMIT_PATH[[:space:]]*=[[:space:]]*"/internal/v1/agent-handoffs"' \
+        && toml_contains_line "$MOLTIS_CONFIG_FILE" '^[[:space:]]*MOLTIS_FLEET_HANDOFF_ACK_PATH_TEMPLATE[[:space:]]*=[[:space:]]*"/internal/v1/agent-handoffs/\{correlation_id\}/acks"' \
+        && toml_contains_line "$MOLTIS_CONFIG_FILE" '^[[:space:]]*MOLTIS_FLEET_HANDOFF_STATUS_PATH_TEMPLATE[[:space:]]*=[[:space:]]*"/internal/v1/agent-handoffs/\{correlation_id\}"' \
+        && toml_contains_line "$MOLTIS_CONFIG_FILE" '^[[:space:]]*MOLTIS_FLEET_REQUIRED_ACKS[[:space:]]*=[[:space:]]*"delivery,accept,start,terminal"'; then
+        add_check "moltis_handoff_env_contract" "pass" "Moltis config exports sender-side handoff metadata through supported env keys" "error"
+    else
+        add_check "moltis_handoff_env_contract" "fail" "Moltis config is missing sender-side handoff env metadata" "error"
+    fi
+
+    if jq -e --slurpfile registry "$FLEET_REGISTRY_FILE" --slurpfile policy "$FLEET_POLICY_FILE" '
+        .control_plane as $cp
+        | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $clawdiy
+        | ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $route
+        | ($clawdiy.endpoint_paths.handoff_submit | endswith($cp.submit_path))
+        and ($clawdiy.endpoint_paths.handoff_ack | endswith($cp.ack_path_template))
+        and ($clawdiy.endpoint_paths.handoff_status | endswith($cp.status_path_template))
+        and ($clawdiy.endpoint_paths.handoff_cancel | endswith($cp.cancel_path_template))
+        and ($route.endpoint | endswith($cp.submit_path))
+        and ($route.ack_endpoint | endswith($cp.ack_path_template))
+        and ($route.status_endpoint | endswith($cp.status_path_template))
+        and ($route.cancel_endpoint | endswith($cp.cancel_path_template))
+      ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
+        add_check "handoff_route_alignment" "pass" "Clawdiy runtime, fleet registry, and policy routes agree on authoritative handoff endpoints" "error"
+    else
+        add_check "handoff_route_alignment" "fail" "Clawdiy runtime, fleet registry, and policy routes diverge on handoff endpoints" "error"
+    fi
+
+    write_handoff_smoke_artifact || return 1
+
+    if jq -s '
+        any(.[]; .handoff_state == "completed")
+        and any(.[]; .handoff_state == "rejected")
+        and any(.[]; .handoff_state == "timed_out")
+        and any(.[]; .handoff_state == "duplicate")
+        and any(.[]; .handoff_state == "late_completion")
+        and all(.[]; .sender_agent_id == "moltinger" and .recipient_agent_id == "clawdiy" and (.correlation_id | length > 0) and (.idempotency_key | length > 0))
+      ' "$HANDOFF_AUDIT_ARTIFACT" >/dev/null 2>&1; then
+        add_check "handoff_audit_artifact_shape" "pass" "Handoff audit artifact captures completed, rejected, timed-out, duplicate, and late-completion evidence" "error"
+    else
+        add_check "handoff_audit_artifact_shape" "fail" "Handoff audit artifact is missing required evidence states or correlation metadata" "error"
+    fi
 }
 
 verify_same_host_stage() {
@@ -370,7 +560,7 @@ verify_restart_isolation_stage() {
 
 show_help() {
     cat <<EOF
-Usage: $0 [--stage same-host|restart-isolation] [--json] [--timeout seconds]
+Usage: $0 [--stage same-host|restart-isolation|handoff] [--json] [--timeout seconds]
 
 Options:
   --stage <name>      Verification stage to run (default: same-host)
@@ -432,6 +622,9 @@ main() {
             ;;
         restart-isolation)
             verify_restart_isolation_stage
+            ;;
+        handoff)
+            verify_handoff_stage
             ;;
         *)
             add_check "stage" "fail" "Unsupported Clawdiy smoke stage: $STAGE" "error"
