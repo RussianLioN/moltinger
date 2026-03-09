@@ -20,6 +20,7 @@
 | `/Users/rl/coding/moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `9bdecfd` | GPT-5.4 primary-model planning lane |
 | `/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new` | `007-codex-update-monitor` | `c529023` | Speckit package and implementation-prep lane for Codex CLI update monitor |
 | `/Users/rl/coding/moltinger-008-codex-update-advisor` | `008-codex-update-advisor` | `351cc4a` | Dedicated Speckit lane for the Codex update advisor UX |
+| `/Users/rl/coding/moltinger-009-codex-update-delivery-ux` | `009-codex-update-delivery-ux` | `ddf6274` | Dedicated Speckit lane for user-facing Codex update delivery surfaces on top of the advisor |
 | `/Users/rl/coding/moltinger-openclaw-control-plane` | `001-clawdiy-agent-platform` | `3bbc4c8` | OpenClaw control-plane feature lane |
 | `/Users/rl/coding/moltinger-pr17-webhook-extraction` | `feat/pr17-webhook-extraction` | `e17a956` | PR17 webhook extraction lane |
 | `/Users/rl/coding/moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `06701a4` | UAT mirror for git-topology-registry |
@@ -31,6 +32,7 @@
 | `main` | `origin/main` | Canonical source of truth |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Active Speckit-aligned branch for Codex update monitor |
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Active Speckit-aligned branch for the advisor layer on top of the Codex update monitor |
+| `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Active Speckit-aligned branch for user-facing delivery UX layered on top of the Codex update advisor |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Legacy issue-named branch retained as the pre-alignment source for `007-codex-update-monitor` |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active feature branch; dedicated worktree exists |
 | `uat/006-git-topology-registry` | `origin/006-git-topology-registry` | UAT mirror branch for the same feature package |
@@ -59,6 +61,8 @@
 | Remote Branch | Current Intent |
 |---|---|
 | `origin/007-codex-update-monitor` | Active Speckit-aligned branch for Codex update monitor |
+| `origin/008-codex-update-advisor` | Active Speckit-aligned branch for the Codex update advisor |
+| `origin/009-codex-update-delivery-ux` | Active Speckit-aligned branch for user-facing Codex update delivery UX |
 | `origin/001-clawdiy-agent-platform` | Active OpenClaw control-plane feature branch |
 | `origin/001-frontend` | Review later; currently dangling |
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup |

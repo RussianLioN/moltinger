@@ -41,11 +41,37 @@ shift
 
 MODEL="${CODEX_MODEL:-gpt-5.4}"
 BASE_BRANCH="${CODEX_BASE_BRANCH:-main}"
+DELIVERY_ALERT_ENABLED="${CODEX_UPDATE_LAUNCH_ALERT:-1}"
 
 if ! command -v codex >/dev/null 2>&1; then
   echo "codex CLI not found in PATH" >&2
   exit 1
 fi
+
+show_delivery_alert() {
+  local enabled="$1"
+  local delivery_script="${REPO_ROOT}/scripts/codex-cli-update-delivery.sh"
+  local summary=""
+
+  case "$enabled" in
+    0|false|FALSE|no|NO|off|OFF)
+      return 0
+      ;;
+  esac
+
+  if [[ ! -f "$delivery_script" ]]; then
+    return 0
+  fi
+
+  if summary="$(bash "$delivery_script" --surface launcher --stdout summary 2>/dev/null)"; then
+    if [[ -n "$summary" ]]; then
+      printf '%s\n' "$summary"
+      printf '\n'
+    fi
+  fi
+}
+
+show_delivery_alert "$DELIVERY_ALERT_ENABLED"
 
 case "${PROFILE}" in
   research)

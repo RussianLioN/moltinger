@@ -1,0 +1,58 @@
+{
+  "checked_at": "2026-03-09T18:20:00.000000+00:00",
+  "monitor_snapshot": {
+    "local_version": "unknown",
+    "latest_version": "0.112.0",
+    "version_status": "unknown",
+    "recommendation": "investigate",
+    "repo_workflow_traits": [],
+    "relevant_changes": [],
+    "evidence": [
+      "The underlying monitor report was incomplete."
+    ]
+  },
+  "notification": {
+    "status": "investigate",
+    "changed": true,
+    "threshold": "upgrade-later",
+    "fingerprint": "delivery-fixture-investigate-fingerprint",
+    "reason": "The advisor requires investigation before repository follow-up should be created.",
+    "notes": [
+      "Advisor could not rely on complete upstream evidence."
+    ]
+  },
+  "project_change_suggestions": [
+    {
+      "id": "investigate-monitor-gap",
+      "title": "Investigate the underlying monitor gap",
+      "priority": "high",
+      "category": "diagnostics",
+      "rationale": "Without complete upstream evidence, the repository should not confidently change its Codex workflow guidance.",
+      "impacted_paths": [
+        "docs/codex-cli-update-monitor.md"
+      ],
+      "next_steps": [
+        "Inspect the monitor sources and rerun the live check."
+      ]
+    }
+  ],
+  "implementation_brief": {
+    "summary": "The advisor could not confirm the Codex update state, so investigation is required before repository changes are proposed.",
+    "top_priorities": [
+      "Investigate the underlying monitor gap"
+    ],
+    "impacted_paths": [
+      "docs/codex-cli-update-monitor.md"
+    ],
+    "notes": [
+      "Investigation required"
+    ]
+  },
+  "issue_action": {
+    "mode": "none",
+    "requested": false,
+    "notes": [
+      "Tracker sync was not requested."
+    ]
+  }
+}
