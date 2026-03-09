@@ -28,11 +28,17 @@ Provide a shell-safe, machine-readable handoff block for `create`, `attach`, and
 - `base_sha`
 - `worktree_action`
 - `issue`
+- `issue_title`
+- `issue_artifact_count`
+- `issue_artifact_<N>`
 - `status`
 - `topology_state`
 - `env_state`
 - `guard_state`
 - `beads_state`
+- `bootstrap_source`
+- `bootstrap_file_count`
+- `bootstrap_file_<N>`
 - `launch_command`
 - `repair_command`
 - `requested_handoff`
@@ -69,10 +75,15 @@ beads_state=shared
 handoff_mode=manual
 approval_required=true
 pending=Start\ Speckit\ for\ the\ OpenClaw\ Control\ Plane\ epic\ in\ the\ target\ worktree.
-next_count=3
+bootstrap_source=origin/006-git-topology-registry
+bootstrap_file_count=2
+bootstrap_file_1=.beads/issues.jsonl
+bootstrap_file_2=docs/plans/codex-cli-update-monitoring-speckit-seed.md
+next_count=4
 next_1=cd\ /Users/rl/coding/moltinger-remote-uat-hardening
-next_2=direnv\ allow
-next_3=codex
+next_2=git\ checkout\ origin/006-git-topology-registry\ --\ .beads/issues.jsonl\ docs/plans/codex-cli-update-monitoring-speckit-seed.md
+next_3=direnv\ allow
+next_4=codex
 warning_count=1
 warning_1=Environment\ approval\ is\ required\ before\ launching\ the\ session.
 ```

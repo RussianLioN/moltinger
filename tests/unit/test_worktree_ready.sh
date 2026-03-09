@@ -94,6 +94,7 @@ seed_fake_issue_artifacts() {
     mkdir -p "${repo_dir}/docs/plans" "${repo_dir}/docs/research"
     printf '# seed\n' > "${repo_dir}/docs/plans/codex-cli-update-monitoring-speckit-seed.md"
     printf '# research\n' > "${repo_dir}/docs/research/codex-cli-update-monitoring-2026-03-09.md"
+    printf '# research index\n' > "${repo_dir}/docs/research/README.md"
 }
 
 test_plan_creates_clean_slug_without_issue() {
@@ -358,6 +359,11 @@ test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them() {
     assert_contains "$output" 'docs/plans/codex-cli-update-monitoring-speckit-seed.md [source only; missing in target]' "Missing seed docs should be called out as source-only context"
     assert_contains "$output" "Issue 'molt-2' is not present in target worktree Beads state" "Handoff should explain why local bd lookups will fail in the target worktree"
     assert_contains "$output" "Issue artifact 'docs/research/codex-cli-update-monitoring-2026-03-09.md' is not present in the target worktree." "Handoff should warn when issue artifacts are absent from the target worktree"
+    assert_contains "$output" 'Bootstrap Source: origin/main' "Bootstrap handoff should prefer the current branch upstream as the source ref"
+    assert_contains "$output" 'Bootstrap Files:' "Bootstrap handoff should enumerate the files that need to be imported"
+    assert_contains "$output" '.beads/issues.jsonl' "Bootstrap handoff should include the Beads issue state file"
+    assert_contains "$output" 'docs/research/README.md' "Bootstrap handoff should include the research index when research artifacts are source-only"
+    assert_contains "$output" 'git checkout origin/main -- .beads/issues.jsonl docs/plans/codex-cli-update-monitoring-speckit-seed.md docs/research/codex-cli-update-monitoring-2026-03-09.md docs/research/README.md' "Manual handoff should include an exact bootstrap import command before launch"
 
     output="$(
         PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
@@ -366,6 +372,8 @@ test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them() {
 
     assert_contains "$output" 'issue_title=Implement\ Codex\ CLI\ update\ monitor\ from\ Speckit\ seed' "Env handoff should preserve the issue title"
     assert_contains "$output" 'issue_artifact_count=2' "Env handoff should enumerate linked issue artifacts"
+    assert_contains "$output" 'bootstrap_source=origin/main' "Env handoff should expose the source ref for bootstrap imports"
+    assert_contains "$output" 'bootstrap_file_count=4' "Env handoff should enumerate the bootstrap files needed in the target worktree"
 
     rm -rf "$fixture_root"
     test_pass

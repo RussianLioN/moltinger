@@ -199,6 +199,16 @@
 
 ---
 
+## Phase 7F: Issue-Aware Bootstrap Handoff
+
+**Purpose**: Ensure dedicated branches created from `main` can pull issue-linked foundation artifacts from the invoking topology branch without breaking the stop-after-create boundary.
+
+- [x] T049 [EXECUTOR: worker] [SEQUENTIAL] Extend `scripts/worktree-ready.sh` to detect missing issue-linked artifacts, emit bootstrap source/files, and inject an exact bootstrap import command into manual handoff next steps
+- [x] T050 [EXECUTOR: worker] [SEQUENTIAL] Update `.claude/commands/worktree.md` so manual handoff preserves helper bootstrap metadata verbatim and keeps the import command ahead of `direnv allow` / `codex`
+- [x] T051 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile `spec.md`, `plan.md`, and `validation.md` with the issue-aware bootstrap handoff semantics and record targeted regression coverage
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

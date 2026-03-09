@@ -129,6 +129,7 @@
 3. **Given** пользователь явно запросил `terminal` или `codex` handoff, **When** launch поддержан и выполнен, **Then** текущая сессия всё равно завершает команду на handoff boundary и не делает follow-up work locally.
 4. **Given** create/attach flow не может подтвердить readiness или topology refresh блокируется, **When** helper завершает классификацию, **Then** workflow останавливается на blocked handoff state и возвращает точную repair command вместо продолжения задачи.
 5. **Given** topology mutation изменила committed registry в invoking branch, **When** create/attach flow завершает Phase A, **Then** workflow сначала landing-the-plane’ит registry mutation в invoking branch, и только после этого возвращает handoff block.
+6. **Given** issue-aware create flow стартует от `main`, а issue-linked foundation files живут только в invoking branch или его upstream, **When** helper рендерит manual handoff, **Then** он включает точную bootstrap import command до запуска Codex, чтобы target worktree мог подтянуть нужный seed context.
 
 ### Edge Cases
 
@@ -195,6 +196,7 @@
 - **FR-046**: Если existing branch уже существует и не совпадает с ожидаемым `base_sha`, workflow ДОЛЖЕН остановиться в blocked state и НЕ ДОЛЖЕН ремонтировать branch in-place внутри Phase A.
 - **FR-047**: Phase A НЕ ДОЛЖЕН создавать или обновлять downstream artifacts, включая Beads issues, specs, plans, checklists и implementation notes.
 - **FR-048**: Managed clean-create flow ДОЛЖЕН делать не более одного topology refresh и не более одного invoking-branch landing cycle.
+- **FR-049**: Если issue-aware create flow создаёт target branch от `main`, а issue-linked foundation files отсутствуют в target worktree, manual handoff ДОЛЖЕН включать exact bootstrap import command из invoking branch или его upstream до запуска Codex.
 
 ### Key Entities
 
@@ -227,3 +229,4 @@
 - **SC-015**: В 100% проверенных ручных handoff сценариев пользователь получает готовый fenced `bash` block с точными next-step командами.
 - **SC-016**: В 100% проверенных clean-create сценариев новая branch рождается от canonical `main` без post-create repair.
 - **SC-017**: В 100% проверенных mixed-request сценариев Phase A не трогает `.beads/issues.jsonl` и не создаёт downstream artifacts.
+- **SC-018**: В 100% проверенных issue-aware create сценариев, где foundation files отсутствуют в target worktree, manual handoff содержит готовую bootstrap import command и перечисляет source ref/files без продолжения Phase B в исходной сессии.

@@ -20,6 +20,8 @@
 - только после этого разрешает topology refresh и landing-the-plane
 - не ремонтирует неправильную базу in-place внутри Phase A
 
+Bootstrap hardening slice для issue-aware create-flow: если dedicated branch создаётся от `main`, а issue description указывает на seed artifacts, живущие только в invoking topology branch, manual handoff должен включать exact import command (`git checkout <source> -- ...`) до запуска Codex. Это сохраняет stop-after-create boundary и даёт новой сессии воспроизводимый способ подтянуть foundation context без Phase B drift в originating session.
+
 Ключевой design choice: не автоматизировать доверительные действия вроде одобрения `.envrc` по умолчанию. Вместо этого команда должна заранее выявлять, что для текущего worktree потребуется дополнительный шаг, и возвращать точные инструкции или opt-in handoff. Для one-shot start authoritative проверкой конфликтов считается live `git`, а committed topology registry используется как shared snapshot и должен refresh-иться сразу после mutation.
 
 ## Technical Context

@@ -222,6 +222,7 @@ Process:
    - omit `--issue <id>` only when no issue id was resolved confidently
 15. Return the helper stdout as the final manual-handoff reply.
 16. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order, one command per line.
+    - If the helper detected issue-linked foundation files that exist only in the invoking branch or its upstream, the fenced `bash` block must include the exact bootstrap import command before `direnv allow` or `codex`.
 17. If and only if the original request contained explicit downstream work, append exactly one fenced `text` block using this fixed template:
    ```text
    Phase B only.
@@ -382,6 +383,7 @@ Phase A is complete. Do not repeat worktree setup. Do not create or update issue
 - If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
 - Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.
 - For manual handoff, if the helper produced a human-readable handoff block, relay it verbatim. Do not restyle fields, collapse commands, convert fenced blocks back into prose, or prepend/append a second custom summary.
+- If the helper surfaced `Bootstrap Source` and `Bootstrap Files`, keep them verbatim and preserve the corresponding `git checkout <source> -- ...` command inside the fenced `bash` block.
 - For manual handoff, the final assistant reply must contain exactly:
   1. the helper status block
   2. one fenced `bash` block containing only the exact next-step commands, one command per line

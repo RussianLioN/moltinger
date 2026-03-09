@@ -83,3 +83,12 @@
   - manual handoff guidance now requires exact fenced `bash` output and optional fixed-template fenced `text`
 - Follow-up:
   - rerun mixed-request UAT to confirm no `bd create`, no `.beads/issues.jsonl` mutation, and no post-create branch repair
+
+### 2026-03-09 - Issue-aware bootstrap handoff
+
+- Goal:
+  - ensure manual handoff for issue-aware branches created from `main` includes an exact bootstrap import command when the target worktree lacks issue-linked foundation artifacts
+- Checks:
+  - `scripts/worktree-ready.sh create ...` renders `Bootstrap Source` and `Bootstrap Files` when issue-linked docs exist only in the invoking branch
+  - fenced `bash` block includes `git checkout <source> -- .beads/issues.jsonl <issue-linked paths...>` before `direnv allow` / `codex`
+  - env output exposes `bootstrap_source` and `bootstrap_file_*` fields for machine-readable orchestration

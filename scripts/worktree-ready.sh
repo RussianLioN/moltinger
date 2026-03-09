@@ -95,10 +95,12 @@ report_repair_command=""
 report_pending_work=""
 report_worktree_action="unchanged"
 report_issue_title=""
+report_bootstrap_source_ref=""
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
 declare -a report_issue_artifacts=()
+declare -a report_bootstrap_paths=()
 
 discovered_worktree_name=""
 discovered_worktree_path=""
@@ -443,12 +445,81 @@ target_has_issue_record() {
   grep -F "\"id\":\"${issue_key}\"" "${target_issues_file}" >/dev/null 2>&1
 }
 
+resolve_bootstrap_source_ref() {
+  local upstream_ref=""
+  local current_branch=""
+
+  if upstream_ref="$(git -C "${resolved_repo_root}" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+    if [[ -n "${upstream_ref}" && "${upstream_ref}" != "HEAD" ]]; then
+      printf '%s\n' "${upstream_ref}"
+      return 0
+    fi
+  fi
+
+  current_branch="$(resolve_current_branch)"
+  if [[ -n "${current_branch}" ]]; then
+    printf '%s\n' "${current_branch}"
+    return 0
+  fi
+
+  printf '\n'
+}
+
+add_bootstrap_path() {
+  local artifact_path="$1"
+  local existing_path=""
+
+  if [[ -z "${artifact_path}" ]]; then
+    return 0
+  fi
+
+  for existing_path in "${report_bootstrap_paths[@]}"; do
+    if [[ "${existing_path}" == "${artifact_path}" ]]; then
+      return 0
+    fi
+  done
+
+  report_bootstrap_paths+=("${artifact_path}")
+}
+
+target_worktree_has_path() {
+  local artifact_path="$1"
+
+  if [[ -z "${artifact_path}" ]]; then
+    return 1
+  fi
+
+  if ! report_worktree_path_exists; then
+    return 1
+  fi
+
+  [[ -e "${report_worktree_path}/${artifact_path}" ]]
+}
+
+build_bootstrap_import_command() {
+  local source_ref="${report_bootstrap_source_ref:-}"
+  local artifact_path=""
+  local command_text=""
+
+  if [[ -z "${source_ref}" || "${#report_bootstrap_paths[@]}" -eq 0 ]]; then
+    return 1
+  fi
+
+  command_text="git checkout $(shell_quote "${source_ref}") --"
+  for artifact_path in "${report_bootstrap_paths[@]}"; do
+    command_text+=" $(shell_quote "${artifact_path}")"
+  done
+
+  printf '%s\n' "${command_text}"
+}
+
 discover_issue_context() {
   local resolved_issue=""
   local issues_file=""
   local issue_line=""
   local artifact_path=""
   local artifact_report=""
+  local has_research_artifact=0
 
   resolved_issue="${report_issue_id:-}"
   if [[ -z "${resolved_issue}" || "${resolved_issue}" == "n/a" ]]; then
@@ -468,9 +539,11 @@ discover_issue_context() {
   fi
 
   report_issue_title="$(extract_issue_title_from_jsonl_line "${issue_line}")"
+  report_bootstrap_source_ref="$(resolve_bootstrap_source_ref)"
 
   if report_worktree_path_exists && ! target_has_issue_record "${resolved_issue}" "${report_worktree_path}"; then
     add_warning "Issue '${resolved_issue}' is not present in target worktree Beads state; rely on the handoff context instead of local bd show."
+    add_bootstrap_path ".beads/issues.jsonl"
   fi
 
   while IFS= read -r artifact_path; do
@@ -483,10 +556,19 @@ discover_issue_context() {
     else
       artifact_report="${artifact_path} [source only; missing in target]"
       add_warning "Issue artifact '${artifact_path}' is not present in the target worktree."
+      add_bootstrap_path "${artifact_path}"
+    fi
+
+    if [[ "${artifact_path}" == docs/research/* ]]; then
+      has_research_artifact=1
     fi
 
     report_issue_artifacts+=("${artifact_report}")
   done < <(extract_issue_artifact_paths_from_jsonl_line "${issue_line}")
+
+  if [[ "${has_research_artifact}" -eq 1 && -e "${resolved_repo_root}/docs/research/README.md" ]] && ! target_worktree_has_path "docs/research/README.md"; then
+    add_bootstrap_path "docs/research/README.md"
+  fi
 }
 
 normalize_slug_token() {
@@ -1257,9 +1339,11 @@ reset_report() {
   report_pending_work=""
   report_worktree_action="unchanged"
   report_issue_title=""
+  report_bootstrap_source_ref=""
   report_next_steps=()
   report_warnings=()
   report_issue_artifacts=()
+  report_bootstrap_paths=()
 }
 
 set_report_target() {
@@ -1470,6 +1554,7 @@ set_command_exit_code_from_readiness() {
 
 set_readiness_next_steps() {
   local mode_name="$1"
+  local bootstrap_command=""
 
   if [[ "${branch_resolution_state}" == "missing" ]]; then
     add_next_step "Create or fetch the branch '${branch}' before using attach or start --existing"
@@ -1485,15 +1570,24 @@ set_readiness_next_steps() {
       ;;
     ready_for_codex)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      if bootstrap_command="$(build_bootstrap_import_command)"; then
+        add_next_step "${bootstrap_command}"
+      fi
       add_next_step "codex"
       ;;
     needs_env_approval)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      if bootstrap_command="$(build_bootstrap_import_command)"; then
+        add_next_step "${bootstrap_command}"
+      fi
       add_next_step "direnv allow"
       add_next_step "codex"
       ;;
     created)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      if bootstrap_command="$(build_bootstrap_import_command)"; then
+        add_next_step "${bootstrap_command}"
+      fi
       case "${report_env_state}" in
         approval_needed)
           add_next_step "direnv allow"
@@ -1732,6 +1826,12 @@ render_readiness_report() {
     if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
       render_env_array "issue_artifact" "${report_issue_artifacts[@]}"
     fi
+    if [[ -n "${report_bootstrap_source_ref}" ]]; then
+      render_env_kv "bootstrap_source" "${report_bootstrap_source_ref}"
+    fi
+    if [[ "${#report_bootstrap_paths[@]}" -gt 0 ]]; then
+      render_env_array "bootstrap_file" "${report_bootstrap_paths[@]}"
+    fi
     render_env_array "next" "${report_next_steps[@]}"
     render_env_array "warning" "${report_warnings[@]}"
     return 0
@@ -1747,6 +1847,11 @@ render_readiness_report() {
   if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
     printf 'Issue Artifacts:\n'
     render_numbered_list "${report_issue_artifacts[@]}"
+  fi
+  if [[ -n "${report_bootstrap_source_ref}" && "${#report_bootstrap_paths[@]}" -gt 0 ]]; then
+    printf 'Bootstrap Source: %s\n' "${report_bootstrap_source_ref}"
+    printf 'Bootstrap Files:\n'
+    render_numbered_list "${report_bootstrap_paths[@]}"
   fi
   printf 'Status: %s\n' "${report_status}"
   printf 'Phase: %s\n' "${report_phase}"
