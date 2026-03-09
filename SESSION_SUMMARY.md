@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-07
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-08
 
 ---
 
@@ -132,6 +132,100 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-09: Codex CLI Update Monitoring Research Seed
+
+**Статус**: ✅ RESEARCH COMPLETE, READY FOR DEDICATED FEATURE BRANCH
+
+#### Что проверено
+
+- Локально установлен `codex-cli 0.112.0`
+- По официальному Codex changelog на 2026-03-09 это актуальный latest release
+- Подтверждены релевантные upstream capabilities для будущего workflow:
+  - `codex exec --json` и `--output-schema`
+  - улучшения `multi_agent`
+  - worktree/resume flow
+  - AGENTS/skills/config surfaces для repo-specific orchestration
+
+#### Что создано
+
+- Исследование: `docs/research/codex-cli-update-monitoring-2026-03-09.md`
+- Speckit seed: `docs/plans/codex-cli-update-monitoring-speckit-seed.md`
+- Закрытый research issue: `molt-1`
+- Follow-up implementation issue: `molt-2` — Implement Codex CLI update monitor from Speckit seed
+
+#### Вывод
+
+- Для этой темы рекомендован **script-first hybrid**, а не long-running agent:
+  - deterministic collector script
+  - thin skill/command wrapper
+  - durable report
+  - optional Beads follow-up behind explicit flag
+
+#### Next Step
+
+1. Создать dedicated branch/worktree под `codex-update-monitor`
+2. Запустить `/speckit.specify` по seed prompt из `docs/plans/codex-cli-update-monitoring-speckit-seed.md`
+3. В отдельной feature-ветке уже проектировать JSON contract, issue integration и optional skill wrapper
+
+### 2026-03-08: Git Topology Registry Automation (Feature: 006-git-topology-registry)
+
+**Статус**: ✅ MERGE-READY FEATURE BRANCH
+
+#### Что доставлено
+
+- `docs/GIT-TOPOLOGY-REGISTRY.md` переведён в deterministic generated artifact
+- `docs/GIT-TOPOLOGY-INTENT.yaml` оформлен как reviewed sidecar schema
+- `scripts/git-topology-registry.sh` реализует `refresh`, `check`, `status`, `doctor`
+- `/worktree`, `/session-summary`, `/git-topology` провязаны в topology workflow
+- tracked hooks валидируют stale-state и блокируют `pre-push` при outdated registry
+- `doctor --prune` сохраняет recovery draft, а `doctor --prune --write-doc` сохраняет backup last good registry
+
+#### Проверки
+
+- `./tests/unit/test_git_topology_registry.sh`
+- `./tests/integration/test_git_topology_registry.sh`
+- `./tests/e2e/test_git_topology_registry_workflow.sh`
+- `./tests/run_unit.sh --filter git_topology_registry`
+- `./tests/run_integration.sh --filter git_topology_registry`
+- `./tests/run_e2e.sh --filter git_topology_registry_workflow`
+- `./scripts/setup-git-hooks.sh`
+- `./scripts/git-topology-registry.sh check`
+- Manual smoke-test:
+  - created issue `moltinger-jb6` for GPT-5.4 primary provider-chain evaluation
+  - created sibling worktree `/Users/rl/coding/moltinger-jb6-gpt54-primary`
+  - confirmed `doctor --prune` writes a recovery draft after raw topology change
+  - confirmed `pre-push` blocks stale topology before publishing a new parallel branch
+  - promoted the new branch/worktree from `needs-decision` to reviewed `active` intent in the sidecar
+
+#### Post-UAT Hardening
+
+- reproduced a real child-worktree drift case where `doctor --write-doc` from a child branch renamed the authoritative `006-*` worktree
+- fixed canonical numbered-feature worktree identity so it no longer depends on the caller branch
+- preserved legacy sidecar aliases `parallel-feature-NNN` as canonical `primary-feature-NNN`
+- clarified in user docs that `doctor --prune --write-doc` intentionally dirties `docs/GIT-TOPOLOGY-REGISTRY.md` after real topology drift
+- added RCA: `docs/rca/2026-03-08-topology-child-worktree-identity-drift.md`
+- added regression coverage in `tests/e2e/test_git_topology_registry_workflow.sh`
+
+#### Handoff
+
+- Active branch: `006-git-topology-registry`
+- Authoritative worktree: `/Users/rl/coding/moltinger-006-git-topology-registry`
+- Parallel task worktree for field test: `/Users/rl/coding/moltinger-jb6-gpt54-primary`
+- Primary operator docs:
+  - `specs/006-git-topology-registry/quickstart.md`
+  - `docs/GIT-TOPOLOGY-REGISTRY.md`
+  - `docs/reports/consilium/2026-03-08-git-topology-registry-automation.md`
+  - `docs/QUICK-REFERENCE.md`
+
+#### Next Step
+
+1. Open/update PR for `006-git-topology-registry`
+2. Review merge diff around hooks and command wiring
+3. Merge after final human review of generated registry and sidecar intent
+4. Backlog follow-up: `moltinger-k89` — reusable installer skill for arbitrary repositories (P4 / nice-to-have)
+
+---
 
 ### 2026-03-04: RCA Skill Enhancements — FINAL SESSION (001-rca-skill-upgrades)
 
@@ -708,6 +802,8 @@ b6a3478 docs(session): update with RCA Skill Enhancements completion
 - **Инструкция для LLM**: docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md
 - **Быстрая справка**: docs/QUICK-REFERENCE.md
 - **GitOps Lessons**: docs/LESSONS-LEARNED.md
+- **Git Topology Registry**: docs/GIT-TOPOLOGY-REGISTRY.md
+- **Topology Quickstart**: specs/006-git-topology-registry/quickstart.md
 
 ---
 
@@ -805,4 +901,4 @@ gh run view --workflow test.yml   # View latest test run details
 
 ---
 
-*Last updated: 2026-03-04 | Session: RCA Skill Enhancements — FINAL SESSION*
+*Last updated: 2026-03-08 | Session: Git Topology Registry Automation (Feature: 006-git-topology-registry)*
