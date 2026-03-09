@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -144,10 +146,11 @@ create_from_base() {
     git -C "${canonical_root}" branch "${branch}" "${base_sha}" >/dev/null
   fi
 
-  (
-    cd "${canonical_root}"
-    bd worktree create "${target_path}" --branch "${branch}" >/dev/null
-  )
+  git -C "${canonical_root}" worktree add "${target_path}" "${branch}" >/dev/null
+
+  if [[ -x "${SCRIPT_DIR}/beads-worktree-localize.sh" ]]; then
+    "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null
+  fi
 
   head_sha="$(git -C "${target_path}" rev-parse HEAD)"
   if [[ "${head_sha}" != "${base_sha}" ]]; then
