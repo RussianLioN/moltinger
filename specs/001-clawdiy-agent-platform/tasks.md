@@ -128,8 +128,8 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] [EXECUTOR: gitops-guardian] [PARALLEL-GROUP-US2-A] Populate canonical Moltinger and Clawdiy registry entries with capability metadata in `config/fleet/agents-registry.json`
-- [ ] T019 [P] [US2] [EXECUTOR: security-expert] [PARALLEL-GROUP-US2-A] Implement caller allowlists and capability authorization rules in `config/fleet/policy.json`
+- [X] T018 [P] [US2] [EXECUTOR: gitops-guardian] [PARALLEL-GROUP-US2-A] Populate canonical Moltinger and Clawdiy registry entries with capability metadata in `config/fleet/agents-registry.json`
+- [X] T019 [P] [US2] [EXECUTOR: security-expert] [PARALLEL-GROUP-US2-A] Implement caller allowlists and capability authorization rules in `config/fleet/policy.json`
 - [ ] T020 [US2] [EXECUTOR: toml-specialist] [SEQUENTIAL] Configure internal handoff endpoints, correlation metadata, and acknowledgement callbacks in `config/moltis.toml` and `config/clawdiy/openclaw.json`
 - [ ] T021 [US2] [EXECUTOR: bash-master] [SEQUENTIAL] Implement `handoff` smoke stages and audit artifact assertions in `scripts/clawdiy-smoke.sh`
 - [ ] T022 [US2] [EXECUTOR: technical-writer] [SEQUENTIAL] Document operator response for rejected, timed-out, duplicate, and late handoffs in `docs/runbooks/fleet-handoff-incident.md`

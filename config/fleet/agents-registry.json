@@ -1,27 +1,68 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T00:00:00Z",
+  "updated_at": "2026-03-09T15:10:00Z",
   "agents": [
     {
       "agent_id": "moltinger",
       "display_name": "Moltinger",
       "role": "coordinator",
+      "owner": "platform-ops",
+      "lifecycle_state": "active",
       "runtime_engine": "moltis",
       "internal_endpoint": "http://moltis:13131/internal/v1",
       "public_endpoints": {
         "web": "https://moltis.ainetic.tech",
         "telegram": "@moltinger_bot"
       },
+      "endpoint_paths": {
+        "handoff_submit": "POST /internal/v1/agent-handoffs",
+        "handoff_ack": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+        "handoff_status": "GET /internal/v1/agent-handoffs/{correlation_id}",
+        "handoff_cancel": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel",
+        "health": "http://moltis:13131/health",
+        "metrics": "http://moltis:13131/metrics"
+      },
       "capabilities": [
         "coordination.dispatch",
         "fleet.registry.read",
         "handoff.status.receive",
+        "handoff.status.publish",
         "operator.escalation"
       ],
+      "capability_prerequisites": {
+        "coordination.dispatch": [
+          "service-auth",
+          "registry-policy"
+        ],
+        "fleet.registry.read": [
+          "git-managed-registry"
+        ],
+        "handoff.status.receive": [
+          "service-auth",
+          "correlation-id"
+        ],
+        "handoff.status.publish": [
+          "service-auth",
+          "correlation-id"
+        ],
+        "operator.escalation": [
+          "service-auth",
+          "audit-evidence"
+        ]
+      },
       "allowed_callers": [
-        "clawdiy",
-        "coordinator"
+        "clawdiy"
       ],
+      "auth_profile_refs": {
+        "human_auth": "github-secret:MOLTIS_PASSWORD",
+        "service_auth": "github-secret:MOLTINGER_SERVICE_TOKEN",
+        "telegram": "github-secret:TELEGRAM_BOT_TOKEN"
+      },
+      "state_scope": {
+        "config_root": "config/moltis.toml",
+        "state_root": "data/",
+        "audit_root": "data/.deployment-info"
+      },
       "reachability": "reachable",
       "policy_version": "git:pending",
       "last_validated_at": null
@@ -30,22 +71,68 @@
       "agent_id": "clawdiy",
       "display_name": "Clawdiy",
       "role": "coder",
+      "owner": "platform-ops",
+      "lifecycle_state": "active",
       "runtime_engine": "openclaw",
       "internal_endpoint": "http://clawdiy:18789/internal/v1",
       "public_endpoints": {
         "web": "https://clawdiy.ainetic.tech",
         "telegram": "@clawdiy_bot"
       },
+      "endpoint_paths": {
+        "handoff_submit": "POST /internal/v1/agent-handoffs",
+        "handoff_ack": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+        "handoff_status": "GET /internal/v1/agent-handoffs/{correlation_id}",
+        "handoff_cancel": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel",
+        "health": "http://clawdiy:18789/health",
+        "metrics": "http://clawdiy:18789/metrics"
+      },
       "capabilities": [
         "coding.orchestration",
         "task.execution",
+        "handoff.accept",
+        "handoff.progress.write",
         "provider.auth.check"
       ],
+      "capability_prerequisites": {
+        "coding.orchestration": [
+          "service-auth",
+          "state-root"
+        ],
+        "task.execution": [
+          "service-auth",
+          "audit-root"
+        ],
+        "handoff.accept": [
+          "service-auth",
+          "correlation-id"
+        ],
+        "handoff.progress.write": [
+          "service-auth",
+          "correlation-id"
+        ],
+        "provider.auth.check": [
+          "provider-auth-profile"
+        ]
+      },
       "allowed_callers": [
-        "moltinger",
-        "coordinator"
+        "moltinger"
       ],
-      "reachability": "degraded",
+      "auth_profile_refs": {
+        "human_auth": "github-secret:CLAWDIY_PASSWORD",
+        "service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN",
+        "telegram": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+        "provider_auth": [
+          "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE"
+        ]
+      },
+      "state_scope": {
+        "config_root": "config/clawdiy",
+        "registry_root": "config/fleet",
+        "state_root": "data/clawdiy/state",
+        "audit_root": "data/clawdiy/audit"
+      },
+      "reachability": "reachable",
       "policy_version": "git:pending",
       "last_validated_at": null
     }

@@ -1,11 +1,16 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T00:00:00Z",
+  "updated_at": "2026-03-09T15:10:00Z",
   "defaults": {
     "allow_unknown_agents": false,
     "allow_unknown_capabilities": false,
     "allow_public_machine_handoffs": false,
-    "fail_closed_on_auth_error": true
+    "fail_closed_on_auth_error": true,
+    "deny_on_reachability": [
+      "unreachable",
+      "auth_required",
+      "quarantined"
+    ]
   },
   "service_auth": {
     "mode": "bearer",
@@ -14,8 +19,124 @@
       "X-Agent-Id",
       "X-Correlation-Id",
       "Idempotency-Key"
+    ],
+    "bind_token_to_agent_header": true
+  },
+  "caller_allowlists": {
+    "moltinger": [
+      "clawdiy"
+    ],
+    "clawdiy": [
+      "moltinger"
     ]
   },
+  "capability_authorization": [
+    {
+      "recipient": "clawdiy",
+      "capability": "coding.orchestration",
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 3,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "clawdiy",
+      "capability": "task.execution",
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 3,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "clawdiy",
+      "capability": "provider.auth.check",
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 1,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "moltinger",
+      "capability": "handoff.status.receive",
+      "allowed_callers": [
+        "clawdiy"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 3,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "recipient": "moltinger",
+      "capability": "operator.escalation",
+      "allowed_callers": [
+        "clawdiy"
+      ],
+      "required_auth": [
+        "service-bearer"
+      ],
+      "required_headers": [
+        "Authorization",
+        "X-Agent-Id",
+        "X-Correlation-Id",
+        "Idempotency-Key"
+      ],
+      "max_delivery_attempts": 2,
+      "delivery_ack_deadline_seconds": 10,
+      "start_ack_deadline_seconds": 60,
+      "progress_heartbeat_seconds": 300,
+      "terminal_timeout_seconds": 900
+    }
+  ],
   "routes": [
     {
       "caller": "moltinger",
@@ -23,10 +144,19 @@
       "transport": "http-json",
       "endpoint": "POST /internal/v1/agent-handoffs",
       "ack_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "status_endpoint": "GET /internal/v1/agent-handoffs/{correlation_id}",
+      "cancel_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel",
       "capabilities": [
         "coding.orchestration",
         "task.execution",
         "provider.auth.check"
+      ],
+      "allowed_callers": [
+        "moltinger"
+      ],
+      "reachability_required": [
+        "reachable",
+        "degraded"
       ]
     },
     {
@@ -35,9 +165,18 @@
       "transport": "http-json",
       "endpoint": "POST /internal/v1/agent-handoffs",
       "ack_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "status_endpoint": "GET /internal/v1/agent-handoffs/{correlation_id}",
+      "cancel_endpoint": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel",
       "capabilities": [
         "handoff.status.receive",
         "operator.escalation"
+      ],
+      "allowed_callers": [
+        "clawdiy"
+      ],
+      "reachability_required": [
+        "reachable",
+        "degraded"
       ]
     }
   ],
