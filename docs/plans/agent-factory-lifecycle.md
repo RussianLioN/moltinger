@@ -16,6 +16,63 @@
 2. **Независимая валидация** - отдельный агент проверяет spec vs code
 3. **Рекурсивная самоприменимость** - фабрика использует свои же методы
 
+## Permanent Agent Onboarding
+
+Для постоянных платформенных агентов действует дополнительный контракт поверх обычного lifecycle.
+
+### Обязательные инварианты
+
+- у каждого агента свой стабильный `agent_id`
+- у каждого агента свой `agent://` logical address
+- handoff envelope, correlation headers и `/internal/v1/agent-handoffs*` path contract не меняются при смене placement
+- discovery и trust policy всегда живут в `config/fleet/agents-registry.json` и `config/fleet/policy.json`
+- human auth, service auth, Telegram auth и provider auth не переиспользуются между агентами
+
+### Минимальный onboarding-пакет для нового постоянного агента
+
+1. Выделить отдельный epic/worktree/branch под агента или под его постоянную роль.
+2. Добавить registry entry, policy routes и role-specific secret refs.
+3. Выделить отдельные config/state/audit roots.
+4. Подготовить smoke/runbook пакет:
+   - deploy
+   - handoff
+   - auth
+   - rollback/recovery
+5. Проверить, что агент вписывается в один из topology profiles:
+   - `same_host`
+   - `remote_node`
+
+### Роли, которые должны масштабироваться без topology rewrite
+
+- coordinator: уже покрыт Moltinger
+- coder: уже покрыт Clawdiy
+- architect: будущий постоянный агент
+- tester: будущий постоянный агент
+- researcher: будущий постоянный агент
+
+## Clawdiy Node Extraction Path
+
+Clawdiy разворачивается сначала same-host, но extraction path считается штатным, а не emergency workaround.
+
+### Последовательность
+
+1. Зафиксировать extraction-readiness через `./scripts/clawdiy-smoke.sh --json --stage extraction-readiness`.
+2. Сохранить те же `agent_id`, logical address и handoff paths.
+3. Изменить только placement:
+   - private internal endpoint
+   - health/metrics host placement
+   - state/audit location на новом node
+4. Оставить human-facing ingress на `clawdiy.ainetic.tech`.
+5. Перепроверить registry/policy и recovery runbooks до cutover.
+
+### Что не должно меняться при extraction
+
+- имя агента `clawdiy`
+- logical address `agent://clawdiy`
+- message envelope schema
+- ack/retry/timeout semantics
+- операторский handoff и rollback process
+
 ---
 
 ## Полный Lifecycle агента

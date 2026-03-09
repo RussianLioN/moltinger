@@ -155,6 +155,93 @@ run_fleet_registry_tests() {
         test_fail "Fleet policy must define the fail-closed openai-codex rollout gate for Clawdiy"
     fi
 
+    test_start "fleet_registry_topology_profiles_defined"
+    if jq -e '
+        .topology_profiles.same_host.transport == "http-json"
+        and .topology_profiles.same_host.network_plane == "fleet-internal"
+        and .topology_profiles.same_host.private_machine_transport_only == true
+        and .topology_profiles.remote_node.transport == "http-json"
+        and .topology_profiles.remote_node.network_plane == "private-overlay"
+        and .topology_profiles.remote_node.private_machine_transport_only == true
+        and all(.agents[]; (.topology.supported_profiles | index("same_host")) != null and (.topology.supported_profiles | index("remote_node")) != null)
+      ' "$REGISTRY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet registry must define same_host and remote_node topology profiles for active agents"
+    fi
+
+    test_start "fleet_registry_extraction_invariants_defined"
+    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
+        ($runtime[0]) as $rt
+        | .agents[] | select(.agent_id == "clawdiy")
+        | .logical_address == $rt.topology.logical_address
+        and .topology.active_profile == $rt.topology.active_profile
+        and (.topology.placement_profiles.same_host.internal_endpoint == $rt.identity.internal_endpoint)
+        and (.topology.placement_profiles.remote_node.internal_endpoint != .topology.placement_profiles.same_host.internal_endpoint)
+        and (.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
+        and (.topology.placement_profiles.remote_node.health_endpoint | endswith($rt.server.health_path))
+        and (.topology.placement_profiles.remote_node.metrics_endpoint | endswith($rt.server.metrics_path))
+        and .topology.route_invariants.handoff_submit_path == ("POST " + $rt.control_plane.submit_path)
+        and .topology.route_invariants.handoff_ack_path == ("POST " + $rt.control_plane.ack_path_template)
+        and .topology.route_invariants.handoff_status_path == ("GET " + $rt.control_plane.status_path_template)
+        and .topology.route_invariants.handoff_cancel_path == ("POST " + $rt.control_plane.cancel_path_template)
+      ' "$REGISTRY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Clawdiy extraction readiness must keep logical address and handoff paths stable while only endpoint placement changes"
+    fi
+
+    test_start "fleet_registry_future_role_examples_defined"
+    if jq -e '
+        [.future_role_examples[].role] as $roles
+        | ($roles | index("architect")) != null
+        and ($roles | index("tester")) != null
+        and ($roles | index("researcher")) != null
+        and all(.future_role_examples[]; (.supported_topology_profiles | index("same_host")) != null and (.supported_topology_profiles | index("remote_node")) != null and .private_machine_transport_only == true)
+      ' "$REGISTRY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet registry must include future role examples that remain private and topology-flexible"
+    fi
+
+    test_start "fleet_policy_topology_profiles_fail_closed"
+    if jq -e '
+        .topology_profiles.same_host.transport == "http-json"
+        and .topology_profiles.same_host.network_plane == "fleet-internal"
+        and .topology_profiles.same_host.requires_private_connectivity == true
+        and .topology_profiles.same_host.allow_public_machine_handoffs == false
+        and .topology_profiles.remote_node.transport == "http-json"
+        and .topology_profiles.remote_node.network_plane == "private-overlay"
+        and .topology_profiles.remote_node.requires_private_connectivity == true
+        and .topology_profiles.remote_node.allow_public_machine_handoffs == false
+      ' "$POLICY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must keep same_host and remote_node machine handoffs private and fail-closed"
+    fi
+
+    test_start "fleet_policy_future_roles_defined"
+    if jq -e '
+        [.future_role_defaults[].role] as $roles
+        | ($roles | index("architect")) != null
+        and ($roles | index("tester")) != null
+        and ($roles | index("researcher")) != null
+        and all(.future_role_defaults[]; .transport == "http-json" and (.required_auth | index("service-bearer")) != null and .private_machine_handoffs_only == true)
+      ' "$POLICY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must define future permanent-role defaults for private service-auth handoffs"
+    fi
+
+    test_start "fleet_policy_routes_support_extraction_profiles"
+    if jq -e '
+        all(.routes[]; (.supported_topology_profiles | index("same_host")) != null and (.supported_topology_profiles | index("remote_node")) != null and .transport == "http-json")
+      ' "$POLICY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy routes must stay valid across same_host and remote_node placements"
+    fi
+
     generate_report
 }
 

@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T19:40:00Z",
+  "updated_at": "2026-03-09T16:35:00Z",
   "defaults": {
     "allow_unknown_agents": false,
     "allow_unknown_capabilities": false,
@@ -22,6 +22,63 @@
     ],
     "bind_token_to_agent_header": true
   },
+  "topology_profiles": {
+    "same_host": {
+      "transport": "http-json",
+      "network_plane": "fleet-internal",
+      "requires_private_connectivity": true,
+      "allow_public_machine_handoffs": false
+    },
+    "remote_node": {
+      "transport": "http-json",
+      "network_plane": "private-overlay",
+      "requires_private_connectivity": true,
+      "allow_public_machine_handoffs": false,
+      "preferred_controls": [
+        "private-dns",
+        "tailscale-or-equivalent",
+        "mTLS-ready"
+      ]
+    }
+  },
+  "future_role_defaults": [
+    {
+      "role": "architect",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "tester",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "researcher",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    }
+  ],
   "telegram_auth": {
     "clawdiy": {
       "mode": "polling",
@@ -181,6 +238,10 @@
       "allowed_callers": [
         "moltinger"
       ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
       "reachability_required": [
         "reachable",
         "degraded"
@@ -200,6 +261,10 @@
       ],
       "allowed_callers": [
         "clawdiy"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
       ],
       "reachability_required": [
         "reachable",

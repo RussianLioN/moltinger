@@ -26,6 +26,35 @@
     "internal_endpoint": "http://clawdiy:18789/internal/v1",
     "telegram_bot": "@clawdiy_bot"
   },
+  "topology": {
+    "active_profile": "same_host",
+    "supported_profiles": [
+      "same_host",
+      "remote_node"
+    ],
+    "logical_address": "agent://clawdiy",
+    "placement_profiles": {
+      "same_host": {
+        "internal_endpoint": "http://clawdiy:18789/internal/v1",
+        "health_endpoint": "http://clawdiy:18789/health",
+        "metrics_endpoint": "http://clawdiy:18789/metrics",
+        "network_plane": "fleet-internal"
+      },
+      "remote_node": {
+        "internal_endpoint": "https://clawdiy-int.ainetic.tech/internal/v1",
+        "health_endpoint": "https://clawdiy-int.ainetic.tech/health",
+        "metrics_endpoint": "https://clawdiy-int.ainetic.tech/metrics",
+        "network_plane": "private-overlay"
+      }
+    },
+    "route_invariants": {
+      "message_envelope_version": "v1",
+      "handoff_submit_path": "POST /internal/v1/agent-handoffs",
+      "handoff_ack_path": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+      "handoff_status_path": "GET /internal/v1/agent-handoffs/{correlation_id}",
+      "handoff_cancel_path": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+    }
+  },
   "control_plane": {
     "authoritative_transport": "http-json",
     "agent_id": "clawdiy",

@@ -196,14 +196,19 @@
 
 ### Validation for User Story 5
 
-- [ ] T035 [P] [US5] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US5-A] Create extraction-readiness validation coverage in `tests/integration_local/test_clawdiy_extraction_readiness.sh`
+- [X] T035 [P] [US5] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US5-A] Create extraction-readiness validation coverage in `tests/integration_local/test_clawdiy_extraction_readiness.sh`
+  → Artifacts: [test_clawdiy_extraction_readiness.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/integration_local/test_clawdiy_extraction_readiness.sh)
 
 ### Implementation for User Story 5
 
-- [ ] T036 [P] [US5] [EXECUTOR: gitops-guardian] [PARALLEL-GROUP-US5-A] Extend future-role and remote-node friendly registry examples in `config/fleet/agents-registry.json` and `config/fleet/policy.json`
-- [ ] T037 [P] [US5] [EXECUTOR: bash-master] [PARALLEL-GROUP-US5-A] Implement `extraction-readiness` verification in `scripts/clawdiy-smoke.sh`
-- [ ] T038 [US5] [EXECUTOR: technical-writer] [SEQUENTIAL] Document future permanent-agent onboarding and Clawdiy node extraction path in `docs/plans/agent-factory-lifecycle.md` and `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T039 [US5] [EXECUTOR: technical-writer] [SEQUENTIAL] Document same-host versus remote-node routing, trust, and discovery posture in `docs/INFRASTRUCTURE.md`
+- [X] T036 [P] [US5] [EXECUTOR: gitops-guardian] [PARALLEL-GROUP-US5-A] Extend future-role and remote-node friendly registry examples in `config/fleet/agents-registry.json` and `config/fleet/policy.json`
+  → Artifacts: [agents-registry.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/agents-registry.json), [policy.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/policy.json), [test_fleet_registry.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/static/test_fleet_registry.sh)
+- [X] T037 [P] [US5] [EXECUTOR: bash-master] [PARALLEL-GROUP-US5-A] Implement `extraction-readiness` verification in `scripts/clawdiy-smoke.sh`
+  → Artifacts: [clawdiy-smoke.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/clawdiy-smoke.sh), [openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json), [test_clawdiy_extraction_readiness.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/integration_local/test_clawdiy_extraction_readiness.sh)
+- [X] T038 [US5] [EXECUTOR: technical-writer] [SEQUENTIAL] Document future permanent-agent onboarding and Clawdiy node extraction path in `docs/plans/agent-factory-lifecycle.md` and `docs/GIT-TOPOLOGY-REGISTRY.md`
+  → Artifacts: [agent-factory-lifecycle.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/plans/agent-factory-lifecycle.md), [GIT-TOPOLOGY-REGISTRY.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/GIT-TOPOLOGY-REGISTRY.md)
+- [X] T039 [US5] [EXECUTOR: technical-writer] [SEQUENTIAL] Document same-host versus remote-node routing, trust, and discovery posture in `docs/INFRASTRUCTURE.md`
+  → Artifacts: [INFRASTRUCTURE.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/INFRASTRUCTURE.md)
 
 **Checkpoint**: The platform contract scales beyond the first two agents without topology rewrite.
 

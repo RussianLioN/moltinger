@@ -149,8 +149,21 @@ output_json_result() {
 
 require_commands() {
     local missing=()
+    local required=(jq)
     local cmd
-    for cmd in curl docker jq; do
+
+    case "$STAGE" in
+        same-host|restart-isolation|handoff|rollback-evidence)
+            required+=(curl docker)
+            ;;
+        auth|extraction-readiness)
+            ;;
+        *)
+            required+=(curl docker)
+            ;;
+    esac
+
+    for cmd in "${required[@]}"; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             missing+=("$cmd")
         fi
@@ -161,7 +174,7 @@ require_commands() {
         return 1
     fi
 
-    add_check "dependencies" "pass" "Required commands available: curl docker jq" "error"
+    add_check "dependencies" "pass" "Required commands available: ${required[*]}" "error"
     return 0
 }
 
@@ -580,6 +593,102 @@ verify_rollback_evidence_stage() {
     fi
 }
 
+verify_extraction_readiness_stage() {
+    if [[ -f "$FLEET_REGISTRY_FILE" && -f "$FLEET_POLICY_FILE" && -f "$CLAWDIY_CONFIG_FILE" ]]; then
+        add_check "extraction_contract_inputs" "pass" "Registry, policy, and Clawdiy runtime config exist for extraction-readiness checks" "error"
+    else
+        add_check "extraction_contract_inputs" "fail" "Missing registry, policy, or Clawdiy runtime config for extraction-readiness checks" "error"
+        return 1
+    fi
+
+    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
+        def host:
+            tostring
+            | sub("^https?://"; "")
+            | split("/")[0]
+            | ascii_downcase;
+        ($runtime[0]) as $rt
+        | (.agents[] | select(.agent_id == "clawdiy")) as $cl
+        | .topology_profiles.same_host.transport == "http-json"
+        and .topology_profiles.remote_node.transport == "http-json"
+        and .topology_profiles.same_host.network_plane == "fleet-internal"
+        and .topology_profiles.remote_node.network_plane == "private-overlay"
+        and $cl.logical_address == $rt.control_plane.reply_to
+        and $cl.topology.active_profile == "same_host"
+        and (($cl.topology.supported_profiles | index("same_host")) != null)
+        and (($cl.topology.supported_profiles | index("remote_node")) != null)
+        and $cl.topology.placement_profiles.same_host.internal_endpoint == $cl.internal_endpoint
+        and ($cl.topology.placement_profiles.same_host.internal_endpoint | host) != ($cl.topology.placement_profiles.remote_node.internal_endpoint | host)
+        and ($cl.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
+        and ($cl.topology.placement_profiles.remote_node.health_endpoint | endswith($rt.server.health_path))
+        and ($cl.topology.placement_profiles.remote_node.metrics_endpoint | endswith($rt.server.metrics_path))
+      ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
+        add_check "extraction_topology_profiles" "pass" "Clawdiy registry preserves logical address and route placement invariants across same_host and remote_node profiles" "error"
+    else
+        add_check "extraction_topology_profiles" "fail" "Clawdiy registry is missing a stable same_host/remote_node extraction contract" "error"
+    fi
+
+    if jq -e --slurpfile registry "$FLEET_REGISTRY_FILE" '
+        ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
+        | .topology.logical_address == $cl.logical_address
+        and .topology.active_profile == $cl.topology.active_profile
+        and .topology.placement_profiles.same_host.internal_endpoint == $cl.topology.placement_profiles.same_host.internal_endpoint
+        and .topology.placement_profiles.remote_node.internal_endpoint == $cl.topology.placement_profiles.remote_node.internal_endpoint
+        and .topology.route_invariants.handoff_submit_path == $cl.topology.route_invariants.handoff_submit_path
+        and .topology.route_invariants.handoff_ack_path == $cl.topology.route_invariants.handoff_ack_path
+        and .topology.route_invariants.handoff_status_path == $cl.topology.route_invariants.handoff_status_path
+        and .topology.route_invariants.handoff_cancel_path == $cl.topology.route_invariants.handoff_cancel_path
+      ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
+        add_check "extraction_runtime_alignment" "pass" "Clawdiy runtime topology block stays aligned with the fleet registry extraction contract" "error"
+    else
+        add_check "extraction_runtime_alignment" "fail" "Clawdiy runtime topology block diverges from the fleet registry extraction contract" "error"
+    fi
+
+    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
+        ($runtime[0]) as $rt
+        | (.agents[] | select(.agent_id == "clawdiy")) as $cl
+        | ($cl.topology.route_invariants.handoff_submit_path | endswith($rt.control_plane.submit_path))
+        and ($cl.topology.route_invariants.handoff_ack_path | endswith($rt.control_plane.ack_path_template))
+        and ($cl.topology.route_invariants.handoff_status_path | endswith($rt.control_plane.status_path_template))
+        and ($cl.topology.route_invariants.handoff_cancel_path | endswith($rt.control_plane.cancel_path_template))
+        and ($cl.endpoint_paths.handoff_submit == $cl.topology.route_invariants.handoff_submit_path)
+        and ($cl.endpoint_paths.handoff_ack == $cl.topology.route_invariants.handoff_ack_path)
+        and ($cl.endpoint_paths.handoff_status == $cl.topology.route_invariants.handoff_status_path)
+        and ($cl.endpoint_paths.handoff_cancel == $cl.topology.route_invariants.handoff_cancel_path)
+      ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
+        add_check "extraction_handoff_invariants" "pass" "Clawdiy handoff submit, ack, status, and cancel paths remain stable for future-node extraction" "error"
+    else
+        add_check "extraction_handoff_invariants" "fail" "Clawdiy handoff path invariants are not stable across the extraction contract" "error"
+    fi
+
+    if jq -e --slurpfile registry "$FLEET_REGISTRY_FILE" '
+        [.future_role_examples[].role] as $roles
+        | ($roles | index("architect")) != null
+        and ($roles | index("tester")) != null
+        and ($roles | index("researcher")) != null
+        and all(.future_role_examples[]; .logical_address_template == "agent://{agent_id}" and (.supported_topology_profiles | index("same_host")) != null and (.supported_topology_profiles | index("remote_node")) != null and .private_machine_transport_only == true)
+      ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
+        add_check "extraction_future_roles" "pass" "Fleet registry includes architect, tester, and researcher examples using the same logical-address and topology contract" "error"
+    else
+        add_check "extraction_future_roles" "fail" "Fleet registry is missing future permanent-role examples for architect, tester, and researcher" "error"
+    fi
+
+    if jq -e '
+        .topology_profiles.same_host.transport == "http-json"
+        and .topology_profiles.remote_node.transport == "http-json"
+        and .topology_profiles.same_host.allow_public_machine_handoffs == false
+        and .topology_profiles.remote_node.allow_public_machine_handoffs == false
+        and .topology_profiles.remote_node.requires_private_connectivity == true
+        and any(.routes[]; .caller == "moltinger" and .recipient == "clawdiy" and (.supported_topology_profiles | index("remote_node")) != null)
+        and any(.routes[]; .caller == "clawdiy" and .recipient == "moltinger" and (.supported_topology_profiles | index("remote_node")) != null)
+        and all(.future_role_defaults[]; (.supported_topology_profiles | index("same_host")) != null and (.supported_topology_profiles | index("remote_node")) != null and .transport == "http-json" and .private_machine_handoffs_only == true)
+      ' "$FLEET_POLICY_FILE" >/dev/null 2>&1; then
+        add_check "extraction_policy_contract" "pass" "Fleet policy keeps remote-node handoffs private, fail-closed, and reusable for future permanent roles" "error"
+    else
+        add_check "extraction_policy_contract" "fail" "Fleet policy does not preserve the private remote-node contract for Clawdiy extraction and future roles" "error"
+    fi
+}
+
 verify_same_host_stage() {
     if container_exists "$CLAWDIY_CONTAINER"; then
         add_check "clawdiy_container_exists" "pass" "Clawdiy container $CLAWDIY_CONTAINER exists" "error"
@@ -711,10 +820,10 @@ verify_restart_isolation_stage() {
 
 show_help() {
     cat <<EOF
-Usage: $0 [--stage same-host|restart-isolation|handoff|auth|rollback-evidence] [--json] [--timeout seconds]
+Usage: $0 [--stage same-host|restart-isolation|handoff|auth|rollback-evidence|extraction-readiness] [--json] [--timeout seconds]
 
 Options:
-  --stage <name>      Verification stage to run (default: same-host). Supported: same-host, restart-isolation, handoff, auth, rollback-evidence
+  --stage <name>      Verification stage to run (default: same-host). Supported: same-host, restart-isolation, handoff, auth, rollback-evidence, extraction-readiness
   --json              Emit JSON instead of human-readable logs
   --timeout <sec>     Wait timeout for health checks (default: ${TIMEOUT_SECONDS})
   --no-color          Disable colorized logs
@@ -782,6 +891,9 @@ main() {
             ;;
         rollback-evidence)
             verify_rollback_evidence_stage
+            ;;
+        extraction-readiness)
+            verify_extraction_readiness_stage
             ;;
         *)
             add_check "stage" "fail" "Unsupported Clawdiy smoke stage: $STAGE" "error"

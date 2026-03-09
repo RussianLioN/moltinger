@@ -1,11 +1,57 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T15:10:00Z",
+  "updated_at": "2026-03-09T16:35:00Z",
+  "topology_profiles": {
+    "same_host": {
+      "transport": "http-json",
+      "network_plane": "fleet-internal",
+      "private_machine_transport_only": true
+    },
+    "remote_node": {
+      "transport": "http-json",
+      "network_plane": "private-overlay",
+      "private_machine_transport_only": true,
+      "notes": "Endpoint placement changes, but agent_id, logical address, and handoff paths remain unchanged."
+    }
+  },
+  "future_role_examples": [
+    {
+      "role": "architect",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true
+    },
+    {
+      "role": "tester",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true
+    },
+    {
+      "role": "researcher",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true
+    }
+  ],
   "agents": [
     {
       "agent_id": "moltinger",
       "display_name": "Moltinger",
       "role": "coordinator",
+      "logical_address": "agent://moltinger",
       "owner": "platform-ops",
       "lifecycle_state": "active",
       "runtime_engine": "moltis",
@@ -63,6 +109,34 @@
         "state_root": "data/",
         "audit_root": "data/.deployment-info"
       },
+      "topology": {
+        "active_profile": "same_host",
+        "supported_profiles": [
+          "same_host",
+          "remote_node"
+        ],
+        "route_invariants": {
+          "message_envelope_version": "v1",
+          "handoff_submit_path": "POST /internal/v1/agent-handoffs",
+          "handoff_ack_path": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+          "handoff_status_path": "GET /internal/v1/agent-handoffs/{correlation_id}",
+          "handoff_cancel_path": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+        },
+        "placement_profiles": {
+          "same_host": {
+            "internal_endpoint": "http://moltis:13131/internal/v1",
+            "health_endpoint": "http://moltis:13131/health",
+            "metrics_endpoint": "http://moltis:13131/metrics",
+            "network_plane": "fleet-internal"
+          },
+          "remote_node": {
+            "internal_endpoint": "https://moltis-int.ainetic.tech/internal/v1",
+            "health_endpoint": "https://moltis-int.ainetic.tech/health",
+            "metrics_endpoint": "https://moltis-int.ainetic.tech/metrics",
+            "network_plane": "private-overlay"
+          }
+        }
+      },
       "reachability": "reachable",
       "policy_version": "git:pending",
       "last_validated_at": null
@@ -71,6 +145,7 @@
       "agent_id": "clawdiy",
       "display_name": "Clawdiy",
       "role": "coder",
+      "logical_address": "agent://clawdiy",
       "owner": "platform-ops",
       "lifecycle_state": "active",
       "runtime_engine": "openclaw",
@@ -131,6 +206,34 @@
         "registry_root": "config/fleet",
         "state_root": "data/clawdiy/state",
         "audit_root": "data/clawdiy/audit"
+      },
+      "topology": {
+        "active_profile": "same_host",
+        "supported_profiles": [
+          "same_host",
+          "remote_node"
+        ],
+        "route_invariants": {
+          "message_envelope_version": "v1",
+          "handoff_submit_path": "POST /internal/v1/agent-handoffs",
+          "handoff_ack_path": "POST /internal/v1/agent-handoffs/{correlation_id}/acks",
+          "handoff_status_path": "GET /internal/v1/agent-handoffs/{correlation_id}",
+          "handoff_cancel_path": "POST /internal/v1/agent-handoffs/{correlation_id}/cancel"
+        },
+        "placement_profiles": {
+          "same_host": {
+            "internal_endpoint": "http://clawdiy:18789/internal/v1",
+            "health_endpoint": "http://clawdiy:18789/health",
+            "metrics_endpoint": "http://clawdiy:18789/metrics",
+            "network_plane": "fleet-internal"
+          },
+          "remote_node": {
+            "internal_endpoint": "https://clawdiy-int.ainetic.tech/internal/v1",
+            "health_endpoint": "https://clawdiy-int.ainetic.tech/health",
+            "metrics_endpoint": "https://clawdiy-int.ainetic.tech/metrics",
+            "network_plane": "private-overlay"
+          }
+        }
       },
       "reachability": "reachable",
       "policy_version": "git:pending",

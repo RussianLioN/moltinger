@@ -80,7 +80,7 @@ Clawdiy is deployed as a second permanent agent on the same server in a separate
 | Local bind | `127.0.0.1:13131` | `127.0.0.1:18789` |
 | Compose file | `docker-compose.prod.yml` | `docker-compose.clawdiy.yml` |
 | Runtime config | `config/moltis.toml` | `config/clawdiy/openclaw.json` |
-| Control-plane registry | implicit/self | `config/fleet/agents-registry.json` + `config/fleet/policy.json` |
+| Control-plane registry | `config/fleet/agents-registry.json` + `config/fleet/policy.json` | `config/fleet/agents-registry.json` + `config/fleet/policy.json` |
 | Persistent state | `data/` | `data/clawdiy/state` |
 | Audit evidence | mixed app logs | `data/clawdiy/audit` |
 
@@ -89,6 +89,37 @@ Clawdiy is deployed as a second permanent agent on the same server in a separate
 - `traefik-net`: public ingress through Traefik
 - `fleet-internal`: private agent-to-agent path
 - `moltinger_monitoring`: Prometheus and cAdvisor visibility for per-agent metrics
+
+### Topology Profiles
+
+| Profile | What changes | What must stay invariant | Machine trust posture |
+|---------|--------------|--------------------------|-----------------------|
+| `same_host` | container placement and local bind remain on one server | `agent_id`, logical address, handoff paths, message envelope | private `fleet-internal` network, bearer service auth, no public machine handoffs |
+| `remote_node` | Clawdiy internal endpoint, health, and metrics move to a private remote endpoint | `agent_id=clawdiy`, `agent://clawdiy`, `/internal/v1/agent-handoffs*`, public web URL | private overlay or equivalent, bearer service auth, public machine handoffs still forbidden |
+
+### Extraction Invariants
+
+- Moving Clawdiy to another node is a placement change, not an identity change.
+- `agent_id`, `logical_address`, correlation headers, required acknowledgements, and handoff envelope schema must remain unchanged.
+- `config/fleet/agents-registry.json` and `config/fleet/policy.json` stay authoritative for discovery and trust policy in both profiles.
+- `clawdiy.ainetic.tech` remains the human-facing URL even if the internal machine endpoint changes to a remote private hostname.
+
+### Same-Host vs Remote-Node Routing
+
+| Concern | Same-host phase | Remote-node target |
+|---------|-----------------|--------------------|
+| Human ingress | Traefik -> `clawdiy.ainetic.tech` on current host | same public hostname through Traefik or equivalent edge |
+| Machine handoff | `fleet-internal` -> `http://clawdiy:18789/internal/v1` | private overlay/private DNS -> `https://clawdiy-int.ainetic.tech/internal/v1` |
+| Discovery source | git-managed registry + policy | same git-managed registry + policy |
+| Auth boundary | bearer token bound to `X-Agent-Id` | same bearer contract, with room for later mTLS hardening |
+| Observability | local health/metrics + Prometheus scrape | same health/metrics paths, new host placement |
+
+### Routing and Trust Rules
+
+- Telegram is never the authoritative inter-agent transport.
+- Public subdomains are for human/operator ingress; machine handoffs stay on private authenticated paths.
+- Remote-node extraction does not authorize public machine-to-machine traffic just because Clawdiy has a public URL.
+- Future permanent roles such as architect, tester, and researcher must reuse the same registry/policy contract instead of inventing new routing rules.
 
 ### Operator Commands
 
@@ -103,6 +134,9 @@ Clawdiy is deployed as a second permanent agent on the same server in a separate
 
 # Inspect current Clawdiy status
 ./scripts/deploy.sh --json clawdiy status | jq .
+
+# Verify the platform is ready for remote-node extraction
+./scripts/clawdiy-smoke.sh --json --stage extraction-readiness | jq .
 ```
 
 ### Ownership Rules
