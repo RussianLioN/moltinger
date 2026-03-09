@@ -197,6 +197,7 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p \
             ${{ env.DEPLOY_PATH }}/config/clawdiy \
             ${{ env.DEPLOY_PATH }}/config/fleet \
+            ${{ env.DEPLOY_PATH }}/config/backup \
             ${{ env.DEPLOY_PATH }}/data/clawdiy/state \
             ${{ env.DEPLOY_PATH }}/data/clawdiy/audit \
             ${{ env.DEPLOY_PATH }}/scripts \
@@ -205,6 +206,7 @@ jobs:
           scp docker-compose.clawdiy.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.clawdiy.yml
           scp -r config/clawdiy/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/clawdiy/
           scp -r config/fleet/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/fleet/
+          scp -r config/backup/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/backup/
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/
           echo "::endgroup::"
 
