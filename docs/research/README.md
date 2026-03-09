@@ -14,6 +14,14 @@
 
 ---
 
+## Additional Research Tracks
+
+| Topic | Documents | Status | Notes |
+|-------|-----------|--------|-------|
+| Codex CLI update monitoring | [Research](./codex-cli-update-monitoring-2026-03-09.md), [Speckit seed](../plans/codex-cli-update-monitoring-speckit-seed.md) | Research complete | Current local/latest CLI: `0.112.0`; recommended next step is a dedicated `codex-update-monitor` feature branch with a script-first monitor. |
+
+---
+
 ## Document Guide
 
 | Document | For Whom | Read Time | Purpose |
