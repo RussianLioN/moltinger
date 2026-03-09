@@ -25,6 +25,7 @@ Expected user flow:
 Validation target:
 - launcher still starts Codex even if delivery check fails
 - repeated launches do not repeat the same alert for the same fingerprint
+- optional launch-time Telegram automation can reuse the same fingerprint without blocking Codex startup
 
 ## Telegram Delivery
 
@@ -36,10 +37,12 @@ Expected user flow:
 Validation target:
 - repeated identical runs do not resend the same Telegram message
 - send failure is visible in the delivery report
+- launcher-driven Telegram sends can delegate transport to the Moltinger host when local bot secrets are absent
 
 ## Verification Checklist
 
 1. Confirm the user-facing entrypoint returns a plain-language answer.
 2. Confirm launcher alert is short and non-blocking.
 3. Confirm Telegram delivery is opt-in and duplicate-safe.
-4. Confirm shared delivery state reflects each supported surface separately.
+4. Confirm launcher-triggered Telegram delivery stays fail-open and does not delay Codex startup.
+5. Confirm shared delivery state reflects each supported surface separately.

@@ -19,8 +19,8 @@
       "ci": true
     },
     "codex-profile-launch.sh": {
-      "version": "1.0.0",
-      "description": "Launch Codex with repo-specific sandbox and approval defaults",
+      "version": "1.1.0",
+      "description": "Launch Codex with repo-specific sandbox, approval defaults, and optional update delivery hooks",
       "entrypoint": true,
       "requires": [
         "codex"
@@ -32,6 +32,17 @@
         "codex-assets",
         "codex-review",
         "codex-hotfix"
+      ]
+    },
+    "telegram-bot-send-remote.sh": {
+      "version": "1.0.0",
+      "description": "Delegate Telegram bot sending to the Moltinger server runtime over SSH",
+      "entrypoint": true,
+      "requires": [
+        "ssh"
+      ],
+      "provides": [
+        "telegram-bot-send-remote"
       ]
     },
     "codex-cli-update-monitor.sh": {
