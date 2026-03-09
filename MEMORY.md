@@ -7,6 +7,7 @@
 >
 > Этот файл содержит критическую конфигурацию проекта.
 > Проверь его ПЕРЕД любыми изменениями в deploy, docker, traefik.
+> Если remote rollout упёрся в blocker: перечитай также `docs/LESSONS-LEARNED.md`, `docs/INFRASTRUCTURE.md` и правило `docs/rules/remote-rollout-diagnosis-traefik-first.md`.
 
 ---
 

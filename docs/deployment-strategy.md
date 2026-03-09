@@ -26,6 +26,7 @@ Clawdiy starts on the same server in its own compose stack:
 - control-plane registry/policy: `config/fleet/agents-registry.json`, `config/fleet/policy.json`
 - persistent state: `data/clawdiy/state`
 - audit evidence: `data/clawdiy/audit`
+- the first CI rollout may create `fleet-internal` if it does not exist yet; `traefik-net` and `moltinger_monitoring` must already exist
 
 ### 2. Private machine handoff
 
@@ -64,6 +65,7 @@ Phase 1 keeps Telegram in long-polling mode:
 ```
 
 This is the first live OpenClaw launch step for Clawdiy.
+If `fleet-internal` is absent on the first rollout, the GitHub deploy workflow or `deploy.sh` bootstraps it; do not create it manually over ad-hoc SSH.
 
 ### 2. Handoff verification
 

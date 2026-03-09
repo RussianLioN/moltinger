@@ -186,6 +186,11 @@ jobs:
           fi
           echo "::notice::Server working tree is clean"
 
+      - name: Bootstrap Clawdiy fleet network
+        run: |
+          NETWORK_RESULT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "set -euo pipefail; if docker network inspect ${{ env.FLEET_INTERNAL_NETWORK }} >/dev/null 2>&1; then echo present; else docker network create ${{ env.FLEET_INTERNAL_NETWORK }} >/dev/null; echo created; fi")
+          echo "::notice::Clawdiy fleet network status: ${NETWORK_RESULT}"
+
       - name: Sync Clawdiy runtime artifacts
         run: |
           echo "::group::Sync Clawdiy runtime artifacts"

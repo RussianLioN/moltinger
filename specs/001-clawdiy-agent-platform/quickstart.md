@@ -11,7 +11,8 @@ This is the operator validation path after implementation. Each stage is a stop/
 - DNS exists for `clawdiy.ainetic.tech`
 - dedicated Telegram bot exists for Clawdiy
 - GitHub Secrets exist for Clawdiy human auth, service auth, Telegram, and optional provider auth
-- shared host networks remain healthy: `traefik-net`, `fleet-internal`, `moltinger_monitoring`
+- shared host networks remain healthy: `traefik-net` and `moltinger_monitoring`
+- `fleet-internal` may be absent before the first rollout and may be bootstrapped by the Clawdiy deploy flow
 
 ## Stage 1: Validate Config And Registry
 
@@ -40,6 +41,7 @@ Expected outcome:
 - no identity collisions
 - no missing Clawdiy baseline secrets
 - compose renders cleanly
+- if `fleet-internal` is missing, preflight reports it as bootstrap-capable rather than as a hard blocker
 
 ## Stage 3: Deploy Same-Host Runtime
 
@@ -54,6 +56,7 @@ Expected outcome:
 - Clawdiy responds on `https://clawdiy.ainetic.tech`
 - Moltinger remains healthy
 - Clawdiy config/state/audit roots stay isolated
+- `fleet-internal` exists by the end of the deploy, even if it was absent before the first rollout
 
 ## Stage 4: Verify Inter-Agent Handoff
 

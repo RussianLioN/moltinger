@@ -18,10 +18,10 @@
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `sibling-worktree` | Needs decision |
 | `pr17-webhook-extraction` | `feat/pr17-webhook-extraction` | `sibling-worktree` | Needs decision |
-| `primary-feature-001` | `001-clawdiy-agent-platform` | `dedicated-feature-worktree` | Active dedicated feature worktree for the Clawdiy permanent-agent platform. |
 | `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-feature-007` | `007-codex-update-monitor` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-008` | `008-clawdiy-rollout-bootstrap-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
@@ -31,10 +31,10 @@
 | Branch | Tracking | Status |
 |---|---|---|
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
-| `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Needs decision |
+| `008-clawdiy-rollout-bootstrap-fix` | `origin/main` | Needs decision |
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
@@ -45,6 +45,7 @@
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
 | `feat/pr17-webhook-extraction` | `origin/feat/pr17-webhook-extraction` | Needs decision |
 | `uat/006-git-topology-registry` | `origin/006-git-topology-registry` | Needs decision |
+| `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
 | `001-moltis-docker-deploy` | `origin/001-moltis-docker-deploy` | Historical branch with local drift. |
@@ -62,7 +63,6 @@
 
 | Remote Branch | Current Intent |
 |---|---|
-| `origin/001-clawdiy-agent-platform` | Active rollout branch for Clawdiy permanent-agent platform. |
 | `origin/001-frontend` | Review later; currently dangling. |
 | `origin/001-moltis-docker-deploy` | Historical; review before cleanup. |
 | `origin/003-testing-infrastructure` | Historical planning branch. |
@@ -81,14 +81,18 @@
 | Subject Type | Subject Key | Intent | Note | PR |
 |---|---|---|---|---|
 | `branch` | `codex/gitops-metrics-fix` | `active` | Fresh replacement branch with open PR #18. | 18 |
+| `remote` | `origin/001-clawdiy-agent-platform` | `active` | Active rollout branch for Clawdiy permanent-agent platform. | - |
+| `remote` | `origin/001-clawdiy-agent-platform` | `active` | Active rollout branch for Clawdiy permanent-agent platform. | - |
 | `remote` | `origin/codex/full-review` | `protected` | Active parallel session; exclude from automated cleanup. | 6 |
 | `remote` | `origin/codex/gitops-metrics-fix` | `active` | Active replacement PR #18. | 18 |
 | `remote` | `origin/feat/gpt-5-moltis` | `active` | Active feature branch. | - |
 | `worktree` | `codex-gitops-metrics-fix` | `active` | Active replacement branch for closed PR #3; open PR #18. | 18 |
+| `worktree` | `primary-feature-001` | `active` | Active dedicated feature worktree for the Clawdiy permanent-agent platform. | - |
+| `worktree` | `primary-feature-001` | `active` | Active dedicated feature worktree for the Clawdiy permanent-agent platform. | - |
 
 ## Registry Warnings
 
-- Reviewed intent contains 5 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
+- Reviewed intent contains 9 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
 
 ## Operating Rules
 
