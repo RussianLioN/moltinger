@@ -17,6 +17,7 @@ Common Options:
   --branch <name>            Target git branch
   --slug <text>              Human task slug for branch/path derivation
   --issue <id>               Optional issue id for branch/path derivation
+  --speckit                  Derive a numeric Speckit-compatible feature branch
   --path <path>              Explicit worktree path override
   --repo <path>              Repository root override
   --handoff <profile>        Handoff profile (manual|terminal|codex)
@@ -64,6 +65,7 @@ mode=""
 branch=""
 request_slug=""
 issue_id=""
+speckit_mode="false"
 target_path=""
 repo_root=""
 handoff_profile="manual"
@@ -169,6 +171,10 @@ parse_args() {
           die "--issue requires a value"
         fi
         shift 2
+        ;;
+      --speckit)
+        speckit_mode="true"
+        shift
         ;;
       --path)
         target_path="${2:-}"
@@ -389,6 +395,24 @@ extract_issue_title_from_jsonl_line() {
     | sed 's/\\"/"/g'
 }
 
+resolve_issue_jsonl_line() {
+  local requested_issue="${1:-}"
+  local issues_file=""
+
+  if [[ -z "${requested_issue}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
+  if [[ ! -f "${issues_file}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  awk -v issue="${requested_issue}" 'index($0, "\"id\":\"" issue "\"") { print; exit }' "${issues_file}"
+}
+
 extract_issue_artifact_paths_from_jsonl_line() {
   local issue_line="$1"
   local candidate_path=""
@@ -531,9 +555,7 @@ discover_issue_context() {
     return 0
   fi
 
-  issue_line="$(
-    awk -v issue="${resolved_issue}" 'index($0, "\"id\":\"" issue "\"") { print; exit }' "${issues_file}"
-  )"
+  issue_line="$(resolve_issue_jsonl_line "${resolved_issue}")"
   if [[ -z "${issue_line}" ]]; then
     return 0
   fi
@@ -569,6 +591,30 @@ discover_issue_context() {
   if [[ "${has_research_artifact}" -eq 1 && -e "${resolved_repo_root}/docs/research/README.md" ]] && ! target_worktree_has_path "docs/research/README.md"; then
     add_bootstrap_path "docs/research/README.md"
   fi
+}
+
+speckit_branching_enabled() {
+  local requested_issue="${issue_id:-}"
+  local issue_line=""
+
+  if [[ "${speckit_mode}" == "true" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${requested_issue}" ]]; then
+    return 1
+  fi
+
+  issue_line="$(resolve_issue_jsonl_line "${requested_issue}")"
+  if [[ -z "${issue_line}" ]]; then
+    return 1
+  fi
+
+  [[ "${issue_line}" =~ [Ss]peckit|/speckit|spec\.md|plan\.md|tasks\.md|specs/ ]]
+}
+
+issue_requests_speckit() {
+  speckit_branching_enabled
 }
 
 normalize_slug_token() {
@@ -633,24 +679,134 @@ derive_effective_slug() {
   printf '%s\n' "${normalized_slug}"
 }
 
+extract_numeric_feature_prefix() {
+  local candidate="$1"
+
+  if [[ "${candidate}" =~ ^([0-9]{3})- ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  printf '\n'
+}
+
+iter_spec_feature_dirs() {
+  local specs_dir="${resolved_repo_root}/specs"
+  local dir=""
+
+  if [[ ! -d "${specs_dir}" ]]; then
+    return 0
+  fi
+
+  for dir in "${specs_dir}"/*; do
+    [[ -d "${dir}" ]] || continue
+    printf '%s\n' "$(basename "${dir}")"
+  done
+}
+
+find_existing_speckit_branch_for_slug() {
+  local feature_slug="$1"
+  local candidate=""
+  local normalized=""
+  local candidate_number=""
+  local best_candidate=""
+  local best_number=0
+
+  if [[ -z "${feature_slug}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  while IFS= read -r candidate; do
+    [[ -n "${candidate}" ]] || continue
+    normalized="${candidate#origin/}"
+    normalized="${normalized#refs/heads/}"
+    normalized="${normalized#refs/remotes/}"
+    if [[ "${normalized}" =~ ^([0-9]{3})-${feature_slug}$ ]]; then
+      candidate_number="$((10#${BASH_REMATCH[1]}))"
+      if [[ -z "${best_candidate}" || "${candidate_number}" -gt "${best_number}" ]]; then
+        best_candidate="${normalized}"
+        best_number="${candidate_number}"
+      fi
+    fi
+  done < <(
+    {
+      iter_local_branches
+      iter_remote_branches
+      iter_spec_feature_dirs
+    } | awk 'NF && !seen[$0]++'
+  )
+
+  printf '%s\n' "${best_candidate}"
+}
+
+highest_speckit_feature_number() {
+  local candidate=""
+  local normalized=""
+  local candidate_number=""
+  local highest=0
+
+  while IFS= read -r candidate; do
+    [[ -n "${candidate}" ]] || continue
+    normalized="${candidate#origin/}"
+    normalized="${normalized#refs/heads/}"
+    normalized="${normalized#refs/remotes/}"
+    candidate_number="$(extract_numeric_feature_prefix "${normalized}")"
+    if [[ -n "${candidate_number}" ]]; then
+      candidate_number="$((10#${candidate_number}))"
+      if [[ "${candidate_number}" -gt "${highest}" ]]; then
+        highest="${candidate_number}"
+      fi
+    fi
+  done < <(
+    {
+      iter_local_branches
+      iter_remote_branches
+      iter_spec_feature_dirs
+    } | awk 'NF && !seen[$0]++'
+  )
+
+  printf '%s\n' "${highest}"
+}
+
+derive_speckit_branch_from_request() {
+  local effective_slug=""
+  local exact_branch=""
+  local next_number=0
+
+  effective_slug="$(derive_effective_slug)"
+  exact_branch="$(find_existing_speckit_branch_for_slug "${effective_slug}")"
+  if [[ -n "${exact_branch}" ]]; then
+    printf '%s\n' "${exact_branch}"
+    return 0
+  fi
+
+  next_number="$(highest_speckit_feature_number)"
+  next_number=$((next_number + 1))
+  printf '%03d-%s\n' "${next_number}" "${effective_slug}"
+}
+
 derive_branch_from_request() {
   local normalized_issue=""
-  local effective_slug=""
 
   if [[ -n "${branch}" ]]; then
     printf '%s\n' "${branch}"
     return 0
   fi
 
-  effective_slug="$(derive_effective_slug)"
-  normalized_issue="$(normalize_issue_key "${issue_id}")"
-
-  if [[ -n "${normalized_issue}" ]]; then
-    printf 'feat/%s-%s\n' "${normalized_issue}" "${effective_slug}"
+  if issue_requests_speckit; then
+    derive_speckit_branch_from_request
     return 0
   fi
 
-  printf 'feat/%s\n' "${effective_slug}"
+  normalized_issue="$(normalize_issue_key "${issue_id}")"
+
+  if [[ -n "${normalized_issue}" ]]; then
+    printf 'feat/%s-%s\n' "${normalized_issue}" "$(derive_effective_slug)"
+    return 0
+  fi
+
+  printf 'feat/%s\n' "$(derive_effective_slug)"
 }
 
 format_request_worktree_dirname() {
@@ -780,6 +936,7 @@ reset_discovery() {
   discovered_worktree_path=""
   discovered_branch_name=""
   discovered_beads_state=""
+  discovered_beads_probe_state="not_run"
   discovered_redirect_target=""
 }
 
@@ -793,6 +950,7 @@ reset_guard_probe() {
   guard_current_branch=""
   guard_current_worktree=""
   guard_raw_status=""
+  guard_probe_status="not_run"
   guard_state="unknown"
 }
 
@@ -813,6 +971,7 @@ resolve_existing_branch_state() {
 
 reset_environment_probe() {
   environment_probe_path=""
+  environment_probe_status="not_run"
   environment_state="unknown"
 }
 
@@ -1099,6 +1258,7 @@ find_bd_worktree_by_path() {
   local exit_code=0
 
   if ! command -v bd >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    printf '__PROBE_STATE__\tprobe_unavailable\n'
     return 0
   fi
 
@@ -1118,12 +1278,17 @@ find_bd_worktree_by_path() {
   set -e
 
   if [[ "${exit_code}" -eq 0 ]]; then
+    printf '__PROBE_STATE__\tok\n'
     printf '%s\n' "${output}"
+    return 0
   fi
+
+  printf '__PROBE_STATE__\tprobe_unavailable\n'
 }
 
 discover_target_state() {
   local git_record=""
+  local bd_payload=""
   local bd_record=""
   local bd_path=""
   local git_path=""
@@ -1132,6 +1297,7 @@ discover_target_state() {
   local bd_branch=""
   local bd_state=""
   local bd_redirect=""
+  local line=""
 
   reset_discovery
 
@@ -1150,9 +1316,22 @@ discover_target_state() {
   fi
 
   if [[ -n "${discovered_worktree_path}" ]]; then
-    bd_record="$(find_bd_worktree_by_path "${discovered_worktree_path}" || true)"
+    bd_payload="$(find_bd_worktree_by_path "${discovered_worktree_path}" || true)"
   elif [[ -n "${target_path}" ]]; then
-    bd_record="$(find_bd_worktree_by_path "${target_path}" || true)"
+    bd_payload="$(find_bd_worktree_by_path "${target_path}" || true)"
+  fi
+
+  if [[ -n "${bd_payload}" ]]; then
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] || continue
+      if [[ "${line}" == "__PROBE_STATE__"$'\t'* ]]; then
+        discovered_beads_probe_state="${line#*$'\t'}"
+        continue
+      fi
+
+      bd_record="${line}"
+      break
+    done <<< "${bd_payload}"
   fi
 
   if [[ -n "${bd_record}" ]]; then
@@ -1241,7 +1420,8 @@ discover_guard_state() {
   fi
 
   if [[ ! -x "${guard_probe_path}/scripts/git-session-guard.sh" ]]; then
-    guard_state="missing"
+    guard_probe_status="script_unavailable"
+    guard_state="unknown"
     return 0
   fi
 
@@ -1255,8 +1435,12 @@ discover_guard_state() {
   parse_guard_probe_output "${output}"
 
   if [[ -z "${guard_raw_status}" && "${exit_code}" -ne 0 ]]; then
+    guard_probe_status="probe_unavailable"
     guard_state="unknown"
+    return 0
   fi
+
+  guard_probe_status="ok"
 }
 
 resolve_environment_probe_path() {
@@ -1284,11 +1468,13 @@ discover_environment_state() {
   fi
 
   if [[ ! -f "${environment_probe_path}/.envrc" ]]; then
+    environment_probe_status="not_required"
     environment_state="no_envrc"
     return 0
   fi
 
   if ! command -v direnv >/dev/null 2>&1; then
+    environment_probe_status="tool_unavailable"
     environment_state="unknown"
     return 0
   fi
@@ -1301,20 +1487,24 @@ discover_environment_state() {
   set -e
 
   if [[ "${output}" == *"is blocked. Run \`direnv allow\` to approve its content"* ]]; then
+    environment_probe_status="ok"
     environment_state="approval_needed"
     return 0
   fi
 
   if [[ "${output}" == *"/direnv/allow/"* && ( "${output}" == *"operation not permitted"* || "${output}" == *"permission denied"* ) ]]; then
+    environment_probe_status="ok"
     environment_state="approval_needed"
     return 0
   fi
 
   if [[ "${exit_code}" -eq 0 ]]; then
+    environment_probe_status="ok"
     environment_state="approved_or_not_required"
     return 0
   fi
 
+  environment_probe_status="probe_unavailable"
   environment_state="unknown"
 }
 
@@ -1369,7 +1559,9 @@ apply_discovery_to_report() {
   fi
 
   if [[ -n "${discovered_worktree_path}" && -n "${target_path}" && "${discovered_worktree_path}" != "${target_path}" ]]; then
-    if [[ "${branch_resolution_state}" == "resolved" ]]; then
+    if [[ "${mode}" == "doctor" && "${path_preview}" != "${target_path}" ]]; then
+      :
+    elif [[ "${branch_resolution_state}" == "resolved" ]]; then
       add_warning "Branch '${report_branch_name}' is already attached at ${discovered_worktree_path}"
     else
       add_warning "Discovery found an existing worktree at ${discovered_worktree_path}"
@@ -1378,6 +1570,10 @@ apply_discovery_to_report() {
 
   if [[ -n "${discovered_redirect_target}" ]]; then
     add_warning "Discovery found beads redirect metadata for the target worktree"
+  fi
+
+  if [[ "${discovered_beads_probe_state}" == "probe_unavailable" ]]; then
+    add_warning "Beads worktree state could not be probed from this session."
   fi
 }
 
@@ -1393,6 +1589,15 @@ apply_guard_probe_to_report() {
   if [[ "${guard_state}" == "missing" ]]; then
     add_warning "Guard probe found no session guard state for the target"
   fi
+
+  case "${guard_probe_status}" in
+    script_unavailable)
+      add_warning "Guard probe script is not available in the target worktree."
+      ;;
+    probe_unavailable)
+      add_warning "Guard probe could not be executed from this session."
+      ;;
+  esac
 }
 
 apply_branch_resolution_to_report() {
@@ -1407,6 +1612,15 @@ apply_environment_probe_to_report() {
   if [[ "${environment_state}" == "approval_needed" ]]; then
     add_warning "Environment approval is required before launching the session."
   fi
+
+  case "${environment_probe_status}" in
+    tool_unavailable)
+      add_warning "direnv is not available from this session; environment readiness could not be confirmed."
+      ;;
+    probe_unavailable)
+      add_warning "Environment readiness could not be probed from this session."
+      ;;
+  esac
 }
 
 apply_topology_probe_to_report() {
@@ -1458,6 +1672,50 @@ set_readiness_status() {
   report_status="action_required"
 }
 
+set_doctor_status() {
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if ! report_worktree_path_exists; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "drift" ]]; then
+    report_status="drift_detected"
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "missing" ]]; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" ]]; then
+    report_status="action_required"
+    add_warning "The target worktree exists, but shared beads configuration could not be confirmed."
+    return 0
+  fi
+
+  case "${report_env_state}" in
+    approval_needed)
+      report_status="needs_env_approval"
+      ;;
+    approved_or_not_required|no_envrc)
+      if [[ "${guard_probe_status}" == "ok" ]]; then
+        report_status="ready_for_codex"
+      else
+        report_status="created"
+      fi
+      ;;
+    *)
+      report_status="created"
+      ;;
+  esac
+}
+
 set_handoff_contract() {
   local mode_name="$1"
 
@@ -1479,6 +1737,10 @@ set_handoff_contract() {
       else
         report_worktree_action="attached"
       fi
+      ;;
+    doctor)
+      report_boundary="none"
+      report_worktree_action="diagnosed"
       ;;
     handoff)
       report_boundary="stop_after_handoff"
@@ -1517,6 +1779,10 @@ set_handoff_contract() {
       report_final_state="blocked_action_required"
       ;;
   esac
+
+  if [[ "${report_env_state}" == "approval_needed" ]]; then
+    report_approval_required="true"
+  fi
 
   if [[ "${report_handoff_mode}" != "manual" && -n "${handoff_launch_command}" ]]; then
     report_final_state="handoff_launched"
@@ -1618,6 +1884,82 @@ set_readiness_next_steps() {
           add_next_step "Inspect the target inputs and retry the command"
           ;;
       esac
+      ;;
+  esac
+}
+
+set_doctor_next_steps() {
+  local worktree_target=""
+  local refspec=""
+
+  worktree_target="${report_worktree_path}"
+
+  if [[ "${report_requested_handoff_mode}" != "manual" ]]; then
+    add_warning "Doctor mode ignores automatic handoff requests and returns diagnostics only."
+  fi
+
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    refspec="${branch}:${branch}"
+    add_next_step "git fetch origin $(shell_quote "${refspec}")"
+    return 0
+  fi
+
+  if ! report_worktree_path_exists; then
+    if [[ -n "${branch}" ]]; then
+      add_next_step "Use command-worktree attach $(shell_quote "${branch}") from the invoking worktree"
+    elif [[ -n "${target_path}" ]]; then
+      add_next_step "bd worktree list"
+    else
+      add_next_step "Inspect the current repository context and retry doctor with --branch or --path"
+    fi
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "drift" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
+  elif [[ "${report_guard_state}" == "missing" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
+  elif [[ "${guard_probe_status}" == "script_unavailable" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && inspect scripts/git-session-guard.sh availability"
+  elif [[ "${guard_probe_status}" == "probe_unavailable" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && inspect ./scripts/git-session-guard.sh --status"
+  fi
+
+  if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" ]]; then
+    add_next_step "bd worktree list"
+  fi
+
+  case "${report_env_state}" in
+    approval_needed)
+      add_next_step "cd $(shell_quote "${worktree_target}") && direnv allow"
+      ;;
+    unknown)
+      case "${environment_probe_status}" in
+        tool_unavailable)
+          add_next_step "Install direnv or launch the session from an environment where direnv is available"
+          ;;
+        probe_unavailable)
+          add_next_step "cd $(shell_quote "${worktree_target}") && inspect .envrc readiness manually"
+          ;;
+      esac
+      ;;
+  esac
+
+  if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
+    return 0
+  fi
+
+  case "${report_status}" in
+    ready_for_codex)
+      add_next_step "cd $(shell_quote "${worktree_target}") && codex"
+      ;;
+    created)
+      add_next_step "cd $(shell_quote "${worktree_target}")"
+      add_next_step "Run the reported prerequisite checks and then launch codex"
+      ;;
+    *)
+      add_next_step "cd $(shell_quote "${worktree_target}")"
+      add_next_step "Inspect the reported warnings and retry doctor once they are fixed"
       ;;
   esac
 }
@@ -1765,6 +2107,11 @@ render_plan_report() {
     render_env_kv "preview" "${path_preview:-n/a}"
     render_env_kv "worktree" "${target_path:-n/a}"
     render_env_kv "decision" "${planning_decision}"
+    if speckit_branching_enabled; then
+      render_env_kv "speckit" "true"
+    else
+      render_env_kv "speckit" "false"
+    fi
     render_env_kv "topology" "${topology_registry_state}"
     if [[ -n "${planning_question}" ]]; then
       render_env_kv "question" "${planning_question}"
@@ -1782,6 +2129,11 @@ render_plan_report() {
   printf 'Preview: %s\n' "${path_preview:-n/a}"
   printf 'Worktree: %s\n' "${target_path:-n/a}"
   printf 'Decision: %s\n' "${planning_decision}"
+  if speckit_branching_enabled; then
+    printf 'Speckit: true\n'
+  else
+    printf 'Speckit: false\n'
+  fi
   printf 'Topology: %s\n' "${topology_registry_state}"
   if [[ -n "${planning_question}" ]]; then
     printf 'Question: %s\n' "${planning_question}"
@@ -1900,6 +2252,14 @@ normalize_mode_inputs() {
       die "Unsupported handoff profile: ${handoff_profile}"
       ;;
   esac
+
+  case "${speckit_mode}" in
+    true|false)
+      ;;
+    *)
+      die "Unsupported speckit mode: ${speckit_mode}"
+      ;;
+  esac
 }
 
 render_context_summary() {
@@ -1907,6 +2267,7 @@ render_context_summary() {
   debug "branch=${branch:-<unset>}"
   debug "slug=${request_slug:-<unset>}"
   debug "issue=${issue_id:-<unset>}"
+  debug "speckit=${speckit_mode}"
   debug "path=${target_path:-<unset>}"
   debug "repo=${repo_root:-<auto>}"
   debug "handoff=${handoff_profile}"
@@ -2173,6 +2534,16 @@ render_mode_placeholder() {
   set_command_exit_code_from_readiness
 }
 
+render_doctor_report() {
+  prepare_report_target
+  set_doctor_status
+  report_handoff_mode="manual"
+  set_doctor_next_steps
+  set_handoff_contract "doctor"
+  render_readiness_report
+  set_command_exit_code_from_readiness
+}
+
 prepare_create_context() {
   require_git_repo
   branch_resolution_state="not_required"
@@ -2300,6 +2671,8 @@ prepare_plan_context() {
 
   if [[ -n "${target_path}" ]]; then
     resolve_explicit_path "${target_path}"
+  elif issue_requests_speckit; then
+    derive_sibling_worktree_path "${branch}"
   else
     derive_request_worktree_path
   fi
@@ -2327,7 +2700,7 @@ handle_attach() {
 
 handle_doctor() {
   prepare_doctor_context
-  render_mode_placeholder "doctor"
+  render_doctor_report
 }
 
 handle_handoff() {

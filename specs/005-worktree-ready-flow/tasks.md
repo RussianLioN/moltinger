@@ -209,6 +209,26 @@
 
 ---
 
+## Phase 7G: Speckit-Compatible Branch Allocation
+
+**Purpose**: Ensure `command-worktree` can create new Speckit-ready feature lanes without first creating a legacy `feat/...` branch that later needs manual normalization.
+
+- [x] T052 [EXECUTOR: worker] [SEQUENTIAL] Extend `scripts/worktree-ready.sh` so Speckit-aware create planning allocates or reuses numeric `NNN-<slug>` branches using the same prefix semantics as `.specify`
+- [x] T053 [EXECUTOR: worker] [SEQUENTIAL] Update `.claude/commands/worktree.md` so Speckit-oriented requests route through the numeric branch allocator instead of legacy `feat/...` templates
+- [x] T054 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile `spec.md`, `plan.md`, `tasks.md`, and `validation.md` with Speckit-compatible branch allocation and targeted unit regression coverage
+
+---
+
+## Phase 7H: Doctor Probe-State Hardening
+
+**Purpose**: Keep `doctor` UX improvements from the 005 selective port, but distinguish missing readiness state from probe/tool failures so diagnostics never recommend impossible recovery steps.
+
+- [x] T055 [EXECUTOR: worker] [SEQUENTIAL] Update `scripts/worktree-ready.sh` doctor status/next-step logic to distinguish missing state from unavailable guard, beads, and environment probes
+- [x] T056 [EXECUTOR: worker] [SEQUENTIAL] Reconcile `.claude/commands/worktree.md` doctor wording so missing-worktree recovery routes back into managed attach flow instead of raw side-door creation
+- [x] T057 [EXECUTOR: MAIN] [SEQUENTIAL] Extend unit coverage for doctor warning suppression, unavailable Beads probes, and missing guard script recovery guidance
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

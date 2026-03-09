@@ -33,8 +33,8 @@ Bootstrap hardening slice для issue-aware create-flow: если dedicated bra
 **Target Platform**: macOS-first terminal workflows with graceful fallback on non-macOS systems
 **Project Type**: Single (CLI/skill workflow enhancement)
 **Performance Goals**: Readiness classification and next-step generation complete in under 2 seconds after worktree creation; zero follow-up explanation needed for primary flows
-**Constraints**: Preserve trust boundary for environment approval, stay additive over existing low-level `bd worktree` usage, avoid destructive cleanup behavior changes, degrade gracefully when terminal automation is unavailable, keep Phase A single-pass, and never create downstream artifacts during Phase A
-**Scale/Scope**: 6 user stories, 39 functional requirements, one command artifact update plus one helper script and supporting docs/contracts
+**Constraints**: Preserve trust boundary for environment approval, stay additive over existing low-level `bd worktree` usage, avoid destructive cleanup behavior changes, degrade gracefully when terminal automation is unavailable, keep Phase A single-pass, never create downstream artifacts during Phase A, keep Speckit-compatible branch allocation aligned with `.specify` numeric-prefix rules, and keep doctor diagnostics exact even when readiness probes or helper tools are unavailable
+**Scale/Scope**: 6 user stories, 42 functional requirements, one command artifact update plus one helper script and supporting docs/contracts
 
 ## Constitution Check
 
@@ -96,6 +96,8 @@ Research findings are documented in [research.md](./research.md). The main outco
 3. Treat `.envrc` readiness as a surfaced user action, not an implicit side effect.
 4. Prefer a single helper script over embedding all readiness logic directly in the command artifact.
 5. For start/create collision checks, prefer live `git` (`git worktree list`, local refs, remote refs) over committed registry snapshots when they disagree.
+6. For Speckit-aware create flows, allocate or reuse numeric feature branches using the same `NNN-<slug>` prefix convention expected by `.specify` prerequisite scripts.
+7. For doctor flows, distinguish missing readiness state from probe/tool unavailability so the helper never emits an impossible corrective command.
 
 ## Phase 1: Design Outcomes
 

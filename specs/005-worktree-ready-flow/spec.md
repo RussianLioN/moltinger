@@ -197,6 +197,9 @@
 - **FR-047**: Phase A НЕ ДОЛЖЕН создавать или обновлять downstream artifacts, включая Beads issues, specs, plans, checklists и implementation notes.
 - **FR-048**: Managed clean-create flow ДОЛЖЕН делать не более одного topology refresh и не более одного invoking-branch landing cycle.
 - **FR-049**: Если issue-aware create flow создаёт target branch от `main`, а issue-linked foundation files отсутствуют в target worktree, manual handoff ДОЛЖЕН включать exact bootstrap import command из invoking branch или его upstream до запуска Codex.
+- **FR-050**: Если start/create запрос явно Speckit-oriented или resolved issue metadata указывает на Speckit seed/package, workflow ДОЛЖЕН планировать и создавать numeric feature branch вида `NNN-<slug>` вместо legacy `feat/...`.
+- **FR-051**: Для Speckit-aware create flow workflow ДОЛЖЕН переиспользовать exact existing numeric branch/spec prefix для того же short name, а не создавать parallel legacy branch и не требовать post-create branch normalization.
+- **FR-052**: `doctor` ДОЛЖЕН различать реально отсутствующее readiness state и probe/tool unavailability; helper НЕ ДОЛЖЕН предлагать corrective command, который не может сработать в текущем состоянии (`bd worktree list`, `git-session-guard.sh --refresh`, `direnv status`) только потому, что сам probe не выполнился.
 
 ### Key Entities
 
@@ -230,3 +233,5 @@
 - **SC-016**: В 100% проверенных clean-create сценариев новая branch рождается от canonical `main` без post-create repair.
 - **SC-017**: В 100% проверенных mixed-request сценариев Phase A не трогает `.beads/issues.jsonl` и не создаёт downstream artifacts.
 - **SC-018**: В 100% проверенных issue-aware create сценариев, где foundation files отсутствуют в target worktree, manual handoff содержит готовую bootstrap import command и перечисляет source ref/files без продолжения Phase B в исходной сессии.
+- **SC-019**: В 100% проверенных Speckit-aware create сценариев helper планирует numeric branch `NNN-<slug>` и не создаёт legacy `feat/...` branch для той же feature line.
+- **SC-020**: В 100% проверенных doctor-сценариев с unavailable probes helper не выдаёт ложные corrective commands и не смешивает probe failure с missing-state.

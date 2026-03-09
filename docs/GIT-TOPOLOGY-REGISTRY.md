@@ -10,6 +10,7 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
+| `codex-005-doctor-ux-port` | `codex/005-doctor-ux-port` | `sibling-worktree` | Needs decision |
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
@@ -22,6 +23,7 @@
 | `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
 | `primary-feature-007` | `007-codex-update-monitor` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -33,6 +35,8 @@
 | `005-worktree-ready-flow` | `origin/005-worktree-ready-flow` | Valid parallel local feature branch; dedicated worktree exists. |
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Needs decision |
+| `008-codex-update-advisor` | `none` | Needs decision |
+| `codex/005-doctor-ux-port` | `origin/codex/005-doctor-ux-port` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
@@ -66,6 +70,7 @@
 | `origin/006-git-topology-registry` | Active topology-registry feature branch. |
 | `origin/007-codex-update-monitor` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
+| `origin/codex/005-doctor-ux-port` | Needs decision |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |

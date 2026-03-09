@@ -71,6 +71,16 @@ When the user gives an issue id and slug:
    - worktree dir: `../<repo>-<issue-short>-<slug>`
 2. If the issue title lookup is needed and `bd show <ISSUE_ID>` fails because SQLite is readonly/locked/unavailable, retry with `bd show --no-db <ISSUE_ID>` from the canonical root worktree.
 
+When the request is clearly Speckit-oriented:
+1. Treat create/start as Speckit-aware if either is true:
+   - the user explicitly mentions Speckit/spec package/`/speckit.*`
+   - the resolved issue title or description references a Speckit seed/package
+2. In that path, do not derive `feat/...`.
+3. Ask the helper for a numeric Speckit-compatible branch instead:
+   - branch: `NNN-<slug>`
+   - worktree dir: `../<repo>-NNN-<slug>`
+4. Reuse an existing exact numeric branch if one already exists for the same short name.
+
 ## Helper Integration
 
 Deterministic readiness, naming, and ambiguity detection are centralized in `scripts/worktree-ready.sh`.
@@ -79,6 +89,7 @@ Treat the helper as the source of truth whenever it is available:
 
 ```bash
 scripts/worktree-ready.sh plan --slug <slug> [--issue <id>]
+scripts/worktree-ready.sh plan --slug <slug> [--issue <id>] --speckit
 scripts/worktree-ready.sh create --branch <branch> --path <path> --handoff manual
 scripts/worktree-ready.sh attach --branch <existing-branch> --handoff manual
 scripts/worktree-ready.sh doctor --branch <branch-or-path>
@@ -86,6 +97,7 @@ scripts/worktree-ready.sh doctor --branch <branch-or-path>
 
 Helper responsibilities:
 - deterministic branch/path derivation
+- Speckit-aware numeric branch allocation when requested or implied by issue context
 - exact worktree/branch detection
 - similar-name discovery
 - readiness status and next-step generation
@@ -158,6 +170,9 @@ Defaults:
 - without issue id:
   - `branch`: `feat/<slug>`
   - `worktree dir`: `../<repo>-<slug>`
+- Speckit-aware create:
+  - `branch`: `NNN-<slug>`
+  - `worktree dir`: `../<repo>-NNN-<slug>`
 
 Process:
 1. Verify git repository, invoking worktree, and canonical root worktree.
@@ -167,7 +182,9 @@ Process:
    - slug-only clean start
    - existing branch attach
 4. For slug-only or ambiguous natural-language requests, run:
-   - `scripts/worktree-ready.sh plan --slug <slug> [--issue <id>]`
+   - generic: `scripts/worktree-ready.sh plan --slug <slug> [--issue <id>]`
+   - Speckit-aware: `scripts/worktree-ready.sh plan --slug <slug> [--issue <id>] --speckit`
+   - If the user did not explicitly mention Speckit, but the resolved issue metadata references a Speckit seed/package, treat the plan as Speckit-aware anyway.
 5. Interpret the helper plan:
    - `create_clean`: continue automatically with the proposed branch and worktree path
    - `attach_existing_branch`: continue automatically with an existing-branch flow for that branch
@@ -258,14 +275,25 @@ When the input is `/worktree start --existing <branch>` or `/worktree attach <br
 
 Usage:
 - `/worktree doctor <branch-or-path>`
+- `/worktree doctor /absolute/path/to/worktree`
+- `/worktree doctor` (fallback to the current branch or current repository context when possible)
 
 Intent:
 1. Resolve the branch or worktree target.
 2. Run the helper diagnostics flow:
    - `scripts/worktree-ready.sh doctor --branch <branch>`
    - or `scripts/worktree-ready.sh doctor --path <absolute-path>`
-3. Return the helper report.
-4. If the helper is unavailable, fall back to a manual status block with at least one exact next action.
+3. Prefer a branch target when the user names a branch; prefer a path target when the user gives a path.
+4. Return the helper report with branch mapping, beads state, guard state, environment state, and one exact next action for any failed probe.
+5. If the helper is unavailable, fall back to a manual status block with at least one exact next action.
+
+Related diagnostics rules:
+- Use `doctor` for "why is this worktree not ready?" questions, not only for hard failures.
+- If the named branch is already attached elsewhere, report the discovered path instead of the derived preview path.
+- If the user is already inside the target worktree, `doctor` should work without forcing them to re-enter the path manually.
+- Keep the result compact; prefer one corrective path over a long troubleshooting checklist.
+- If a branch exists but no worktree is attached, route the user back into the managed attach flow instead of suggesting raw `bd worktree create`.
+- Distinguish missing readiness state from unavailable probes: do not claim beads or guard are missing when the probe itself could not be executed.
 
 ## Finish Workflow
 

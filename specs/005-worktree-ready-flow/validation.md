@@ -92,3 +92,24 @@
   - `scripts/worktree-ready.sh create ...` renders `Bootstrap Source` and `Bootstrap Files` when issue-linked docs exist only in the invoking branch
   - fenced `bash` block includes `git checkout <source> -- .beads/issues.jsonl <issue-linked paths...>` before `direnv allow` / `codex`
   - env output exposes `bootstrap_source` and `bootstrap_file_*` fields for machine-readable orchestration
+
+### 2026-03-09 - Speckit-compatible branch allocation
+
+- Goal:
+  - ensure Speckit-oriented create flows allocate or reuse numeric `NNN-<slug>` branches instead of creating legacy `feat/...` branches that must be normalized later
+- Checks:
+  - `./tests/unit/test_worktree_ready.sh`
+  - explicit `--speckit` planning emits `001-codex-update-monitor` style branch names in a clean fixture repo
+  - issue-driven planning for `molt-2` reuses an existing exact numeric branch such as `007-codex-update-monitor`
+  - generic non-Speckit issue-aware planning still stays on legacy `feat/<issue>-<slug>` behavior
+
+### 2026-03-09 - Doctor probe-state hardening
+
+- Goal:
+  - port the useful doctor UX from the 005 micro-branch without treating unavailable probes as missing readiness state
+- Checks:
+  - `./tests/unit/test_worktree_ready.sh`
+  - branch-only doctor suppresses the false `already attached` warning
+  - unavailable Beads probes do not force `bd worktree list` or a blocked doctor result by themselves
+  - missing guard script does not produce `./scripts/git-session-guard.sh --refresh`
+  - missing-worktree recovery routes back to managed attach flow instead of raw `bd worktree create`
