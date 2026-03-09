@@ -41,6 +41,8 @@ CLAWDIY_STATE_DIR="${CLAWDIY_STATE_DIR:-$PROJECT_ROOT/data/clawdiy/state}"
 CLAWDIY_AUDIT_DIR="${CLAWDIY_AUDIT_DIR:-$PROJECT_ROOT/data/clawdiy/audit}"
 CLAWDIY_CONTAINER_NAME="${CLAWDIY_CONTAINER_NAME:-clawdiy}"
 CLAWDIY_RESTORE_AUTOSTART="${CLAWDIY_RESTORE_AUTOSTART:-true}"
+CLAWDIY_ALLOW_PARTIAL_RESTORE="${CLAWDIY_ALLOW_PARTIAL_RESTORE:-false}"
+CLAWDIY_EVIDENCE_MANIFEST_NAME="${CLAWDIY_EVIDENCE_MANIFEST_NAME:-clawdiy-evidence-manifest.json}"
 RETENTION_DAYS=30
 RETENTION_WEEKS=12
 RETENTION_MONTHS=12
@@ -153,6 +155,27 @@ container_is_running() {
 
 clawdiy_inventory_present() {
     [[ -e "$CLAWDIY_CONFIG_DIR" || -e "$CLAWDIY_STATE_DIR" || -e "$CLAWDIY_AUDIT_DIR" ]]
+}
+
+count_files_under() {
+    local root="$1"
+
+    if [[ ! -d "$root" ]]; then
+        echo "0"
+        return
+    fi
+
+    find "$root" -type f | wc -l | tr -d ' '
+}
+
+latest_file_under() {
+    local root="$1"
+
+    if [[ ! -d "$root" ]]; then
+        return 0
+    fi
+
+    find "$root" -type f | sort | tail -1
 }
 
 json_bool() {
@@ -604,6 +627,20 @@ create_backup() {
         if clawdiy_inventory_present; then
             clawdiy_included=true
             log_info "Recording Clawdiy inventory in backup metadata"
+
+            cat > "$tmp_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME" <<EOF
+{
+  "schema_version": "v1",
+  "captured_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "config_present": $(json_bool "$( [[ -d "$CLAWDIY_CONFIG_DIR" ]] && echo true || echo false )"),
+  "state_present": $(json_bool "$( [[ -d "$CLAWDIY_STATE_DIR" ]] && echo true || echo false )"),
+  "audit_present": $(json_bool "$( [[ -d "$CLAWDIY_AUDIT_DIR" ]] && echo true || echo false )"),
+  "state_file_count": $(count_files_under "$CLAWDIY_STATE_DIR"),
+  "audit_file_count": $(count_files_under "$CLAWDIY_AUDIT_DIR"),
+  "latest_state_artifact": $(latest_file_under "$CLAWDIY_STATE_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "latest_audit_artifact": $(latest_file_under "$CLAWDIY_AUDIT_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end')
+}
+EOF
         else
             log_warn "Clawdiy backup inventory is enabled but no Clawdiy paths were found"
         fi
@@ -649,6 +686,10 @@ EOF
 
     if [[ -f "$tmp_dir/clawdiy-container-inspect.json" ]]; then
         tar_args+=(-C "$tmp_dir" "clawdiy-container-inspect.json")
+    fi
+
+    if [[ -f "$tmp_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME" ]]; then
+        tar_args+=(-C "$tmp_dir" "$CLAWDIY_EVIDENCE_MANIFEST_NAME")
     fi
 
     tar_args+=(
@@ -844,6 +885,9 @@ restore_backup() {
     local backup_file="$1"
     local restore_dir="${2:-/tmp/moltis-restore}"
     local clawdiy_container_present=false
+    local clawdiy_restore_expected=false
+    local metadata_file=""
+    local expected_manifest=""
 
     log_info "Starting restore from: $backup_file"
     log_warn "This will OVERWRITE existing data!"
@@ -866,6 +910,28 @@ restore_backup() {
     # Extract backup
     log_info "Extracting backup to: $restore_dir"
     tar -xzf "$restore_file" -C "$restore_dir"
+
+    metadata_file="$restore_dir/backup-metadata.json"
+    expected_manifest="$restore_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME"
+
+    if [[ -f "$metadata_file" ]] && jq -e '.clawdiy.included == true' "$metadata_file" >/dev/null 2>&1; then
+        clawdiy_restore_expected=true
+    fi
+
+    if [[ "$clawdiy_restore_expected" == "true" ]]; then
+        if [[ ! -f "$expected_manifest" ]]; then
+            log_error "Restore payload is missing $CLAWDIY_EVIDENCE_MANIFEST_NAME for Clawdiy"
+            return 1
+        fi
+
+        if [[ ! -d "$restore_dir/config/clawdiy" || ! -d "$restore_dir/data/clawdiy/state" || ! -d "$restore_dir/data/clawdiy/audit" ]]; then
+            log_error "Restore payload is missing required Clawdiy config/state/audit directories"
+            return 1
+        fi
+    elif clawdiy_inventory_present && ! string_is_true "$CLAWDIY_ALLOW_PARTIAL_RESTORE"; then
+        log_error "Current runtime has Clawdiy inventory but the backup payload does not; set CLAWDIY_ALLOW_PARTIAL_RESTORE=true only for explicit partial restores"
+        return 1
+    fi
 
     # Stop container
     log_info "Stopping Moltis container..."
@@ -890,12 +956,40 @@ restore_backup() {
     # Start container
     log_info "Starting Moltis container..."
     cd "$PROJECT_ROOT"
-    docker compose up -d
+    docker compose -f "$PROJECT_ROOT/docker-compose.prod.yml" up -d moltis
 
     if [[ "$clawdiy_container_present" == "true" ]] && string_is_true "$CLAWDIY_RESTORE_AUTOSTART"; then
         log_info "Starting Clawdiy container..."
-        docker start "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
-            log_warn "Failed to start Clawdiy container automatically after restore"
+        if [[ -f "$PROJECT_ROOT/docker-compose.clawdiy.yml" ]]; then
+            local -a clawdiy_compose_args
+            local clawdiy_env_file="${CLAWDIY_ENV_FILE:-$PROJECT_ROOT/.env.clawdiy}"
+            clawdiy_compose_args=(-f "$PROJECT_ROOT/docker-compose.clawdiy.yml")
+            if [[ -f "$clawdiy_env_file" ]]; then
+                clawdiy_compose_args=(--env-file "$clawdiy_env_file" "${clawdiy_compose_args[@]}")
+            fi
+            docker compose "${clawdiy_compose_args[@]}" up -d "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
+                docker start "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
+                log_warn "Failed to start Clawdiy container automatically after restore"
+        else
+            docker start "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
+                log_warn "Failed to start Clawdiy container automatically after restore"
+        fi
+    fi
+
+    if [[ "$clawdiy_restore_expected" == "true" ]]; then
+        mkdir -p "$CLAWDIY_AUDIT_DIR" 2>/dev/null || true
+        cat > "$CLAWDIY_AUDIT_DIR/restore-report-$(date -u +%Y%m%dT%H%M%SZ).json" <<EOF
+{
+  "schema_version": "v1",
+  "restored_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "backup_file": "$backup_file",
+  "restore_dir": "$restore_dir",
+  "clawdiy_config_dir": "$CLAWDIY_CONFIG_DIR",
+  "clawdiy_state_dir": "$CLAWDIY_STATE_DIR",
+  "clawdiy_audit_dir": "$CLAWDIY_AUDIT_DIR",
+  "clawdiy_container_autostarted": $(json_bool "$CLAWDIY_RESTORE_AUTOSTART")
+}
+EOF
     fi
 
     log_info "Restore complete!"

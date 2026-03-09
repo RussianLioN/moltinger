@@ -196,6 +196,7 @@ LIST
 bash|resilience_rate_limiting|Rate limiting resilience|$SCRIPT_DIR/resilience/test_rate_limiting.sh
 bash|resilience_full_failover_chain|Full failover chain|$SCRIPT_DIR/resilience/test_full_failover_chain.sh
 bash|resilience_deployment_recovery|Deployment recovery|$SCRIPT_DIR/resilience/test_deployment_recovery.sh
+bash|resilience_clawdiy_rollback|Clawdiy rollback and restore|$SCRIPT_DIR/resilience/test_clawdiy_rollback.sh
 LIST
             ;;
         security_runtime_smoke)

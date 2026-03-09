@@ -12,6 +12,8 @@ FLEET_REGISTRY_FILE="${FLEET_REGISTRY_FILE:-$PROJECT_ROOT/config/fleet/agents-re
 FLEET_POLICY_FILE="${FLEET_POLICY_FILE:-$PROJECT_ROOT/config/fleet/policy.json}"
 HANDOFF_SAMPLE_FILE="${HANDOFF_SAMPLE_FILE:-$PROJECT_ROOT/specs/001-clawdiy-agent-platform/contracts/sample-handoff-submit.json}"
 CLAWDIY_AUTH_CHECK_SCRIPT="${CLAWDIY_AUTH_CHECK_SCRIPT:-$PROJECT_ROOT/scripts/clawdiy-auth-check.sh}"
+CLAWDIY_LOCAL_AUDIT_ROOT="${CLAWDIY_LOCAL_AUDIT_ROOT:-$PROJECT_ROOT/data/clawdiy/audit}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 CLAWDIY_CONTAINER="${CLAWDIY_CONTAINER:-clawdiy}"
 MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
@@ -245,6 +247,16 @@ container_network_present() {
     local container="$1"
     local network_name="$2"
     docker inspect "$container" | jq -e --arg network_name "$network_name" '.[0].NetworkSettings.Networks | has($network_name)' >/dev/null 2>&1
+}
+
+latest_file_under() {
+    local root="$1"
+
+    if [[ ! -d "$root" ]]; then
+        return 0
+    fi
+
+    find "$root" -type f | sort | tail -1
 }
 
 toml_contains_line() {
@@ -517,6 +529,57 @@ verify_auth_stage() {
     fi
 }
 
+verify_rollback_evidence_stage() {
+    local audit_root="$CLAWDIY_LOCAL_AUDIT_ROOT"
+    local rollback_manifest=""
+    local backup_reference=""
+
+    if [[ -d "$audit_root" ]]; then
+        add_check "rollback_audit_root_exists" "pass" "Clawdiy audit root exists for rollback evidence review: $audit_root" "error"
+    else
+        add_check "rollback_audit_root_exists" "fail" "Clawdiy audit root is missing: $audit_root" "error"
+        return 1
+    fi
+
+    rollback_manifest="$(latest_file_under "$audit_root/rollback-evidence")"
+    if [[ -n "$rollback_manifest" && -f "$rollback_manifest" ]]; then
+        add_check "rollback_manifest_exists" "pass" "Found latest Clawdiy rollback evidence manifest: $rollback_manifest" "error"
+    else
+        add_check "rollback_manifest_exists" "fail" "No Clawdiy rollback evidence manifest found under $audit_root/rollback-evidence" "error"
+        return 1
+    fi
+
+    if jq -e '
+        .schema_version == "v1"
+        and .target == "clawdiy"
+        and (.rollback_reason | type == "string" and length > 0)
+        and (.pre_rollback_image | type == "string")
+        and (.audit_root | type == "string" and length > 0)
+        and (.audit_file_count_before | type == "number")
+        and (.audit_file_count_after | type == "number")
+        and (.moltis_health_http_code == 200)
+        and (.resulting_mode == "rolled_back" or .resulting_mode == "disabled")
+        and (.status == "completed")
+      ' "$rollback_manifest" >/dev/null 2>&1; then
+        add_check "rollback_manifest_shape" "pass" "Clawdiy rollback evidence manifest includes reason, audit counts, Moltis health, and resulting mode" "error"
+    else
+        add_check "rollback_manifest_shape" "fail" "Clawdiy rollback evidence manifest is missing required rollback metadata" "error"
+    fi
+
+    backup_reference="$(jq -r '.backup_reference // empty' "$rollback_manifest")"
+    if [[ -n "$backup_reference" && -f "$backup_reference" ]]; then
+        add_check "rollback_backup_reference" "pass" "Rollback evidence references an existing backup archive: $backup_reference" "error"
+    else
+        add_check "rollback_backup_reference" "fail" "Rollback evidence must reference an existing backup archive for restore readiness" "error"
+    fi
+
+    if [[ "$(http_code "$MOLTIS_HEALTH_URL" 10)" == "200" ]]; then
+        add_check "rollback_moltis_health" "pass" "Moltis health endpoint remained 200 during rollback evidence review" "error"
+    else
+        add_check "rollback_moltis_health" "fail" "Moltis health endpoint did not return 200 during rollback evidence review" "error"
+    fi
+}
+
 verify_same_host_stage() {
     if container_exists "$CLAWDIY_CONTAINER"; then
         add_check "clawdiy_container_exists" "pass" "Clawdiy container $CLAWDIY_CONTAINER exists" "error"
@@ -648,10 +711,10 @@ verify_restart_isolation_stage() {
 
 show_help() {
     cat <<EOF
-Usage: $0 [--stage same-host|restart-isolation|handoff|auth] [--json] [--timeout seconds]
+Usage: $0 [--stage same-host|restart-isolation|handoff|auth|rollback-evidence] [--json] [--timeout seconds]
 
 Options:
-  --stage <name>      Verification stage to run (default: same-host). Supported: same-host, restart-isolation, handoff, auth
+  --stage <name>      Verification stage to run (default: same-host). Supported: same-host, restart-isolation, handoff, auth, rollback-evidence
   --json              Emit JSON instead of human-readable logs
   --timeout <sec>     Wait timeout for health checks (default: ${TIMEOUT_SECONDS})
   --no-color          Disable colorized logs
@@ -716,6 +779,9 @@ main() {
             ;;
         auth)
             verify_auth_stage
+            ;;
+        rollback-evidence)
+            verify_rollback_evidence_stage
             ;;
         *)
             add_check "stage" "fail" "Unsupported Clawdiy smoke stage: $STAGE" "error"

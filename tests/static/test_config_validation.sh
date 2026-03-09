@@ -11,6 +11,8 @@ COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
+ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
+BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 
 validate_toml() {
     local file_path="$1"
@@ -170,6 +172,31 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Clawdiy deploy workflow must render fail-closed auth flags into the dedicated env file"
+    fi
+
+    test_start "static_clawdiy_workflow_validates_restore_readiness"
+    if rg -q 'Validate Clawdiy restore readiness' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'clawdiy-evidence-manifest\.json' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'has_evidence_manifest' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must validate restore-readiness metadata and evidence inventory"
+    fi
+
+    test_start "static_rollback_drill_covers_clawdiy_inventory"
+    if rg -q 'clawdiy_included' "$ROLLBACK_DRILL_WORKFLOW" && \
+       rg -q 'has_clawdiy_audit' "$ROLLBACK_DRILL_WORKFLOW" && \
+       rg -q 'has_clawdiy_evidence_manifest' "$ROLLBACK_DRILL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Rollback drill workflow must validate Clawdiy config, state, audit, and evidence manifest inventory"
+    fi
+
+    test_start "static_backup_config_guards_partial_clawdiy_restore"
+    if rg -q '^CLAWDIY_ALLOW_PARTIAL_RESTORE=false' "$BACKUP_CONFIG"; then
+        test_pass
+    else
+        test_fail "Backup config must default to fail-closed partial restore protection for Clawdiy"
     fi
 
     generate_report

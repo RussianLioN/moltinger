@@ -37,6 +37,7 @@ env:
   CLAWDIY_PUBLIC_URL: https://clawdiy.ainetic.tech
   FLEET_INTERNAL_NETWORK: fleet-internal
   MONITORING_NETWORK: moltinger_monitoring
+  BACKUP_PATH: /var/backups/moltis
 
 jobs:
   preflight:
@@ -269,6 +270,104 @@ jobs:
           EOF
           echo "::endgroup::"
 
+      - name: Remote Clawdiy smoke
+        run: |
+          echo "::group::Remote Clawdiy smoke"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/clawdiy-smoke.sh
+            ./scripts/clawdiy-smoke.sh --json --stage same-host | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Validate Clawdiy restore readiness
+        id: restore_readiness
+        run: |
+          echo "::group::Validate Clawdiy restore readiness"
+          RESULT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            PROJECT_ROOT="${{ env.DEPLOY_PATH }}"
+            KEY_FILE="/etc/moltis/backup.key"
+            if [ -f config/backup/backup.conf ]; then
+              source config/backup/backup.conf
+            fi
+
+            LATEST=$(ls -t "${{ env.BACKUP_PATH }}"/daily/moltis_* "${{ env.BACKUP_PATH }}"/weekly/moltis_* "${{ env.BACKUP_PATH }}"/monthly/moltis_* 2>/dev/null | head -1)
+            if [ -z "$LATEST" ]; then
+              echo "error=no_backup"
+              exit 1
+            fi
+
+            TMP_DIR=$(mktemp -d /tmp/clawdiy-restore-readiness.XXXXXX)
+            trap 'rm -rf "$TMP_DIR"' EXIT
+
+            EXTRACT_FILE="$LATEST"
+            if printf '%s' "$LATEST" | grep -q '\.aes$'; then
+              openssl enc -aes-256-cbc -d -pbkdf2 -in "$LATEST" -out "$TMP_DIR/archive.tar.gz" -pass "file:${ENCRYPTION_KEY_FILE:-$KEY_FILE}" >/dev/null 2>&1
+              EXTRACT_FILE="$TMP_DIR/archive.tar.gz"
+            fi
+
+            tar -xzf "$EXTRACT_FILE" -C "$TMP_DIR"
+
+            HAS_CONFIG=false
+            HAS_STATE=false
+            HAS_AUDIT=false
+            HAS_EVIDENCE_MANIFEST=false
+            CLAWDIY_INCLUDED=false
+
+            [ -d "$TMP_DIR/config/clawdiy" ] && HAS_CONFIG=true
+            [ -d "$TMP_DIR/data/clawdiy/state" ] && HAS_STATE=true
+            [ -d "$TMP_DIR/data/clawdiy/audit" ] && HAS_AUDIT=true
+            [ -f "$TMP_DIR/clawdiy-evidence-manifest.json" ] && HAS_EVIDENCE_MANIFEST=true
+
+            if [ -f "$TMP_DIR/backup-metadata.json" ] && jq -e '.clawdiy.included == true' "$TMP_DIR/backup-metadata.json" >/dev/null 2>&1; then
+              CLAWDIY_INCLUDED=true
+            fi
+
+            echo "backup_file=$LATEST"
+            echo "clawdiy_included=$CLAWDIY_INCLUDED"
+            echo "has_config=$HAS_CONFIG"
+            echo "has_state=$HAS_STATE"
+            echo "has_audit=$HAS_AUDIT"
+            echo "has_evidence_manifest=$HAS_EVIDENCE_MANIFEST"
+          EOF
+          )
+
+          echo "$RESULT"
+          BACKUP_FILE=$(echo "$RESULT" | grep '^backup_file=' | cut -d= -f2-)
+          CLAWDIY_INCLUDED=$(echo "$RESULT" | grep '^clawdiy_included=' | cut -d= -f2-)
+          HAS_CONFIG=$(echo "$RESULT" | grep '^has_config=' | cut -d= -f2-)
+          HAS_STATE=$(echo "$RESULT" | grep '^has_state=' | cut -d= -f2-)
+          HAS_AUDIT=$(echo "$RESULT" | grep '^has_audit=' | cut -d= -f2-)
+          HAS_EVIDENCE_MANIFEST=$(echo "$RESULT" | grep '^has_evidence_manifest=' | cut -d= -f2-)
+
+          if [ "$CLAWDIY_INCLUDED" != "true" ] || [ "$HAS_CONFIG" != "true" ] || [ "$HAS_STATE" != "true" ] || [ "$HAS_AUDIT" != "true" ] || [ "$HAS_EVIDENCE_MANIFEST" != "true" ]; then
+            echo "::error::Latest backup is not restore-ready for Clawdiy"
+            exit 1
+          fi
+
+          echo "backup_file=$BACKUP_FILE" >> "$GITHUB_OUTPUT"
+          echo "clawdiy_included=$CLAWDIY_INCLUDED" >> "$GITHUB_OUTPUT"
+          echo "has_config=$HAS_CONFIG" >> "$GITHUB_OUTPUT"
+          echo "has_state=$HAS_STATE" >> "$GITHUB_OUTPUT"
+          echo "has_audit=$HAS_AUDIT" >> "$GITHUB_OUTPUT"
+          echo "has_evidence_manifest=$HAS_EVIDENCE_MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+      - name: Validate Clawdiy rollback evidence
+        if: ${{ github.event.inputs.rollback == 'true' }}
+        run: |
+          echo "::group::Validate Clawdiy rollback evidence"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/clawdiy-smoke.sh
+            ./scripts/clawdiy-smoke.sh --json --stage rollback-evidence | jq .
+          EOF
+          echo "::endgroup::"
+
       - name: Capture final Clawdiy status
         if: always()
         run: |
@@ -292,3 +391,4 @@ jobs:
           echo "| Image | \`${{ needs.preflight.outputs.clawdiy_image }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Rollback | \`${{ github.event.inputs.rollback }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| URL | ${{ env.CLAWDIY_PUBLIC_URL }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Restore-ready backup | \`${{ steps.restore_readiness.outputs.backup_file }}\` |" >> "$GITHUB_STEP_SUMMARY"

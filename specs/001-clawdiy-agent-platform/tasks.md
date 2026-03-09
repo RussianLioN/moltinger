@@ -168,15 +168,21 @@
 
 ### Validation for User Story 4
 
-- [ ] T029 [P] [US4] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US4-A] Create rollback and restore resilience coverage in `tests/resilience/test_clawdiy_rollback.sh`
+- [X] T029 [P] [US4] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US4-A] Create rollback and restore resilience coverage in `tests/resilience/test_clawdiy_rollback.sh`
+  → Artifacts: [test_clawdiy_rollback.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/resilience/test_clawdiy_rollback.sh), [run.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/run.sh)
 
 ### Implementation for User Story 4
 
-- [ ] T030 [P] [US4] [EXECUTOR: sre-engineer] [PARALLEL-GROUP-US4-A] Extend per-agent health, log correlation, and evidence checks in `scripts/health-monitor.sh` and `scripts/clawdiy-smoke.sh`
-- [ ] T031 [P] [US4] [EXECUTOR: backup-specialist] [PARALLEL-GROUP-US4-A] Extend backup scope for Clawdiy config, state, and audit artifacts in `scripts/backup-moltis-enhanced.sh` and `config/backup/backup.conf`
-- [ ] T032 [P] [US4] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US4-A] Extend Clawdiy rollback and restore validation in `.github/workflows/rollback-drill.yml` and `.github/workflows/deploy-clawdiy.yml`
-- [ ] T033 [US4] [EXECUTOR: bash-master] [SEQUENTIAL] Preserve audit evidence during Clawdiy rollback and disable paths in `scripts/deploy.sh` and `scripts/clawdiy-smoke.sh`
-- [ ] T034 [US4] [EXECUTOR: technical-writer] [SEQUENTIAL] Document single-agent disaster recovery and rollback procedures in `docs/disaster-recovery.md` and `docs/runbooks/clawdiy-rollback.md`
+- [X] T030 [P] [US4] [EXECUTOR: sre-engineer] [PARALLEL-GROUP-US4-A] Extend per-agent health, log correlation, and evidence checks in `scripts/health-monitor.sh` and `scripts/clawdiy-smoke.sh`
+  → Artifacts: [health-monitor.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/health-monitor.sh), [clawdiy-smoke.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/clawdiy-smoke.sh)
+- [X] T031 [P] [US4] [EXECUTOR: backup-specialist] [PARALLEL-GROUP-US4-A] Extend backup scope for Clawdiy config, state, and audit artifacts in `scripts/backup-moltis-enhanced.sh` and `config/backup/backup.conf`
+  → Artifacts: [backup-moltis-enhanced.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/backup-moltis-enhanced.sh), [backup.conf](/Users/rl/coding/moltinger-openclaw-control-plane/config/backup/backup.conf)
+- [X] T032 [P] [US4] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US4-A] Extend Clawdiy rollback and restore validation in `.github/workflows/rollback-drill.yml` and `.github/workflows/deploy-clawdiy.yml`
+  → Artifacts: [rollback-drill.yml](/Users/rl/coding/moltinger-openclaw-control-plane/.github/workflows/rollback-drill.yml), [deploy-clawdiy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/.github/workflows/deploy-clawdiy.yml), [test_config_validation.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/static/test_config_validation.sh)
+- [X] T033 [US4] [EXECUTOR: bash-master] [SEQUENTIAL] Preserve audit evidence during Clawdiy rollback and disable paths in `scripts/deploy.sh` and `scripts/clawdiy-smoke.sh`
+  → Artifacts: [deploy.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/deploy.sh), [clawdiy-smoke.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/clawdiy-smoke.sh)
+- [X] T034 [US4] [EXECUTOR: technical-writer] [SEQUENTIAL] Document single-agent disaster recovery and rollback procedures in `docs/disaster-recovery.md` and `docs/runbooks/clawdiy-rollback.md`
+  → Artifacts: [disaster-recovery.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/disaster-recovery.md), [clawdiy-rollback.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-rollback.md)
 
 **Checkpoint**: Clawdiy can be observed, restored, and rolled back as a separate production service with preserved evidence.
 

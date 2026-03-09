@@ -54,11 +54,16 @@ TARGET_SERVICE=""
 TARGET_HEALTH_URL=""
 TARGET_METRICS_URL=""
 TARGET_LAST_IMAGE_FILE=""
+TARGET_LAST_BACKUP_FILE=""
 TARGET_NOTIFICATION_NAME=""
 TARGET_REQUIRED_NETWORKS=()
 TARGET_AUXILIARY_SERVICES=()
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
+BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
+DEPLOY_EVIDENCE_FILE=""
+ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
 
 # ========================================================================
 # UTILITY FUNCTIONS
@@ -110,6 +115,7 @@ output_json_result() {
     local services_json="[]"
     local errors_json="[]"
     local details="{}"
+    local evidence_file_json="null"
 
     if [[ $DEPLOY_START_TIME -gt 0 ]]; then
         duration_ms=$(( ($(date +%s) - DEPLOY_START_TIME) * 1000 ))
@@ -128,8 +134,9 @@ output_json_result() {
             --arg image "$DEPLOY_IMAGE" \
             --argjson duration "$duration_ms" \
             --arg health "$health" \
+            --arg evidence_file "$DEPLOY_EVIDENCE_FILE" \
             --argjson services "$services_json" \
-            '{image: $image, duration_ms: $duration, health: $health, services: $services}')
+            '{image: $image, duration_ms: $duration, health: $health, services: $services, rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end)}')
     fi
 
     jq -n \
@@ -256,6 +263,7 @@ configure_target() {
             TARGET_HEALTH_URL="http://localhost:13131/health"
             TARGET_METRICS_URL="http://localhost:13131/metrics"
             TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/.last-deployed-image"
+            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/.last-moltis-backup"
             TARGET_NOTIFICATION_NAME="Moltis"
             TARGET_REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
             TARGET_AUXILIARY_SERVICES=("watchtower")
@@ -267,6 +275,7 @@ configure_target() {
             TARGET_CONTAINER="clawdiy"
             TARGET_SERVICE="clawdiy"
             TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/.last-deployed-clawdiy-image"
+            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/.last-clawdiy-backup"
             TARGET_NOTIFICATION_NAME="Clawdiy"
             TARGET_REQUIRED_NETWORKS=(
                 "$TRAEFIK_NETWORK"
@@ -313,11 +322,117 @@ ensure_clawdiy_runtime_paths() {
         "$PROJECT_ROOT/config/fleet"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"
+        "$PROJECT_ROOT/data/clawdiy/audit/rollback-evidence"
     )
 
     for path in "${required_paths[@]}"; do
         mkdir -p "$path"
     done
+}
+
+count_files_under() {
+    local root="$1"
+
+    if [[ ! -d "$root" ]]; then
+        echo "0"
+        return
+    fi
+
+    find "$root" -type f | wc -l | tr -d ' '
+}
+
+latest_file_under() {
+    local root="$1"
+
+    if [[ ! -d "$root" ]]; then
+        return 0
+    fi
+
+    find "$root" -type f | sort | tail -1
+}
+
+latest_backup_path() {
+    if [[ -n "$TARGET_LAST_BACKUP_FILE" && -f "$TARGET_LAST_BACKUP_FILE" && -s "$TARGET_LAST_BACKUP_FILE" ]]; then
+        cat "$TARGET_LAST_BACKUP_FILE"
+        return 0
+    fi
+
+    ls -t "$BACKUP_DIR"/daily/moltis_* "$BACKUP_DIR"/weekly/moltis_* "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1 || true
+}
+
+capture_clawdiy_rollback_evidence() {
+    local reason="$1"
+    local evidence_root="$PROJECT_ROOT/data/clawdiy/audit/rollback-evidence"
+    local evidence_file="$evidence_root/rollback-$(date -u +%Y%m%dT%H%M%SZ).json"
+    local current_image current_health backup_ref latest_audit artifact_count moltis_health_code
+
+    mkdir -p "$evidence_root" "$PROJECT_ROOT/data/clawdiy/audit" 2>/dev/null || true
+
+    current_image="$(get_current_version)"
+    current_health="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$TARGET_CONTAINER" 2>/dev/null || echo "not_found")"
+    backup_ref="$(latest_backup_path)"
+    latest_audit="$(latest_file_under "$PROJECT_ROOT/data/clawdiy/audit")"
+    artifact_count="$(count_files_under "$PROJECT_ROOT/data/clawdiy/audit")"
+    moltis_health_code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:13131/health 2>/dev/null || echo "000")"
+
+    cat > "$evidence_file" <<EOF
+{
+  "schema_version": "v1",
+  "target": "clawdiy",
+  "captured_at": "$(get_timestamp)",
+  "rollback_reason": "$reason",
+  "pre_rollback_image": "$current_image",
+  "pre_rollback_health": "$current_health",
+  "audit_root": "$PROJECT_ROOT/data/clawdiy/audit",
+  "audit_file_count_before": $artifact_count,
+  "latest_audit_artifact_before": $(printf '%s' "$latest_audit" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "backup_reference": $(printf '%s' "$backup_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "moltis_health_http_code": $moltis_health_code,
+  "resulting_mode": null,
+  "post_rollback_image": null,
+  "post_rollback_health": null,
+  "audit_file_count_after": null,
+  "latest_audit_artifact_after": null,
+  "status": "captured"
+}
+EOF
+
+    DEPLOY_EVIDENCE_FILE="$evidence_file"
+    printf '%s' "$evidence_file"
+}
+
+update_clawdiy_rollback_evidence() {
+    local evidence_file="$1"
+    local resulting_mode="$2"
+
+    if [[ -z "$evidence_file" || ! -f "$evidence_file" ]]; then
+        return 0
+    fi
+
+    local post_image post_health latest_audit artifact_count tmp_file
+    post_image="$(get_current_version)"
+    post_health="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$TARGET_CONTAINER" 2>/dev/null || echo "not_found")"
+    latest_audit="$(latest_file_under "$PROJECT_ROOT/data/clawdiy/audit")"
+    artifact_count="$(count_files_under "$PROJECT_ROOT/data/clawdiy/audit")"
+    tmp_file="$(mktemp)"
+
+    jq \
+        --arg resulting_mode "$resulting_mode" \
+        --arg post_image "$post_image" \
+        --arg post_health "$post_health" \
+        --arg completed_at "$(get_timestamp)" \
+        --arg latest_audit "$latest_audit" \
+        --argjson artifact_count "$artifact_count" \
+        '.resulting_mode = $resulting_mode
+        | .post_rollback_image = (if $post_image == "" then null else $post_image end)
+        | .post_rollback_health = $post_health
+        | .completed_at = $completed_at
+        | .audit_file_count_after = $artifact_count
+        | .latest_audit_artifact_after = (if $latest_audit == "" then null else $latest_audit end)
+        | .status = "completed"' \
+        "$evidence_file" > "$tmp_file"
+
+    mv "$tmp_file" "$evidence_file"
 }
 
 check_prerequisites() {
@@ -409,14 +524,21 @@ get_current_version() {
 backup_current_state() {
     local backup_name="pre-deploy-${TARGET}-$(date +%Y%m%d_%H%M%S)"
     local current_image
+    local backup_json=""
+    local backup_path=""
 
     log_info "Creating pre-deployment backup marker: $backup_name"
     current_image="$(get_current_version)"
 
-    if [[ "$TARGET" == "moltis" ]]; then
-        "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh" backup
+    if [[ -x "$BACKUP_SCRIPT" ]]; then
+        backup_json="$("$BACKUP_SCRIPT" --json backup)"
+        backup_path="$(printf '%s' "$backup_json" | jq -r '.details.local_path // empty')"
+        if [[ -n "$backup_path" && -n "$TARGET_LAST_BACKUP_FILE" ]]; then
+            echo "$backup_path" > "$TARGET_LAST_BACKUP_FILE"
+            log_info "Stored latest backup reference for target $TARGET: $backup_path"
+        fi
     else
-        log_info "Clawdiy full backup integration lands in T010; storing last image reference only in this phase"
+        log_warn "Backup script not executable, skipping pre-deployment backup archive"
     fi
 
     if [[ "$current_image" != "none" ]]; then
@@ -443,8 +565,14 @@ rollback() {
     log_warn "Initiating rollback for target $TARGET..."
 
     local last_image=""
+    local evidence_file=""
+    local resulting_mode="rolled_back"
     if [[ -f "$TARGET_LAST_IMAGE_FILE" ]]; then
         last_image="$(cat "$TARGET_LAST_IMAGE_FILE")"
+    fi
+
+    if [[ "$TARGET" == "clawdiy" ]]; then
+        evidence_file="$(capture_clawdiy_rollback_evidence "$ROLLBACK_REASON")"
     fi
 
     if [[ -n "$last_image" && "$last_image" != "none" ]]; then
@@ -467,6 +595,11 @@ rollback() {
     else
         log_warn "No previous Clawdiy image found, disabling Clawdiy stack instead"
         compose_cmd allow-placeholder down --remove-orphans
+        resulting_mode="disabled"
+    fi
+
+    if [[ "$TARGET" == "clawdiy" ]]; then
+        update_clawdiy_rollback_evidence "$evidence_file" "$resulting_mode"
     fi
 
     log_success "Rollback complete for target $TARGET"
@@ -564,6 +697,7 @@ cmd_deploy() {
         local health_status="unhealthy"
 
         if [[ "$ROLLBACK_ENABLED" == "true" ]]; then
+            ROLLBACK_REASON="deployment-verification-failed"
             rollback
             if [[ "$TARGET" == "clawdiy" ]] && ! docker ps --format '{{.Names}}' | grep -qx "$TARGET_CONTAINER"; then
                 health_status="disabled"
@@ -584,6 +718,7 @@ cmd_rollback() {
     DEPLOY_ACTION="rollback"
     DEPLOY_START_TIME=$(date +%s)
     local container_present=false
+    ROLLBACK_REASON="operator-requested"
 
     log_info "=========================================="
     log_info "Starting ${TARGET_DISPLAY} Rollback"

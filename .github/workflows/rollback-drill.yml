@@ -37,45 +37,68 @@ jobs:
             set -euo pipefail
 
             BACKUP_DIR="${{ env.BACKUP_PATH }}"
-            LATEST=$(ls -t "$BACKUP_DIR"/pre_deploy_*.tar.gz 2>/dev/null | head -1)
+            PROJECT_ROOT="${{ env.DEPLOY_PATH }}"
+            KEY_FILE="/etc/moltis/backup.key"
+            if [ -f "$PROJECT_ROOT/config/backup/backup.conf" ]; then
+              source "$PROJECT_ROOT/config/backup/backup.conf"
+            fi
+
+            LATEST=$(ls -t "$BACKUP_DIR"/daily/moltis_* "$BACKUP_DIR"/weekly/moltis_* "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1)
 
             if [ -z "$LATEST" ]; then
               echo "error=no_backup"
               exit 1
             fi
 
-            if [ ! -f "${LATEST}.compose" ]; then
-              echo "error=missing_compose_metadata"
-              exit 1
-            fi
-
-            if [ ! -f "${LATEST}.version" ]; then
-              echo "error=missing_version_metadata"
-              exit 1
-            fi
-
-            # Archive integrity check
-            tar -tzf "$LATEST" > /dev/null
+            EXTRACT_FILE="$LATEST"
 
             # Non-disruptive restore drill to temp directory
             TMP_DIR=$(mktemp -d /tmp/moltis-rollback-drill.XXXXXX)
             trap 'rm -rf "$TMP_DIR"' EXIT
-            tar -xzf "$LATEST" -C "$TMP_DIR"
+            if printf '%s' "$LATEST" | grep -q '\.aes$'; then
+              openssl enc -aes-256-cbc -d -pbkdf2 -in "$LATEST" -out "$TMP_DIR/archive.tar.gz" -pass "file:${ENCRYPTION_KEY_FILE:-$KEY_FILE}" >/dev/null 2>&1
+              EXTRACT_FILE="$TMP_DIR/archive.tar.gz"
+            fi
+
+            # Archive integrity check
+            tar -tzf "$EXTRACT_FILE" > /dev/null
+            tar -xzf "$EXTRACT_FILE" -C "$TMP_DIR"
 
             HAS_CONFIG=false
             HAS_DATA=false
-            HAS_ENV=false
+            HAS_CLAWDIY_CONFIG=false
+            HAS_CLAWDIY_STATE=false
+            HAS_CLAWDIY_AUDIT=false
+            HAS_CLAWDIY_EVIDENCE_MANIFEST=false
+            HAS_METADATA=false
+            CLAWDIY_INCLUDED=false
             [ -d "$TMP_DIR/config" ] && HAS_CONFIG=true
             [ -d "$TMP_DIR/data" ] && HAS_DATA=true
-            [ -f "$TMP_DIR/.env" ] && HAS_ENV=true
 
-            VERSION=$(cat "${LATEST}.version" 2>/dev/null || echo "unknown")
+            [ -d "$TMP_DIR/config/clawdiy" ] && HAS_CLAWDIY_CONFIG=true
+            [ -d "$TMP_DIR/data/clawdiy/state" ] && HAS_CLAWDIY_STATE=true
+            [ -d "$TMP_DIR/data/clawdiy/audit" ] && HAS_CLAWDIY_AUDIT=true
+            [ -f "$TMP_DIR/clawdiy-evidence-manifest.json" ] && HAS_CLAWDIY_EVIDENCE_MANIFEST=true
+
+            if [ -f "$TMP_DIR/backup-metadata.json" ]; then
+              HAS_METADATA=true
+              if jq -e '.clawdiy.included == true' "$TMP_DIR/backup-metadata.json" >/dev/null 2>&1; then
+                CLAWDIY_INCLUDED=true
+              fi
+            fi
+
+            VERSION=$(jq -r '.version // "unknown"' "$TMP_DIR/backup-metadata.json" 2>/dev/null || echo "unknown")
 
             echo "backup_file=$LATEST"
             echo "backup_version=$VERSION"
             echo "has_config=$HAS_CONFIG"
             echo "has_data=$HAS_DATA"
-            echo "has_env=$HAS_ENV"
+            echo "has_metadata=$HAS_METADATA"
+            echo "clawdiy_included=$CLAWDIY_INCLUDED"
+            echo "has_clawdiy_config=$HAS_CLAWDIY_CONFIG"
+            echo "has_clawdiy_state=$HAS_CLAWDIY_STATE"
+            echo "has_clawdiy_audit=$HAS_CLAWDIY_AUDIT"
+            echo "has_clawdiy_evidence_manifest=$HAS_CLAWDIY_EVIDENCE_MANIFEST"
           EOF
           )
 
@@ -83,10 +106,21 @@ jobs:
           BACKUP_VERSION=$(echo "$RESULT" | grep '^backup_version=' | cut -d= -f2-)
           HAS_CONFIG=$(echo "$RESULT" | grep '^has_config=' | cut -d= -f2-)
           HAS_DATA=$(echo "$RESULT" | grep '^has_data=' | cut -d= -f2-)
-          HAS_ENV=$(echo "$RESULT" | grep '^has_env=' | cut -d= -f2-)
+          HAS_METADATA=$(echo "$RESULT" | grep '^has_metadata=' | cut -d= -f2-)
+          CLAWDIY_INCLUDED=$(echo "$RESULT" | grep '^clawdiy_included=' | cut -d= -f2-)
+          HAS_CLAWDIY_CONFIG=$(echo "$RESULT" | grep '^has_clawdiy_config=' | cut -d= -f2-)
+          HAS_CLAWDIY_STATE=$(echo "$RESULT" | grep '^has_clawdiy_state=' | cut -d= -f2-)
+          HAS_CLAWDIY_AUDIT=$(echo "$RESULT" | grep '^has_clawdiy_audit=' | cut -d= -f2-)
+          HAS_CLAWDIY_EVIDENCE_MANIFEST=$(echo "$RESULT" | grep '^has_clawdiy_evidence_manifest=' | cut -d= -f2-)
 
           if [ -z "$BACKUP_FILE" ] || [ -z "$BACKUP_VERSION" ]; then
             echo "::error::Rollback drill failed to parse backup metadata"
+            echo "$RESULT"
+            exit 1
+          fi
+
+          if [ "$HAS_METADATA" != "true" ] || [ "$CLAWDIY_INCLUDED" != "true" ] || [ "$HAS_CLAWDIY_CONFIG" != "true" ] || [ "$HAS_CLAWDIY_STATE" != "true" ] || [ "$HAS_CLAWDIY_AUDIT" != "true" ] || [ "$HAS_CLAWDIY_EVIDENCE_MANIFEST" != "true" ]; then
+            echo "::error::Rollback drill found backup that is not restore-ready for Clawdiy"
             echo "$RESULT"
             exit 1
           fi
@@ -95,7 +129,12 @@ jobs:
           echo "backup_version=$BACKUP_VERSION" >> $GITHUB_OUTPUT
           echo "has_config=$HAS_CONFIG" >> $GITHUB_OUTPUT
           echo "has_data=$HAS_DATA" >> $GITHUB_OUTPUT
-          echo "has_env=$HAS_ENV" >> $GITHUB_OUTPUT
+          echo "has_metadata=$HAS_METADATA" >> $GITHUB_OUTPUT
+          echo "clawdiy_included=$CLAWDIY_INCLUDED" >> $GITHUB_OUTPUT
+          echo "has_clawdiy_config=$HAS_CLAWDIY_CONFIG" >> $GITHUB_OUTPUT
+          echo "has_clawdiy_state=$HAS_CLAWDIY_STATE" >> $GITHUB_OUTPUT
+          echo "has_clawdiy_audit=$HAS_CLAWDIY_AUDIT" >> $GITHUB_OUTPUT
+          echo "has_clawdiy_evidence_manifest=$HAS_CLAWDIY_EVIDENCE_MANIFEST" >> $GITHUB_OUTPUT
 
       - name: Drill summary
         if: always()
@@ -110,7 +149,12 @@ jobs:
           echo "| Version | \`${{ steps.drill.outputs.backup_version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Contains config/ | \`${{ steps.drill.outputs.has_config }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Contains data/ | \`${{ steps.drill.outputs.has_data }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Contains .env | \`${{ steps.drill.outputs.has_env }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Contains backup metadata | \`${{ steps.drill.outputs.has_metadata }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clawdiy included | \`${{ steps.drill.outputs.clawdiy_included }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Contains config/clawdiy | \`${{ steps.drill.outputs.has_clawdiy_config }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Contains data/clawdiy/state | \`${{ steps.drill.outputs.has_clawdiy_state }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Contains data/clawdiy/audit | \`${{ steps.drill.outputs.has_clawdiy_audit }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Contains clawdiy evidence manifest | \`${{ steps.drill.outputs.has_clawdiy_evidence_manifest }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Runbook | $RUNBOOK_URL |" >> $GITHUB_STEP_SUMMARY
 
