@@ -5,9 +5,9 @@
 
 ## Phase 0: Planning (Executor Assignment)
 
-- [ ] P001 Confirm implementation branch/spec pairing and executor ownership in `specs/007-codex-update-monitor/tasks.md`
-- [ ] P002 Link the feature package to the active Beads issue via `bd` and capture dependency notes in `specs/007-codex-update-monitor/tasks.md`
-- [ ] P003 Validate local prerequisites for Codex CLI, upstream source access, and optional Beads sync in `docs/codex-cli-update-monitor.md`
+- [x] P001 Confirm implementation branch/spec pairing and executor ownership in `specs/007-codex-update-monitor/tasks.md`
+- [x] P002 Link the feature package to the active Beads issue via `bd` and capture dependency notes in `specs/007-codex-update-monitor/tasks.md`
+- [ ] P003 Validate local prerequisites for Codex CLI, upstream source access, and optional Beads sync in `specs/007-codex-update-monitor/research.md`
 - [ ] P004 Start MVP delivery with User Story 1 only after executor assignment and prerequisite validation
 
 ---
@@ -25,7 +25,7 @@
 ## Phase 2: Foundational
 
 - [ ] T006 Implement local Codex state detection in `scripts/codex-cli-update-monitor.sh`
-- [ ] T007 Implement upstream release collection with graceful source-failure handling in `scripts/codex-cli-update-monitor.sh`
+- [ ] T007 Implement upstream release collection plus optional issue-signal intake with graceful source-failure handling in `scripts/codex-cli-update-monitor.sh`
 - [ ] T008 [P] Implement repository workflow trait detection in `scripts/codex-cli-update-monitor.sh`
 - [ ] T009 Implement deterministic JSON report generation matching `specs/007-codex-update-monitor/contracts/monitor-report.schema.json` in `scripts/codex-cli-update-monitor.sh`
 - [ ] T010 Implement recommendation rubric and human summary rendering in `scripts/codex-cli-update-monitor.sh`
@@ -53,8 +53,8 @@
 
 **Independent Test**: Run the monitor against fixtures that include both relevant and non-relevant upstream changes and confirm the report classifies them with repository-specific rationale.
 
-- [ ] T020 [US2] Map upstream changes to repository workflow traits in `scripts/codex-cli-update-monitor.sh`
-- [ ] T021 [US2] Implement `relevant_changes`, `non_relevant_changes`, and evidence sections in `scripts/codex-cli-update-monitor.sh`
+- [ ] T020 [US2] Map upstream release and optional issue-signal changes to repository workflow traits in `scripts/codex-cli-update-monitor.sh`
+- [ ] T021 [US2] Implement `relevant_changes`, `non_relevant_changes`, and evidence sections while keeping issue signals advisory in `scripts/codex-cli-update-monitor.sh`
 - [ ] T022 [P] [US2] Add relevance-classification fixtures in `tests/fixtures/codex-update-monitor/`
 - [ ] T023 [US2] Validate repository-specific rationale coverage in `tests/component/test_codex_cli_update_monitor.sh`
 - [ ] T024 [US2] Document how relevance is interpreted for operators in `docs/codex-cli-update-monitor.md`
@@ -86,7 +86,7 @@
 
 ---
 
-## Final Phase: Polish & Cross-Cutting Concerns
+## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T050 [P] Add a convenient make target in `Makefile`
 - [ ] T051 [P] Validate Bash syntax for `scripts/codex-cli-update-monitor.sh` and referenced helpers
@@ -98,7 +98,7 @@
 
 ## Dependencies & Execution Order
 
-- Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Final Phase
+- Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7
 - User Story 1 is the MVP and must land before any follow-up automation work.
 - User Story 2 depends on foundational collection/reporting logic from Phase 2.
 - User Story 3 depends on the stable recommendation report from User Stories 1 and 2.
