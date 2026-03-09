@@ -1,0 +1,42 @@
+{
+  "issues": [
+    {
+      "id": "openai/codex#13504",
+      "title": "codex resume can still lose git context after worktree handoff",
+      "state": "open",
+      "labels": [
+        "cli",
+        "resume",
+        "worktree"
+      ],
+      "html_url": "https://github.com/openai/codex/issues/13504"
+    },
+    {
+      "id": "openai/codex#13533",
+      "title": "plugin mention prompt support is confusing in mixed MCP setups",
+      "state": "open",
+      "labels": [
+        "plugin",
+        "mcp"
+      ],
+      "html_url": "https://github.com/openai/codex/issues/13533"
+    },
+    {
+      "id": "openai/codex#13577",
+      "title": "Improve JS REPL recovery after local import errors",
+      "state": "open",
+      "labels": [
+        "js_repl"
+      ],
+      "html_url": "https://github.com/openai/codex/issues/13577"
+    },
+    {
+      "id": "openai/codex#99999",
+      "title": "Internal PR placeholder",
+      "state": "open",
+      "pull_request": {
+        "url": "https://api.github.com/repos/openai/codex/pulls/99999"
+      }
+    }
+  ]
+}

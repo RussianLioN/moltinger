@@ -1,0 +1,10 @@
+model = "gpt-5.4"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+check_for_update_on_startup = true
+service_tier = "fast"
+
+[features]
+multi_agent = true
+js_repl = true
+prevent_idle_sleep = true
