@@ -10,7 +10,6 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `codex-cli-upgrade-watch-v2` | `feat/codex-cli-upgrade-watch-v2` | `sibling-worktree` | Needs decision |
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `gpt-5-moltis` | `feat/gpt-5-moltis` | `sibling-worktree` | Active research and documentation worktree. |
@@ -34,7 +33,6 @@
 | `006-git-topology-registry` | `origin/006-git-topology-registry` | Active Speckit feature branch; dedicated authoritative worktree exists. |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
-| `feat/codex-cli-upgrade-watch-v2` | `none` | Needs decision |
 | `feat/gpt-5-moltis` | `origin/feat/gpt-5-moltis` | Active documentation and research branch; dedicated worktree exists. |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
@@ -49,7 +47,6 @@
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
-| `feat/codex-cli-upgrade-watch` | `origin/feat/codex-cli-upgrade-watch` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
@@ -67,7 +64,6 @@
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
-| `origin/feat/codex-cli-upgrade-watch` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
