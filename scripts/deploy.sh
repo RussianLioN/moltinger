@@ -218,12 +218,17 @@ compose_cmd() {
 
     local args=("$@")
     local -a compose_args=()
+    local redirect_stdout=false
 
     if [[ -n "$ENV_FILE" && -f "$ENV_FILE" ]]; then
         compose_args+=(--env-file "$ENV_FILE")
     fi
 
     compose_args+=(-f "$COMPOSE_FILE")
+
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        redirect_stdout=true
+    fi
 
     if [[ "$TARGET" == "clawdiy" ]]; then
         local clawdiy_image=""
@@ -235,12 +240,20 @@ compose_cmd() {
         fi
 
         if [[ -n "$clawdiy_image" ]]; then
-            CLAWDIY_IMAGE="$clawdiy_image" docker compose "${compose_args[@]}" "${args[@]}"
+            if [[ "$redirect_stdout" == "true" ]]; then
+                CLAWDIY_IMAGE="$clawdiy_image" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+            else
+                CLAWDIY_IMAGE="$clawdiy_image" docker compose "${compose_args[@]}" "${args[@]}"
+            fi
             return
         fi
     fi
 
-    docker compose "${compose_args[@]}" "${args[@]}"
+    if [[ "$redirect_stdout" == "true" ]]; then
+        docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+    else
+        docker compose "${compose_args[@]}" "${args[@]}"
+    fi
 }
 
 add_json_services() {
@@ -501,7 +514,7 @@ wait_for_healthy() {
                 ;;
             unhealthy)
                 log_error "$container is unhealthy"
-                docker logs "$container" --tail 50 2>&1 || true
+                docker logs "$container" --tail 50 >&2 || true
                 return 1
                 ;;
             starting)
@@ -510,10 +523,14 @@ wait_for_healthy() {
 
         sleep "$HEALTH_CHECK_INTERVAL"
         elapsed=$((elapsed + HEALTH_CHECK_INTERVAL))
-        echo -n "."
+        if [[ "$OUTPUT_JSON" != "true" ]]; then
+            echo -n "."
+        fi
     done
 
-    echo ""
+    if [[ "$OUTPUT_JSON" != "true" ]]; then
+        echo ""
+    fi
     log_error "Timeout waiting for $container to become healthy"
     return 1
 }
