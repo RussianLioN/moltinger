@@ -133,6 +133,41 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
+### 2026-03-09: Codex CLI Update Monitoring Research Seed
+
+**Статус**: ✅ RESEARCH COMPLETE, READY FOR DEDICATED FEATURE BRANCH
+
+#### Что проверено
+
+- Локально установлен `codex-cli 0.112.0`
+- По официальному Codex changelog на 2026-03-09 это актуальный latest release
+- Подтверждены релевантные upstream capabilities для будущего workflow:
+  - `codex exec --json` и `--output-schema`
+  - улучшения `multi_agent`
+  - worktree/resume flow
+  - AGENTS/skills/config surfaces для repo-specific orchestration
+
+#### Что создано
+
+- Исследование: `docs/research/codex-cli-update-monitoring-2026-03-09.md`
+- Speckit seed: `docs/plans/codex-cli-update-monitoring-speckit-seed.md`
+- Закрытый research issue: `molt-1`
+- Follow-up implementation issue: `molt-2` — Implement Codex CLI update monitor from Speckit seed
+
+#### Вывод
+
+- Для этой темы рекомендован **script-first hybrid**, а не long-running agent:
+  - deterministic collector script
+  - thin skill/command wrapper
+  - durable report
+  - optional Beads follow-up behind explicit flag
+
+#### Next Step
+
+1. Создать dedicated branch/worktree под `codex-update-monitor`
+2. Запустить `/speckit.specify` по seed prompt из `docs/plans/codex-cli-update-monitoring-speckit-seed.md`
+3. В отдельной feature-ветке уже проектировать JSON contract, issue integration и optional skill wrapper
+
 ### 2026-03-08: Git Topology Registry Automation (Feature: 006-git-topology-registry)
 
 **Статус**: ✅ MERGE-READY FEATURE BRANCH
