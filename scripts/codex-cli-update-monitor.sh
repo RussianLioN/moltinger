@@ -797,7 +797,7 @@ def parse_release_source(raw: str, limit: int) -> list[dict]:
     releases: list[dict] = []
     current = None
     pending_date = ""
-    version_pattern = re.compile(r"Codex CLI (\d+\.\d+\.\d+)")
+    version_pattern = re.compile(r"Codex CLI(?: Release:)?\s*(\d+\.\d+\.\d+)")
     date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
     for line in lines:
