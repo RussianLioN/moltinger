@@ -95,3 +95,21 @@
 - The feature package assumes v1 will read local Codex state, fetch upstream release data, classify relevance, and optionally sync a Beads issue.
 - No runtime code or workflow should self-upgrade Codex.
 - The monitor should emit both JSON and Markdown outputs even when recommendations are non-actionable, so runs remain comparable over time.
+
+## Implementation Preflight (2026-03-09)
+
+- Verified `codex --version` in this worktree resolves to `codex-cli 0.112.0`.
+- Verified the local Codex config file exists at `~/.codex/config.toml` and exposes the workflow traits needed for detection:
+  - `check_for_update_on_startup = true`
+  - `approval_policy = "on-request"`
+  - `sandbox_mode = "workspace-write"`
+  - `service_tier = "fast"`
+  - `features.multi_agent = true`
+  - `features.js_repl = true`
+  - `features.prevent_idle_sleep = true`
+- Confirmed the Speckit implementation prerequisites with `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`.
+- Confirmed optional Beads sync remains available from this worktree via the shared DB path `/Users/rl/coding/moltinger/.beads/beads.db`, but tracker mutation stays out of the first runtime slice.
+- Chosen runtime defaults for the first slice:
+  - primary release source: official Codex changelog URL
+  - optional advisory issue source: `openai/codex` GitHub issues API
+  - fixture mode: local JSON files under `tests/fixtures/codex-update-monitor/`

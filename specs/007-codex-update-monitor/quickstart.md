@@ -44,12 +44,12 @@ Expected result:
 
 Expected result:
 
-- Tracker mutation happens only because explicit issue flags were supplied
-- JSON report records whether the issue action was created, updated, skipped, or suggested
+- In the first implementation slice, the request is recorded as `issue_action.mode=skipped` without mutating Beads
+- A later User Story 3 slice will turn the same explicit flags into real Beads create/update behavior
 
 ## Manual Workflow Run
 
-Trigger the planned GitHub Actions workflow manually with the same inputs used locally.
+Trigger the planned GitHub Actions workflow manually with the same inputs used locally. If the runner does not have `codex` installed, provide `local_version` explicitly.
 
 Expected result:
 
@@ -63,4 +63,4 @@ Expected result:
 2. Confirm the JSON report conforms to `contracts/monitor-report.schema.json`.
 3. Confirm the summary clearly explains why the recommendation was chosen.
 4. Run the manual workflow path and verify artifact parity with the local path.
-5. Run the explicit issue-sync path and confirm the issue action is auditable in the report.
+5. Run the explicit issue-sync path and confirm the issue action is auditable in the report, even before US3 lands real tracker mutation.

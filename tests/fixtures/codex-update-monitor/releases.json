@@ -1,0 +1,31 @@
+{
+  "releases": [
+    {
+      "version": "0.112.0",
+      "published_at": "2026-03-08",
+      "changes": [
+        "Experimental approval profiles let operators predefine safer approval and sandbox combinations for repeated tasks.",
+        "@plugin mentions from the prompt can auto-include plugin context when a plugin is installed.",
+        "Model-selection flow is improved when Codex launches without a fixed model."
+      ]
+    },
+    {
+      "version": "0.111.0",
+      "published_at": "2026-03-06",
+      "changes": [
+        "Child worktree creation from /new reduces setup friction for worktree-heavy repositories.",
+        "Local dynamic imports in js_repl make it easier to reuse local helpers during iterative sessions.",
+        "codex resume preserves git context and app state across resumed sessions."
+      ]
+    },
+    {
+      "version": "0.110.0",
+      "published_at": "2026-03-03",
+      "changes": [
+        "Improved multi-agent task splitting reduces coordination overhead for delegated work.",
+        "Project docs updates no longer require a restart after instructions change.",
+        "Plugin system support was added for broader reuse across repositories."
+      ]
+    }
+  ]
+}

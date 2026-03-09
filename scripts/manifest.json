@@ -34,6 +34,21 @@
         "codex-hotfix"
       ]
     },
+    "codex-cli-update-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Assess local Codex CLI state against upstream releases and repo workflow relevance",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-update-monitor",
+        "codex-update-report"
+      ],
+      "ci": true
+    },
     "backup-moltis-enhanced.sh": {
       "version": "3.0.0",
       "description": "Enterprise backup with encryption, offsite backup, integrity verification",

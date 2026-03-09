@@ -338,6 +338,13 @@ codex-check:
 codex-check-ci:
 	@./scripts/codex-check.sh --ci
 
+codex-update-monitor:
+	@mkdir -p .tmp/current
+	@./scripts/codex-cli-update-monitor.sh \
+		--json-out .tmp/current/codex-update-report.json \
+		--summary-out .tmp/current/codex-update-summary.md \
+		--stdout summary
+
 codex-research:
 	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh research
 
