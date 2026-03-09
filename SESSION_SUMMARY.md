@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-08
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-09
 
 ---
 
@@ -132,6 +132,27 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-09: Clawdiy Rebase And Mainline Reconcile
+
+**Статус**: ✅ branch rebased onto `origin/main`, PR conflicts cleared
+
+- Rebased `001-clawdiy-agent-platform` onto the updated `main` line and resolved the PR conflict set instead of merging stale branch state.
+- Adapted the Clawdiy topology notes to the new generated-registry workflow by updating `docs/GIT-TOPOLOGY-INTENT.yaml` and regenerating `docs/GIT-TOPOLOGY-REGISTRY.md` from live git state.
+- Re-ran the targeted Clawdiy validation set after the rebase to confirm that config, auth, topology, and extraction-readiness behavior stayed intact.
+
+**Validated**
+
+- `make codex-check-ci`
+- `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+- `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
+- `./tests/run.sh --lane integration_local --filter extraction_readiness --json`
+- `./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `./scripts/clawdiy-smoke.sh --json --stage auth`
+
+**Next**
+
+- Force-push the rebased branch to PR `#24`, wait for the rerun checks, and merge if the PR stays green.
 
 ### 2026-03-09: Clawdiy PR Governance Follow-Up
 
