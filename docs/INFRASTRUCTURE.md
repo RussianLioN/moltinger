@@ -68,6 +68,49 @@ This document describes the production-ready infrastructure for Moltis deploymen
 | AlertManager | 9093 | Alert handling |
 | cAdvisor | 8080 | Container metrics |
 
+## Clawdiy Same-Host Runtime
+
+Clawdiy is deployed as a second permanent agent on the same server in a separate compose stack.
+
+### Runtime Boundary
+
+| Area | Moltinger | Clawdiy |
+|------|-----------|---------|
+| Public URL | `https://moltis.ainetic.tech` | `https://clawdiy.ainetic.tech` |
+| Local bind | `127.0.0.1:13131` | `127.0.0.1:18789` |
+| Compose file | `docker-compose.prod.yml` | `docker-compose.clawdiy.yml` |
+| Runtime config | `config/moltis.toml` | `config/clawdiy/openclaw.json` |
+| Control-plane registry | implicit/self | `config/fleet/agents-registry.json` + `config/fleet/policy.json` |
+| Persistent state | `data/` | `data/clawdiy/state` |
+| Audit evidence | mixed app logs | `data/clawdiy/audit` |
+
+### Shared Networks
+
+- `traefik-net`: public ingress through Traefik
+- `fleet-internal`: private agent-to-agent path
+- `moltinger_monitoring`: Prometheus and cAdvisor visibility for per-agent metrics
+
+### Operator Commands
+
+```bash
+# Same-host deploy flow
+./scripts/deploy.sh clawdiy deploy
+./scripts/clawdiy-smoke.sh --stage same-host
+./scripts/clawdiy-smoke.sh --stage restart-isolation
+
+# Stop only Clawdiy
+./scripts/deploy.sh clawdiy stop
+
+# Inspect current Clawdiy status
+./scripts/deploy.sh --json clawdiy status | jq .
+```
+
+### Ownership Rules
+
+- Clawdiy must not reuse Moltinger password material, cookies, or state directories.
+- Clawdiy control-plane config remains Git-managed under `config/clawdiy/` and `config/fleet/`.
+- A Clawdiy restart must not change Moltinger container identity or health.
+
 ## Quick Start
 
 ```bash

@@ -107,8 +107,10 @@
   → Artifacts: [openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json)
 - [X] T014 [US1] [EXECUTOR: deployment-engineer] [SEQUENTIAL] Wire remote sync and deploy steps for the Clawdiy stack in `.github/workflows/deploy-clawdiy.yml` and `scripts/deploy.sh`
   → Artifacts: [deploy-clawdiy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/.github/workflows/deploy-clawdiy.yml), [deploy.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/deploy.sh)
-- [ ] T015 [US1] [EXECUTOR: bash-master] [SEQUENTIAL] Implement `same-host` and `restart-isolation` verification stages in `scripts/clawdiy-smoke.sh`
-- [ ] T016 [US1] [EXECUTOR: technical-writer] [SEQUENTIAL] Document deploy, restart, disable, and ownership procedures in `docs/runbooks/clawdiy-deploy.md` and `docs/INFRASTRUCTURE.md`
+- [X] T015 [US1] [EXECUTOR: bash-master] [SEQUENTIAL] Implement `same-host` and `restart-isolation` verification stages in `scripts/clawdiy-smoke.sh`
+  → Artifacts: [clawdiy-smoke.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/clawdiy-smoke.sh)
+- [X] T016 [US1] [EXECUTOR: technical-writer] [SEQUENTIAL] Document deploy, restart, disable, and ownership procedures in `docs/runbooks/clawdiy-deploy.md` and `docs/INFRASTRUCTURE.md`
+  → Artifacts: [clawdiy-deploy.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-deploy.md), [INFRASTRUCTURE.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/INFRASTRUCTURE.md)
 
 **Checkpoint**: Clawdiy exists as a separate long-lived runtime and can be operated without mutating Moltinger state.
 
