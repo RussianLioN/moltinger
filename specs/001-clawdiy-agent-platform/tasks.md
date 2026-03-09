@@ -60,7 +60,8 @@
   → Artifacts: [openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json), [agents-registry.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/agents-registry.json), [policy.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/fleet/policy.json)
 - [X] T003 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-SETUP-A] Add Clawdiy secret inventory placeholders and deployment env mapping notes in `.github/workflows/deploy.yml` and `docs/SECRETS-MANAGEMENT.md`
   → Artifacts: [deploy.yml](/Users/rl/coding/moltinger-openclaw-control-plane/.github/workflows/deploy.yml), [SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md)
-- [ ] T004 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-SETUP-A] Create the Clawdiy runbook directory and initial documents in `docs/runbooks/clawdiy-deploy.md`, `docs/runbooks/clawdiy-repeat-auth.md`, `docs/runbooks/clawdiy-rollback.md`, and `docs/runbooks/fleet-handoff-incident.md`
+- [X] T004 [P] [EXECUTOR: technical-writer] [PARALLEL-GROUP-SETUP-A] Create the Clawdiy runbook directory and initial documents in `docs/runbooks/clawdiy-deploy.md`, `docs/runbooks/clawdiy-repeat-auth.md`, `docs/runbooks/clawdiy-rollback.md`, and `docs/runbooks/fleet-handoff-incident.md`
+  → Artifacts: [clawdiy-deploy.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-deploy.md), [clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md), [clawdiy-rollback.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-rollback.md), [fleet-handoff-incident.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/fleet-handoff-incident.md)
 
 ---
 
