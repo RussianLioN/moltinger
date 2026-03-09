@@ -150,6 +150,16 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must use target-aware preflight and deploy/rollback entrypoints"
     fi
 
+    test_start "static_clawdiy_workflow_propagates_remote_ci_context"
+    if rg -q 'export GITHUB_ACTIONS=true' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'export GITHUB_RUN_ID="\$\{\{ github\.run_id \}\}"' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'deploy_rc=0' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'missing_result' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must propagate CI context to remote deploy.sh and surface JSON failure output"
+    fi
+
     test_start "static_clawdiy_workflow_bootstraps_fleet_network"
     if rg -q 'Bootstrap Clawdiy fleet network' "$CLAWDIY_WORKFLOW" && \
        rg -q 'docker network create \$\{\{ env\.FLEET_INTERNAL_NETWORK \}\}' "$CLAWDIY_WORKFLOW"; then
