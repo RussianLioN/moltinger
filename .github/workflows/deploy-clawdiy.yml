@@ -131,12 +131,12 @@ jobs:
             fi
 
             if ! printf '%s' "$CLAWDIY_OPENAI_CODEX_AUTH_PROFILE" | jq -ce '
-              .provider == "openai-codex"
+              .provider == "codex-oauth"
               and .auth_type == "oauth"
               and (.granted_scopes | type == "array" and index("api.responses.write") != null)
               and (.allowed_models | type == "array" and index("gpt-5.4") != null)
             ' >/dev/null; then
-              echo "::error::CLAWDIY_OPENAI_CODEX_AUTH_PROFILE must be JSON for openai-codex OAuth with api.responses.write and gpt-5.4 authorization"
+              echo "::error::CLAWDIY_OPENAI_CODEX_AUTH_PROFILE must be JSON for Codex OAuth with api.responses.write and gpt-5.4 authorization"
               exit 1
             fi
           else
