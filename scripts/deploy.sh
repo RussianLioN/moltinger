@@ -307,6 +307,19 @@ ensure_required_networks() {
     done
 }
 
+ensure_clawdiy_runtime_paths() {
+    local required_paths=(
+        "$PROJECT_ROOT/config/clawdiy"
+        "$PROJECT_ROOT/config/fleet"
+        "$PROJECT_ROOT/data/clawdiy/state"
+        "$PROJECT_ROOT/data/clawdiy/audit"
+    )
+
+    for path in "${required_paths[@]}"; do
+        mkdir -p "$path"
+    done
+}
+
 check_prerequisites() {
     local action="$1"
 
@@ -342,6 +355,7 @@ check_prerequisites() {
 
     if [[ "$TARGET" == "clawdiy" && ("$action" == "deploy" || "$action" == "start" || "$action" == "restart") ]]; then
         require_clawdiy_image_ref
+        ensure_clawdiy_runtime_paths
     fi
 
     if ! compose_cmd allow-placeholder config --quiet >/dev/null 2>&1; then

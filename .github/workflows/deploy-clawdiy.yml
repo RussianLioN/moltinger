@@ -35,6 +35,8 @@ env:
   CLAWDIY_RUNTIME_PATH: /opt/moltinger/clawdiy
   CLAWDIY_ENV_PATH: /opt/moltinger/clawdiy/.env
   CLAWDIY_PUBLIC_URL: https://clawdiy.ainetic.tech
+  FLEET_INTERNAL_NETWORK: fleet-internal
+  MONITORING_NETWORK: moltinger_monitoring
 
 jobs:
   preflight:
@@ -142,6 +144,8 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p \
             ${{ env.DEPLOY_PATH }}/config/clawdiy \
             ${{ env.DEPLOY_PATH }}/config/fleet \
+            ${{ env.DEPLOY_PATH }}/data/clawdiy/state \
+            ${{ env.DEPLOY_PATH }}/data/clawdiy/audit \
             ${{ env.DEPLOY_PATH }}/scripts \
             ${{ env.CLAWDIY_RUNTIME_PATH }}"
 
@@ -162,6 +166,10 @@ jobs:
           CLAWDIY_TELEGRAM_ALLOWED_USERS=${{ secrets.CLAWDIY_TELEGRAM_ALLOWED_USERS }}
           CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=${{ secrets.CLAWDIY_OPENAI_CODEX_AUTH_PROFILE }}
           CLAWDIY_DOMAIN=clawdiy.ainetic.tech
+          CLAWDIY_INTERNAL_PORT=18789
+          CLAWDIY_PORT=18789
+          FLEET_INTERNAL_NETWORK=${{ env.FLEET_INTERNAL_NETWORK }}
+          MONITORING_NETWORK=${{ env.MONITORING_NETWORK }}
           EOF
 
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.CLAWDIY_RUNTIME_PATH }}"

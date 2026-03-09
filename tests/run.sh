@@ -39,6 +39,7 @@ Canonical lanes:
 
 Additional live-only aliases:
   security_runtime_smoke
+  clawdiy_live_deploy
   mcp_real
   telegram_live
   provider_live
@@ -107,7 +108,7 @@ lane_needs_stack() {
 
 lane_is_live_only() {
     case "$1" in
-        resilience|live_external|security_runtime_smoke|mcp_real|telegram_live|provider_live) return 0 ;;
+        resilience|live_external|security_runtime_smoke|clawdiy_live_deploy|mcp_real|telegram_live|provider_live) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -133,13 +134,13 @@ group_to_lanes() {
             printf '%s\n' static component integration_local security_api mcp_fake e2e_browser
             ;;
         nightly)
-            printf '%s\n' resilience security_runtime_smoke telegram_live provider_live mcp_real
+            printf '%s\n' resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         all)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke telegram_live provider_live mcp_real
+            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         live_external)
-            printf '%s\n' telegram_live provider_live mcp_real
+            printf '%s\n' clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         *)
             printf '%s\n' "$1"
@@ -198,6 +199,11 @@ LIST
         security_runtime_smoke)
             cat <<LIST
 bash|security_runtime_smoke|Security runtime smoke|$SCRIPT_DIR/live_external/test_security_runtime_smoke.sh
+LIST
+            ;;
+        clawdiy_live_deploy)
+            cat <<LIST
+bash|live_clawdiy_deploy_smoke|Clawdiy deploy smoke|$SCRIPT_DIR/live_external/test_clawdiy_deploy_smoke.sh
 LIST
             ;;
         mcp_real)
