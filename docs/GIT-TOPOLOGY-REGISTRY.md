@@ -17,6 +17,7 @@
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-uat-006-git-topology-registry` | `uat/006-git-topology-registry` | `sibling-worktree` | Needs decision |
+| `openclaw-control-plane` | `feat/openclaw-control-plane` | `sibling-worktree` | Needs decision |
 | `pr17-webhook-extraction` | `feat/pr17-webhook-extraction` | `sibling-worktree` | Needs decision |
 | `primary-feature-005` | `005-worktree-ready-flow` | `dedicated-feature-worktree` | Active parallel Speckit feature worktree. |
 | `primary-feature-006` | `006-git-topology-registry` | `dedicated-feature-worktree` | Active authoritative worktree for topology-registry automation. |
@@ -35,6 +36,7 @@
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
+| `feat/openclaw-control-plane` | `none` | Needs decision |
 | `feat/pr17-webhook-extraction` | `origin/feat/pr17-webhook-extraction` | Needs decision |
 | `uat/006-git-topology-registry` | `origin/006-git-topology-registry` | Needs decision |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
@@ -60,7 +62,6 @@
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
-| `origin/feat/gpt-5-moltis` | Active feature branch. |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/pr17-webhook-extraction` | Needs decision |
 
@@ -71,11 +72,12 @@
 | `branch` | `codex/gitops-metrics-fix` | `active` | Fresh replacement branch with open PR #18. | 18 |
 | `remote` | `origin/codex/full-review` | `protected` | Active parallel session; exclude from automated cleanup. | 6 |
 | `remote` | `origin/codex/gitops-metrics-fix` | `active` | Active replacement PR #18. | 18 |
+| `remote` | `origin/feat/gpt-5-moltis` | `active` | Active feature branch. | - |
 | `worktree` | `codex-gitops-metrics-fix` | `active` | Active replacement branch for closed PR #3; open PR #18. | 18 |
 
 ## Registry Warnings
 
-- Reviewed intent contains 4 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
+- Reviewed intent contains 5 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
 
 ## Operating Rules
 
