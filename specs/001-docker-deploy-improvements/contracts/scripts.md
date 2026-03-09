@@ -14,19 +14,25 @@ This document defines the interface contracts for deployment and backup scripts.
 ### Synopsis
 
 ```bash
-./scripts/deploy.sh [OPTIONS] COMMAND
+./scripts/deploy.sh [OPTIONS] [TARGET] COMMAND [ARGS]
 
 OPTIONS:
   --json           Output in JSON format
   --no-color       Disable colored output
-  --dry-run        Show what would be done without executing
   -h, --help       Show help message
 
+TARGETS:
+  moltis           Default target
+  clawdiy          OpenClaw sidecar stack
+
 COMMANDS:
-  deploy           Deploy the stack
-  rollback         Rollback to previous version
-  status           Show deployment status
-  health           Check health status
+  deploy [env]     Deploy the target stack
+  rollback         Rollback the target stack
+  status           Show target deployment status
+  start            Start target services
+  stop             Stop target services
+  restart          Restart target services
+  logs [-f]        Show target logs
 ```
 
 ### Exit Codes
@@ -46,13 +52,14 @@ COMMANDS:
 ```json
 {
   "status": "success",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {
-    "image": "ghcr.io/moltis-org/moltis:v1.7.0",
+    "image": "ghcr.io/openclaw/openclaw:latest",
     "duration_ms": 45000,
     "health": "healthy",
-    "services": ["moltis", "watchtower"]
+    "services": ["clawdiy"]
   },
   "errors": []
 }
@@ -62,14 +69,14 @@ COMMANDS:
 ```json
 {
   "status": "failure",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {},
   "errors": [
     {
-      "code": "HEALTH_CHECK_FAILED",
-      "message": "Container unhealthy after 3 retries",
-      "service": "moltis"
+      "code": "DEPLOY_ERROR",
+      "message": "Clawdiy deployment verification failed"
     }
   ]
 }

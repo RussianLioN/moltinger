@@ -82,8 +82,8 @@
       ]
     },
     "deploy.sh": {
-      "version": "2.2.0",
-      "description": "Blue-green deployment with health checks, rollback, notifications",
+      "version": "2.3.0",
+      "description": "Target-aware deployment orchestration with health checks, rollback, and notifications",
       "entrypoint": true,
       "requires": [
         "docker",
@@ -91,6 +91,7 @@
       ],
       "provides": [
         "deploy",
+        "deploy-targeted",
         "rollback",
         "status",
         "start",

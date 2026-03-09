@@ -59,13 +59,14 @@ All JSON responses follow a consistent structure:
 ```json
 {
   "status": "success",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {
-    "image": "ghcr.io/moltis-org/moltis:v1.7.0",
+    "image": "ghcr.io/openclaw/openclaw:latest",
     "duration_ms": 45000,
     "health": "healthy",
-    "services": ["moltis", "watchtower"]
+    "services": ["clawdiy"]
   },
   "errors": []
 }
@@ -76,14 +77,14 @@ All JSON responses follow a consistent structure:
 ```json
 {
   "status": "failure",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {},
   "errors": [
     {
-      "code": "HEALTH_CHECK_FAILED",
-      "message": "Container unhealthy after 3 retries",
-      "service": "moltis"
+      "code": "DEPLOY_ERROR",
+      "message": "Clawdiy deployment verification failed"
     }
   ]
 }
@@ -93,6 +94,7 @@ All JSON responses follow a consistent structure:
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `target` | string | Deployment target, for example `moltis` or `clawdiy` |
 | `details.image` | string | Full image reference deployed |
 | `details.duration_ms` | number | Total deployment time in milliseconds |
 | `details.health` | string | Post-deploy health status |
@@ -113,10 +115,13 @@ All JSON responses follow a consistent structure:
 
 | Command | Description |
 |---------|-------------|
-| `deploy` | Deploy the stack |
-| `rollback` | Rollback to previous version |
-| `status` | Show deployment status |
-| `health` | Check health status |
+| `deploy` | Deploy the selected target stack |
+| `rollback` | Roll back the selected target stack |
+| `status` | Show target deployment status |
+| `start` | Start target services |
+| `stop` | Stop target services |
+| `restart` | Restart target services |
+| `logs` | Show target logs |
 
 ---
 
