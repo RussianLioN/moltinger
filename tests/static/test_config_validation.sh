@@ -236,6 +236,7 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_security_hardening"
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
+       rg -q '\./config/clawdiy/openclaw\.json:/home/node/\.openclaw/openclaw\.json:ro' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
        rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
        rg -q '/tmp:rw,noexec,nosuid,nodev,size=64m' "$COMPOSE_CLAWDIY" && \

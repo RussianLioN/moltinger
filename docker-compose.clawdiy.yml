@@ -34,7 +34,7 @@ services:
       - "127.0.0.1:${CLAWDIY_PORT:-18789}:${CLAWDIY_INTERNAL_PORT:-18789}"
 
     volumes:
-      - ./config/clawdiy:/home/node/.openclaw:ro
+      - ./config/clawdiy/openclaw.json:/home/node/.openclaw/openclaw.json:ro
       - ./config/fleet:/home/node/.openclaw/registry:ro
       - clawdiy-state:/home/node/.openclaw-data/state
       - clawdiy-audit:/home/node/.openclaw-data/audit
