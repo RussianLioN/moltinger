@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T15:10:00Z",
+  "updated_at": "2026-03-09T19:40:00Z",
   "defaults": {
     "allow_unknown_agents": false,
     "allow_unknown_capabilities": false,
@@ -21,6 +21,33 @@
       "Idempotency-Key"
     ],
     "bind_token_to_agent_header": true
+  },
+  "telegram_auth": {
+    "clawdiy": {
+      "mode": "polling",
+      "secret_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+      "allowlist_secret_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+      "fail_closed_on_token_error": true,
+      "repeat_auth_runbook": "docs/runbooks/clawdiy-repeat-auth.md"
+    }
+  },
+  "provider_auth": {
+    "clawdiy": {
+      "openai-codex": {
+        "secret_ref": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE",
+        "profile_format": "json",
+        "auth_type": "oauth",
+        "rollout_gate": "post-auth-verify",
+        "required_scopes": [
+          "api.responses.write"
+        ],
+        "allowed_models": [
+          "gpt-5.4"
+        ],
+        "fail_closed_on_scope_error": true,
+        "quarantine_capability": "provider.auth.check"
+      }
+    }
   },
   "caller_allowlists": {
     "moltinger": [
@@ -181,7 +208,13 @@
     }
   ],
   "secret_refs": {
+    "moltinger_human_auth": "github-secret:MOLTIS_PASSWORD",
     "moltinger_service_auth": "github-secret:MOLTINGER_SERVICE_TOKEN",
-    "clawdiy_service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN"
+    "moltinger_telegram_auth": "github-secret:TELEGRAM_BOT_TOKEN",
+    "clawdiy_human_auth": "github-secret:CLAWDIY_PASSWORD",
+    "clawdiy_service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN",
+    "clawdiy_telegram_auth": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+    "clawdiy_telegram_allowlist": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+    "clawdiy_openai_codex_auth_profile": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE"
   }
 }

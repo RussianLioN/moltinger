@@ -146,15 +146,15 @@
 
 ### Validation for User Story 3
 
-- [ ] T023 [P] [US3] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US3-A] Create auth-boundary regression coverage for missing tokens, bad scopes, and cross-agent secret reuse in `tests/security_api/test_clawdiy_auth_boundaries.sh`
+- [X] T023 [P] [US3] [EXECUTOR: integration-tester] [PARALLEL-GROUP-US3-A] Create auth-boundary regression coverage for missing tokens, bad scopes, and cross-agent secret reuse in `tests/security_api/test_clawdiy_auth_boundaries.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T024 [P] [US3] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US3-A] Add distinct Clawdiy secret refs and runtime env rendering rules in `.github/workflows/deploy-clawdiy.yml` and `docs/SECRETS-MANAGEMENT.md`
-- [ ] T025 [P] [US3] [EXECUTOR: security-expert] [PARALLEL-GROUP-US3-A] Configure service bearer auth, Telegram token isolation, and provider auth profiles in `config/clawdiy/openclaw.json`, `config/moltis.toml`, and `config/fleet/policy.json`
-- [ ] T026 [P] [US3] [EXECUTOR: bash-master] [PARALLEL-GROUP-US3-A] Implement Telegram and provider repeat-auth validation in `scripts/clawdiy-auth-check.sh`
-- [ ] T027 [US3] [EXECUTOR: security-expert] [SEQUENTIAL] Extend auth failure smoke coverage and fail-closed escalation checks in `scripts/preflight-check.sh` and `scripts/clawdiy-smoke.sh`
-- [ ] T028 [US3] [EXECUTOR: technical-writer] [SEQUENTIAL] Document Clawdiy credential rotation and repeat-auth procedures in `docs/runbooks/clawdiy-repeat-auth.md`
+- [X] T024 [P] [US3] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-US3-A] Add distinct Clawdiy secret refs and runtime env rendering rules in `.github/workflows/deploy-clawdiy.yml` and `docs/SECRETS-MANAGEMENT.md`
+- [X] T025 [P] [US3] [EXECUTOR: security-expert] [PARALLEL-GROUP-US3-A] Configure service bearer auth, Telegram token isolation, and provider auth profiles in `config/clawdiy/openclaw.json`, `config/moltis.toml`, and `config/fleet/policy.json`
+- [X] T026 [P] [US3] [EXECUTOR: bash-master] [PARALLEL-GROUP-US3-A] Implement Telegram and provider repeat-auth validation in `scripts/clawdiy-auth-check.sh`
+- [X] T027 [US3] [EXECUTOR: security-expert] [SEQUENTIAL] Extend auth failure smoke coverage and fail-closed escalation checks in `scripts/preflight-check.sh` and `scripts/clawdiy-smoke.sh`
+- [X] T028 [US3] [EXECUTOR: technical-writer] [SEQUENTIAL] Document Clawdiy credential rotation and repeat-auth procedures in `docs/runbooks/clawdiy-repeat-auth.md`
 
 **Checkpoint**: Auth state is isolated per agent, and degraded auth paths are explicitly surfaced and contained.
 

@@ -66,6 +66,52 @@
         "build-lessons-index"
       ]
     },
+    "clawdiy-auth-check.sh": {
+      "version": "1.0.0",
+      "description": "Validate Clawdiy Telegram and provider auth boundaries with fail-closed repeat-auth guidance",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq"
+      ],
+      "provides": [
+        "clawdiy-auth-check",
+        "clawdiy-repeat-auth-check"
+      ],
+      "env_vars": [
+        "CLAWDIY_CONFIG_FILE",
+        "FLEET_POLICY_FILE",
+        "ENV_FILE",
+        "CLAWDIY_TELEGRAM_BOT_TOKEN",
+        "CLAWDIY_TELEGRAM_ALLOWED_USERS",
+        "CLAWDIY_OPENAI_CODEX_AUTH_PROFILE"
+      ],
+      "ci": true
+    },
+    "clawdiy-smoke.sh": {
+      "version": "1.0.0",
+      "description": "Clawdiy rollout verification for same-host, handoff, restart isolation, and auth gates",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "jq"
+      ],
+      "provides": [
+        "clawdiy-smoke",
+        "clawdiy-smoke-auth",
+        "clawdiy-smoke-handoff"
+      ],
+      "env_vars": [
+        "CLAWDIY_CONFIG_FILE",
+        "MOLTIS_CONFIG_FILE",
+        "FLEET_REGISTRY_FILE",
+        "FLEET_POLICY_FILE",
+        "CLAWDIY_AUTH_CHECK_SCRIPT"
+      ],
+      "ci": true
+    },
     "claude-rate-watch.sh": {
       "version": "1.0.0",
       "description": "Monitor Claude debug logs for rate limit status",

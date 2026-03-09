@@ -154,6 +154,24 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must keep a dedicated env path separate from /opt/moltinger/.env"
     fi
 
+    test_start "static_clawdiy_workflow_validates_auth_rendering_rules"
+    if rg -q 'Validate auth material rendering rules' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'api\.responses\.write' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'gpt-5\.4' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must validate auth material rendering rules for Telegram and Codex OAuth"
+    fi
+
+    test_start "static_clawdiy_workflow_renders_fail_closed_auth_flags"
+    if rg -q 'CLAWDIY_AUTH_FAIL_CLOSED=' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'CLAWDIY_OPENAI_CODEX_AUTH_ENABLED' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'CLAWDIY_OPENAI_CODEX_REQUIRED_SCOPES' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must render fail-closed auth flags into the dedicated env file"
+    fi
+
     generate_report
 }
 

@@ -178,6 +178,7 @@ LIST
 bash|security_api_authentication|Authentication security|$SCRIPT_DIR/security_api/test_authentication.sh
 bash|security_api_input_validation|Input validation security|$SCRIPT_DIR/security_api/test_input_validation.sh
 bash|security_api_auth_rate_limit|Authentication rate limit|$SCRIPT_DIR/security_api/test_auth_rate_limit.sh
+bash|security_api_clawdiy_auth_boundaries|Clawdiy auth boundaries|$SCRIPT_DIR/security_api/test_clawdiy_auth_boundaries.sh
 LIST
             ;;
         mcp_fake)

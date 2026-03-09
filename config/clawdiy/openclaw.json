@@ -63,12 +63,31 @@
   },
   "auth": {
     "human_auth_secret_ref": "github-secret:CLAWDIY_PASSWORD",
+    "service_auth": {
+      "mode": "bearer",
+      "authorization_header": "Authorization",
+      "bind_token_to_agent_header": "X-Agent-Id",
+      "allowed_callers": [
+        "moltinger"
+      ]
+    },
     "service_auth_secret_ref": "github-secret:CLAWDIY_SERVICE_TOKEN",
     "telegram_token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+    "telegram_allowed_users_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
     "provider_auth_profiles": {
       "openai-codex": {
         "enabled": false,
-        "rollout_gate": "post-auth-verify"
+        "rollout_gate": "post-auth-verify",
+        "secret_ref": "github-secret:CLAWDIY_OPENAI_CODEX_AUTH_PROFILE",
+        "profile_format": "json",
+        "auth_type": "oauth",
+        "required_scopes": [
+          "api.responses.write"
+        ],
+        "allowed_models": [
+          "gpt-5.4"
+        ],
+        "fail_closed_on_scope_error": true
       }
     }
   },
@@ -77,7 +96,9 @@
       "enabled": true,
       "mode": "polling",
       "bot_username": "@clawdiy_bot",
-      "token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN"
+      "token_ref": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
+      "allowlist_secret_ref": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",
+      "fail_closed_on_token_error": true
     }
   },
   "storage": {

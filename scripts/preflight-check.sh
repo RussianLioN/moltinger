@@ -67,9 +67,15 @@ CLAWDIY_TELEGRAM_BOT=""
 CLAWDIY_HUMAN_AUTH_REF=""
 CLAWDIY_SERVICE_AUTH_REF=""
 CLAWDIY_TELEGRAM_TOKEN_REF=""
+CLAWDIY_TELEGRAM_ALLOWLIST_REF=""
+CLAWDIY_PROVIDER_AUTH_REF=""
 CLAWDIY_REGISTRY_WEB=""
 CLAWDIY_REGISTRY_TELEGRAM=""
 CLAWDIY_POLICY_SERVICE_REF=""
+CLAWDIY_POLICY_HUMAN_REF=""
+CLAWDIY_POLICY_TELEGRAM_REF=""
+CLAWDIY_POLICY_ALLOWLIST_REF=""
+CLAWDIY_POLICY_PROVIDER_REF=""
 
 # Helper functions
 log_info() {
@@ -463,8 +469,20 @@ check_clawdiy_runtime_config() {
         and (.identity.telegram_bot | type == "string" and length > 0)
         and (.control_plane.authoritative_transport == "http-json")
         and (.auth.human_auth_secret_ref | type == "string" and length > 0)
+        and (.auth.service_auth.mode == "bearer")
+        and (.auth.service_auth.authorization_header == "Authorization")
+        and (.auth.service_auth.bind_token_to_agent_header == "X-Agent-Id")
         and (.auth.service_auth_secret_ref | type == "string" and length > 0)
         and (.auth.telegram_token_ref | type == "string" and length > 0)
+        and (.auth.telegram_allowed_users_ref | type == "string" and length > 0)
+        and (.channels.telegram.allowlist_secret_ref == .auth.telegram_allowed_users_ref)
+        and (.channels.telegram.fail_closed_on_token_error == true)
+        and (.auth.provider_auth_profiles["openai-codex"].secret_ref | type == "string" and length > 0)
+        and (.auth.provider_auth_profiles["openai-codex"].profile_format == "json")
+        and (.auth.provider_auth_profiles["openai-codex"].auth_type == "oauth")
+        and (.auth.provider_auth_profiles["openai-codex"].required_scopes | index("api.responses.write") != null)
+        and (.auth.provider_auth_profiles["openai-codex"].allowed_models | index("gpt-5.4") != null)
+        and (.auth.provider_auth_profiles["openai-codex"].fail_closed_on_scope_error == true)
     ' "$RUNTIME_CONFIG_PATH" >/dev/null 2>&1; then
         add_check "runtime_config_shape" "fail" "Clawdiy runtime config is missing required identity, transport, or auth fields" "error"
         return
@@ -477,6 +495,8 @@ check_clawdiy_runtime_config() {
     CLAWDIY_HUMAN_AUTH_REF="$(jq -r '.auth.human_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_SERVICE_AUTH_REF="$(jq -r '.auth.service_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_TOKEN_REF="$(jq -r '.auth.telegram_token_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_TELEGRAM_ALLOWLIST_REF="$(jq -r '.auth.telegram_allowed_users_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_PROVIDER_AUTH_REF="$(jq -r '.auth.provider_auth_profiles["openai-codex"].secret_ref' "$RUNTIME_CONFIG_PATH")"
 
     add_check "runtime_config_shape" "pass" "Clawdiy runtime config fields parsed successfully" "error"
 }
@@ -549,7 +569,22 @@ check_fleet_policy_config() {
         and .defaults.allow_public_machine_handoffs == false
         and .defaults.fail_closed_on_auth_error == true
         and .service_auth.mode == "bearer"
+        and .service_auth.authorization_header == "Authorization"
         and (.service_auth.required_headers | type == "array" and length > 0)
+        and (.secret_refs.clawdiy_human_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_telegram_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_telegram_allowlist | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_openai_codex_auth_profile | type == "string" and length > 0)
+        and (.telegram_auth.clawdiy.secret_ref == .secret_refs.clawdiy_telegram_auth)
+        and (.telegram_auth.clawdiy.allowlist_secret_ref == .secret_refs.clawdiy_telegram_allowlist)
+        and (.telegram_auth.clawdiy.mode == "polling")
+        and (.telegram_auth.clawdiy.fail_closed_on_token_error == true)
+        and (.provider_auth.clawdiy["openai-codex"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
+        and (.provider_auth.clawdiy["openai-codex"].profile_format == "json")
+        and (.provider_auth.clawdiy["openai-codex"].auth_type == "oauth")
+        and (.provider_auth.clawdiy["openai-codex"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["openai-codex"].allowed_models | index("gpt-5.4") != null)
+        and (.provider_auth.clawdiy["openai-codex"].fail_closed_on_scope_error == true)
     ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
         add_check "fleet_policy_shape" "fail" "Fleet policy must stay fail-closed with bearer service auth defaults" "error"
         return
@@ -564,7 +599,11 @@ check_fleet_policy_config() {
         return
     fi
 
+    CLAWDIY_POLICY_HUMAN_REF="$(jq -r '.secret_refs.clawdiy_human_auth' "$POLICY_CONFIG_PATH")"
     CLAWDIY_POLICY_SERVICE_REF="$(jq -r '.secret_refs.clawdiy_service_auth' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_TELEGRAM_REF="$(jq -r '.secret_refs.clawdiy_telegram_auth' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_ALLOWLIST_REF="$(jq -r '.secret_refs.clawdiy_telegram_allowlist' "$POLICY_CONFIG_PATH")"
+    CLAWDIY_POLICY_PROVIDER_REF="$(jq -r '.secret_refs.clawdiy_openai_codex_auth_profile' "$POLICY_CONFIG_PATH")"
     add_check "fleet_policy_shape" "pass" "Fleet policy parsed successfully for target $TARGET" "error"
 }
 
@@ -605,7 +644,7 @@ check_clawdiy_identity_alignment() {
 }
 
 check_clawdiy_secret_isolation() {
-    if [[ -z "$CLAWDIY_HUMAN_AUTH_REF" || -z "$CLAWDIY_SERVICE_AUTH_REF" || -z "$CLAWDIY_TELEGRAM_TOKEN_REF" ]]; then
+    if [[ -z "$CLAWDIY_HUMAN_AUTH_REF" || -z "$CLAWDIY_SERVICE_AUTH_REF" || -z "$CLAWDIY_TELEGRAM_TOKEN_REF" || -z "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" || -z "$CLAWDIY_PROVIDER_AUTH_REF" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy secret isolation could not be evaluated because runtime config parsing did not complete" "error"
         return
     fi
@@ -625,12 +664,42 @@ check_clawdiy_secret_isolation() {
         return
     fi
 
+    if [[ "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" == "github-secret:TELEGRAM_ALLOWED_USERS" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy Telegram allowlist ref must not reuse TELEGRAM_ALLOWED_USERS" "error"
+        return
+    fi
+
+    if [[ "$CLAWDIY_PROVIDER_AUTH_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" || "$CLAWDIY_PROVIDER_AUTH_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy provider auth profile ref must stay isolated from Moltinger auth secrets" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_HUMAN_REF" && "$CLAWDIY_HUMAN_AUTH_REF" != "$CLAWDIY_POLICY_HUMAN_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime human auth ref must match fleet policy secret_refs.clawdiy_human_auth" "error"
+        return
+    fi
+
     if [[ -n "$CLAWDIY_POLICY_SERVICE_REF" && "$CLAWDIY_SERVICE_AUTH_REF" != "$CLAWDIY_POLICY_SERVICE_REF" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy runtime service auth ref must match fleet policy secret_refs.clawdiy_service_auth" "error"
         return
     fi
 
-    add_check "fleet_secret_isolation" "pass" "Clawdiy auth and Telegram secret refs are isolated from Moltinger" "error"
+    if [[ -n "$CLAWDIY_POLICY_TELEGRAM_REF" && "$CLAWDIY_TELEGRAM_TOKEN_REF" != "$CLAWDIY_POLICY_TELEGRAM_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime Telegram token ref must match fleet policy secret_refs.clawdiy_telegram_auth" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_ALLOWLIST_REF" && "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" != "$CLAWDIY_POLICY_ALLOWLIST_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime Telegram allowlist ref must match fleet policy secret_refs.clawdiy_telegram_allowlist" "error"
+        return
+    fi
+
+    if [[ -n "$CLAWDIY_POLICY_PROVIDER_REF" && "$CLAWDIY_PROVIDER_AUTH_REF" != "$CLAWDIY_POLICY_PROVIDER_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime provider auth ref must match fleet policy secret_refs.clawdiy_openai_codex_auth_profile" "error"
+        return
+    fi
+
+    add_check "fleet_secret_isolation" "pass" "Clawdiy auth, Telegram, and provider auth refs are isolated from Moltinger and aligned with fleet policy" "error"
 }
 
 check_target_specific_config() {

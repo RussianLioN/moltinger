@@ -1,0 +1,595 @@
+#!/usr/bin/env bash
+# Validate Clawdiy auth boundaries and repeat-auth readiness.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+SECRETS_DIR="${SECRETS_DIR:-$PROJECT_ROOT/secrets}"
+CLAWDIY_CONFIG_FILE="${CLAWDIY_CONFIG_FILE:-$PROJECT_ROOT/config/clawdiy/openclaw.json}"
+FLEET_POLICY_FILE="${FLEET_POLICY_FILE:-$PROJECT_ROOT/config/fleet/policy.json}"
+ENV_FILE="${ENV_FILE:-}"
+PROVIDER="${PROVIDER:-all}"
+OUTPUT_JSON=false
+STRICT_MODE=false
+NO_COLOR=false
+
+declare -a CHECKS=()
+declare -a ERRORS=()
+declare -a WARNINGS=()
+declare -a CAPABILITIES=()
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+HUMAN_AUTH_REF=""
+SERVICE_AUTH_REF=""
+SERVICE_AUTH_MODE=""
+SERVICE_AUTH_HEADER=""
+SERVICE_AUTH_BOUND_HEADER=""
+TELEGRAM_TOKEN_REF=""
+TELEGRAM_ALLOWLIST_REF=""
+TELEGRAM_ENABLED=""
+TELEGRAM_MODE=""
+TELEGRAM_FAIL_CLOSED=""
+PROVIDER_SECRET_REF=""
+PROVIDER_PROFILE_FORMAT=""
+PROVIDER_AUTH_TYPE=""
+PROVIDER_ROLLOUT_GATE=""
+PROVIDER_ENABLED=""
+POLICY_CLAWDIY_HUMAN_REF=""
+POLICY_CLAWDIY_SERVICE_REF=""
+POLICY_CLAWDIY_TELEGRAM_REF=""
+POLICY_CLAWDIY_ALLOWLIST_REF=""
+POLICY_CLAWDIY_PROVIDER_REF=""
+
+disable_colors() {
+    if [[ "$NO_COLOR" == "true" || "$OUTPUT_JSON" == "true" || ! -t 1 ]]; then
+        RED=''
+        GREEN=''
+        YELLOW=''
+        BLUE=''
+        NC=''
+    fi
+}
+
+log() {
+    local level="$1"
+    shift
+    local message="$*"
+
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        return
+    fi
+
+    case "$level" in
+        INFO) echo -e "${BLUE}[INFO]${NC} $message" ;;
+        WARN) echo -e "${YELLOW}[WARN]${NC} $message" ;;
+        ERROR) echo -e "${RED}[ERROR]${NC} $message" ;;
+        SUCCESS) echo -e "${GREEN}[SUCCESS]${NC} $message" ;;
+    esac
+}
+
+log_info() { log INFO "$@"; }
+log_warn() { log WARN "$@"; WARNINGS+=("$1"); }
+log_error() { log ERROR "$@"; ERRORS+=("$1"); }
+log_success() { log SUCCESS "$@"; }
+
+add_check() {
+    local name="$1"
+    local status="$2"
+    local message="$3"
+    local severity="${4:-error}"
+
+    CHECKS+=("{\"name\":\"$name\",\"status\":\"$status\",\"message\":\"$message\",\"severity\":\"$severity\"}")
+
+    case "$status" in
+        pass) log_success "$message" ;;
+        warning) log_warn "$message" ;;
+        fail)
+            if [[ "$severity" == "warning" ]]; then
+                log_warn "$message"
+            else
+                log_error "$message"
+            fi
+            ;;
+    esac
+}
+
+add_capability_result() {
+    local capability="$1"
+    local status="$2"
+    local next_action="$3"
+    CAPABILITIES+=("{\"capability\":\"$capability\",\"status\":\"$status\",\"next_action\":\"$next_action\"}")
+}
+
+timestamp_utc() {
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+to_secret_file_stem() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+secret_ref_name() {
+    local ref="$1"
+    printf '%s' "${ref#github-secret:}"
+}
+
+read_env_file() {
+    local file_path="$1"
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        if [[ "$line" != *=* ]]; then
+            continue
+        fi
+
+        local key="${line%%=*}"
+        local value="${line#*=}"
+        key="$(printf '%s' "$key" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+
+        export "$key=$value"
+    done <"$file_path"
+}
+
+lookup_secret_value() {
+    local name="$1"
+    local stem
+    stem="$(to_secret_file_stem "$name")"
+    local lowercase_file="$SECRETS_DIR/${stem}.txt"
+    local exact_file="$SECRETS_DIR/${name}.txt"
+
+    if [[ -n "${!name:-}" ]]; then
+        printf '%s' "${!name}"
+        return 0
+    fi
+
+    if [[ -f "$exact_file" ]]; then
+        cat "$exact_file"
+        return 0
+    fi
+
+    if [[ -f "$lowercase_file" ]]; then
+        cat "$lowercase_file"
+        return 0
+    fi
+
+    return 1
+}
+
+require_commands() {
+    local missing=()
+    local cmd
+    for cmd in jq; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing+=("$cmd")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        add_check "dependencies" "fail" "Missing required commands: ${missing[*]}" "error"
+        return 1
+    fi
+
+    add_check "dependencies" "pass" "Required commands available: jq" "error"
+    return 0
+}
+
+parse_runtime_config() {
+    if [[ ! -f "$CLAWDIY_CONFIG_FILE" ]]; then
+        add_check "runtime_config_exists" "fail" "Clawdiy runtime config is missing: $CLAWDIY_CONFIG_FILE" "error"
+        return 1
+    fi
+
+    if ! jq empty "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
+        add_check "runtime_config_valid" "fail" "Clawdiy runtime config is not valid JSON: $CLAWDIY_CONFIG_FILE" "error"
+        return 1
+    fi
+
+    if ! jq -e '
+        .schema_version == "v1alpha1"
+        and .auth.service_auth.mode == "bearer"
+        and .auth.service_auth.authorization_header == "Authorization"
+        and .auth.service_auth.bind_token_to_agent_header == "X-Agent-Id"
+        and (.auth.telegram_allowed_users_ref | type == "string" and length > 0)
+        and (.channels.telegram.enabled == true)
+        and (.channels.telegram.mode == "polling")
+        and (.channels.telegram.allowlist_secret_ref == .auth.telegram_allowed_users_ref)
+        and (.channels.telegram.fail_closed_on_token_error == true)
+        and (.auth.provider_auth_profiles["openai-codex"].secret_ref | type == "string" and length > 0)
+        and (.auth.provider_auth_profiles["openai-codex"].profile_format == "json")
+        and (.auth.provider_auth_profiles["openai-codex"].auth_type == "oauth")
+        and (.auth.provider_auth_profiles["openai-codex"].required_scopes | index("api.responses.write") != null)
+        and (.auth.provider_auth_profiles["openai-codex"].allowed_models | index("gpt-5.4") != null)
+        and (.auth.provider_auth_profiles["openai-codex"].fail_closed_on_scope_error == true)
+    ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
+        add_check "runtime_auth_shape" "fail" "Clawdiy runtime config is missing required service, Telegram, or provider auth boundary fields" "error"
+        return 1
+    fi
+
+    HUMAN_AUTH_REF="$(jq -r '.auth.human_auth_secret_ref' "$CLAWDIY_CONFIG_FILE")"
+    SERVICE_AUTH_REF="$(jq -r '.auth.service_auth_secret_ref' "$CLAWDIY_CONFIG_FILE")"
+    SERVICE_AUTH_MODE="$(jq -r '.auth.service_auth.mode' "$CLAWDIY_CONFIG_FILE")"
+    SERVICE_AUTH_HEADER="$(jq -r '.auth.service_auth.authorization_header' "$CLAWDIY_CONFIG_FILE")"
+    SERVICE_AUTH_BOUND_HEADER="$(jq -r '.auth.service_auth.bind_token_to_agent_header' "$CLAWDIY_CONFIG_FILE")"
+    TELEGRAM_TOKEN_REF="$(jq -r '.auth.telegram_token_ref' "$CLAWDIY_CONFIG_FILE")"
+    TELEGRAM_ALLOWLIST_REF="$(jq -r '.auth.telegram_allowed_users_ref' "$CLAWDIY_CONFIG_FILE")"
+    TELEGRAM_ENABLED="$(jq -r '.channels.telegram.enabled' "$CLAWDIY_CONFIG_FILE")"
+    TELEGRAM_MODE="$(jq -r '.channels.telegram.mode' "$CLAWDIY_CONFIG_FILE")"
+    TELEGRAM_FAIL_CLOSED="$(jq -r '.channels.telegram.fail_closed_on_token_error' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_SECRET_REF="$(jq -r '.auth.provider_auth_profiles["openai-codex"].secret_ref' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_PROFILE_FORMAT="$(jq -r '.auth.provider_auth_profiles["openai-codex"].profile_format' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_AUTH_TYPE="$(jq -r '.auth.provider_auth_profiles["openai-codex"].auth_type' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_ROLLOUT_GATE="$(jq -r '.auth.provider_auth_profiles["openai-codex"].rollout_gate' "$CLAWDIY_CONFIG_FILE")"
+    PROVIDER_ENABLED="$(jq -r '.auth.provider_auth_profiles["openai-codex"].enabled' "$CLAWDIY_CONFIG_FILE")"
+
+    add_check "runtime_auth_shape" "pass" "Clawdiy runtime auth boundary fields parsed successfully" "error"
+    return 0
+}
+
+parse_policy_config() {
+    if [[ ! -f "$FLEET_POLICY_FILE" ]]; then
+        add_check "policy_exists" "fail" "Fleet policy is missing: $FLEET_POLICY_FILE" "error"
+        return 1
+    fi
+
+    if ! jq empty "$FLEET_POLICY_FILE" >/dev/null 2>&1; then
+        add_check "policy_valid" "fail" "Fleet policy is not valid JSON: $FLEET_POLICY_FILE" "error"
+        return 1
+    fi
+
+    if ! jq -e '
+        .defaults.fail_closed_on_auth_error == true
+        and .service_auth.mode == "bearer"
+        and .service_auth.authorization_header == "Authorization"
+        and (.secret_refs.clawdiy_human_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_service_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_telegram_auth | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_telegram_allowlist | type == "string" and length > 0)
+        and (.secret_refs.clawdiy_openai_codex_auth_profile | type == "string" and length > 0)
+        and (.telegram_auth.clawdiy.secret_ref == .secret_refs.clawdiy_telegram_auth)
+        and (.telegram_auth.clawdiy.allowlist_secret_ref == .secret_refs.clawdiy_telegram_allowlist)
+        and (.telegram_auth.clawdiy.mode == "polling")
+        and (.telegram_auth.clawdiy.fail_closed_on_token_error == true)
+        and (.provider_auth.clawdiy["openai-codex"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile)
+        and (.provider_auth.clawdiy["openai-codex"].auth_type == "oauth")
+        and (.provider_auth.clawdiy["openai-codex"].profile_format == "json")
+        and (.provider_auth.clawdiy["openai-codex"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["openai-codex"].allowed_models | index("gpt-5.4") != null)
+        and (.provider_auth.clawdiy["openai-codex"].fail_closed_on_scope_error == true)
+    ' "$FLEET_POLICY_FILE" >/dev/null 2>&1; then
+        add_check "policy_auth_shape" "fail" "Fleet policy is missing fail-closed service, Telegram, or provider auth metadata for Clawdiy" "error"
+        return 1
+    fi
+
+    POLICY_CLAWDIY_HUMAN_REF="$(jq -r '.secret_refs.clawdiy_human_auth' "$FLEET_POLICY_FILE")"
+    POLICY_CLAWDIY_SERVICE_REF="$(jq -r '.secret_refs.clawdiy_service_auth' "$FLEET_POLICY_FILE")"
+    POLICY_CLAWDIY_TELEGRAM_REF="$(jq -r '.secret_refs.clawdiy_telegram_auth' "$FLEET_POLICY_FILE")"
+    POLICY_CLAWDIY_ALLOWLIST_REF="$(jq -r '.secret_refs.clawdiy_telegram_allowlist' "$FLEET_POLICY_FILE")"
+    POLICY_CLAWDIY_PROVIDER_REF="$(jq -r '.secret_refs.clawdiy_openai_codex_auth_profile' "$FLEET_POLICY_FILE")"
+
+    add_check "policy_auth_shape" "pass" "Fleet policy auth metadata parsed successfully for Clawdiy" "error"
+    return 0
+}
+
+check_common_auth_boundary() {
+    if [[ "$SERVICE_AUTH_MODE" != "bearer" || "$SERVICE_AUTH_HEADER" != "Authorization" || "$SERVICE_AUTH_BOUND_HEADER" != "X-Agent-Id" ]]; then
+        add_check "service_auth_contract" "fail" "Clawdiy service auth must stay on bearer mode with Authorization and X-Agent-Id binding" "error"
+    else
+        add_check "service_auth_contract" "pass" "Clawdiy service auth stays on bearer mode with explicit caller binding" "error"
+    fi
+
+    if [[ "$HUMAN_AUTH_REF" != "$POLICY_CLAWDIY_HUMAN_REF" || "$SERVICE_AUTH_REF" != "$POLICY_CLAWDIY_SERVICE_REF" || "$TELEGRAM_TOKEN_REF" != "$POLICY_CLAWDIY_TELEGRAM_REF" || "$TELEGRAM_ALLOWLIST_REF" != "$POLICY_CLAWDIY_ALLOWLIST_REF" || "$PROVIDER_SECRET_REF" != "$POLICY_CLAWDIY_PROVIDER_REF" ]]; then
+        add_check "auth_ref_alignment" "fail" "Clawdiy runtime auth refs must match the fleet policy secret_refs catalog and stay isolated from Moltinger refs" "error"
+        return 1
+    fi
+
+    if [[ "$HUMAN_AUTH_REF" == "github-secret:MOLTIS_PASSWORD" || "$SERVICE_AUTH_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" || "$TELEGRAM_TOKEN_REF" == "github-secret:TELEGRAM_BOT_TOKEN" || "$TELEGRAM_ALLOWLIST_REF" == "github-secret:TELEGRAM_ALLOWED_USERS" || "$PROVIDER_SECRET_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" ]]; then
+        add_check "auth_ref_isolation" "fail" "Clawdiy auth refs must stay isolated from Moltinger human, service, and Telegram refs" "error"
+        return 1
+    fi
+
+    local clawdiy_service_value=""
+    local moltinger_service_value=""
+    local clawdiy_telegram_value=""
+    local moltinger_telegram_value=""
+    clawdiy_service_value="$(lookup_secret_value "$(secret_ref_name "$SERVICE_AUTH_REF")" || true)"
+    moltinger_service_value="$(lookup_secret_value "MOLTINGER_SERVICE_TOKEN" || true)"
+    clawdiy_telegram_value="$(lookup_secret_value "$(secret_ref_name "$TELEGRAM_TOKEN_REF")" || true)"
+    moltinger_telegram_value="$(lookup_secret_value "TELEGRAM_BOT_TOKEN" || true)"
+
+    if [[ -n "$clawdiy_service_value" && -n "$moltinger_service_value" && "$clawdiy_service_value" == "$moltinger_service_value" ]]; then
+        add_check "auth_value_isolation" "fail" "Clawdiy service token value must not equal Moltinger service token value" "error"
+        return 1
+    fi
+
+    if [[ -n "$clawdiy_telegram_value" && -n "$moltinger_telegram_value" && "$clawdiy_telegram_value" == "$moltinger_telegram_value" ]]; then
+        add_check "auth_value_isolation" "fail" "Clawdiy Telegram token value must not equal Moltinger Telegram token value" "error"
+        return 1
+    fi
+
+    add_check "auth_ref_alignment" "pass" "Clawdiy runtime auth refs align with the fleet policy catalog" "error"
+    add_check "auth_ref_isolation" "pass" "Clawdiy auth refs stay isolated from Moltinger auth refs" "error"
+    add_check "auth_value_isolation" "pass" "Clawdiy auth values do not collide with Moltinger values when both are available" "error"
+    return 0
+}
+
+run_telegram_check() {
+    local token_secret
+    local allowlist_secret
+    local token_value=""
+    local allowlist_value=""
+
+    token_secret="$(secret_ref_name "$TELEGRAM_TOKEN_REF")"
+    allowlist_secret="$(secret_ref_name "$TELEGRAM_ALLOWLIST_REF")"
+    token_value="$(lookup_secret_value "$token_secret" || true)"
+    allowlist_value="$(lookup_secret_value "$allowlist_secret" || true)"
+
+    if [[ "$TELEGRAM_ENABLED" != "true" || "$TELEGRAM_MODE" != "polling" || "$TELEGRAM_FAIL_CLOSED" != "true" ]]; then
+        add_check "telegram_contract" "fail" "Clawdiy Telegram auth must stay enabled with polling mode and fail-closed token handling" "error"
+        add_capability_result "telegram" "fail" "Fix runtime config before repeating Telegram auth"
+        return 1
+    fi
+
+    add_check "telegram_contract" "pass" "Clawdiy Telegram runtime stays in polling mode with fail-closed token handling" "error"
+
+    if [[ -z "$token_value" ]]; then
+        add_check "telegram_token_present" "fail" "Clawdiy Telegram token is missing; keep Telegram ingress quarantined and run repeat-auth" "error"
+        add_capability_result "telegram" "fail" "Repeat-auth the Telegram bot token and redeploy Clawdiy"
+        return 1
+    fi
+
+    add_check "telegram_token_present" "pass" "Clawdiy Telegram token is present for repeat-auth validation" "error"
+
+    if [[ -n "${TELEGRAM_BOT_TOKEN:-}" && "$token_value" == "${TELEGRAM_BOT_TOKEN}" ]]; then
+        add_check "telegram_token_isolation" "fail" "Clawdiy Telegram token must not reuse Moltinger TELEGRAM_BOT_TOKEN" "error"
+        add_capability_result "telegram" "fail" "Rotate Clawdiy Telegram token so it is isolated from Moltinger"
+        return 1
+    fi
+
+    add_check "telegram_token_isolation" "pass" "Clawdiy Telegram token stays isolated from Moltinger bot identity" "error"
+
+    if [[ -n "$allowlist_value" ]]; then
+        if printf '%s' "$allowlist_value" | grep -Eq '^[^[:space:],]+(,[^[:space:],]+)*$'; then
+            add_check "telegram_allowlist_format" "pass" "Clawdiy Telegram allowlist is present and formatted as a comma-separated list" "warning"
+        else
+            add_check "telegram_allowlist_format" "fail" "Clawdiy Telegram allowlist is malformed; keep Telegram ingress fail-closed until corrected" "error"
+            add_capability_result "telegram" "fail" "Fix CLAWDIY_TELEGRAM_ALLOWED_USERS formatting and redeploy"
+            return 1
+        fi
+    else
+        add_check "telegram_allowlist_format" "warning" "Clawdiy Telegram allowlist is empty; operator-side filtering still required until the allowlist secret is set" "warning"
+    fi
+
+    add_capability_result "telegram" "pass" "Telegram auth boundary is ready; keep monitoring duplicate delivery separately"
+    return 0
+}
+
+run_openai_codex_check() {
+    local profile_secret
+    local profile_value=""
+
+    profile_secret="$(secret_ref_name "$PROVIDER_SECRET_REF")"
+    profile_value="$(lookup_secret_value "$profile_secret" || true)"
+
+    if [[ "$PROVIDER_PROFILE_FORMAT" != "json" || "$PROVIDER_AUTH_TYPE" != "oauth" || "$PROVIDER_ROLLOUT_GATE" != "post-auth-verify" ]]; then
+        add_check "openai_codex_contract" "fail" "Clawdiy openai-codex auth must stay JSON/OAuth with the post-auth-verify rollout gate" "error"
+        add_capability_result "openai-codex" "fail" "Fix runtime provider auth metadata before repeating OAuth verification"
+        return 1
+    fi
+
+    if [[ "$PROVIDER_ENABLED" == "true" ]]; then
+        add_check "openai_codex_gate" "warning" "Clawdiy openai-codex capability is already enabled; verify the rollout gate before promoting it again" "warning"
+    else
+        add_check "openai_codex_gate" "pass" "Clawdiy openai-codex capability remains rollout-gated until post-auth verification passes" "error"
+    fi
+
+    add_check "openai_codex_contract" "pass" "Clawdiy openai-codex runtime metadata stays JSON/OAuth with an explicit rollout gate" "error"
+
+    if [[ -z "$profile_value" ]]; then
+        add_check "openai_codex_profile_present" "fail" "Clawdiy openai-codex auth profile is missing; keep the capability quarantined and run repeat-auth" "error"
+        add_capability_result "openai-codex" "fail" "Refresh CLAWDIY_OPENAI_CODEX_AUTH_PROFILE before enabling Codex-backed capability"
+        return 1
+    fi
+
+    if ! printf '%s' "$profile_value" | jq -e '
+        .provider == "openai-codex"
+        and .auth_type == "oauth"
+        and (.granted_scopes | type == "array")
+        and (.allowed_models | type == "array")
+    ' >/dev/null 2>&1; then
+        add_check "openai_codex_profile_json" "fail" "Clawdiy openai-codex auth profile must be compact JSON with provider/auth/scopes/models fields" "error"
+        add_capability_result "openai-codex" "fail" "Rewrite CLAWDIY_OPENAI_CODEX_AUTH_PROFILE as valid compact JSON"
+        return 1
+    fi
+
+    add_check "openai_codex_profile_json" "pass" "Clawdiy openai-codex auth profile is valid JSON" "error"
+
+    if ! jq -e --argjson required_scopes "$(jq -c '.auth.provider_auth_profiles["openai-codex"].required_scopes' "$CLAWDIY_CONFIG_FILE")" --argjson allowed_models "$(jq -c '.auth.provider_auth_profiles["openai-codex"].allowed_models' "$CLAWDIY_CONFIG_FILE")" '
+        (($required_scopes - (.granted_scopes // [])) | length == 0)
+        and (($allowed_models - (.allowed_models // [])) | length == 0)
+    ' <(printf '%s' "$profile_value") >/dev/null 2>&1; then
+        add_check "openai_codex_scope_gate" "fail" "Clawdiy openai-codex profile is missing required scopes or gpt-5.4 authorization; capability stays quarantined and repeat-auth is required" "error"
+        add_capability_result "openai-codex" "fail" "Repeat OAuth until api.responses.write and gpt-5.4 authorization are present"
+        return 1
+    fi
+
+    add_check "openai_codex_scope_gate" "pass" "Clawdiy openai-codex profile grants api.responses.write and gpt-5.4 authorization" "error"
+    add_capability_result "openai-codex" "pass" "Provider auth profile is valid; capability may be promoted only after the post-auth verification gate"
+    return 0
+}
+
+show_help() {
+    cat <<EOF
+Usage: $0 [--provider telegram|openai-codex|all] [--env-file path] [--json] [--strict] [--no-color]
+
+Options:
+  --provider <name>   Capability to validate (default: all)
+  --env-file <path>   Optional env file to load before checks
+  --json              Emit JSON output
+  --strict            Treat warnings as failures
+  --no-color          Disable colorized logs
+  -h, --help          Show help text
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --provider)
+                PROVIDER="$2"
+                shift 2
+                ;;
+            --env-file)
+                ENV_FILE="$2"
+                shift 2
+                ;;
+            --json)
+                OUTPUT_JSON=true
+                shift
+                ;;
+            --strict)
+                STRICT_MODE=true
+                shift
+                ;;
+            --no-color)
+                NO_COLOR=true
+                shift
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                exit 2
+                ;;
+        esac
+    done
+}
+
+output_json_result() {
+    local status="$1"
+    local checks_json="[]"
+    local warnings_json="[]"
+    local errors_json="[]"
+    local capabilities_json="[]"
+
+    if [[ ${#CHECKS[@]} -gt 0 ]]; then
+        checks_json=$(printf '%s\n' "${CHECKS[@]}" | jq -s '.')
+    fi
+
+    if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+        warnings_json=$(printf '%s\n' "${WARNINGS[@]}" | jq -R . | jq -s '.')
+    fi
+
+    if [[ ${#ERRORS[@]} -gt 0 ]]; then
+        errors_json=$(printf '%s\n' "${ERRORS[@]}" | jq -R . | jq -s '.')
+    fi
+
+    if [[ ${#CAPABILITIES[@]} -gt 0 ]]; then
+        capabilities_json=$(printf '%s\n' "${CAPABILITIES[@]}" | jq -s '.')
+    fi
+
+    jq -n \
+        --arg status "$status" \
+        --arg provider "$PROVIDER" \
+        --arg timestamp "$(timestamp_utc)" \
+        --arg config "$CLAWDIY_CONFIG_FILE" \
+        --arg policy "$FLEET_POLICY_FILE" \
+        --arg env_file "${ENV_FILE:-}" \
+        --argjson checks "$checks_json" \
+        --argjson warnings "$warnings_json" \
+        --argjson errors "$errors_json" \
+        --argjson capabilities "$capabilities_json" \
+        '{
+            status: $status,
+            provider: $provider,
+            timestamp: $timestamp,
+            details: {
+                config: $config,
+                policy: $policy,
+                env_file: (if $env_file == "" then null else $env_file end)
+            },
+            checks: $checks,
+            capabilities: $capabilities,
+            warnings: $warnings,
+            errors: $errors
+        }'
+}
+
+main() {
+    parse_args "$@"
+    disable_colors
+
+    if [[ -n "$ENV_FILE" ]]; then
+        if [[ ! -f "$ENV_FILE" ]]; then
+            add_check "env_file_exists" "fail" "Env file not found: $ENV_FILE" "error"
+            output_json_result "fail"
+            exit 1
+        fi
+        read_env_file "$ENV_FILE"
+        add_check "env_file_exists" "pass" "Loaded auth input env file: $ENV_FILE" "error"
+    fi
+
+    require_commands || {
+        output_json_result "fail"
+        exit 1
+    }
+
+    parse_runtime_config || {
+        output_json_result "fail"
+        exit 1
+    }
+
+    parse_policy_config || {
+        output_json_result "fail"
+        exit 1
+    }
+
+    check_common_auth_boundary || {
+        output_json_result "fail"
+        exit 1
+    }
+
+    case "$PROVIDER" in
+        telegram)
+            run_telegram_check || true
+            ;;
+        openai-codex)
+            run_openai_codex_check || true
+            ;;
+        all)
+            run_telegram_check || true
+            run_openai_codex_check || true
+            ;;
+        *)
+            add_check "provider" "fail" "Unsupported provider: $PROVIDER" "error"
+            ;;
+    esac
+
+    local final_status="pass"
+    if [[ ${#ERRORS[@]} -gt 0 ]]; then
+        final_status="fail"
+    elif [[ ${#WARNINGS[@]} -gt 0 ]]; then
+        if [[ "$STRICT_MODE" == "true" ]]; then
+            final_status="fail"
+        else
+            final_status="warning"
+        fi
+    fi
+
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        output_json_result "$final_status"
+    fi
+
+    [[ "$final_status" == "fail" ]] && exit 1
+    exit 0
+}
+
+main "$@"

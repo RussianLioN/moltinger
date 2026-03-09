@@ -128,6 +128,33 @@ run_fleet_registry_tests() {
         test_fail "Fleet policy service auth refs must be distinct GitHub secret refs"
     fi
 
+    test_start "fleet_telegram_auth_boundary_isolated"
+    if jq -e '
+        .telegram_auth.clawdiy.mode == "polling"
+        and .telegram_auth.clawdiy.fail_closed_on_token_error == true
+        and .telegram_auth.clawdiy.secret_ref == .secret_refs.clawdiy_telegram_auth
+        and .telegram_auth.clawdiy.allowlist_secret_ref == .secret_refs.clawdiy_telegram_allowlist
+        and .secret_refs.clawdiy_telegram_auth != .secret_refs.moltinger_telegram_auth
+      ' "$POLICY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must keep Clawdiy Telegram auth isolated and fail-closed"
+    fi
+
+    test_start "fleet_provider_auth_gate_defined"
+    if jq -e '
+        .provider_auth.clawdiy["openai-codex"].secret_ref == .secret_refs.clawdiy_openai_codex_auth_profile
+        and .provider_auth.clawdiy["openai-codex"].profile_format == "json"
+        and .provider_auth.clawdiy["openai-codex"].auth_type == "oauth"
+        and (.provider_auth.clawdiy["openai-codex"].required_scopes | index("api.responses.write") != null)
+        and (.provider_auth.clawdiy["openai-codex"].allowed_models | index("gpt-5.4") != null)
+        and .provider_auth.clawdiy["openai-codex"].fail_closed_on_scope_error == true
+      ' "$POLICY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must define the fail-closed openai-codex rollout gate for Clawdiy"
+    fi
+
     generate_report
 }
 

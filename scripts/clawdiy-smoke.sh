@@ -11,6 +11,7 @@ MOLTIS_CONFIG_FILE="${MOLTIS_CONFIG_FILE:-$PROJECT_ROOT/config/moltis.toml}"
 FLEET_REGISTRY_FILE="${FLEET_REGISTRY_FILE:-$PROJECT_ROOT/config/fleet/agents-registry.json}"
 FLEET_POLICY_FILE="${FLEET_POLICY_FILE:-$PROJECT_ROOT/config/fleet/policy.json}"
 HANDOFF_SAMPLE_FILE="${HANDOFF_SAMPLE_FILE:-$PROJECT_ROOT/specs/001-clawdiy-agent-platform/contracts/sample-handoff-submit.json}"
+CLAWDIY_AUTH_CHECK_SCRIPT="${CLAWDIY_AUTH_CHECK_SCRIPT:-$PROJECT_ROOT/scripts/clawdiy-auth-check.sh}"
 CLAWDIY_CONTAINER="${CLAWDIY_CONTAINER:-clawdiy}"
 MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
@@ -429,6 +430,93 @@ verify_handoff_stage() {
     fi
 }
 
+verify_auth_stage() {
+    if [[ ! -f "$CLAWDIY_AUTH_CHECK_SCRIPT" ]]; then
+        add_check "auth_check_script_exists" "fail" "Clawdiy auth-check script is missing: $CLAWDIY_AUTH_CHECK_SCRIPT" "error"
+        return 1
+    fi
+
+    if bash -n "$CLAWDIY_AUTH_CHECK_SCRIPT"; then
+        add_check "auth_check_script_syntax" "pass" "Clawdiy auth-check script parses cleanly" "error"
+    else
+        add_check "auth_check_script_syntax" "fail" "Clawdiy auth-check script has shell syntax errors" "error"
+        return 1
+    fi
+
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$tmpdir"' RETURN
+
+    local positive_env="$tmpdir/auth-pass.env"
+    local missing_telegram_env="$tmpdir/auth-missing-telegram.env"
+    local bad_scope_env="$tmpdir/auth-bad-scope.env"
+    local positive_profile='{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}'
+    local bad_scope_profile='{"provider":"openai-codex","auth_type":"oauth","granted_scopes":["profile.read"],"allowed_models":["gpt-5.4"]}'
+
+    {
+        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
+        printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
+        printf '%s\n' 'CLAWDIY_TELEGRAM_BOT_TOKEN=test-clawdiy-telegram-token'
+        printf '%s\n' 'CLAWDIY_TELEGRAM_ALLOWED_USERS=user42,user99'
+        printf 'CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=%s\n' "$positive_profile"
+    } >"$positive_env"
+
+    {
+        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
+        printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
+        printf '%s\n' 'CLAWDIY_TELEGRAM_ALLOWED_USERS=user42,user99'
+        printf 'CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=%s\n' "$positive_profile"
+    } >"$missing_telegram_env"
+
+    {
+        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
+        printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
+        printf '%s\n' 'CLAWDIY_TELEGRAM_BOT_TOKEN=test-clawdiy-telegram-token'
+        printf '%s\n' 'CLAWDIY_TELEGRAM_ALLOWED_USERS=user42,user99'
+        printf 'CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=%s\n' "$bad_scope_profile"
+    } >"$bad_scope_env"
+
+    if "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider telegram --env-file "$positive_env" --json >"$tmpdir/telegram-pass.json"; then
+        if jq -e '.status == "pass" and any(.capabilities[]; .capability == "telegram" and .status == "pass")' "$tmpdir/telegram-pass.json" >/dev/null 2>&1; then
+            add_check "auth_smoke_telegram_pass" "pass" "Telegram repeat-auth validation passes with isolated test credentials" "error"
+        else
+            add_check "auth_smoke_telegram_pass" "fail" "Telegram repeat-auth validation did not report a passing capability state" "error"
+        fi
+    else
+        add_check "auth_smoke_telegram_pass" "fail" "Telegram repeat-auth validation should pass with isolated test credentials" "error"
+    fi
+
+    set +e
+    "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider telegram --env-file "$missing_telegram_env" --json >"$tmpdir/telegram-fail.json"
+    local telegram_fail_code=$?
+    set -e
+    if [[ $telegram_fail_code -ne 0 ]] && jq -e '.status == "fail" and ([.errors[] | test("repeat-auth"; "i")] | any)' "$tmpdir/telegram-fail.json" >/dev/null 2>&1; then
+        add_check "auth_smoke_telegram_fail_closed" "pass" "Missing Telegram token fails closed with repeat-auth guidance" "error"
+    else
+        add_check "auth_smoke_telegram_fail_closed" "fail" "Missing Telegram token must fail closed with repeat-auth guidance" "error"
+    fi
+
+    if "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider openai-codex --env-file "$positive_env" --json >"$tmpdir/provider-pass.json"; then
+        if jq -e '.status == "pass" and any(.capabilities[]; .capability == "openai-codex" and .status == "pass")' "$tmpdir/provider-pass.json" >/dev/null 2>&1; then
+            add_check "auth_smoke_provider_pass" "pass" "OpenAI Codex auth validation passes with required scope and model authorization" "error"
+        else
+            add_check "auth_smoke_provider_pass" "fail" "OpenAI Codex auth validation did not report a passing capability state" "error"
+        fi
+    else
+        add_check "auth_smoke_provider_pass" "fail" "OpenAI Codex auth validation should pass with required scope and model authorization" "error"
+    fi
+
+    set +e
+    "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider openai-codex --env-file "$bad_scope_env" --json >"$tmpdir/provider-fail.json"
+    local provider_fail_code=$?
+    set -e
+    if [[ $provider_fail_code -ne 0 ]] && jq -e '.status == "fail" and ([.errors[] | test("quarantined|quarantine|repeat-auth"; "i")] | any)' "$tmpdir/provider-fail.json" >/dev/null 2>&1; then
+        add_check "auth_smoke_provider_fail_closed" "pass" "Bad provider scopes fail closed and keep the capability quarantined" "error"
+    else
+        add_check "auth_smoke_provider_fail_closed" "fail" "Bad provider scopes must fail closed and quarantine the capability" "error"
+    fi
+}
+
 verify_same_host_stage() {
     if container_exists "$CLAWDIY_CONTAINER"; then
         add_check "clawdiy_container_exists" "pass" "Clawdiy container $CLAWDIY_CONTAINER exists" "error"
@@ -560,10 +648,10 @@ verify_restart_isolation_stage() {
 
 show_help() {
     cat <<EOF
-Usage: $0 [--stage same-host|restart-isolation|handoff] [--json] [--timeout seconds]
+Usage: $0 [--stage same-host|restart-isolation|handoff|auth] [--json] [--timeout seconds]
 
 Options:
-  --stage <name>      Verification stage to run (default: same-host)
+  --stage <name>      Verification stage to run (default: same-host). Supported: same-host, restart-isolation, handoff, auth
   --json              Emit JSON instead of human-readable logs
   --timeout <sec>     Wait timeout for health checks (default: ${TIMEOUT_SECONDS})
   --no-color          Disable colorized logs
@@ -625,6 +713,9 @@ main() {
             ;;
         handoff)
             verify_handoff_stage
+            ;;
+        auth)
+            verify_auth_stage
             ;;
         *)
             add_check "stage" "fail" "Unsupported Clawdiy smoke stage: $STAGE" "error"
