@@ -10,6 +10,13 @@ SYNC_SCRIPT="$PROJECT_ROOT/scripts/sync-claude-skills-to-codex.sh"
 run_component_sync_claude_skills_bridge_tests() {
     start_timer
 
+    if ! command -v rsync >/dev/null 2>&1; then
+        test_start "component_sync_claude_skills_bridge_dependencies"
+        test_skip "Missing rsync for portable Claude bridge component checks"
+        generate_report
+        return
+    fi
+
     local temp_root codex_home command_skill agent_skill
     temp_root="$(mktemp -d)"
     trap 'rm -rf "$temp_root"' EXIT
