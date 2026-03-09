@@ -315,6 +315,63 @@ normalize_issue_key() {
     | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g')"
 }
 
+infer_issue_id_from_branch_name() {
+  local branch_name="$1"
+  local stripped_branch=""
+  local issues_file=""
+  local candidate_issue=""
+  local normalized_issue=""
+  local best_issue=""
+  local best_normalized=""
+
+  if [[ -z "${branch_name}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
+  if [[ ! -f "${issues_file}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  stripped_branch="$(strip_common_branch_prefix "${branch_name}")"
+  if [[ -z "${stripped_branch}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  while IFS= read -r candidate_issue; do
+    normalized_issue="$(normalize_issue_key "${candidate_issue}")"
+    if [[ -z "${normalized_issue}" ]]; then
+      continue
+    fi
+
+    if [[ "${stripped_branch}" == "${normalized_issue}" || "${stripped_branch}" == "${normalized_issue}"-* ]]; then
+      if [[ -z "${best_normalized}" || "${#normalized_issue}" -gt "${#best_normalized}" ]]; then
+        best_issue="${candidate_issue}"
+        best_normalized="${normalized_issue}"
+      fi
+    fi
+  done < <(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "${issues_file}")
+
+  printf '%s\n' "${best_issue}"
+}
+
+resolve_report_issue_id() {
+  if [[ -n "${issue_id}" ]]; then
+    printf '%s\n' "${issue_id}"
+    return 0
+  fi
+
+  if [[ -n "${branch}" ]]; then
+    infer_issue_id_from_branch_name "${branch}"
+    return 0
+  fi
+
+  printf '\n'
+}
+
 normalize_slug_token() {
   local raw_slug="$1"
 
@@ -1090,6 +1147,7 @@ set_report_target() {
   report_worktree_path="${target_path:-n/a}"
   report_path_preview="${path_preview:-n/a}"
   report_branch_name="${branch:-n/a}"
+  report_issue_id="$(resolve_report_issue_id)"
 }
 
 apply_discovery_to_report() {

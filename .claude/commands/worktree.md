@@ -218,8 +218,9 @@ Process:
     - Do not expand it into subtasks, rationale, diagnostics, recommendations, or new deliverables.
     - Normalize only pronouns or path references when needed for clarity.
 14. If the helper exists, run:
-   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --handoff <manual|terminal|codex> [--pending-summary "<pending_summary>"]`
-15. Return the helper status block.
+   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --issue <id> --handoff <manual|terminal|codex> [--pending-summary "<pending_summary>"]`
+   - omit `--issue <id>` only when no issue id was resolved confidently
+15. Return the helper stdout as the final manual-handoff reply.
 16. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order, one command per line.
 17. If and only if the original request contained explicit downstream work, append exactly one fenced `text` block using this fixed template:
    ```text
@@ -380,12 +381,13 @@ Phase A is complete. Do not repeat worktree setup. Do not create or update issue
 - For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
 - If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
 - Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.
-- For manual handoff, if the helper produced a human-readable handoff block, relay it verbatim. Do not restyle fields, collapse commands, or convert fenced blocks back into prose.
+- For manual handoff, if the helper produced a human-readable handoff block, relay it verbatim. Do not restyle fields, collapse commands, convert fenced blocks back into prose, or prepend/append a second custom summary.
 - For manual handoff, the final assistant reply must contain exactly:
   1. the helper status block
   2. one fenced `bash` block containing only the exact next-step commands, one command per line
   3. if explicit downstream work was provided, one fenced `text` block using the fixed `Phase B only` template
 - Do not add lead-in prose, explanation, bullets, rationale, or commentary before the status block, between blocks, or after the final block.
+- If the helper was run in human mode, its stdout is the canonical reply payload for manual handoff. Return that payload unchanged instead of reconstructing it from local notes.
 - Never render commands or the seed prompt as unfenced plain text.
 - The `Next:` list and the fenced `bash` block must contain the same commands in the same order.
 
