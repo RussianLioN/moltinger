@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-09
-**Total Lessons**: 17
+**Total Lessons**: 18
 
 ---
 
@@ -18,7 +18,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (6 lessons)
+#### P2 (7 lessons)
+- [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
@@ -54,7 +55,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (4 lessons)
+#### process (5 lessons)
+- [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
 - [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
@@ -72,12 +74,12 @@
 
 ### Popular Tags
 
-- `rca` (4 lessons)
+- `rca` (5 lessons)
+- `topology-registry` (4 lessons)
+- `process` (4 lessons)
+- `git-worktree` (4 lessons)
 - `ux` (3 lessons)
-- `topology-registry` (3 lessons)
-- `process` (3 lessons)
 - `github-actions` (3 lessons)
-- `git-worktree` (3 lessons)
 - `drift-detection` (3 lessons)
 - `sandbox` (2 lessons)
 - `permissions` (2 lessons)
@@ -90,10 +92,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 17 |
+| Total Lessons | 18 |
 | Critical (P0/P1) | 3 |
 | Categories | 5 |
-| Unique Tags | 40 |
+| Unique Tags | 42 |
 
 ---
 
