@@ -28,13 +28,19 @@ fi
 # CONFIGURATION
 # ========================================================================
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-CONFIG_FILE="${BACKUP_CONFIG:-$PROJECT_ROOT/config/backup.conf}"
+CONFIG_FILE="${BACKUP_CONFIG:-$PROJECT_ROOT/config/backup/backup.conf}"
 
 # Default configuration (can be overridden by config file or environment)
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 CONFIG_DIR="${BACKUP_CONFIG_DIR:-$PROJECT_ROOT/config}"
 DATA_DIR="${BACKUP_DATA_DIR:-$PROJECT_ROOT/data}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/moltis}"
+CLAWDIY_BACKUP_ENABLED="${CLAWDIY_BACKUP_ENABLED:-true}"
+CLAWDIY_CONFIG_DIR="${CLAWDIY_CONFIG_DIR:-$PROJECT_ROOT/config/clawdiy}"
+CLAWDIY_STATE_DIR="${CLAWDIY_STATE_DIR:-$PROJECT_ROOT/data/clawdiy/state}"
+CLAWDIY_AUDIT_DIR="${CLAWDIY_AUDIT_DIR:-$PROJECT_ROOT/data/clawdiy/audit}"
+CLAWDIY_CONTAINER_NAME="${CLAWDIY_CONTAINER_NAME:-clawdiy}"
+CLAWDIY_RESTORE_AUTOSTART="${CLAWDIY_RESTORE_AUTOSTART:-true}"
 RETENTION_DAYS=30
 RETENTION_WEEKS=12
 RETENTION_MONTHS=12
@@ -85,6 +91,7 @@ BACKUP_ENCRYPTED=false
 BACKUP_STATUS="pending"
 BACKUP_ERRORS=()
 BACKUP_ID=""
+ENCRYPTED_OUTPUT_FILE=""
 
 # ========================================================================
 # INITIALIZATION
@@ -94,6 +101,11 @@ BACKUP_ID=""
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
+
+# Reconcile derived directories after config/env overrides are loaded.
+CONFIG_DIR="${BACKUP_CONFIG_DIR:-${CONFIG_DIR:-$PROJECT_ROOT/config}}"
+DATA_DIR="${BACKUP_DATA_DIR:-${DATA_DIR:-$PROJECT_ROOT/data}}"
+LOG_DIR="${BACKUP_LOG_DIR:-${LOG_DIR:-/var/log/moltis}}"
 
 # Setup logging (with fallback if permission denied)
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
@@ -117,6 +129,84 @@ esac
 if [[ "$(date +%d)" == "01" ]]; then
     BACKUP_TYPE="monthly"
 fi
+
+string_is_true() {
+    case "${1:-}" in
+        1|true|TRUE|yes|YES|on|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+container_exists() {
+    local container_name="$1"
+    docker inspect "$container_name" >/dev/null 2>&1
+}
+
+container_is_running() {
+    local container_name="$1"
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"
+}
+
+clawdiy_inventory_present() {
+    [[ -e "$CLAWDIY_CONFIG_DIR" || -e "$CLAWDIY_STATE_DIR" || -e "$CLAWDIY_AUDIT_DIR" ]]
+}
+
+json_bool() {
+    if string_is_true "$1"; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+current_time_ms() {
+    local timestamp
+    timestamp=$(date +%s%3N 2>/dev/null || true)
+    if [[ "$timestamp" =~ ^[0-9]+$ ]]; then
+        echo "$timestamp"
+    else
+        echo "$(($(date +%s) * 1000))"
+    fi
+}
+
+write_sha256_file() {
+    local input_file="$1"
+    local output_file="$2"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$input_file" > "$output_file"
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$input_file" > "$output_file"
+    else
+        log_error "No SHA-256 checksum tool available"
+        return 1
+    fi
+}
+
+verify_sha256_file() {
+    local input_file="$1"
+    local checksum_file="$2"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum -c "$checksum_file" --quiet 2>/dev/null
+        return $?
+    fi
+
+    if command -v shasum >/dev/null 2>&1; then
+        local expected actual
+        expected=$(awk '{print $1}' "$checksum_file")
+        actual=$(shasum -a 256 "$input_file" | awk '{print $1}')
+        [[ -n "$expected" && "$expected" == "$actual" ]]
+        return $?
+    fi
+
+    log_error "No SHA-256 checksum tool available"
+    return 1
+}
 
 # ========================================================================
 # LOGGING FUNCTIONS
@@ -199,10 +289,14 @@ EOF
 write_backup_status() {
     local status="$1"
     local timestamp
+    local status_file="$BACKUP_STATUS_FILE"
     timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
     # Ensure directory exists
-    mkdir -p "$(dirname "$BACKUP_STATUS_FILE")" 2>/dev/null || true
+    if ! mkdir -p "$(dirname "$status_file")" 2>/dev/null; then
+        status_file="${TMPDIR:-/tmp}/moltis-backup-status.json"
+        mkdir -p "$(dirname "$status_file")" 2>/dev/null || true
+    fi
 
     # Build errors array
     local errors_json="[]"
@@ -225,7 +319,7 @@ write_backup_status() {
         s3_location="\"$BACKUP_S3_LOCATION\""
     fi
 
-    cat > "$BACKUP_STATUS_FILE" <<EOF
+    cat > "$status_file" <<EOF
 {
   "status": "$status",
   "last_backup_timestamp": "$timestamp",
@@ -246,7 +340,7 @@ write_backup_status() {
 }
 EOF
 
-    log_info "Backup status written to $BACKUP_STATUS_FILE"
+    log_info "Backup status written to $status_file"
 }
 
 # ========================================================================
@@ -257,10 +351,16 @@ EOF
 write_prometheus_metrics() {
     local status="$1"
     local duration_seconds
+    local metrics_dir="$PROMETHEUS_TEXTFILE_DIR"
+    local metrics_file="$PROMETHEUS_METRICS_FILE"
     duration_seconds=$(echo "scale=2; $BACKUP_DURATION_MS / 1000" | bc 2>/dev/null || echo "0")
 
     # Ensure directory exists
-    mkdir -p "$PROMETHEUS_TEXTFILE_DIR" 2>/dev/null || true
+    if ! mkdir -p "$metrics_dir" 2>/dev/null; then
+        metrics_dir="${TMPDIR:-/tmp}/moltis-prometheus-textfile"
+        metrics_file="${metrics_dir}/$(basename "$PROMETHEUS_METRICS_FILE")"
+        mkdir -p "$metrics_dir" 2>/dev/null || true
+    fi
 
     # Convert status to metric value
     local status_success=0
@@ -278,7 +378,7 @@ write_prometheus_metrics() {
     # Write metrics in Prometheus textfile format
     # Using temporary file for atomic write
     local temp_file
-    temp_file=$(mktemp "${PROMETHEUS_TEXTFILE_DIR}/.moltis_backup.XXXXXX") || {
+    temp_file=$(mktemp "${metrics_dir}/.moltis_backup.XXXXXX") || {
         log_warn "Failed to create temp file for Prometheus metrics"
         return 1
     }
@@ -311,13 +411,13 @@ moltis_backup_s3_uploaded $( [[ -n "$BACKUP_S3_LOCATION" ]] && echo "1" || echo 
 EOF
 
     # Atomic move
-    mv "$temp_file" "$PROMETHEUS_METRICS_FILE" || {
+    mv "$temp_file" "$metrics_file" || {
         log_warn "Failed to move Prometheus metrics file"
         rm -f "$temp_file"
         return 1
     }
 
-    log_info "Prometheus metrics written to $PROMETHEUS_METRICS_FILE"
+    log_info "Prometheus metrics written to $metrics_file"
 }
 
 # ========================================================================
@@ -384,12 +484,10 @@ init_backup_dirs() {
 generate_checksum() {
     local file="$1"
     local checksum_file="${file}.sha256"
-    sha256sum "$file" > "$checksum_file"
+    write_sha256_file "$file" "$checksum_file"
 
     # Extract just the hash for status tracking
     BACKUP_CHECKSUM=$(cut -d' ' -f1 "$checksum_file")
-
-    echo "$checksum_file"
 }
 
 # Verify checksum
@@ -402,7 +500,7 @@ verify_checksum() {
         return 1
     fi
 
-    if sha256sum -c "$checksum_file" --quiet 2>/dev/null; then
+    if verify_sha256_file "$file" "$checksum_file"; then
         log_info "Checksum verified: $file"
         return 0
     else
@@ -419,14 +517,14 @@ encrypt_file() {
     if [[ "$ENCRYPTION_ENABLED" != "true" ]]; then
         log_info "Encryption disabled, skipping"
         BACKUP_ENCRYPTED=false
-        echo "$input_file"
+        ENCRYPTED_OUTPUT_FILE="$input_file"
         return 0
     fi
 
     if [[ ! -f "$ENCRYPTION_KEY_FILE" ]]; then
         log_error "Encryption key not found: $ENCRYPTION_KEY_FILE"
         BACKUP_ENCRYPTED=false
-        echo "$input_file"
+        ENCRYPTED_OUTPUT_FILE="$input_file"
         return 0
     fi
 
@@ -443,18 +541,18 @@ encrypt_file() {
         if [[ -f "$output_file" ]] && [[ -s "$output_file" ]]; then
             rm -f "$input_file"
             # Also update checksum for encrypted file
-            sha256sum "$output_file" > "${output_file}.sha256"
+            write_sha256_file "$output_file" "${output_file}.sha256"
             BACKUP_CHECKSUM=$(cut -d' ' -f1 "${output_file}.sha256")
             BACKUP_ENCRYPTED=true
+            ENCRYPTED_OUTPUT_FILE="$output_file"
             log_info "Encryption complete: $output_file"
-            echo "$output_file"
             return 0
         fi
     fi
 
     log_error "Encryption failed"
     BACKUP_ENCRYPTED=false
-    echo "$input_file"
+    ENCRYPTED_OUTPUT_FILE="$input_file"
     return 1
 }
 
@@ -491,14 +589,29 @@ create_backup() {
     local backup_name="moltis_${BACKUP_TYPE}_${BACKUP_ID}"
     local backup_path="$BACKUP_DIR/$BACKUP_TYPE/${backup_name}.tar.gz"
     local tmp_dir="$BACKUP_DIR/tmp/${backup_name}"
+    local clawdiy_included=false
 
     log_info "Creating $BACKUP_TYPE backup: $backup_name"
     mkdir -p "$tmp_dir"
 
     # Export container state (if running)
-    if docker ps --format '{{.Names}}' | grep -q '^moltis$'; then
+    if container_is_running "moltis"; then
         log_info "Exporting container state..."
         docker inspect moltis > "$tmp_dir/container-inspect.json" 2>/dev/null || true
+    fi
+
+    if string_is_true "$CLAWDIY_BACKUP_ENABLED"; then
+        if clawdiy_inventory_present; then
+            clawdiy_included=true
+            log_info "Recording Clawdiy inventory in backup metadata"
+        else
+            log_warn "Clawdiy backup inventory is enabled but no Clawdiy paths were found"
+        fi
+
+        if container_exists "$CLAWDIY_CONTAINER_NAME"; then
+            log_info "Exporting Clawdiy container state..."
+            docker inspect "$CLAWDIY_CONTAINER_NAME" > "$tmp_dir/clawdiy-container-inspect.json" 2>/dev/null || true
+        fi
     fi
 
     # Create metadata
@@ -511,34 +624,57 @@ create_backup() {
     "version": "3.0",
     "config_dir": "$CONFIG_DIR",
     "data_dir": "$DATA_DIR",
+    "clawdiy": {
+        "enabled": $(json_bool "$CLAWDIY_BACKUP_ENABLED"),
+        "included": $(json_bool "$clawdiy_included"),
+        "config_dir": "$CLAWDIY_CONFIG_DIR",
+        "state_dir": "$CLAWDIY_STATE_DIR",
+        "audit_dir": "$CLAWDIY_AUDIT_DIR",
+        "container_name": "$CLAWDIY_CONTAINER_NAME"
+    },
     "docker_version": "$(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"
 }
 EOF
 
     # Create tarball
     log_info "Creating tarball..."
-    tar -czf "$backup_path" \
-        -C "$tmp_dir" "backup-metadata.json" \
-        -C "$tmp_dir" "container-inspect.json" 2>/dev/null || true \
-        -C "$(dirname "$CONFIG_DIR")" "$(basename "$CONFIG_DIR")" \
-        -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")" \
-        2>/dev/null
+    local -a tar_args
+    tar_args=(
+        -C "$tmp_dir" "backup-metadata.json"
+    )
+
+    if [[ -f "$tmp_dir/container-inspect.json" ]]; then
+        tar_args+=(-C "$tmp_dir" "container-inspect.json")
+    fi
+
+    if [[ -f "$tmp_dir/clawdiy-container-inspect.json" ]]; then
+        tar_args+=(-C "$tmp_dir" "clawdiy-container-inspect.json")
+    fi
+
+    tar_args+=(
+        -C "$(dirname "$CONFIG_DIR")" "$(basename "$CONFIG_DIR")"
+        -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")"
+    )
+
+    if ! tar -czf "$backup_path" "${tar_args[@]}" 2>/dev/null; then
+        log_error "Failed to create backup tarball"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
 
     # Cleanup temp
     rm -rf "$tmp_dir"
-
-    # Check if tarball was created
-    if [[ ! -f "$backup_path" ]]; then
-        log_error "Failed to create backup tarball"
-        return 1
-    fi
 
     # Generate checksum
     generate_checksum "$backup_path"
 
     # Encrypt
-    local encrypted_path
-    encrypted_path=$(encrypt_file "$backup_path")
+    local encrypted_path="$backup_path"
+    if encrypt_file "$backup_path"; then
+        encrypted_path="$ENCRYPTED_OUTPUT_FILE"
+    else
+        encrypted_path="${ENCRYPTED_OUTPUT_FILE:-$backup_path}"
+    fi
 
     # Get size in bytes
     BACKUP_SIZE_BYTES=$(stat -f%z "$encrypted_path" 2>/dev/null || stat -c%s "$encrypted_path" 2>/dev/null || echo "0")
@@ -548,8 +684,7 @@ EOF
     size_human=$(du -h "$encrypted_path" | cut -f1)
 
     log_info "Backup created: $encrypted_path ($size_human)"
-
-    echo "$encrypted_path"
+    return 0
 }
 
 # Upload to S3 with retry logic
@@ -708,6 +843,7 @@ verify_backup() {
 restore_backup() {
     local backup_file="$1"
     local restore_dir="${2:-/tmp/moltis-restore}"
+    local clawdiy_container_present=false
 
     log_info "Starting restore from: $backup_file"
     log_warn "This will OVERWRITE existing data!"
@@ -735,15 +871,32 @@ restore_backup() {
     log_info "Stopping Moltis container..."
     docker stop moltis 2>/dev/null || true
 
+    if container_exists "$CLAWDIY_CONTAINER_NAME"; then
+        clawdiy_container_present=true
+        log_info "Stopping Clawdiy container..."
+        docker stop "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || true
+    fi
+
     # Restore data
     log_info "Restoring data..."
     rsync -av --delete "$restore_dir/data/" "$DATA_DIR/"
     rsync -av --delete "$restore_dir/config/" "$CONFIG_DIR/"
 
+    if string_is_true "$CLAWDIY_BACKUP_ENABLED" && [[ -e "$restore_dir/config/clawdiy" || -e "$restore_dir/data/clawdiy" ]]; then
+        log_info "Clawdiy backup inventory detected in restore payload"
+        mkdir -p "$CLAWDIY_STATE_DIR" "$CLAWDIY_AUDIT_DIR" 2>/dev/null || true
+    fi
+
     # Start container
     log_info "Starting Moltis container..."
     cd "$PROJECT_ROOT"
     docker compose up -d
+
+    if [[ "$clawdiy_container_present" == "true" ]] && string_is_true "$CLAWDIY_RESTORE_AUTOSTART"; then
+        log_info "Starting Clawdiy container..."
+        docker start "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
+            log_warn "Failed to start Clawdiy container automatically after restore"
+    fi
 
     log_info "Restore complete!"
     send_notification "Restore Complete" "Successfully restored from $backup_file" "info"
@@ -828,7 +981,7 @@ main() {
     case "$action" in
         backup)
             # Record start time
-            BACKUP_START_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+            BACKUP_START_TIME=$(current_time_ms)
 
             if [[ "$JSON_OUTPUT" != "true" ]]; then
                 log_info "=========================================="
@@ -839,10 +992,10 @@ main() {
 
             init_backup_dirs
 
-            local backup_file
             local backup_result=0
 
-            if backup_file=$(create_backup); then
+            if create_backup; then
+                local backup_file="$BACKUP_LOCAL_PATH"
                 # Upload to S3 with retry logic
                 local s3_result=0
                 upload_to_s3 "$backup_file" || s3_result=$?
@@ -855,7 +1008,7 @@ main() {
                 rotate_backups
 
                 # Record end time and calculate duration
-                BACKUP_END_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+                BACKUP_END_TIME=$(current_time_ms)
                 BACKUP_DURATION_MS=$((BACKUP_END_TIME - BACKUP_START_TIME))
 
                 # Determine final status
@@ -889,7 +1042,7 @@ main() {
                 fi
             else
                 # Record end time
-                BACKUP_END_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+                BACKUP_END_TIME=$(current_time_ms)
                 BACKUP_DURATION_MS=$((BACKUP_END_TIME - BACKUP_START_TIME))
 
                 # Write metrics and status

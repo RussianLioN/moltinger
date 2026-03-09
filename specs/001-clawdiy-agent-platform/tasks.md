@@ -81,7 +81,8 @@
   → Artifacts: [test_fleet_registry.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/static/test_fleet_registry.sh), [test_config_validation.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/static/test_config_validation.sh), [run.sh](/Users/rl/coding/moltinger-openclaw-control-plane/tests/run.sh)
 - [X] T009 [P] [EXECUTOR: prometheus-expert] [PARALLEL-GROUP-FOUNDATION-A] Add per-agent scrape targets, labels, and alerts in `config/prometheus/prometheus.yml`, `config/prometheus/alert-rules.yml`, and `config/alertmanager/alertmanager.yml`
   → Artifacts: [prometheus.yml](/Users/rl/coding/moltinger-openclaw-control-plane/config/prometheus/prometheus.yml), [alert-rules.yml](/Users/rl/coding/moltinger-openclaw-control-plane/config/prometheus/alert-rules.yml), [alertmanager.yml](/Users/rl/coding/moltinger-openclaw-control-plane/config/alertmanager/alertmanager.yml)
-- [ ] T010 [P] [EXECUTOR: backup-specialist] [PARALLEL-GROUP-FOUNDATION-A] Extend backup inventory and restore hooks for Clawdiy config/state/audit data in `config/backup/backup.conf` and `scripts/backup-moltis-enhanced.sh`
+- [X] T010 [P] [EXECUTOR: backup-specialist] [PARALLEL-GROUP-FOUNDATION-A] Extend backup inventory and restore hooks for Clawdiy config/state/audit data in `config/backup/backup.conf` and `scripts/backup-moltis-enhanced.sh`
+  → Artifacts: [backup.conf](/Users/rl/coding/moltinger-openclaw-control-plane/config/backup/backup.conf), [backup-moltis-enhanced.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/backup-moltis-enhanced.sh)
 
 **Checkpoint**: Deployment tooling, validation, monitoring, and backup primitives are ready for feature work.
 
