@@ -307,12 +307,13 @@ All JSON responses follow a consistent structure:
 ```json
 {
   "status": "pass",
+  "target": "moltis",
   "timestamp": "2024-01-15T10:30:00Z",
   "checks": [
     {
       "name": "secrets_exist",
       "status": "pass",
-      "message": "All 4 required secrets found",
+      "message": "All 4 required secrets found for target moltis",
       "severity": "error"
     },
     {
@@ -324,13 +325,13 @@ All JSON responses follow a consistent structure:
     {
       "name": "compose_valid",
       "status": "pass",
-      "message": "docker-compose.yml syntax is valid",
+      "message": "Compose files valid for target moltis: docker-compose.yml docker-compose.prod.yml",
       "severity": "error"
     },
     {
       "name": "network_exists",
       "status": "pass",
-      "message": "Network traefik-net exists",
+      "message": "Required external networks exist for target moltis: traefik-net",
       "severity": "error"
     },
     {
@@ -348,7 +349,7 @@ All JSON responses follow a consistent structure:
   ],
   "missing_secrets": [],
   "errors": [],
-  "warnings": ["s3_credentials"]
+  "warnings": ["Optional secret 'smtp_password' not found for target moltis"]
 }
 ```
 
@@ -357,12 +358,13 @@ All JSON responses follow a consistent structure:
 ```json
 {
   "status": "fail",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "checks": [
     {
       "name": "secrets_exist",
       "status": "fail",
-      "message": "Missing secrets: moltis_password, telegram_bot_token",
+      "message": "Missing secrets for target clawdiy: clawdiy_password clawdiy_service_token clawdiy_telegram_bot_token",
       "severity": "error"
     },
     {
@@ -374,12 +376,15 @@ All JSON responses follow a consistent structure:
     {
       "name": "compose_valid",
       "status": "fail",
-      "message": "Invalid YAML syntax at line 42",
+      "message": "docker-compose.clawdiy.yml has compose config errors",
       "severity": "error"
     }
   ],
-  "missing_secrets": ["moltis_password", "telegram_bot_token"],
-  "errors": ["secrets_exist", "compose_valid"],
+  "missing_secrets": ["clawdiy_password", "clawdiy_service_token", "clawdiy_telegram_bot_token"],
+  "errors": [
+    "Missing secrets for target clawdiy: clawdiy_password clawdiy_service_token clawdiy_telegram_bot_token",
+    "docker-compose.clawdiy.yml has compose config errors"
+  ],
   "warnings": []
 }
 ```
@@ -390,7 +395,7 @@ All JSON responses follow a consistent structure:
 |-------|-------------|----------|
 | `secrets_exist` | All required secrets present | error |
 | `docker_available` | Docker daemon running | error |
-| `compose_valid` | docker-compose.yml syntax | error |
+| `compose_valid` | Target-specific compose syntax | error |
 | `network_exists` | Required networks exist | error |
 | `s3_credentials` | S3 credentials configured | warning |
 | `disk_space` | Sufficient disk space | warning |
@@ -400,13 +405,16 @@ All JSON responses follow a consistent structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `checks` | array | List of validation check results |
+| `target` | string | Validation target, for example `moltis` or `clawdiy` |
 | `checks[].name` | string | Check identifier |
 | `checks[].status` | string | `pass`, `fail`, or `warning` |
 | `checks[].message` | string | Human-readable result |
 | `checks[].severity` | string | `error` or `warning` |
 | `missing_secrets` | array | List of missing secret names |
-| `errors` | array | Names of failed error-severity checks |
-| `warnings` | array | Names of warning-severity checks |
+| `errors` | array | Error messages accumulated during validation |
+| `warnings` | array | Warning messages accumulated during validation |
+
+`preflight-check.sh --target clawdiy` also emits target-specific checks such as `runtime_config_shape`, `fleet_registry_shape`, `fleet_policy_shape`, `fleet_identity_alignment`, and `fleet_secret_isolation`.
 
 ### Options
 

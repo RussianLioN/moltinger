@@ -179,7 +179,7 @@
     },
     "preflight-check.sh": {
       "version": "1.0.0",
-      "description": "Pre-deployment validation for compose config and required secrets",
+      "description": "Pre-deployment validation for target-specific compose config, fleet identity, and required secrets",
       "entrypoint": true,
       "requires": [
         "jq"
@@ -187,7 +187,8 @@
       "provides": [
         "preflight-check",
         "preflight-json",
-        "preflight-ci"
+        "preflight-ci",
+        "preflight-targeted"
       ],
       "ci": true
     },

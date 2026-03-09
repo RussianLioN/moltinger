@@ -71,7 +71,8 @@
 
 **⚠️ CRITICAL**: No user story work should be considered done until this phase is complete.
 
-- [ ] T005 [EXECUTOR: bash-master] [SEQUENTIAL] Extend target-aware validation, duplicate identity checks, and fleet config parsing in `scripts/preflight-check.sh`
+- [X] T005 [EXECUTOR: bash-master] [SEQUENTIAL] Extend target-aware validation, duplicate identity checks, and fleet config parsing in `scripts/preflight-check.sh`
+  → Artifacts: [preflight-check.sh](/Users/rl/coding/moltinger-openclaw-control-plane/scripts/preflight-check.sh), [scripts.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-docker-deploy-improvements/contracts/scripts.md), [json-output.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/json-output.md)
 - [ ] T006 [P] [EXECUTOR: deployment-engineer] [PARALLEL-GROUP-FOUNDATION-A] Extend multi-target deploy and rollback orchestration for Clawdiy in `scripts/deploy.sh`
 - [ ] T007 [P] [EXECUTOR: cicd-architect] [PARALLEL-GROUP-FOUNDATION-A] Create isolated GitOps deployment workflow for Clawdiy in `.github/workflows/deploy-clawdiy.yml`
 - [ ] T008 [P] [EXECUTOR: integration-tester] [PARALLEL-GROUP-FOUNDATION-A] Add fleet registry and policy static validation in `tests/static/test_fleet_registry.sh` and `tests/static/test_config_validation.sh`

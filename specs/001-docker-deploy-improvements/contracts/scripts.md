@@ -197,9 +197,11 @@ OPTIONS:
 ./scripts/preflight-check.sh [OPTIONS]
 
 OPTIONS:
-  --json           Output in JSON format
-  --strict         Fail on warnings (not just errors)
-  -h, --help       Show help message
+  --json             Output in JSON format
+  --strict           Fail on warnings (not just errors)
+  --ci               CI mode (skip Docker daemon and runtime checks)
+  --target <name>    Validation target (moltis|clawdiy)
+  -h, --help         Show help message
 ```
 
 ### Validation Checks
@@ -208,22 +210,28 @@ OPTIONS:
 |-------|-------------|----------|
 | secrets_exist | All required secrets present | error |
 | docker_available | Docker daemon running | error |
-| compose_valid | docker-compose.yml syntax | error |
+| compose_valid | Target-specific compose syntax | error |
 | network_exists | Required networks exist | error |
 | s3_credentials | S3 credentials configured | warning |
 | disk_space | Sufficient disk space | warning |
+
+Target-aware additions:
+- `--target clawdiy` validates `docker-compose.clawdiy.yml`
+- `--target clawdiy` parses `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json`
+- `--target clawdiy` fails on duplicate agent/domain/Telegram identity collisions and on reused Moltinger secret refs
 
 ### JSON Output Format
 
 ```json
 {
   "status": "pass",
+  "target": "clawdiy",
   "timestamp": "2024-01-15T10:30:00Z",
   "checks": [
     {
       "name": "secrets_exist",
       "status": "pass",
-      "message": "All 5 secrets found",
+      "message": "All required secrets found for target clawdiy",
       "severity": "error"
     },
     {
@@ -235,9 +243,11 @@ OPTIONS:
   ],
   "missing_secrets": [],
   "errors": [],
-  "warnings": ["s3_credentials"]
+  "warnings": ["Optional secret 'smtp_password' not found for target moltis"]
 }
 ```
+
+`errors` and `warnings` contain the emitted validation messages, not just check ids.
 
 ---
 
