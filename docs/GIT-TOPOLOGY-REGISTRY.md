@@ -15,7 +15,6 @@
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
-| `moltinger-openclaw-control-plane` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
 | `moltinger-pr39` | `tmp-pr39-fix` | `sibling-worktree` | Needs decision |
@@ -29,10 +28,10 @@
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-010` | `010-beads-recovery-batch` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-011` | `011-worktree-handoff-hardening` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher-writable` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-016` | `016-worktree-skill-bug-fix` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-017` | `017-clawdiy-workspace-mount-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -43,10 +42,10 @@
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `010-beads-recovery-batch` | `origin/010-beads-recovery-batch` | Needs decision |
-| `011-worktree-handoff-hardening` | `origin/011-worktree-handoff-hardening` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `012-codex-upstream-watcher-writable` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
+| `017-clawdiy-workspace-mount-fix` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
@@ -56,7 +55,7 @@
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `none` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `none` | Needs decision |
-| `tmp-pr35-fix` | `origin/011-worktree-handoff-hardening` | Needs decision |
+| `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `tmp-pr40-fix` | `origin/012-clawdiy-live-runtime-fix` | Needs decision |
@@ -75,7 +74,7 @@
 | `014-clawdiy-smoke-jq-fix` | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `015-clawdiy-smoke-mount-resolution` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `016-clawdiy-restore-readiness-fix` | `origin/016-clawdiy-restore-readiness-fix` | Needs decision |
-| `017-clawdiy-workspace-mount-fix` | `none` | Needs decision |
+| `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/remote-uat-hardening` | `none` | Needs decision |
@@ -102,6 +101,7 @@
 | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
+| `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
