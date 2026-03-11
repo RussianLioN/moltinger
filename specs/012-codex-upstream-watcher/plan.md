@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add a dedicated upstream watcher layer that polls official Codex sources on a schedule, persists one stable upstream fingerprint, and sends one Telegram alert through Moltinger when a fresh upstream Codex state appears, without requiring a local Codex CLI on the watcher host.
+Add a dedicated upstream watcher layer that polls official Codex sources on a schedule, persists one stable upstream fingerprint, assigns a severity level, optionally batches non-critical events into a digest, and sends Russian Telegram alerts through Moltinger when a fresh upstream Codex state appears, without requiring a local Codex CLI on the watcher host. Extend the watcher with an opt-in advisor bridge so a user can explicitly ask for practical project recommendations after the alert.
 
 ## Technical Context
 
@@ -16,8 +16,8 @@ Add a dedicated upstream watcher layer that polls official Codex sources on a sc
 **Target Platform**: Linux shell on the Moltinger host for scheduled runs; optional local/manual dry runs and CI-safe fixture validation  
 **Project Type**: Operational shell script + cron automation + Telegram alerting + docs  
 **Performance Goals**: Scheduled run should finish quickly enough for cron use and never block unrelated services  
-**Constraints**: Use official Codex sources as primary truth, keep local repo applicability out of scope, preserve GitOps install path, keep Telegram delivery duplicate-safe, degrade explicitly on partial or failed source evidence  
-**Scale/Scope**: Single repository, one shared watcher state model, one Telegram delivery surface, one scheduler path
+**Constraints**: Use official Codex sources as primary truth, keep upstream awareness separate from project advice until user consent is received, preserve GitOps install path, keep Telegram delivery duplicate-safe, degrade explicitly on partial or failed source evidence, keep all human-facing UX in Russian  
+**Scale/Scope**: Single repository, one shared watcher state model, one Telegram delivery surface, one digest queue, one consent-follow-up path
 
 ## Constitution Check
 
@@ -77,7 +77,7 @@ docs/
 `-- codex-cli-upstream-watcher.md
 ```
 
-**Structure Decision**: Implement one dedicated watcher script for upstream-only polling and scheduler-safe Telegram alerts. Keep it separate from the local monitor/advisor/delivery chain so upstream awareness and local applicability remain distinct concerns.
+**Structure Decision**: Implement one dedicated watcher script for upstream-only polling and scheduler-safe Telegram alerts. Keep upstream awareness separate from local applicability by building project-facing recommendations only through an explicit advisor bridge and only sending them after user consent.
 
 ## Phase 0: Research Decisions (to `research.md`)
 
@@ -85,18 +85,19 @@ docs/
 2. Install the scheduler through repository-managed cron files on the Moltinger host rather than inventing a manual server-only setup path.
 3. Reuse the existing Moltinger Telegram sender for scheduled alerts instead of adding another transport.
 4. Persist a watcher-specific fingerprint and delivery state so repeated cron runs remain duplicate-safe.
-5. Keep local repo applicability explicitly out of scope; the watcher reports upstream changes only.
+5. Keep local repo applicability separate from the main alert and expose it only through an explicit advisor bridge after user consent.
+6. Add severity levels and a digest mode so the watcher can stay informative without becoming noisy.
 
 ## Phase 1: Design Artifacts
 
-- Data model for upstream snapshot, upstream fingerprint, watcher state, watcher decision, Telegram target, and watcher run report.
+- Data model for upstream snapshot, upstream fingerprint, watcher state, watcher severity, digest queue, consent state, advisor bridge, Telegram target, and watcher run report.
 - JSON schema for the watcher report.
 - Quickstart showing manual run, scheduled run, and failure/recovery validation.
-- Tasks grouped by manual run, scheduler alerting, and resilience behavior.
+- Tasks grouped by manual run, scheduler alerting, digest/consent UX, and resilience behavior.
 
 ## Phase 2: Execution Readiness
 
 - One upstream watcher script becomes the shared runtime entrypoint.
 - Cron automation is installed through existing deploy/GitOps paths.
-- Telegram delivery stays opt-in, duplicate-safe, and retry-aware.
-- The watcher report remains reusable by future integrations that may bridge into local advisor or delivery layers.
+- Telegram delivery stays duplicate-safe, retry-aware, and can optionally ask whether the user wants practical project recommendations.
+- The watcher report remains reusable by future integrations and now exposes a first bridge into the local advisor layer.

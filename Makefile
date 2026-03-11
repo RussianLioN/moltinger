@@ -92,7 +92,7 @@ help:
 	@echo "  codex-update-monitor - Run the Codex update monitor"
 	@echo "  codex-update-advisor - Run the advisor layer over the Codex update monitor"
 	@echo "  codex-update-delivery - Run the user-facing delivery layer over the advisor"
-	@echo "  codex-upstream-watcher - Проверить официальный upstream Codex CLI"
+	@echo "  codex-upstream-watcher - Проверить upstream Codex CLI с уровнями важности и project-ready рекомендациями"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"

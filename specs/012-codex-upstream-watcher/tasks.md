@@ -80,15 +80,33 @@
 - [x] T044 Verify watcher docs, cron automation, and deployment wiring stay aligned
 - [x] T045 Update `docs/GIT-TOPOLOGY-REGISTRY.md` for the new `012-codex-upstream-watcher` worktree
 
+---
+
+## Phase 7: Severity, Digest, And Opt-In Practical Guidance
+
+**Goal**: Make upstream alerts more useful and less noisy by adding severity levels, digest batching, and a consent-based bridge to project-facing recommendations.
+
+**Independent Test**: Confirm manual reports expose Russian severity and plain-language explanations, digest mode batches non-critical events, and a Telegram `да` reply triggers a second practical-recommendation message while `нет` suppresses it.
+
+- [x] T050 [US4] Add Russian plain-language highlight explanations and severity classification in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T051 [US4] Add digest-mode state handling and combined Telegram delivery in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T052 [US3] Build an advisor bridge for project-facing practical recommendations in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T053 [US3] Add Telegram consent follow-up and reply processing in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T054 [P] Extend fixtures and component coverage for severity, digest, and consent flow in `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T055 [US3] Update the watcher contract and documentation for severity, digest, and practical-recommendation UX in `specs/012-codex-upstream-watcher/contracts/watcher-report.schema.json` and `docs/codex-cli-upstream-watcher.md`
+- [x] T056 [P] Update manual workflow and script inventory metadata for the expanded watcher surface in `.github/workflows/codex-cli-upstream-watcher.yml` and `scripts/manifest.json`
+
 ## Dependencies & Execution Order
 
-- Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6
+- Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7
 - User Story 1 is the MVP and must land before scheduler or Telegram automation work.
 - User Story 2 depends on stable fingerprint/state logic from Phases 2 and 3.
 - User Story 3 depends on earlier scheduler delivery behavior existing so recovery and retry semantics are meaningful.
+- User Stories 3 and 4 in the extended scope depend on the baseline watcher and Telegram alert path already existing.
 
 ## Implementation Strategy
 
 - Deliver the smallest useful slice first: manual upstream watcher run.
 - Add scheduled Telegram delivery second.
 - Add failure/recovery hardening after the baseline watcher and scheduler behavior are stable.
+- Add severity, digest batching, and consent-based project guidance only after the base upstream watcher semantics are stable.

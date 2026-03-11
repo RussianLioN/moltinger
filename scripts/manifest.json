@@ -61,8 +61,8 @@
       "ci": true
     },
     "codex-cli-upstream-watcher.sh": {
-      "version": "1.0.0",
-      "description": "Watch official Codex upstream sources and send duplicate-safe Telegram alerts",
+      "version": "2.0.0",
+      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and consent-based project recommendations",
       "entrypoint": true,
       "requires": [
         "curl",
@@ -71,7 +71,33 @@
       ],
       "provides": [
         "codex-upstream-watcher",
-        "codex-upstream-telegram"
+        "codex-upstream-telegram",
+        "codex-upstream-digest",
+        "codex-upstream-practical-guidance"
+      ],
+      "env_vars": [
+        "CODEX_UPSTREAM_WATCHER_MODE",
+        "CODEX_UPSTREAM_WATCHER_STATE_FILE",
+        "CODEX_UPSTREAM_WATCHER_RELEASE_FILE",
+        "CODEX_UPSTREAM_WATCHER_RELEASE_URL",
+        "CODEX_UPSTREAM_WATCHER_ISSUE_SIGNALS_FILE",
+        "CODEX_UPSTREAM_WATCHER_ISSUE_SIGNALS_URL",
+        "CODEX_UPSTREAM_WATCHER_MAX_RELEASES",
+        "CODEX_UPSTREAM_WATCHER_DELIVERY_MODE",
+        "CODEX_UPSTREAM_WATCHER_DIGEST_WINDOW_HOURS",
+        "CODEX_UPSTREAM_WATCHER_DIGEST_MAX_ITEMS",
+        "CODEX_UPSTREAM_WATCHER_ADVISOR_BRIDGE_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CHAT_ID",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_ENV_FILE",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_WINDOW_HOURS",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "MOLTIS_ENV_FILE"
       ],
       "ci": true
     },

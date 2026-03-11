@@ -79,6 +79,45 @@
 - Reuse the `009` delivery state file directly: rejected because it encodes surface-level local delivery decisions, not upstream-only watcher semantics.
 - Keep no state and always notify on every run: rejected because it would spam Telegram and fail the low-noise requirement.
 
+## Decision 6: Add severity and digest as first-class watcher concepts
+
+**Decision**: The watcher will classify each upstream state by severity and support a digest delivery mode for non-critical events.
+
+**Rationale**:
+- The user explicitly asked for less noisy delivery while still understanding whether a change is routine or urgent.
+- Severity gives a fast operator answer before any deeper project analysis starts.
+- Digest mode keeps scheduler-based Telegram alerts useful instead of chatty.
+
+**Alternatives considered**:
+- Always send every update immediately: rejected because minor upstream changes can create unnecessary alert noise.
+- Only show “new vs known” without importance ranking: rejected because it forces the operator to do manual triage every time.
+
+## Decision 7: Use an opt-in advisor bridge for practical project recommendations
+
+**Decision**: The watcher may prepare project-facing recommendations through the existing monitor/advisor chain, but it will only send them after the user explicitly agrees in Telegram.
+
+**Rationale**:
+- The user wants both upstream awareness and practical guidance for the current project.
+- Sending project recommendations only after consent keeps the watcher from feeling noisy or presumptuous.
+- Reusing the existing advisor layer is safer than duplicating repo-specific heuristics inside the upstream watcher.
+
+**Alternatives considered**:
+- Hard-code project advice directly inside the watcher summary: rejected because it duplicates logic and blurs responsibility boundaries.
+- Never bridge into advisor output: rejected because it leaves the UX one step short of actionable guidance.
+
+## Decision 8: Keep direct Bot API `getUpdates` opt-in only
+
+**Decision**: Reading user replies through direct Bot API `getUpdates` stays disabled by default and must be explicitly enabled only in a safe maintenance mode or for a dedicated bot.
+
+**Rationale**:
+- A second poller can compete with the main bot consumer and steal updates from the primary runtime.
+- If a webhook is active, the watcher should not try to override or bypass that inbound mode.
+- The consent-follow-up feature still needs a deterministic local contract for fixtures and controlled operational windows.
+
+**Alternatives considered**:
+- Always read replies directly from Bot API: rejected because it risks breaking the existing production Telegram flow.
+- Remove automatic reply handling entirely: rejected because the user explicitly asked for opt-in practical recommendations after the Telegram question.
+
 ## Reusable Local Patterns
 
 - `scripts/codex-cli-update-monitor.sh`: upstream parsing lessons and release-source handling
@@ -89,7 +128,8 @@
 
 ## Planning Notes
 
-- `012` intentionally covers upstream awareness and scheduled Telegram alerting, not local applicability or local CLI inspection.
+- `012` keeps upstream awareness as the primary concern, but now exposes a consent-based bridge to project-facing practical guidance.
 - The watcher should emit a reusable JSON contract even when the primary scheduler path is cron.
 - Source failures should remain explicit and retry-safe.
-- Future integration can bridge watcher output into local advisor or Codex-facing delivery, but that is not v1 scope here.
+- Severity, digest mode, and Telegram consent flow are now part of the watcher UX itself.
+- Direct live reply reading is intentionally guarded behind an explicit opt-in and webhook safety checks.

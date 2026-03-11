@@ -31,11 +31,39 @@ on:
         required: true
         default: false
         type: boolean
+      delivery_mode:
+        description: "Режим доставки уведомлений"
+        required: true
+        default: "immediate"
+        type: choice
+        options:
+          - immediate
+          - digest
+      digest_window_hours:
+        description: "Через сколько часов отправлять накопленный дайджест"
+        required: true
+        default: "24"
+        type: string
+      digest_max_items:
+        description: "Сколько событий накапливать до принудительной отправки дайджеста"
+        required: true
+        default: "3"
+        type: string
       telegram_chat_id:
         description: "Необязательный явный Telegram chat id"
         required: false
         default: ""
         type: string
+      telegram_consent_enabled:
+        description: "Спрашивать в Telegram, нужны ли практические рекомендации"
+        required: true
+        default: true
+        type: boolean
+      telegram_allow_getupdates:
+        description: "Разрешить live-чтение ответов через Bot API getUpdates (только для safe-режима)"
+        required: true
+        default: false
+        type: boolean
       artifact_name:
         description: "Имя набора артефактов"
         required: true
@@ -65,6 +93,9 @@ jobs:
           args=(
             --mode "${{ inputs.mode }}"
             --release-url "${{ inputs.release_url }}"
+            --delivery-mode "${{ inputs.delivery_mode }}"
+            --digest-window-hours "${{ inputs.digest_window_hours }}"
+            --digest-max-items "${{ inputs.digest_max_items }}"
             --json-out codex-upstream-watcher-report.json
             --summary-out codex-upstream-watcher-summary.md
             --stdout none
@@ -76,6 +107,14 @@ jobs:
 
           if [[ "${{ inputs.telegram_enabled }}" == "true" ]]; then
             args+=(--telegram-enabled)
+          fi
+
+          if [[ "${{ inputs.telegram_consent_enabled }}" != "true" ]]; then
+            args+=(--telegram-consent-disabled)
+          fi
+
+          if [[ "${{ inputs.telegram_allow_getupdates }}" == "true" ]]; then
+            args+=(--telegram-allow-getupdates)
           fi
 
           if [[ -n "${{ inputs.telegram_chat_id }}" ]]; then
