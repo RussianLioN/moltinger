@@ -4,6 +4,8 @@
 
 Spec-kit handles **planning** (spec → plan → tasks), Beads handles **execution** (tracking, dependencies, multi-session).
 
+Inside this repository, the execution side should continue with plain `bd` once the session is safely bootstrapped; do not reintroduce a wrapper-choice step while moving from Spec-kit to Beads.
+
 ```
 Spec-kit (Planning)          Beads (Execution)
 ─────────────────           ─────────────────

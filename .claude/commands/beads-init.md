@@ -37,6 +37,8 @@ npm install -g @beads/bd
 brew install steveyegge/tap/beads
 ```
 
+Repo note: once initialization is complete, ordinary repo-local work should use plain `bd`. Safe local ownership is bootstrapped through `.envrc` or managed worktree/Codex session launch.
+
 ## Configuration Selection
 
 Ask user to choose configuration:
@@ -131,7 +133,8 @@ END:    bd sync → git push
 
 If bd init fails:
 - Check if .beads/ already exists
-- Try: `rm -rf .beads && bd init`
+- Inspect the existing Beads state first with `bd info`
+- In an existing dedicated worktree, prefer `./scripts/beads-worktree-localize.sh --path .` over deleting `.beads/`
 
 If daemon doesn't start:
 - Check logs: `cat .beads/daemon.log`

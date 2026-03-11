@@ -76,6 +76,7 @@ path_preview=""
 resolved_repo_root=""
 resolved_common_dir=""
 canonical_repo_name=""
+resolved_bd_command=""
 
 report_worktree_path=""
 report_path_preview=""
@@ -535,6 +536,37 @@ build_bootstrap_import_command() {
   done
 
   printf '%s\n' "${command_text}"
+}
+
+resolve_bd_command() {
+  if [[ -n "${resolved_bd_command}" ]]; then
+    printf '%s\n' "${resolved_bd_command}"
+    return 0
+  fi
+
+  if [[ -n "${resolved_repo_root}" && -x "${resolved_repo_root}/bin/bd" ]]; then
+    resolved_bd_command="${resolved_repo_root}/bin/bd"
+    printf '%s\n' "${resolved_bd_command}"
+    return 0
+  fi
+
+  if command -v bd >/dev/null 2>&1; then
+    resolved_bd_command="$(command -v bd)"
+    printf '%s\n' "${resolved_bd_command}"
+    return 0
+  fi
+
+  return 1
+}
+
+build_plain_bd_bootstrap_command_for_path() {
+  local worktree_path="${1:-}"
+
+  if [[ -z "${worktree_path}" || "${worktree_path}" == "n/a" ]]; then
+    return 1
+  fi
+
+  printf 'export PATH=%s:$PATH\n' "$(shell_quote "${worktree_path}/bin")"
 }
 
 discover_issue_context() {
@@ -1256,8 +1288,9 @@ find_bd_worktree_by_path() {
   local normalized_search_path=""
   local output=""
   local exit_code=0
+  local bd_command=""
 
-  if ! command -v bd >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+  if ! bd_command="$(resolve_bd_command)" || ! command -v jq >/dev/null 2>&1; then
     printf '__PROBE_STATE__\tprobe_unavailable\n'
     return 0
   fi
@@ -1266,7 +1299,7 @@ find_bd_worktree_by_path() {
 
   set +e
   output="$(
-    cd "${resolved_repo_root}" && bd worktree list --json 2>/dev/null \
+    cd "${resolved_repo_root}" && "${bd_command}" worktree list --json 2>/dev/null \
       | jq -r --arg path "${normalized_search_path}" '
         .[]
         | select(.path == $path)
@@ -1821,6 +1854,7 @@ set_command_exit_code_from_readiness() {
 set_readiness_next_steps() {
   local mode_name="$1"
   local bootstrap_command=""
+  local plain_bd_bootstrap=""
 
   if [[ "${branch_resolution_state}" == "missing" ]]; then
     add_next_step "Create or fetch the branch '${branch}' before using attach or start --existing"
@@ -1836,6 +1870,9 @@ set_readiness_next_steps() {
       ;;
     ready_for_codex)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${report_worktree_path}")"; then
+        add_next_step "${plain_bd_bootstrap}"
+      fi
       if bootstrap_command="$(build_bootstrap_import_command)"; then
         add_next_step "${bootstrap_command}"
       fi
@@ -1843,6 +1880,9 @@ set_readiness_next_steps() {
       ;;
     needs_env_approval)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${report_worktree_path}")"; then
+        add_next_step "${plain_bd_bootstrap}"
+      fi
       if bootstrap_command="$(build_bootstrap_import_command)"; then
         add_next_step "${bootstrap_command}"
       fi
@@ -1851,6 +1891,9 @@ set_readiness_next_steps() {
       ;;
     created)
       add_next_step "cd $(shell_quote "${report_worktree_path}")"
+      if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${report_worktree_path}")"; then
+        add_next_step "${plain_bd_bootstrap}"
+      fi
       if bootstrap_command="$(build_bootstrap_import_command)"; then
         add_next_step "${bootstrap_command}"
       fi
@@ -1871,7 +1914,7 @@ set_readiness_next_steps() {
             add_next_step "cd $(shell_quote "${report_worktree_path}")"
             add_next_step "Inspect the existing worktree and fix the reported prerequisites"
           else
-            add_next_step "bd worktree create $(shell_quote "${path_preview}") --branch $(shell_quote "${branch}")"
+            add_next_step "Retry the managed worktree flow from the invoking worktree after fixing the reported prerequisites"
           fi
           ;;
         doctor|handoff)
@@ -1891,6 +1934,7 @@ set_readiness_next_steps() {
 set_doctor_next_steps() {
   local worktree_target=""
   local refspec=""
+  local plain_bd_bootstrap=""
 
   worktree_target="${report_worktree_path}"
 
@@ -1908,7 +1952,7 @@ set_doctor_next_steps() {
     if [[ -n "${branch}" ]]; then
       add_next_step "Use command-worktree attach $(shell_quote "${branch}") from the invoking worktree"
     elif [[ -n "${target_path}" ]]; then
-      add_next_step "bd worktree list"
+      add_next_step "Inspect the current repository context and rerun doctor from the invoking worktree with a managed attach path"
     else
       add_next_step "Inspect the current repository context and retry doctor with --branch or --path"
     fi
@@ -1926,7 +1970,7 @@ set_doctor_next_steps() {
   fi
 
   if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" ]]; then
-    add_next_step "bd worktree list"
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
   fi
 
   case "${report_env_state}" in
@@ -1951,7 +1995,13 @@ set_doctor_next_steps() {
 
   case "${report_status}" in
     ready_for_codex)
-      add_next_step "cd $(shell_quote "${worktree_target}") && codex"
+      if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${worktree_target}")"; then
+        add_next_step "cd $(shell_quote "${worktree_target}")"
+        add_next_step "${plain_bd_bootstrap}"
+        add_next_step "codex"
+      else
+        add_next_step "cd $(shell_quote "${worktree_target}") && codex"
+      fi
       ;;
     created)
       add_next_step "cd $(shell_quote "${worktree_target}")"
@@ -2435,12 +2485,21 @@ apple_script_escape() {
 }
 
 build_terminal_session_command() {
+  local plain_bd_bootstrap=""
+
   case "${report_handoff_mode}" in
     terminal)
       printf 'cd %s\n' "$(shell_quote "${report_worktree_path}")"
+      if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${report_worktree_path}")"; then
+        printf '%s\n' "${plain_bd_bootstrap}"
+      fi
       ;;
     codex)
-      printf 'cd %s && codex\n' "$(shell_quote "${report_worktree_path}")"
+      printf 'cd %s\n' "$(shell_quote "${report_worktree_path}")"
+      if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${report_worktree_path}")"; then
+        printf '%s\n' "${plain_bd_bootstrap}"
+      fi
+      printf 'codex\n'
       ;;
     *)
       printf '\n'

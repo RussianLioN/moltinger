@@ -586,6 +586,35 @@ test_doctor_missing_worktree_routes_back_to_managed_attach() {
     test_pass
 }
 
+test_doctor_missing_beads_state_routes_to_localize_helper() {
+    test_start "worktree_ready_doctor_missing_beads_state_routes_to_localize_helper"
+
+    local fixture_root repo_dir fake_bin existing_path output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-beads-localize"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/beads-localize" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "$existing_path" "ok"
+
+    output="$(
+        set +e
+        run_worktree_doctor "$repo_dir" "$fake_bin" --branch feat/beads-localize 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Missing Beads ownership should still block doctor"
+    assert_contains "$output" "./scripts/beads-worktree-localize.sh --path ." "Doctor should route dedicated-worktree Beads recovery through the managed localization helper"
+    if [[ "$output" == *"bd worktree create"* ]]; then
+        test_fail "Doctor should not suggest raw bd worktree create for Beads ownership recovery"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_plan_needs_clarification_returns_exit_code_10() {
     test_start "worktree_ready_plan_needs_clarification_returns_exit_code_10"
 
@@ -667,6 +696,7 @@ run_all_tests() {
     test_doctor_does_not_block_on_beads_probe_unavailable
     test_doctor_missing_guard_script_does_not_suggest_refresh
     test_doctor_missing_worktree_routes_back_to_managed_attach
+    test_doctor_missing_beads_state_routes_to_localize_helper
     test_plan_needs_clarification_returns_exit_code_10
     test_attach_missing_branch_returns_blocked_missing_branch
     generate_report

@@ -20,6 +20,8 @@ bd info
 
 If not installed, instruct user to run `/beads-init` first.
 
+Within this repository, assume plain `bd` is the normal command path once the session is safely bootstrapped; do not introduce a separate wrapper command in the user guidance.
+
 ## Outline
 
 1. Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute.

@@ -74,6 +74,7 @@ check_required_files() {
 
   local files=(
     "AGENTS.md"
+    "bin/bd"
     ".ai/instructions/shared-core.md"
     ".ai/instructions/codex-adapter.md"
     ".ai/AGENTS.md"
@@ -93,6 +94,8 @@ check_required_files() {
     "tests/AGENTS.md"
     "scripts/codex-check.sh"
     "scripts/codex-profile-launch.sh"
+    "scripts/beads-resolve-db.sh"
+    "scripts/beads-worktree-localize.sh"
   )
 
   local failures=0

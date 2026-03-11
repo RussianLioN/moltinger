@@ -11,6 +11,8 @@ argument-hint: ""
 
 Beads is a git-backed, AI-native issue tracking system. This skill helps AI agents work with Beads effectively.
 
+In this repository, normal work should use plain `bd`; safe repo-local dispatch is bootstrapped by `.envrc` or the managed worktree/Codex launch flows without requiring a separate wrapper command.
+
 ## When to Use
 
 - Starting a new work session (bd prime → bd ready)
