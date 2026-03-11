@@ -32,6 +32,19 @@ Use the topology registry before cleanup worktree/branch actions and after manua
 
 ## Core Commands
 
+### Moltinger remote UAT
+
+```bash
+gh workflow run telegram-e2e-on-demand.yml \
+  -f message='/status' \
+  -f timeout_sec='45' \
+  -f operator_intent='post_deploy_verification' \
+  -f run_secondary_mtproto=false \
+  -f upload_restricted_debug=false
+```
+
+Canonical post-deploy verdict path is `Telegram Web`; `MTProto` is secondary diagnostics only.
+
 ### Clawdiy deploy
 
 ```bash

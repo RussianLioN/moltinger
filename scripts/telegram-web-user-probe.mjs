@@ -45,9 +45,16 @@ const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 let stage = "login";
 let retriesUsed = 0;
 let chatOpenVerified = false;
+let lastChatOpenCheck = null;
 
 function normalizeMessageText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
+  return String(value || "")
+    .replace(/[\u200e\u200f]/g, " ")
+    .replace(/[\uE000-\uF8FF]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/(?:\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)+$/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function safeMid(value) {
@@ -61,6 +68,12 @@ function normalizeProbeMessage(message) {
     direction: String(message?.direction || "unknown"),
     text: normalizeMessageText(message?.text),
   };
+}
+
+function previewText(value, limit = 160) {
+  const normalized = normalizeMessageText(value);
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, Math.max(0, limit - 1))}...`;
 }
 
 function maxObservedMid(messages) {
@@ -109,7 +122,7 @@ function summarizeMessage(message) {
   return {
     mid: normalized.mid,
     direction: normalized.direction,
-    text: normalized.text,
+    text: previewText(normalized.text),
   };
 }
 
@@ -121,13 +134,11 @@ function normalizeTarget(value) {
   };
 }
 
-function withDiagnostics(base, stats) {
+function buildBasePayload() {
   return {
-    ...base,
     stage,
     retries_used: retriesUsed,
     chat_open_verified: chatOpenVerified,
-    ...(stats ? { stats } : {}),
   };
 }
 
@@ -136,13 +147,211 @@ function buildCorrelationWindow(details) {
     strategy: "quiet_window_then_first_incoming_after_sent_mid",
     quiet_window_ms: details.quietWindowMs,
     quiet_window_wait_ms: details.quietWindowWaitMs,
-    baseline_max_mid: details.baselineMaxMid,
+    baseline_max_message_id: details.baselineMaxMid,
     sent_observed_at_ms: details.sentObservedAtMs || null,
     reply_observed_at_ms: details.replyObservedAtMs || null,
     sent_message: summarizeMessage(details.sentMessage),
     matched_reply: summarizeMessage(details.replyMessage),
     latest_seen_incoming: summarizeMessage(details.latestIncoming),
     last_pre_send_activity: details.lastPreSendActivity || null,
+  };
+}
+
+export function classifyFailure(code, stageName = stage) {
+  const registry = {
+    missing_session_state: {
+      summary: "Telegram Web session is missing, stale, or not logged in",
+      actionability: "operator",
+      fallback_relevant: true,
+      recommended_action: "Re-authenticate Telegram Web and rerun the authoritative check.",
+    },
+    ui_drift: {
+      summary: "Telegram Web UI structure no longer matches the probe contract",
+      actionability: "engineering",
+      fallback_relevant: true,
+      recommended_action: "Inspect restricted debug evidence, update selectors, and rerun the authoritative check.",
+    },
+    chat_open_failure: {
+      summary: "The target Telegram chat could not be opened reliably",
+      actionability: "operator",
+      fallback_relevant: true,
+      recommended_action: "Confirm the target chat/user mapping and rerun after restoring chat visibility.",
+    },
+    stale_chat_noise: {
+      summary: "The chat remained noisy, so attribution could not be proven safely",
+      actionability: "operator",
+      fallback_relevant: false,
+      recommended_action: "Wait for the chat to settle or isolate the chat noise, then rerun the authoritative check.",
+    },
+    send_failure: {
+      summary: "The probe message was not observed after the send action",
+      actionability: "engineering",
+      fallback_relevant: true,
+      recommended_action: "Inspect Telegram Web send diagnostics and rerun after fixing the send path or selector drift.",
+    },
+    bot_no_response: {
+      summary: "The bot did not produce an attributable reply for the current run",
+      actionability: "operator",
+      fallback_relevant: true,
+      recommended_action: "Check bot/runtime health and polling logs, then rerun the authoritative check.",
+    },
+    environment_precondition: {
+      summary: "The authoritative Telegram Web probe is missing runtime prerequisites",
+      actionability: "operator",
+      fallback_relevant: true,
+      recommended_action: "Restore the required runtime prerequisites and rerun the authoritative check.",
+    },
+  };
+
+  const resolved = registry[code] || {
+    summary: "The authoritative Telegram Web probe failed unexpectedly",
+    actionability: "engineering",
+    fallback_relevant: true,
+    recommended_action: "Inspect restricted debug evidence and rerun after narrowing the root cause.",
+  };
+
+  return {
+    code,
+    stage: stageName,
+    summary: resolved.summary,
+    actionability: resolved.actionability,
+    fallback_relevant: resolved.fallback_relevant,
+    recommended_action: resolved.recommended_action,
+  };
+}
+
+function sanitizeStats(stats) {
+  if (!stats) return null;
+  return {
+    url: stats.url || "",
+    peers: Number(stats.peers || 0),
+    chats: Number(stats.chats || 0),
+    skeletons: Number(stats.skeletons || 0),
+    hasSearch: Boolean(stats.hasSearch),
+    loginInputs: Number(stats.loginInputs || 0),
+  };
+}
+
+function buildAttributionEvidence(correlation, confidence) {
+  if (!correlation) {
+    return {
+      attribution_confidence: confidence,
+    };
+  }
+
+  return {
+    quiet_window_ms: correlation.quiet_window_ms,
+    quiet_window_wait_ms: correlation.quiet_window_wait_ms,
+    baseline_max_message_id: correlation.baseline_max_message_id,
+    last_pre_send_activity: correlation.last_pre_send_activity || null,
+    sent_message_fingerprint: correlation.sent_message || null,
+    sent_message_id: correlation.sent_message?.mid || null,
+    matched_reply_fingerprint: correlation.matched_reply || null,
+    matched_reply_id: correlation.matched_reply?.mid || null,
+    latest_seen_incoming: correlation.latest_seen_incoming || null,
+    reply_observed_at_ms: correlation.reply_observed_at_ms || null,
+    attribution_confidence: confidence,
+  };
+}
+
+function failurePayload({ code, hint, diagnosticContext, correlation, stats, extra = {} }) {
+  const failure = classifyFailure(code);
+  const safeStats = sanitizeStats(stats);
+
+  return {
+    ok: false,
+    status: "fail",
+    ...buildBasePayload(),
+    failure,
+    attribution_evidence: buildAttributionEvidence(
+      correlation,
+      code === "stale_chat_noise" ? "invalidated" : "absent"
+    ),
+    diagnostic_context: {
+      ...(diagnosticContext || {}),
+      ...(safeStats ? { stats: safeStats } : {}),
+    },
+    recommended_action: failure.recommended_action,
+    ...(hint ? { hint } : {}),
+    ...extra,
+  };
+}
+
+export function buildSendDebugSnapshot(rawSnapshot, probeText, minMidExclusive = 0) {
+  const messages = Array.isArray(rawSnapshot?.bubbles)
+    ? rawSnapshot.bubbles.map(normalizeProbeMessage)
+    : [];
+  const normalizedProbeText = normalizeMessageText(probeText);
+  const exactOutgoingMatches = messages
+    .filter(
+      (message) =>
+        message.direction === "out" &&
+        message.mid > minMidExclusive &&
+        message.text === normalizedProbeText
+    )
+    .slice(-5)
+    .map(summarizeMessage);
+
+  return {
+    url: String(rawSnapshot?.url || ""),
+    hash: String(rawSnapshot?.hash || ""),
+    composer: {
+      present: Boolean(rawSnapshot?.composer?.present),
+      contenteditable: Boolean(rawSnapshot?.composer?.contenteditable),
+      peer_id: rawSnapshot?.composer?.peerId ?? null,
+      draft_text_length: Number(rawSnapshot?.composer?.draftTextLength || 0),
+      draft_text_preview: previewText(rawSnapshot?.composer?.draftTextPreview || ""),
+      draft_matches_probe:
+        normalizeMessageText(rawSnapshot?.composer?.draftTextPreview || "") === normalizedProbeText,
+    },
+    send_button: {
+      present: Boolean(rawSnapshot?.sendButton?.present),
+      enabled: Boolean(rawSnapshot?.sendButton?.enabled),
+      aria_label: previewText(rawSnapshot?.sendButton?.ariaLabel || "", 80),
+      title: previewText(rawSnapshot?.sendButton?.title || "", 80),
+    },
+    active_element: {
+      tag: String(rawSnapshot?.activeElement?.tag || ""),
+      role: String(rawSnapshot?.activeElement?.role || ""),
+      aria_label: previewText(rawSnapshot?.activeElement?.ariaLabel || "", 80),
+      class_name: previewText(rawSnapshot?.activeElement?.className || "", 120),
+    },
+    verification_prompt_present: Boolean(rawSnapshot?.verificationPromptPresent),
+    bubble_count: messages.length,
+    exact_outgoing_probe_candidates: exactOutgoingMatches,
+    last_bubbles: messages.slice(-8).map(summarizeMessage),
+  };
+}
+
+function successPayload({ targetValue, sentText, sentMessage, replyMessage, correlation, checks, failures, stats }) {
+  const safeStats = sanitizeStats(stats);
+  const ok = failures.length === 0;
+  const recommendedAction = ok
+    ? "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+    : "Inspect the reply quality checks and rerun after correcting the authoritative path.";
+
+  return {
+    ok,
+    status: ok ? "pass" : "fail",
+    ...buildBasePayload(),
+    target: targetValue,
+    sent_text: sentText,
+    sent_mid: sentMessage.mid,
+    reply_text: replyMessage.text,
+    reply_mid: replyMessage.mid,
+    checks,
+    failures,
+    failure: ok
+      ? null
+      : {
+          ...classifyFailure("bot_no_response", "wait_reply"),
+          summary: "The bot reply was observed but failed reply-quality checks",
+        },
+    attribution_evidence: buildAttributionEvidence(correlation, ok ? "proven" : "invalidated"),
+    diagnostic_context: {
+      ...(safeStats ? { stats: safeStats } : {}),
+    },
+    recommended_action: recommendedAction,
   };
 }
 
@@ -172,6 +381,32 @@ async function locateComposer(page) {
   for (const c of candidates) {
     const loc = page.locator(c).first();
     if (await loc.isVisible().catch(() => false)) return loc;
+  }
+  return null;
+}
+
+async function locateSendButton(page) {
+  const candidates = [
+    'button[aria-label*="Send" i]',
+    'button[title*="Send" i]',
+    ".btn-send",
+    "button.send",
+    ".new-message-send",
+  ];
+  for (const candidate of candidates) {
+    const locator = page.locator(candidate).first();
+    if (await locator.isVisible().catch(() => false)) return locator;
+  }
+  return null;
+}
+
+async function waitForOutgoingProbe(page, probeText, minMidExclusive, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(400);
+    const nowMessages = await collectMessages(page);
+    const sentMessage = findOutgoingProbeMessage(nowMessages, probeText, minMidExclusive);
+    if (sentMessage) return sentMessage;
   }
   return null;
 }
@@ -350,6 +585,82 @@ async function verifyChatOpen(page, targetValue) {
     .catch(() => ({ open: false, hashHasTarget: false, hasComposer: false, hasChatPane: false }));
 }
 
+async function collectSendDebugSnapshot(page, probeText, minMidExclusive = 0) {
+  const rawSnapshot = await page
+    .evaluate(() => {
+      const composer =
+        document.querySelector('div.input-message-input[contenteditable="true"][data-peer-id]') ||
+        document.querySelector('.input-message-container div.input-message-input[contenteditable="true"]') ||
+        document.querySelector('.input-message-container [contenteditable="true"]') ||
+        document.querySelector('div[contenteditable="true"]');
+      const sendButton =
+        document.querySelector('button[aria-label*="Send" i]') ||
+        document.querySelector('button[title*="Send" i]') ||
+        document.querySelector('.btn-send, .send, .new-message-send');
+      const activeElement = document.activeElement;
+      const bubbles = Array.from(document.querySelectorAll(".bubble")).map((bubble) => {
+        const className = (bubble.className || "").toString();
+        const textNode =
+          bubble.querySelector(".translatable-message") ||
+          bubble.querySelector(".bubble-content") ||
+          bubble;
+        const text = (textNode.textContent || "").replace(/\s+/g, " ").trim();
+        const midRaw = bubble.closest("[data-mid]")?.getAttribute("data-mid");
+        let direction = "unknown";
+        if (className.includes(" is-in ")) direction = "in";
+        if (className.includes(" is-out ")) direction = "out";
+        if (className.includes(" service ")) direction = "service";
+        return {
+          mid: midRaw ? Number(midRaw) : null,
+          direction,
+          text,
+        };
+      });
+
+      return {
+        url: location.href,
+        hash: location.hash || "",
+        composer: composer
+          ? {
+              present: true,
+              contenteditable: composer.getAttribute("contenteditable") === "true",
+              peerId: composer.getAttribute("data-peer-id"),
+              draftTextLength: (composer.textContent || "").replace(/\s+/g, " ").trim().length,
+              draftTextPreview: (composer.textContent || "").replace(/\s+/g, " ").trim(),
+            }
+          : { present: false },
+        sendButton: sendButton
+          ? {
+              present: true,
+              enabled: !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true",
+              ariaLabel: sendButton.getAttribute("aria-label") || "",
+              title: sendButton.getAttribute("title") || "",
+            }
+          : { present: false },
+        activeElement: activeElement
+          ? {
+              tag: activeElement.tagName || "",
+              role: activeElement.getAttribute?.("role") || "",
+              ariaLabel: activeElement.getAttribute?.("aria-label") || "",
+              className: (activeElement.className || "").toString(),
+            }
+          : null,
+        verificationPromptPresent: /verification code|enter the verification code/i.test(document.body?.innerText || ""),
+        bubbles,
+      };
+    })
+    .catch((error) => ({
+      evaluate_error: error?.message || "send_debug_capture_failed",
+      bubbles: [],
+    }));
+
+  const snapshot = buildSendDebugSnapshot(rawSnapshot, probeText, minMidExclusive);
+  if (rawSnapshot?.evaluate_error) {
+    snapshot.capture_error = rawSnapshot.evaluate_error;
+  }
+  return snapshot;
+}
+
 async function openTargetChat(page, search, targetValue, maxRetries = 1) {
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     stage = "search";
@@ -364,6 +675,7 @@ async function openTargetChat(page, search, targetValue, maxRetries = 1) {
       await chat.click({ timeout: 10_000 });
       await page.waitForTimeout(1000 + attempt * 300);
       const verified = await verifyChatOpen(page, targetValue);
+      lastChatOpenCheck = verified;
       if (verified.open) {
         chatOpenVerified = true;
         return true;
@@ -387,8 +699,11 @@ async function pageStats(page) {
       chats: document.querySelectorAll(".chatlist-chat, a.chatlist-chat").length,
       skeletons: document.querySelectorAll(".dialogs-placeholder-canvas, .shimmer-canvas, .skeleton").length,
       hasSearch: !!document.querySelector("input.input-search-input, input[type='search'], input[placeholder*='Search']"),
+      loginInputs: document.querySelectorAll(
+        'input[type="tel"], input[autocomplete="tel"], [class*="qr" i], [data-testid*="qr" i]'
+      ).length,
     }))
-    .catch(() => ({ url: "", peers: 0, chats: 0, skeletons: 0, hasSearch: false }));
+    .catch(() => ({ url: "", peers: 0, chats: 0, skeletons: 0, hasSearch: false, loginInputs: 0 }));
 }
 
 async function main() {
@@ -397,12 +712,15 @@ async function main() {
     ({ chromium } = await import("playwright"));
   } catch {
     console.log(
-      JSON.stringify({
-        ok: false,
-        status: "fail",
-        error: "Playwright is not installed",
-        hint: "npm install playwright && npx playwright install chromium",
-      })
+      JSON.stringify(
+        failurePayload({
+          code: "environment_precondition",
+          hint: "npm install playwright && npx playwright install chromium",
+          diagnosticContext: {
+            reason: "playwright_not_installed",
+          },
+        })
+      )
     );
     process.exit(1);
   }
@@ -411,12 +729,14 @@ async function main() {
   if (!fs.existsSync(statePath)) {
     console.log(
       JSON.stringify(
-        withDiagnostics({
-          ok: false,
-          status: "fail",
-          error: "Telegram Web state file not found",
-          state: statePath,
+        failurePayload({
+          code: "missing_session_state",
           hint: `Run: node scripts/telegram-web-user-login.mjs --state ${statePath}`,
+          diagnosticContext: {
+            target,
+            state_present: false,
+            state_file: path.basename(statePath),
+          },
         })
       )
     );
@@ -435,12 +755,15 @@ async function main() {
     if (!ready.ready) {
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Telegram Web UI did not become ready in time",
-            stats: ready.stats,
+          failurePayload({
+            code: ready.stats?.loginInputs > 0 ? "missing_session_state" : "ui_drift",
             hint: `Run: node scripts/telegram-web-user-login.mjs --state ${statePath}`,
+            diagnosticContext: {
+              target,
+              state_present: true,
+              login_state: ready.stats?.loginInputs > 0 ? "login_required" : "unknown",
+            },
+            stats: ready.stats,
           })
         )
       );
@@ -452,11 +775,14 @@ async function main() {
     if (!search) {
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Telegram Web is not logged in or UI not detected",
+          failurePayload({
+            code: "missing_session_state",
             hint: "Run: scripts/telegram-web-user-login.mjs",
+            diagnosticContext: {
+              target,
+              state_present: true,
+              login_state: "not_logged_in_or_ui_missing",
+            },
             stats: await pageStats(page),
           })
         )
@@ -469,11 +795,12 @@ async function main() {
     if (!chatOpened) {
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Cannot locate or open target chat in Telegram Web UI",
-            target,
+          failurePayload({
+            code: "chat_open_failure",
+            diagnosticContext: {
+              target,
+              chat_open_check: lastChatOpenCheck,
+            },
             stats: await pageStats(page),
           })
         )
@@ -493,26 +820,26 @@ async function main() {
     );
 
     if (!quietWindow.ok) {
+      const correlation = buildCorrelationWindow({
+        quietWindowMs,
+        quietWindowWaitMs: quietWindow.quietWindowWaitMs,
+        baselineMaxMid: quietWindow.baselineMaxMid,
+        sentObservedAtMs: null,
+        replyObservedAtMs: null,
+        sentMessage: null,
+        replyMessage: null,
+        latestIncoming: null,
+        lastPreSendActivity: quietWindow.lastActivity,
+      });
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Chat did not become quiet before probe",
-            target,
-            quiet_window_ms: quietWindowMs,
-            correlation: buildCorrelationWindow({
-              quietWindowMs,
-              quietWindowWaitMs: quietWindow.quietWindowWaitMs,
-              baselineMaxMid: quietWindow.baselineMaxMid,
-              sentObservedAtMs: null,
-              replyObservedAtMs: null,
-              sentMessage: null,
-              replyMessage: null,
-              latestIncoming: null,
-              lastPreSendActivity: quietWindow.lastActivity,
-            }),
-            recent_messages: quietWindow.recentMessages,
+          failurePayload({
+            code: "stale_chat_noise",
+            correlation,
+            diagnosticContext: {
+              target,
+              recent_messages: quietWindow.recentMessages,
+            },
             stats: await pageStats(page),
           })
         )
@@ -540,10 +867,12 @@ async function main() {
     if (!composer) {
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Cannot find message composer in Telegram Web UI",
+          failurePayload({
+            code: "ui_drift",
+            diagnosticContext: {
+              target,
+              selector: "composer",
+            },
             stats: await pageStats(page),
           })
         )
@@ -556,38 +885,71 @@ async function main() {
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.press("Backspace");
     await page.keyboard.type(text, { delay: 20 });
-    await page.keyboard.press("Enter");
+    const preSendDebug = debug ? await collectSendDebugSnapshot(page, text, beforeMaxMid) : null;
+    let sendMethod = "enter";
+    const sendButton = await locateSendButton(page);
+    if (sendButton) {
+      sendMethod = "button";
+      await sendButton.click({ timeout: 5_000 }).catch(async () => {
+        sendMethod = "enter";
+        await page.keyboard.press("Enter");
+      });
+    } else {
+      await page.keyboard.press("Enter");
+    }
 
     const sentObservedAtMs = Date.now();
-    let sentMessage = null;
-    const sendObservedDeadline = Date.now() + Math.min(timeoutSec * 1000, 12_000);
-    while (!sentMessage && Date.now() < sendObservedDeadline) {
-      await page.waitForTimeout(500);
-      const nowMessages = await collectMessages(page);
-      sentMessage = findOutgoingProbeMessage(nowMessages, text, beforeMaxMid);
+    let sentMessage = await waitForOutgoingProbe(page, text, beforeMaxMid, 2_500);
+
+    if (!sentMessage && sendMethod === "button") {
+      await composer.focus().catch(() => {});
+      await page.keyboard.press("Enter").catch(() => {});
+      sendMethod = "button_then_enter";
+      sentMessage = await waitForOutgoingProbe(page, text, beforeMaxMid, Math.min(timeoutSec * 1000, 10_000));
+    } else if (!sentMessage && sendMethod === "enter") {
+      const retrySendButton = await locateSendButton(page);
+      if (retrySendButton) {
+        await retrySendButton.click({ timeout: 5_000 }).catch(() => {});
+        sendMethod = "enter_then_button";
+        sentMessage = await waitForOutgoingProbe(page, text, beforeMaxMid, Math.min(timeoutSec * 1000, 10_000));
+      }
     }
 
     if (!sentMessage) {
+      const postSendDebug = debug ? await collectSendDebugSnapshot(page, text, beforeMaxMid) : null;
+      const correlation = buildCorrelationWindow({
+        quietWindowMs,
+        quietWindowWaitMs,
+        baselineMaxMid: beforeMaxMid,
+        sentObservedAtMs,
+        replyObservedAtMs: null,
+        sentMessage: null,
+        replyMessage: null,
+        latestIncoming: null,
+        lastPreSendActivity,
+      });
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Probe message was not observed in chat after send",
-            target,
-            sent_text: text,
-            correlation: buildCorrelationWindow({
-              quietWindowMs,
-              quietWindowWaitMs,
-              baselineMaxMid: beforeMaxMid,
-              sentObservedAtMs,
-              replyObservedAtMs: null,
-              sentMessage: null,
-              replyMessage: null,
-              latestIncoming: null,
-              lastPreSendActivity,
-            }),
+          failurePayload({
+            code: "send_failure",
+            correlation,
+            diagnosticContext: {
+              target,
+              sent_text: text,
+              send_method_attempted: sendMethod,
+              chat_open_check: lastChatOpenCheck,
+            },
             stats: await pageStats(page),
+            extra:
+              debug && (preSendDebug || postSendDebug)
+                ? {
+                    restricted_debug: {
+                      send_method_attempted: sendMethod,
+                      pre_send_snapshot: preSendDebug,
+                      post_send_snapshot: postSendDebug,
+                    },
+                  }
+                : {},
           })
         )
       );
@@ -627,29 +989,31 @@ async function main() {
       const verificationBlocked =
         priorVerificationPrompt ||
         Boolean(currentLatestIncoming && /verification code|enter the verification code/i.test(currentLatestIncoming.text));
+      const correlation = buildCorrelationWindow({
+        quietWindowMs,
+        quietWindowWaitMs,
+        baselineMaxMid: beforeMaxMid,
+        sentObservedAtMs,
+        replyObservedAtMs: null,
+        sentMessage,
+        replyMessage: null,
+        latestIncoming: currentLatestIncoming,
+        lastPreSendActivity,
+      });
 
       console.log(
         JSON.stringify(
-          withDiagnostics({
-            ok: false,
-            status: "fail",
-            error: "Timeout waiting for attributed reply",
-            target,
-            sent_text: text,
-            timeout_seconds: timeoutSec,
-            outgoing_sent: outgoingSent,
-            possible_reason: verificationBlocked ? "bot_requires_verification_code" : undefined,
-            correlation: buildCorrelationWindow({
-              quietWindowMs,
-              quietWindowWaitMs,
-              baselineMaxMid: beforeMaxMid,
-              sentObservedAtMs,
-              replyObservedAtMs: null,
-              sentMessage,
-              replyMessage: null,
-              latestIncoming: currentLatestIncoming,
-              lastPreSendActivity,
-            }),
+          failurePayload({
+            code: "bot_no_response",
+            correlation,
+            diagnosticContext: {
+              target,
+              sent_text: text,
+              send_method_attempted: sendMethod,
+              timeout_seconds: timeoutSec,
+              outgoing_sent: outgoingSent,
+              possible_reason: verificationBlocked ? "bot_requires_verification_code" : null,
+            },
             stats: await pageStats(page),
           })
         )
@@ -667,37 +1031,30 @@ async function main() {
     const failures = Object.entries(checks)
       .filter(([, ok]) => !ok)
       .map(([name]) => name);
-
-    const ok = failures.length === 0;
-    const payload = withDiagnostics({
-      ok,
-      status: ok ? "pass" : "fail",
-      target,
-      sent_text: text,
-      sent_mid: sentMessage.mid,
-      reply_text: replyText,
-      reply_mid: replyMessage.mid,
-      correlation: buildCorrelationWindow({
-        quietWindowMs,
-        quietWindowWaitMs,
-        baselineMaxMid: beforeMaxMid,
-        sentObservedAtMs,
-        replyObservedAtMs,
-        sentMessage,
-        replyMessage,
-        latestIncoming,
-        lastPreSendActivity,
-      }),
+    const correlation = buildCorrelationWindow({
+      quietWindowMs,
+      quietWindowWaitMs,
+      baselineMaxMid: beforeMaxMid,
+      sentObservedAtMs,
+      replyObservedAtMs,
+      sentMessage,
+      replyMessage,
+      latestIncoming,
+      lastPreSendActivity,
+    });
+    const payload = successPayload({
+      targetValue: target,
+      sentText: text,
+      sentMessage,
+      replyMessage,
+      correlation,
       checks,
       failures,
+      stats: debug ? await pageStats(page) : null,
     });
 
-    if (debug && !payload.stats) {
-      payload.stats = await pageStats(page);
-    }
-
     console.log(JSON.stringify(payload));
-    process.exit(ok ? 0 : 6);
+    process.exit(payload.ok ? 0 : 6);
   } finally {
     await browser.close();
   }

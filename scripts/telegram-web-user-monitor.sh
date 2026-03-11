@@ -14,6 +14,7 @@ TELEGRAM_WEB_TIMEOUT_SECONDS="${TELEGRAM_WEB_TIMEOUT_SECONDS:-45}"
 TELEGRAM_WEB_MIN_REPLY_LEN="${TELEGRAM_WEB_MIN_REPLY_LEN:-2}"
 TELEGRAM_WEB_COMPOSER_RETRIES="${TELEGRAM_WEB_COMPOSER_RETRIES:-2}"
 TELEGRAM_WEB_QUIET_WINDOW_MS="${TELEGRAM_WEB_QUIET_WINDOW_MS:-3000}"
+TELEGRAM_WEB_DEBUG="${TELEGRAM_WEB_DEBUG:-false}"
 
 if [[ -f "$ENV_FILE" ]]; then
     set -a
@@ -36,11 +37,19 @@ case "${TELEGRAM_WEB_PROBE_PROFILE}" in
         ;;
 esac
 
-exec node "${SCRIPT_DIR}/telegram-web-user-probe.mjs" \
-    --state "${TELEGRAM_WEB_STATE}" \
-    --target "${TELEGRAM_WEB_TARGET}" \
-    --text "${PROBE_TEXT}" \
-    --timeout "${TELEGRAM_WEB_TIMEOUT_SECONDS}" \
-    --min-reply-len "${TELEGRAM_WEB_MIN_REPLY_LEN}" \
-    --composer-retries "${TELEGRAM_WEB_COMPOSER_RETRIES}" \
+probe_args=(
+    node "${SCRIPT_DIR}/telegram-web-user-probe.mjs"
+    --state "${TELEGRAM_WEB_STATE}"
+    --target "${TELEGRAM_WEB_TARGET}"
+    --text "${PROBE_TEXT}"
+    --timeout "${TELEGRAM_WEB_TIMEOUT_SECONDS}"
+    --min-reply-len "${TELEGRAM_WEB_MIN_REPLY_LEN}"
+    --composer-retries "${TELEGRAM_WEB_COMPOSER_RETRIES}"
     --quiet-window-ms "${TELEGRAM_WEB_QUIET_WINDOW_MS}"
+)
+
+if [[ "${TELEGRAM_WEB_DEBUG}" == "true" ]]; then
+    probe_args+=(--debug)
+fi
+
+exec "${probe_args[@]}"

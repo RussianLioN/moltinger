@@ -50,7 +50,7 @@
 | `011-worktree-handoff-hardening` | `origin/011-worktree-handoff-hardening` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `012-codex-upstream-watcher-writable` | `origin/012-codex-upstream-watcher` | Needs decision |
-| `016-beads-local-db-ux` | `none` | Needs decision |
+| `016-beads-local-db-ux` | `origin/016-beads-local-db-ux` | Needs decision |
 | `016-clawdiy-restore-readiness-fix` | `origin/016-clawdiy-restore-readiness-fix` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
@@ -110,6 +110,7 @@
 | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
+| `origin/016-beads-local-db-ux` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
