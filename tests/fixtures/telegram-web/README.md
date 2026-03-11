@@ -1,18 +1,22 @@
 # Telegram Web Remote UAT Fixtures
 
-Эта папка зарезервирована для before/after artifacts authoritative remote UAT.
+В этой папке лежат review-safe before/after artifacts для production-aware authoritative remote UAT.
 
-Что сюда должно попадать после post-deploy запуска:
+Снимки из этой ветки:
 
-- failing review-safe artifact до исправления;
-- passing review-safe artifact после исправления или root-cause narrowing;
-- при необходимости restricted debug bundle, если его можно хранить в репозитории безопасно.
+- `2026-03-11-before-send-failure-review-safe.json`
+  - run: `22976837805`
+  - sha: `d08dbb1`
+  - verdict: `failed`
+  - stage/failure: `send/send_failure`
+  - review-safe artifact id: `5880467782`
+  - restricted debug artifact id: `5880467947`
+- `2026-03-11-after-pass-review-safe.json`
+  - run: `22977239309`
+  - sha: `2924b12`
+  - verdict: `passed`
+  - stage: `wait_reply`
+  - review-safe artifact id: `5880633329`
+  - restricted debug artifact id: `5880633566`
 
-В этой ветке implementation и component contract уже готовы, но реальные production-aware before/after artifacts появляются только после ручного post-deploy запуска через:
-
-```bash
-gh workflow run telegram-e2e-on-demand.yml \
-  -f message='/status' \
-  -f timeout_sec='45' \
-  -f operator_intent='post_deploy_verification'
-```
+Restricted debug bundles в репозиторий не коммитятся, потому что содержат production chat evidence. Они доступны в GitHub Actions artifacts для соответствующих run.

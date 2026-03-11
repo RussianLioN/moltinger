@@ -18,7 +18,7 @@
 **Purpose**: Freeze what is already shipped in `main`, capture the current production-aware gap, and convert the package from generic planning into a precise delta backlog.
 
 - [ ] T001 Compare the shipped baseline for `synthetic`, `real_user`, and standalone Telegram Web paths in `specs/011-remote-uat-hardening/quickstart.md`
-- [ ] T002 Capture the current failing production-aware Telegram Web artifact and execution notes in `tests/fixtures/telegram-web/`
+- [X] T002 Capture the current failing production-aware Telegram Web artifact and execution notes in `tests/fixtures/telegram-web/`
 - [ ] T003 Document the schema delta between the current `telegram-e2e-result.json` output and the target contract in `specs/011-remote-uat-hardening/contracts/remote-uat-contract.md`
 - [ ] T004 Rewrite the implementation delta summary and acceptance proof section in `specs/011-remote-uat-hardening/plan.md`
 
@@ -35,7 +35,7 @@
 - [X] T007 [P] Add concurrency and manual-use serialization guards for the shared production target in `.github/workflows/telegram-e2e-on-demand.yml`
 - [X] T008 Add Telegram Web state handling, storage, and break-glass guidance in `docs/TELEGRAM-WEB-USER-MONITOR.md`
 - [X] T009 [P] Add secret/state redaction and no-leak coverage in `tests/component/`
-- [ ] T010 Verify scheduler-disable and polling-preservation guardrails in `.github/workflows/deploy.yml`
+- [X] T010 Verify scheduler-disable and polling-preservation guardrails in `.github/workflows/deploy.yml`
 
 **Checkpoint**: Production guardrails are enforceable, not just documented.
 
@@ -51,7 +51,7 @@
 - [X] T012 [US1] Convert `.github/workflows/telegram-e2e-on-demand.yml` into a single authoritative operator entrypoint in `.github/workflows/telegram-e2e-on-demand.yml`
 - [X] T013 [US1] Implement the canonical verdict artifact structure in `scripts/telegram-e2e-on-demand.sh`
 - [X] T014 [US1] Add operator-facing `recommended_action` output in `scripts/telegram-e2e-on-demand.sh`
-- [ ] T015 [US1] Capture comparable before/after authoritative run artifacts in `tests/fixtures/telegram-web/`
+- [X] T015 [US1] Capture comparable before/after authoritative run artifacts in `tests/fixtures/telegram-web/`
 
 **Checkpoint**: The operator gets one authoritative post-deploy verdict rather than multiple loosely related run modes.
 
@@ -106,8 +106,8 @@
 **Purpose**: Close the loop with proof that the change improved operator outcomes and preserved production boundaries.
 
 - [X] T027 [P] Run final component regression for `tests/component/test_telegram_web_probe_correlation.sh`
-- [ ] T028 [P] Verify no-regression for scheduler-disable and polling-preservation behavior in `.github/workflows/deploy.yml`
-- [ ] T029 Run the final manual authoritative rerun and store the acceptance evidence in `tests/fixtures/telegram-web/`
+- [X] T028 [P] Verify no-regression for scheduler-disable and polling-preservation behavior in `.github/workflows/deploy.yml`
+- [X] T029 Run the final manual authoritative rerun and store the acceptance evidence in `tests/fixtures/telegram-web/`
 
 ---
 
