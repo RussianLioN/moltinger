@@ -200,13 +200,13 @@ parse_runtime_config() {
         .gateway.mode == "local"
         and .gateway.auth.mode == "password"
         and .gateway.auth.password.source == "env"
-        and .gateway.auth.password.provider == "runtimeEnv"
+        and .gateway.auth.password.provider == "default"
         and .gateway.auth.password.id == "OPENCLAW_GATEWAY_PASSWORD"
         and (.channels.telegram.enabled == true)
         and (.channels.telegram.dmPolicy == "allowlist")
         and (.channels.telegram.allowFrom | type == "array")
         and .channels.telegram.botToken.source == "env"
-        and .channels.telegram.botToken.provider == "runtimeEnv"
+        and .channels.telegram.botToken.provider == "default"
         and .channels.telegram.botToken.id == "TELEGRAM_BOT_TOKEN"
     ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
         add_check "runtime_auth_shape" "fail" "Clawdiy runtime config is missing required official gateway or Telegram auth fields" "error"

@@ -76,7 +76,7 @@ run_fleet_registry_tests() {
         ($runtime[0]) as $rt
         | .agents[] | select(.agent_id == "clawdiy")
         | (.internal_endpoint == .topology.placement_profiles.same_host.internal_endpoint)
-        and (.public_endpoints.web == $rt.gateway.publicBaseUrl)
+        and (.public_endpoints.web == $rt.gateway.controlUi.allowedOrigins[0])
         and (.display_name == ($rt.agents.list[] | select(.id == "main") | .identity.name))
         and (.public_endpoints.telegram == "@clawdiy_bot")
       ' "$REGISTRY_FILE" >/dev/null 2>&1; then

@@ -11,7 +11,7 @@
   },
   "secrets": {
     "providers": {
-      "runtimeEnv": {
+      "default": {
         "source": "env"
       }
     }
@@ -21,20 +21,20 @@
     "bind": "custom",
     "customBindHost": "0.0.0.0",
     "port": 18789,
-    "publicBaseUrl": "https://clawdiy.ainetic.tech",
     "auth": {
       "mode": "password",
       "password": {
         "source": "env",
-        "provider": "runtimeEnv",
+        "provider": "default",
         "id": "OPENCLAW_GATEWAY_PASSWORD"
       }
+    },
+    "controlUi": {
+      "enabled": true,
+      "allowedOrigins": [
+        "https://clawdiy.ainetic.tech"
+      ]
     }
-  },
-  "controlUi": {
-    "allowedOrigins": [
-      "https://clawdiy.ainetic.tech"
-    ]
   },
   "agents": {
     "list": [
@@ -53,7 +53,7 @@
       "allowFrom": [],
       "botToken": {
         "source": "env",
-        "provider": "runtimeEnv",
+        "provider": "default",
         "id": "TELEGRAM_BOT_TOKEN"
       }
     }

@@ -102,12 +102,12 @@ render_config() {
         --argjson allow_from "$allow_from_json" \
         '
         .gateway.port = $internal_port
-        | .gateway.publicBaseUrl = $public_base_url
-        | .controlUi.allowedOrigins = [$public_base_url]
+        | .gateway.controlUi.allowedOrigins = [$public_base_url]
         | .channels.telegram.allowFrom = $allow_from
         ' "$TEMPLATE_FILE" >"$tmp_file"
 
     mv "$tmp_file" "$OUTPUT_FILE"
+    chmod 0644 "$OUTPUT_FILE"
 }
 
 output_result() {
