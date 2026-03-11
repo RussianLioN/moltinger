@@ -20,7 +20,7 @@ create_fake_bd_bin() {
 set -euo pipefail
 
 if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
-  printf '[]\n'
+  printf '%s\n' "${BD_WORKTREE_LIST_JSON:-[]}"
   exit 0
 fi
 
@@ -638,6 +638,35 @@ test_doctor_branch_only_suppresses_already_attached_warning() {
     test_pass
 }
 
+test_doctor_accepts_local_beads_state() {
+    test_start "worktree_ready_doctor_accepts_local_beads_state"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_doctor "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Doctor should accept a local Beads worktree as ready"
+    assert_contains "$output" "Worktree: ${existing_path}" "Doctor should report the discovered attached worktree path"
+    assert_contains "$output" 'Status: ready_for_codex' "Local Beads ownership plus an OK guard should be considered ready"
+    assert_contains "$output" 'Beads: local' "Doctor should surface local Beads ownership explicitly"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_doctor_does_not_block_on_beads_probe_unavailable() {
     test_start "worktree_ready_doctor_does_not_block_on_beads_probe_unavailable"
 
@@ -874,7 +903,9 @@ test_attach_terminal_handoff_launches_and_stops_at_handoff() {
     assert_contains "$output" 'requested_handoff=terminal' "Env contract should preserve the explicit terminal handoff request"
     assert_contains "$output" 'handoff_mode=terminal' "Successful terminal handoff should keep the requested automatic handoff mode"
     assert_contains "$output" 'final_state=handoff_launched' "Successful automatic terminal handoff should report the launched handoff final state"
-    assert_contains "$output" 'launch_command=osascript' "Successful automatic terminal handoff should expose the launch command"
+    if [[ "$output" != *"launch_command="*"osascript"* ]]; then
+        test_fail "Successful automatic terminal handoff should expose the osascript launch command"
+    fi
     assert_contains "$output" 'Dry-run\ mode\ enabled\;\ handoff\ command\ was\ not\ executed.' "Dry-run success path should still stop at the launched-handoff boundary"
 
     rm -rf "$fixture_root"
@@ -904,9 +935,12 @@ test_attach_codex_handoff_falls_back_to_manual_boundary() {
     assert_contains "$output" 'handoff_mode=manual' "Failed automatic codex handoff should fall back to manual mode"
     assert_contains "$output" 'final_state=handoff_ready' "Failed automatic codex handoff should degrade to a manual-ready final state"
     assert_contains "$output" 'next_1=cd\ ' "Fallback should restore manual next-step commands instead of pretending the launch succeeded"
-    assert_contains "$output" 'next_2=codex' "Fallback should keep the exact manual codex next step"
+    assert_contains "$output" 'next_2=export\ PATH=' "Fallback should restore the plain bd bootstrap step before launching codex"
+    assert_contains "$output" 'next_3=codex' "Fallback should keep the exact manual codex next step after bootstrap"
     assert_contains "$output" 'Automatic\ codex\ handoff\ failed.\ Falling\ back\ to\ manual\ steps.' "Fallback should be explicit in the warning stream"
-    assert_contains "$output" 'Launch\ command:\ osascript' "Fallback should expose the failed launch command for debugging"
+    if [[ "$output" != *"Launch command:"*"osascript"* ]]; then
+        test_fail "Fallback should expose the failed launch command for debugging"
+    fi
 
     rm -rf "$fixture_root"
     test_pass
@@ -945,6 +979,7 @@ run_all_tests() {
     test_create_infers_issue_from_issue_aware_branch_name
     test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them
     test_doctor_branch_only_suppresses_already_attached_warning
+    test_doctor_accepts_local_beads_state
     test_doctor_does_not_block_on_beads_probe_unavailable
     test_doctor_missing_guard_script_does_not_suggest_refresh
     test_doctor_missing_worktree_routes_back_to_managed_attach

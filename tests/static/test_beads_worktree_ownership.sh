@@ -66,11 +66,12 @@ run_static_beads_worktree_ownership_tests() {
 
     test_start "static_worktree_helpers_bootstrap_plain_bd_and_avoid_raw_create_fallback"
     if rg -q 'build_plain_bd_bootstrap_command_for_path' "$WORKTREE_READY_SCRIPT" && \
-       rg -q '"\$\{bd_command\}" worktree create' "$WORKTREE_PHASE_A_SCRIPT" && \
+       rg -q 'git -C "\$\{canonical_root\}" worktree add "\$\{target_path\}" "\$\{branch\}"' "$WORKTREE_PHASE_A_SCRIPT" && \
+       ! rg -q '"\$\{bd_command\}" worktree create' "$WORKTREE_PHASE_A_SCRIPT" && \
        ! rg -q 'add_next_step "bd worktree create' "$WORKTREE_READY_SCRIPT"; then
         test_pass
     else
-        test_fail "Managed worktree helpers must bootstrap plain bd and must not suggest raw bd worktree create"
+        test_fail "Managed worktree helpers must bootstrap plain bd while keeping Phase A off raw bd worktree create"
     fi
 
     test_start "static_high_traffic_docs_do_not_reintroduce_wrapper_choice"
