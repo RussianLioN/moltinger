@@ -424,23 +424,43 @@ resolve_live_candidate_state_json() {
 
   case "${target_count}" in
     0)
-      jq -nc \
-        --arg issue_id "${issue_id}" \
-        --arg owner_branch "${owner_branch}" \
-        --arg owner_reason "${owner_reason}" \
-        --argjson source_issue "${source_contract}" \
-        '{
-          issue_id: $issue_id,
-          source_issue: $source_issue,
-          owner_state: "missing_worktree",
-          owner_blocker: "missing_worktree",
-          owner_branch: $owner_branch,
-          ownership_reason: $owner_reason,
-          owner_worktree: null,
-          beads_state: null,
-          redirect_target: null,
-          target_issue_present: false
-        }'
+      if branch_snapshot_has_issue "${issue_id}" "${owner_branch}"; then
+        jq -nc \
+          --arg issue_id "${issue_id}" \
+          --arg owner_branch "${owner_branch}" \
+          --arg owner_reason "${owner_reason}" \
+          --argjson source_issue "${source_contract}" \
+          '{
+            issue_id: $issue_id,
+            source_issue: $source_issue,
+            owner_state: "already_present_in_owner_branch",
+            owner_blocker: "already_present_in_owner_branch",
+            owner_branch: $owner_branch,
+            ownership_reason: $owner_reason,
+            owner_worktree: null,
+            beads_state: null,
+            redirect_target: null,
+            target_issue_present: false
+          }'
+      else
+        jq -nc \
+          --arg issue_id "${issue_id}" \
+          --arg owner_branch "${owner_branch}" \
+          --arg owner_reason "${owner_reason}" \
+          --argjson source_issue "${source_contract}" \
+          '{
+            issue_id: $issue_id,
+            source_issue: $source_issue,
+            owner_state: "missing_worktree",
+            owner_blocker: "missing_worktree",
+            owner_branch: $owner_branch,
+            ownership_reason: $owner_reason,
+            owner_worktree: null,
+            beads_state: null,
+            redirect_target: null,
+            target_issue_present: false
+          }'
+      fi
       return 0
       ;;
     1) ;;
@@ -652,6 +672,15 @@ target_has_issue() {
   jq -e --arg id "${issue_id}" 'select(.id == $id)' "${target_jsonl}" >/dev/null 2>&1
 }
 
+branch_snapshot_has_issue() {
+  local issue_id="$1"
+  local branch_name="$2"
+  local branch_issue_jsonl="${branch_name}:.beads/issues.jsonl"
+
+  git cat-file -e "${branch_issue_jsonl}" 2>/dev/null || return 1
+  git show "${branch_issue_jsonl}" 2>/dev/null | jq -e --arg id "${issue_id}" 'select(.id == $id)' >/dev/null 2>&1
+}
+
 append_candidate() {
   local candidate_json="$1"
   printf '%s\n' "${candidate_json}" >> "${candidates_jsonl}"
@@ -724,24 +753,47 @@ build_audit_candidates() {
 
     target_lines="$(worktree_for_branch "${owner_branch}")"
     if [[ -z "${target_lines}" ]]; then
-      candidate_json="$(
-        jq -nc \
-          --arg issue_id "${issue_id}" \
-          --arg title "${title}" \
-          --arg owner_branch "${owner_branch}" \
-          --arg owner_reason "${owner_reason}" \
-          '{
-            issue_id: $issue_id,
-            title: $title,
-            source_state: "root_only",
-            owner_branch: $owner_branch,
-            owner_worktree: null,
-            ownership_reason: $owner_reason,
-            confidence: "blocked",
-            blockers: ["missing_worktree"],
-            requires_localization: false
-          }'
-      )"
+      if branch_snapshot_has_issue "${issue_id}" "${owner_branch}"; then
+        candidate_json="$(
+          jq -nc \
+            --arg issue_id "${issue_id}" \
+            --arg title "${title}" \
+            --arg issue_digest "${issue_digest}" \
+            --arg owner_branch "${owner_branch}" \
+            --arg owner_reason "${owner_reason}" \
+            '{
+              issue_id: $issue_id,
+              title: $title,
+              issue_digest: $issue_digest,
+              source_state: "already_present_in_owner_branch",
+              owner_branch: $owner_branch,
+              owner_worktree: null,
+              ownership_reason: $owner_reason,
+              confidence: "blocked",
+              blockers: ["already_present_in_owner_branch"],
+              requires_localization: false
+            }'
+        )"
+      else
+        candidate_json="$(
+          jq -nc \
+            --arg issue_id "${issue_id}" \
+            --arg title "${title}" \
+            --arg owner_branch "${owner_branch}" \
+            --arg owner_reason "${owner_reason}" \
+            '{
+              issue_id: $issue_id,
+              title: $title,
+              source_state: "root_only",
+              owner_branch: $owner_branch,
+              owner_worktree: null,
+              ownership_reason: $owner_reason,
+              confidence: "blocked",
+              blockers: ["missing_worktree"],
+              requires_localization: false
+            }'
+        )"
+      fi
       append_candidate "${candidate_json}"
       continue
     fi

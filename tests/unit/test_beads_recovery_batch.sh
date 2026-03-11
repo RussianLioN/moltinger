@@ -42,11 +42,27 @@ create_owner_worktree() {
     )
 }
 
+create_owner_branch_snapshot() {
+    local repo_dir="$1"
+    local branch_name="$2"
+    local issue_id="$3"
+    local issue_title="$4"
+
+    (
+        cd "${repo_dir}"
+        git switch -c "${branch_name}" >/dev/null
+        printf '{"id":"demo-1","title":"seed"}\n{"id":"%s","title":"%s"}\n' "${issue_id}" "${issue_title}" > .beads/issues.jsonl
+        git add .beads/issues.jsonl
+        git commit -m "fixture: add branch snapshot issue" >/dev/null
+        git switch - >/dev/null
+    )
+}
+
 test_batch_audit_reports_safe_and_blocked_candidates() {
     test_start "beads_recovery_batch_audit_reports_safe_and_blocked_candidates"
 
     local fixture_root repo_dir worktree_dir source_jsonl ownership_map plan_path
-    local safe_count blocked_count requires_localization missing_blocker plan_schema source_state
+    local safe_count blocked_count requires_localization missing_blocker present_blocker plan_schema source_state present_source_state
     fixture_root="$(mktemp -d /tmp/beads-recovery-batch-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     worktree_dir="${fixture_root}/moltinger-demo-ejy-owner"
@@ -62,10 +78,12 @@ test_batch_audit_reports_safe_and_blocked_candidates() {
         cd "${repo_dir}"
         git branch "feat/demo-missing-owner" >/dev/null
     )
+    create_owner_branch_snapshot "${repo_dir}" "feat/demo-branch-present-owner" "demo-branch-present" "already localized"
 
     cat > "${source_jsonl}" <<'EOF'
 {"id":"demo-ejy","title":"recoverable"}
 {"id":"demo-miss","title":"missing worktree"}
+{"id":"demo-branch-present","title":"already localized"}
 EOF
 
     cat > "${ownership_map}" <<'EOF'
@@ -84,15 +102,19 @@ EOF
     blocked_count="$(jq -r '.blocked_count' "${plan_path}")"
     requires_localization="$(jq -r '.candidates[] | select(.issue_id == "demo-ejy") | .requires_localization' "${plan_path}")"
     missing_blocker="$(jq -r '.candidates[] | select(.issue_id == "demo-miss") | .blockers[0]' "${plan_path}")"
+    present_blocker="$(jq -r '.candidates[] | select(.issue_id == "demo-branch-present") | .blockers[0]' "${plan_path}")"
     plan_schema="$(jq -r '.schema' "${plan_path}")"
     source_state="$(jq -r '.candidates[] | select(.issue_id == "demo-ejy") | .validation_contract.source_issue.state' "${plan_path}")"
+    present_source_state="$(jq -r '.candidates[] | select(.issue_id == "demo-branch-present") | .source_state' "${plan_path}")"
 
     assert_eq "1" "${safe_count}" "Audit should report one safe candidate"
-    assert_eq "1" "${blocked_count}" "Audit should report one blocked candidate"
+    assert_eq "2" "${blocked_count}" "Audit should report blocked candidates for both missing and already localized branches"
     assert_eq "true" "${requires_localization}" "Audit should mark redirected owner worktrees for localization"
     assert_eq "missing_worktree" "${missing_blocker}" "Audit should block candidates whose owner branch has no attached worktree"
+    assert_eq "already_present_in_owner_branch" "${present_blocker}" "Audit should distinguish already localized owner branches from missing worktrees"
     assert_eq "beads-recovery-plan/v2" "${plan_schema}" "Audit should emit the candidate-scoped plan schema"
     assert_eq "present" "${source_state}" "Audit should persist source issue validation state for safe candidates"
+    assert_eq "already_present_in_owner_branch" "${present_source_state}" "Audit should record branch-snapshot localization in source_state"
 
     rm -rf "${fixture_root}"
     test_pass

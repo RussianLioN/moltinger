@@ -17,7 +17,7 @@
 - `issue_id` (string, required)
 - `title` (string, required)
 - `issue_digest` (string, required): digest of the exact root JSONL record seen during audit
-- `source_state` (enum, required): `root_only` | `already_present_in_target` | `missing_from_root`
+- `source_state` (enum, required): `root_only` | `already_present_in_target` | `already_present_in_owner_branch` | `missing_from_root`
 - `owner_branch` (string, optional)
 - `owner_worktree` (string, optional)
 - `confidence` (enum, required): `high` | `blocked`
@@ -79,7 +79,7 @@
 
 - `issue_id` (string, required)
 - `source_issue` (SourceIssueContract, required)
-- `owner_state` (enum, required): `resolved` | `missing_owner_branch` | `blocked` | `missing_worktree` | `ambiguous_worktree`
+- `owner_state` (enum, required): `resolved` | `missing_owner_branch` | `blocked` | `missing_worktree` | `already_present_in_owner_branch` | `ambiguous_worktree`
 - `owner_blocker` (string, optional)
 - `owner_branch` (string, optional)
 - `ownership_reason` (string, optional)

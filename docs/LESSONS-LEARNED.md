@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-09
-**Total Lessons**: 19
+**Generated**: 2026-03-12
+**Total Lessons**: 20
 
 ---
 
@@ -18,7 +18,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (8 lessons)
+#### P2 (9 lessons)
+- [Beads recovery audit mislabeled owner-branch snapshots as missing worktrees](../docs/rca/2026-03-12-beads-recovery-owner-branch-snapshot.md)
 - [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
 - [Диагностика remote rollout началась без повторного применения Traefik-first уроков](../docs/rca/2026-03-09-remote-rollout-diagnosis-skipped-traefik-lessons.md)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
@@ -67,7 +68,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (4 lessons)
+#### shell (5 lessons)
+- [Beads recovery audit mislabeled owner-branch snapshots as missing worktrees](../docs/rca/2026-03-12-beads-recovery-owner-branch-snapshot.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
@@ -76,7 +78,7 @@
 
 ### Popular Tags
 
-- `rca` (5 lessons)
+- `rca` (6 lessons)
 - `process` (5 lessons)
 - `topology-registry` (4 lessons)
 - `git-worktree` (4 lessons)
@@ -94,10 +96,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 19 |
+| Total Lessons | 20 |
 | Critical (P0/P1) | 3 |
 | Categories | 5 |
-| Unique Tags | 46 |
+| Unique Tags | 50 |
 
 ---
 
