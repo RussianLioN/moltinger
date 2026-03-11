@@ -23,7 +23,7 @@
 | `primary-feature-011` | `011-worktree-handoff-hardening` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher-writable` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-013` | `013-clawdiy-state-hardening` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-014` | `014-clawdiy-smoke-jq-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -38,13 +38,13 @@
 | `011-worktree-handoff-hardening` | `origin/011-worktree-handoff-hardening` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `012-codex-upstream-watcher-writable` | `none` | Needs decision |
-| `013-clawdiy-state-hardening` | `origin/main` | Needs decision |
+| `014-clawdiy-smoke-jq-fix` | `origin/main` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
-| `feat/moltis-real-user-tests` | `none` | Needs decision |
+| `feat/moltis-real-user-tests` | `origin/feat/moltis-real-user-tests` | Needs decision |
 | `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
@@ -54,6 +54,7 @@
 | `008-clawdiy-rollout-bootstrap-fix` | `gone` | Tracking ref is gone; needs decision |
 | `011-clawdiy-openclaw-runtime-fix` | `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `012-clawdiy-live-runtime-fix` | `origin/012-clawdiy-live-runtime-fix` | Needs decision |
+| `013-clawdiy-state-hardening` | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/remote-uat-hardening` | `none` | Needs decision |
@@ -80,12 +81,14 @@
 | `origin/011-worktree-skill-extraction` | Needs decision |
 | `origin/012-clawdiy-live-runtime-fix` | Needs decision |
 | `origin/012-codex-upstream-watcher` | Needs decision |
+| `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
+| `origin/feat/moltis-real-user-tests` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 

@@ -224,6 +224,16 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy script must normalize state and audit ownership for the node runtime user during server-side rollout"
     fi
 
+    test_start "static_clawdiy_smoke_avoids_reserved_jq_variable_names"
+    if rg -q 'local label_key="\$2"' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh" && \
+       rg -q 'Labels\[\$label_key\]' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh" && \
+       ! rg -q 'local label="\$2"' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh" && \
+       ! rg -q 'Labels\[\$label\]' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh"; then
+        test_pass
+    else
+        test_fail "Clawdiy smoke script must avoid jq reserved variable names when reading docker labels"
+    fi
+
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \

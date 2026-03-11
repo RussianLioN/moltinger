@@ -245,8 +245,8 @@ container_health() {
 
 container_label() {
     local container="$1"
-    local label="$2"
-    docker inspect "$container" | jq -r --arg label "$label" '.[0].Config.Labels[$label] // empty'
+    local label_key="$2"
+    docker inspect "$container" | jq -r --arg label_key "$label_key" '.[0].Config.Labels[$label_key] // empty'
 }
 
 container_mount_source() {
