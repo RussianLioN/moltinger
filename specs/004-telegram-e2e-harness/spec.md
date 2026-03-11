@@ -53,6 +53,22 @@ The same test scenario can be run either locally via CLI or remotely via GitHub 
 
 ---
 
+### User Story 4 - Live Operability Regression Pack (Priority: P2)
+
+An operator can run a documented live-only verification set that checks direct Telegram reachability, synthetic Moltis harness execution, and `real_user` MTProto execution against the authoritative Moltis target.
+
+**Why this priority**: The original feature history moved from a deferred `real_user` contract to working MTProto delivery. That path must stay regression-visible now that user-originated bot messaging is available.
+
+**Independent Test**: Run `./tests/run.sh --lane telegram_live --live --filter live_telegram_smoke --json` with the required live secrets and observe successful direct Telegram smoke plus completed synthetic and `real_user` harness artifacts with non-empty `observed_response`.
+
+**Acceptance Scenarios**:
+
+1. **Given** live mode is enabled and all Moltis/Telegram secrets are present, **When** operator runs the live verification set, **Then** the suite confirms direct Telegram API health, synthetic Moltis harness success, and `real_user` MTProto success.
+2. **Given** live mode is enabled but `real_user` prerequisites are absent on the runner, **When** operator runs the same suite, **Then** synthetic checks still execute and `real_user` coverage reports an explicit skip/precondition boundary instead of silently passing.
+3. **Given** the harness produces JSON artifacts or logs during live verification, **When** operator inspects them, **Then** raw password/session material is not present.
+
+---
+
 ### Edge Cases
 
 - What happens when message contains quotes, unicode, markdown, or long payloads close to transport limits?
@@ -75,6 +91,8 @@ The same test scenario can be run either locally via CLI or remotely via GitHub 
 - **FR-009**: CLI MUST expose documented exit codes for completed, precondition/config failure, timeout, and upstream/auth failure.
 - **FR-010**: Workflow MUST always upload execution artifacts even when command exits non-zero.
 - **FR-011**: `real_user` mode MUST return structured `precondition_failed` for missing/invalid Telegram prerequisites.
+- **FR-012**: System MUST provide a live-only operability verification path that exercises direct Telegram smoke plus both `synthetic` and `real_user` harness modes against the authoritative Moltis target.
+- **FR-013**: Operability verification MUST confirm that generated artifacts/logs do not expose raw Moltis password or Telegram test-session material.
 
 ### Key Entities
 
@@ -91,3 +109,4 @@ The same test scenario can be run either locally via CLI or remotely via GitHub 
 - **SC-003**: At least 95% of synthetic runs in healthy environment produce valid JSON artifact with required schema fields.
 - **SC-004**: Routine bot conversations remain available after test runs (no persistent runtime mode drift).
 - **SC-005**: 100% of error paths produce structured status and error metadata without exposing secrets.
+- **SC-006**: In a healthy live environment with required secrets, the documented operability verification set completes with both harness modes returning `status="completed"` and non-empty `observed_response`.

@@ -234,6 +234,14 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy smoke script must avoid jq reserved variable names when reading docker labels"
     fi
 
+    test_start "static_clawdiy_smoke_resolves_bind_backed_volume_devices"
+    if rg -q 'docker volume inspect "\$mount_name"' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh" && \
+       rg -q '\.\[0\]\.Options\.device // \.\[0\]\.Mountpoint // empty' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh"; then
+        test_pass
+    else
+        test_fail "Clawdiy smoke script must resolve bind-backed local Docker volumes to their effective host device paths"
+    fi
+
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \
@@ -264,11 +272,13 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_workflow_validates_restore_readiness"
     if rg -q 'Validate Clawdiy restore readiness' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'data/clawdiy/\.last-backup' "$CLAWDIY_WORKFLOW" && \
+       rg -q "pre_deploy_\\*\\.tar\\.gz" "$CLAWDIY_WORKFLOW" && \
        rg -q 'clawdiy-evidence-manifest\.json' "$CLAWDIY_WORKFLOW" && \
        rg -q 'has_evidence_manifest' "$CLAWDIY_WORKFLOW"; then
         test_pass
     else
-        test_fail "Clawdiy deploy workflow must validate restore-readiness metadata and evidence inventory"
+        test_fail "Clawdiy deploy workflow must validate restore-readiness from the tracked Clawdiy backup reference and evidence inventory"
     fi
 
     test_start "static_rollback_drill_covers_clawdiy_inventory"

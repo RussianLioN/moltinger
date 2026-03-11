@@ -4,6 +4,8 @@
 
 Spec-kit handles **planning** (spec → plan → tasks), Beads handles **execution** (tracking, dependencies, multi-session).
 
+Inside this repository, the execution side should continue with plain `bd` once the session is safely bootstrapped; do not reintroduce a wrapper-choice step while moving from Spec-kit to Beads.
+
 ```
 Spec-kit (Planning)          Beads (Execution)
 ─────────────────           ─────────────────
@@ -56,12 +58,12 @@ This creates:
 
 ```bash
 # Find available work
-./scripts/bd-local.sh ready
+bd ready
 
 # Work on task
-./scripts/bd-local.sh update PREFIX-xxx --status in_progress
+bd update PREFIX-xxx --status in_progress
 # ... implement ...
-./scripts/bd-local.sh close PREFIX-xxx --reason "Completed"
+bd close PREFIX-xxx --reason "Completed"
 /push patch
 
 # Repeat until epic done
@@ -91,7 +93,7 @@ The tasks.md file is **frozen** after import. All new work goes through Beads:
 
 ```bash
 # Found new task during implementation?
-./scripts/bd-local.sh create "Also need to add caching" -t feature --deps discovered-from:PREFIX-xxx
+bd create "Also need to add caching" -t feature --deps discovered-from:PREFIX-xxx
 
 # DON'T edit tasks.md - use Beads instead
 ```

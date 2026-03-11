@@ -2,7 +2,7 @@
 
 > **Attribution**: [Beads](https://github.com/steveyegge/beads) — методология [Steve Yegge](https://github.com/steveyegge)
 
-> **Moltinger repo note**: для repo-local Beads команд используй `./scripts/bd-local.sh`, чтобы текущий worktree не проваливался обратно в canonical root tracker.
+> **Moltinger repo note**: внутри этого репо для обычной работы используйте plain `bd`. Безопасный repo-local dispatch приходит через `.envrc` или managed worktree/Codex handoff; отдельную wrapper-команду выбирать не нужно.
 
 ---
 
@@ -13,9 +13,9 @@
 ```bash
 git status              # 1. Что изменилось?
 git add <files>         # 2. Добавить код
-./scripts/bd-local.sh sync  # 3. Sync beads
+bd sync                 # 3. Sync beads
 git commit -m "... (PREFIX-xxx)"  # 4. Коммит с ID issue
-./scripts/bd-local.sh sync  # 5. Sync новые изменения
+bd sync                 # 5. Sync новые изменения
 git push                # 6. Push в remote
 ```
 
@@ -28,9 +28,9 @@ git push                # 6. Push в remote
 | Сценарий | Инструмент | Команда |
 |----------|------------|---------|
 | Большая фича (>1 день) | Spec-kit → Beads | `/speckit.specify` → `/speckit.tobeads` |
-| Маленькая фича (<1 день) | Beads | `./scripts/bd-local.sh create -t feature` |
-| Баг | Beads | `./scripts/bd-local.sh create -t bug` |
-| Tech debt | Beads | `./scripts/bd-local.sh create -t chore` |
+| Маленькая фича (<1 день) | Beads | `bd create -t feature` |
+| Баг | Beads | `bd create -t bug` |
+| Tech debt | Beads | `bd create -t chore` |
 | Исследование/spike | Beads formula | `bd mol wisp exploration` |
 | Hotfix (срочно!) | Beads formula | `bd mol wisp hotfix` |
 | Health check | Workflow | `bd mol wisp healthcheck` |
@@ -42,17 +42,17 @@ git push                # 6. Push в remote
 
 ```bash
 # === СТАРТ ===
-./scripts/bd-local.sh prime                    # Восстановить контекст
-./scripts/bd-local.sh ready                    # Что доступно для работы?
+bd prime                    # Восстановить контекст
+bd ready                    # Что доступно для работы?
 
 # === РАБОТА ===
-./scripts/bd-local.sh update ID --status in_progress   # Взять задачу
+bd update ID --status in_progress   # Взять задачу
 # ... делаем работу ...
-./scripts/bd-local.sh close ID --reason "Описание"     # Закрыть задачу
+bd close ID --reason "Описание"     # Закрыть задачу
 /push patch                         # Коммит
 
 # === КОНЕЦ (ОБЯЗАТЕЛЬНО) ===
-./scripts/bd-local.sh sync                     # Синхронизация перед выходом
+bd sync                     # Синхронизация перед выходом
 ```
 
 ---
@@ -61,7 +61,7 @@ git push                # 6. Push в remote
 
 ### Базовая команда
 ```bash
-./scripts/bd-local.sh create "Заголовок" -t тип -p приоритет -d "описание"
+bd create "Заголовок" -t тип -p приоритет -d "описание"
 ```
 
 ### Типы (-t)
@@ -86,13 +86,13 @@ git push                # 6. Push в remote
 ### Примеры
 ```bash
 # Простая задача
-./scripts/bd-local.sh create "Добавить кнопку logout" -t feature -p 3
+bd create "Добавить кнопку logout" -t feature -p 3
 
 # С описанием
-./scripts/bd-local.sh create "DEBT-001: Рефакторинг" -t chore -p 2 -d "Подробнее..."
+bd create "DEBT-001: Рефакторинг" -t chore -p 2 -d "Подробнее..."
 
 # Баг с ссылкой на источник
-./scripts/bd-local.sh create "Кнопка не работает" -t bug -p 1 --deps discovered-from:PREFIX-abc
+bd create "Кнопка не работает" -t bug -p 1 --deps discovered-from:PREFIX-abc
 ```
 
 ---
@@ -101,7 +101,7 @@ git push                # 6. Push в remote
 
 ```bash
 # При создании
-./scripts/bd-local.sh create "Задача" -t feature --deps ТИП:ID
+bd create "Задача" -t feature --deps ТИП:ID
 
 # Добавить к существующей
 bd dep add ISSUE DEPENDS_ON
@@ -120,14 +120,14 @@ bd dep add ISSUE DEPENDS_ON
 
 ```bash
 # Создать epic
-./scripts/bd-local.sh create "User Authentication" -t epic -p 2
+bd create "User Authentication" -t epic -p 2
 
 # Добавить дочерние задачи
-./scripts/bd-local.sh create "Login form" -t feature --deps parent:PREFIX-epic-id
-./scripts/bd-local.sh create "JWT tokens" -t feature --deps parent:PREFIX-epic-id
+bd create "Login form" -t feature --deps parent:PREFIX-epic-id
+bd create "JWT tokens" -t feature --deps parent:PREFIX-epic-id
 
 # Посмотреть структуру
-./scripts/bd-local.sh show PREFIX-epic-id --tree
+bd show PREFIX-epic-id --tree
 ```
 
 ---
@@ -171,10 +171,10 @@ bd mol burn WISP_ID    # Удалить без следа
 
 ```bash
 # Терминал 1: захватил lock
-./scripts/bd-local.sh update PREFIX-abc --status in_progress
+bd update PREFIX-abc --status in_progress
 
 # Терминал 2: найти незалоченные
-./scripts/bd-local.sh list --unlocked
+bd list --unlocked
 ```
 
 ---
@@ -183,10 +183,10 @@ bd mol burn WISP_ID    # Удалить без следа
 
 ```bash
 # Нашёл баг во время работы
-./scripts/bd-local.sh create "Найден баг: ..." -t bug --deps discovered-from:PREFIX-current
+bd create "Найден баг: ..." -t bug --deps discovered-from:PREFIX-current
 
 # Понял что нужна ещё одна задача
-./scripts/bd-local.sh create "Также нужно..." -t feature --deps blocks:PREFIX-current
+bd create "Также нужно..." -t feature --deps blocks:PREFIX-current
 ```
 
 ---
@@ -194,13 +194,13 @@ bd mol burn WISP_ID    # Удалить без следа
 ## Поиск и фильтрация
 
 ```bash
-./scripts/bd-local.sh ready                    # Готовые к работе
-./scripts/bd-local.sh list                     # Все открытые
-./scripts/bd-local.sh list --all               # Включая закрытые
-./scripts/bd-local.sh list -t bug              # Только баги
-./scripts/bd-local.sh list -p 1                # Только P1
-./scripts/bd-local.sh show ID                  # Детали задачи
-./scripts/bd-local.sh show ID --tree           # С иерархией
+bd ready                    # Готовые к работе
+bd list                     # Все открытые
+bd list --all               # Включая закрытые
+bd list -t bug              # Только баги
+bd list -p 1                # Только P1
+bd show ID                  # Детали задачи
+bd show ID --tree           # С иерархией
 ```
 
 ---
@@ -209,19 +209,19 @@ bd mol burn WISP_ID    # Удалить без следа
 
 ```bash
 # Изменить статус
-./scripts/bd-local.sh update ID --status in_progress
-./scripts/bd-local.sh update ID --status blocked
-./scripts/bd-local.sh update ID --status open
+bd update ID --status in_progress
+bd update ID --status blocked
+bd update ID --status open
 
 # Изменить приоритет
-./scripts/bd-local.sh update ID --priority 1
+bd update ID --priority 1
 
 # Добавить метку
-./scripts/bd-local.sh update ID --add-label security
+bd update ID --add-label security
 
 # Закрыть
-./scripts/bd-local.sh close ID --reason "Готово"
-./scripts/bd-local.sh close ID1 ID2 ID3 --reason "Batch done"
+bd close ID --reason "Готово"
+bd close ID1 ID2 ID3 --reason "Batch done"
 ```
 
 ---
@@ -229,9 +229,9 @@ bd mol burn WISP_ID    # Удалить без следа
 ## Диагностика
 
 ```bash
-./scripts/bd-local.sh doctor     # Проверка здоровья
-./scripts/bd-local.sh info       # Статус проекта
-./scripts/bd-local.sh prime      # Контекст workflow
+bd doctor     # Проверка здоровья
+bd info       # Статус проекта
+bd prime      # Контекст workflow
 ```
 
 ---
@@ -240,17 +240,17 @@ bd mol burn WISP_ID    # Удалить без следа
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ СТАРТ     ./scripts/bd-local.sh prime / ready    │
-│ ВЗЯТЬ     ./scripts/bd-local.sh update ID ...    │
-│ СОЗДАТЬ   ./scripts/bd-local.sh create "..."     │
-│ ЗАКРЫТЬ   ./scripts/bd-local.sh close ID ...     │
+│ СТАРТ     bd prime / bd ready                    │
+│ ВЗЯТЬ     bd update ID --status in_progress      │
+│ СОЗДАТЬ   bd create "..." -t type -p N           │
+│ ЗАКРЫТЬ   bd close ID --reason "..."             │
 ├──────────────────────────────────────────────────┤
 │ КОНЕЦ СЕССИИ (ВСЕ 6 ШАГОВ!)                      │
 │   1. git status                                  │
 │   2. git add <files>                             │
-│   3. ./scripts/bd-local.sh sync                  │
+│   3. bd sync                                     │
 │   4. git commit -m "... (PREFIX-xxx)"            │
-│   5. ./scripts/bd-local.sh sync                  │
+│   5. bd sync                                     │
 │   6. git push                                    │
 ├──────────────────────────────────────────────────┤
 │ WORKFLOWS bd formula list                        │

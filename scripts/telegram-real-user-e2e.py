@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -54,9 +55,9 @@ def emit_and_exit(result: RunResult, code: int) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run real-user Telegram E2E probe via MTProto.")
-    parser.add_argument("--api-id", required=True, help="Telegram API ID")
-    parser.add_argument("--api-hash", required=True, help="Telegram API hash")
-    parser.add_argument("--session", required=True, help="Telegram StringSession for test user")
+    parser.add_argument("--api-id", help="Telegram API ID (or TELEGRAM_TEST_API_ID env)")
+    parser.add_argument("--api-hash", help="Telegram API hash (or TELEGRAM_TEST_API_HASH env)")
+    parser.add_argument("--session", help="Telegram StringSession for test user (or TELEGRAM_TEST_SESSION env)")
     parser.add_argument("--bot-username", required=True, help="Target bot username, e.g. @moltinger_bot")
     parser.add_argument("--message", required=True, help="Message to send")
     parser.add_argument("--timeout-sec", type=int, default=30, help="Reply wait timeout in seconds")
@@ -78,6 +79,20 @@ def log(verbose: bool, message: str) -> None:
         print(f"[telegram-real-user] {message}", file=sys.stderr)
 
 
+def build_context(args: argparse.Namespace, **extra: Any) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "timeout_sec": args.timeout_sec,
+        "message_length": len(str(getattr(args, "message", ""))),
+    }
+    requested_bot_username = normalize_username(str(getattr(args, "bot_username", "")))
+    if requested_bot_username:
+        context["requested_bot_username"] = requested_bot_username
+    for key, value in extra.items():
+        if value is not None:
+            context[key] = value
+    return context
+
+
 async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
     if args.timeout_sec <= 0:
         return (
@@ -86,27 +101,29 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="timeout must be positive",
-                context={"timeout_sec": args.timeout_sec},
+                context=build_context(args),
             ),
             EXIT_PRECONDITION,
         )
 
+    api_id_raw = str(args.api_id or os.getenv("TELEGRAM_TEST_API_ID", "")).strip()
+    api_hash = str(args.api_hash or os.getenv("TELEGRAM_TEST_API_HASH", "")).strip()
+    session = str(args.session or os.getenv("TELEGRAM_TEST_SESSION", "")).strip()
+
     try:
-        api_id = int(str(args.api_id).strip())
+        api_id = int(api_id_raw)
     except ValueError:
         return (
             RunResult(
                 status="precondition_failed",
                 observed_response=None,
                 error_code="precondition",
-                error_message="api_id must be an integer",
-                context={},
+                error_message="api_id must be an integer (flag or TELEGRAM_TEST_API_ID env)",
+                context=build_context(args),
             ),
             EXIT_PRECONDITION,
         )
 
-    api_hash = str(args.api_hash).strip()
-    session = str(args.session).strip()
     message = str(args.message)
     bot_username = normalize_username(str(args.bot_username))
 
@@ -117,7 +134,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="api_hash, session, bot_username and message are required",
-                context={},
+                context=build_context(args),
             ),
             EXIT_PRECONDITION,
         )
@@ -133,7 +150,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="telethon is not installed",
-                context={"hint": "Install dependency: pip install telethon"},
+                context=build_context(args, hint="Install dependency: pip install telethon"),
             ),
             EXIT_PRECONDITION,
         )
@@ -156,7 +173,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                     observed_response=None,
                     error_code="precondition",
                     error_message="telegram session is not authorized",
-                    context={"bot_username": bot_username},
+                    context=build_context(args, bot_username=bot_username),
                 ),
                 EXIT_PRECONDITION,
             )
@@ -178,7 +195,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                     observed_response=None,
                     error_code="upstream",
                     error_message="failed to obtain sent message id",
-                    context={"bot_username": bot_display},
+                    context=build_context(args, bot_username=bot_display),
                 ),
                 EXIT_UPSTREAM,
             )
@@ -208,14 +225,15 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                         observed_response=reply_text,
                         error_code=None,
                         error_message=None,
-                        context={
-                            "bot_username": bot_display,
-                            "bot_user_id": bot_user_id,
-                            "chat_id": sent_chat_id,
-                            "sent_message_id": sent_message_id,
-                            "reply_message_id": message_id,
-                            "poll_attempts": poll_attempts,
-                        },
+                        context=build_context(
+                            args,
+                            bot_username=bot_display,
+                            bot_user_id=bot_user_id,
+                            chat_id=sent_chat_id,
+                            sent_message_id=sent_message_id,
+                            reply_message_id=message_id,
+                            poll_attempts=poll_attempts,
+                        ),
                     ),
                     EXIT_COMPLETED,
                 )
@@ -228,13 +246,14 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="timeout",
                 error_message="no bot reply before timeout",
-                context={
-                    "bot_username": bot_display,
-                    "bot_user_id": bot_user_id,
-                    "chat_id": sent_chat_id,
-                    "sent_message_id": sent_message_id,
-                    "poll_attempts": poll_attempts,
-                },
+                context=build_context(
+                    args,
+                    bot_username=bot_display,
+                    bot_user_id=bot_user_id,
+                    chat_id=sent_chat_id,
+                    sent_message_id=sent_message_id,
+                    poll_attempts=poll_attempts,
+                ),
             ),
             EXIT_TIMEOUT,
         )
@@ -245,10 +264,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="upstream",
                 error_message=f"telegram RPC error: {exc.__class__.__name__}",
-                context={
-                    "bot_username": bot_username,
-                    "details": str(exc),
-                },
+                context=build_context(args, bot_username=bot_username, details=str(exc)),
             ),
             EXIT_UPSTREAM,
         )
@@ -259,7 +275,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="upstream",
                 error_message=f"unexpected error: {exc.__class__.__name__}",
-                context={"details": str(exc)},
+                context=build_context(args, details=str(exc)),
             ),
             EXIT_UPSTREAM,
         )

@@ -20,7 +20,7 @@
     },
     "codex-profile-launch.sh": {
       "version": "1.0.0",
-      "description": "Launch Codex with repo-specific sandbox and approval defaults",
+      "description": "Launch Codex with repo-specific sandbox, approval defaults, and repo-local plain-bd bootstrap",
       "entrypoint": true,
       "requires": [
         "codex"
@@ -32,6 +32,33 @@
         "codex-assets",
         "codex-review",
         "codex-hotfix"
+      ]
+    },
+    "beads-resolve-db.sh": {
+      "version": "1.0.0",
+      "description": "Resolve whether plain bd may use the current worktree-local tracker, pass through, or fail closed before root fallback",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "git"
+      ],
+      "provides": [
+        "beads-dispatch-resolve",
+        "beads-root-fallback-guard"
+      ]
+    },
+    "beads-worktree-localize.sh": {
+      "version": "1.0.0",
+      "description": "Localize or validate Beads ownership for an existing worktree without reviving shared redirect state",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "git",
+        "bd"
+      ],
+      "provides": [
+        "beads-worktree-localize",
+        "beads-ownership-migrate"
       ]
     },
     "backup-moltis-enhanced.sh": {
@@ -500,7 +527,7 @@
     },
     "worktree-ready.sh": {
       "version": "1.0.0",
-      "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, and handoff generation",
+      "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, handoff generation, and repo-local plain-bd bootstrap",
       "entrypoint": true,
       "requires": ["git"],
       "provides": ["worktree-plan", "worktree-readiness", "worktree-doctor", "worktree-handoff"],

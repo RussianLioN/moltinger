@@ -6,7 +6,10 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-In this repository, run repo-local Beads commands from the worktree root via `./scripts/bd-local.sh`. It pins `BEADS_DB` to the current worktree and fails closed if redirect metadata is still present.
+## Communication Language (Mandatory)
+
+- If the user writes in Russian or explicitly asks for Russian-only communication, respond only in Russian unless the user later asks to switch languages.
+- Do not alternate between Russian and English in user-facing replies unless the user explicitly requests bilingual output or translation.
 
 ## Git Topology Reference
 
@@ -30,12 +33,20 @@ In Codex/App sessions, `refresh --write-doc` may require approval if the shared 
 ## Quick Reference
 
 ```bash
-./scripts/bd-local.sh ready              # Find available work
-./scripts/bd-local.sh show <id>          # View issue details
-./scripts/bd-local.sh update <id> --status in_progress  # Claim work
-./scripts/bd-local.sh close <id>         # Complete work
-./scripts/bd-local.sh sync               # Sync with git
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+bd sync               # Sync with git
 ```
+
+## Beads Worktree Ownership
+
+Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
+
+- The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
+- If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
+- Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
 
 ## Speckit Artifact Guard
 
@@ -94,7 +105,7 @@ Forbidden:
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   ./scripts/bd-local.sh sync
+   bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```

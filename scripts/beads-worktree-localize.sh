@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=scripts/beads-resolve-db.sh
+source "${REPO_ROOT}/scripts/beads-resolve-db.sh"
+
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/beads-worktree-localize.sh [--path <worktree>]
+  scripts/beads-worktree-localize.sh [--path <worktree>] [--format <human|env>] [--check]
 
 Description:
-  Localize Beads ownership for a git worktree by removing stale redirect metadata
-  and bootstrapping a worktree-local SQLite DB from the checked-out JSONL state.
+  Localize Beads ownership for an existing git worktree by removing legacy
+  redirect residue and materializing a worktree-local SQLite DB from the local
+  JSONL/config foundation when that is safe to do.
 EOF
 }
 
@@ -18,6 +25,15 @@ die() {
 }
 
 target_path=""
+output_format="human"
+check_only="false"
+
+report_state=""
+report_action=""
+report_worktree=""
+report_db_path=""
+report_message=""
+report_notice=""
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -26,6 +42,15 @@ parse_args() {
         target_path="${2:-}"
         [[ -n "${target_path}" ]] || die "--path requires a value"
         shift 2
+        ;;
+      --format)
+        output_format="${2:-}"
+        [[ -n "${output_format}" ]] || die "--format requires a value"
+        shift 2
+        ;;
+      --check)
+        check_only="true"
+        shift
         ;;
       -h|--help)
         usage
@@ -36,88 +61,158 @@ parse_args() {
         ;;
     esac
   done
-}
 
-normalize_path() {
-  local input_path="$1"
-  local base_path="${2:-$PWD}"
-
-  if [[ "${input_path}" == /* ]]; then
-    printf '%s\n' "${input_path}"
-    return 0
-  fi
-
-  (
-    cd "${base_path}"
-    cd "${input_path}"
-    pwd -P
-  )
+  case "${output_format}" in
+    human|env) ;;
+    *)
+      die "Unsupported output format: ${output_format}"
+      ;;
+  esac
 }
 
 ensure_worktree_context() {
   if [[ -z "${target_path}" ]]; then
     target_path="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   else
-    target_path="$(normalize_path "${target_path}")"
+    target_path="$(beads_resolve_normalize_path "${target_path}")"
   fi
 
   [[ -n "${target_path}" ]] || die "Unable to resolve target worktree path"
   git -C "${target_path}" rev-parse --show-toplevel >/dev/null 2>&1 || die "Not a git worktree: ${target_path}"
+  report_worktree="${target_path}"
 }
 
-localize_beads_state() {
+classify_state() {
   local beads_dir="${target_path}/.beads"
+  local config_path="${beads_dir}/config.yaml"
+  local issues_path="${beads_dir}/issues.jsonl"
+  local db_path="${beads_dir}/beads.db"
   local redirect_path="${beads_dir}/redirect"
-  local local_db="${beads_dir}/beads.db"
 
-  [[ -d "${beads_dir}" ]] || return 0
+  report_db_path="${db_path}"
+  report_notice=""
 
   if [[ -f "${redirect_path}" ]]; then
-    [[ -f "${beads_dir}/config.yaml" ]] || die "Refusing to remove ${redirect_path} without ${beads_dir}/config.yaml"
-    [[ -f "${beads_dir}/issues.jsonl" ]] || die "Refusing to remove ${redirect_path} without ${beads_dir}/issues.jsonl"
-    rm -f "${redirect_path}"
+    if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
+      report_state="migratable_legacy"
+      report_action="localize_in_place"
+      report_message="Legacy redirect metadata is present, but local foundation files are available for safe in-place localization."
+      report_notice="Residual canonical-root cleanup remains a separate follow-up."
+      return 0
+    fi
+
+    report_state="damaged_blocked"
+    report_action="stop_and_report"
+    report_message="Legacy redirect metadata is present, but local Beads foundation files are incomplete."
+    report_notice="Do not fall back to the canonical root tracker."
+    return 0
   fi
 
-  if [[ -f "${beads_dir}/config.yaml" && -f "${beads_dir}/issues.jsonl" ]]; then
-    command -v bd >/dev/null 2>&1 || die "bd is required to bootstrap ${local_db}"
-    (
-      cd "${target_path}"
-      BEADS_DB="${local_db}" bd --no-daemon list >/dev/null 2>&1
-    )
+  if [[ -f "${config_path}" && -f "${issues_path}" && -f "${db_path}" ]]; then
+    report_state="current"
+    report_action="none"
+    report_message="This worktree already has localized Beads ownership."
+    return 0
   fi
+
+  if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
+    report_state="partial_foundation"
+    report_action="rebuild_local_foundation"
+    report_message="Local Beads foundation exists, but the SQLite DB must be materialized in place."
+    return 0
+  fi
+
+  report_state="damaged_blocked"
+  report_action="stop_and_report"
+  report_message="This worktree does not have enough local Beads foundation files to localize ownership safely."
 }
 
-report_state() {
-  local beads_dir="${target_path}/.beads"
-  local redirect_path="${beads_dir}/redirect"
-  local local_db="${beads_dir}/beads.db"
-  local ownership="missing"
-  local redirect_state="absent"
-  local db_state="absent"
+materialize_local_db() {
+  local system_bd="${BEADS_SYSTEM_BD:-}"
 
-  if [[ -d "${beads_dir}" ]]; then
-    ownership="local"
-  fi
-  if [[ -f "${redirect_path}" ]]; then
-    ownership="redirected"
-    redirect_state="$(cat "${redirect_path}")"
-  fi
-  if [[ -f "${local_db}" ]]; then
-    db_state="present"
+  if [[ -z "${system_bd}" ]]; then
+    system_bd="$(beads_resolve_find_system_bd "${REPO_ROOT}/bin/bd")" || die "Could not locate the system bd binary"
   fi
 
-  printf 'Worktree: %s\n' "${target_path}"
-  printf 'Beads Dir: %s\n' "${beads_dir}"
-  printf 'Ownership: %s\n' "${ownership}"
-  printf 'Redirect: %s\n' "${redirect_state}"
-  printf 'Local DB: %s\n' "${db_state}"
+  (
+    cd "${target_path}"
+    "${system_bd}" --db "${report_db_path}" info >/dev/null
+  )
+}
+
+localize_state() {
+  local redirect_path="${target_path}/.beads/redirect"
+
+  case "${report_state}" in
+    current)
+      return 0
+      ;;
+    migratable_legacy)
+      rm -f "${redirect_path}"
+      materialize_local_db
+      ;;
+    partial_foundation)
+      materialize_local_db
+      ;;
+    damaged_blocked)
+      return 1
+      ;;
+    *)
+      die "Unsupported localization state: ${report_state}"
+      ;;
+  esac
+
+  classify_state
+}
+
+render_env() {
+  printf 'schema=%q\n' "beads-localize/v1"
+  printf 'worktree=%q\n' "${report_worktree}"
+  printf 'state=%q\n' "${report_state}"
+  printf 'action=%q\n' "${report_action}"
+  printf 'db_path=%q\n' "${report_db_path}"
+  printf 'message=%q\n' "${report_message}"
+  printf 'notice=%q\n' "${report_notice}"
+}
+
+render_human() {
+  printf 'Worktree: %s\n' "${report_worktree}"
+  printf 'State: %s\n' "${report_state}"
+  printf 'Action: %s\n' "${report_action}"
+  printf 'DB Path: %s\n' "${report_db_path}"
+  printf 'Message: %s\n' "${report_message}"
+  if [[ -n "${report_notice}" ]]; then
+    printf 'Notice: %s\n' "${report_notice}"
+  fi
 }
 
 main() {
   parse_args "$@"
   ensure_worktree_context
-  localize_beads_state
-  report_state
+  classify_state
+
+  if [[ "${check_only}" != "true" ]]; then
+    if [[ "${report_action}" == "stop_and_report" ]]; then
+      render_human >&2
+      exit 23
+    fi
+    localize_state
+  fi
+
+  if [[ "${output_format}" == "env" ]]; then
+    render_env
+  else
+    render_human
+  fi
+
+  case "${report_action}" in
+    stop_and_report)
+      exit 23
+      ;;
+    *)
+      exit 0
+      ;;
+  esac
 }
 
 main "$@"

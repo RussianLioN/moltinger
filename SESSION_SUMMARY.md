@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-09
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-11
 
 ---
 
@@ -50,17 +50,22 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-09)
+### Current Session Update (2026-03-11)
 
-- Branch in progress: `011-clawdiy-openclaw-runtime-fix`
-- Clawdiy remote rollout is still pending; no new live OpenClaw launch happened in this fix session
-- `config/clawdiy/openclaw.json` now serves as the tracked OpenClaw runtime template, while the deployable artifact is rendered to `data/clawdiy/runtime/openclaw.json`
-- `scripts/render-clawdiy-runtime-config.sh` renders the runtime file from the dedicated Clawdiy env before preflight/deploy
-- `scripts/clawdiy-auth-check.sh` now treats `TELEGRAM_BOT_TOKEN` inside `/opt/moltinger/clawdiy/.env` as a runtime alias for Clawdiy only, not as evidence of Moltinger secret reuse
+- Branch in progress: `feat/moltis-real-user-tests`
+- Restored the historical `deferred -> executable real_user` line for `specs/004-telegram-e2e-harness` so the current scope explicitly tracks that US3 used to be deferred in `moltinger-xtx`, but is now treated as active regression surface.
+- Added a fuller live-only operability pack to `tests/live_external/test_telegram_external_smoke.sh`: direct Telegram API smoke, Moltis synthetic harness, Moltis `real_user` MTProto harness, and artifact redaction checks.
+- `docs/telegram-e2e-on-demand.md` now contains the operator-facing verification set for local CLI, workflow dispatch, and the consolidated `telegram_live` lane.
+- `scripts/telegram-real-user-e2e.py` now emits richer structured context (`timeout_sec`, `message_length`, requested bot identity) on both success and failure paths.
+- `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed in this worktree because the registry was stale and would block landing hooks.
 - Verified in this session:
-  - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
-  - `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
-  - `./scripts/preflight-check.sh --ci --target clawdiy --json`
+  - `bash -n tests/live_external/test_telegram_external_smoke.sh`
+  - `python3 -m py_compile scripts/telegram-real-user-e2e.py`
+  - `python3 scripts/telegram-real-user-e2e.py --api-id not-an-int --api-hash test-hash --session test-session --bot-username @moltinger_bot --message '/status' --timeout-sec 15`
+  - `bash scripts/telegram-e2e-on-demand.sh --mode real_user --message '/status' --timeout-sec 15 --output /tmp/telegram-e2e-precondition.json`
+  - `./tests/run.sh --lane telegram_live --filter live_telegram_smoke --json`
+  - `./tests/run.sh --lane telegram_live --live --json`
+  - `scripts/git-topology-registry.sh check`
 
 ---
 

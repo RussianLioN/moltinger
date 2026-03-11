@@ -103,6 +103,73 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+create_fake_uname_darwin_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/uname-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/uname" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-s" || "$#" -eq 0 ]]; then
+  printf 'Darwin\n'
+  exit 0
+fi
+
+/usr/bin/uname "$@"
+EOF
+    chmod +x "${fake_bin}/uname"
+
+    printf '%s\n' "${fake_bin}"
+}
+
+create_fake_osascript_success_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/osascript-success-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/osascript" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+    chmod +x "${fake_bin}/osascript"
+
+    printf '%s\n' "${fake_bin}"
+}
+
+create_fake_osascript_failure_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/osascript-failure-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/osascript" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'simulated osascript failure\n' >&2
+exit 1
+EOF
+    chmod +x "${fake_bin}/osascript"
+
+    printf '%s\n' "${fake_bin}"
+}
+
+create_fake_codex_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/codex-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/codex" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+    chmod +x "${fake_bin}/codex"
+
+    printf '%s\n' "${fake_bin}"
+}
+
 seed_fake_guard_script() {
     local worktree_dir="$1"
     local raw_status="${2:-ok}"
@@ -357,6 +424,34 @@ test_create_env_format_emits_handoff_boundary_contract() {
     test_pass
 }
 
+test_attach_env_format_emits_handoff_boundary_contract() {
+    test_start "worktree_ready_attach_env_format_emits_handoff_boundary_contract"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin existing_path output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    printf 'export DEMO=1\n' > "${existing_path}/.envrc"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" --branch feat/remote-uat-hardening --format env
+    )"
+
+    assert_contains "$output" 'schema=worktree-handoff/v1' "Attach env output should expose the handoff schema"
+    assert_contains "$output" 'phase=attach' "Attach env output should declare the attach phase"
+    assert_contains "$output" 'boundary=stop_after_attach' "Attach env output should declare the hard attach handoff boundary"
+    assert_contains "$output" 'final_state=handoff_needs_env_approval' "Attach env output should map blocked env approval to the env-approval final state"
+    assert_contains "$output" 'approval_required=true' "Attach env output should require approval explicitly when direnv is blocked"
+    assert_contains "$output" 'handoff_mode=manual' "Attach env output should keep manual handoff as the default"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_create_uses_explicit_pending_summary() {
     test_start "worktree_ready_create_uses_explicit_pending_summary"
 
@@ -387,6 +482,53 @@ test_create_uses_explicit_pending_summary() {
     )"
 
     assert_contains "$output" 'pending=Start\ Speckit\ for\ the\ OpenClaw\ Control\ Plane\ epic\ in\ the\ target\ worktree.' "Env contract should preserve explicit pending handoff intent"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_create_preserves_separate_phase_b_seed_payload() {
+    test_start "worktree_ready_create_preserves_separate_phase_b_seed_payload"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output phase_b_seed
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-openclaw-control-plane"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+    phase_b_seed=$'Feature Description: Create a feature for hardening the command-worktree Phase A / Phase B boundary and manual handoff contract.\nConstraints: do not deploy; do not weaken the stop-after-handoff boundary.\nDefaults: manual handoff remains default; explicit codex/terminal launch remains opt-in only.'
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/openclaw-control-plane --path "$probe_dir" \
+          --pending-summary "Start Speckit for the OpenClaw Control Plane epic in the target worktree." \
+          --phase-b-seed-payload "$phase_b_seed"
+    )"
+
+    assert_contains "$output" 'Pending: Start Speckit for the OpenClaw Control Plane epic in the target worktree.' "Short pending summary should remain a distinct quick-scan field"
+    assert_contains "$output" 'Phase B Seed Payload (deferred, not executed).' "Human handoff should render a separate richer deferred payload block"
+    assert_contains "$output" 'Payload:' "Richer payload block should clearly mark the payload body"
+    assert_contains "$output" 'Feature Description: Create a feature for hardening the command-worktree Phase A / Phase B boundary and manual handoff contract.' "Richer payload block should preserve the exact feature description"
+    assert_contains "$output" 'Constraints: do not deploy; do not weaken the stop-after-handoff boundary.' "Richer payload block should preserve critical constraints"
+    assert_contains "$output" 'Defaults: manual handoff remains default; explicit codex/terminal launch remains opt-in only.' "Richer payload block should preserve default handoff rules"
+    assert_contains "$output" 'Phase A is complete. Do not repeat worktree setup in the originating session.' "Richer payload block should restate the stop boundary"
+    if [[ "$output" == *'Phase B only.'* ]]; then
+        test_fail "Rich handoff payload should replace the short Phase B only block instead of rendering both"
+    fi
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/openclaw-control-plane --path "$probe_dir" \
+          --pending-summary "Start Speckit for the OpenClaw Control Plane epic in the target worktree." \
+          --phase-b-seed-payload "$phase_b_seed" --format env
+    )"
+
+    assert_contains "$output" 'pending=Start\ Speckit\ for\ the\ OpenClaw\ Control\ Plane\ epic\ in\ the\ target\ worktree.' "Env contract should keep the short pending summary separate"
+    assert_contains "$output" "phase_b_seed_payload=\$'Feature Description: Create a feature for hardening the command-worktree" "Env contract should expose the richer payload in a separate field"
+    assert_contains "$output" 'Constraints: do not deploy; do not weaken the stop-after-handoff boundary.' "Env contract should preserve constraints inside the richer payload"
+    assert_contains "$output" 'Defaults: manual handoff remains default; explicit codex/terminal launch remains opt-in only.' "Env contract should preserve defaults inside the richer payload"
 
     rm -rf "$fixture_root"
     test_pass
@@ -615,6 +757,35 @@ test_doctor_missing_worktree_routes_back_to_managed_attach() {
     test_pass
 }
 
+test_doctor_missing_beads_state_routes_to_localize_helper() {
+    test_start "worktree_ready_doctor_missing_beads_state_routes_to_localize_helper"
+
+    local fixture_root repo_dir fake_bin existing_path output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-beads-localize"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/beads-localize" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "$existing_path" "ok"
+
+    output="$(
+        set +e
+        run_worktree_doctor "$repo_dir" "$fake_bin" --branch feat/beads-localize 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Missing Beads ownership should still block doctor"
+    assert_contains "$output" "./scripts/beads-worktree-localize.sh --path ." "Doctor should route dedicated-worktree Beads recovery through the managed localization helper"
+    if [[ "$output" == *"bd worktree create"* ]]; then
+        test_fail "Doctor should not suggest raw bd worktree create for Beads ownership recovery"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_plan_needs_clarification_returns_exit_code_10() {
     test_start "worktree_ready_plan_needs_clarification_returns_exit_code_10"
 
@@ -662,6 +833,119 @@ test_attach_missing_branch_returns_blocked_missing_branch() {
     test_pass
 }
 
+test_attach_preserves_separate_phase_b_seed_payload() {
+    test_start "worktree_ready_attach_preserves_separate_phase_b_seed_payload"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin existing_path output phase_b_seed
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    printf 'export DEMO=1\n' > "${existing_path}/.envrc"
+    phase_b_seed=$'Feature Description: Continue the deferred review only from the attached worktree.\nConstraints: do not continue in the originating session.\nDefaults: manual handoff remains default.'
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" --branch feat/remote-uat-hardening \
+          --pending-summary "Continue the deferred review from the attached worktree." \
+          --phase-b-seed-payload "$phase_b_seed"
+    )"
+
+    assert_contains "$output" 'Boundary: stop_after_attach' "Attach handoff should preserve the attach boundary in human output"
+    assert_contains "$output" 'Pending: Continue the deferred review from the attached worktree.' "Attach handoff should keep the concise pending summary"
+    assert_contains "$output" 'Phase B Seed Payload (deferred, not executed).' "Attach handoff should render a separate richer deferred payload block"
+    assert_contains "$output" 'Payload:' "Attach handoff should clearly mark the payload body"
+    assert_contains "$output" 'Constraints: do not continue in the originating session.' "Attach handoff should preserve critical downstream constraints"
+    assert_contains "$output" 'Defaults: manual handoff remains default.' "Attach handoff should preserve default handoff rules"
+    assert_contains "$output" 'Phase A is complete. Do not repeat worktree setup in the originating session.' "Attach handoff should restate the stop boundary"
+    if [[ "$output" == *'Phase B only.'* ]]; then
+        test_fail "Attach rich handoff payload should replace the short Phase B only block instead of rendering both"
+    fi
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" --branch feat/remote-uat-hardening \
+          --pending-summary "Continue the deferred review from the attached worktree." \
+          --phase-b-seed-payload "$phase_b_seed" --format env
+    )"
+
+    assert_contains "$output" 'boundary=stop_after_attach' "Attach env output should preserve the attach boundary"
+    assert_contains "$output" 'pending=Continue\ the\ deferred\ review\ from\ the\ attached\ worktree.' "Attach env contract should keep the short pending summary separate"
+    assert_contains "$output" "phase_b_seed_payload=\$'Feature Description: Continue the deferred review only from the attached worktree." "Attach env contract should expose the richer payload in a separate field"
+    assert_contains "$output" 'Constraints: do not continue in the originating session.' "Attach env contract should preserve critical constraints"
+    assert_contains "$output" 'Defaults: manual handoff remains default.' "Attach env contract should preserve default handoff rules"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_attach_terminal_handoff_launches_and_stops_at_handoff() {
+    test_start "worktree_ready_attach_terminal_handoff_launches_and_stops_at_handoff"
+
+    local fixture_root repo_dir fake_bd_bin fake_uname_bin fake_osascript_bin existing_path output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_uname_bin="$(create_fake_uname_darwin_bin "$fixture_root")"
+    fake_osascript_bin="$(create_fake_osascript_success_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+
+    output="$(
+        WORKTREE_READY_DRY_RUN=1 \
+        PATH="${fake_osascript_bin}:${fake_uname_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" --branch feat/remote-uat-hardening --handoff terminal --format env
+    )"
+
+    assert_contains "$output" 'boundary=stop_after_attach' "Automatic terminal handoff should preserve the attach stop boundary"
+    assert_contains "$output" 'requested_handoff=terminal' "Env contract should preserve the explicit terminal handoff request"
+    assert_contains "$output" 'handoff_mode=terminal' "Successful terminal handoff should keep the requested automatic handoff mode"
+    assert_contains "$output" 'final_state=handoff_launched' "Successful automatic terminal handoff should report the launched handoff final state"
+    if [[ "$output" != *"launch_command="*"osascript"* ]]; then
+        test_fail "Successful automatic terminal handoff should expose the osascript launch command"
+    fi
+    assert_contains "$output" 'Dry-run\ mode\ enabled\;\ handoff\ command\ was\ not\ executed.' "Dry-run success path should still stop at the launched-handoff boundary"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_attach_codex_handoff_falls_back_to_manual_boundary() {
+    test_start "worktree_ready_attach_codex_handoff_falls_back_to_manual_boundary"
+
+    local fixture_root repo_dir fake_bd_bin fake_uname_bin fake_osascript_bin fake_codex_bin existing_path output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_uname_bin="$(create_fake_uname_darwin_bin "$fixture_root")"
+    fake_osascript_bin="$(create_fake_osascript_failure_bin "$fixture_root")"
+    fake_codex_bin="$(create_fake_codex_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+
+    output="$(
+        PATH="${fake_osascript_bin}:${fake_codex_bin}:${fake_uname_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" attach --repo "$repo_dir" --branch feat/remote-uat-hardening --handoff codex --format env
+    )"
+
+    assert_contains "$output" 'boundary=stop_after_attach' "Automatic codex fallback should preserve the attach stop boundary"
+    assert_contains "$output" 'requested_handoff=codex' "Fallback env contract should preserve the explicit codex handoff request"
+    assert_contains "$output" 'handoff_mode=manual' "Failed automatic codex handoff should fall back to manual mode"
+    assert_contains "$output" 'final_state=handoff_ready' "Failed automatic codex handoff should degrade to a manual-ready final state"
+    assert_contains "$output" 'next_1=cd\ ' "Fallback should restore manual next-step commands instead of pretending the launch succeeded"
+    assert_contains "$output" 'next_2=export\ PATH=' "Fallback should restore the plain bd bootstrap step before launching codex"
+    assert_contains "$output" 'next_3=codex' "Fallback should keep the exact manual codex next step after bootstrap"
+    assert_contains "$output" 'Automatic\ codex\ handoff\ failed.\ Falling\ back\ to\ manual\ steps.' "Fallback should be explicit in the warning stream"
+    if [[ "$output" != *"Launch command:"*"osascript"* ]]; then
+        test_fail "Fallback should expose the failed launch command for debugging"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -689,7 +973,9 @@ run_all_tests() {
     test_plan_asks_once_when_similar_branch_exists
     test_create_treats_direnv_permission_denied_as_needs_env_approval
     test_create_env_format_emits_handoff_boundary_contract
+    test_attach_env_format_emits_handoff_boundary_contract
     test_create_uses_explicit_pending_summary
+    test_create_preserves_separate_phase_b_seed_payload
     test_create_infers_issue_from_issue_aware_branch_name
     test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them
     test_doctor_branch_only_suppresses_already_attached_warning
@@ -697,8 +983,12 @@ run_all_tests() {
     test_doctor_does_not_block_on_beads_probe_unavailable
     test_doctor_missing_guard_script_does_not_suggest_refresh
     test_doctor_missing_worktree_routes_back_to_managed_attach
+    test_doctor_missing_beads_state_routes_to_localize_helper
     test_plan_needs_clarification_returns_exit_code_10
     test_attach_missing_branch_returns_blocked_missing_branch
+    test_attach_preserves_separate_phase_b_seed_payload
+    test_attach_terminal_handoff_launches_and_stops_at_handoff
+    test_attach_codex_handoff_falls_back_to_manual_boundary
     generate_report
 }
 

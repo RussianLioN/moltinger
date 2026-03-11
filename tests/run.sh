@@ -155,6 +155,7 @@ suite_entries_for_lane() {
 bash|static_config_validation|Config validation|$SCRIPT_DIR/static/test_config_validation.sh
 bash|static_fleet_registry|Fleet registry and policy|$SCRIPT_DIR/static/test_fleet_registry.sh
 bash|static_dev_mcp_smoke|Dev MCP smoke|$SCRIPT_DIR/static/test_dev_mcp_smoke.sh
+bash|static_beads_worktree_ownership|Beads worktree ownership guardrails|$SCRIPT_DIR/static/test_beads_worktree_ownership.sh
 LIST
             ;;
         component)
@@ -165,6 +166,8 @@ bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_ll
 bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh
 bash|component_sync_claude_skills_bridge|Claude skills bridge component|$SCRIPT_DIR/component/test_sync_claude_skills_bridge.sh
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
+bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh
+bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh
 LIST
             ;;
         integration_local)

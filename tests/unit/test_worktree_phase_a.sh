@@ -23,6 +23,16 @@ if [[ "${1:-}" == "--no-daemon" ]]; then
   shift
 fi
 
+if [[ "${1:-}" == "--db" ]]; then
+  db_path="${2:-}"
+  shift 2
+  if [[ "${1:-}" == "info" ]]; then
+    mkdir -p "$(dirname "${db_path}")"
+    : > "${db_path}"
+    exit 0
+  fi
+fi
+
 if [[ "${1:-}" == "list" ]]; then
   if [[ -n "${BEADS_DB:-}" ]]; then
     mkdir -p "$(dirname "${BEADS_DB}")"

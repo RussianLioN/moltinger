@@ -125,6 +125,16 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 - `fix/<topic>` for narrow runtime fixes
 - `test/<topic>-YYYYMMDD-HHMM` for disposable probes
 
+## Beads Local Ownership
+
+For Beads in dedicated worktrees, ordinary work should use plain `bd`.
+
+1. The ownership source of truth is the current worktree's local `.beads/` state.
+2. The repo-local bootstrap path comes from `.envrc` or the managed worktree/Codex handoff, not from asking the user to choose a wrapper.
+3. If a dedicated worktree has legacy redirect residue or a partial local foundation, recover it in place with `./scripts/beads-worktree-localize.sh --path <worktree>`.
+4. Silent fallback to the canonical root tracker is not an acceptable recovery path.
+5. Residual cleanup in canonical `main` is a separate follow-up and must not be mixed into day-to-day worktree recovery.
+
 ## Local Instruction Split
 
 Use the nearest local `AGENTS.md` for directory-specific rules.

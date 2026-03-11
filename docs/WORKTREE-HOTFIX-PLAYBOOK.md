@@ -5,8 +5,11 @@ Use this playbook if `command-worktree` is already merged, but a real session st
 Examples:
 - it creates the wrong branch name
 - it continues work in the old session instead of stopping at handoff
+- manual handoff loses structured downstream intent or prints both short and rich deferred payload blocks
+- explicit terminal or Codex handoff does not fall back cleanly to manual handoff
 - `doctor` suggests the wrong next step
 - a readiness probe reports the wrong state
+- a dedicated worktree falls back to the canonical root tracker instead of using its local `.beads/` ownership
 
 ## Core Rule
 
@@ -65,12 +68,21 @@ Use the file that matches the real defect:
   - `./claude/commands/worktree.md`
 - helper status, report, next steps:
   - `scripts/worktree-ready.sh`
+- Beads ownership dispatch or localization:
+  - `bin/bd`
+  - `scripts/beads-resolve-db.sh`
+  - `scripts/beads-worktree-localize.sh`
 - deterministic create/start execution:
   - `scripts/worktree-phase-a.sh`
 - topology reconcile, stale state, locks:
   - `scripts/git-topology-registry.sh`
 
 If you are not sure, start with the helper and the unit tests. Most user-facing `command-worktree` bugs end there.
+
+If the hotfix touches Beads ownership:
+- keep plain `bd` as the only normal-path user command
+- preserve worktree-local ownership and fail closed before canonical-root fallback
+- treat residual canonical-root cleanup as a separate issue instead of folding it into the hotfix
 
 ## Step 5: Add a Regression Test First
 
@@ -81,6 +93,13 @@ tests/unit/test_worktree_ready.sh
 ```
 
 If the bug is larger than helper output, add the smallest integration coverage that proves the failure.
+
+For boundary and handoff regressions, verify the exact contract that broke:
+
+- `Boundary: stop_after_create` or `Boundary: stop_after_attach` is still present
+- `Pending` remains concise
+- a structured request renders `Phase B Seed Payload (deferred, not executed)` instead of duplicating it alongside the short `Phase B only` block
+- an explicit automatic handoff either reports `handoff_launched` or degrades to manual handoff and still stops
 
 ## Step 6: Run the Focused Checks
 

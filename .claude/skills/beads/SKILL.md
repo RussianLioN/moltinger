@@ -11,11 +11,11 @@ argument-hint: ""
 
 Beads is a git-backed, AI-native issue tracking system. This skill helps AI agents work with Beads effectively.
 
-Repo note for Moltinger: use `./scripts/bd-local.sh` for repo-local tracker commands so the current worktree keeps ownership even when `direnv` is not active.
+In this repository, normal work should use plain `bd`; safe repo-local dispatch is bootstrapped by `.envrc` or the managed worktree/Codex launch flows without requiring a separate wrapper command.
 
 ## When to Use
 
-- Starting a new work session (`./scripts/bd-local.sh prime` → `./scripts/bd-local.sh ready`)
+- Starting a new work session (bd prime → bd ready)
 - Creating, updating, or closing issues
 - Managing task dependencies
 - Running workflow formulas
@@ -27,17 +27,17 @@ Repo note for Moltinger: use `./scripts/bd-local.sh` for repo-local tracker comm
 
 ```bash
 # START
-./scripts/bd-local.sh prime                    # Inject context
-./scripts/bd-local.sh ready                    # Find available work
+bd prime                    # Inject context
+bd ready                    # Find available work
 
 # WORK
-./scripts/bd-local.sh update ID --status in_progress  # Take task
+bd update ID --status in_progress  # Take task
 # ... implement ...
-./scripts/bd-local.sh close ID --reason "Done"        # Complete task
+bd close ID --reason "Done"        # Complete task
 /push patch                        # Commit
 
 # END (MANDATORY!)
-./scripts/bd-local.sh sync
+bd sync
 git push
 ```
 
@@ -45,13 +45,13 @@ git push
 
 ```bash
 # Basic
-./scripts/bd-local.sh create "Title" -t type -p priority
+bd create "Title" -t type -p priority
 
 # With files (auto-labels)
-./scripts/bd-local.sh create "Fix button" --files src/components/Button.tsx
+bd create "Fix button" --files src/components/Button.tsx
 
 # Emergent work
-./scripts/bd-local.sh create "Found bug" -t bug --deps discovered-from:current-id
+bd create "Found bug" -t bug --deps discovered-from:current-id
 ```
 
 ### Types & Priorities
@@ -98,7 +98,7 @@ For large features (>1 day):
 2. `/speckit.plan` → design
 3. `/speckit.tasks` → task breakdown
 4. `/speckit.tobeads` → import to Beads
-5. `./scripts/bd-local.sh ready` → work with Beads
+5. `bd ready` → work with Beads
 
 ## Links
 

@@ -1,26 +1,26 @@
 # Beads Common Workflows
 
-Repo note for Moltinger: use `./scripts/bd-local.sh` for repo-local tracker commands so each worktree keeps its own Beads ownership.
+In this repository, run these workflows with plain `bd`; the safe repo-local dispatch path should come from `.envrc` or the managed worktree/Codex bootstrap flow rather than a separate wrapper command.
 
 ## Daily Session
 
 ```bash
 # === START ===
-./scripts/bd-local.sh prime                    # Restore context
-./scripts/bd-local.sh ready                    # What's available?
+bd prime                    # Restore context
+bd ready                    # What's available?
 
 # === WORK ===
-./scripts/bd-local.sh update PREFIX-xxx --status in_progress
+bd update PREFIX-xxx --status in_progress
 # ... implement ...
-./scripts/bd-local.sh close PREFIX-xxx --reason "Implemented feature"
+bd close PREFIX-xxx --reason "Implemented feature"
 /push patch
 
 # === END (MANDATORY!) ===
 git status
 git add <files>
-./scripts/bd-local.sh sync
+bd sync
 git commit -m "feat: description (PREFIX-xxx)"
-./scripts/bd-local.sh sync
+bd sync
 git push
 ```
 
@@ -30,10 +30,10 @@ Found something while working?
 
 ```bash
 # 1. Create linked issue
-./scripts/bd-local.sh create "Found: memory leak in Parser" -t bug --deps discovered-from:PREFIX-current
+bd create "Found: memory leak in Parser" -t bug --deps discovered-from:PREFIX-current
 
 # 2. Continue current work or switch
-./scripts/bd-local.sh ready  # Will show new issue when available
+bd ready  # Will show new issue when available
 ```
 
 ## Big Feature (>1 day)
@@ -52,10 +52,10 @@ Found something while working?
 /speckit.tobeads
 
 # 5. Work through tasks
-./scripts/bd-local.sh ready
-./scripts/bd-local.sh update PREFIX-xxx --status in_progress
+bd ready
+bd update PREFIX-xxx --status in_progress
 # ... implement ...
-./scripts/bd-local.sh close PREFIX-xxx --reason "Done"
+bd close PREFIX-xxx --reason "Done"
 /push patch
 # Repeat until epic is complete
 ```
@@ -110,11 +110,11 @@ bd mol burn WISP_ID    # Discard if dead end
 
 ```bash
 # Terminal 1: Working on PREFIX-abc
-./scripts/bd-local.sh update PREFIX-abc --status in_progress  # Acquires lock
+bd update PREFIX-abc --status in_progress  # Acquires lock
 
 # Terminal 2: Find other work
-./scripts/bd-local.sh list --unlocked
-./scripts/bd-local.sh update PREFIX-def --status in_progress  # Different issue
+bd list --unlocked
+bd update PREFIX-def --status in_progress  # Different issue
 
 # Both can work in parallel without conflicts
 ```

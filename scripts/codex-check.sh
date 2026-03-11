@@ -74,6 +74,7 @@ check_required_files() {
 
   local files=(
     "AGENTS.md"
+    "bin/bd"
     ".ai/instructions/shared-core.md"
     ".ai/instructions/codex-adapter.md"
     ".ai/AGENTS.md"
@@ -93,6 +94,8 @@ check_required_files() {
     "tests/AGENTS.md"
     "scripts/codex-check.sh"
     "scripts/codex-profile-launch.sh"
+    "scripts/beads-resolve-db.sh"
+    "scripts/beads-worktree-localize.sh"
   )
 
   local failures=0
@@ -109,10 +112,22 @@ check_instruction_references() {
   local failures=0
   assert_contains ".ai/instructions/shared-core.md" "Speckit Artifact Guard" "root Speckit guard" || failures=1
   assert_contains ".ai/instructions/shared-core.md" "docs/GIT-TOPOLOGY-REGISTRY.md" "topology registry reference" || failures=1
-  assert_contains ".ai/instructions/shared-core.md" "./scripts/bd-local.sh sync" "safe Beads sync guidance" || failures=1
+  if grep -Fq -- "./scripts/bd-local.sh sync" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.ai/instructions/shared-core.md"; then
+    log_success "Verified safe Beads sync guidance in .ai/instructions/shared-core.md"
+  else
+    log_error "Missing safe Beads sync guidance in .ai/instructions/shared-core.md"
+    failures=1
+  fi
   assert_contains ".ai/instructions/codex-adapter.md" "docs/CODEX-OPERATING-MODEL.md" "operating model reference" || failures=1
   assert_contains ".ai/instructions/codex-adapter.md" "make codex-check" "Codex governance check command" || failures=1
-  assert_contains "docs/CODEX-OPERATING-MODEL.md" "./scripts/bd-local.sh" "local Beads wrapper guidance" || failures=1
+  if grep -Fq -- "./scripts/bd-local.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md" || \
+     grep -Fq -- "plain `bd`" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md"; then
+    log_success "Verified local Beads ownership guidance in docs/CODEX-OPERATING-MODEL.md"
+  else
+    log_error "Missing local Beads ownership guidance in docs/CODEX-OPERATING-MODEL.md"
+    failures=1
+  fi
 
   return "${failures}"
 }

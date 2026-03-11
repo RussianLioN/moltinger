@@ -1,0 +1,461 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BEADS_RESOLVE_SCHEMA="beads-dispatch/v1"
+BEADS_RESOLVE_DECISION=""
+BEADS_RESOLVE_CONTEXT=""
+BEADS_RESOLVE_REPO_ROOT=""
+BEADS_RESOLVE_CANONICAL_ROOT=""
+BEADS_RESOLVE_DB_PATH=""
+BEADS_RESOLVE_MESSAGE=""
+BEADS_RESOLVE_RECOVERY_HINT=""
+BEADS_RESOLVE_ROOT_CLEANUP_NOTICE=""
+BEADS_RESOLVE_EXIT_CODE=0
+
+beads_resolve_usage() {
+  cat <<'EOF'
+Usage:
+  scripts/beads-resolve-db.sh [--repo <path>] [--format <human|env>] [--] [bd args...]
+  scripts/beads-resolve-db.sh localize [--repo <path>] [--format <human|env>]
+
+Description:
+  Resolve whether plain `bd` can safely use the current worktree-local tracker,
+  should pass through unchanged, or must fail closed before a root fallback.
+  The `localize` subcommand materializes a local beads.db from the current
+  worktree's tracked `.beads/issues.jsonl`.
+EOF
+}
+
+beads_resolve_reset() {
+  BEADS_RESOLVE_DECISION=""
+  BEADS_RESOLVE_CONTEXT=""
+  BEADS_RESOLVE_REPO_ROOT=""
+  BEADS_RESOLVE_CANONICAL_ROOT=""
+  BEADS_RESOLVE_DB_PATH=""
+  BEADS_RESOLVE_MESSAGE=""
+  BEADS_RESOLVE_RECOVERY_HINT=""
+  BEADS_RESOLVE_ROOT_CLEANUP_NOTICE=""
+  BEADS_RESOLVE_EXIT_CODE=0
+}
+
+beads_resolve_die() {
+  echo "[beads-resolve-db] $*" >&2
+  exit 2
+}
+
+beads_localize_notice() {
+  local message="$1"
+  if [[ "${BEADS_LOCALIZE_FORMAT:-human}" == "env" ]]; then
+    printf 'result=%q\n' "${message}"
+  else
+    printf '%s\n' "${message}"
+  fi
+}
+
+beads_resolve_normalize_path() {
+  local input_path="$1"
+  local base_path="${2:-$PWD}"
+
+  if [[ -z "${input_path}" ]]; then
+    return 1
+  fi
+
+  if [[ "${input_path}" == /* ]]; then
+    (
+      cd "$(dirname "${input_path}")"
+      printf '%s/%s\n' "$(pwd -P)" "$(basename "${input_path}")"
+    )
+    return 0
+  fi
+
+  (
+    cd "${base_path}"
+    cd "$(dirname "${input_path}")"
+    printf '%s/%s\n' "$(pwd -P)" "$(basename "${input_path}")"
+  )
+}
+
+beads_resolve_repo_root() {
+  local probe_path="${1:-$PWD}"
+  git -C "${probe_path}" rev-parse --show-toplevel 2>/dev/null || true
+}
+
+beads_resolve_canonical_root() {
+  local repo_root="$1"
+  local common_dir=""
+
+  common_dir="$(git -C "${repo_root}" rev-parse --git-common-dir 2>/dev/null || true)"
+  if [[ -z "${common_dir}" ]]; then
+    return 1
+  fi
+
+  (
+    cd "${repo_root}"
+    cd "${common_dir}"
+    cd ..
+    pwd -P
+  )
+}
+
+beads_resolve_is_global_passthrough() {
+  local first_arg="${1:-}"
+
+  case "${first_arg}" in
+    ""|-h|--help|help|-V|--version|version|completion|onboard)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+beads_resolve_is_explicit_troubleshooting() {
+  local arg=""
+
+  for arg in "$@"; do
+    case "${arg}" in
+      --db|--db=*|--no-db)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+beads_resolve_set_decision() {
+  local decision="$1"
+  local context="$2"
+  local exit_code="$3"
+  local message="${4:-}"
+  local recovery_hint="${5:-}"
+  local root_cleanup_notice="${6:-}"
+
+  BEADS_RESOLVE_DECISION="${decision}"
+  BEADS_RESOLVE_CONTEXT="${context}"
+  BEADS_RESOLVE_EXIT_CODE="${exit_code}"
+  BEADS_RESOLVE_MESSAGE="${message}"
+  BEADS_RESOLVE_RECOVERY_HINT="${recovery_hint}"
+  BEADS_RESOLVE_ROOT_CLEANUP_NOTICE="${root_cleanup_notice}"
+}
+
+beads_resolve_dispatch() {
+  local current_dir="${1:-$PWD}"
+  shift || true
+
+  local repo_root=""
+  local canonical_root=""
+  local beads_dir=""
+  local config_path=""
+  local issues_path=""
+  local db_path=""
+  local redirect_path=""
+  local redirect_target=""
+  local root_db_path=""
+  local recovery_hint=""
+  local root_cleanup_notice=""
+
+  beads_resolve_reset
+
+  repo_root="$(beads_resolve_repo_root "${current_dir}")"
+  if [[ -z "${repo_root}" ]]; then
+    beads_resolve_set_decision "pass_through_non_repo" "non_repo" 0
+    return 0
+  fi
+
+  canonical_root="$(beads_resolve_canonical_root "${repo_root}")"
+  if [[ -z "${canonical_root}" ]]; then
+    beads_resolve_set_decision \
+      "block_unresolved_ownership" \
+      "unknown" \
+      25 \
+      "bd: could not determine the canonical git worktree for this repository." \
+      "Re-enter the repository from a valid git worktree and retry."
+    return 0
+  fi
+
+  BEADS_RESOLVE_REPO_ROOT="${repo_root}"
+  BEADS_RESOLVE_CANONICAL_ROOT="${canonical_root}"
+
+  if beads_resolve_is_global_passthrough "$@"; then
+    beads_resolve_set_decision "pass_through_global" "global" 0
+    return 0
+  fi
+
+  if beads_resolve_is_explicit_troubleshooting "$@"; then
+    beads_resolve_set_decision "allow_explicit_troubleshooting" "explicit" 0
+    return 0
+  fi
+
+  if [[ "${repo_root}" == "${canonical_root}" ]]; then
+    beads_resolve_set_decision "pass_through_root" "canonical_root" 0
+    return 0
+  fi
+
+  beads_dir="${repo_root}/.beads"
+  config_path="${beads_dir}/config.yaml"
+  issues_path="${beads_dir}/issues.jsonl"
+  db_path="${beads_dir}/beads.db"
+  redirect_path="${beads_dir}/redirect"
+  root_db_path="${canonical_root}/.beads/beads.db"
+  recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
+
+  if [[ -f "${redirect_path}" ]]; then
+    redirect_target="$(cat "${redirect_path}")"
+    if [[ -n "${redirect_target}" ]]; then
+      root_cleanup_notice="Residual canonical-root cleanup may still be required, but it is a separate follow-up from this local ownership fix."
+    fi
+    beads_resolve_set_decision \
+      "block_legacy_redirect" \
+      "dedicated_worktree" \
+      23 \
+      "bd: legacy Beads redirect metadata is still present at ${redirect_path}. Shared redirect ownership is disabled for dedicated worktrees." \
+      "${recovery_hint}" \
+      "${root_cleanup_notice}"
+    return 0
+  fi
+
+  if [[ ! -f "${config_path}" || ! -f "${issues_path}" ]]; then
+    if [[ -f "${root_db_path}" ]]; then
+      beads_resolve_set_decision \
+        "block_root_fallback" \
+        "dedicated_worktree" \
+        24 \
+        "bd: local Beads foundation is incomplete in ${repo_root}, and falling back to the canonical root tracker is blocked." \
+        "${recovery_hint}" \
+        "Residual canonical-root cleanup must be handled separately; this command will not repair root state."
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "dedicated_worktree" \
+      25 \
+      "bd: local Beads foundation is incomplete in ${repo_root}. Required files: .beads/config.yaml and .beads/issues.jsonl." \
+      "${recovery_hint}"
+    return 0
+  fi
+
+  BEADS_RESOLVE_DB_PATH="${db_path}"
+  beads_resolve_set_decision "execute_local" "dedicated_worktree" 0
+}
+
+beads_resolve_find_system_bd() {
+  local self_path="$1"
+  local path_dir=""
+  local candidate=""
+  local self_real=""
+  local candidate_real=""
+  local old_ifs="${IFS}"
+
+  self_real="$(beads_resolve_normalize_path "${self_path}")"
+
+  IFS=':'
+  for path_dir in ${PATH}; do
+    [[ -n "${path_dir}" ]] || path_dir="."
+    candidate="${path_dir%/}/bd"
+    if [[ ! -x "${candidate}" ]]; then
+      continue
+    fi
+
+    candidate_real="$(beads_resolve_normalize_path "${candidate}")"
+    if [[ "${candidate_real}" == "${self_real}" ]]; then
+      continue
+    fi
+
+    printf '%s\n' "${candidate}"
+    IFS="${old_ifs}"
+    return 0
+  done
+  IFS="${old_ifs}"
+
+  return 1
+}
+
+beads_resolve_render_env() {
+  printf 'schema=%q\n' "${BEADS_RESOLVE_SCHEMA}"
+  printf 'decision=%q\n' "${BEADS_RESOLVE_DECISION}"
+  printf 'context=%q\n' "${BEADS_RESOLVE_CONTEXT}"
+  printf 'repo_root=%q\n' "${BEADS_RESOLVE_REPO_ROOT:-}"
+  printf 'canonical_root=%q\n' "${BEADS_RESOLVE_CANONICAL_ROOT:-}"
+  printf 'db_path=%q\n' "${BEADS_RESOLVE_DB_PATH:-}"
+  printf 'exit_code=%q\n' "${BEADS_RESOLVE_EXIT_CODE}"
+  printf 'message=%q\n' "${BEADS_RESOLVE_MESSAGE:-}"
+  printf 'recovery_hint=%q\n' "${BEADS_RESOLVE_RECOVERY_HINT:-}"
+  printf 'root_cleanup_notice=%q\n' "${BEADS_RESOLVE_ROOT_CLEANUP_NOTICE:-}"
+}
+
+beads_resolve_render_human() {
+  printf 'Decision: %s\n' "${BEADS_RESOLVE_DECISION}"
+  printf 'Context: %s\n' "${BEADS_RESOLVE_CONTEXT}"
+  if [[ -n "${BEADS_RESOLVE_REPO_ROOT}" ]]; then
+    printf 'Repo Root: %s\n' "${BEADS_RESOLVE_REPO_ROOT}"
+  fi
+  if [[ -n "${BEADS_RESOLVE_CANONICAL_ROOT}" ]]; then
+    printf 'Canonical Root: %s\n' "${BEADS_RESOLVE_CANONICAL_ROOT}"
+  fi
+  if [[ -n "${BEADS_RESOLVE_DB_PATH}" ]]; then
+    printf 'DB Path: %s\n' "${BEADS_RESOLVE_DB_PATH}"
+  fi
+  if [[ -n "${BEADS_RESOLVE_MESSAGE}" ]]; then
+    printf 'Message: %s\n' "${BEADS_RESOLVE_MESSAGE}"
+  fi
+  if [[ -n "${BEADS_RESOLVE_RECOVERY_HINT}" ]]; then
+    printf 'Recovery: %s\n' "${BEADS_RESOLVE_RECOVERY_HINT}"
+  fi
+  if [[ -n "${BEADS_RESOLVE_ROOT_CLEANUP_NOTICE}" ]]; then
+    printf 'Root Cleanup: %s\n' "${BEADS_RESOLVE_ROOT_CLEANUP_NOTICE}"
+  fi
+}
+
+beads_localize_worktree() {
+  local repo_root="$1"
+  local output_format="$2"
+  local current_db=""
+  local current_redirect=""
+  local current_config=""
+  local current_issues=""
+  local system_bd=""
+  local tmp_db=""
+  local backup_dir=""
+  local timestamp=""
+  local backup_path=""
+
+  BEADS_LOCALIZE_FORMAT="${output_format}"
+
+  repo_root="$(beads_resolve_normalize_path "${repo_root}")"
+  current_config="${repo_root}/.beads/config.yaml"
+  current_issues="${repo_root}/.beads/issues.jsonl"
+  current_db="${repo_root}/.beads/beads.db"
+  current_redirect="${repo_root}/.beads/redirect"
+
+  if [[ ! -f "${current_config}" || ! -f "${current_issues}" ]]; then
+    beads_resolve_die "Cannot localize ${repo_root}: tracked .beads/config.yaml and .beads/issues.jsonl must exist locally first."
+  fi
+
+  if [[ -f "${current_db}" && ! -f "${current_redirect}" ]]; then
+    if [[ "${output_format}" == "env" ]]; then
+      printf 'result=%q\n' "already_local"
+      printf 'repo_root=%q\n' "${repo_root}"
+      printf 'db_path=%q\n' "${current_db}"
+    else
+      printf 'Local Beads DB already present at %s\n' "${current_db}"
+    fi
+    return 0
+  fi
+
+  system_bd="${BEADS_SYSTEM_BD:-}"
+  if [[ -z "${system_bd}" ]]; then
+    system_bd="$(beads_resolve_find_system_bd "${DEFAULT_REPO_ROOT}/bin/bd")" || {
+      beads_resolve_die "Could not find the system bd binary needed for localization."
+    }
+  fi
+
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  tmp_db="${repo_root}/.beads/beads.db.tmp.$$"
+  backup_dir="${repo_root}/.beads/backups"
+  backup_path=""
+
+  cleanup_tmp_db() {
+    rm -f "${tmp_db}"
+  }
+  trap cleanup_tmp_db EXIT
+
+  mkdir -p "${repo_root}/.beads"
+  if [[ -f "${current_db}" ]]; then
+    mkdir -p "${backup_dir}"
+    backup_path="${backup_dir}/beads-${timestamp}.db"
+    cp "${current_db}" "${backup_path}"
+  fi
+
+  rm -f "${tmp_db}"
+  "${system_bd}" --db "${tmp_db}" import -i "${current_issues}" --force --strict >/dev/null
+  mv "${tmp_db}" "${current_db}"
+  rm -f "${current_redirect}"
+
+  if [[ "${output_format}" == "env" ]]; then
+    printf 'result=%q\n' "localized"
+    printf 'repo_root=%q\n' "${repo_root}"
+    printf 'db_path=%q\n' "${current_db}"
+    if [[ -n "${backup_path}" ]]; then
+      printf 'backup_path=%q\n' "${backup_path}"
+    fi
+    return 0
+  fi
+
+  printf 'Localized Beads state to %s\n' "${current_db}"
+  if [[ -n "${backup_path}" ]]; then
+    printf 'Backup: %s\n' "${backup_path}"
+  fi
+}
+
+beads_resolve_main() {
+  local repo_override=""
+  local output_format="human"
+  local -a bd_args=()
+  local localize_mode="false"
+
+  if [[ "${1:-}" == "localize" ]]; then
+    localize_mode="true"
+    shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo)
+        repo_override="${2:-}"
+        [[ -n "${repo_override}" ]] || beads_resolve_die "--repo requires a value"
+        shift 2
+        ;;
+      --format)
+        output_format="${2:-}"
+        [[ -n "${output_format}" ]] || beads_resolve_die "--format requires a value"
+        shift 2
+        ;;
+      --)
+        shift
+        bd_args=("$@")
+        break
+        ;;
+      -h|--help)
+        beads_resolve_usage
+        exit 0
+        ;;
+      *)
+        bd_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  case "${output_format}" in
+    human|env) ;;
+    *)
+      beads_resolve_die "Unsupported output format: ${output_format}"
+      ;;
+  esac
+
+  if [[ -n "${repo_override}" ]]; then
+    repo_override="$(beads_resolve_normalize_path "${repo_override}")"
+  fi
+
+  if [[ "${localize_mode}" == "true" ]]; then
+    beads_localize_worktree "${repo_override:-$PWD}" "${output_format}"
+    return 0
+  fi
+
+  beads_resolve_dispatch "${repo_override:-$PWD}" "${bd_args[@]}"
+
+  if [[ "${output_format}" == "env" ]]; then
+    beads_resolve_render_env
+  else
+    beads_resolve_render_human
+  fi
+
+  exit "${BEADS_RESOLVE_EXIT_CODE}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  beads_resolve_main "$@"
+fi

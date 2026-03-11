@@ -5,8 +5,10 @@
 1. Run `/worktree attach codex/gitops-metrics-fix`
 2. Expect:
    - new worktree path is shown
+   - helper output includes `Boundary: stop_after_attach`
    - status is `needs_env_approval` or `ready_for_codex`
    - `Next` contains exact manual commands
+   - the workflow stops at handoff and does not continue downstream work in the originating session
 
 ## Scenario 2: Existing branch with blocked environment
 
@@ -91,6 +93,8 @@
    - `schema=worktree-handoff/v1`
    - `boundary=stop_after_create`
    - `final_state=<handoff_*|blocked_*>`
+   - `pending=<short deferred summary>` when explicit downstream work was provided
+   - `phase_b_seed_payload=<structured deferred payload>` when richer downstream context was provided
    - shell-safe `next_1`, `next_2`, and warnings if applicable
 
 ## Scenario 11: Manual next steps are copy-paste friendly
@@ -106,6 +110,16 @@
 1. Run a managed create/attach flow where the originating request also described explicit downstream work in the target worktree.
 2. Expect:
    - the workflow still stops after Phase A
-   - `Pending` contains the concrete deferred task instead of generic placeholder text
-   - for manual handoff, the response may append a short `Phase B Seed Prompt (optional, not executed)` after the fenced `bash` block
-   - the seed prompt describes only what to do in the new worktree and does not claim that Phase B already started
+   - `Pending` contains a concise concrete deferred summary instead of generic placeholder text
+   - if the request is long or structured, the helper preserves the richer deferred intent separately via `phase_b_seed_payload`
+   - for manual handoff, the response treats the helper human output as canonical and may append a dedicated `Phase B Seed Payload (deferred, not executed)` block after the fenced `bash` block
+   - the richer deferred payload preserves exact feature descriptions, defaults, boundaries, and stop conditions without claiming that Phase B already started
+
+## Scenario 13: Attach flow preserves rich deferred payload
+
+1. Run `/worktree attach codex/gitops-metrics-fix` together with a structured downstream request for the target worktree.
+2. Expect:
+   - helper output includes `Boundary: stop_after_attach`
+   - the workflow still stops after Phase A
+   - `Pending` stays short
+   - the richer deferred Phase B intent is preserved separately and not collapsed into the short summary

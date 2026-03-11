@@ -145,8 +145,10 @@ Rules:
 - Do not continue the broader user task in the originating session.
 - Do not claim "we are now working from the new worktree" unless the handoff actually launched a new session and the downstream work happens there.
 - Do not prove the new context via `git -C ...`, path-targeted commands, or ad hoc `cd` in the old session.
-- If the user asks for later work "из нового worktree", treat that as deferred Phase B and include it in `Pending`, not as permission to continue locally.
-- If the user already described concrete downstream work, preserve that exact deferred intent in `Pending` instead of a generic placeholder.
+- If the user asks for later work "из нового worktree", treat that as deferred Phase B intent, not as permission to continue locally.
+- If the user already described concrete downstream work, preserve it as:
+  - `Pending`: one concise deferred summary
+  - `Phase B Seed Payload`: richer deferred Phase B context when the original request includes structured constraints, exact feature descriptions, defaults, or stop conditions
 - Mixed requests do not expand Phase A permissions. Treat downstream work as opaque deferred payload only.
 - During Phase A, do not analyze, validate, decompose, or prepare the downstream work.
 - During Phase A, do not create or update downstream artifacts, including Beads issues, GitHub issues, Linear issues, specs, plans, checklists, or implementation notes.
@@ -235,13 +237,21 @@ Process:
     - Treat it as deferred payload, not as a task to reason about now.
     - Do not expand it into subtasks, rationale, diagnostics, recommendations, or new deliverables.
     - Normalize only pronouns or path references when needed for clarity.
-14. If the helper exists, run:
-   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --issue <id> --handoff <manual|terminal|codex> [--pending-summary "<pending_summary>"]`
+14. If the original request contains longer structured downstream intent, preserve it separately as `phase_b_seed_payload`.
+    - Use it only for deferred Phase B context.
+    - Preserve concrete constraints, boundaries, exact feature descriptions, defaults, and stop conditions.
+    - Do not collapse this richer payload into `pending_summary`.
+    - Do not add new interpretation, decomposition, or execution notes.
+15. If the helper exists, run:
+   - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --issue <id> --handoff <manual|terminal|codex> [--pending-summary "<pending_summary>"] [--phase-b-seed-payload "<phase_b_seed_payload>"]`
    - omit `--issue <id>` only when no issue id was resolved confidently
-15. Return the helper stdout as the final manual-handoff reply.
-16. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order, one command per line.
+16. Return the helper stdout as the final manual-handoff reply.
+17. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order, one command per line.
     - If the helper detected issue-linked foundation files that exist only in the invoking branch or its upstream, the fenced `bash` block must include the exact bootstrap import command before `direnv allow` or `codex`.
-17. If and only if the original request contained explicit downstream work, append exactly one fenced `text` block using this fixed template:
+18. Treat the helper human output as the canonical manual handoff payload.
+    - Do not reconstruct, paraphrase, reorder, or summarize it in the originating session.
+    - The helper may render a short `Pending` line plus a separate richer deferred payload block.
+19. If and only if the original request contained explicit downstream work, append exactly one fenced `text` block using this fixed template when only a short summary exists:
    ```text
    Phase B only.
    Worktree: <path>
@@ -249,7 +259,17 @@ Process:
    Task: <pending_summary>
    Phase A is complete. Do not repeat worktree setup. Do not create or update issues, specs, or plans unless explicitly requested in the target session.
    ```
-18. Stop. Do not continue downstream task execution in the originating session.
+20. If `phase_b_seed_payload` exists, the helper may instead render a dedicated richer deferred payload block after the fenced `bash` block, for example:
+   ```text
+   Phase B Seed Payload (deferred, not executed).
+   Worktree: <path>
+   Branch: <branch>
+   Pending Summary: <pending_summary>
+   Payload:
+   <phase_b_seed_payload>
+   Phase A is complete. Do not repeat worktree setup in the originating session.
+   ```
+21. Stop. Do not continue downstream task execution in the originating session.
 
 Handoff default:
 - Default to `manual`.
@@ -295,6 +315,7 @@ Related diagnostics rules:
 - Keep the result compact; prefer one corrective path over a long troubleshooting checklist.
 - If a branch exists but no worktree is attached, route the user back into the managed attach flow instead of suggesting raw `bd worktree create`.
 - Distinguish missing readiness state from unavailable probes: do not claim beads or guard are missing when the probe itself could not be executed.
+- If the Beads probe shows missing local ownership in an existing dedicated worktree, route recovery through `./scripts/beads-worktree-localize.sh --path <worktree>` and keep any canonical-root cleanup note separate from that recovery step.
 
 ## Finish Workflow
 
@@ -387,7 +408,7 @@ direnv allow
 codex
 ```
 
-If the request included explicit downstream work, append:
+If the request included explicit downstream work, `Pending` must stay concise and summary-only. When no richer payload is needed, append:
 
 ```text
 Phase B only.
@@ -395,6 +416,18 @@ Worktree: <path>
 Branch: <branch>
 Task: <concrete deferred task>
 Phase A is complete. Do not repeat worktree setup. Do not create or update issues, specs, or plans unless explicitly requested in the target session.
+```
+
+If the request included structured downstream intent that would be lossy as a one-line summary, the helper may instead append:
+
+```text
+Phase B Seed Payload (deferred, not executed).
+Worktree: <path>
+Branch: <branch>
+Pending Summary: <one-sentence summary>
+Payload:
+<exact richer deferred Phase B seed payload>
+Phase A is complete. Do not repeat worktree setup in the originating session.
 ```
 
 ## Completion Rules
@@ -407,7 +440,7 @@ Phase A is complete. Do not repeat worktree setup. Do not create or update issue
 - Do not downgrade `ready_for_codex` or `needs_env_approval` back to a vague `created` summary in prose.
 - Treat `Final State` as the authoritative terminal result for create/attach flows; `Status` is compatibility-only.
 - For manual handoff, the final assistant message must end at the handoff block. Do not continue the user’s downstream task.
-- If an optional `Phase B Seed Prompt` is rendered, it is advisory handoff metadata only. It must follow the fenced `bash` block and must not contain evidence that Phase B already executed.
+- If a richer `Phase B Seed Payload` is rendered, it is deferred handoff metadata only. It must follow the fenced `bash` block and must not contain evidence that Phase B already executed.
 - For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
 - If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
 - Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.
@@ -416,7 +449,8 @@ Phase A is complete. Do not repeat worktree setup. Do not create or update issue
 - For manual handoff, the final assistant reply must contain exactly:
   1. the helper status block
   2. one fenced `bash` block containing only the exact next-step commands, one command per line
-  3. if explicit downstream work was provided, one fenced `text` block using the fixed `Phase B only` template
+  3. if only a short downstream summary was provided, one fenced `text` block using the fixed `Phase B only` template
+  4. if a richer deferred payload was provided, one fenced `text` block for `Phase B Seed Payload (deferred, not executed)` instead of collapsing it into `Pending`
 - Do not add lead-in prose, explanation, bullets, rationale, or commentary before the status block, between blocks, or after the final block.
 - If the helper was run in human mode, its stdout is the canonical reply payload for manual handoff. Return that payload unchanged instead of reconstructing it from local notes.
 - Never render commands or the seed prompt as unfenced plain text.

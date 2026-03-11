@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+SELF_PATH="${SCRIPT_DIR}/bd"
+
+# shellcheck source=scripts/beads-resolve-db.sh
+source "${REPO_ROOT}/scripts/beads-resolve-db.sh"
+
+SYSTEM_BD="${BEADS_SYSTEM_BD:-}"
+
+if [[ -z "${SYSTEM_BD}" ]]; then
+  SYSTEM_BD="$(beads_resolve_find_system_bd "${SELF_PATH}")" || {
+    echo "bd: could not locate the system bd binary after ${SELF_PATH} on PATH" >&2
+    exit 1
+  }
+fi
+
+beads_resolve_dispatch "$PWD" "$@"
+
+case "${BEADS_RESOLVE_DECISION}" in
+  execute_local)
+    exec "${SYSTEM_BD}" --db "${BEADS_RESOLVE_DB_PATH}" "$@"
+    ;;
+  pass_through_non_repo|pass_through_root|pass_through_global|allow_explicit_troubleshooting)
+    exec "${SYSTEM_BD}" "$@"
+    ;;
+  block_legacy_redirect|block_missing_foundation|block_root_fallback|block_unresolved_ownership)
+    printf '%s\n' "${BEADS_RESOLVE_MESSAGE}" >&2
+    if [[ -n "${BEADS_RESOLVE_RECOVERY_HINT}" ]]; then
+      printf 'Recovery: %s\n' "${BEADS_RESOLVE_RECOVERY_HINT}" >&2
+    fi
+    if [[ -n "${BEADS_RESOLVE_ROOT_CLEANUP_NOTICE}" ]]; then
+      printf 'Note: %s\n' "${BEADS_RESOLVE_ROOT_CLEANUP_NOTICE}" >&2
+    fi
+    exit "${BEADS_RESOLVE_EXIT_CODE:-1}"
+    ;;
+  *)
+    echo "bd: unsupported resolution state '${BEADS_RESOLVE_DECISION}'" >&2
+    exit 1
+    ;;
+esac
