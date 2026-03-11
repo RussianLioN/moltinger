@@ -30,6 +30,24 @@ NODE
         test_fail "Probe correlation should pick the newest exact outgoing match after baseline"
     fi
 
+    test_start "component_telegram_web_probe_strips_telegram_time_suffix_from_outgoing_message"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { findOutgoingProbeMessage } = await import(process.env.NODE_SCRIPT);
+const probe = findOutgoingProbeMessage([
+  { mid: 51, direction: "out", text: "/status22:1022:10" },
+  { mid: 52, direction: "in", text: "ok" }
+], "/status", 0);
+if (!probe || probe.mid !== 51 || probe.text !== "/status") {
+  throw new Error(`expected normalized outgoing probe, got ${JSON.stringify(probe)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Outgoing probe correlation must ignore Telegram Web time/status suffixes appended to bubble text"
+    fi
+
     test_start "component_telegram_web_probe_ignores_stale_incoming_messages"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";

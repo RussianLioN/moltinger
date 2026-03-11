@@ -48,7 +48,13 @@ let chatOpenVerified = false;
 let lastChatOpenCheck = null;
 
 function normalizeMessageText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
+  return String(value || "")
+    .replace(/[\u200e\u200f]/g, " ")
+    .replace(/[\uE000-\uF8FF]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/(?:\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)+$/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function safeMid(value) {
