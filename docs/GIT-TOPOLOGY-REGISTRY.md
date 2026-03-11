@@ -15,11 +15,11 @@
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
-| `moltinger-openclaw-control-plane` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `primary-feature-007` | `007-codex-update-monitor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-010` | `010-beads-recovery-batch` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-011` | `011-clawdiy-openclaw-runtime-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-011` | `011-remote-uat-hardening` | `codex-managed` | Needs decision |
 | `primary-feature-011` | `011-worktree-handoff-hardening` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
@@ -34,6 +34,7 @@
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `010-beads-recovery-batch` | `origin/010-beads-recovery-batch` | Needs decision |
+| `011-clawdiy-openclaw-runtime-fix` | `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `011-remote-uat-hardening` | `none` | Needs decision |
 | `011-worktree-handoff-hardening` | `none` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -48,7 +49,6 @@
 | `001-moltis-docker-deploy` | `origin/001-moltis-docker-deploy` | Historical branch with local drift. |
 | `003-testing-infrastructure` | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `008-clawdiy-rollout-bootstrap-fix` | `gone` | Tracking ref is gone; needs decision |
-| `011-clawdiy-openclaw-runtime-fix` | `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/remote-uat-hardening` | `none` | Needs decision |
