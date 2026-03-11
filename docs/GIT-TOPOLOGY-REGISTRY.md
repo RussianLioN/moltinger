@@ -14,7 +14,6 @@
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
-| `moltinger-ejy-beads-redirect-fix` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
@@ -25,6 +24,7 @@
 | `moltis-real-user-tests` | `feat/moltis-real-user-tests` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-010` | `010-beads-recovery-batch` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-011` | `011-remote-uat-hardening` | `codex-managed` | Needs decision |
 | `primary-feature-011` | `011-worktree-handoff-hardening` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
@@ -41,6 +41,7 @@
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
+| `010-beads-recovery-batch` | `origin/010-beads-recovery-batch` | Needs decision |
 | `011-remote-uat-hardening` | `origin/011-remote-uat-hardening` | Needs decision |
 | `011-worktree-handoff-hardening` | `origin/011-worktree-handoff-hardening` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -67,7 +68,6 @@
 | `003-testing-infrastructure` | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `007-codex-update-monitor` | `origin/007-codex-update-monitor` | Needs decision |
 | `008-clawdiy-rollout-bootstrap-fix` | `gone` | Tracking ref is gone; needs decision |
-| `010-beads-recovery-batch` | `origin/010-beads-recovery-batch` | Needs decision |
 | `011-clawdiy-openclaw-runtime-fix` | `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `012-clawdiy-live-runtime-fix` | `origin/012-clawdiy-live-runtime-fix` | Needs decision |
 | `013-clawdiy-state-hardening` | `origin/013-clawdiy-state-hardening` | Needs decision |
