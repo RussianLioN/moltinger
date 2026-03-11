@@ -40,6 +40,7 @@ Expected result:
 - Only high-confidence items are touched
 - Redirected owner worktrees are localized first
 - A journal and per-worktree backups are created
+- Unrelated worktree churn no longer aborts the whole run under `plan/v2`
 - Canonical root cleanup remains prohibited if blocked items remain
 
 ## 4. Validate the result
@@ -51,7 +52,7 @@ bash -n scripts/beads-recovery-batch.sh
 tests/unit/test_beads_recover_issue.sh
 tests/unit/test_beads_recovery_batch.sh
 tests/static/test_beads_worktree_ownership.sh
-make codex-check
+scripts/scripts-verify.sh
 ```
 
 ## 5. Cleanup follow-up remains separate

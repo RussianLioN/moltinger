@@ -139,6 +139,17 @@ sha256_file() {
   shasum -a 256 "${target}" | awk '{print $1}'
 }
 
+sha256_string() {
+  local value="$1"
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "${value}" | sha256sum | awk '{print $1}'
+    return 0
+  fi
+
+  printf '%s' "${value}" | shasum -a 256 | awk '{print $1}'
+}
+
 ensure_context() {
   command -v git >/dev/null 2>&1 || die "git is required"
   command -v jq >/dev/null 2>&1 || die "jq is required"
@@ -263,6 +274,332 @@ topology_fingerprint() {
   sha256_file "${topology_porcelain_file}"
 }
 
+source_issue_contract_json() {
+  local issue_id="$1"
+  local issue_jsonl="$2"
+  local match_file=""
+  local match_count=""
+  local issue_digest=""
+  local issue_state=""
+  local issue_payload=""
+  local issue_title=""
+  local issue_priority=""
+  local issue_status=""
+
+  ensure_tmp_dir
+  match_file="${tmp_dir}/source-issue-$(sanitize_path_component "${issue_id}").jsonl"
+  jq -c --arg id "${issue_id}" 'select(.id == $id)' "${issue_jsonl}" > "${match_file}"
+  match_count="$(wc -l < "${match_file}" | tr -d '[:space:]')"
+
+  case "${match_count}" in
+    0)
+      issue_state="missing"
+      ;;
+    1)
+      issue_state="present"
+      issue_payload="$(cat "${match_file}")"
+      issue_digest="$(sha256_string "${issue_payload}")"
+      issue_title="$(printf '%s\n' "${issue_payload}" | jq -r '.title // ""')"
+      issue_priority="$(printf '%s\n' "${issue_payload}" | jq -r 'if has("priority") then (.priority | tostring) else "" end')"
+      issue_status="$(printf '%s\n' "${issue_payload}" | jq -r '.status // ""')"
+      ;;
+    *)
+      issue_state="duplicate"
+      ;;
+  esac
+
+  jq -nc \
+    --arg state "${issue_state}" \
+    --arg digest "${issue_digest}" \
+    --arg title "${issue_title}" \
+    --arg priority "${issue_priority}" \
+    --arg status "${issue_status}" \
+    '{
+      state: $state,
+      digest: ($digest | if . == "" then null else . end),
+      title: ($title | if . == "" then null else . end),
+      priority: ($priority | if . == "" then null else . end),
+      status: ($status | if . == "" then null else . end)
+    }'
+}
+
+candidate_validation_contract_json() {
+  local issue_id="$1"
+  local issue_jsonl="$2"
+  local owner_branch="$3"
+  local owner_worktree="$4"
+  local beads_state="$5"
+  local redirect_target="$6"
+  local target_issue_present="$7"
+  local source_contract=""
+
+  source_contract="$(source_issue_contract_json "${issue_id}" "${issue_jsonl}")"
+  jq -nc \
+    --arg issue_id "${issue_id}" \
+    --arg owner_branch "${owner_branch}" \
+    --arg owner_worktree "${owner_worktree}" \
+    --arg beads_state "${beads_state}" \
+    --arg redirect_target "${redirect_target}" \
+    --argjson target_issue_present "${target_issue_present}" \
+    --argjson source_issue "${source_contract}" \
+    '{
+      issue_id: $issue_id,
+      source_issue: $source_issue,
+      owner_branch: $owner_branch,
+      owner_worktree: $owner_worktree,
+      beads_state: $beads_state,
+      redirect_target: ($redirect_target | if . == "" then null else . end),
+      target_issue_present: $target_issue_present
+    }'
+}
+
+resolve_live_candidate_state_json() {
+  local issue_id="$1"
+  local issue_jsonl="$2"
+  local owner_result=""
+  local owner_branch=""
+  local owner_reason=""
+  local target_lines=""
+  local target_count=""
+  local source_contract=""
+  local blocker=""
+  local target_worktree=""
+  local beads_state=""
+  local redirect_target=""
+  local target_issue_present="false"
+  local target_issue_jsonl=""
+
+  source_contract="$(source_issue_contract_json "${issue_id}" "${issue_jsonl}")"
+  owner_result="$(ownership_branch_for_issue "${issue_id}")"
+
+  case "${owner_result}" in
+    __NONE__)
+      jq -nc \
+        --arg issue_id "${issue_id}" \
+        --argjson source_issue "${source_contract}" \
+        '{
+          issue_id: $issue_id,
+          source_issue: $source_issue,
+          owner_state: "missing_owner_branch",
+          owner_blocker: "missing_owner_branch",
+          owner_branch: null,
+          owner_worktree: null,
+          beads_state: null,
+          redirect_target: null,
+          target_issue_present: false
+        }'
+      return 0
+      ;;
+    __BLOCKED__:* )
+      blocker="${owner_result#__BLOCKED__:}"
+      jq -nc \
+        --arg issue_id "${issue_id}" \
+        --arg blocker "${blocker}" \
+        --argjson source_issue "${source_contract}" \
+        '{
+          issue_id: $issue_id,
+          source_issue: $source_issue,
+          owner_state: "blocked",
+          owner_blocker: $blocker,
+          owner_branch: null,
+          owner_worktree: null,
+          beads_state: null,
+          redirect_target: null,
+          target_issue_present: false
+        }'
+      return 0
+      ;;
+    __OWNER__:* )
+      owner_branch="${owner_result#__OWNER__:}"
+      owner_reason="${owner_branch#*:}"
+      owner_branch="${owner_branch%%:*}"
+      ;;
+    *)
+      die "Unexpected owner resolution output: ${owner_result}"
+      ;;
+  esac
+
+  target_lines="$(worktree_for_branch "${owner_branch}")"
+  target_count="$(printf '%s\n' "${target_lines}" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+
+  case "${target_count}" in
+    0)
+      jq -nc \
+        --arg issue_id "${issue_id}" \
+        --arg owner_branch "${owner_branch}" \
+        --arg owner_reason "${owner_reason}" \
+        --argjson source_issue "${source_contract}" \
+        '{
+          issue_id: $issue_id,
+          source_issue: $source_issue,
+          owner_state: "missing_worktree",
+          owner_blocker: "missing_worktree",
+          owner_branch: $owner_branch,
+          ownership_reason: $owner_reason,
+          owner_worktree: null,
+          beads_state: null,
+          redirect_target: null,
+          target_issue_present: false
+        }'
+      return 0
+      ;;
+    1) ;;
+    *)
+      jq -nc \
+        --arg issue_id "${issue_id}" \
+        --arg owner_branch "${owner_branch}" \
+        --arg owner_reason "${owner_reason}" \
+        --argjson source_issue "${source_contract}" \
+        '{
+          issue_id: $issue_id,
+          source_issue: $source_issue,
+          owner_state: "ambiguous_worktree",
+          owner_blocker: "ambiguous_worktree",
+          owner_branch: $owner_branch,
+          ownership_reason: $owner_reason,
+          owner_worktree: null,
+          beads_state: null,
+          redirect_target: null,
+          target_issue_present: false
+        }'
+      return 0
+      ;;
+  esac
+
+  target_worktree="${target_lines}"
+  beads_state="$(jq -r --arg path "${target_worktree}" 'select(.path == $path) | .beads_state' "${worktrees_jsonl}")"
+  redirect_target="$(jq -r --arg path "${target_worktree}" 'select(.path == $path) | .redirect_target' "${worktrees_jsonl}")"
+  target_issue_jsonl="${target_worktree}/.beads/issues.jsonl"
+  if target_has_issue "${issue_id}" "${target_issue_jsonl}"; then
+    target_issue_present="true"
+  fi
+
+  jq -nc \
+    --arg issue_id "${issue_id}" \
+    --arg owner_branch "${owner_branch}" \
+    --arg owner_reason "${owner_reason}" \
+    --arg owner_worktree "${target_worktree}" \
+    --arg beads_state "${beads_state}" \
+    --arg redirect_target "${redirect_target}" \
+    --argjson target_issue_present "${target_issue_present}" \
+    --argjson source_issue "${source_contract}" \
+    '{
+      issue_id: $issue_id,
+      source_issue: $source_issue,
+      owner_state: "resolved",
+      owner_blocker: null,
+      owner_branch: $owner_branch,
+      ownership_reason: $owner_reason,
+      owner_worktree: $owner_worktree,
+      beads_state: $beads_state,
+      redirect_target: ($redirect_target | if . == "" then null else . end),
+      target_issue_present: $target_issue_present
+    }'
+}
+
+validation_reasons_json() {
+  local candidate_json="$1"
+  local current_json="$2"
+  local planned_source_state=""
+  local current_source_state=""
+  local planned_source_digest=""
+  local current_source_digest=""
+  local planned_owner_branch=""
+  local current_owner_branch=""
+  local planned_owner_worktree=""
+  local current_owner_worktree=""
+  local planned_beads_state=""
+  local current_beads_state=""
+  local planned_redirect_target=""
+  local current_redirect_target=""
+  local current_owner_state=""
+  local current_owner_blocker=""
+  local reasons_json='[]'
+
+  planned_source_state="$(printf '%s\n' "${candidate_json}" | jq -r '.validation_contract.source_issue.state // "missing"')"
+  current_source_state="$(printf '%s\n' "${current_json}" | jq -r '.source_issue.state // "missing"')"
+  planned_source_digest="$(printf '%s\n' "${candidate_json}" | jq -r '.validation_contract.source_issue.digest // ""')"
+  current_source_digest="$(printf '%s\n' "${current_json}" | jq -r '.source_issue.digest // ""')"
+  planned_owner_branch="$(printf '%s\n' "${candidate_json}" | jq -r '.validation_contract.owner_branch // ""')"
+  current_owner_branch="$(printf '%s\n' "${current_json}" | jq -r '.owner_branch // ""')"
+  planned_owner_worktree="$(printf '%s\n' "${candidate_json}" | jq -r '.validation_contract.owner_worktree // ""')"
+  current_owner_worktree="$(printf '%s\n' "${current_json}" | jq -r '.owner_worktree // ""')"
+  planned_beads_state="$(printf '%s\n' "${candidate_json}" | jq -r '.validation_contract.beads_state // ""')"
+  current_beads_state="$(printf '%s\n' "${current_json}" | jq -r '.beads_state // ""')"
+  planned_redirect_target="$(printf '%s\n' "${candidate_json}" | jq -r '.validation_contract.redirect_target // ""')"
+  current_redirect_target="$(printf '%s\n' "${current_json}" | jq -r '.redirect_target // ""')"
+  current_owner_state="$(printf '%s\n' "${current_json}" | jq -r '.owner_state // ""')"
+  current_owner_blocker="$(printf '%s\n' "${current_json}" | jq -r '.owner_blocker // ""')"
+
+  if [[ "${current_source_state}" != "present" ]]; then
+    reasons_json="$(printf '%s\n' "${reasons_json}" | jq --arg reason "source_issue_${current_source_state}" '. + [$reason]')"
+  elif [[ "${planned_source_state}" != "present" || "${current_source_digest}" != "${planned_source_digest}" ]]; then
+    reasons_json="$(printf '%s\n' "${reasons_json}" | jq '. + ["source_issue_changed"]')"
+  fi
+
+  if [[ "${current_owner_state}" != "resolved" ]]; then
+    reasons_json="$(printf '%s\n' "${reasons_json}" | jq --arg reason "${current_owner_blocker}" '. + [$reason]')"
+  else
+    if [[ "${current_owner_branch}" != "${planned_owner_branch}" ]]; then
+      reasons_json="$(printf '%s\n' "${reasons_json}" | jq '. + ["owner_branch_changed"]')"
+    fi
+    if [[ "${current_owner_worktree}" != "${planned_owner_worktree}" ]]; then
+      reasons_json="$(printf '%s\n' "${reasons_json}" | jq '. + ["owner_worktree_changed"]')"
+    fi
+
+    if [[ "${planned_beads_state}" == "redirected" && "${current_beads_state}" == "local" ]]; then
+      :
+    else
+      if [[ "${current_beads_state}" != "${planned_beads_state}" ]]; then
+        reasons_json="$(printf '%s\n' "${reasons_json}" | jq '. + ["beads_state_changed"]')"
+      fi
+      if [[ "${current_beads_state}" == "redirected" && "${planned_redirect_target}" != "${current_redirect_target}" ]]; then
+        reasons_json="$(printf '%s\n' "${reasons_json}" | jq '. + ["redirect_target_changed"]')"
+      fi
+    fi
+  fi
+
+  printf '%s\n' "${reasons_json}"
+}
+
+validate_candidate_against_plan() {
+  local candidate_json="$1"
+  local plan_source_jsonl="$2"
+  local issue_id=""
+  local current_json=""
+  local reasons_json=""
+  local status="ok"
+  local message=""
+  local target_issue_present="false"
+
+  issue_id="$(printf '%s\n' "${candidate_json}" | jq -r '.issue_id')"
+  current_json="$(resolve_live_candidate_state_json "${issue_id}" "${plan_source_jsonl}")"
+  reasons_json="$(validation_reasons_json "${candidate_json}" "${current_json}")"
+  target_issue_present="$(printf '%s\n' "${current_json}" | jq -r '.target_issue_present')"
+
+  if [[ "$(printf '%s\n' "${reasons_json}" | jq 'length')" != "0" ]]; then
+    status="blocked"
+    message="$(printf '%s\n' "${reasons_json}" | jq -r 'join(", ")')"
+  elif [[ "${target_issue_present}" == "true" ]]; then
+    status="already_present"
+    message="issue already present in target worktree"
+  else
+    message="candidate contract still matches live state"
+  fi
+
+  jq -nc \
+    --arg status "${status}" \
+    --arg message "${message}" \
+    --argjson reasons "${reasons_json}" \
+    --argjson current "${current_json}" \
+    '{
+      status: $status,
+      message: $message,
+      reasons: $reasons,
+      current: $current
+    }'
+}
+
 ownership_branch_for_issue() {
   local issue_id="$1"
   local override_branch=""
@@ -324,6 +661,7 @@ build_audit_candidates() {
   local issue_record=""
   local issue_id=""
   local title=""
+  local issue_digest=""
   local owner_result=""
   local owner_branch=""
   local owner_reason=""
@@ -332,9 +670,12 @@ build_audit_candidates() {
   local blocker=""
   local requires_localization="false"
   local beads_state=""
+  local redirect_target=""
   local source_state=""
   local confidence=""
   local candidate_json=""
+  local target_issue_present="false"
+  local validation_contract=""
 
   : > "${candidates_jsonl}"
 
@@ -342,6 +683,7 @@ build_audit_candidates() {
     [[ -n "${issue_record}" ]] || continue
     issue_id="$(printf '%s\n' "${issue_record}" | jq -r '.id')"
     title="$(printf '%s\n' "${issue_record}" | jq -r '.title')"
+    issue_digest="$(sha256_string "${issue_record}")"
     owner_result="$(ownership_branch_for_issue "${issue_id}")"
 
     case "${owner_result}" in
@@ -429,6 +771,7 @@ build_audit_candidates() {
 
     target_worktree="${target_lines}"
     beads_state="$(jq -r --arg path "${target_worktree}" 'select(.path == $path) | .beads_state' "${worktrees_jsonl}")"
+    redirect_target="$(jq -r --arg path "${target_worktree}" 'select(.path == $path) | .redirect_target' "${worktrees_jsonl}")"
     if [[ "${beads_state}" == "redirected" ]]; then
       requires_localization="true"
     else
@@ -436,53 +779,83 @@ build_audit_candidates() {
     fi
 
     if target_has_issue "${issue_id}" "${target_worktree}/.beads/issues.jsonl"; then
+      target_issue_present="true"
       source_state="already_present_in_target"
       confidence="blocked"
+      validation_contract="$(
+        candidate_validation_contract_json \
+          "${issue_id}" \
+          "${source_jsonl}" \
+          "${owner_branch}" \
+          "${target_worktree}" \
+          "${beads_state}" \
+          "${redirect_target}" \
+          "${target_issue_present}"
+      )"
       candidate_json="$(
         jq -nc \
           --arg issue_id "${issue_id}" \
           --arg title "${title}" \
+          --arg issue_digest "${issue_digest}" \
           --arg source_state "${source_state}" \
           --arg owner_branch "${owner_branch}" \
           --arg owner_worktree "${target_worktree}" \
           --arg owner_reason "${owner_reason}" \
           --argjson requires_localization "${requires_localization}" \
+          --argjson validation_contract "${validation_contract}" \
           '{
             issue_id: $issue_id,
             title: $title,
+            issue_digest: $issue_digest,
             source_state: $source_state,
             owner_branch: $owner_branch,
             owner_worktree: $owner_worktree,
             ownership_reason: $owner_reason,
             confidence: "blocked",
             blockers: ["already_present"],
-            requires_localization: $requires_localization
+            requires_localization: $requires_localization,
+            validation_contract: $validation_contract
           }'
       )"
       append_candidate "${candidate_json}"
       continue
     fi
 
+    target_issue_present="false"
     source_state="root_only"
+    validation_contract="$(
+      candidate_validation_contract_json \
+        "${issue_id}" \
+        "${source_jsonl}" \
+        "${owner_branch}" \
+        "${target_worktree}" \
+        "${beads_state}" \
+        "${redirect_target}" \
+        "${target_issue_present}"
+    )"
     candidate_json="$(
       jq -nc \
         --arg issue_id "${issue_id}" \
         --arg title "${title}" \
+        --arg issue_digest "${issue_digest}" \
         --arg source_state "${source_state}" \
         --arg owner_branch "${owner_branch}" \
         --arg owner_worktree "${target_worktree}" \
         --arg owner_reason "${owner_reason}" \
         --argjson requires_localization "${requires_localization}" \
+        --argjson validation_contract "${validation_contract}" \
         '{
           issue_id: $issue_id,
           title: $title,
+          issue_digest: $issue_digest,
           source_state: $source_state,
           owner_branch: $owner_branch,
           owner_worktree: $owner_worktree,
           ownership_reason: $owner_reason,
           confidence: "high",
           blockers: [],
-          requires_localization: $requires_localization
+          requires_localization: $requires_localization,
+          validation_contract: $validation_contract
         }'
     )"
     append_candidate "${candidate_json}"
@@ -490,22 +863,33 @@ build_audit_candidates() {
 }
 
 write_audit_plan() {
-  local fingerprint=""
+  local topology_epoch=""
+  local source_jsonl_digest=""
+  local ownership_map_digest=""
   local total_root_issues=""
   local plan_json=""
 
-  fingerprint="$(topology_fingerprint)"
+  topology_epoch="$(topology_fingerprint)"
+  source_jsonl_digest="$(sha256_file "${source_jsonl}")"
+  if [[ -f "${ownership_map}" ]]; then
+    ownership_map_digest="$(sha256_file "${ownership_map}")"
+  else
+    ownership_map_digest=""
+  fi
   total_root_issues="$(wc -l < "${source_jsonl}" | tr -d '[:space:]')"
   mkdir -p "$(dirname "${output_path}")"
 
   plan_json="$(
     jq -n \
-      --arg schema "beads-recovery-plan/v1" \
+      --arg schema "beads-recovery-plan/v2" \
       --arg generated_at "$(now_utc)" \
       --arg canonical_root "${canonical_root}" \
       --arg source_jsonl "${source_jsonl}" \
-      --arg topology_fingerprint "${fingerprint}" \
+      --arg topology_epoch "${topology_epoch}" \
+      --arg topology_fingerprint "${topology_epoch}" \
+      --arg source_jsonl_digest "${source_jsonl_digest}" \
       --arg ownership_map "$([[ -f "${ownership_map}" ]] && printf '%s' "${ownership_map}" || printf '')" \
+      --arg ownership_map_digest "${ownership_map_digest}" \
       --argjson total_root_issues "${total_root_issues}" \
       --slurpfile candidates "${candidates_jsonl}" \
       '{
@@ -513,8 +897,11 @@ write_audit_plan() {
         generated_at: $generated_at,
         canonical_root: $canonical_root,
         source_jsonl: $source_jsonl,
+        source_jsonl_digest: $source_jsonl_digest,
+        topology_epoch: $topology_epoch,
         topology_fingerprint: $topology_fingerprint,
         ownership_map: ($ownership_map | if . == "" then null else . end),
+        ownership_map_digest: ($ownership_map_digest | if . == "" then null else . end),
         total_root_issues: $total_root_issues,
         safe_count: ($candidates | map(select(.confidence == "high" and (.blockers | length == 0))) | length),
         blocked_count: ($candidates | map(select(.confidence != "high" or (.blockers | length > 0))) | length),
@@ -576,13 +963,16 @@ print_apply_summary() {
 }
 
 run_apply() {
-  local current_fingerprint=""
-  local plan_fingerprint=""
+  local current_topology_epoch=""
+  local plan_topology_epoch=""
+  local plan_schema=""
   local plan_source_jsonl=""
   local run_root=""
   local journal_path=""
   local actions_jsonl=""
   local backups_index=""
+  local runtime_blocked_jsonl=""
+  local planned_blocked_json=""
   local blocked_json=""
   local any_failure=0
   local started_at=""
@@ -596,15 +986,21 @@ run_apply() {
   local recover_rc=0
   local result_state=""
   local localized="false"
+  local validation_json=""
+  local validation_status=""
+  local validation_message=""
+  local current_beads_state=""
+  local plan_requires_localization=""
 
   [[ -f "${plan_path}" ]] || die "Plan file not found: ${plan_path}"
-  current_fingerprint="$(topology_fingerprint)"
-  plan_fingerprint="$(jq -r '.topology_fingerprint' "${plan_path}")"
+  plan_schema="$(jq -r '.schema // "beads-recovery-plan/v1"' "${plan_path}")"
+  current_topology_epoch="$(topology_fingerprint)"
+  plan_topology_epoch="$(jq -r '.topology_epoch // .topology_fingerprint // ""' "${plan_path}")"
 
-  if [[ "${current_fingerprint}" != "${plan_fingerprint}" ]]; then
+  if [[ "${plan_schema}" == "beads-recovery-plan/v1" && "${current_topology_epoch}" != "${plan_topology_epoch}" ]]; then
     echo "[beads-recovery-batch] Plan fingerprint does not match live topology" >&2
-    echo "[beads-recovery-batch] expected=${plan_fingerprint}" >&2
-    echo "[beads-recovery-batch] actual=${current_fingerprint}" >&2
+    echo "[beads-recovery-batch] expected=${plan_topology_epoch}" >&2
+    echo "[beads-recovery-batch] actual=${current_topology_epoch}" >&2
     exit 3
   fi
 
@@ -618,8 +1014,10 @@ run_apply() {
   journal_path="${run_root}/journal.json"
   actions_jsonl="${run_root}/actions.jsonl"
   backups_index="${run_root}/backups.index"
+  runtime_blocked_jsonl="${run_root}/runtime-blocked.jsonl"
   : > "${actions_jsonl}"
   : > "${backups_index}"
+  : > "${runtime_blocked_jsonl}"
   cp "${plan_path}" "${run_root}/plan.json"
   started_at="$(now_utc)"
 
@@ -627,10 +1025,87 @@ run_apply() {
     [[ -n "${candidate_row}" ]] || continue
     issue_id="$(printf '%s\n' "${candidate_row}" | jq -r '.issue_id')"
     target_worktree="$(printf '%s\n' "${candidate_row}" | jq -r '.owner_worktree')"
-    requires_localization="$(printf '%s\n' "${candidate_row}" | jq -r '.requires_localization')"
+    plan_requires_localization="$(printf '%s\n' "${candidate_row}" | jq -r '.requires_localization')"
     localized="false"
+    backup_path=""
+    recover_output=""
+    validation_json=""
+    validation_status=""
+    validation_message=""
+    current_beads_state=""
 
-    if [[ "${requires_localization}" == "true" ]]; then
+    if [[ "${plan_schema}" == "beads-recovery-plan/v2" ]]; then
+      collect_topology
+      validation_json="$(validate_candidate_against_plan "${candidate_row}" "${plan_source_jsonl}")"
+      validation_status="$(printf '%s\n' "${validation_json}" | jq -r '.status')"
+      validation_message="$(printf '%s\n' "${validation_json}" | jq -r '.message')"
+      current_beads_state="$(printf '%s\n' "${validation_json}" | jq -r '.current.beads_state // ""')"
+      target_worktree="$(printf '%s\n' "${validation_json}" | jq -r '.current.owner_worktree // .owner_worktree // ""')"
+
+      case "${validation_status}" in
+        blocked)
+          result_state="blocked_topology_drift"
+          recover_output="Validation: ${validation_message}"
+          any_failure=1
+          jq -nc \
+            --argjson candidate "${candidate_row}" \
+            --argjson validation "${validation_json}" \
+            '($candidate + {
+              confidence: "blocked",
+              blockers: ((($candidate.blockers // []) + $validation.reasons) | unique),
+              apply_validation: $validation
+            })' >> "${runtime_blocked_jsonl}"
+          jq -nc \
+            --arg issue_id "${issue_id}" \
+            --arg target_worktree "${target_worktree}" \
+            --argjson localized false \
+            --arg backup_path "" \
+            --arg result "${result_state}" \
+            --arg details "${recover_output}" \
+            --argjson validation "${validation_json}" \
+            '{
+              issue_id: $issue_id,
+              target_worktree: ($target_worktree | if . == "" then null else . end),
+              localized: $localized,
+              backup_path: ($backup_path | if . == "" then null else . end),
+              result: $result,
+              details: $details,
+              validation: $validation
+            }' >> "${actions_jsonl}"
+          continue
+          ;;
+        already_present)
+          result_state="already_present"
+          recover_output="Validation: ${validation_message}"
+          jq -nc \
+            --arg issue_id "${issue_id}" \
+            --arg target_worktree "${target_worktree}" \
+            --argjson localized false \
+            --arg backup_path "" \
+            --arg result "${result_state}" \
+            --arg details "${recover_output}" \
+            --argjson validation "${validation_json}" \
+            '{
+              issue_id: $issue_id,
+              target_worktree: ($target_worktree | if . == "" then null else . end),
+              localized: $localized,
+              backup_path: ($backup_path | if . == "" then null else . end),
+              result: $result,
+              details: $details,
+              validation: $validation
+            }' >> "${actions_jsonl}"
+          continue
+          ;;
+      esac
+    else
+      if [[ "${plan_requires_localization}" == "true" ]]; then
+        current_beads_state="redirected"
+      else
+        current_beads_state="local"
+      fi
+    fi
+
+    if [[ "${plan_requires_localization}" == "true" && "${current_beads_state}" == "redirected" ]]; then
       "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_worktree}" >/dev/null
       localized="true"
     fi
@@ -666,26 +1141,42 @@ run_apply() {
       --arg backup_path "${backup_path}" \
       --arg result "${result_state}" \
       --arg details "${recover_output}" \
+      --argjson validation "$(
+        if [[ -n "${validation_json}" ]]; then
+          printf '%s\n' "${validation_json}"
+        else
+          printf 'null\n'
+        fi
+      )" \
       '{
         issue_id: $issue_id,
         target_worktree: $target_worktree,
         localized: $localized,
         backup_path: $backup_path,
         result: $result,
-        details: $details
+        details: $details,
+        validation: $validation
       }' >> "${actions_jsonl}"
   done < <(jq -c '.candidates[] | select(.confidence == "high" and (.blockers | length == 0))' "${plan_path}")
 
-  blocked_json="$(jq '.candidates | map(select(.confidence != "high" or (.blockers | length > 0)))' "${plan_path}")"
+  planned_blocked_json="$(jq '.candidates | map(select(.confidence != "high" or (.blockers | length > 0)))' "${plan_path}")"
+  blocked_json="$(
+    jq -n \
+      --argjson planned "${planned_blocked_json}" \
+      --slurpfile runtime "${runtime_blocked_jsonl}" \
+      '$planned + $runtime'
+  )"
   finished_at="$(now_utc)"
 
   jq -n \
-    --arg schema "beads-recovery-journal/v1" \
+    --arg schema "$([[ "${plan_schema}" == "beads-recovery-plan/v2" ]] && printf 'beads-recovery-journal/v2' || printf 'beads-recovery-journal/v1')" \
     --arg mode "apply" \
     --arg started_at "${started_at}" \
     --arg finished_at "${finished_at}" \
     --arg plan_path "${plan_path}" \
-    --arg topology_fingerprint "${current_fingerprint}" \
+    --arg plan_schema "${plan_schema}" \
+    --arg topology_epoch "${current_topology_epoch}" \
+    --arg plan_topology_epoch "${plan_topology_epoch}" \
     --argjson blocked "${blocked_json}" \
     --argjson any_failure "${any_failure}" \
     --slurpfile actions "${actions_jsonl}" \
@@ -695,7 +1186,11 @@ run_apply() {
       started_at: $started_at,
       finished_at: $finished_at,
       plan_path: $plan_path,
-      topology_fingerprint: $topology_fingerprint,
+      plan_schema: $plan_schema,
+      topology_epoch: $topology_epoch,
+      plan_topology_epoch: ($plan_topology_epoch | if . == "" then null else . end),
+      topology_fingerprint: $topology_epoch,
+      topology_drift_detected: (($plan_topology_epoch != "") and ($topology_epoch != $plan_topology_epoch)),
       canonical_root_cleanup_allowed: ((($blocked | length) == 0) and ($any_failure == 0)),
       actions: $actions,
       blocked: $blocked

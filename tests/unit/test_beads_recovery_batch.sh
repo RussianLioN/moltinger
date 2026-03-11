@@ -46,7 +46,7 @@ test_batch_audit_reports_safe_and_blocked_candidates() {
     test_start "beads_recovery_batch_audit_reports_safe_and_blocked_candidates"
 
     local fixture_root repo_dir worktree_dir source_jsonl ownership_map plan_path
-    local safe_count blocked_count requires_localization missing_blocker
+    local safe_count blocked_count requires_localization missing_blocker plan_schema source_state
     fixture_root="$(mktemp -d /tmp/beads-recovery-batch-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     worktree_dir="${fixture_root}/moltinger-demo-ejy-owner"
@@ -84,11 +84,15 @@ EOF
     blocked_count="$(jq -r '.blocked_count' "${plan_path}")"
     requires_localization="$(jq -r '.candidates[] | select(.issue_id == "demo-ejy") | .requires_localization' "${plan_path}")"
     missing_blocker="$(jq -r '.candidates[] | select(.issue_id == "demo-miss") | .blockers[0]' "${plan_path}")"
+    plan_schema="$(jq -r '.schema' "${plan_path}")"
+    source_state="$(jq -r '.candidates[] | select(.issue_id == "demo-ejy") | .validation_contract.source_issue.state' "${plan_path}")"
 
     assert_eq "1" "${safe_count}" "Audit should report one safe candidate"
     assert_eq "1" "${blocked_count}" "Audit should report one blocked candidate"
     assert_eq "true" "${requires_localization}" "Audit should mark redirected owner worktrees for localization"
     assert_eq "missing_worktree" "${missing_blocker}" "Audit should block candidates whose owner branch has no attached worktree"
+    assert_eq "beads-recovery-plan/v2" "${plan_schema}" "Audit should emit the candidate-scoped plan schema"
+    assert_eq "present" "${source_state}" "Audit should persist source issue validation state for safe candidates"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -150,15 +154,16 @@ EOF
     test_pass
 }
 
-test_batch_apply_refuses_stale_plan() {
-    test_start "beads_recovery_batch_apply_refuses_stale_plan"
+test_batch_apply_allows_unrelated_topology_drift() {
+    test_start "beads_recovery_batch_apply_allows_unrelated_topology_drift"
 
-    local fixture_root repo_dir worktree_dir source_jsonl plan_path output rc
+    local fixture_root repo_dir worktree_dir source_jsonl plan_path journal_root output rc journal_path
     fixture_root="$(mktemp -d /tmp/beads-recovery-batch-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     worktree_dir="${fixture_root}/moltinger-demo-ejy-owner"
     source_jsonl="${fixture_root}/source.jsonl"
     plan_path="${fixture_root}/plan.json"
+    journal_root="${fixture_root}/journals"
 
     seed_repo_beads_state "${repo_dir}"
     create_owner_worktree "${repo_dir}" "feat/demo-ejy-owner" "${worktree_dir}"
@@ -179,13 +184,62 @@ EOF
     output="$(
         set +e
         cd "${repo_dir}"
+        "$BATCH_SCRIPT" apply --plan "${plan_path}" --journal-dir "${journal_root}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Apply should tolerate unrelated topology drift under plan v2"
+    if ! rg -q '"id":"demo-ejy"' "${worktree_dir}/.beads/issues.jsonl"; then
+        test_fail "Apply should still recover the safe candidate when unrelated worktrees changed"
+    fi
+    journal_path="$(find "${journal_root}" -name journal.json | head -1)"
+    assert_eq "true" "$(jq -r '.topology_drift_detected' "${journal_path}")" "Journal should record advisory topology drift"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_batch_apply_blocks_candidate_worktree_change() {
+    test_start "beads_recovery_batch_apply_blocks_candidate_worktree_change"
+
+    local fixture_root repo_dir worktree_dir moved_worktree source_jsonl plan_path output rc
+    fixture_root="$(mktemp -d /tmp/beads-recovery-batch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_dir="${fixture_root}/moltinger-demo-ejy-owner"
+    moved_worktree="${fixture_root}/moltinger-demo-ejy-owner-moved"
+    source_jsonl="${fixture_root}/source.jsonl"
+    plan_path="${fixture_root}/plan.json"
+
+    seed_repo_beads_state "${repo_dir}"
+    create_owner_worktree "${repo_dir}" "feat/demo-ejy-owner" "${worktree_dir}"
+
+    cat > "${source_jsonl}" <<'EOF'
+{"id":"demo-ejy","title":"recoverable","status":"in_progress","priority":2,"issue_type":"bug"}
+EOF
+
+    (
+        cd "${repo_dir}"
+        "$BATCH_SCRIPT" audit \
+            --output "${plan_path}" \
+            --source-jsonl "${source_jsonl}" >/dev/null
+        git worktree remove "${worktree_dir}" --force >/dev/null
+        git worktree add "${moved_worktree}" "feat/demo-ejy-owner" >/dev/null
+    )
+
+    output="$(
+        set +e
+        cd "${repo_dir}"
         "$BATCH_SCRIPT" apply --plan "${plan_path}" 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
 
-    assert_eq "3" "${rc}" "Apply should refuse a stale plan when topology changed after audit"
-    assert_contains "${output}" "Plan fingerprint does not match live topology" "Apply should explain stale-plan refusal"
+    assert_eq "4" "${rc}" "Apply should fail closed when the planned owner worktree path changed"
+    assert_contains "${output}" "Canonical Root Cleanup: still blocked" "Apply should record the blocked candidate in the summary"
+    if rg -q '"id":"demo-ejy"' "${moved_worktree}/.beads/issues.jsonl"; then
+        test_fail "Apply must not recover into a moved owner worktree from a stale contract"
+    fi
 
     rm -rf "${fixture_root}"
     test_pass
@@ -210,7 +264,8 @@ run_all_tests() {
 
     test_batch_audit_reports_safe_and_blocked_candidates
     test_batch_apply_localizes_and_recovers_safe_candidates
-    test_batch_apply_refuses_stale_plan
+    test_batch_apply_allows_unrelated_topology_drift
+    test_batch_apply_blocks_candidate_worktree_change
     generate_report
 }
 
