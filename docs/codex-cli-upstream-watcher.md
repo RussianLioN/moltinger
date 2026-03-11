@@ -1,16 +1,16 @@
-# Codex CLI Upstream Watcher
+# Монитор upstream-обновлений Codex CLI
 
-`codex-cli-upstream-watcher.sh` watches official Codex upstream sources without requiring a local `codex` binary on the watcher host.
+`codex-cli-upstream-watcher.sh` следит за официальными upstream-источниками Codex CLI и не требует локально установленного `codex` на сервере Moltinger.
 
-It answers a simple question:
+Он отвечает на три простых вопроса:
 
-- is there a fresh upstream Codex state?
-- is it already known?
-- should Telegram deliver one new alert or suppress it?
+- появилось ли новое состояние upstream?
+- это уже известное состояние или новое?
+- нужно ли отправлять одно Telegram-уведомление или надо промолчать?
 
-The watcher stays upstream-only. It does not try to decide whether this repository should change locally.
+Этот watcher намеренно смотрит только на upstream. Он не решает сам, нужно ли менять текущий репозиторий локально.
 
-## Manual operator run
+## Ручной запуск
 
 ```bash
 mkdir -p .tmp/current
@@ -22,22 +22,27 @@ mkdir -p .tmp/current
   --stdout summary
 ```
 
-What the operator gets:
+Что получает оператор:
 
-- short plain-language summary in the terminal
-- deterministic JSON report
-- persisted watcher state in `.tmp/current/codex-cli-upstream-watcher-state.json`
+- короткий понятный summary в терминале
+- детерминированный JSON-отчёт
+- сохранённое состояние в `.tmp/current/codex-cli-upstream-watcher-state.json`
 
-Plain-language outcomes:
+Важно:
 
-- `deliver`: a fresh upstream fingerprint was found
-- `suppress`: this fingerprint was already seen before
-- `investigate`: the primary changelog source was unavailable or malformed
-- `retry`: Telegram failed after a schedulable upstream state was found
+- summary и Telegram-текст теперь формируются только на русском
+- исходные формулировки из официального changelog сохраняются в JSON-отчёте как данные источника и могут оставаться на английском
+
+Понятные итоги:
+
+- `deliver`: найден новый upstream fingerprint
+- `suppress`: этот fingerprint уже встречался раньше
+- `investigate`: основной changelog недоступен или повреждён
+- `retry`: Telegram-отправка сломалась, позже нужно повторить
 
 ## Advisory issue signals
 
-Optional issue signals add extra awareness without replacing the official changelog as release truth.
+Дополнительные issue signals добавляют контекст, но не заменяют официальный changelog как главный источник истины.
 
 ```bash
 ./scripts/codex-cli-upstream-watcher.sh \
@@ -46,11 +51,11 @@ Optional issue signals add extra awareness without replacing the official change
   --issue-signals-url "https://api.github.com/repos/openai/codex/issues?state=open&per_page=20"
 ```
 
-Issue signals affect source notes and operator context, but they do not override the release decision on their own.
+Issue signals влияют на заметки и контекст, но сами по себе не переопределяют решение по релизу.
 
-## Scheduler and Telegram
+## Scheduler и Telegram
 
-Scheduler mode is intended for the Moltinger host.
+Режим scheduler предназначен для запуска на стороне Moltinger.
 
 ```bash
 ./scripts/codex-cli-upstream-watcher.sh \
@@ -63,36 +68,36 @@ Scheduler mode is intended for the Moltinger host.
   --stdout none
 ```
 
-Telegram behavior:
+Как ведёт себя Telegram:
 
-- a fresh upstream fingerprint sends one alert
-- the same fingerprint is suppressed on repeat runs
-- a Telegram failure becomes `retry` and stays retryable
+- новый upstream fingerprint даёт одно уведомление
+- тот же самый fingerprint повторно не отправляется
+- при ошибке Telegram run получает статус `retry` и остаётся пригодным для повторной попытки
 
-If `--telegram-chat-id` is not passed, the watcher resolves the target in this order:
+Если `--telegram-chat-id` не указан, watcher пытается определить адресата так:
 
 1. `CODEX_UPSTREAM_WATCHER_TELEGRAM_CHAT_ID` from the env file
 2. first id from `TELEGRAM_ALLOWED_USERS` in the env file
 
-This keeps the feature compatible with the existing Moltinger bot runtime.
+Так feature остаётся совместимым с уже существующим Moltinger bot runtime.
 
-## Cron installation
+## Cron-установка
 
-The repository-managed cron artifact is:
+GitOps-managed cron-файл:
 
 - `scripts/cron.d/moltis-codex-upstream-watcher`
 
-It is installed by `.github/workflows/deploy.yml` together with the rest of `scripts/cron.d/`.
+Он ставится через `.github/workflows/deploy.yml` вместе с остальными файлами из `scripts/cron.d/`.
 
-The cron job:
+Что делает cron-задача:
 
-- writes logs to `/var/log/moltis/codex-upstream-watcher.log`
-- keeps state under `/opt/moltinger/.tmp/current/`
-- reads Telegram credentials from `/opt/moltinger/.env`
+- пишет логи в `/var/log/moltis/codex-upstream-watcher.log`
+- хранит state в `/opt/moltinger/.tmp/current/`
+- берёт Telegram credentials из `/opt/moltinger/.env`
 
-## Output contract
+## Что именно выдаёт инструмент
 
-Top-level report fields:
+Верхние поля отчёта:
 
 - `checked_at`
 - `snapshot`
@@ -102,28 +107,28 @@ Top-level report fields:
 - `telegram_target`
 - `notes`
 
-Important semantics:
+Важная семантика:
 
-- `snapshot.release_status` tells whether upstream looks `new`, `known`, `investigate`, or `unavailable`
-- `decision.status` tells what the watcher should do now: `deliver`, `suppress`, `retry`, or `investigate`
-- `state.last_delivered_fingerprint` is only updated after a successful Telegram delivery path
+- `snapshot.release_status` показывает, upstream это `new`, `known`, `investigate` или `unavailable`
+- `decision.status` показывает, что делать сейчас: `deliver`, `suppress`, `retry` или `investigate`
+- `state.last_delivered_fingerprint` обновляется только после успешной Telegram-отправки
 
-## UX examples
+## Как это выглядит для пользователя
 
-Example 1: fresh upstream release during a manual check
+Пример 1: ручная проверка увидела новый релиз
 
-- summary says a fresh upstream Codex version exists
-- decision is `deliver`
-- no Telegram is sent because the run is manual
+- summary говорит, что появилась новая upstream-версия Codex
+- решение будет `deliver`
+- Telegram не отправляется, потому что запуск был ручной
 
-Example 2: scheduled run sees the same already-delivered release
+Пример 2: scheduler снова увидел тот же уже отправленный релиз
 
-- summary/report say the fingerprint is already known
-- decision is `suppress`
-- Telegram is not called again
+- summary и отчёт говорят, что fingerprint уже известен
+- решение будет `suppress`
+- Telegram повторно не вызывается
 
-Example 3: changelog source breaks temporarily
+Пример 3: официальный changelog временно сломался
 
-- summary/report say `investigate`
-- previous delivered fingerprint stays intact
-- recovery to the same fingerprint later suppresses instead of resending
+- summary и отчёт показывают `investigate`
+- прошлый доставленный fingerprint сохраняется
+- если потом вернётся тот же fingerprint, повторной отправки не будет

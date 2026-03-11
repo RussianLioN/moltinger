@@ -101,7 +101,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     test_start "component_codex_cli_upstream_watcher_manual_first_run_is_fresh"
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "First manual run should mark the upstream fingerprint as fresh"
     assert_eq "new" "$(jq -r '.snapshot.release_status' "$report")" "First manual run should report a new release status"
-    assert_contains "$(cat "$summary")" "Latest version: 0.113.0" "Summary should mention the latest version"
+    assert_contains "$(cat "$summary")" "Последняя версия из официального источника: 0.113.0" "Summary should mention the latest version in Russian"
     test_pass
 
     test_start "component_codex_cli_upstream_watcher_manual_repeat_is_suppressed"

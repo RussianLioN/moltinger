@@ -38,27 +38,28 @@ usage() {
     cat <<'USAGE'
 Usage: codex-cli-upstream-watcher.sh [options]
 
-Watch official Codex upstream sources, compute a stable upstream fingerprint, and
-optionally send one Telegram alert per new fingerprint.
+Проверяет официальный upstream Codex CLI, вычисляет стабильный отпечаток
+состояния и при необходимости отправляет одно Telegram-уведомление на новый
+upstream-отпечаток.
 
 Options:
-  --mode MODE                Run mode: manual|scheduler (default: manual)
-  --state-file PATH          Persist watcher state to PATH
-  --json-out PATH            Write the machine-readable watcher report to PATH
-  --summary-out PATH         Write the human-readable summary to PATH
-  --stdout MODE              stdout mode: summary|json|none (default: summary)
-  --release-file PATH        Read the primary changelog source from a local file
-  --release-url URL          Read the primary changelog source from URL
-  --max-releases N           Maximum recent releases to scan from the primary source
-  --include-issue-signals    Include advisory issue-signal intake
-  --issue-signals-file PATH  Read issue-signal JSON from a local file
-  --issue-signals-url URL    Read issue-signal JSON from URL
-  --telegram-enabled         Enable Telegram delivery for scheduler runs
-  --telegram-chat-id ID      Explicit Telegram chat target
-  --telegram-env-file PATH   Env file used by telegram-bot-send.sh
-  --telegram-silent          Send Telegram messages silently
-  --telegram-send-script PATH Override telegram sender script path
-  -h, --help                 Show this help text
+  --mode MODE                Режим: manual|scheduler (по умолчанию: manual)
+  --state-file PATH          Файл состояния watcher-а
+  --json-out PATH            Куда записать JSON-отчёт
+  --summary-out PATH         Куда записать человекочитаемый summary
+  --stdout MODE              Вывод в stdout: summary|json|none (по умолчанию: summary)
+  --release-file PATH        Читать основной changelog из локального файла
+  --release-url URL          Читать основной changelog по URL
+  --max-releases N           Сколько последних релизов анализировать
+  --include-issue-signals    Подключить advisory issue signals
+  --issue-signals-file PATH  Читать issue signals из локального JSON-файла
+  --issue-signals-url URL    Читать issue signals по URL
+  --telegram-enabled         Включить Telegram-доставку для scheduler-режима
+  --telegram-chat-id ID      Явно указать Telegram chat id
+  --telegram-env-file PATH   Env-файл для telegram-bot-send.sh
+  --telegram-silent          Отправлять Telegram тихо, без звука
+  --telegram-send-script PATH Путь к telegram sender script
+  -h, --help                 Показать эту справку
 
 Environment overrides:
   CODEX_UPSTREAM_WATCHER_MODE
@@ -89,7 +90,7 @@ add_warning() {
 require_command() {
     local name="$1"
     if ! command -v "$name" >/dev/null 2>&1; then
-        printf 'Missing required dependency: %s\n' "$name" >&2
+        printf 'Не найдена обязательная зависимость: %s\n' "$name" >&2
         exit 2
     fi
 }
@@ -107,7 +108,7 @@ normalize_bool() {
             printf 'false\n'
             ;;
         *)
-            printf 'Invalid boolean value: %s\n' "$1" >&2
+            printf 'Некорректное boolean-значение: %s\n' "$1" >&2
             exit 2
             ;;
     esac
@@ -181,13 +182,13 @@ fetch_source() {
             cp "$file_arg" "$target"
             return 0
         fi
-        add_warning "${kind} source file not found: ${file_arg}"
+        add_warning "Не найден файл источника (${kind}): ${file_arg}"
         return 1
     fi
 
     local source_url="${url_arg:-$default_url}"
     if [[ -z "$source_url" ]]; then
-        add_warning "No ${kind} source URL configured"
+        add_warning "Для источника ${kind} не настроен URL"
         return 1
     fi
 
@@ -197,69 +198,100 @@ fetch_source() {
         return 0
     fi
 
-    add_warning "Failed to fetch ${kind} source: ${source_url}"
+    add_warning "Не удалось получить источник ${kind}: ${source_url}"
     return 1
 }
 
 render_summary() {
     jq -r '
+      def ru_status(value):
+        if value == "new" then "новое"
+        elif value == "known" then "уже известно"
+        elif value == "investigate" then "нужно проверить"
+        elif value == "unavailable" then "недоступно"
+        elif value == "deliver" then "отправить"
+        elif value == "suppress" then "не отправлять повторно"
+        elif value == "retry" then "повторить позже"
+        elif value == "ok" then "доступно"
+        elif value == "true" then "да"
+        elif value == "false" then "нет"
+        elif value == "delivered" then "доставлено"
+        elif value == "suppressed" then "подавлено"
+        elif value == "failed" then "ошибка"
+        elif value == "unknown" then "неизвестно"
+        else value
+        end;
+      def ru_source_name(value):
+        if value == "codex-changelog" then "официальная лента изменений Codex CLI"
+        elif value == "codex-advisory-issues" then "дополнительные сигналы из тикетов Codex CLI"
+        else value
+        end;
       def fmt_list(items):
-        if (items | length) == 0 then "- none"
+        if (items | length) == 0 then "- нет"
         else items[] | "- \(.)"
         end;
       def fmt_source(source):
         [
-          "- \(source.name): \(source.status)",
-          (if (source.url // "") != "" then "  url: \(source.url)" else empty end),
-          (if (source.notes | length) > 0 then "  notes:" else empty end),
+          "- \(ru_source_name(source.name)): \(ru_status(source.status))",
+          (if (source.url // "") != "" then "  ссылка: \(source.url)" else empty end),
+          (if (source.notes | length) > 0 then "  заметки:" else empty end),
           (source.notes[]? | "    - \(.)")
         ];
 
       [
-        "# Codex Upstream Watcher",
+        "# Монитор обновлений Codex CLI",
         "",
-        "- Checked at: \(.checked_at)",
-        "- Latest version: \(.snapshot.latest_version)",
-        "- Freshness: \(.snapshot.release_status)",
-        "- Decision: \(.decision.status)",
-        "- Why: \(.decision.reason)",
-        "- Telegram enabled: \(.telegram_target.enabled)",
+        "- Проверено: \(.checked_at)",
+        "- Последняя версия из официального источника: \(.snapshot.latest_version)",
+        "- Состояние: \(ru_status(.snapshot.release_status))",
+        "- Решение: \(ru_status(.decision.status))",
+        "- Почему: \(.decision.reason)",
+        "- Telegram включён: \(if .telegram_target.enabled then "да" else "нет" end)",
         (if (.telegram_target.chat_id // "") != "" then "- Telegram chat: \(.telegram_target.chat_id)" else empty end),
         "",
-        "## Highlights",
-        (fmt_list(.snapshot.highlights)),
+        "## Что изменилось",
+        "- Найдено ключевых пунктов в официальной ленте изменений: \(.snapshot.highlights | length)",
+        "- Подробные формулировки из официального источника сохранены в JSON-отчёте.",
         "",
-        "## Sources",
+        "## Источники",
         (fmt_source(.snapshot.primary_source)),
         (if (.snapshot.advisory_sources | length) > 0 then "" else empty end),
         (.snapshot.advisory_sources[]? | fmt_source(.)),
         "",
-        "## Watcher Notes",
+        "## Заметки watcher-а",
         (fmt_list(.notes)),
         "",
-        "## Persisted State",
-        "- Last status: \(.state.last_status)",
-        (if (.state.last_seen_fingerprint // "") != "" then "- Last seen fingerprint: \(.state.last_seen_fingerprint)" else empty end),
-        (if (.state.last_delivered_fingerprint // "") != "" then "- Last delivered fingerprint: \(.state.last_delivered_fingerprint)" else empty end),
-        (if (.state.last_checked_at // "") != "" then "- Last checked at: \(.state.last_checked_at)" else empty end)
+        "## Сохранённое состояние",
+        "- Последний статус: \(ru_status(.state.last_status))",
+        (if (.state.last_seen_fingerprint // "") != "" then "- Последний увиденный отпечаток состояния: \(.state.last_seen_fingerprint)" else empty end),
+        (if (.state.last_delivered_fingerprint // "") != "" then "- Последний доставленный отпечаток состояния: \(.state.last_delivered_fingerprint)" else empty end),
+        (if (.state.last_checked_at // "") != "" then "- Последняя проверка: \(.state.last_checked_at)" else empty end)
       ] | flatten | join("\n")
     ' "$REPORT_PATH"
 }
 
 build_telegram_message() {
     jq -r '
+      def ru_status(value):
+        if value == "new" then "новое"
+        elif value == "known" then "уже известно"
+        elif value == "investigate" then "нужно проверить"
+        elif value == "unavailable" then "недоступно"
+        else value
+        end;
       def first_or_none(items):
-        if (items | length) == 0 then "- none"
+        if (items | length) == 0 then "- нет"
         else items[] | "- \(.)"
         end;
 
       [
-        "Codex CLI upstream watcher",
-        "Latest version: \(.snapshot.latest_version)",
-        "Freshness: \(.snapshot.release_status)",
-        "Decision: \(.decision.reason)",
-        "Highlights:",
-        (first_or_none(.snapshot.highlights[:4]))
+        "Обновление Codex CLI",
+        "Последняя версия из официального источника: \(.snapshot.latest_version)",
+        "Состояние: \(ru_status(.snapshot.release_status))",
+        "Что это значит: \(.decision.reason)",
+        "Коротко:",
+        "- В официальной ленте изменений найдено ключевых пунктов: \(.snapshot.highlights | length)",
+        "- Подробности сохранены в watcher-отчёте."
       ] | flatten | join("\n")
     ' "$REPORT_PATH"
 }
@@ -289,8 +321,8 @@ patch_report_with_telegram_success() {
     jq \
         --arg chat_id "$chat_id" \
         '
-        .notes += ["Telegram alert sent successfully."] |
-        .state.notes = ((.state.notes + ["Telegram alert delivered to " + $chat_id + "."]) | .[-8:]) |
+        .notes += ["Telegram-уведомление успешно отправлено."] |
+        .state.notes = ((.state.notes + ["Telegram-уведомление доставлено в чат " + $chat_id + "."]) | .[-8:]) |
         .telegram_target.chat_id = $chat_id
         ' \
         "$REPORT_PATH" > "${REPORT_PATH}.tmp"
@@ -306,10 +338,10 @@ patch_report_with_telegram_failure() {
         --arg failure_message "$failure_message" \
         '
         .decision.status = "retry" |
-        .decision.reason = "Telegram delivery failed; the upstream fingerprint remains retryable." |
+        .decision.reason = "Не удалось отправить Telegram-уведомление; этот upstream fingerprint нужно повторить позже." |
         .state.last_status = "failed" |
-        .notes += ["Telegram delivery failed: " + $failure_message] |
-        .state.notes = ((.state.notes + ["Telegram delivery failed: " + $failure_message]) | .[-8:]) |
+        .notes += ["Ошибка Telegram-доставки: " + $failure_message] |
+        .state.notes = ((.state.notes + ["Ошибка Telegram-доставки: " + $failure_message]) | .[-8:]) |
         (
           if $previous_delivered == "" then
             .state |= del(.last_delivered_fingerprint)
@@ -404,7 +436,7 @@ parse_args() {
     case "$MODE" in
         manual|scheduler) ;;
         *)
-            printf 'Invalid --mode value: %s\n' "$MODE" >&2
+            printf 'Некорректное значение --mode: %s\n' "$MODE" >&2
             exit 2
             ;;
     esac
@@ -412,7 +444,7 @@ parse_args() {
     case "$STDOUT_FORMAT" in
         summary|json|none) ;;
         *)
-            printf 'Invalid --stdout mode: %s\n' "$STDOUT_FORMAT" >&2
+            printf 'Некорректное значение --stdout: %s\n' "$STDOUT_FORMAT" >&2
             exit 2
             ;;
     esac
@@ -420,7 +452,7 @@ parse_args() {
     TELEGRAM_ENABLED="$(normalize_bool "$TELEGRAM_ENABLED")"
 
     if ! [[ "$MAX_RELEASES" =~ ^[1-9][0-9]*$ ]]; then
-        printf '--max-releases must be a positive integer\n' >&2
+        printf '--max-releases должен быть положительным целым числом\n' >&2
         exit 2
     fi
 }
@@ -545,11 +577,11 @@ def load_state(path: pathlib.Path) -> tuple[dict, list[str]]:
     try:
         raw = json.loads(path.read_text())
     except Exception as exc:
-        notes.append(f"Failed to parse watcher state file: {exc}")
+        notes.append(f"Не удалось разобрать файл состояния watcher-а: {exc}")
         return default, notes
 
     if not isinstance(raw, dict):
-        notes.append("Watcher state file did not contain an object; ignored.")
+        notes.append("Файл состояния watcher-а не содержит JSON-объект и был проигнорирован.")
         return default, notes
 
     state = {
@@ -697,21 +729,21 @@ if release_source_path.is_file():
         releases = parse_release_source(release_source_path.read_text(), max_releases)
         if releases:
             primary_status = "ok"
-            primary_notes.append(f"Parsed {len(releases)} release entries from the primary source.")
+            primary_notes.append(f"Из основного источника разобрано релизов: {len(releases)}.")
         else:
             primary_status = "investigate"
-            primary_notes.append("Primary source was readable but no Codex CLI release entries were parsed.")
+            primary_notes.append("Основной источник прочитан, но релизы Codex CLI из него не разобрались.")
     except Exception as exc:
         primary_status = "investigate"
-        primary_notes.append(f"Failed to parse the primary source: {exc}")
+        primary_notes.append(f"Не удалось разобрать основной источник: {exc}")
 else:
     primary_status = "unavailable"
-    primary_notes.append("Primary source could not be fetched.")
+    primary_notes.append("Не удалось получить основной источник.")
 
 latest_version = releases[0]["version"] if releases else "unknown"
 highlights = releases[0]["changes"][:5] if releases else []
 if releases and not highlights:
-    highlights = [f"Release {latest_version} was published."]
+    highlights = [f"Опубликован релиз {latest_version}."]
 
 advisory_sources: list[dict] = []
 if include_issue_signals:
@@ -722,15 +754,15 @@ if include_issue_signals:
         try:
             advisory_issues = parse_issue_signals(issue_source_path.read_text())
             advisory_status = "ok"
-            advisory_notes.append(f"Advisory issue intake reviewed {len(advisory_issues)} item(s).")
+            advisory_notes.append(f"Проверено дополнительных сигналов из тикетов: {len(advisory_issues)}.")
             if advisory_issues:
-                advisory_notes.append(f"Newest advisory title: {advisory_issues[0]['title']}")
+                advisory_notes.append("Найден как минимум один свежий сигнал из тикетов; подробности сохранены в JSON-отчёте.")
         except Exception as exc:
             advisory_status = "investigate"
-            advisory_notes.append(f"Failed to parse advisory issue signals: {exc}")
+            advisory_notes.append(f"Не удалось разобрать advisory issue signals: {exc}")
     else:
         advisory_status = "unavailable"
-        advisory_notes.append("Advisory issue-signal source could not be fetched.")
+        advisory_notes.append("Не удалось получить источник advisory issue signals.")
 
     advisory_sources.append(
         {
@@ -744,13 +776,13 @@ if include_issue_signals:
 fingerprint = build_fingerprint(latest_version, highlights, primary_status)
 release_status = "unavailable"
 decision_status = "investigate"
-decision_reason = "Primary changelog evidence is unavailable."
+decision_reason = "Официальная лента изменений сейчас недоступна."
 decision_changed = False
 
 if primary_status == "investigate":
     release_status = "investigate"
     decision_status = "investigate"
-    decision_reason = "Primary changelog evidence is malformed or incomplete."
+    decision_reason = "Официальная лента изменений вернула неполные или некорректные данные."
 elif primary_status == "ok":
     delivered_matches = previous_state.get("last_delivered_fingerprint", "") == fingerprint
     seen_matches = previous_state.get("last_seen_fingerprint", "") == fingerprint
@@ -759,23 +791,23 @@ elif primary_status == "ok":
     if mode == "scheduler" and telegram_enabled:
         if not telegram_chat_id:
             decision_status = "investigate"
-            decision_reason = "Telegram delivery was enabled but no chat id could be resolved."
+            decision_reason = "Telegram включён, но chat id определить не удалось."
         elif delivered_matches:
             decision_status = "suppress"
-            decision_reason = "This upstream fingerprint was already delivered to Telegram."
+            decision_reason = "Это состояние уже было отправлено в Telegram."
         elif seen_matches:
             decision_status = "deliver"
-            decision_reason = "This upstream fingerprint is known locally but has not been delivered to Telegram yet."
+            decision_reason = "Это состояние уже известно, но в Telegram ещё не отправлялось."
         else:
             decision_status = "deliver"
-            decision_reason = "Fresh upstream fingerprint detected and queued for Telegram delivery."
+            decision_reason = "Найдено новое состояние; его нужно отправить в Telegram."
     else:
         if seen_matches:
             decision_status = "suppress"
-            decision_reason = "This upstream fingerprint was already seen earlier."
+            decision_reason = "Это состояние уже встречалось раньше."
         else:
             decision_status = "deliver"
-            decision_reason = "Fresh upstream fingerprint detected."
+            decision_reason = "Найдено новое состояние."
 
     decision_changed = not seen_matches
 
@@ -834,9 +866,9 @@ report = {
     },
     "notes": compact_notes(
         notes
-        + [f"Mode: {mode}."]
-        + ([f"Resolved Telegram chat id: {telegram_chat_id}."] if telegram_chat_id else [])
-        + ([f"Telegram env file: {telegram_env_file}."] if telegram_env_file else [])
+        + [f"Режим: {'ручной' if mode == 'manual' else 'по расписанию'}."]
+        + ([f"Определён идентификатор чата Telegram: {telegram_chat_id}."] if telegram_chat_id else [])
+        + ([f"Использован файл окружения Telegram: {telegram_env_file}."] if telegram_env_file else [])
     ),
 }
 
@@ -855,9 +887,9 @@ PY
         telegram_text="$(build_telegram_message)"
 
         if [[ ! -x "$TELEGRAM_SEND_SCRIPT" ]]; then
-            patch_report_with_telegram_failure "$previous_delivered" "telegram sender script is missing or not executable: ${TELEGRAM_SEND_SCRIPT}"
+            patch_report_with_telegram_failure "$previous_delivered" "не найден или не исполняем telegram sender script: ${TELEGRAM_SEND_SCRIPT}"
         elif [[ -z "$resolved_chat_id" ]]; then
-            patch_report_with_telegram_failure "$previous_delivered" "telegram chat id could not be resolved"
+            patch_report_with_telegram_failure "$previous_delivered" "не удалось определить telegram chat id"
         else
             set +e
             telegram_output="$(run_telegram_sender "$resolved_chat_id" "$telegram_text" 2>&1)"
