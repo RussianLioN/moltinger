@@ -58,7 +58,7 @@
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
-| `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `none` | Needs decision |
+| `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `none` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `none` | Needs decision |
@@ -114,6 +114,7 @@
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
+| `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `origin/feat/moltis-real-user-tests` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
