@@ -58,6 +58,16 @@
 
 ---
 
+## Phase 6: User Story 4 - Live Operability Regression Pack (P2)
+
+- [x] T034 [US4] Reconcile deferred-vs-live `real_user` history in `specs/004-telegram-e2e-harness/spec.md` and `specs/004-telegram-e2e-harness/tasks.md`
+- [x] T035 [US4] Extend `tests/live_external/test_telegram_external_smoke.sh` to execute the synthetic Moltis harness against the authoritative live target
+- [x] T036 [US4] Extend `tests/live_external/test_telegram_external_smoke.sh` to execute `real_user` MTProto verification and assert redaction boundaries
+- [x] T037 [US4] Document the full Moltis operability verification set in `docs/telegram-e2e-on-demand.md`
+- [x] T038 [US4] Run targeted validation for the updated docs, helper diagnostics, and live-suite skip wiring
+
+---
+
 ## Final Phase: Polish & Cross-Cutting
 
 - [x] T040 Add script metadata to `scripts/manifest.json`
@@ -70,6 +80,7 @@
 
 ## Dependencies & Execution Order
 
-- Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Final Phase
+- Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Final Phase
 - US2 depends on US1 artifact schema and invocation path
 - US3 depends on established report/error framework from US1/US2
+- US4 depends on working US3 execution plus the existing live-only lane boundary

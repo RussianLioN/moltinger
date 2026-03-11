@@ -115,6 +115,83 @@ export TELEGRAM_TEST_BOT_USERNAME='@moltinger_bot'
   --verbose
 ```
 
+## История scope
+
+- Исходный epic `moltinger-xtx` был закрыт с US3 в состоянии `Real User Contract (Deferred)`: `real_user` существовал как расширяемая ветка контракта, но ещё без настоящей отправки.
+- В тот же день scope был расширен коммитом `d078d02` до рабочего MTProto execution path и отдельного helper-скрипта `scripts/telegram-real-user-e2e.py`.
+- Текущая ветка рассматривает `spec.md`, `tasks.md`, этот runbook и helper как единый regression surface: цель не допустить отката обратно к deferred-only semantics.
+
+## Полный набор проверок работоспособности Moltis
+
+Авторитетная цель для этих проверок - live Moltis target. Локальный fixture stack не заменяет этот набор и не доказывает, что удалённый бот отвечает сейчас.
+
+### Быстрый live suite
+
+```bash
+./tests/run.sh --lane telegram_live --live --filter live_telegram_smoke --json
+```
+
+Suite покрывает:
+
+- `getMe` и `getWebhookInfo` через прямой Telegram Bot API.
+- `sendMessage` smoke, если задан `TELEGRAM_TEST_CHAT_ID`.
+- `scripts/telegram-e2e-on-demand.sh --mode synthetic` против `MOLTIS_URL` или `https://moltis.ainetic.tech`.
+- `scripts/telegram-e2e-on-demand.sh --mode real_user` через MTProto, если заданы `TELEGRAM_TEST_*` и на раннере установлен `telethon`.
+- Regression check, что в JSON-артефактах и логах не просачиваются `MOLTIS_PASSWORD` и `TELEGRAM_TEST_SESSION`.
+
+### Операторский check set
+
+1. Локальный synthetic probe:
+
+```bash
+export MOLTIS_PASSWORD='***'
+./scripts/telegram-e2e-on-demand.sh \
+  --mode synthetic \
+  --message '/status' \
+  --timeout-sec 30 \
+  --output /tmp/telegram-e2e-synthetic.json \
+  --moltis-url 'https://moltis.ainetic.tech' \
+  --verbose
+```
+
+2. Локальный real_user probe:
+
+```bash
+export TELEGRAM_TEST_API_ID='123456'
+export TELEGRAM_TEST_API_HASH='your_api_hash'
+export TELEGRAM_TEST_SESSION='your_string_session'
+./scripts/telegram-e2e-on-demand.sh \
+  --mode real_user \
+  --message '/status' \
+  --timeout-sec 45 \
+  --output /tmp/telegram-e2e-real-user.json \
+  --verbose
+```
+
+3. Workflow synthetic probe:
+
+```bash
+gh workflow run telegram-e2e-on-demand.yml \
+  -f mode=synthetic \
+  -f message='/status' \
+  -f timeout_sec=30 \
+  -f moltis_url='https://moltis.ainetic.tech' \
+  -f artifact_name='telegram-e2e-synthetic' \
+  -f verbose=true
+```
+
+4. Workflow real_user probe:
+
+```bash
+gh workflow run telegram-e2e-on-demand.yml \
+  -f mode=real_user \
+  -f message='/status' \
+  -f timeout_sec=45 \
+  -f moltis_url='https://moltis.ainetic.tech' \
+  -f artifact_name='telegram-e2e-real-user' \
+  -f verbose=true
+```
+
 ## Bootstrap TELEGRAM_TEST_SESSION (one-time)
 
 `TELEGRAM_TEST_SESSION` получается локально через OTP и потом кладется в GitHub Secret.
