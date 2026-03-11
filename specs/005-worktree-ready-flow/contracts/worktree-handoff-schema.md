@@ -43,6 +43,7 @@ Provide a shell-safe, machine-readable handoff block for `create`, `attach`, and
 - `repair_command`
 - `requested_handoff`
 - `pending`
+- `phase_b_seed_payload`
 - `next_count`
 - `next_<N>`
 - `warning_count`
@@ -50,8 +51,9 @@ Provide a shell-safe, machine-readable handoff block for `create`, `attach`, and
 
 ## Notes
 
-- `pending` should carry the concrete deferred Phase B intent when the originating request already described downstream work.
-- Multiline downstream starter prompts are intentionally **not** part of `worktree-handoff/v1`; if rendered, they remain human-facing handoff metadata outside the machine-readable schema.
+- `pending` is the concise one-sentence deferred Phase B summary when the originating request already described downstream work.
+- `phase_b_seed_payload` is the richer deferred Phase B carrier for structured downstream intent such as exact feature descriptions, defaults, boundaries, and stop conditions.
+- For manual handoff, the human-facing helper output remains canonical. It may render `Pending` plus a separate richer deferred payload block, but both must still preserve the hard Phase A stop boundary.
 
 ## Example
 
@@ -75,6 +77,7 @@ beads_state=shared
 handoff_mode=manual
 approval_required=true
 pending=Start\ Speckit\ for\ the\ OpenClaw\ Control\ Plane\ epic\ in\ the\ target\ worktree.
+phase_b_seed_payload=Feature\ Description:\ Create\ a\ feature\ for\ hardening\ the\ command-worktree\ boundary.$'\n'Defaults:\ manual\ handoff\ remains\ default.$'\n'Stop\ Conditions:\ do\ not\ continue\ Phase\ B\ in\ the\ originating\ session.
 bootstrap_source=origin/006-git-topology-registry
 bootstrap_file_count=2
 bootstrap_file_1=.beads/issues.jsonl
@@ -86,6 +89,22 @@ next_3=direnv\ allow
 next_4=codex
 warning_count=1
 warning_1=Environment\ approval\ is\ required\ before\ launching\ the\ session.
+```
+
+## Human Manual-Handoff Rendering
+
+When `handoff_mode=manual`, the helper human output is the canonical operator payload. If `phase_b_seed_payload` is present, the human output may append a dedicated deferred block after the fenced `bash` block:
+
+```text
+Phase B Seed Payload (deferred, not executed).
+Worktree: /Users/rl/coding/moltinger-remote-uat-hardening
+Branch: feat/remote-uat-hardening
+Pending Summary: Start Speckit for the OpenClaw Control Plane epic in the target worktree.
+Payload:
+Feature Description: Create a feature for hardening the command-worktree boundary.
+Defaults: manual handoff remains default.
+Stop Conditions: do not continue Phase B in the originating session.
+Phase A is complete. Do not repeat worktree setup in the originating session.
 ```
 
 ## Exit Codes
