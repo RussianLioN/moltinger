@@ -252,11 +252,35 @@ container_label() {
 container_mount_source() {
     local container="$1"
     local destination="$2"
-    docker inspect "$container" | jq -r --arg destination "$destination" '
+    local mount_type mount_source mount_name
+    mount_type="$(docker inspect "$container" | jq -r --arg destination "$destination" '
         .[0].Mounts[]
         | select(.Destination == $destination)
-        | .Source
-    ' | head -1
+        | .Type // empty
+    ' | head -1)"
+    mount_source="$(docker inspect "$container" | jq -r --arg destination "$destination" '
+        .[0].Mounts[]
+        | select(.Destination == $destination)
+        | .Source // empty
+    ' | head -1)"
+    mount_name="$(docker inspect "$container" | jq -r --arg destination "$destination" '
+        .[0].Mounts[]
+        | select(.Destination == $destination)
+        | .Name // empty
+    ' | head -1)"
+
+    if [[ "$mount_type" == "volume" && -n "$mount_name" ]]; then
+        local volume_device
+        volume_device="$(docker volume inspect "$mount_name" | jq -r '
+            .[0].Options.device // .[0].Mountpoint // empty
+        ' | head -1)"
+        if [[ -n "$volume_device" ]]; then
+            printf '%s\n' "$volume_device"
+            return 0
+        fi
+    fi
+
+    printf '%s\n' "$mount_source"
 }
 
 container_network_present() {
