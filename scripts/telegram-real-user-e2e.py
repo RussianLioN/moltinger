@@ -78,6 +78,20 @@ def log(verbose: bool, message: str) -> None:
         print(f"[telegram-real-user] {message}", file=sys.stderr)
 
 
+def build_context(args: argparse.Namespace, **extra: Any) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "timeout_sec": args.timeout_sec,
+        "message_length": len(str(getattr(args, "message", ""))),
+    }
+    requested_bot_username = normalize_username(str(getattr(args, "bot_username", "")))
+    if requested_bot_username:
+        context["requested_bot_username"] = requested_bot_username
+    for key, value in extra.items():
+        if value is not None:
+            context[key] = value
+    return context
+
+
 async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
     if args.timeout_sec <= 0:
         return (
@@ -86,7 +100,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="timeout must be positive",
-                context={"timeout_sec": args.timeout_sec},
+                context=build_context(args),
             ),
             EXIT_PRECONDITION,
         )
@@ -100,7 +114,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="api_id must be an integer",
-                context={},
+                context=build_context(args),
             ),
             EXIT_PRECONDITION,
         )
@@ -117,7 +131,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="api_hash, session, bot_username and message are required",
-                context={},
+                context=build_context(args),
             ),
             EXIT_PRECONDITION,
         )
@@ -133,7 +147,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="precondition",
                 error_message="telethon is not installed",
-                context={"hint": "Install dependency: pip install telethon"},
+                context=build_context(args, hint="Install dependency: pip install telethon"),
             ),
             EXIT_PRECONDITION,
         )
@@ -156,7 +170,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                     observed_response=None,
                     error_code="precondition",
                     error_message="telegram session is not authorized",
-                    context={"bot_username": bot_username},
+                    context=build_context(args, bot_username=bot_username),
                 ),
                 EXIT_PRECONDITION,
             )
@@ -178,7 +192,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                     observed_response=None,
                     error_code="upstream",
                     error_message="failed to obtain sent message id",
-                    context={"bot_username": bot_display},
+                    context=build_context(args, bot_username=bot_display),
                 ),
                 EXIT_UPSTREAM,
             )
@@ -208,14 +222,15 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                         observed_response=reply_text,
                         error_code=None,
                         error_message=None,
-                        context={
-                            "bot_username": bot_display,
-                            "bot_user_id": bot_user_id,
-                            "chat_id": sent_chat_id,
-                            "sent_message_id": sent_message_id,
-                            "reply_message_id": message_id,
-                            "poll_attempts": poll_attempts,
-                        },
+                        context=build_context(
+                            args,
+                            bot_username=bot_display,
+                            bot_user_id=bot_user_id,
+                            chat_id=sent_chat_id,
+                            sent_message_id=sent_message_id,
+                            reply_message_id=message_id,
+                            poll_attempts=poll_attempts,
+                        ),
                     ),
                     EXIT_COMPLETED,
                 )
@@ -228,13 +243,14 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="timeout",
                 error_message="no bot reply before timeout",
-                context={
-                    "bot_username": bot_display,
-                    "bot_user_id": bot_user_id,
-                    "chat_id": sent_chat_id,
-                    "sent_message_id": sent_message_id,
-                    "poll_attempts": poll_attempts,
-                },
+                context=build_context(
+                    args,
+                    bot_username=bot_display,
+                    bot_user_id=bot_user_id,
+                    chat_id=sent_chat_id,
+                    sent_message_id=sent_message_id,
+                    poll_attempts=poll_attempts,
+                ),
             ),
             EXIT_TIMEOUT,
         )
@@ -245,10 +261,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="upstream",
                 error_message=f"telegram RPC error: {exc.__class__.__name__}",
-                context={
-                    "bot_username": bot_username,
-                    "details": str(exc),
-                },
+                context=build_context(args, bot_username=bot_username, details=str(exc)),
             ),
             EXIT_UPSTREAM,
         )
@@ -259,7 +272,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[RunResult, int]:
                 observed_response=None,
                 error_code="upstream",
                 error_message=f"unexpected error: {exc.__class__.__name__}",
-                context={"details": str(exc)},
+                context=build_context(args, details=str(exc)),
             ),
             EXIT_UPSTREAM,
         )
