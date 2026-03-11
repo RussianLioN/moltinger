@@ -42,6 +42,7 @@ services:
         source: ./config/fleet
         target: /home/node/.openclaw/registry
         read_only: true
+      - clawdiy-workspace:/home/node/.openclaw/workspace
       - clawdiy-state:/home/node/.openclaw-data/state
       - clawdiy-audit:/home/node/.openclaw-data/audit
     tmpfs:
@@ -93,6 +94,12 @@ services:
       - monitoring
 
 volumes:
+  clawdiy-workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/clawdiy/workspace
   clawdiy-state:
     driver: local
     driver_opts:

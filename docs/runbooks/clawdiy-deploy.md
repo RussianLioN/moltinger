@@ -39,7 +39,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ```bash
    ./scripts/deploy.sh clawdiy deploy
    ```
-   During deploy, `scripts/deploy.sh` must normalize `data/clawdiy/state` and `data/clawdiy/audit` to the OpenClaw runtime uid/gid (`1000:1000` by default) so the `node` process can create persistent `canvas`, `cron`, and audit artifacts without manual server fixes.
+   During deploy, `scripts/deploy.sh` must normalize `data/clawdiy/workspace`, `data/clawdiy/state`, and `data/clawdiy/audit` to the OpenClaw runtime uid/gid (`1000:1000` by default) so the `node` process can create runtime workspace, persistent `canvas`, `cron`, and audit artifacts without manual server fixes.
 5. Run same-host smoke verification:
    ```bash
    ./scripts/clawdiy-smoke.sh --stage same-host
@@ -62,6 +62,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 - Rendered runtime artifact:
   - `data/clawdiy/runtime/openclaw.json`
 - Distinct persistent host paths:
+  - `data/clawdiy/workspace`
   - `data/clawdiy/state`
   - `data/clawdiy/audit`
   - these paths are deploy-managed and normalized to the Clawdiy runtime uid/gid during rollout
