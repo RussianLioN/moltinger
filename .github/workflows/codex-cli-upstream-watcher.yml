@@ -1,0 +1,99 @@
+name: Codex CLI Upstream Watcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Watcher mode"
+        required: true
+        default: "manual"
+        type: choice
+        options:
+          - manual
+          - scheduler
+      release_url:
+        description: "Primary changelog source URL"
+        required: true
+        default: "https://developers.openai.com/codex/changelog"
+        type: string
+      include_issue_signals:
+        description: "Include advisory upstream issue signals"
+        required: true
+        default: true
+        type: boolean
+      issue_signals_url:
+        description: "Advisory issue signal source URL"
+        required: true
+        default: "https://api.github.com/repos/openai/codex/issues?state=open&per_page=20"
+        type: string
+      telegram_enabled:
+        description: "Enable Telegram delivery"
+        required: true
+        default: false
+        type: boolean
+      telegram_chat_id:
+        description: "Optional explicit Telegram chat id"
+        required: false
+        default: ""
+        type: string
+      artifact_name:
+        description: "Artifact bundle name"
+        required: true
+        default: "codex-cli-upstream-watcher"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  codex-cli-upstream-watcher:
+    name: Run Codex CLI upstream watcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run upstream watcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/codex-cli-upstream-watcher.sh
+
+          args=(
+            --mode "${{ inputs.mode }}"
+            --release-url "${{ inputs.release_url }}"
+            --json-out codex-upstream-watcher-report.json
+            --summary-out codex-upstream-watcher-summary.md
+            --stdout none
+          )
+
+          if [[ "${{ inputs.include_issue_signals }}" == "true" ]]; then
+            args+=(--include-issue-signals --issue-signals-url "${{ inputs.issue_signals_url }}")
+          fi
+
+          if [[ "${{ inputs.telegram_enabled }}" == "true" ]]; then
+            args+=(--telegram-enabled)
+          fi
+
+          if [[ -n "${{ inputs.telegram_chat_id }}" ]]; then
+            args+=(--telegram-chat-id "${{ inputs.telegram_chat_id }}")
+          fi
+
+          ./scripts/codex-cli-upstream-watcher.sh "${args[@]}"
+
+      - name: Upload JSON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-json
+          path: codex-upstream-watcher-report.json
+          if-no-files-found: error
+
+      - name: Upload summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-summary
+          path: codex-upstream-watcher-summary.md
+          if-no-files-found: error

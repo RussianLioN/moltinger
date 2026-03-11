@@ -165,6 +165,7 @@ bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_ll
 bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh
 bash|component_sync_claude_skills_bridge|Claude skills bridge component|$SCRIPT_DIR/component/test_sync_claude_skills_bridge.sh
 bash|component_codex_cli_update_monitor|Codex CLI update monitor component|$SCRIPT_DIR/component/test_codex_cli_update_monitor.sh
+bash|component_codex_cli_upstream_watcher|Codex CLI upstream watcher component|$SCRIPT_DIR/component/test_codex_cli_upstream_watcher.sh
 bash|component_codex_cli_update_advisor|Codex CLI update advisor component|$SCRIPT_DIR/component/test_codex_cli_update_advisor.sh
 bash|component_codex_cli_update_delivery|Codex CLI update delivery component|$SCRIPT_DIR/component/test_codex_cli_update_delivery.sh
 bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/component/test_codex_profile_launch.sh

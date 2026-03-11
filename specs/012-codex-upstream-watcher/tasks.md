@@ -13,21 +13,21 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the watcher script skeleton in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T002 [P] Create the operator runbook in `docs/codex-cli-upstream-watcher.md`
-- [ ] T003 [P] Create fixed watcher fixtures in `tests/fixtures/codex-upstream-watcher/`
-- [ ] T004 Create the component test skeleton in `tests/component/test_codex_cli_upstream_watcher.sh`
-- [ ] T005 Register the watcher script and cron artifact in `scripts/manifest.json`
-- [ ] T006 Create the scheduler cron file skeleton in `scripts/cron.d/moltis-codex-upstream-watcher`
+- [x] T001 Create the watcher script skeleton in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T002 [P] Create the operator runbook in `docs/codex-cli-upstream-watcher.md`
+- [x] T003 [P] Create fixed watcher fixtures in `tests/fixtures/codex-upstream-watcher/`
+- [x] T004 Create the component test skeleton in `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T005 Register the watcher script and cron artifact in `scripts/manifest.json`
+- [x] T006 Create the scheduler cron file skeleton in `scripts/cron.d/moltis-codex-upstream-watcher`
 
 ---
 
 ## Phase 2: Foundational
 
-- [ ] T007 Implement official-source intake and shared watcher-state handling in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T008 Implement deterministic JSON generation matching `specs/012-codex-upstream-watcher/contracts/watcher-report.schema.json` in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T009 Reuse `scripts/telegram-bot-send.sh` for scheduler Telegram transport in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T010 Create baseline component validation coverage in `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T007 Implement official-source intake and shared watcher-state handling in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T008 Implement deterministic JSON generation matching `specs/012-codex-upstream-watcher/contracts/watcher-report.schema.json` in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T009 Reuse `scripts/telegram-bot-send.sh` for scheduler Telegram transport in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T010 Create baseline component validation coverage in `tests/component/test_codex_cli_upstream_watcher.sh`
 
 ---
 
@@ -37,10 +37,10 @@
 
 **Independent Test**: Run the watcher against fixture-backed official sources and confirm it emits a deterministic summary and JSON report with latest version, highlights, fingerprint, and freshness decision.
 
-- [ ] T011 [US1] Implement manual watcher mode and primary-source polling in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T012 [US1] Add advisory issue-signal intake and source-status reporting in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T013 [P] [US1] Add fixture-backed manual-run tests in `tests/component/test_codex_cli_upstream_watcher.sh`
-- [ ] T014 [US1] Document manual watcher usage and output semantics in `docs/codex-cli-upstream-watcher.md`
+- [x] T011 [US1] Implement manual watcher mode and primary-source polling in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T012 [US1] Add advisory issue-signal intake and source-status reporting in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T013 [P] [US1] Add fixture-backed manual-run tests in `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T014 [US1] Document manual watcher usage and output semantics in `docs/codex-cli-upstream-watcher.md`
 
 ---
 
@@ -50,11 +50,11 @@
 
 **Independent Test**: Run scheduler mode with a fresh actionable fixture and mocked Telegram sender, then confirm one alert is sent and duplicates are suppressed on repeat runs.
 
-- [ ] T020 [US2] Implement scheduler-safe Telegram delivery decisions in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T021 [US2] Add the repository-managed cron job in `scripts/cron.d/moltis-codex-upstream-watcher`
-- [ ] T022 [US2] Wire cron installation and script inventory metadata in `scripts/manifest.json`
-- [ ] T023 [P] [US2] Add Telegram scheduler and duplicate-suppression tests in `tests/component/test_codex_cli_upstream_watcher.sh`
-- [ ] T024 [US2] Document scheduled Moltinger installation and Telegram requirements in `docs/codex-cli-upstream-watcher.md`
+- [x] T020 [US2] Implement scheduler-safe Telegram delivery decisions in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T021 [US2] Add the repository-managed cron job in `scripts/cron.d/moltis-codex-upstream-watcher`
+- [x] T022 [US2] Wire cron installation and script inventory metadata in `scripts/manifest.json`
+- [x] T023 [P] [US2] Add Telegram scheduler and duplicate-suppression tests in `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T024 [US2] Document scheduled Moltinger installation and Telegram requirements in `docs/codex-cli-upstream-watcher.md`
 
 ---
 
@@ -64,21 +64,21 @@
 
 **Independent Test**: Exercise source failure, recovery, and changed-source fixtures and confirm watcher state, report, and Telegram behavior stay retry-safe and duplicate-safe.
 
-- [ ] T030 [US3] Implement failure and recovery state transitions in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T031 [US3] Implement explicit investigate and retry reporting for malformed or unavailable sources in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T032 [P] [US3] Add failure-and-recovery component tests in `tests/component/test_codex_cli_upstream_watcher.sh`
-- [ ] T033 [US3] Document safety boundaries and future bridge points to local advisor flows in `docs/codex-cli-upstream-watcher.md`
+- [x] T030 [US3] Implement failure and recovery state transitions in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T031 [US3] Implement explicit investigate and retry reporting for malformed or unavailable sources in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T032 [P] [US3] Add failure-and-recovery component tests in `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T033 [US3] Document safety boundaries and future bridge points to local advisor flows in `docs/codex-cli-upstream-watcher.md`
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T040 [P] Add a convenient make target in `Makefile`
-- [ ] T041 [P] Add a manual workflow entrypoint in `.github/workflows/codex-cli-upstream-watcher.yml`
-- [ ] T042 Validate Bash syntax for `scripts/codex-cli-upstream-watcher.sh` and referenced tests
-- [ ] T043 Run targeted component validation for `tests/component/test_codex_cli_upstream_watcher.sh`
-- [ ] T044 Verify watcher docs, cron automation, and deployment wiring stay aligned
-- [ ] T045 Update `docs/GIT-TOPOLOGY-REGISTRY.md` for the new `012-codex-upstream-watcher` worktree
+- [x] T040 [P] Add a convenient make target in `Makefile`
+- [x] T041 [P] Add a manual workflow entrypoint in `.github/workflows/codex-cli-upstream-watcher.yml`
+- [x] T042 Validate Bash syntax for `scripts/codex-cli-upstream-watcher.sh` and referenced tests
+- [x] T043 Run targeted component validation for `tests/component/test_codex_cli_upstream_watcher.sh`
+- [x] T044 Verify watcher docs, cron automation, and deployment wiring stay aligned
+- [x] T045 Update `docs/GIT-TOPOLOGY-REGISTRY.md` for the new `012-codex-upstream-watcher` worktree
 
 ## Dependencies & Execution Order
 

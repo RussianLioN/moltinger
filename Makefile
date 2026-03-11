@@ -11,7 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
-.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery
+.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -92,6 +92,7 @@ help:
 	@echo "  codex-update-monitor - Run the Codex update monitor"
 	@echo "  codex-update-advisor - Run the advisor layer over the Codex update monitor"
 	@echo "  codex-update-delivery - Run the user-facing delivery layer over the advisor"
+	@echo "  codex-upstream-watcher - Run the upstream-only Codex watcher"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -364,6 +365,16 @@ codex-update-delivery:
 		--json-out .tmp/current/codex-update-delivery-report.json \
 		--summary-out .tmp/current/codex-update-delivery-summary.md \
 		--state-file .tmp/current/codex-cli-update-delivery-state.json \
+		--stdout summary
+
+codex-upstream-watcher:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-cli-upstream-watcher.sh \
+		--mode manual \
+		--include-issue-signals \
+		--json-out .tmp/current/codex-upstream-watcher-report.json \
+		--summary-out .tmp/current/codex-upstream-watcher-summary.md \
+		--state-file .tmp/current/codex-cli-upstream-watcher-state.json \
 		--stdout summary
 
 codex-research:
