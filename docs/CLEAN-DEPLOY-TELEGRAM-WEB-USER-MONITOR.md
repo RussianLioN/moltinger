@@ -29,12 +29,22 @@ git status --porcelain
    - проверит `ssh root@ainetic.tech "cd /opt/moltinger && git status --porcelain"`;
    - **заблокирует** деплой при drift.
 
-4. После успешного deploy при ручном opt-in scheduler:
+4. После успешного deploy authoritative remote UAT запускается вручную:
 
 ```bash
-ssh root@ainetic.tech "systemctl status moltis-telegram-web-user-monitor.timer --no-pager"
-ssh root@ainetic.tech "tail -n 50 /var/log/moltis/telegram-web-user-monitor.log"
+gh workflow run telegram-e2e-on-demand.yml \
+  -f message='/status' \
+  -f timeout_sec='45' \
+  -f operator_intent='post_deploy_verification' \
+  -f run_secondary_mtproto=false \
+  -f upload_restricted_debug=false
 ```
+
+5. Оператор смотрит:
+   - `run.verdict`
+   - `run.stage`
+   - `failure.code`
+   - `recommended_action`
 
 ## Drift remediation
 
@@ -47,6 +57,7 @@ ssh root@ainetic.tech "tail -n 50 /var/log/moltis/telegram-web-user-monitor.log"
 
 ## Политика
 
-- Ручной `scp` разрешён только для аварийной диагностики.
+- Ручной `scp` state-файлов не должен быть обычным production workflow.
 - Любая постоянная настройка должна попадать в git (scripts/config/systemd/cron).
 - Production по умолчанию не включает периодический Telegram Web scheduler.
+- Канонический post-deploy verdict path: `Telegram Web`.

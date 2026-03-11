@@ -117,6 +117,31 @@ NODE
         test_fail "Probe must fail instead of passing on a noisy chat with unbounded unrelated activity"
     fi
 
+    test_start "component_telegram_web_probe_classifies_required_failure_codes"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { classifyFailure } = await import(process.env.NODE_SCRIPT);
+const requiredCodes = [
+  "missing_session_state",
+  "ui_drift",
+  "chat_open_failure",
+  "stale_chat_noise",
+  "send_failure",
+  "bot_no_response",
+];
+for (const code of requiredCodes) {
+  const failure = classifyFailure(code, "send");
+  if (failure.code !== code || failure.stage !== "send" || typeof failure.summary !== "string" || failure.summary.length === 0) {
+    throw new Error(`bad failure mapping for ${code}: ${JSON.stringify(failure)}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must export a stable failure taxonomy for all required authoritative Telegram Web failure classes"
+    fi
+
     generate_report
 }
 

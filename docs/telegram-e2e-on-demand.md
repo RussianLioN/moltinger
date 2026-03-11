@@ -1,50 +1,20 @@
-# On-Demand Telegram E2E Harness
+# On-Demand Telegram Remote UAT
 
-Контур ручного E2E-тестирования для сценария "сообщение пользователя -> ответ Moltis" без переключения прод-бота в постоянный test mode.
+Канонический ручной post-deploy UAT для Moltinger.
 
-## Назначение
+## Что это теперь делает
 
-- Запуск по требованию (из Codex/локального shell или через `workflow_dispatch`).
-- Фиксация фактического ответа и тех. метаданных.
-- Ручной verdict по содержимому ответа.
+- Один authoritative запуск через `Telegram Web`.
+- Один review-safe JSON artifact как основной verdict.
+- Опциональный restricted debug bundle только по явному запросу.
+- Опциональный `MTProto` только как secondary diagnostics после primary verdict.
+- Production transport mode не меняется и остается `polling`.
 
-## CLI
+## Что это больше не делает
 
-Скрипт: `scripts/telegram-e2e-on-demand.sh`
-
-```bash
-export MOLTIS_PASSWORD='***'
-
-./scripts/telegram-e2e-on-demand.sh \
-  --mode synthetic \
-  --message '/status' \
-  --timeout-sec 30 \
-  --output /tmp/telegram-e2e-result.json \
-  --moltis-url 'https://moltis.ainetic.tech' \
-  --verbose
-```
-
-### Аргументы
-
-- `--mode synthetic|real_user` (обязательно)
-- `--message "<text>"` (обязательно)
-- `--timeout-sec <int>` (по умолчанию `30`)
-- `--output <path>` (по умолчанию `telegram-e2e-result.json`)
-- `--moltis-url <url>` (по умолчанию `http://localhost:13131`)
-- `--moltis-password-env <ENV_NAME>` (по умолчанию `MOLTIS_PASSWORD`)
-- `--verbose`
-
-Примечание по зависимостям:
-
-- для `synthetic`: `curl`, `jq`
-- для `real_user`: `python3` + пакет `telethon` (`python3 -m pip install telethon`)
-
-### Exit codes
-
-- `0`: `status=completed`
-- `2`: `precondition_failed`
-- `3`: `timeout`
-- `4`: `upstream_failed`
+- Не продвигает remote UAT в blocking PR/main CI.
+- Не включает scheduler или постоянный production spam.
+- Не использует `synthetic` или `real_user` как основной operator entrypoint.
 
 ## GitHub Workflow
 
@@ -54,169 +24,119 @@ Workflow: `.github/workflows/telegram-e2e-on-demand.yml`
 
 ```bash
 gh workflow run telegram-e2e-on-demand.yml \
-  -f mode=synthetic \
   -f message='/status' \
-  -f timeout_sec=30 \
-  -f moltis_url='https://moltis.ainetic.tech' \
-  -f artifact_name='telegram-e2e-result' \
-  -f verbose=true
+  -f timeout_sec='45' \
+  -f operator_intent='post_deploy_verification' \
+  -f run_secondary_mtproto=false \
+  -f upload_restricted_debug=false \
+  -f artifact_name='telegram-remote-uat' \
+  -f verbose=false
 ```
 
-Секреты:
+### Inputs
 
-- `MOLTIS_PASSWORD` (обязателен для `synthetic`)
-- `TELEGRAM_TEST_API_ID` (обязателен для `real_user`)
-- `TELEGRAM_TEST_API_HASH` (обязателен для `real_user`)
-- `TELEGRAM_TEST_SESSION` (обязателен для `real_user`, StringSession тестового Telegram-пользователя)
-- `TELEGRAM_TEST_BOT_USERNAME` (опционально, default `@moltinger_bot`)
+- `message` — probe message/command, по умолчанию `/status`
+- `timeout_sec` — timeout ожидания ответа
+- `operator_intent` — причина запуска (`post_deploy_verification`, `rerun_after_fix` и т.д.)
+- `run_secondary_mtproto` — включить secondary MTProto diagnostics
+- `upload_restricted_debug` — загрузить restricted debug bundle
+- `artifact_name` — имя артефакта
+- `verbose` — verbose wrapper logs
 
-Артефакты:
+### Что делает workflow
 
-- `telegram-e2e-result.json`
-- `telegram-e2e.log`
+1. Берет SSH-доступ через `SSH_PRIVATE_KEY`.
+2. Идет на production target `root@ainetic.tech`.
+3. Копирует текущие checkout-версии wrapper/probe во временную директорию под `/opt/moltinger/.tmp/`.
+4. Запускает authoritative wrapper против production-aware target без изменения deploy state.
+5. Возвращает review-safe JSON artifact.
+6. При opt-in возвращает restricted debug bundle отдельным artifact.
 
-## Result JSON Schema (v1)
+### Guardrails
 
-Поля:
+- workflow serializes runs через `concurrency: telegram-remote-uat-production`
+- wrapper serializes shared target через lock file
+- `TELEGRAM_TEST_*` secrets больше не висят job-wide на всех шагах
+- restricted debug не загружается по умолчанию
 
-- `run_id`
-- `mode`
-- `trigger_source` (`cli` | `workflow_dispatch`)
-- `message`
-- `started_at`
-- `finished_at`
-- `duration_ms`
-- `transport`
-- `observed_response`
-- `status` (`completed` | `timeout` | `precondition_failed` | `upstream_failed`)
-- `error_code`
-- `error_message`
-- `context`
+## CLI Wrapper
 
-## MVP Boundary
+Скрипт: `scripts/telegram-e2e-on-demand.sh`
 
-- `mode=synthetic`: рабочий транспорт через `/api/auth/login` + `/api/v1/chat`.
-- `mode=real_user`: рабочая отправка через MTProto (Telethon) от тестового пользователя к боту.
-- Штатный режим прод-бота не меняется.
-
-## Real User Example
+Основной режим:
 
 ```bash
-export TELEGRAM_TEST_API_ID='123456'
-export TELEGRAM_TEST_API_HASH='your_api_hash'
-export TELEGRAM_TEST_SESSION='your_string_session'
-export TELEGRAM_TEST_BOT_USERNAME='@moltinger_bot'
-
 ./scripts/telegram-e2e-on-demand.sh \
-  --mode real_user \
+  --mode authoritative \
   --message '/status' \
   --timeout-sec 45 \
-  --output /tmp/telegram-e2e-real-user.json \
-  --verbose
+  --output /tmp/telegram-e2e-result.json
 ```
 
-## История scope
-
-- Исходный epic `moltinger-xtx` был закрыт с US3 в состоянии `Real User Contract (Deferred)`: `real_user` существовал как расширяемая ветка контракта, но ещё без настоящей отправки.
-- В тот же день scope был расширен коммитом `d078d02` до рабочего MTProto execution path и отдельного helper-скрипта `scripts/telegram-real-user-e2e.py`.
-- Текущая ветка рассматривает `spec.md`, `tasks.md`, этот runbook и helper как единый regression surface: цель не допустить отката обратно к deferred-only semantics.
-
-## Полный набор проверок работоспособности Moltis
-
-Авторитетная цель для этих проверок - live Moltis target. Локальный fixture stack не заменяет этот набор и не доказывает, что удалённый бот отвечает сейчас.
-
-### Быстрый live suite
+С secondary MTProto diagnostics:
 
 ```bash
-./tests/run.sh --lane telegram_live --live --filter live_telegram_smoke --json
-```
-
-Suite покрывает:
-
-- `getMe` и `getWebhookInfo` через прямой Telegram Bot API.
-- `sendMessage` smoke, если задан `TELEGRAM_TEST_CHAT_ID`.
-- `scripts/telegram-e2e-on-demand.sh --mode synthetic` против `MOLTIS_URL` или `https://moltis.ainetic.tech`.
-- `scripts/telegram-e2e-on-demand.sh --mode real_user` через MTProto, если заданы `TELEGRAM_TEST_*` и на раннере установлен `telethon`.
-- Regression check, что в JSON-артефактах и логах не просачиваются `MOLTIS_PASSWORD` и `TELEGRAM_TEST_SESSION`.
-
-### Операторский check set
-
-1. Локальный synthetic probe:
-
-```bash
-export MOLTIS_PASSWORD='***'
 ./scripts/telegram-e2e-on-demand.sh \
-  --mode synthetic \
-  --message '/status' \
-  --timeout-sec 30 \
-  --output /tmp/telegram-e2e-synthetic.json \
-  --moltis-url 'https://moltis.ainetic.tech' \
-  --verbose
-```
-
-2. Локальный real_user probe:
-
-```bash
-export TELEGRAM_TEST_API_ID='123456'
-export TELEGRAM_TEST_API_HASH='your_api_hash'
-export TELEGRAM_TEST_SESSION='your_string_session'
-./scripts/telegram-e2e-on-demand.sh \
-  --mode real_user \
+  --mode authoritative \
+  --secondary-diagnostics mtproto \
   --message '/status' \
   --timeout-sec 45 \
-  --output /tmp/telegram-e2e-real-user.json \
-  --verbose
+  --output /tmp/telegram-e2e-result.json \
+  --debug-output /tmp/telegram-e2e-debug.json
 ```
 
-3. Workflow synthetic probe:
+## Review-Safe Artifact Contract
 
-```bash
-gh workflow run telegram-e2e-on-demand.yml \
-  -f mode=synthetic \
-  -f message='/status' \
-  -f timeout_sec=30 \
-  -f moltis_url='https://moltis.ainetic.tech' \
-  -f artifact_name='telegram-e2e-synthetic' \
-  -f verbose=true
-```
+Основной JSON теперь имеет каноническую структуру:
 
-4. Workflow real_user probe:
+- `schema_version`
+- `run`
+- `failure`
+- `attribution_evidence`
+- `diagnostic_context`
+- `fallback_assessment`
+- `recommended_action`
+- `artifact_status`
+- `redactions_applied`
+- `debug_bundle.available`
 
-```bash
-gh workflow run telegram-e2e-on-demand.yml \
-  -f mode=real_user \
-  -f message='/status' \
-  -f timeout_sec=45 \
-  -f moltis_url='https://moltis.ainetic.tech' \
-  -f artifact_name='telegram-e2e-real-user' \
-  -f verbose=true
-```
+### Что оператор смотрит первым
 
-## Bootstrap TELEGRAM_TEST_SESSION (one-time)
+- `run.verdict`
+- `run.stage`
+- `failure.code`
+- `recommended_action`
 
-`TELEGRAM_TEST_SESSION` получается локально через OTP и потом кладется в GitHub Secret.
+## Failure Codes
 
-```bash
-python3 -m pip install --upgrade telethon
+Authoritative Telegram Web path различает минимум:
 
-# If you omit --code, script will prompt OTP interactively.
-bootstrap_json="$(
-  python3 scripts/telegram-real-user-bootstrap.py \
-    --api-id "$TELEGRAM_TEST_API_ID" \
-    --api-hash "$TELEGRAM_TEST_API_HASH" \
-    --phone "+79991234567" \
-    --session-out /tmp/telegram-test.session \
-    --code "12345"
-)"
+- `missing_session_state`
+- `ui_drift`
+- `chat_open_failure`
+- `stale_chat_noise`
+- `send_failure`
+- `bot_no_response`
 
-echo "$bootstrap_json" | jq .
+## Restricted Debug Bundle
 
-# Save to GitHub Secret (repo example)
-gh secret set TELEGRAM_TEST_SESSION --repo RussianLioN/moltinger < /tmp/telegram-test.session
-```
+Restricted debug bundle хранит raw helper evidence:
 
-Если у аккаунта включен Telegram 2FA:
+- `authoritative_raw`
+- `authoritative_stderr_tail`
+- `fallback_raw`
+- `fallback_stderr_tail`
 
-```bash
-export TELEGRAM_TEST_2FA_PASSWORD='your-password'
-```
+Этот bundle не считается routine-share artifact и загружается только при явном `upload_restricted_debug=true`.
+
+## MTProto Secondary Lane
+
+`MTProto` больше не заменяет primary verdict.
+
+Он используется только если:
+
+1. primary Telegram Web verdict уже известен;
+2. оператор явно запросил secondary diagnostics;
+3. есть `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, `TELEGRAM_TEST_SESSION`.
+
+Если prerequisites отсутствуют, основной artifact фиксирует это в `fallback_assessment` как `outcome=unavailable`.

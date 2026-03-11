@@ -1,37 +1,60 @@
 #!/usr/bin/env bash
-# On-demand Telegram/Moltis E2E harness (manual verdict mode)
+# On-demand Telegram remote UAT wrapper.
+#
+# Canonical use:
+#   --mode authoritative
+#   --secondary-diagnostics none|mtproto
 #
 # Exit codes:
-#   0 - completed with report
+#   0 - authoritative verdict passed
 #   2 - precondition/config error
-#   3 - timeout/no observed response
-#   4 - upstream/auth error
+#   3 - authoritative verdict failed
+#   4 - upstream/runtime error
 
 set -euo pipefail
 
-MODE=""
+MODE="authoritative"
+SECONDARY_DIAGNOSTICS="none"
 MESSAGE=""
-TIMEOUT_SEC=30
+TIMEOUT_SEC=45
 OUTPUT_PATH="telegram-e2e-result.json"
-MOLTIS_URL="http://localhost:13131"
-MOLTIS_PASSWORD_ENV="MOLTIS_PASSWORD"
+DEBUG_OUTPUT_PATH="${REMOTE_UAT_DEBUG_OUTPUT:-}"
 VERBOSE=false
 TRIGGER_SOURCE="${TRIGGER_SOURCE:-cli}"
+TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-production}"
+OPERATOR_INTENT="${OPERATOR_INTENT:-post_deploy_verification}"
+PRODUCTION_TRANSPORT_MODE="${PRODUCTION_TRANSPORT_MODE:-polling}"
+AUTHORITATIVE_TARGET="${TELEGRAM_WEB_TARGET:-@moltinger_bot}"
+AUTHORITATIVE_STATE="${TELEGRAM_WEB_STATE:-/opt/moltinger/data/.telegram-web-state.json}"
+SHARED_TARGET_LOCK="${SHARED_TARGET_LOCK:-/tmp/moltinger-telegram-remote-uat.lock}"
+SERIALIZE_SHARED_TARGET="${SERIALIZE_SHARED_TARGET:-true}"
+MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
+MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
 
 RUN_ID=""
 STARTED_AT=""
 FINISHED_AT=""
 START_MS=0
 DURATION_MS=0
-TRANSPORT=""
-OBSERVED_RESPONSE=""
-STATUS=""
-ERROR_CODE=""
-ERROR_MESSAGE=""
-CONTEXT_JSON='{}'
+RUN_STAGE="init"
+VERDICT="failed"
+AUTHORITATIVE_PATH="telegram_web"
+TRANSPORT="telegram_web_user"
+FAILURE_JSON='null'
+ATTRIBUTION_JSON='{"attribution_confidence":"unknown"}'
+DIAGNOSTIC_JSON='{}'
+FALLBACK_JSON='{"requested":false,"path_used":null,"prerequisites_present":null,"outcome":"not_requested","decision_note":"Secondary diagnostics not requested."}'
+RECOMMENDED_ACTION="Inspect the authoritative artifact and rerun after narrowing the root cause."
+REDACTIONS_JSON='["telegram_session","telegram_api_hash","telegram_web_state_path","raw_logs"]'
+ARTIFACT_STATUS="review_safe"
+
+AUTHORITATIVE_RAW_JSON='null'
+AUTHORITATIVE_STDERR=""
+FALLBACK_RAW_JSON='null'
+FALLBACK_STDERR=""
 
 TMP_DIR=""
-COOKIE_FILE=""
+LOCK_FD=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
@@ -39,14 +62,20 @@ usage() {
 Usage: scripts/telegram-e2e-on-demand.sh [options]
 
 Options:
-  --mode synthetic|real_user      Execution mode (required)
-  --message "<text>"             Input message for the run (required)
-  --timeout-sec <int>             Timeout in seconds (default: 30)
-  --output <path>                 Report output path (default: telegram-e2e-result.json)
-  --moltis-url <url>              Moltis base URL (default: http://localhost:13131)
-  --moltis-password-env <ENV>     Env var name that holds Moltis password (default: MOLTIS_PASSWORD)
-  --verbose                       Enable verbose logs
-  -h, --help                      Show this help message
+  --mode authoritative|telegram_web|synthetic|real_user
+                                    Execution mode (default: authoritative)
+  --secondary-diagnostics none|mtproto
+                                    Optional secondary diagnostics (default: none)
+  --message "<text>"                Input message/command to send (required)
+  --timeout-sec <int>               Timeout in seconds (default: 45)
+  --output <path>                   Review-safe JSON output path (default: telegram-e2e-result.json)
+  --debug-output <path>             Restricted debug bundle output path
+  --target-environment <name>       Target environment label (default: production)
+  --operator-intent <name>          Operator intent label (default: post_deploy_verification)
+  --moltis-url <url>                Moltis base URL for synthetic compatibility mode
+  --moltis-password-env <ENV>       Env var holding Moltis password for synthetic mode
+  --verbose                         Enable verbose logs
+  -h, --help                        Show this help message
 USAGE
 }
 
@@ -61,75 +90,166 @@ now_iso() {
 }
 
 now_ms() {
-  local sec ns ms
+  local sec ns
   sec="$(date +%s)"
   ns="$(date +%N 2>/dev/null || true)"
-
   if [[ "$ns" =~ ^[0-9]{1,9}$ ]]; then
-    ms=$(( sec * 1000 + 10#${ns:0:3} ))
-    echo "$ms"
+    echo $(( sec * 1000 + 10#${ns:0:3} ))
+    return 0
+  fi
+  echo $(( sec * 1000 ))
+}
+
+tail_sanitized() {
+  local file_path="$1"
+  if [[ ! -f "$file_path" ]]; then
+    echo ""
     return 0
   fi
 
-  # macOS BSD date does not support %N.
-  echo "$(( sec * 1000 ))"
+  tail -n 80 "$file_path" 2>/dev/null \
+    | sed -E 's/(TELEGRAM_TEST_SESSION|TELEGRAM_TEST_API_HASH|TELEGRAM_TEST_API_ID|MOLTIS_PASSWORD|password|token|secret)=([^[:space:]]+)/\1=[redacted]/g' \
+    | tr '\n' ' ' \
+    | sed 's/[[:space:]]\+/ /g'
 }
 
-is_meaningful_payload() {
-  local payload="$1"
-  local trimmed
-  trimmed="$(echo "$payload" | tr -d '[:space:]')"
+write_json_file() {
+  local path="$1"
+  local content="$2"
+  local output_dir
+  output_dir="$(dirname "$path")"
+  mkdir -p "$output_dir" 2>/dev/null || true
+  printf '%s\n' "$content" > "$path"
+}
 
-  if [[ -z "$trimmed" ]]; then
-    return 1
-  fi
+build_failure_json() {
+  local code="$1"
+  local stage_name="$2"
+  local summary="$3"
+  local actionability="$4"
+  local fallback_relevant="$5"
 
-  case "$trimmed" in
-    null|"null"|{}|[]|""|"{}"|"[]")
-      return 1
-      ;;
-  esac
+  jq -cn \
+    --arg code "$code" \
+    --arg stage "$stage_name" \
+    --arg summary "$summary" \
+    --arg actionability "$actionability" \
+    --argjson fallback_relevant "$fallback_relevant" \
+    '{
+      code: $code,
+      stage: $stage,
+      summary: $summary,
+      actionability: $actionability,
+      fallback_relevant: $fallback_relevant
+    }'
+}
 
-  return 0
+sanitize_json_for_operator() {
+  local input_json="${1:-"{}"}"
+  jq -c '
+    def scrub:
+      walk(
+        if type == "object" then
+          with_entries(
+            if (.key | test("(token|secret|session|api[_-]?hash|password|state_path)"; "i"))
+            then .value = "[redacted]"
+            else .
+            end
+          )
+        else .
+        end
+      );
+    scrub
+  ' <<< "$input_json"
 }
 
 write_report() {
-  local output_dir
-  output_dir="$(dirname "$OUTPUT_PATH")"
+  local debug_available="false"
+  if [[ -n "$DEBUG_OUTPUT_PATH" ]]; then
+    debug_available="true"
+  fi
 
-  mkdir -p "$output_dir" 2>/dev/null || true
+  local report_json
+  report_json="$(
+    jq -cn \
+      --arg schema_version "remote_uat.v2" \
+      --arg run_id "$RUN_ID" \
+      --arg target_environment "$TARGET_ENVIRONMENT" \
+      --arg trigger_source "$TRIGGER_SOURCE" \
+      --arg authoritative_path "$AUTHORITATIVE_PATH" \
+      --arg started_at "$STARTED_AT" \
+      --arg finished_at "$FINISHED_AT" \
+      --arg verdict "$VERDICT" \
+      --arg stage "$RUN_STAGE" \
+      --arg production_transport_mode "$PRODUCTION_TRANSPORT_MODE" \
+      --arg operator_intent "$OPERATOR_INTENT" \
+      --arg message "$MESSAGE" \
+      --arg transport "$TRANSPORT" \
+      --arg artifact_status "$ARTIFACT_STATUS" \
+      --arg recommended_action "$RECOMMENDED_ACTION" \
+      --argjson duration_ms "$DURATION_MS" \
+      --argjson failure "$FAILURE_JSON" \
+      --argjson attribution_evidence "$ATTRIBUTION_JSON" \
+      --argjson diagnostic_context "$DIAGNOSTIC_JSON" \
+      --argjson redactions_applied "$REDACTIONS_JSON" \
+      --argjson fallback_assessment "$FALLBACK_JSON" \
+      --argjson debug_available "$debug_available" \
+      '{
+        schema_version: $schema_version,
+        run: {
+          run_id: $run_id,
+          target_environment: $target_environment,
+          trigger_source: $trigger_source,
+          authoritative_path: $authoritative_path,
+          started_at: $started_at,
+          finished_at: $finished_at,
+          duration_ms: $duration_ms,
+          verdict: $verdict,
+          stage: $stage,
+          production_transport_mode: $production_transport_mode,
+          operator_intent: $operator_intent,
+          message: $message,
+          transport: $transport
+        },
+        failure: $failure,
+        attribution_evidence: $attribution_evidence,
+        diagnostic_context: $diagnostic_context,
+        fallback_assessment: $fallback_assessment,
+        recommended_action: $recommended_action,
+        artifact_status: $artifact_status,
+        redactions_applied: $redactions_applied,
+        debug_bundle: {available: $debug_available}
+      }'
+  )"
 
-  jq -n \
-    --arg run_id "$RUN_ID" \
-    --arg mode "$MODE" \
-    --arg trigger_source "$TRIGGER_SOURCE" \
-    --arg message "$MESSAGE" \
-    --arg started_at "$STARTED_AT" \
-    --arg finished_at "$FINISHED_AT" \
-    --argjson duration_ms "$DURATION_MS" \
-    --arg transport "$TRANSPORT" \
-    --arg observed_response "$OBSERVED_RESPONSE" \
-    --arg status "$STATUS" \
-    --arg error_code "$ERROR_CODE" \
-    --arg error_message "$ERROR_MESSAGE" \
-    --argjson context "$CONTEXT_JSON" \
-    '{
-      run_id: $run_id,
-      mode: $mode,
-      trigger_source: $trigger_source,
-      message: $message,
-      started_at: $started_at,
-      finished_at: $finished_at,
-      duration_ms: $duration_ms,
-      transport: $transport,
-      observed_response: (if $observed_response == "" then null else $observed_response end),
-      status: $status,
-      error_code: (if $error_code == "" then null else $error_code end),
-      error_message: (if $error_message == "" then null else $error_message end),
-      context: $context
-    }' > "$OUTPUT_PATH"
+  write_json_file "$OUTPUT_PATH" "$report_json"
+  log "Review-safe artifact written to $OUTPUT_PATH"
+}
 
-  log "Report written: $OUTPUT_PATH"
+write_debug_bundle() {
+  if [[ -z "$DEBUG_OUTPUT_PATH" ]]; then
+    return 0
+  fi
+
+  local debug_json
+  debug_json="$(
+    jq -cn \
+      --arg run_id "$RUN_ID" \
+      --arg authoritative_stderr "$AUTHORITATIVE_STDERR" \
+      --arg fallback_stderr "$FALLBACK_STDERR" \
+      --argjson authoritative_raw "$AUTHORITATIVE_RAW_JSON" \
+      --argjson fallback_raw "$FALLBACK_RAW_JSON" \
+      '{
+        run_id: $run_id,
+        authoritative_raw: $authoritative_raw,
+        authoritative_stderr_tail: (if $authoritative_stderr == "" then null else $authoritative_stderr end),
+        fallback_raw: $fallback_raw,
+        fallback_stderr_tail: (if $fallback_stderr == "" then null else $fallback_stderr end)
+      }'
+  )"
+
+  write_json_file "$DEBUG_OUTPUT_PATH" "$debug_json"
+  log "Restricted debug bundle written to $DEBUG_OUTPUT_PATH"
 }
 
 finish_with_status() {
@@ -137,6 +257,7 @@ finish_with_status() {
   local finished_ms
   finished_ms="$(now_ms)"
   FINISHED_AT="$(now_iso)"
+
   if [[ "$START_MS" =~ ^[0-9]+$ ]] && [[ "$finished_ms" =~ ^[0-9]+$ ]]; then
     DURATION_MS=$(( finished_ms - START_MS ))
     if [[ "$DURATION_MS" -lt 0 ]]; then
@@ -147,28 +268,37 @@ finish_with_status() {
   fi
 
   write_report
+  write_debug_bundle
   exit "$exit_code"
 }
 
 precondition_fail() {
-  ERROR_CODE="precondition"
-  ERROR_MESSAGE="$1"
-  STATUS="precondition_failed"
+  local summary="$1"
+  local stage_name="${2:-$RUN_STAGE}"
+  local code="${3:-environment_precondition}"
+  local actionability="${4:-operator}"
+  local fallback_relevant="${5:-true}"
+  FAILURE_JSON="$(build_failure_json "$code" "$stage_name" "$summary" "$actionability" "$fallback_relevant")"
+  VERDICT="failed"
+  RUN_STAGE="$stage_name"
+  RECOMMENDED_ACTION="$(jq -r '.recommended_action // "Restore the missing prerequisites and rerun the authoritative check."' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null || true)"
+  if [[ -z "$RECOMMENDED_ACTION" || "$RECOMMENDED_ACTION" == "null" ]]; then
+    RECOMMENDED_ACTION="Restore the missing prerequisites and rerun the authoritative check."
+  fi
   finish_with_status 2
 }
 
 upstream_fail() {
-  ERROR_CODE="upstream"
-  ERROR_MESSAGE="$1"
-  STATUS="upstream_failed"
+  local summary="$1"
+  local stage_name="${2:-$RUN_STAGE}"
+  local code="${3:-environment_precondition}"
+  local actionability="${4:-engineering}"
+  local fallback_relevant="${5:-true}"
+  FAILURE_JSON="$(build_failure_json "$code" "$stage_name" "$summary" "$actionability" "$fallback_relevant")"
+  VERDICT="failed"
+  RUN_STAGE="$stage_name"
+  RECOMMENDED_ACTION="Inspect restricted debug evidence and rerun after narrowing the root cause."
   finish_with_status 4
-}
-
-timeout_fail() {
-  ERROR_CODE="timeout"
-  ERROR_MESSAGE="$1"
-  STATUS="timeout"
-  finish_with_status 3
 }
 
 parse_args() {
@@ -176,6 +306,10 @@ parse_args() {
     case "$1" in
       --mode)
         MODE="${2:-}"
+        shift 2
+        ;;
+      --secondary-diagnostics)
+        SECONDARY_DIAGNOSTICS="${2:-}"
         shift 2
         ;;
       --message)
@@ -188,6 +322,18 @@ parse_args() {
         ;;
       --output)
         OUTPUT_PATH="${2:-}"
+        shift 2
+        ;;
+      --debug-output)
+        DEBUG_OUTPUT_PATH="${2:-}"
+        shift 2
+        ;;
+      --target-environment)
+        TARGET_ENVIRONMENT="${2:-}"
+        shift 2
+        ;;
+      --operator-intent)
+        OPERATOR_INTENT="${2:-}"
         shift 2
         ;;
       --moltis-url)
@@ -216,78 +362,286 @@ parse_args() {
 }
 
 validate_args() {
-  if ! command -v curl >/dev/null 2>&1; then
-    precondition_fail "curl is required"
-  fi
   if ! command -v jq >/dev/null 2>&1; then
-    precondition_fail "jq is required"
-  fi
-
-  if [[ -z "$MODE" ]]; then
-    precondition_fail "--mode is required"
-  fi
-
-  if [[ "$MODE" != "synthetic" && "$MODE" != "real_user" ]]; then
-    precondition_fail "--mode must be synthetic or real_user"
+    echo "jq is required" >&2
+    exit 2
   fi
 
   if [[ -z "${MESSAGE// }" ]]; then
-    precondition_fail "--message must be non-empty"
+    precondition_fail "--message must be non-empty" "init"
   fi
 
   if ! [[ "$TIMEOUT_SEC" =~ ^[0-9]+$ ]] || [[ "$TIMEOUT_SEC" -le 0 ]]; then
-    precondition_fail "--timeout-sec must be a positive integer"
+    precondition_fail "--timeout-sec must be a positive integer" "init"
   fi
+
+  case "$MODE" in
+    authoritative|telegram_web|synthetic|real_user)
+      ;;
+    *)
+      precondition_fail "--mode must be authoritative, telegram_web, synthetic, or real_user" "init"
+      ;;
+  esac
+
+  case "$SECONDARY_DIAGNOSTICS" in
+    none|mtproto)
+      ;;
+    *)
+      precondition_fail "--secondary-diagnostics must be none or mtproto" "init"
+      ;;
+  esac
 }
 
 init_runtime() {
   RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
   STARTED_AT="$(now_iso)"
   START_MS="$(now_ms)"
-
   TMP_DIR="$(mktemp -d)"
-  COOKIE_FILE="$TMP_DIR/moltis-cookie.txt"
-
-  trap 'rm -rf "$TMP_DIR"' EXIT
+  trap 'cleanup_runtime' EXIT
 }
 
-run_real_user() {
-  TRANSPORT="telegram_mtproto_real_user"
+cleanup_runtime() {
+  if [[ -n "$LOCK_FD" ]]; then
+    eval "exec ${LOCK_FD}>&-"
+    LOCK_FD=""
+  fi
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+  fi
+}
 
-  if ! command -v python3 >/dev/null 2>&1; then
-    CONTEXT_JSON='{"notes":["python3 is required for real_user mode"]}'
-    precondition_fail "python3 is required for real_user mode"
+acquire_shared_target_lock() {
+  if [[ "$SERIALIZE_SHARED_TARGET" != "true" ]]; then
+    return 0
   fi
 
-  local required_vars=(
-    TELEGRAM_TEST_API_ID
-    TELEGRAM_TEST_API_HASH
-    TELEGRAM_TEST_SESSION
-  )
-
-  local missing=()
-  local key
-  for key in "${required_vars[@]}"; do
-    if [[ -z "${!key:-}" ]]; then
-      missing+=("$key")
+  if command -v flock >/dev/null 2>&1; then
+    exec {LOCK_FD}>"$SHARED_TARGET_LOCK"
+    if ! flock -n "$LOCK_FD"; then
+      FAILURE_JSON="$(build_failure_json "environment_precondition" "init" "Another authoritative remote UAT run is already in progress" "operator" false)"
+      DIAGNOSTIC_JSON="$(jq -cn --arg lock_file "$SHARED_TARGET_LOCK" '{lock_file:$lock_file, serialization:"flock"}')"
+      RECOMMENDED_ACTION="Wait for the current authoritative run to finish and rerun the check."
+      VERDICT="failed"
+      RUN_STAGE="init"
+      finish_with_status 2
     fi
+    return 0
+  fi
+
+  local lock_dir="${SHARED_TARGET_LOCK}.d"
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    FAILURE_JSON="$(build_failure_json "environment_precondition" "init" "Another authoritative remote UAT run is already in progress" "operator" false)"
+    DIAGNOSTIC_JSON="$(jq -cn --arg lock_dir "$lock_dir" '{lock_dir:$lock_dir, serialization:"mkdir"}')"
+    RECOMMENDED_ACTION="Wait for the current authoritative run to finish and rerun the check."
+    VERDICT="failed"
+    RUN_STAGE="init"
+    finish_with_status 2
+  fi
+  trap 'rmdir "'"$lock_dir"'" 2>/dev/null || true; cleanup_runtime' EXIT
+}
+
+capture_helper_json() {
+  local helper_output_file="$1"
+  local helper_error_file="$2"
+  local raw_var_name="$3"
+  local stderr_var_name="$4"
+
+  if jq -e . "$helper_output_file" >/dev/null 2>&1; then
+    printf -v "$raw_var_name" '%s' "$(jq -c . "$helper_output_file")"
+  else
+    printf -v "$raw_var_name" '%s' 'null'
+  fi
+
+  printf -v "$stderr_var_name" '%s' "$(tail_sanitized "$helper_error_file")"
+}
+
+normalize_from_authoritative_helper() {
+  local helper_json="$1"
+  local helper_context
+  helper_context="$(jq -c '.diagnostic_context // {}' <<< "$helper_json")"
+  helper_context="$(sanitize_json_for_operator "$helper_context")"
+  RUN_STAGE="$(jq -r '.stage // "unknown"' <<< "$helper_json")"
+  ATTRIBUTION_JSON="$(jq -c '.attribution_evidence // {attribution_confidence:"unknown"}' <<< "$helper_json")"
+  DIAGNOSTIC_JSON="$(
+    jq -cn \
+      --arg target "$AUTHORITATIVE_TARGET" \
+      --arg state_file "$(basename "$AUTHORITATIVE_STATE")" \
+      --argjson helper_context "$helper_context" \
+      --argjson helper "$helper_json" \
+      '$helper_context + {
+        target: $target,
+        state_file: $state_file
+      } + (if $helper.hint then {hint:$helper.hint} else {} end)'
+  )"
+  RECOMMENDED_ACTION="$(jq -r '.recommended_action // empty' <<< "$helper_json")"
+  if [[ -z "$RECOMMENDED_ACTION" ]]; then
+    RECOMMENDED_ACTION="Inspect the authoritative artifact and rerun after narrowing the root cause."
+  fi
+
+  if [[ "$(jq -r '.ok' <<< "$helper_json")" == "true" ]]; then
+    VERDICT="passed"
+    FAILURE_JSON='null'
+    return 0
+  fi
+
+  VERDICT="failed"
+  if jq -e '.failure | type == "object"' <<< "$helper_json" >/dev/null 2>&1; then
+    FAILURE_JSON="$(jq -c '.failure' <<< "$helper_json")"
+  else
+    FAILURE_JSON="$(build_failure_json "environment_precondition" "$RUN_STAGE" "Authoritative Telegram Web probe failed without a normalized failure object" "engineering" true)"
+  fi
+}
+
+run_authoritative_telegram_web() {
+  acquire_shared_target_lock
+  RUN_STAGE="login"
+  AUTHORITATIVE_PATH="telegram_web"
+  TRANSPORT="telegram_web_user"
+
+  if ! command -v node >/dev/null 2>&1; then
+    DIAGNOSTIC_JSON='{"reason":"node_missing"}'
+    precondition_fail "node is required for Telegram Web authoritative mode" "login"
+  fi
+
+  local helper_script="$SCRIPT_DIR/telegram-web-user-monitor.sh"
+  if [[ ! -f "$helper_script" ]]; then
+    DIAGNOSTIC_JSON='{"reason":"telegram_web_monitor_missing"}'
+    upstream_fail "Telegram Web monitor script is missing" "login"
+  fi
+
+  local helper_output_file="$TMP_DIR/telegram-web-result.json"
+  local helper_error_file="$TMP_DIR/telegram-web-error.log"
+
+  set +e
+  TELEGRAM_WEB_TARGET="$AUTHORITATIVE_TARGET" \
+  TELEGRAM_WEB_STATE="$AUTHORITATIVE_STATE" \
+  TELEGRAM_WEB_MESSAGE="$MESSAGE" \
+  TELEGRAM_WEB_TIMEOUT_SECONDS="$TIMEOUT_SEC" \
+  "$helper_script" >"$helper_output_file" 2>"$helper_error_file"
+  local helper_exit=$?
+  set -e
+
+  capture_helper_json "$helper_output_file" "$helper_error_file" AUTHORITATIVE_RAW_JSON AUTHORITATIVE_STDERR
+
+  if ! jq -e . "$helper_output_file" >/dev/null 2>&1; then
+    DIAGNOSTIC_JSON="$(jq -cn --arg stderr "$AUTHORITATIVE_STDERR" '{helper_stderr:$stderr, helper_exit_code:"invalid_json"}')"
+    upstream_fail "Telegram Web authoritative probe returned invalid JSON" "login" "environment_precondition"
+  fi
+
+  normalize_from_authoritative_helper "$AUTHORITATIVE_RAW_JSON"
+
+  DIAGNOSTIC_JSON="$(
+    jq -cn \
+      --arg transport "$TRANSPORT" \
+      --argjson helper_exit "$helper_exit" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {transport:$transport, helper_exit_code:$helper_exit}'
+  )"
+}
+
+run_synthetic_compat() {
+  AUTHORITATIVE_PATH="synthetic_api"
+  TRANSPORT="moltis_api_chat"
+  RUN_STAGE="auth"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    DIAGNOSTIC_JSON='{"reason":"curl_missing"}'
+    precondition_fail "curl is required for synthetic mode" "auth"
+  fi
+
+  local password
+  password="${!MOLTIS_PASSWORD_ENV:-}"
+  if [[ -z "$password" ]]; then
+    DIAGNOSTIC_JSON="$(jq -cn --arg env_name "$MOLTIS_PASSWORD_ENV" '{missing_env:$env_name}')"
+    precondition_fail "Environment variable for Moltis password is empty" "auth"
+  fi
+
+  local cookie_file="$TMP_DIR/moltis-cookie.txt"
+  local login_response_file="$TMP_DIR/login-response.json"
+  local send_response_file="$TMP_DIR/send-response.json"
+  local poll_response_file="$TMP_DIR/poll-response.json"
+
+  local login_code
+  login_code="$(curl -sS -c "$cookie_file" -b "$cookie_file" \
+    -X POST "$MOLTIS_URL/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -cn --arg pw "$password" '{password:$pw}')" \
+    -o "$login_response_file" \
+    -w "%{http_code}" || true)"
+  login_code="${login_code:-000}"
+
+  if [[ "$login_code" != "200" && "$login_code" != "302" ]]; then
+    DIAGNOSTIC_JSON="$(jq -cn --arg login_http_code "$login_code" '{login_http_code:$login_http_code}')"
+    upstream_fail "Synthetic Moltis authentication failed" "auth" "environment_precondition"
+  fi
+
+  RUN_STAGE="send"
+  local send_code
+  send_code="$(curl -sS -b "$cookie_file" \
+    -X POST "$MOLTIS_URL/api/v1/chat" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -cn --arg msg "$MESSAGE" '{message:$msg}')" \
+    -o "$send_response_file" \
+    -w "%{http_code}" || true)"
+  send_code="${send_code:-000}"
+
+  if [[ "$send_code" != "200" && "$send_code" != "202" ]]; then
+    FAILURE_JSON="$(build_failure_json "send_failure" "send" "Synthetic chat send failed" "engineering" true)"
+    DIAGNOSTIC_JSON="$(jq -cn --arg login_http_code "$login_code" --arg send_http_code "$send_code" '{login_http_code:$login_http_code, send_http_code:$send_http_code}')"
+    RECOMMENDED_ACTION="Inspect the synthetic API chat path and rerun after fixing the upstream error."
+    VERDICT="failed"
+    finish_with_status 4
+  fi
+
+  RUN_STAGE="wait_reply"
+  local observed=""
+  local attempt=0
+  local elapsed=0
+  while [[ $elapsed -lt $TIMEOUT_SEC && -z "$observed" ]]; do
+    attempt=$((attempt + 1))
+    sleep 1
+    local poll_code
+    poll_code="$(curl -sS -b "$cookie_file" -X GET "$MOLTIS_URL/api/v1/chat" -o "$poll_response_file" -w "%{http_code}" || true)"
+    poll_code="${poll_code:-000}"
+    if [[ "$poll_code" == "200" || "$poll_code" == "202" ]]; then
+      local poll_body
+      poll_body="$(cat "$poll_response_file" 2>/dev/null || true)"
+      if [[ -n "$(printf '%s' "$poll_body" | tr -d '[:space:]')" ]]; then
+        observed="$poll_body"
+      fi
+    fi
+    elapsed=$((elapsed + 1))
   done
 
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    local missing_json
-    missing_json="$(printf '%s\n' "${missing[@]}" | jq -R . | jq -s .)"
-    CONTEXT_JSON="$(jq -cn \
-      --argjson missing "$missing_json" \
-      --arg hint1 "Set TELEGRAM_TEST_API_ID, TELEGRAM_TEST_API_HASH, TELEGRAM_TEST_SESSION" \
-      --arg hint2 "Generate TELEGRAM_TEST_SESSION via scripts/telegram-real-user-bootstrap.py (OTP bootstrap)" \
-      '{missing_prerequisites:$missing, action_hints:[$hint1,$hint2]}')"
-    precondition_fail "Missing required TELEGRAM_TEST_* prerequisites for real_user mode"
+  ATTRIBUTION_JSON='{"attribution_confidence":"n/a"}'
+  if [[ -z "$observed" ]]; then
+    FAILURE_JSON="$(build_failure_json "bot_no_response" "wait_reply" "Synthetic path did not observe a response before timeout" "engineering" true)"
+    DIAGNOSTIC_JSON="$(jq -cn --arg login_http_code "$login_code" --arg send_http_code "$send_code" --argjson poll_attempts "$attempt" '{login_http_code:$login_http_code, send_http_code:$send_http_code, poll_attempts:$poll_attempts}')"
+    RECOMMENDED_ACTION="Inspect the synthetic API polling path and rerun after restoring the response contract."
+    VERDICT="failed"
+    finish_with_status 3
+  fi
+
+  DIAGNOSTIC_JSON="$(jq -cn --arg observed_response "$observed" --argjson poll_attempts "$attempt" '{observed_response:$observed_response, poll_attempts:$poll_attempts}')"
+  RECOMMENDED_ACTION="Synthetic compatibility path passed."
+  VERDICT="passed"
+  FAILURE_JSON='null'
+}
+
+run_real_user_compat() {
+  AUTHORITATIVE_PATH="telegram_mtproto"
+  TRANSPORT="telegram_mtproto_real_user"
+  RUN_STAGE="send"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    DIAGNOSTIC_JSON='{"reason":"python3_missing"}'
+    precondition_fail "python3 is required for real_user mode" "send"
   fi
 
   local helper_script="$SCRIPT_DIR/telegram-real-user-e2e.py"
   if [[ ! -f "$helper_script" ]]; then
-    CONTEXT_JSON='{"notes":["real_user helper script not found"]}'
-    upstream_fail "real_user helper script is missing"
+    DIAGNOSTIC_JSON='{"reason":"telegram_real_user_helper_missing"}'
+    upstream_fail "real_user helper script is missing" "send"
   fi
 
   local helper_output_file="$TMP_DIR/real-user-result.json"
@@ -295,9 +649,6 @@ run_real_user() {
   local bot_username="${TELEGRAM_TEST_BOT_USERNAME:-@moltinger_bot}"
   local helper_args=(
     "$helper_script"
-    --api-id "${TELEGRAM_TEST_API_ID}"
-    --api-hash "${TELEGRAM_TEST_API_HASH}"
-    --session "${TELEGRAM_TEST_SESSION}"
     --bot-username "$bot_username"
     --message "$MESSAGE"
     --timeout-sec "$TIMEOUT_SEC"
@@ -307,141 +658,148 @@ run_real_user() {
   fi
 
   set +e
-  python3 "${helper_args[@]}" > "$helper_output_file" 2> "$helper_error_file"
+  python3 "${helper_args[@]}" >"$helper_output_file" 2>"$helper_error_file"
   local helper_exit=$?
   set -e
 
+  capture_helper_json "$helper_output_file" "$helper_error_file" AUTHORITATIVE_RAW_JSON AUTHORITATIVE_STDERR
+
   if ! jq -e . "$helper_output_file" >/dev/null 2>&1; then
-    local helper_stderr
-    helper_stderr="$(tail -n 50 "$helper_error_file" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')"
-    CONTEXT_JSON="$(jq -cn --arg stderr "$helper_stderr" '{helper_stderr:$stderr}')"
-    upstream_fail "real_user helper returned invalid JSON"
+    DIAGNOSTIC_JSON="$(jq -cn --arg stderr "$AUTHORITATIVE_STDERR" '{helper_stderr:$stderr}')"
+    upstream_fail "real_user helper returned invalid JSON" "send"
   fi
 
-  TRANSPORT="$(jq -r '.transport // "telegram_mtproto_real_user"' "$helper_output_file")"
-  OBSERVED_RESPONSE="$(jq -r '.observed_response // ""' "$helper_output_file")"
-  STATUS="$(jq -r '.status // "upstream_failed"' "$helper_output_file")"
-  ERROR_CODE="$(jq -r '.error_code // ""' "$helper_output_file")"
-  ERROR_MESSAGE="$(jq -r '.error_message // ""' "$helper_output_file")"
-  CONTEXT_JSON="$(jq -c --argjson helper_exit "$helper_exit" '(.context // {}) + {helper_exit_code:$helper_exit}' "$helper_output_file")"
+  RUN_STAGE="$(jq -r '.context.stage // "wait_reply"' "$helper_output_file")"
+  DIAGNOSTIC_JSON="$(jq -c '.context // {}' "$helper_output_file")"
+  ATTRIBUTION_JSON='{"attribution_confidence":"n/a"}'
 
-  case "$STATUS" in
+  local helper_status
+  helper_status="$(jq -r '.status // "upstream_failed"' "$helper_output_file")"
+  local error_message
+  error_message="$(jq -r '.error_message // empty' "$helper_output_file")"
+  local observed_response
+  observed_response="$(jq -r '.observed_response // empty' "$helper_output_file")"
+  DIAGNOSTIC_JSON="$(sanitize_json_for_operator "$DIAGNOSTIC_JSON")"
+
+  case "$helper_status" in
     completed)
-      finish_with_status 0
+      VERDICT="passed"
+      FAILURE_JSON='null'
+      DIAGNOSTIC_JSON="$(jq -cn --arg observed_response "$observed_response" --argjson helper_exit "$helper_exit" --argjson context "$DIAGNOSTIC_JSON" '$context + {observed_response:$observed_response, helper_exit_code:$helper_exit}')"
+      RECOMMENDED_ACTION="MTProto compatibility path passed."
       ;;
     timeout)
+      VERDICT="failed"
+      FAILURE_JSON="$(build_failure_json "bot_no_response" "wait_reply" "MTProto helper timed out waiting for a reply" "operator" true)"
+      RECOMMENDED_ACTION="Inspect bot response health and rerun after restoring reply delivery."
       finish_with_status 3
       ;;
     precondition_failed)
+      VERDICT="failed"
+      FAILURE_JSON="$(build_failure_json "environment_precondition" "send" "${error_message:-MTProto prerequisites are missing}" "operator" true)"
+      RECOMMENDED_ACTION="Restore MTProto prerequisites and rerun if secondary diagnostics are still needed."
       finish_with_status 2
       ;;
-    upstream_failed)
-      finish_with_status 4
-      ;;
     *)
-      ERROR_CODE="upstream"
-      if [[ -z "$ERROR_MESSAGE" ]]; then
-        ERROR_MESSAGE="Unexpected real_user status from helper: $STATUS"
-      fi
-      STATUS="upstream_failed"
+      VERDICT="failed"
+      FAILURE_JSON="$(build_failure_json "environment_precondition" "send" "${error_message:-Unexpected MTProto helper failure}" "engineering" true)"
+      RECOMMENDED_ACTION="Inspect restricted debug evidence and rerun after narrowing the MTProto failure."
       finish_with_status 4
       ;;
   esac
 }
 
-run_synthetic() {
-  TRANSPORT="moltis_api_chat"
-
-  local password
-  password="${!MOLTIS_PASSWORD_ENV:-}"
-  if [[ -z "$password" ]]; then
-    CONTEXT_JSON='{"notes":["missing Moltis password env"]}'
-    precondition_fail "Environment variable ${MOLTIS_PASSWORD_ENV} is empty"
+evaluate_secondary_mtproto() {
+  if [[ "$SECONDARY_DIAGNOSTICS" != "mtproto" ]]; then
+    FALLBACK_JSON='{"requested":false,"path_used":null,"prerequisites_present":null,"outcome":"not_requested","decision_note":"Secondary diagnostics not requested."}'
+    return 0
   fi
 
-  local login_response_file="$TMP_DIR/login-response.json"
-  local send_response_file="$TMP_DIR/send-response.json"
-  local poll_response_file="$TMP_DIR/poll-response.json"
-
-  log "Authenticating against $MOLTIS_URL/api/auth/login"
-  local login_code
-  login_code="$(curl -sS -c "$COOKIE_FILE" -b "$COOKIE_FILE" \
-    -X POST "$MOLTIS_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -cn --arg pw "$password" '{password:$pw}')" \
-    -o "$login_response_file" \
-    -w "%{http_code}" || true)"
-  login_code="${login_code:-000}"
-
-  if [[ "$login_code" != "200" && "$login_code" != "302" ]]; then
-    CONTEXT_JSON="$(jq -cn --arg login_http_code "$login_code" '{login_http_code:$login_http_code}')"
-    upstream_fail "Moltis authentication failed (HTTP ${login_code})"
-  fi
-
-  log "Sending message to $MOLTIS_URL/api/v1/chat"
-  local send_code
-  send_code="$(curl -sS -b "$COOKIE_FILE" \
-    -X POST "$MOLTIS_URL/api/v1/chat" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -cn --arg msg "$MESSAGE" '{message:$msg}')" \
-    -o "$send_response_file" \
-    -w "%{http_code}" || true)"
-  send_code="${send_code:-000}"
-
-  local send_body
-  send_body="$(cat "$send_response_file" 2>/dev/null || true)"
-
-  if [[ "$send_code" != "200" && "$send_code" != "202" ]]; then
-    CONTEXT_JSON="$(jq -cn \
-      --arg login_http_code "$login_code" \
-      --arg send_http_code "$send_code" \
-      '{login_http_code:$login_http_code, send_http_code:$send_http_code}')"
-    upstream_fail "Moltis chat send failed (HTTP ${send_code})"
-  fi
-
-  local observed=""
-  if is_meaningful_payload "$send_body"; then
-    observed="$send_body"
-  fi
-
-  local attempt=0
-  local elapsed=0
-  while [[ $elapsed -lt $TIMEOUT_SEC && -z "$observed" ]]; do
-    attempt=$((attempt + 1))
-    sleep 1
-
-    local poll_code
-    poll_code="$(curl -sS -b "$COOKIE_FILE" \
-      -X GET "$MOLTIS_URL/api/v1/chat" \
-      -o "$poll_response_file" \
-      -w "%{http_code}" || true)"
-    poll_code="${poll_code:-000}"
-
-    local poll_body
-    poll_body="$(cat "$poll_response_file" 2>/dev/null || true)"
-
-    if [[ "$poll_code" == "200" || "$poll_code" == "202" ]]; then
-      if is_meaningful_payload "$poll_body"; then
-        observed="$poll_body"
-      fi
+  local prerequisites_present="true"
+  local missing=()
+  local key
+  for key in TELEGRAM_TEST_API_ID TELEGRAM_TEST_API_HASH TELEGRAM_TEST_SESSION; do
+    if [[ -z "${!key:-}" ]]; then
+      prerequisites_present="false"
+      missing+=("$key")
     fi
-
-    elapsed=$((elapsed + 1))
   done
 
-  CONTEXT_JSON="$(jq -cn \
-    --arg login_http_code "$login_code" \
-    --arg send_http_code "$send_code" \
-    --argjson poll_attempts "$attempt" \
-    '{login_http_code:$login_http_code, send_http_code:$send_http_code, poll_attempts:$poll_attempts}')"
-
-  if [[ -z "$observed" ]]; then
-    timeout_fail "No observed response before timeout"
+  if [[ "$prerequisites_present" != "true" ]]; then
+    local missing_json
+    missing_json="$(printf '%s\n' "${missing[@]}" | jq -R . | jq -s .)"
+    FALLBACK_JSON="$(jq -cn \
+      --argjson missing "$missing_json" \
+      '{
+        requested: true,
+        path_used: "mtproto",
+        prerequisites_present: false,
+        outcome: "unavailable",
+        decision_note: "MTProto fallback prerequisites are absent on this target.",
+        missing_prerequisites: $missing
+      }')"
+    return 0
   fi
 
-  OBSERVED_RESPONSE="$observed"
-  STATUS="completed"
-  finish_with_status 0
+  local helper_script="$SCRIPT_DIR/telegram-real-user-e2e.py"
+  local helper_output_file="$TMP_DIR/fallback-real-user-result.json"
+  local helper_error_file="$TMP_DIR/fallback-real-user-error.log"
+  local bot_username="${TELEGRAM_TEST_BOT_USERNAME:-@moltinger_bot}"
+  local helper_args=(
+    "$helper_script"
+    --bot-username "$bot_username"
+    --message "$MESSAGE"
+    --timeout-sec "$TIMEOUT_SEC"
+  )
+  if [[ "$VERBOSE" == "true" ]]; then
+    helper_args+=(--verbose)
+  fi
+
+  set +e
+  python3 "${helper_args[@]}" >"$helper_output_file" 2>"$helper_error_file"
+  local helper_exit=$?
+  set -e
+
+  capture_helper_json "$helper_output_file" "$helper_error_file" FALLBACK_RAW_JSON FALLBACK_STDERR
+
+  if ! jq -e . "$helper_output_file" >/dev/null 2>&1; then
+    FALLBACK_JSON="$(jq -cn \
+      --arg stderr "$FALLBACK_STDERR" \
+      '{
+        requested: true,
+        path_used: "mtproto",
+        prerequisites_present: true,
+        outcome: "failed",
+        decision_note: "MTProto fallback returned invalid JSON.",
+        helper_stderr: (if $stderr == "" then null else $stderr end)
+      }')"
+    return 0
+  fi
+
+  FALLBACK_JSON="$(
+    jq -cn \
+      --argjson helper "$(jq -c . "$helper_output_file")" \
+      --argjson helper_exit "$helper_exit" \
+      '{
+        requested: true,
+        path_used: "mtproto",
+        prerequisites_present: true,
+        outcome: ($helper.status // "unknown"),
+        decision_note:
+          (if ($helper.status // "") == "completed"
+           then "Secondary MTProto diagnostics succeeded; Telegram Web remains authoritative but fallback may help isolate UI-only issues."
+           elif ($helper.status // "") == "timeout"
+           then "Secondary MTProto diagnostics also missed a reply; investigate deployed bot/runtime before enabling fallback."
+           elif ($helper.status // "") == "precondition_failed"
+           then "Secondary MTProto diagnostics could not run because prerequisites were incomplete."
+           else "Secondary MTProto diagnostics failed unexpectedly; keep Telegram Web authoritative and inspect the fallback helper."
+           end),
+        helper_exit_code: $helper_exit,
+        helper_status: ($helper.status // null),
+        helper_error_code: ($helper.error_code // null),
+        helper_error_message: ($helper.error_message // null)
+      }'
+  )"
 }
 
 main() {
@@ -450,14 +808,22 @@ main() {
   validate_args
 
   case "$MODE" in
+    authoritative|telegram_web)
+      run_authoritative_telegram_web
+      if [[ "$VERDICT" == "failed" ]]; then
+        evaluate_secondary_mtproto
+        finish_with_status 3
+      fi
+      evaluate_secondary_mtproto
+      finish_with_status 0
+      ;;
     synthetic)
-      run_synthetic
+      run_synthetic_compat
+      finish_with_status 0
       ;;
     real_user)
-      run_real_user
-      ;;
-    *)
-      precondition_fail "Unsupported mode"
+      run_real_user_compat
+      finish_with_status 0
       ;;
   esac
 }

@@ -30,15 +30,9 @@ node scripts/telegram-web-user-login.mjs --state /opt/moltinger/data/.telegram-w
 
 Откроется браузер Telegram Web. Войдите как пользователь (QR/код).
 
-Если на сервере нет GUI:
-1. Выполните login-скрипт на локальном ПК (где есть браузер), например:
-```bash
-node scripts/telegram-web-user-login.mjs --state .telegram-web-state.json
-```
-2. Скопируйте state-файл на сервер:
-```bash
-scp .telegram-web-state.json root@ainetic.tech:/opt/moltinger/data/.telegram-web-state.json
-```
+Если на сервере нет GUI, используйте login-скрипт на машине с браузером только как break-glass путь.
+Не документируйте и не превращайте ручной `scp` state-файла в обычный operational workflow.
+Нормальный production-aware путь должен идти через GitOps-доставленный runtime и уже существующий state на сервере.
 
 ## 3) Разовая проверка
 
@@ -49,12 +43,27 @@ node scripts/telegram-web-user-probe.mjs \
   --text "/status"
 ```
 
-## 4) Периодический режим
+## 4) Authoritative remote UAT
+
+Канонический post-deploy запуск теперь идет через:
+
+- `.github/workflows/telegram-e2e-on-demand.yml`
+- `scripts/telegram-e2e-on-demand.sh --mode authoritative`
+
+Этот поток:
+
+- использует `Telegram Web` как source of truth;
+- возвращает review-safe artifact с `failure.code`, `stage`, `recommended_action`;
+- не включает scheduler;
+- не меняет production transport mode;
+- может по запросу добавить restricted debug bundle и optional MTProto secondary diagnostics.
+
+## 5) Периодический режим
 
 Периодический Telegram Web monitor больше не включается в production по умолчанию.
-Если он нужен снова, включайте его только явно и вручную.
+Если он нужен снова, включайте его только явно и вручную после отдельного решения.
 
-### Вариант A: systemd timer (manual opt-in)
+### Вариант A: systemd timer (manual opt-in, non-default)
 
 ```bash
 cp systemd/moltis-telegram-web-user-monitor.service /etc/systemd/system/
@@ -92,10 +101,10 @@ scripts/telegram-web-user-monitor.sh
 JSON output `telegram-web-user-probe.mjs` теперь включает:
 
 - `stage`: `login|search|chat_open|quiet_window|composer|send|wait_reply`
-- `retries_used`
-- `chat_open_verified`
-- `sent_mid`
-- `correlation`: `quiet_window_ms`, `quiet_window_wait_ms`, `baseline_max_mid`, `sent_message`, `matched_reply`, `latest_seen_incoming`, `last_pre_send_activity`
+- `failure.code`, `failure.summary`, `failure.actionability`, `failure.fallback_relevant`
+- `attribution_evidence`
+- `diagnostic_context`
+- `recommended_action`
 
 ## Плюсы/минусы
 

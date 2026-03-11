@@ -1,38 +1,40 @@
-name: Telegram E2E On-Demand
+name: Telegram Remote UAT On-Demand
 
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "Execution mode"
-        required: true
-        default: synthetic
-        type: choice
-        options:
-          - synthetic
-          - real_user
       message:
-        description: "Input message/command to send"
+        description: "Probe message/command to send through Telegram Web"
         required: true
         default: "/status"
         type: string
       timeout_sec:
-        description: "Timeout in seconds"
+        description: "Reply timeout in seconds"
         required: true
-        default: "30"
+        default: "45"
         type: string
-      moltis_url:
-        description: "Moltis base URL"
+      operator_intent:
+        description: "Operator intent label"
         required: true
-        default: "https://moltis.ainetic.tech"
+        default: "post_deploy_verification"
         type: string
+      run_secondary_mtproto:
+        description: "Run optional MTProto secondary diagnostics after the authoritative verdict"
+        required: true
+        default: false
+        type: boolean
+      upload_restricted_debug:
+        description: "Upload restricted debug bundle artifact"
+        required: true
+        default: false
+        type: boolean
       artifact_name:
-        description: "Artifact name"
+        description: "Artifact base name"
         required: true
-        default: "telegram-e2e-result"
+        default: "telegram-remote-uat"
         type: string
       verbose:
-        description: "Enable verbose script logs"
+        description: "Enable verbose wrapper logs"
         required: true
         default: false
         type: boolean
@@ -40,77 +42,182 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: telegram-remote-uat-production
+  cancel-in-progress: false
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+
 jobs:
-  telegram-e2e:
-    name: Run on-demand Telegram E2E harness
+  remote-uat:
+    name: Run authoritative Telegram Web remote UAT
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}
-      TELEGRAM_TEST_API_ID: ${{ secrets.TELEGRAM_TEST_API_ID }}
-      TELEGRAM_TEST_API_HASH: ${{ secrets.TELEGRAM_TEST_API_HASH }}
-      TELEGRAM_TEST_SESSION: ${{ secrets.TELEGRAM_TEST_SESSION }}
-      TELEGRAM_TEST_BOT_USERNAME: ${{ secrets.TELEGRAM_TEST_BOT_USERNAME }}
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install real_user dependencies
-        if: ${{ inputs.mode == 'real_user' }}
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
         shell: bash
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install telethon
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Run harness
-        id: run_harness
-        continue-on-error: true
+      - name: Run authoritative remote UAT
+        id: remote_uat
         shell: bash
+        env:
+          TELEGRAM_TEST_API_ID: ${{ secrets.TELEGRAM_TEST_API_ID }}
+          TELEGRAM_TEST_API_HASH: ${{ secrets.TELEGRAM_TEST_API_HASH }}
+          TELEGRAM_TEST_SESSION: ${{ secrets.TELEGRAM_TEST_SESSION }}
+          TELEGRAM_TEST_BOT_USERNAME: ${{ secrets.TELEGRAM_TEST_BOT_USERNAME }}
         run: |
-          set -o pipefail
-          chmod +x scripts/telegram-e2e-on-demand.sh
+          set -euo pipefail
 
-          verbose_flag=""
-          if [[ "${{ inputs.verbose }}" == "true" ]]; then
-            verbose_flag="--verbose"
+          RESULT_DIR="$RUNNER_TEMP/telegram-remote-uat"
+          mkdir -p "$RESULT_DIR"
+
+          REMOTE_RUN_DIR="${{ env.DEPLOY_PATH }}/.tmp/remote-uat-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          REMOTE_RESULT="$REMOTE_RUN_DIR/telegram-e2e-result.json"
+          REMOTE_DEBUG="$REMOTE_RUN_DIR/telegram-e2e-debug.json"
+
+          secondary_mode="none"
+          if [[ "${{ inputs.run_secondary_mtproto }}" == "true" ]]; then
+            secondary_mode="mtproto"
           fi
 
+          remote_run_dir_q="$(printf '%q' "$REMOTE_RUN_DIR")"
+          deploy_path_q="$(printf '%q' "${{ env.DEPLOY_PATH }}")"
+          message_q="$(printf '%q' "${{ inputs.message }}")"
+          timeout_q="$(printf '%q' "${{ inputs.timeout_sec }}")"
+          operator_intent_q="$(printf '%q' "${{ inputs.operator_intent }}")"
+          secondary_q="$(printf '%q' "$secondary_mode")"
+          verbose_q="$(printf '%q' "${{ inputs.verbose }}")"
+          upload_debug_q="$(printf '%q' "${{ inputs.upload_restricted_debug }}")"
+
+          remote_env_prefix=""
+          if [[ "$secondary_mode" == "mtproto" ]]; then
+            api_id_q="$(printf '%q' "${TELEGRAM_TEST_API_ID}")"
+            api_hash_q="$(printf '%q' "${TELEGRAM_TEST_API_HASH}")"
+            session_q="$(printf '%q' "${TELEGRAM_TEST_SESSION}")"
+            bot_username_q="$(printf '%q' "${TELEGRAM_TEST_BOT_USERNAME}")"
+            remote_env_prefix="TELEGRAM_TEST_API_ID=${api_id_q} TELEGRAM_TEST_API_HASH=${api_hash_q} TELEGRAM_TEST_SESSION=${session_q} TELEGRAM_TEST_BOT_USERNAME=${bot_username_q} "
+          fi
+
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p $(printf '%q' "$REMOTE_RUN_DIR/scripts")"
+          scp \
+            scripts/telegram-e2e-on-demand.sh \
+            scripts/telegram-web-user-monitor.sh \
+            scripts/telegram-web-user-probe.mjs \
+            scripts/telegram-real-user-e2e.py \
+            "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${REMOTE_RUN_DIR}/scripts/"
+
           set +e
-          TRIGGER_SOURCE=workflow_dispatch \
-          ./scripts/telegram-e2e-on-demand.sh \
-            --mode "${{ inputs.mode }}" \
-            --message "${{ inputs.message }}" \
-            --timeout-sec "${{ inputs.timeout_sec }}" \
-            --output "telegram-e2e-result.json" \
-            --moltis-url "${{ inputs.moltis_url }}" \
-            --moltis-password-env MOLTIS_PASSWORD \
-            ${verbose_flag} \
-            2>&1 | tee telegram-e2e.log
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" \
+            "${remote_env_prefix}REMOTE_RUN_DIR=${remote_run_dir_q} DEPLOY_PATH=${deploy_path_q} MESSAGE=${message_q} TIMEOUT_SEC=${timeout_q} OPERATOR_INTENT=${operator_intent_q} SECONDARY=${secondary_q} VERBOSE=${verbose_q} UPLOAD_DEBUG=${upload_debug_q} bash -se" <<'EOF'
+          set -euo pipefail
 
-          exit_code=${PIPESTATUS[0]}
+          mkdir -p "$REMOTE_RUN_DIR"
+          chmod +x "$REMOTE_RUN_DIR/scripts/telegram-e2e-on-demand.sh"
+          chmod +x "$REMOTE_RUN_DIR/scripts/telegram-web-user-monitor.sh"
+          chmod +x "$REMOTE_RUN_DIR/scripts/telegram-real-user-e2e.py"
+
+          debug_args=()
+          if [[ "$UPLOAD_DEBUG" == "true" ]]; then
+            debug_args+=(--debug-output "$REMOTE_RUN_DIR/telegram-e2e-debug.json")
+          fi
+
+          verbose_args=()
+          if [[ "$VERBOSE" == "true" ]]; then
+            verbose_args+=(--verbose)
+          fi
+
+          export TRIGGER_SOURCE=workflow_dispatch
+          export TARGET_ENVIRONMENT=production
+          export PRODUCTION_TRANSPORT_MODE=polling
+          export SERIALIZE_SHARED_TARGET=true
+
+          "$REMOTE_RUN_DIR/scripts/telegram-e2e-on-demand.sh" \
+            --mode authoritative \
+            --secondary-diagnostics "$SECONDARY" \
+            --message "$MESSAGE" \
+            --timeout-sec "$TIMEOUT_SEC" \
+            --operator-intent "$OPERATOR_INTENT" \
+            --target-environment production \
+            --output "$REMOTE_RUN_DIR/telegram-e2e-result.json" \
+            "${debug_args[@]}" \
+            "${verbose_args[@]}"
+          EOF
+          remote_exit=$?
           set -e
-          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
-          echo "Harness exit code: ${exit_code}"
 
-      - name: Upload result artifact
+          scp "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${REMOTE_RESULT}" "$RESULT_DIR/telegram-e2e-result.json"
+
+          if [[ "${{ inputs.upload_restricted_debug }}" == "true" ]]; then
+            scp "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${REMOTE_DEBUG}" "$RESULT_DIR/telegram-e2e-debug.json" || true
+          fi
+
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "rm -rf $(printf '%q' "$REMOTE_RUN_DIR")" || true
+
+          verdict="$(jq -r '.run.verdict // "unknown"' "$RESULT_DIR/telegram-e2e-result.json")"
+          failure_code="$(jq -r '.failure.code // "none"' "$RESULT_DIR/telegram-e2e-result.json")"
+          stage="$(jq -r '.run.stage // "unknown"' "$RESULT_DIR/telegram-e2e-result.json")"
+
+          echo "remote_exit=${remote_exit}" >> "$GITHUB_OUTPUT"
+          echo "verdict=${verdict}" >> "$GITHUB_OUTPUT"
+          echo "failure_code=${failure_code}" >> "$GITHUB_OUTPUT"
+          echo "stage=${stage}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload review-safe artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: telegram-e2e-result.json
+          path: ${{ runner.temp }}/telegram-remote-uat/telegram-e2e-result.json
           if-no-files-found: error
 
-      - name: Upload execution log
-        if: always()
+      - name: Upload restricted debug bundle
+        if: ${{ always() && inputs.upload_restricted_debug }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.artifact_name }}-log
-          path: telegram-e2e.log
+          name: ${{ inputs.artifact_name }}-restricted-debug
+          path: ${{ runner.temp }}/telegram-remote-uat/telegram-e2e-debug.json
           if-no-files-found: warn
 
-      - name: Fail workflow when harness failed
-        if: ${{ always() && steps.run_harness.outputs.exit_code != '0' }}
+      - name: Append job summary
+        if: always()
         shell: bash
         run: |
-          echo "telegram-e2e harness failed with exit code ${{ steps.run_harness.outputs.exit_code }}"
+          RESULT_FILE="${RUNNER_TEMP}/telegram-remote-uat/telegram-e2e-result.json"
+          if [[ ! -f "$RESULT_FILE" ]]; then
+            echo "Remote UAT artifact not found." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## Telegram Remote UAT"
+            echo
+            echo "- Verdict: \`$(jq -r '.run.verdict' "$RESULT_FILE")\`"
+            echo "- Stage: \`$(jq -r '.run.stage' "$RESULT_FILE")\`"
+            echo "- Failure code: \`$(jq -r '.failure.code // "none"' "$RESULT_FILE")\`"
+            echo "- Recommended action: $(jq -r '.recommended_action' "$RESULT_FILE")"
+            echo
+            echo '```json'
+            jq '.' "$RESULT_FILE"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail workflow when authoritative verdict failed
+        if: ${{ always() && steps.remote_uat.outputs.verdict != 'passed' }}
+        shell: bash
+        run: |
+          echo "Authoritative remote UAT failed at stage=${{ steps.remote_uat.outputs.stage }} failure=${{ steps.remote_uat.outputs.failure_code }}"
           exit 1
