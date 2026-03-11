@@ -272,11 +272,13 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_workflow_validates_restore_readiness"
     if rg -q 'Validate Clawdiy restore readiness' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'data/clawdiy/\.last-backup' "$CLAWDIY_WORKFLOW" && \
+       rg -q "pre_deploy_\\*\\.tar\\.gz" "$CLAWDIY_WORKFLOW" && \
        rg -q 'clawdiy-evidence-manifest\.json' "$CLAWDIY_WORKFLOW" && \
        rg -q 'has_evidence_manifest' "$CLAWDIY_WORKFLOW"; then
         test_pass
     else
-        test_fail "Clawdiy deploy workflow must validate restore-readiness metadata and evidence inventory"
+        test_fail "Clawdiy deploy workflow must validate restore-readiness from the tracked Clawdiy backup reference and evidence inventory"
     fi
 
     test_start "static_rollback_drill_covers_clawdiy_inventory"
