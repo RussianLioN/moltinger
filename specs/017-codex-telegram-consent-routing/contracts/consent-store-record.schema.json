@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moltinger/specs/017-codex-telegram-consent-routing/contracts/consent-store-record.schema.json",
+  "title": "Codex Telegram Consent Store Record",
+  "type": "object",
+  "required": [
+    "request",
+    "recommendations",
+    "delivery",
+    "audit_notes"
+  ],
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": [
+        "request_id",
+        "source",
+        "fingerprint",
+        "chat_id",
+        "created_at",
+        "expires_at",
+        "status",
+        "action_token",
+        "question_text",
+        "delivery_mode"
+      ],
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1 },
+        "source": { "const": "codex_upstream_watcher" },
+        "fingerprint": { "type": "string", "minLength": 1 },
+        "chat_id": { "type": "string", "minLength": 1 },
+        "question_message_id": { "type": ["integer", "null"], "minimum": 1 },
+        "created_at": { "type": "string", "minLength": 1 },
+        "expires_at": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "declined", "expired", "delivered", "failed"]
+        },
+        "action_token": { "type": "string", "minLength": 1 },
+        "question_text": { "type": "string", "minLength": 1 },
+        "delivery_mode": {
+          "type": "string",
+          "enum": ["inline_callback", "command_fallback", "one_way_only"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "recommendations": {
+      "type": "object",
+      "required": ["summary", "items"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "rationale", "impacted_paths", "next_steps"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1 },
+              "rationale": { "type": "string", "minLength": 1 },
+              "impacted_paths": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "next_steps": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": ["object", "null"],
+      "required": ["request_id", "decision", "resolved_at", "resolved_via", "telegram_actor_id", "raw_input"],
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1 },
+        "decision": {
+          "type": "string",
+          "enum": ["accept", "decline", "expired", "invalid", "duplicate"]
+        },
+        "resolved_at": { "type": "string", "minLength": 1 },
+        "resolved_via": {
+          "type": "string",
+          "enum": ["callback_query", "command_fallback", "operator_override"]
+        },
+        "telegram_actor_id": { "type": "string", "minLength": 1 },
+        "raw_input": { "type": "string", "minLength": 1 },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_sent", "sent", "suppressed", "retry", "failed"]
+        },
+        "message_id": { "type": ["integer", "null"], "minimum": 1 },
+        "sent_at": { "type": "string" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "audit_notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}
