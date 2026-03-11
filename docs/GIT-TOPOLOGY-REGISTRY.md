@@ -116,7 +116,6 @@
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
-| `origin/feat/moltis-real-user-tests` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
