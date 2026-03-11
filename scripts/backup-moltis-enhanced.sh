@@ -35,6 +35,10 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 CONFIG_DIR="${BACKUP_CONFIG_DIR:-$PROJECT_ROOT/config}"
 DATA_DIR="${BACKUP_DATA_DIR:-$PROJECT_ROOT/data}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/moltis}"
+RUNTIME_ENV_FILE="${BACKUP_ENV_FILE:-$PROJECT_ROOT/.env}"
+COMPOSE_FILE_MAIN="${BACKUP_COMPOSE_FILE_MAIN:-$PROJECT_ROOT/docker-compose.yml}"
+COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod.yml}"
+BACKUP_RESTORE_RUNTIME_FILES="${BACKUP_RESTORE_RUNTIME_FILES:-true}"
 CLAWDIY_BACKUP_ENABLED="${CLAWDIY_BACKUP_ENABLED:-true}"
 CLAWDIY_CONFIG_DIR="${CLAWDIY_CONFIG_DIR:-$PROJECT_ROOT/config/clawdiy}"
 CLAWDIY_RUNTIME_DIR="${CLAWDIY_RUNTIME_DIR:-$PROJECT_ROOT/data/clawdiy/runtime}"
@@ -109,6 +113,9 @@ fi
 CONFIG_DIR="${BACKUP_CONFIG_DIR:-${CONFIG_DIR:-$PROJECT_ROOT/config}}"
 DATA_DIR="${BACKUP_DATA_DIR:-${DATA_DIR:-$PROJECT_ROOT/data}}"
 LOG_DIR="${BACKUP_LOG_DIR:-${LOG_DIR:-/var/log/moltis}}"
+RUNTIME_ENV_FILE="${BACKUP_ENV_FILE:-${RUNTIME_ENV_FILE:-$PROJECT_ROOT/.env}}"
+COMPOSE_FILE_MAIN="${BACKUP_COMPOSE_FILE_MAIN:-${COMPOSE_FILE_MAIN:-$PROJECT_ROOT/docker-compose.yml}}"
+COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-${COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod.yml}}"
 
 # Setup logging (with fallback if permission denied)
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
@@ -614,6 +621,10 @@ create_backup() {
     local backup_path="$BACKUP_DIR/$BACKUP_TYPE/${backup_name}.tar.gz"
     local tmp_dir="$BACKUP_DIR/tmp/${backup_name}"
     local clawdiy_included=false
+    local env_included=false
+    local compose_main_included=false
+    local compose_prod_included=false
+    local moltis_restore_ready=false
 
     log_info "Creating $BACKUP_TYPE backup: $backup_name"
     mkdir -p "$tmp_dir"
@@ -655,6 +666,28 @@ EOF
         fi
     fi
 
+    if [[ -f "$RUNTIME_ENV_FILE" ]]; then
+        env_included=true
+    else
+        log_warn "Runtime env file missing from backup scope: $RUNTIME_ENV_FILE"
+    fi
+
+    if [[ -f "$COMPOSE_FILE_MAIN" ]]; then
+        compose_main_included=true
+    else
+        log_warn "Compose file missing from backup scope: $COMPOSE_FILE_MAIN"
+    fi
+
+    if [[ -f "$COMPOSE_FILE_PROD" ]]; then
+        compose_prod_included=true
+    else
+        log_warn "Production compose file missing from backup scope: $COMPOSE_FILE_PROD"
+    fi
+
+    if [[ "$env_included" == "true" && "$compose_main_included" == "true" && "$compose_prod_included" == "true" ]]; then
+        moltis_restore_ready=true
+    fi
+
     # Create metadata
     cat > "$tmp_dir/backup-metadata.json" <<EOF
 {
@@ -673,6 +706,33 @@ EOF
         "state_dir": "$CLAWDIY_STATE_DIR",
         "audit_dir": "$CLAWDIY_AUDIT_DIR",
         "container_name": "$CLAWDIY_CONTAINER_NAME"
+    },
+    "runtime_files": {
+        "env_file": {
+            "path": "$RUNTIME_ENV_FILE",
+            "included": $(json_bool "$env_included")
+        },
+        "compose_file_main": {
+            "path": "$COMPOSE_FILE_MAIN",
+            "included": $(json_bool "$compose_main_included")
+        },
+        "compose_file_prod": {
+            "path": "$COMPOSE_FILE_PROD",
+            "included": $(json_bool "$compose_prod_included")
+        }
+    },
+    "restore_readiness": {
+        "moltis": {
+            "ready": $(json_bool "$moltis_restore_ready"),
+            "required": [
+                "backup-metadata.json",
+                "config/",
+                "data/",
+                ".env",
+                "docker-compose.yml",
+                "docker-compose.prod.yml"
+            ]
+        }
     },
     "docker_version": "$(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"
 }
@@ -695,6 +755,18 @@ EOF
 
     if [[ -f "$tmp_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME" ]]; then
         tar_args+=(-C "$tmp_dir" "$CLAWDIY_EVIDENCE_MANIFEST_NAME")
+    fi
+
+    if [[ -f "$RUNTIME_ENV_FILE" ]]; then
+        tar_args+=(-C "$(dirname "$RUNTIME_ENV_FILE")" "$(basename "$RUNTIME_ENV_FILE")")
+    fi
+
+    if [[ -f "$COMPOSE_FILE_MAIN" ]]; then
+        tar_args+=(-C "$(dirname "$COMPOSE_FILE_MAIN")" "$(basename "$COMPOSE_FILE_MAIN")")
+    fi
+
+    if [[ -f "$COMPOSE_FILE_PROD" ]]; then
+        tar_args+=(-C "$(dirname "$COMPOSE_FILE_PROD")" "$(basename "$COMPOSE_FILE_PROD")")
     fi
 
     tar_args+=(
@@ -852,6 +924,120 @@ list_backups() {
     du -sh "$BACKUP_DIR" 2>/dev/null || echo "  Unknown"
 }
 
+extract_backup_payload() {
+    local backup_file="$1"
+    local extract_dir="$2"
+    local extract_file="$backup_file"
+
+    if [[ "$backup_file" == *.aes ]]; then
+        extract_file=$(decrypt_file "$backup_file")
+    fi
+
+    mkdir -p "$extract_dir"
+    tar -xzf "$extract_file" -C "$extract_dir"
+}
+
+validate_restore_readiness() {
+    local extracted_dir="$1"
+    local metadata_file="$extracted_dir/backup-metadata.json"
+    local expected_manifest="$extracted_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME"
+
+    if [[ ! -f "$metadata_file" ]]; then
+        log_error "Restore payload is missing backup-metadata.json"
+        return 1
+    fi
+
+    if [[ ! -d "$extracted_dir/config" ]]; then
+        log_error "Restore payload is missing config/"
+        return 1
+    fi
+
+    if [[ ! -d "$extracted_dir/data" ]]; then
+        log_error "Restore payload is missing data/"
+        return 1
+    fi
+
+    if [[ ! -f "$extracted_dir/.env" ]]; then
+        log_error "Restore payload is missing .env"
+        return 1
+    fi
+
+    if [[ ! -f "$extracted_dir/docker-compose.yml" ]]; then
+        log_error "Restore payload is missing docker-compose.yml"
+        return 1
+    fi
+
+    if [[ ! -f "$extracted_dir/docker-compose.prod.yml" ]]; then
+        log_error "Restore payload is missing docker-compose.prod.yml"
+        return 1
+    fi
+
+    if ! jq -e '.restore_readiness.moltis.ready == true' "$metadata_file" >/dev/null 2>&1; then
+        log_error "Backup metadata does not mark Moltis restore readiness as ready"
+        return 1
+    fi
+
+    if [[ -f "$metadata_file" ]] && jq -e '.clawdiy.included == true' "$metadata_file" >/dev/null 2>&1; then
+        if [[ ! -f "$expected_manifest" ]]; then
+            log_error "Restore payload is missing $CLAWDIY_EVIDENCE_MANIFEST_NAME for Clawdiy"
+            return 1
+        fi
+
+        if [[ ! -d "$extracted_dir/config/clawdiy" || ! -d "$extracted_dir/data/clawdiy/state" || ! -d "$extracted_dir/data/clawdiy/audit" ]]; then
+            log_error "Restore payload is missing required Clawdiy config/state/audit directories"
+            return 1
+        fi
+    fi
+
+    log_info "Restore readiness verified for payload at $extracted_dir"
+}
+
+restore_check_backup() {
+    local backup_file="$1"
+    local restore_dir="${2:-}"
+    local cleanup_dir=false
+
+    if [[ -z "$restore_dir" ]]; then
+        restore_dir=$(mktemp -d "${TMPDIR:-/tmp}/moltis-restore-check.XXXXXX")
+        cleanup_dir=true
+    fi
+
+    if ! verify_backup "$backup_file"; then
+        log_error "Backup verification failed, restore readiness check aborted"
+        [[ "$cleanup_dir" == "true" ]] && rm -rf "$restore_dir"
+        return 1
+    fi
+
+    if ! extract_backup_payload "$backup_file" "$restore_dir"; then
+        log_error "Failed to extract backup payload for restore readiness check"
+        [[ "$cleanup_dir" == "true" ]] && rm -rf "$restore_dir"
+        return 1
+    fi
+
+    if ! validate_restore_readiness "$restore_dir"; then
+        [[ "$cleanup_dir" == "true" ]] && rm -rf "$restore_dir"
+        return 1
+    fi
+
+    if [[ "$cleanup_dir" == "true" ]]; then
+        rm -rf "$restore_dir"
+    fi
+
+    log_info "Restore readiness check passed: $backup_file"
+}
+
+restore_runtime_file() {
+    local source_file="$1"
+    local target_file="$2"
+
+    if [[ ! -f "$source_file" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$target_file")"
+    cp "$source_file" "$target_file"
+}
+
 # Verify backup integrity
 verify_backup() {
     local backup_file="$1"
@@ -892,32 +1078,16 @@ restore_backup() {
     local clawdiy_container_present=false
     local clawdiy_restore_expected=false
     local metadata_file=""
-    local expected_manifest=""
 
     log_info "Starting restore from: $backup_file"
     log_warn "This will OVERWRITE existing data!"
 
-    # Verify backup first
-    if ! verify_backup "$backup_file"; then
-        log_error "Backup verification failed, aborting restore"
+    if ! restore_check_backup "$backup_file" "$restore_dir"; then
+        log_error "Restore readiness check failed, aborting restore"
         return 1
     fi
 
-    # Decrypt if needed
-    local restore_file="$backup_file"
-    if [[ "$backup_file" == *.aes ]]; then
-        restore_file=$(decrypt_file "$backup_file")
-    fi
-
-    # Create restore directory
-    mkdir -p "$restore_dir"
-
-    # Extract backup
-    log_info "Extracting backup to: $restore_dir"
-    tar -xzf "$restore_file" -C "$restore_dir"
-
     metadata_file="$restore_dir/backup-metadata.json"
-    expected_manifest="$restore_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME"
 
     if [[ -f "$metadata_file" ]] && jq -e '.clawdiy.included == true' "$metadata_file" >/dev/null 2>&1; then
         clawdiy_restore_expected=true
@@ -952,6 +1122,13 @@ restore_backup() {
     log_info "Restoring data..."
     rsync -av --delete "$restore_dir/data/" "$DATA_DIR/"
     rsync -av --delete "$restore_dir/config/" "$CONFIG_DIR/"
+
+    if string_is_true "$BACKUP_RESTORE_RUNTIME_FILES"; then
+        log_info "Restoring runtime env and compose files..."
+        restore_runtime_file "$restore_dir/.env" "$RUNTIME_ENV_FILE"
+        restore_runtime_file "$restore_dir/docker-compose.yml" "$COMPOSE_FILE_MAIN"
+        restore_runtime_file "$restore_dir/docker-compose.prod.yml" "$COMPOSE_FILE_PROD"
+    fi
 
     if string_is_true "$CLAWDIY_BACKUP_ENABLED" && [[ -e "$restore_dir/config/clawdiy" || -e "$restore_dir/data/clawdiy" ]]; then
         log_info "Clawdiy backup inventory detected in restore payload"
@@ -1008,11 +1185,12 @@ EOF
 
 show_usage() {
     cat <<EOF
-Usage: $0 [OPTIONS] {backup|verify|restore|list|rotate|generate-key}
+Usage: $0 [OPTIONS] {backup|verify|restore-check|restore|list|rotate|generate-key}
 
 Commands:
   backup                Create a new backup
   verify <file>         Verify backup integrity
+  restore-check <file>  Verify that a backup is restore-ready without mutating runtime
   restore <file> [dir]  Restore from backup
   list                  List available backups
   rotate                Rotate old backups
@@ -1034,10 +1212,11 @@ Environment Variables:
   BACKUP_STATUS_FILE    Path to backup status JSON file (default: /var/lib/moltis/backup-status.json)
 
 Examples:
-  $0 backup                    # Create backup (human-readable output)
-  $0 --json backup             # Create backup (JSON output)
-  $0 verify /path/to/backup    # Verify backup integrity
-  $0 list                      # List all backups
+  $0 backup                          # Create backup (human-readable output)
+  $0 --json backup                   # Create backup (JSON output)
+  $0 verify /path/to/backup          # Verify backup integrity
+  $0 restore-check /path/to/backup   # Verify restore readiness
+  $0 list                            # List all backups
 EOF
 }
 
@@ -1056,7 +1235,7 @@ main() {
                 show_usage
                 exit 0
                 ;;
-            backup|verify|restore|list|rotate|generate-key)
+            backup|verify|restore-check|restore|list|rotate|generate-key)
                 action="$1"
                 shift
                 # Collect remaining arguments for the action
@@ -1166,6 +1345,16 @@ main() {
                 exit $EXIT_GENERAL_ERROR
             fi
             verify_backup "$backup_file"
+            ;;
+
+        restore-check)
+            local backup_file="${action_args[0]:-}"
+            local restore_dir="${action_args[1]:-}"
+            if [[ -z "$backup_file" ]]; then
+                log_error "Usage: $0 restore-check <backup-file> [restore-dir]"
+                exit $EXIT_GENERAL_ERROR
+            fi
+            restore_check_backup "$backup_file" "$restore_dir"
             ;;
 
         restore)

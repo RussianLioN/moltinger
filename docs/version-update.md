@@ -1,165 +1,78 @@
 # Version Update Process
 
-This document describes how to manage Docker image versions for the Moltis infrastructure.
+This document defines the safe way to update Moltis versions in this repository.
 
-## Checking Current Versions
+## Current Version
 
-Use the Makefile target to see currently configured versions:
+Check the tracked version defaults:
 
 ```bash
 make version-check
 ```
 
-Output example:
-```
-Moltis version:
-docker-compose.yml:    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v1.7.0}
-docker-compose.prod.yml:    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v1.7.0}
+## Production Rule
 
-Watchtower version:
-docker-compose.yml:    image: containrrr/watchtower:1.7.1
-docker-compose.prod.yml:    image: containrrr/watchtower:1.7.1
-```
+Production Moltis updates are git-based and backup-safe only.
 
-## Updating Moltis Version
+Allowed:
 
-The Moltis version is configured in both `docker-compose.yml` and `docker-compose.prod.yml`.
+- update `docker-compose.yml` and `docker-compose.prod.yml` in git
+- commit and push the version change
+- deploy only after fresh backup + restore-check pass
 
-### Method 1: Environment Variable (Recommended for quick testing)
+Forbidden:
 
-```bash
-export MOLTIS_VERSION=v1.8.0
-make deploy
-```
+- `sed -i` edits on the server
+- ad-hoc image pulls without a matching pre-update backup
+- rollout when restore-check has not passed for the same backup
 
-### Method 2: Update Default Version (Persistent)
+## Required Update Flow
 
-Edit both compose files to change the default version:
+1. Change the tracked image version in:
+   - `docker-compose.yml`
+   - `docker-compose.prod.yml`
+2. Commit the change in git.
+3. Capture a fresh pre-update backup.
+4. Run restore-check against that fresh backup.
+5. Only then roll out the updated Moltis container.
 
-```bash
-# Update docker-compose.yml
-sed -i 's/MOLTIS_VERSION:-v1.7.0/MOLTIS_VERSION:-v1.8.0/' docker-compose.yml
+Preferred operator runbook:
 
-# Update docker-compose.prod.yml
-sed -i 's/MOLTIS_VERSION:-v1.7.0/MOLTIS_VERSION:-v1.8.0/' docker-compose.prod.yml
-```
+- [moltis-backup-safe-update.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/runbooks/moltis-backup-safe-update.md)
 
-Or manually edit the files and change the image line:
-```yaml
-image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v1.8.0}
-```
-
-### Git Commit for Version Changes
-
-After updating versions, commit the changes:
+## Manual Server Helper
 
 ```bash
-git add docker-compose.yml docker-compose.prod.yml
-git commit -m "chore: bump Moltis to v1.8.0"
-git push
+./scripts/backup-moltis-enhanced.sh --json backup
+BACKUP_FILE="$(cat .last-moltis-backup)"
+./scripts/backup-moltis-enhanced.sh restore-check "$BACKUP_FILE"
+./scripts/deploy.sh --json moltis deploy
 ```
 
-## Updating Watchtower Version
+## GitHub Actions Path
 
-Watchtower handles automatic container updates. Pin to a specific version for stability.
+`.github/workflows/deploy.yml` is expected to:
 
-### Steps
+- create a fresh pre-update backup
+- validate restore readiness of that backup
+- block deploy if restore readiness fails
 
-1. Check available releases: https://github.com/containrrr/watchtower/releases
-2. Update both compose files:
+## Rollback Expectations
 
-```yaml
-image: containrrr/watchtower:v2.0.0
-```
+If the update regresses, rollback must preserve:
 
-3. Commit the change:
+- backup reference
+- restore-check reference
+- pre/post image references
+- pre/post health
+- rollback reason
 
-```bash
-git add docker-compose.yml docker-compose.prod.yml
-git commit -m "chore: bump Watchtower to v2.0.0"
-git push
-```
+Runtime audit paths:
 
-## Deployment Verification
+- `data/moltis/audit/restore-checks/`
+- `data/moltis/audit/rollback-evidence/`
 
-After updating versions, verify the deployment:
+## References
 
-### 1. Check Container Status
-
-```bash
-make status
-```
-
-### 2. Verify Image Version
-
-```bash
-docker inspect moltis --format '{{.Config.Image}}'
-```
-
-### 3. Health Check
-
-```bash
-make health-check
-```
-
-### 4. Check Logs
-
-```bash
-make logs LOGS_OPTS="-f --tail=100"
-```
-
-### 5. Verify Watchtower is Running
-
-```bash
-docker logs watchtower --tail=50
-```
-
-## Rollback Process
-
-If a version update causes issues:
-
-### Quick Rollback
-
-```bash
-# Stop current deployment
-make stop
-
-# Revert to previous version
-export MOLTIS_VERSION=v1.7.0
-make deploy
-```
-
-### Git-based Rollback
-
-```bash
-# Find the commit with the previous version
-git log --oneline -10
-
-# Revert the version change commit
-git revert <commit-sha>
-git push
-
-# Redeploy
-make deploy
-```
-
-## Version Pinning Best Practices
-
-1. **Always pin versions** - Never use `:latest` tag in production
-2. **Use semantic versioning** - Pin to major.minor.patch (e.g., `v1.7.0`)
-3. **Test before production** - Deploy to dev/staging first
-4. **Document changes** - Include version updates in release notes
-5. **Monitor after updates** - Watch logs and metrics for anomalies
-
-## Environment Variables Reference
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MOLTIS_VERSION` | `v1.7.0` | Moltis application version |
-| `WATCHTOWER_VERSION` | `v1.7.1` | Watchtower auto-updater version |
-
-## Related Documentation
-
-- [Deployment Strategy](./deployment-strategy.md)
-- [Infrastructure Overview](./INFRASTRUCTURE.md)
-- [Quick Reference](./QUICK-REFERENCE.md)
+- [deployment-strategy.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/deployment-strategy.md)
+- [disaster-recovery.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/disaster-recovery.md)

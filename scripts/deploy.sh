@@ -46,6 +46,7 @@ declare -a JSON_SERVICES=()
 DEPLOY_START_TIME=0
 DEPLOY_ACTION=""
 DEPLOY_IMAGE=""
+DEPLOY_RESTORE_CHECK_FILE=""
 
 # Target-specific state
 TARGET_DISPLAY=""
@@ -57,6 +58,7 @@ TARGET_HEALTH_URL=""
 TARGET_METRICS_URL=""
 TARGET_LAST_IMAGE_FILE=""
 TARGET_LAST_BACKUP_FILE=""
+TARGET_LAST_RESTORE_CHECK_FILE=""
 TARGET_NOTIFICATION_NAME=""
 TARGET_REQUIRED_NETWORKS=()
 TARGET_AUXILIARY_SERVICES=()
@@ -141,8 +143,9 @@ output_json_result() {
             --argjson duration "$duration_ms" \
             --arg health "$health" \
             --arg evidence_file "$DEPLOY_EVIDENCE_FILE" \
+            --arg restore_check_file "$DEPLOY_RESTORE_CHECK_FILE" \
             --argjson services "$services_json" \
-            '{image: $image, duration_ms: $duration, health: $health, services: $services, rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end)}')
+            '{image: $image, duration_ms: $duration, health: $health, services: $services, rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end), restore_check_file: (if $restore_check_file == "" then null else $restore_check_file end)}')
     fi
 
     jq -n \
@@ -283,6 +286,7 @@ configure_target() {
             TARGET_METRICS_URL="http://localhost:13131/metrics"
             TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/.last-deployed-image"
             TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/.last-moltis-backup"
+            TARGET_LAST_RESTORE_CHECK_FILE="$PROJECT_ROOT/.last-moltis-restore-check"
             TARGET_NOTIFICATION_NAME="Moltis"
             TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
             TARGET_REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
@@ -310,6 +314,7 @@ configure_target() {
             server_port="${server_port:-18789}"
             TARGET_HEALTH_URL="http://localhost:${server_port}/health"
             TARGET_METRICS_URL="http://localhost:${server_port}/metrics"
+            TARGET_LAST_RESTORE_CHECK_FILE=""
             ;;
         *)
             echo "Unsupported target: $TARGET" >&2
@@ -416,6 +421,113 @@ latest_backup_path() {
     ls -t "$BACKUP_DIR"/daily/moltis_* "$BACKUP_DIR"/weekly/moltis_* "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1 || true
 }
 
+latest_restore_check_path() {
+    if [[ -n "$TARGET_LAST_RESTORE_CHECK_FILE" && -f "$TARGET_LAST_RESTORE_CHECK_FILE" && -s "$TARGET_LAST_RESTORE_CHECK_FILE" ]]; then
+        cat "$TARGET_LAST_RESTORE_CHECK_FILE"
+        return 0
+    fi
+
+    return 0
+}
+
+ensure_moltis_audit_paths() {
+    mkdir -p \
+        "$PROJECT_ROOT/data/moltis/audit/restore-checks" \
+        "$PROJECT_ROOT/data/moltis/audit/rollback-evidence"
+}
+
+write_moltis_restore_check_evidence() {
+    local backup_ref="$1"
+    local evidence_root="$PROJECT_ROOT/data/moltis/audit/restore-checks"
+    local evidence_file="$evidence_root/restore-check-$(date -u +%Y%m%dT%H%M%SZ).json"
+    local current_image current_health
+
+    ensure_moltis_audit_paths
+    current_image="$(get_current_version)"
+    current_health="$(curl -s -o /dev/null -w '%{http_code}' "$TARGET_HEALTH_URL" 2>/dev/null || echo "000")"
+
+    cat > "$evidence_file" <<EOF
+{
+  "schema_version": "v1",
+  "target": "moltis",
+  "checked_at": "$(get_timestamp)",
+  "backup_reference": $(printf '%s' "$backup_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "restore_check_command": "./scripts/backup-moltis-enhanced.sh restore-check <backup>",
+  "pre_update_image": "$current_image",
+  "moltis_health_http_code_before_update": $current_health,
+  "status": "passed"
+}
+EOF
+
+    if [[ -n "$TARGET_LAST_RESTORE_CHECK_FILE" ]]; then
+        echo "$evidence_file" > "$TARGET_LAST_RESTORE_CHECK_FILE"
+    fi
+
+    DEPLOY_RESTORE_CHECK_FILE="$evidence_file"
+    printf '%s' "$evidence_file"
+}
+
+capture_moltis_rollback_evidence() {
+    local reason="$1"
+    local evidence_root="$PROJECT_ROOT/data/moltis/audit/rollback-evidence"
+    local evidence_file="$evidence_root/rollback-$(date -u +%Y%m%dT%H%M%SZ).json"
+    local current_image current_health backup_ref restore_check_ref
+
+    ensure_moltis_audit_paths
+    current_image="$(get_current_version)"
+    current_health="$(curl -s -o /dev/null -w '%{http_code}' "$TARGET_HEALTH_URL" 2>/dev/null || echo "000")"
+    backup_ref="$(latest_backup_path)"
+    restore_check_ref="$(latest_restore_check_path)"
+
+    cat > "$evidence_file" <<EOF
+{
+  "schema_version": "v1",
+  "target": "moltis",
+  "captured_at": "$(get_timestamp)",
+  "rollback_reason": "$reason",
+  "backup_reference": $(printf '%s' "$backup_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "restore_check_reference": $(printf '%s' "$restore_check_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "pre_rollback_image": "$current_image",
+  "pre_rollback_health_http_code": $current_health,
+  "resulting_mode": null,
+  "post_rollback_image": null,
+  "post_rollback_health_http_code": null,
+  "status": "captured"
+}
+EOF
+
+    DEPLOY_EVIDENCE_FILE="$evidence_file"
+    printf '%s' "$evidence_file"
+}
+
+update_moltis_rollback_evidence() {
+    local evidence_file="$1"
+    local resulting_mode="$2"
+
+    if [[ -z "$evidence_file" || ! -f "$evidence_file" ]]; then
+        return 0
+    fi
+
+    local post_image post_health tmp_file
+    post_image="$(get_current_version)"
+    post_health="$(curl -s -o /dev/null -w '%{http_code}' "$TARGET_HEALTH_URL" 2>/dev/null || echo "000")"
+    tmp_file="$(mktemp)"
+
+    jq \
+        --arg resulting_mode "$resulting_mode" \
+        --arg post_image "$post_image" \
+        --arg completed_at "$(get_timestamp)" \
+        --argjson post_health "$post_health" \
+        '.resulting_mode = $resulting_mode
+        | .post_rollback_image = (if $post_image == "" then null else $post_image end)
+        | .post_rollback_health_http_code = $post_health
+        | .completed_at = $completed_at
+        | .status = "completed"' \
+        "$evidence_file" > "$tmp_file"
+
+    mv "$tmp_file" "$evidence_file"
+}
+
 capture_clawdiy_rollback_evidence() {
     local reason="$1"
     local evidence_root="$PROJECT_ROOT/data/clawdiy/audit/rollback-evidence"
@@ -512,6 +624,10 @@ check_prerequisites() {
     fi
 
     if [[ "$TARGET" == "moltis" ]]; then
+        if [[ "$action" == "deploy" || "$action" == "rollback" ]]; then
+            ensure_moltis_audit_paths
+        fi
+
         if [[ ! -f "$PROJECT_ROOT/secrets/moltis_password.txt" ]]; then
             log_warn "Secrets file not found, creating from .env"
             mkdir -p "$PROJECT_ROOT/secrets"
@@ -624,7 +740,24 @@ backup_current_state() {
             echo "$backup_path" > "$TARGET_LAST_BACKUP_FILE"
             log_info "Stored latest backup reference for target $TARGET: $backup_path"
         fi
+
+        if [[ "$TARGET" == "moltis" ]]; then
+            if [[ -z "$backup_path" || ! -f "$backup_path" ]]; then
+                log_error "Pre-deployment backup did not produce a valid archive for Moltis"
+                exit 1
+            fi
+
+            log_info "Running restore-readiness check for Moltis backup..."
+            "$BACKUP_SCRIPT" restore-check "$backup_path"
+            write_moltis_restore_check_evidence "$backup_path" >/dev/null
+            log_success "Restore-readiness evidence recorded: $DEPLOY_RESTORE_CHECK_FILE"
+        fi
     else
+        if [[ "$TARGET" == "moltis" ]]; then
+            log_error "Backup script is required for Moltis pre-deployment backup and restore-readiness checks"
+            exit 1
+        fi
+
         log_warn "Backup script not executable, skipping pre-deployment backup archive"
     fi
 
@@ -660,6 +793,8 @@ rollback() {
 
     if [[ "$TARGET" == "clawdiy" ]]; then
         evidence_file="$(capture_clawdiy_rollback_evidence "$ROLLBACK_REASON")"
+    elif [[ "$TARGET" == "moltis" ]]; then
+        evidence_file="$(capture_moltis_rollback_evidence "$ROLLBACK_REASON")"
     fi
 
     if [[ -n "$last_image" && "$last_image" != "none" ]]; then
@@ -674,10 +809,13 @@ rollback() {
         log_error "No previous image found for rollback"
 
         local latest_backup
-        latest_backup=$(ls -t /var/backups/moltis/daily/*.tar.gz* 2>/dev/null | head -1 || true)
+        latest_backup="$(latest_backup_path)"
         if [[ -n "$latest_backup" ]]; then
             log_info "Attempting restore from backup: $latest_backup"
             "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh" restore "$latest_backup"
+            resulting_mode="restored_from_backup"
+        else
+            resulting_mode="failed"
         fi
     else
         log_warn "No previous Clawdiy image found, disabling Clawdiy stack instead"
@@ -687,6 +825,8 @@ rollback() {
 
     if [[ "$TARGET" == "clawdiy" ]]; then
         update_clawdiy_rollback_evidence "$evidence_file" "$resulting_mode"
+    elif [[ "$TARGET" == "moltis" ]]; then
+        update_moltis_rollback_evidence "$evidence_file" "$resulting_mode"
     fi
 
     log_success "Rollback complete for target $TARGET"

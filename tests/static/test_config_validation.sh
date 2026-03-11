@@ -10,6 +10,7 @@ TEST_FIXTURE_CONFIG="$PROJECT_ROOT/tests/fixtures/config/moltis.toml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
+DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
@@ -17,6 +18,7 @@ FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
 MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
+BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -130,31 +132,31 @@ PY
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
-    if rg -q 'data/\.deployed-sha' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'data/\.deployment-info' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if rg -q 'data/\.deployed-sha' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/\.deployment-info' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
         test_fail "Deploy workflow should write audit markers under data/"
     fi
 
     test_start "static_deploy_audit_markers_not_written_to_repo_root"
-    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$PROJECT_ROOT/.github/workflows/deploy.yml" >/dev/null 2>&1; then
+    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$DEPLOY_WORKFLOW" >/dev/null 2>&1; then
         test_fail "Deploy workflow still writes audit markers to repo root"
     else
         test_pass
     fi
 
     test_start "static_deploy_server_git_checkout_aligned_after_success"
-    if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -Fq 'git reset --hard "${{ github.sha }}"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'git reset --hard "${{ github.sha }}"' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
         test_fail "Deploy workflow should align server git checkout after successful sync"
     fi
 
     test_start "static_deploy_pending_sync_is_not_treated_as_hard_drift"
-    if rg -q 'Pending Sync' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'Hard block applies only to dirty server worktree' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if rg -q 'Pending Sync' "$DEPLOY_WORKFLOW" && \
+       rg -q 'Hard block applies only to dirty server worktree' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
@@ -211,6 +213,35 @@ PY
         test_pass
     else
         test_fail "Deploy verification and runbook must classify post-upgrade protocol skew as an operator signal before rollback"
+    fi
+
+    test_start "static_moltis_workflow_validates_restore_readiness"
+    if rg -q 'Validate Moltis restore readiness' "$DEPLOY_WORKFLOW" && \
+       rg -q 'compose-main' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/moltis/audit/restore-checks' "$DEPLOY_WORKFLOW" && \
+       rg -q 'has_env' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must enforce a restore-readiness gate for the fresh Moltis pre-update backup"
+    fi
+
+    test_start "static_backup_script_captures_runtime_restore_payload"
+    if rg -q 'RUNTIME_ENV_FILE' "$BACKUP_SCRIPT" && \
+       rg -q 'docker-compose.prod.yml' "$BACKUP_SCRIPT" && \
+       rg -q 'restore-check' "$BACKUP_SCRIPT" && \
+       rg -q 'restore_readiness' "$BACKUP_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Backup script must archive Moltis runtime files and expose restore-check readiness validation"
+    fi
+
+    test_start "static_deploy_script_enforces_moltis_backup_safe_rollout"
+    if rg -q 'restore-check "\$backup_path"' "$DEPLOY_SCRIPT" && \
+       rg -q '\.last-moltis-restore-check' "$DEPLOY_SCRIPT" && \
+       rg -q 'data/moltis/audit/rollback-evidence' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "deploy.sh must require restore-check before Moltis deploy and record rollback evidence for rollback-safe updates"
     fi
 
     test_start "static_clawdiy_workflow_exists"

@@ -237,6 +237,29 @@ GitOps Compliance: Enforced ✅
 - live browser inspection on `https://clawdiy.ainetic.tech`
 - `git diff --check`
 
+### 2026-03-12: Moltis Backup-Safe Update Baseline (z8m.1)
+
+**Статус**: ✅ Phase B baseline complete on branch `feat/moltinger-z8m-1-moltis-backup-rollback-baseline`
+
+- Audited the existing Moltis backup/restore path and closed the main rollout gap: backup archives now include runtime rollback files (`.env`, `docker-compose.yml`, `docker-compose.prod.yml`) instead of only `config/` and `data/`.
+- Added non-destructive `restore-check` support to `scripts/backup-moltis-enhanced.sh` and wired it into `scripts/deploy.sh` so Moltis deploys stop unless a fresh pre-update backup is also restore-ready.
+- Added Moltis restore-check evidence and rollback evidence paths under `data/moltis/audit/` and documented the operator flow in `docs/runbooks/moltis-backup-safe-update.md`.
+- Hardened `.github/workflows/deploy.yml` so the Git-based Moltis rollout path now backs up both compose files and blocks deploy when the fresh backup is not restore-ready.
+- Added regression coverage via `tests/component/test_backup_restore_readiness.sh` and static assertions for the new workflow/script contract.
+
+**Validated**
+
+- `bash -n scripts/backup-moltis-enhanced.sh scripts/deploy.sh tests/component/test_backup_restore_readiness.sh tests/static/test_config_validation.sh tests/run.sh`
+- `./tests/run.sh --lane component --filter backup_restore_readiness --json`
+- `./tests/run.sh --lane static --filter config_validation --json`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); puts "deploy.yml ok"'`
+
+**Next**
+
+- `moltinger-z8m.3`: bump Moltis via git and roll out only through the backup-safe path that now requires fresh backup + restore-check.
+- `moltinger-z8m.4`: fix any post-update regressions while preserving the new rollback evidence contract.
+- `moltinger-z8m.2`: add skills/subagents/abilities only after the updated Moltis baseline is confirmed stable.
+
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 
 **Статус**: ✅ RCA-010 captured and codified
