@@ -45,6 +45,7 @@ const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 let stage = "login";
 let retriesUsed = 0;
 let chatOpenVerified = false;
+let lastChatOpenCheck = null;
 
 function normalizeMessageText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
@@ -61,6 +62,12 @@ function normalizeProbeMessage(message) {
     direction: String(message?.direction || "unknown"),
     text: normalizeMessageText(message?.text),
   };
+}
+
+function previewText(value, limit = 160) {
+  const normalized = normalizeMessageText(value);
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, Math.max(0, limit - 1))}...`;
 }
 
 function maxObservedMid(messages) {
@@ -109,7 +116,7 @@ function summarizeMessage(message) {
   return {
     mid: normalized.mid,
     direction: normalized.direction,
-    text: normalized.text,
+    text: previewText(normalized.text),
   };
 }
 
@@ -261,6 +268,52 @@ function failurePayload({ code, hint, diagnosticContext, correlation, stats, ext
     recommended_action: failure.recommended_action,
     ...(hint ? { hint } : {}),
     ...extra,
+  };
+}
+
+export function buildSendDebugSnapshot(rawSnapshot, probeText, minMidExclusive = 0) {
+  const messages = Array.isArray(rawSnapshot?.bubbles)
+    ? rawSnapshot.bubbles.map(normalizeProbeMessage)
+    : [];
+  const normalizedProbeText = normalizeMessageText(probeText);
+  const exactOutgoingMatches = messages
+    .filter(
+      (message) =>
+        message.direction === "out" &&
+        message.mid > minMidExclusive &&
+        message.text === normalizedProbeText
+    )
+    .slice(-5)
+    .map(summarizeMessage);
+
+  return {
+    url: String(rawSnapshot?.url || ""),
+    hash: String(rawSnapshot?.hash || ""),
+    composer: {
+      present: Boolean(rawSnapshot?.composer?.present),
+      contenteditable: Boolean(rawSnapshot?.composer?.contenteditable),
+      peer_id: rawSnapshot?.composer?.peerId ?? null,
+      draft_text_length: Number(rawSnapshot?.composer?.draftTextLength || 0),
+      draft_text_preview: previewText(rawSnapshot?.composer?.draftTextPreview || ""),
+      draft_matches_probe:
+        normalizeMessageText(rawSnapshot?.composer?.draftTextPreview || "") === normalizedProbeText,
+    },
+    send_button: {
+      present: Boolean(rawSnapshot?.sendButton?.present),
+      enabled: Boolean(rawSnapshot?.sendButton?.enabled),
+      aria_label: previewText(rawSnapshot?.sendButton?.ariaLabel || "", 80),
+      title: previewText(rawSnapshot?.sendButton?.title || "", 80),
+    },
+    active_element: {
+      tag: String(rawSnapshot?.activeElement?.tag || ""),
+      role: String(rawSnapshot?.activeElement?.role || ""),
+      aria_label: previewText(rawSnapshot?.activeElement?.ariaLabel || "", 80),
+      class_name: previewText(rawSnapshot?.activeElement?.className || "", 120),
+    },
+    verification_prompt_present: Boolean(rawSnapshot?.verificationPromptPresent),
+    bubble_count: messages.length,
+    exact_outgoing_probe_candidates: exactOutgoingMatches,
+    last_bubbles: messages.slice(-8).map(summarizeMessage),
   };
 }
 
@@ -500,6 +553,82 @@ async function verifyChatOpen(page, targetValue) {
     .catch(() => ({ open: false, hashHasTarget: false, hasComposer: false, hasChatPane: false }));
 }
 
+async function collectSendDebugSnapshot(page, probeText, minMidExclusive = 0) {
+  const rawSnapshot = await page
+    .evaluate(() => {
+      const composer =
+        document.querySelector('div.input-message-input[contenteditable="true"][data-peer-id]') ||
+        document.querySelector('.input-message-container div.input-message-input[contenteditable="true"]') ||
+        document.querySelector('.input-message-container [contenteditable="true"]') ||
+        document.querySelector('div[contenteditable="true"]');
+      const sendButton =
+        document.querySelector('button[aria-label*="Send" i]') ||
+        document.querySelector('button[title*="Send" i]') ||
+        document.querySelector('.btn-send, .send, .new-message-send');
+      const activeElement = document.activeElement;
+      const bubbles = Array.from(document.querySelectorAll(".bubble")).map((bubble) => {
+        const className = (bubble.className || "").toString();
+        const textNode =
+          bubble.querySelector(".translatable-message") ||
+          bubble.querySelector(".bubble-content") ||
+          bubble;
+        const text = (textNode.textContent || "").replace(/\s+/g, " ").trim();
+        const midRaw = bubble.closest("[data-mid]")?.getAttribute("data-mid");
+        let direction = "unknown";
+        if (className.includes(" is-in ")) direction = "in";
+        if (className.includes(" is-out ")) direction = "out";
+        if (className.includes(" service ")) direction = "service";
+        return {
+          mid: midRaw ? Number(midRaw) : null,
+          direction,
+          text,
+        };
+      });
+
+      return {
+        url: location.href,
+        hash: location.hash || "",
+        composer: composer
+          ? {
+              present: true,
+              contenteditable: composer.getAttribute("contenteditable") === "true",
+              peerId: composer.getAttribute("data-peer-id"),
+              draftTextLength: (composer.textContent || "").replace(/\s+/g, " ").trim().length,
+              draftTextPreview: (composer.textContent || "").replace(/\s+/g, " ").trim(),
+            }
+          : { present: false },
+        sendButton: sendButton
+          ? {
+              present: true,
+              enabled: !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true",
+              ariaLabel: sendButton.getAttribute("aria-label") || "",
+              title: sendButton.getAttribute("title") || "",
+            }
+          : { present: false },
+        activeElement: activeElement
+          ? {
+              tag: activeElement.tagName || "",
+              role: activeElement.getAttribute?.("role") || "",
+              ariaLabel: activeElement.getAttribute?.("aria-label") || "",
+              className: (activeElement.className || "").toString(),
+            }
+          : null,
+        verificationPromptPresent: /verification code|enter the verification code/i.test(document.body?.innerText || ""),
+        bubbles,
+      };
+    })
+    .catch((error) => ({
+      evaluate_error: error?.message || "send_debug_capture_failed",
+      bubbles: [],
+    }));
+
+  const snapshot = buildSendDebugSnapshot(rawSnapshot, probeText, minMidExclusive);
+  if (rawSnapshot?.evaluate_error) {
+    snapshot.capture_error = rawSnapshot.evaluate_error;
+  }
+  return snapshot;
+}
+
 async function openTargetChat(page, search, targetValue, maxRetries = 1) {
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     stage = "search";
@@ -514,6 +643,7 @@ async function openTargetChat(page, search, targetValue, maxRetries = 1) {
       await chat.click({ timeout: 10_000 });
       await page.waitForTimeout(1000 + attempt * 300);
       const verified = await verifyChatOpen(page, targetValue);
+      lastChatOpenCheck = verified;
       if (verified.open) {
         chatOpenVerified = true;
         return true;
@@ -637,6 +767,7 @@ async function main() {
             code: "chat_open_failure",
             diagnosticContext: {
               target,
+              chat_open_check: lastChatOpenCheck,
             },
             stats: await pageStats(page),
           })
@@ -722,6 +853,7 @@ async function main() {
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.press("Backspace");
     await page.keyboard.type(text, { delay: 20 });
+    const preSendDebug = debug ? await collectSendDebugSnapshot(page, text, beforeMaxMid) : null;
     await page.keyboard.press("Enter");
 
     const sentObservedAtMs = Date.now();
@@ -734,6 +866,7 @@ async function main() {
     }
 
     if (!sentMessage) {
+      const postSendDebug = debug ? await collectSendDebugSnapshot(page, text, beforeMaxMid) : null;
       const correlation = buildCorrelationWindow({
         quietWindowMs,
         quietWindowWaitMs,
@@ -753,8 +886,18 @@ async function main() {
             diagnosticContext: {
               target,
               sent_text: text,
+              chat_open_check: lastChatOpenCheck,
             },
             stats: await pageStats(page),
+            extra:
+              debug && (preSendDebug || postSendDebug)
+                ? {
+                    restricted_debug: {
+                      pre_send_snapshot: preSendDebug,
+                      post_send_snapshot: postSendDebug,
+                    },
+                  }
+                : {},
           })
         )
       );

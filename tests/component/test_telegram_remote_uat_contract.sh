@@ -15,7 +15,7 @@ setup_remote_uat_contract_fixture() {
 
     cat > "$TEST_TMPDIR/telegram-web-user-monitor.sh" <<'SH'
 #!/usr/bin/env bash
-cat <<'JSON'
+base_payload="$(cat <<'JSON'
 {
   "ok": false,
   "status": "fail",
@@ -42,6 +42,21 @@ cat <<'JSON'
   "recommended_action": "Inspect send diagnostics and rerun."
 }
 JSON
+)"
+
+if [[ "${TELEGRAM_WEB_DEBUG:-false}" == "true" ]]; then
+  jq '. + {
+    restricted_debug: {
+      debug_flag: true,
+      dom: {
+        send_button_present: true,
+        draft_matches_probe: true
+      }
+    }
+  }' <<<"$base_payload"
+else
+  printf '%s\n' "$base_payload"
+fi
 SH
     chmod +x "$TEST_TMPDIR/telegram-web-user-monitor.sh"
 
@@ -87,11 +102,13 @@ run_component_telegram_remote_uat_contract_tests() {
             && ! grep -q '/opt/moltinger/data/.telegram-web-state.json' "$TEST_TMPDIR/result.json" \
             && jq -e '.diagnostic_context.state_file == ".telegram-web-state.json"' "$TEST_TMPDIR/result.json" >/dev/null 2>&1 \
             && jq -e '.debug_bundle.available == true' "$TEST_TMPDIR/result.json" >/dev/null 2>&1 \
-            && grep -q 'secret-token' "$TEST_TMPDIR/debug.json"
+            && grep -q 'secret-token' "$TEST_TMPDIR/debug.json" \
+            && jq -e '.authoritative_raw.restricted_debug.debug_flag == true' "$TEST_TMPDIR/debug.json" >/dev/null 2>&1 \
+            && ! grep -q 'debug_flag' "$TEST_TMPDIR/result.json"
         then
             test_pass
         else
-            test_fail "Review-safe artifact must redact token/session/state-path while restricted debug keeps raw helper evidence"
+            test_fail "Review-safe artifact must redact token/session/state-path and keep restricted debug only in the debug bundle"
         fi
     fi
 

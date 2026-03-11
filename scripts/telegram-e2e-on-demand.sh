@@ -511,12 +511,17 @@ run_authoritative_telegram_web() {
 
   local helper_output_file="$TMP_DIR/telegram-web-result.json"
   local helper_error_file="$TMP_DIR/telegram-web-error.log"
+  local helper_debug="false"
+  if [[ -n "$DEBUG_OUTPUT_PATH" || "$VERBOSE" == "true" ]]; then
+    helper_debug="true"
+  fi
 
   set +e
   TELEGRAM_WEB_TARGET="$AUTHORITATIVE_TARGET" \
   TELEGRAM_WEB_STATE="$AUTHORITATIVE_STATE" \
   TELEGRAM_WEB_MESSAGE="$MESSAGE" \
   TELEGRAM_WEB_TIMEOUT_SECONDS="$TIMEOUT_SEC" \
+  TELEGRAM_WEB_DEBUG="$helper_debug" \
   "$helper_script" >"$helper_output_file" 2>"$helper_error_file"
   local helper_exit=$?
   set -e
