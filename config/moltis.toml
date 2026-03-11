@@ -685,6 +685,25 @@ rate_limit_window_secs = 60
 # ══════════════════════════════════════════════════════════════════════════════
 # Shell commands triggered by events.
 
+[hooks]
+[[hooks.hooks]]
+name = "codex-consent-router"
+command = "./scripts/moltis-codex-consent-router.sh"
+events = ["Command"]
+timeout = 10
+[hooks.hooks.env]
+CODEX_TELEGRAM_CONSENT_STORE_SCRIPT = "./scripts/codex-telegram-consent-store.sh"
+CODEX_TELEGRAM_CONSENT_STORE_DIR = "/opt/moltinger/.tmp/current/codex-telegram-consent-store"
+CODEX_TELEGRAM_CONSENT_ROUTER_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+CODEX_TELEGRAM_CONSENT_ROUTER_ENV_FILE = "/opt/moltinger/.env"
+CODEX_TELEGRAM_CONSENT_ROUTER_SEND_REPLY = "true"
+
+# The production-safe authoritative path in repo-managed config is the
+# structured fallback command `/codex-followup ...`. The router already
+# understands callback-style payloads too, but live callback interception must
+# wait for an ingress surface in Moltis core that can hand callback_query data
+# to repo-managed runtime code before generic handling.
+
 # [hooks]
 # [[hooks.hooks]]
 # name = "my-hook"                # Hook name (for logging)

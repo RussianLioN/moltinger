@@ -23,6 +23,7 @@ Optional:
   --parse-mode MODE           MarkdownV2 | HTML
   --disable-notification      Send silently
   --reply-to MESSAGE_ID       Reply to a specific message
+  --reply-markup-json JSON    Raw Telegram reply_markup JSON object
   --json                      JSON output (default)
   -h, --help                  Show help
 
@@ -40,6 +41,7 @@ TEXT=""
 PARSE_MODE=""
 DISABLE_NOTIFICATION=false
 REPLY_TO=""
+REPLY_MARKUP_JSON=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +63,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --reply-to)
             REPLY_TO="${2:-}"
+            shift 2
+            ;;
+        --reply-markup-json)
+            REPLY_MARKUP_JSON="${2:-}"
             shift 2
             ;;
         --json)
@@ -91,6 +97,7 @@ payload_b64="$(
         --arg parse_mode "$PARSE_MODE" \
         --argjson disable_notification "$DISABLE_NOTIFICATION" \
         --arg reply_to "$REPLY_TO" \
+        --arg reply_markup_json "$REPLY_MARKUP_JSON" \
         '{
             remote_root: $remote_root,
             remote_env_file: $remote_env_file,
@@ -98,7 +105,8 @@ payload_b64="$(
             text: $text,
             parse_mode: $parse_mode,
             disable_notification: $disable_notification,
-            reply_to: $reply_to
+            reply_to: $reply_to,
+            reply_markup_json: $reply_markup_json
         }' | base64 | tr -d '\n'
 )"
 
@@ -114,6 +122,7 @@ text="$(jq -r '.text' <<<"$payload_json")"
 parse_mode="$(jq -r '.parse_mode' <<<"$payload_json")"
 disable_notification="$(jq -r '.disable_notification' <<<"$payload_json")"
 reply_to="$(jq -r '.reply_to' <<<"$payload_json")"
+reply_markup_json="$(jq -r '.reply_markup_json' <<<"$payload_json")"
 
 cd "$remote_root"
 
@@ -134,6 +143,10 @@ fi
 
 if [[ -n "$reply_to" ]]; then
   cmd+=(--reply-to "$reply_to")
+fi
+
+if [[ -n "$reply_markup_json" ]]; then
+  cmd+=(--reply-markup-json "$reply_markup_json")
 fi
 
 MOLTIS_ENV_FILE="$remote_env_file" "${cmd[@]}"

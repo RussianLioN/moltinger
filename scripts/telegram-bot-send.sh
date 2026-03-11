@@ -20,6 +20,7 @@ Optional:
   --parse-mode MODE           MarkdownV2 | HTML
   --disable-notification      Send silently
   --reply-to MESSAGE_ID       Reply to a specific message
+  --reply-markup-json JSON    Raw Telegram reply_markup JSON object
   --token TOKEN               Override TELEGRAM_BOT_TOKEN
   --json                      JSON output (default)
   -h, --help                  Show help
@@ -53,6 +54,7 @@ TEXT=""
 PARSE_MODE=""
 DISABLE_NOTIFICATION="false"
 REPLY_TO=""
+REPLY_MARKUP_JSON=""
 TOKEN_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
@@ -75,6 +77,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --reply-to)
             REPLY_TO="${2:-}"
+            shift 2
+            ;;
+        --reply-markup-json)
+            REPLY_MARKUP_JSON="${2:-}"
             shift 2
             ;;
         --token)
@@ -106,12 +112,18 @@ if [[ -z "$CHAT_ID" || -z "$TEXT" ]]; then
     exit 2
 fi
 
+if [[ -n "$REPLY_MARKUP_JSON" ]] && ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$REPLY_MARKUP_JSON"; then
+    echo "{\"ok\":false,\"error\":\"--reply-markup-json must be a JSON object\",\"script\":\"$SCRIPT_NAME\"}"
+    exit 2
+fi
+
 payload="$(jq -cn \
     --arg chat_id "$CHAT_ID" \
     --arg text "$TEXT" \
     --arg parse_mode "$PARSE_MODE" \
     --argjson disable_notification "$DISABLE_NOTIFICATION" \
     --arg reply_to_message_id "$REPLY_TO" \
+    --arg reply_markup_json "$REPLY_MARKUP_JSON" \
     '{
         chat_id: $chat_id,
         text: $text,
@@ -119,6 +131,7 @@ payload="$(jq -cn \
     }
     + (if ($parse_mode|length) > 0 then {parse_mode: $parse_mode} else {} end)
     + (if ($reply_to_message_id|length) > 0 then {reply_to_message_id: ($reply_to_message_id|tonumber)} else {} end)
+    + (if ($reply_markup_json|length) > 0 then {reply_markup: ($reply_markup_json|fromjson)} else {} end)
     '
 )"
 

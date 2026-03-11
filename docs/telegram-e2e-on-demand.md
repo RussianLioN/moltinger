@@ -99,6 +99,31 @@ gh workflow run telegram-e2e-on-demand.yml \
 - `mode=real_user`: рабочая отправка через MTProto (Telethon) от тестового пользователя к боту.
 - Штатный режим прод-бота не меняется.
 
+## Ограничение для Codex consent routing
+
+После feature `017-codex-telegram-consent-routing` этого harness недостаточно, чтобы доказать исправление UX-багa `alert -> consent -> recommendations`.
+
+Почему:
+
+- `synthetic` режим проверяет chat API, а не реальный Telegram ingress ownership;
+- `real_user` подтверждает поведение пользователя, но не подменяет production routing contract;
+- authoritative consent path теперь опирается на токенизированные действия и shared consent store.
+
+Простыми словами:
+
+- этот harness по-прежнему полезен;
+- но он сам по себе не доказывает, что ответ пользователя больше не уходит в generic chat flow;
+- для этого нужен отдельный Codex-specific acceptance path в следующем implementation slice.
+
+## Что уже можно проверять после feature 017
+
+Сейчас через component/runtime validation уже можно проверить:
+
+- watcher создаёт authoritative consent request;
+- Telegram alert несёт tokenized fallback command;
+- router умеет разобрать command fallback и callback payload;
+- shared store фиксирует решение и expiry.
+
 ## Real User Example
 
 ```bash

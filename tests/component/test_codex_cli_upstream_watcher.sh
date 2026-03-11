@@ -6,6 +6,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 WATCHER_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-upstream-watcher.sh"
+CONSENT_STORE_SCRIPT="$PROJECT_ROOT/scripts/codex-telegram-consent-store.sh"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-upstream-watcher"
 FAKE_TELEGRAM_BIN_DIR=""
 FAKE_TELEGRAM_STATE_DIR=""
@@ -79,7 +80,7 @@ run_component_codex_cli_upstream_watcher_tests() {
         return
     fi
 
-    local work_dir state_file report summary summary_text call_text
+    local work_dir state_file report summary summary_text call_text consent_store_dir request_id store_record
 
     test_start "component_codex_cli_upstream_watcher_emits_extended_schema_shape"
     work_dir="$(secure_temp_dir codex-upstream-watcher-schema)"
@@ -158,27 +159,37 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_contains "$call_text" "0.114.0" "Digest should mention the second queued version"
     test_pass
 
-    test_start "component_codex_cli_upstream_watcher_scheduler_asks_for_practical_recommendations_once"
+    test_start "component_codex_cli_upstream_watcher_scheduler_emits_authoritative_consent_request"
     setup_fake_telegram_sender
     export FAKE_TELEGRAM_STATE_DIR
     work_dir="$(secure_temp_dir codex-upstream-watcher-telegram)"
     state_file="$work_dir/state.json"
+    consent_store_dir="$work_dir/consent-store"
     run_watcher scheduler "$work_dir" "$state_file" \
         --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
         --include-issue-signals \
         --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
         --telegram-enabled \
         --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
-        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
+        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+        --telegram-consent-store-script "$CONSENT_STORE_SCRIPT" \
+        --telegram-consent-store-dir "$consent_store_dir"
     report="$work_dir/report.json"
     call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
+    request_id="$(jq -r '.followup.consent.pending_state.request_id' "$report")"
+    store_record="$consent_store_dir/${request_id}.json"
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Fresh scheduler run should deliver the upstream alert"
     assert_eq "pending" "$(jq -r '.followup.consent.status' "$report")" "Scheduler alert should open a pending consent flow"
-    assert_eq "pending" "$(jq -r '.state.pending_consent.status' "$report")" "State should remember the pending consent request"
+    assert_eq "authoritative" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should advertise authoritative consent routing"
+    assert_eq "true" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Router flag should be exposed in the report"
+    assert_file_exists "$store_record" "Watcher should persist a shared consent record for the authoritative router"
     assert_contains "$call_text" "Хотите получить практические рекомендации" "Alert message should ask whether recommendations are needed"
+    assert_contains "$call_text" "/codex-followup accept" "Alert message should include explicit fallback command"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "--reply-markup-json" "Watcher should pass reply_markup for explicit actions"
+    assert_eq "1" "$(jq -r '.request.question_message_id' "$store_record")" "Shared consent record should be bound to the Telegram alert message id"
     test_pass
 
-    test_start "component_codex_cli_upstream_watcher_yes_reply_triggers_practical_recommendations"
+    test_start "component_codex_cli_upstream_watcher_repeat_scheduler_run_is_suppressed_without_legacy_getupdates"
     run_watcher scheduler "$work_dir" "$state_file" \
         --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
         --include-issue-signals \
@@ -186,37 +197,11 @@ run_component_codex_cli_upstream_watcher_tests() {
         --telegram-enabled \
         --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
         --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
-        --telegram-updates-file "$FIXTURE_DIR/telegram-updates-yes.json"
+        --telegram-consent-store-script "$CONSENT_STORE_SCRIPT" \
+        --telegram-consent-store-dir "$consent_store_dir"
     report="$work_dir/report.json"
-    call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-2.txt")"
-    assert_eq "sent" "$(jq -r '.followup.consent.status' "$report")" "Consent flow should finish after recommendations are sent"
-    assert_eq "2" "$(wc -l < "$FAKE_TELEGRAM_STATE_DIR/calls.log" | tr -d ' ')" "A second Telegram call should send practical recommendations"
-    assert_contains "$call_text" "Практические рекомендации по внедрению в этом проекте" "Second Telegram message should contain practical recommendations"
-    if jq -e '.state.pending_consent? | not' "$report" >/dev/null 2>&1; then
-        test_pass
-    else
-        test_fail "Pending consent should be cleared after recommendations are sent"
-    fi
-
-    test_start "component_codex_cli_upstream_watcher_decline_reply_does_not_send_recommendations"
-    setup_fake_telegram_sender
-    export FAKE_TELEGRAM_STATE_DIR
-    work_dir="$(secure_temp_dir codex-upstream-watcher-no)"
-    state_file="$work_dir/state.json"
-    run_watcher scheduler "$work_dir" "$state_file" \
-        --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
-        --telegram-enabled \
-        --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
-        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
-    run_watcher scheduler "$work_dir" "$state_file" \
-        --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
-        --telegram-enabled \
-        --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
-        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
-        --telegram-updates-file "$FIXTURE_DIR/telegram-updates-no.json"
-    report="$work_dir/report.json"
-    assert_eq "declined" "$(jq -r '.followup.consent.status' "$report")" "Negative reply should close the consent flow"
-    assert_eq "1" "$(wc -l < "$FAKE_TELEGRAM_STATE_DIR/calls.log" | tr -d ' ')" "Decline should not trigger a second Telegram message"
+    assert_eq "suppress" "$(jq -r '.decision.status' "$report")" "Repeated scheduler run should not resend the same upstream event"
+    assert_eq "1" "$(wc -l < "$FAKE_TELEGRAM_STATE_DIR/calls.log" | tr -d ' ')" "Repeated scheduler run should not trigger a second Telegram message"
     test_pass
 
     test_start "component_codex_cli_upstream_watcher_surfaces_primary_parse_investigate"

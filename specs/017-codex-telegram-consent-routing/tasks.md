@@ -13,21 +13,21 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the consent router runtime skeleton in `scripts/moltis-codex-consent-router.sh`
-- [ ] T002 [P] Create the shared consent-store helper skeleton in `scripts/codex-telegram-consent-store.sh`
-- [ ] T003 [P] Create fixture inputs under `tests/fixtures/codex-telegram-consent-routing/`
-- [ ] T004 Create the component test skeleton in `tests/component/test_moltis_codex_consent_router.sh`
-- [ ] T005 Register new scripts and env contracts in `scripts/manifest.json`
-- [ ] T006 Add operator documentation skeleton updates in `docs/codex-cli-upstream-watcher.md` and `docs/telegram-e2e-on-demand.md`
+- [x] T001 Create the consent router runtime skeleton in `scripts/moltis-codex-consent-router.sh`
+- [x] T002 [P] Create the shared consent-store helper skeleton in `scripts/codex-telegram-consent-store.sh`
+- [x] T003 [P] Create fixture inputs under `tests/fixtures/codex-telegram-consent-routing/`
+- [x] T004 Create the component test skeleton in `tests/component/test_moltis_codex_consent_router.sh`
+- [x] T005 Register new scripts and env contracts in `scripts/manifest.json`
+- [x] T006 Add operator documentation skeleton updates in `docs/codex-cli-upstream-watcher.md` and `docs/telegram-e2e-on-demand.md`
 
 ---
 
 ## Phase 2: Foundational
 
-- [ ] T007 Extend `scripts/telegram-bot-send.sh` and `scripts/telegram-bot-send-remote.sh` to support explicit inline reply markup payloads
-- [ ] T008 Implement the authoritative consent-store contract matching `specs/017-codex-telegram-consent-routing/contracts/consent-store-record.schema.json`
-- [ ] T009 Wire the main Moltis Telegram ingress surface in `config/moltis.toml` and related runtime glue so consent actions reach the authoritative router instead of only the generic chat path
-- [ ] T010 Add baseline component validation for store parsing, action-token validation, expiry handling, and duplicate suppression
+- [x] T007 Extend `scripts/telegram-bot-send.sh` and `scripts/telegram-bot-send-remote.sh` to support explicit inline reply markup payloads
+- [x] T008 Implement the authoritative consent-store contract matching `specs/017-codex-telegram-consent-routing/contracts/consent-store-record.schema.json`
+- [x] T009 Wire the main Moltis Telegram ingress surface in `config/moltis.toml` and related runtime glue so consent actions reach the authoritative router instead of only the generic chat path
+- [x] T010 Add baseline component validation for store parsing, action-token validation, expiry handling, and duplicate suppression
 
 ---
 
@@ -37,11 +37,11 @@
 
 **Independent Test**: Open a pending consent request, submit a valid callback or structured fallback command, and confirm the authoritative router records the decision while generic bot handling is suppressed or replaced contextually.
 
-- [ ] T011 [US1] Update `scripts/codex-cli-upstream-watcher.sh` so consent-capable alerts emit a request id, action token, and explicit action affordances instead of only free-text `да/нет`
-- [ ] T012 [US1] Implement callback/fallback-command matching and validation in `scripts/moltis-codex-consent-router.sh`
-- [ ] T013 [US1] Persist authoritative decision state in `scripts/codex-telegram-consent-store.sh`
-- [ ] T014 [P] [US1] Add fixture-backed component tests for callback routing, command fallback, expired tokens, and invalid chat/context handling
-- [ ] T015 [US1] Document the authoritative routing behavior and fallback semantics in `docs/codex-cli-upstream-watcher.md`
+- [x] T011 [US1] Update `scripts/codex-cli-upstream-watcher.sh` so consent-capable alerts emit a request id, action token, and explicit action affordances instead of only free-text `да/нет`
+- [x] T012 [US1] Implement callback/fallback-command matching and validation in `scripts/moltis-codex-consent-router.sh`
+- [x] T013 [US1] Persist authoritative decision state in `scripts/codex-telegram-consent-store.sh`
+- [x] T014 [P] [US1] Add fixture-backed component tests for callback routing, command fallback, expired tokens, and invalid chat/context handling
+- [x] T015 [US1] Document the authoritative routing behavior and fallback semantics in `docs/codex-cli-upstream-watcher.md`
 
 ---
 

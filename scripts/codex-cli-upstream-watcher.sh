@@ -9,6 +9,8 @@ DEFAULT_STATE_FILE="${PROJECT_ROOT}/.tmp/current/codex-cli-upstream-watcher-stat
 DEFAULT_TELEGRAM_SEND_SCRIPT="${PROJECT_ROOT}/scripts/telegram-bot-send.sh"
 DEFAULT_MONITOR_SCRIPT="${PROJECT_ROOT}/scripts/codex-cli-update-monitor.sh"
 DEFAULT_ADVISOR_SCRIPT="${PROJECT_ROOT}/scripts/codex-cli-update-advisor.sh"
+DEFAULT_CONSENT_STORE_SCRIPT="${PROJECT_ROOT}/scripts/codex-telegram-consent-store.sh"
+DEFAULT_CONSENT_STORE_DIR="${PROJECT_ROOT}/.tmp/current/codex-telegram-consent-store"
 
 MODE="${CODEX_UPSTREAM_WATCHER_MODE:-manual}"
 STATE_FILE="${CODEX_UPSTREAM_WATCHER_STATE_FILE:-${DEFAULT_STATE_FILE}}"
@@ -38,6 +40,9 @@ TELEGRAM_SILENT=false
 TELEGRAM_SEND_SCRIPT="${CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT:-${DEFAULT_TELEGRAM_SEND_SCRIPT}}"
 TELEGRAM_CONSENT_ENABLED="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED:-true}"
 TELEGRAM_CONSENT_WINDOW_HOURS="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_WINDOW_HOURS:-72}"
+TELEGRAM_CONSENT_ROUTER_ENABLED="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED:-true}"
+TELEGRAM_CONSENT_STORE_SCRIPT="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_SCRIPT:-${DEFAULT_CONSENT_STORE_SCRIPT}}"
+TELEGRAM_CONSENT_STORE_DIR="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR:-${DEFAULT_CONSENT_STORE_DIR}}"
 TELEGRAM_UPDATES_FILE="${CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE:-}"
 TELEGRAM_ALLOW_GETUPDATES="${CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES:-false}"
 
@@ -80,6 +85,9 @@ Options:
   --telegram-send-script PATH    Путь к telegram sender script
   --telegram-consent-disabled    Не спрашивать о практических рекомендациях в Telegram
   --telegram-consent-window-hours N Сколько часов ждать ответ пользователя в Telegram
+  --telegram-consent-router-disabled Выключить authoritative consent router и оставить legacy follow-up режим
+  --telegram-consent-store-script PATH Путь к consent store helper
+  --telegram-consent-store-dir PATH Директория shared consent store
   --telegram-updates-file PATH   Читать ответы Telegram из локального JSON-файла
   --telegram-allow-getupdates    Разрешить live-чтение ответов через Bot API getUpdates
   -h, --help                     Показать эту справку
@@ -102,6 +110,9 @@ Environment overrides:
   CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT
   CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED
   CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_WINDOW_HOURS
+  CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED
+  CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_SCRIPT
+  CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR
   CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE
   CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES
 USAGE
@@ -481,6 +492,7 @@ run_telegram_sender() {
     local chat_id="$1"
     local text="$2"
     local reply_to="${3:-}"
+    local reply_markup_json="${4:-}"
     local -a cmd=(
         "$TELEGRAM_SEND_SCRIPT"
         --chat-id "$chat_id"
@@ -496,11 +508,81 @@ run_telegram_sender() {
         cmd+=(--reply-to "$reply_to")
     fi
 
+    if [[ -n "$reply_markup_json" ]]; then
+        cmd+=(--reply-markup-json "$reply_markup_json")
+    fi
+
     if [[ -n "$TELEGRAM_ENV_FILE" ]]; then
         MOLTIS_ENV_FILE="$TELEGRAM_ENV_FILE" "${cmd[@]}"
     else
         "${cmd[@]}"
     fi
+}
+
+persist_authoritative_consent_request() {
+    [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" ]] || return 0
+    [[ -x "$TELEGRAM_CONSENT_STORE_SCRIPT" ]] || return 1
+
+    local pending_state_path record_path record_file
+    pending_state_path="$(jq -r '.followup.consent.pending_state.request_id // ""' "$REPORT_PATH")"
+    [[ -n "$pending_state_path" ]] || return 0
+
+    ensure_parent_dir "${TELEGRAM_CONSENT_STORE_DIR}/placeholder"
+    record_file="${TEMP_DIR}/consent-record.json"
+
+    jq '
+        .followup.consent.pending_state as $pending |
+        .advisor_bridge as $advisor |
+        {
+            request: {
+                request_id: $pending.request_id,
+                source: "codex_upstream_watcher",
+                fingerprint: $pending.fingerprint,
+                chat_id: $pending.chat_id,
+                question_message_id: null,
+                created_at: $pending.asked_at,
+                expires_at: $pending.expires_at,
+                status: "pending",
+                action_token: $pending.action_token,
+                question_text: $pending.question,
+                delivery_mode: $pending.delivery_mode
+            },
+            recommendations: {
+                summary: $advisor.summary,
+                items: ($pending.recommendations // [])
+            },
+            decision: null,
+            delivery: {
+                status: "not_sent"
+            },
+            audit_notes: [
+                "authoritative-router",
+                "opened by watcher alert"
+            ]
+        }
+    ' "$REPORT_PATH" > "$record_file"
+
+    "$TELEGRAM_CONSENT_STORE_SCRIPT" \
+        open \
+        --store-dir "$TELEGRAM_CONSENT_STORE_DIR" \
+        --record-file "$record_file" \
+        --json >/dev/null
+}
+
+bind_authoritative_consent_message_id() {
+    [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" ]] || return 0
+    [[ -x "$TELEGRAM_CONSENT_STORE_SCRIPT" ]] || return 1
+
+    local request_id="$1"
+    local message_id="$2"
+    [[ -n "$request_id" && -n "$message_id" ]] || return 0
+
+    "$TELEGRAM_CONSENT_STORE_SCRIPT" \
+        bind-message \
+        --store-dir "$TELEGRAM_CONSENT_STORE_DIR" \
+        --request-id "$request_id" \
+        --message-id "$message_id" \
+        --json >/dev/null
 }
 
 patch_report_alert_success() {
@@ -531,12 +613,21 @@ patch_report_alert_success() {
         ) |
         (
           if (.followup.consent.pending_state? != null) and (.automation.alert.consent_requested == true) then
-            .state.pending_consent = (
-              .followup.consent.pending_state +
-              (if $message_id == "" then {} else {message_id: ($message_id | tonumber)} end)
-            ) |
-            .followup.consent.status = "pending" |
-            .followup.consent.reason = "В Telegram отправлен вопрос, нужны ли практические рекомендации."
+            (
+              if (.followup.consent.router_mode // "") == "authoritative" then
+                .state.last_consent_request_id = .followup.consent.pending_state.request_id |
+                .state |= del(.pending_consent) |
+                .followup.consent.status = "pending" |
+                .followup.consent.reason = "В Telegram отправлен токенизированный запрос; дальнейший ответ принимает authoritative router."
+              else
+                .state.pending_consent = (
+                  .followup.consent.pending_state +
+                  (if $message_id == "" then {} else {message_id: ($message_id | tonumber)} end)
+                ) |
+                .followup.consent.status = "pending" |
+                .followup.consent.reason = "В Telegram отправлен вопрос, нужны ли практические рекомендации."
+              end
+            )
           else
             .
           end
@@ -694,6 +785,18 @@ parse_args() {
                 TELEGRAM_CONSENT_WINDOW_HOURS="${2:?missing value for --telegram-consent-window-hours}"
                 shift 2
                 ;;
+            --telegram-consent-router-disabled)
+                TELEGRAM_CONSENT_ROUTER_ENABLED=false
+                shift
+                ;;
+            --telegram-consent-store-script)
+                TELEGRAM_CONSENT_STORE_SCRIPT="${2:?missing value for --telegram-consent-store-script}"
+                shift 2
+                ;;
+            --telegram-consent-store-dir)
+                TELEGRAM_CONSENT_STORE_DIR="${2:?missing value for --telegram-consent-store-dir}"
+                shift 2
+                ;;
             --telegram-updates-file)
                 TELEGRAM_UPDATES_FILE="${2:?missing value for --telegram-updates-file}"
                 shift 2
@@ -803,7 +906,7 @@ main() {
         advisor_bridge_path="$(build_advisor_bridge "$release_source_path" "$issue_source_path" || true)"
     fi
 
-    if [[ "$TELEGRAM_ENABLED" == "true" && "$TELEGRAM_CONSENT_ENABLED" == "true" && "$(state_has_pending_consent "$STATE_FILE"; printf '%s' "$?")" == "0" ]]; then
+    if [[ "$TELEGRAM_ENABLED" == "true" && "$TELEGRAM_CONSENT_ENABLED" == "true" && "$TELEGRAM_CONSENT_ROUTER_ENABLED" != "true" && "$(state_has_pending_consent "$STATE_FILE"; printf '%s' "$?")" == "0" ]]; then
         local updates_path next_offset
         updates_path="${TEMP_DIR}/telegram-updates.json"
         next_offset="$(state_next_update_offset "$STATE_FILE")"
@@ -834,6 +937,7 @@ main() {
         "$advisor_bridge_path" \
         "$TELEGRAM_CONSENT_ENABLED" \
         "$TELEGRAM_CONSENT_WINDOW_HOURS" \
+        "$TELEGRAM_CONSENT_ROUTER_ENABLED" \
         "$updates_source_path" \
         "$(printf '%s\n' "${WARNINGS[@]:-}" | jq -R . | jq -s .)" \
         > "$REPORT_PATH" <<'PY'
@@ -866,8 +970,9 @@ advisor_bridge_enabled = sys.argv[18] == "true"
 advisor_bridge_path = pathlib.Path(sys.argv[19]) if sys.argv[19] else None
 telegram_consent_enabled = sys.argv[20] == "true"
 telegram_consent_window_hours = int(sys.argv[21])
-updates_source_path = pathlib.Path(sys.argv[22]) if sys.argv[22] else None
-warnings = json.loads(sys.argv[23])
+telegram_consent_router_enabled = sys.argv[22] == "true"
+updates_source_path = pathlib.Path(sys.argv[23]) if sys.argv[23] else None
+warnings = json.loads(sys.argv[24])
 
 checked_dt = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
 checked_at = checked_dt.isoformat().replace("+00:00", "Z")
@@ -1365,7 +1470,7 @@ def load_advisor_bridge(path: pathlib.Path | None) -> dict:
         "top_priorities": top_priorities,
         "practical_recommendations": practical_recommendations,
         "notes": [str(item).strip() for item in raw.get("implementation_brief", {}).get("notes", []) if str(item).strip()],
-        "question": "Хотите получить практические рекомендации по применению этих новых возможностей в вашем проекте? Ответьте в этом чате: да или нет.",
+        "question": "Хотите получить практические рекомендации по применению этих новых возможностей в вашем проекте?",
     }
 
 
@@ -1445,6 +1550,47 @@ def build_recommendations_message(advisor_bridge: dict) -> str:
     return "\n".join(lines)
 
 
+def build_consent_request(
+    fingerprint: str,
+    chat_id: str,
+    checked_at: str,
+    checked_dt: dt.datetime,
+    window_hours: int,
+    advisor_bridge: dict,
+) -> dict:
+    seed = f"{fingerprint}:{chat_id}:{checked_at}"
+    request_id = "req-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
+    action_token = "tok-" + hashlib.sha256((seed + ":token").encode("utf-8")).hexdigest()[:8]
+    accept_command = f"/codex-followup accept {request_id} {action_token}"
+    decline_command = f"/codex-followup decline {request_id} {action_token}"
+    return {
+        "request_id": request_id,
+        "action_token": action_token,
+        "fingerprint": fingerprint,
+        "chat_id": chat_id,
+        "asked_at": checked_at,
+        "expires_at": (checked_dt + dt.timedelta(hours=window_hours)).isoformat().replace("+00:00", "Z"),
+        "question": advisor_bridge["question"],
+        "summary": advisor_bridge["summary"],
+        "status": "pending",
+        "delivery_mode": "inline_callback",
+        "router_mode": "authoritative",
+        "command_accept": accept_command,
+        "command_decline": decline_command,
+        "callback_accept": f"codex-consent:accept:{request_id}:{action_token}",
+        "callback_decline": f"codex-consent:decline:{request_id}:{action_token}",
+        "reply_markup": {
+            "inline_keyboard": [
+                [
+                    {"text": "Получить рекомендации", "callback_data": f"codex-consent:accept:{request_id}:{action_token}"},
+                    {"text": "Не нужно", "callback_data": f"codex-consent:decline:{request_id}:{action_token}"},
+                ]
+            ]
+        },
+        "recommendations": advisor_bridge["practical_recommendations"],
+    }
+
+
 def build_alert_message(
     latest_version: str,
     severity: dict,
@@ -1454,6 +1600,7 @@ def build_alert_message(
     digest_entries: list[dict],
     advisor_bridge: dict,
     ask_for_consent: bool,
+    consent_request: dict | None,
 ) -> str:
     severity_label = {
         "info": "обычная",
@@ -1495,6 +1642,13 @@ def build_alert_message(
     if ask_for_consent and advisor_bridge["question"]:
         lines.append("")
         lines.append(advisor_bridge["question"])
+        if consent_request is not None:
+            lines.append("Нажмите кнопку ниже. Если кнопки недоступны, используйте одну из команд:")
+            lines.append(f"- {consent_request['command_accept']}")
+            lines.append(f"- {consent_request['command_decline']}")
+            lines.append(f"- Идентификатор запроса: {consent_request['request_id']}")
+        else:
+            lines.append("Ответьте в этом чате: да или нет.")
 
     return "\n".join(lines)
 
@@ -1587,79 +1741,83 @@ consent_expires_at = ""
 
 pending_consent = previous_state.get("pending_consent")
 if telegram_consent_enabled:
-    if pending_consent and isinstance(pending_consent, dict):
-        expires_at = parse_datetime(str(pending_consent.get("expires_at", "")))
-        consent_expires_at = str(pending_consent.get("expires_at", "")).strip()
-        if expires_at and checked_dt > expires_at:
-            state.pop("pending_consent", None)
-            consent_status = "expired"
-            consent_reason = "Пользователь не ответил вовремя, окно ожидания закрыто."
-        elif pending_consent.get("status") == "accepted":
-            if advisor_bridge["status"] == "ready" and advisor_bridge["practical_recommendations"]:
-                recommendations_action = {
-                    "action": "send",
-                    "reason": "Пользователь уже согласился ранее, рекомендации ещё не были отправлены.",
-                    "text": build_recommendations_message(advisor_bridge),
-                    "reply_to_message_id": int(pending_consent.get("message_id", 0) or 0),
-                }
-                consent_status = "accepted"
-                consent_reason = "Пользователь уже согласился; нужно дослать рекомендации."
-                state["pending_consent"] = pending_consent
-            else:
+    if telegram_consent_router_enabled:
+        state.pop("pending_consent", None)
+        consent_status = "none"
+        consent_reason = "Authoritative router готов принимать токенизированные ответы на новые уведомления."
+    else:
+        if pending_consent and isinstance(pending_consent, dict):
+            expires_at = parse_datetime(str(pending_consent.get("expires_at", "")))
+            consent_expires_at = str(pending_consent.get("expires_at", "")).strip()
+            if expires_at and checked_dt > expires_at:
                 state.pop("pending_consent", None)
-                consent_status = "investigate"
-                consent_reason = "Пользователь согласился, но готовые рекомендации сейчас недоступны."
-        else:
-            asked_at = parse_datetime(str(pending_consent.get("asked_at", "")))
-            response = "unknown"
-            matching_update = None
-            for item in sorted(updates, key=lambda value: (value["date"], value["update_id"])):
-                if item["chat_id"] != str(pending_consent.get("chat_id", "")):
-                    continue
-                if asked_at is not None and item["date"] and dt.datetime.fromtimestamp(item["date"], tz=dt.timezone.utc) < asked_at:
-                    continue
-                if pending_consent.get("message_id") and item["reply_to_message_id"] not in {0, int(pending_consent.get("message_id", 0))}:
-                    if item["message_id"] <= int(pending_consent.get("message_id", 0)):
-                        continue
-                parsed = classify_response(item["text"])
-                if parsed != "unknown":
-                    response = parsed
-                    matching_update = item
-                    break
-
-            if response == "yes":
+                consent_status = "expired"
+                consent_reason = "Пользователь не ответил вовремя, окно ожидания закрыто."
+            elif pending_consent.get("status") == "accepted":
                 if advisor_bridge["status"] == "ready" and advisor_bridge["practical_recommendations"]:
-                    updated_pending = dict(pending_consent)
-                    updated_pending["status"] = "accepted"
-                    updated_pending["accepted_at"] = checked_at
-                    state["pending_consent"] = updated_pending
                     recommendations_action = {
                         "action": "send",
-                        "reason": "Пользователь согласился получить практические рекомендации.",
+                        "reason": "Пользователь уже согласился ранее, рекомендации ещё не были отправлены.",
                         "text": build_recommendations_message(advisor_bridge),
-                        "reply_to_message_id": int(updated_pending.get("message_id", 0) or 0),
+                        "reply_to_message_id": int(pending_consent.get("message_id", 0) or 0),
                     }
                     consent_status = "accepted"
-                    consent_reason = "Пользователь согласился получить практические рекомендации."
+                    consent_reason = "Пользователь уже согласился; нужно дослать рекомендации."
+                    state["pending_consent"] = pending_consent
                 else:
                     state.pop("pending_consent", None)
                     consent_status = "investigate"
-                    consent_reason = "Пользователь согласился, но рекомендации пока не готовы."
-            elif response == "no":
-                state.pop("pending_consent", None)
-                consent_status = "declined"
-                consent_reason = "Пользователь отказался от практических рекомендаций."
+                    consent_reason = "Пользователь согласился, но готовые рекомендации сейчас недоступны."
             else:
-                state["pending_consent"] = pending_consent
-                consent_status = "pending"
-                consent_reason = "Вопрос о практических рекомендациях уже отправлен, ждём ответ пользователя."
-    else:
-        consent_status = "none"
-        consent_reason = "Сейчас нет активного вопроса о практических рекомендациях."
+                asked_at = parse_datetime(str(pending_consent.get("asked_at", "")))
+                response = "unknown"
+                for item in sorted(updates, key=lambda value: (value["date"], value["update_id"])):
+                    if item["chat_id"] != str(pending_consent.get("chat_id", "")):
+                        continue
+                    if asked_at is not None and item["date"] and dt.datetime.fromtimestamp(item["date"], tz=dt.timezone.utc) < asked_at:
+                        continue
+                    if pending_consent.get("message_id") and item["reply_to_message_id"] not in {0, int(pending_consent.get("message_id", 0))}:
+                        if item["message_id"] <= int(pending_consent.get("message_id", 0)):
+                            continue
+                    parsed = classify_response(item["text"])
+                    if parsed != "unknown":
+                        response = parsed
+                        break
+
+                if response == "yes":
+                    if advisor_bridge["status"] == "ready" and advisor_bridge["practical_recommendations"]:
+                        updated_pending = dict(pending_consent)
+                        updated_pending["status"] = "accepted"
+                        updated_pending["accepted_at"] = checked_at
+                        state["pending_consent"] = updated_pending
+                        recommendations_action = {
+                            "action": "send",
+                            "reason": "Пользователь согласился получить практические рекомендации.",
+                            "text": build_recommendations_message(advisor_bridge),
+                            "reply_to_message_id": int(updated_pending.get("message_id", 0) or 0),
+                        }
+                        consent_status = "accepted"
+                        consent_reason = "Пользователь согласился получить практические рекомендации."
+                    else:
+                        state.pop("pending_consent", None)
+                        consent_status = "investigate"
+                        consent_reason = "Пользователь согласился, но рекомендации пока не готовы."
+                elif response == "no":
+                    state.pop("pending_consent", None)
+                    consent_status = "declined"
+                    consent_reason = "Пользователь отказался от практических рекомендаций."
+                else:
+                    state["pending_consent"] = pending_consent
+                    consent_status = "pending"
+                    consent_reason = "Вопрос о практических рекомендациях уже отправлен, ждём ответ пользователя."
+        else:
+            consent_status = "none"
+            consent_reason = "Сейчас нет активного вопроса о практических рекомендациях."
 
 decision_status = "investigate"
 decision_reason = "Официальная лента изменений сейчас недоступна."
 decision_changed = False
+consent_request = None
 alert_action = {"action": "skip", "kind": delivery_mode, "reason": "Отправка не требуется.", "text": "", "delivered_fingerprints": [], "consent_requested": False}
 
 if primary_status == "investigate":
@@ -1674,13 +1832,26 @@ else:
     decision_changed = not seen_matches
     state["last_seen_fingerprint"] = fingerprint
 
+    consent_request = None
     ask_for_consent = (
         telegram_enabled
         and telegram_consent_enabled
         and advisor_bridge["status"] == "ready"
         and bool(advisor_bridge["practical_recommendations"])
-        and "pending_consent" not in state
+        and (
+            telegram_consent_router_enabled
+            or "pending_consent" not in state
+        )
     )
+    if ask_for_consent and telegram_consent_router_enabled and telegram_chat_id:
+        consent_request = build_consent_request(
+            fingerprint,
+            telegram_chat_id,
+            checked_at,
+            checked_dt,
+            telegram_consent_window_hours,
+            advisor_bridge,
+        )
 
     current_digest_entry = {
         "fingerprint": fingerprint,
@@ -1727,9 +1898,11 @@ else:
                         digest_pending,
                         advisor_bridge,
                         ask_for_consent,
+                        consent_request,
                     ),
                     "delivered_fingerprints": [item["fingerprint"] for item in digest_pending],
                     "consent_requested": ask_for_consent,
+                    "reply_markup_json": json.dumps(consent_request["reply_markup"], ensure_ascii=False) if consent_request else "",
                 }
             elif delivered_matches and not digest_pending:
                 decision_status = "suppress"
@@ -1765,9 +1938,11 @@ else:
                         [current_digest_entry],
                         advisor_bridge,
                         ask_for_consent,
+                        consent_request,
                     ),
                     "delivered_fingerprints": [fingerprint],
                     "consent_requested": ask_for_consent,
+                    "reply_markup_json": json.dumps(consent_request["reply_markup"], ensure_ascii=False) if consent_request else "",
                 }
     else:
         if seen_matches:
@@ -1806,18 +1981,24 @@ if (
     and alert_action["action"] == "send"
     and alert_action["consent_requested"]
 ):
-    pending_consent_state = {
-        "fingerprint": fingerprint,
-        "chat_id": telegram_chat_id,
-        "asked_at": checked_at,
-        "expires_at": (checked_dt + dt.timedelta(hours=telegram_consent_window_hours)).isoformat().replace("+00:00", "Z"),
-        "question": advisor_bridge["question"],
-        "summary": advisor_bridge["summary"],
-        "status": "pending",
-        "recommendations": advisor_bridge["practical_recommendations"],
-    }
+    if consent_request is not None:
+        pending_consent_state = consent_request
+    else:
+        pending_consent_state = {
+            "fingerprint": fingerprint,
+            "chat_id": telegram_chat_id,
+            "asked_at": checked_at,
+            "expires_at": (checked_dt + dt.timedelta(hours=telegram_consent_window_hours)).isoformat().replace("+00:00", "Z"),
+            "question": advisor_bridge["question"],
+            "summary": advisor_bridge["summary"],
+            "status": "pending",
+            "recommendations": advisor_bridge["practical_recommendations"],
+        }
     consent_status = "pending"
-    consent_reason = "После уведомления пользователь сможет ответить в Telegram и получить проектные рекомендации."
+    if telegram_consent_router_enabled:
+        consent_reason = "После уведомления пользователь сможет нажать кнопку или отправить токенизированную команду; authoritative router зафиксирует ответ."
+    else:
+        consent_reason = "После уведомления пользователь сможет ответить в Telegram и получить проектные рекомендации."
     consent_expires_at = pending_consent_state["expires_at"]
 elif consent_status == "pending" and pending_consent:
     consent_expires_at = str(pending_consent.get("expires_at", "")).strip()
@@ -1852,6 +2033,7 @@ report = {
     "telegram_target": {
         "enabled": telegram_enabled,
         "consent_enabled": telegram_consent_enabled,
+        "consent_router_enabled": telegram_consent_router_enabled,
     },
     "followup": {
         "digest": followup_digest,
@@ -1860,6 +2042,7 @@ report = {
             "reason": consent_reason,
             "expires_at": consent_expires_at,
             "question": advisor_bridge["question"],
+            "router_mode": "authoritative" if telegram_consent_router_enabled else "legacy",
             "pending_state": pending_consent_state,
         },
     },
@@ -1887,21 +2070,38 @@ if telegram_env_file:
 print(json.dumps(report, indent=2))
 PY
 
-    local alert_action alert_text telegram_output send_code resolved_reply_to alert_message_id
+    local alert_action alert_text alert_reply_markup telegram_output send_code resolved_reply_to alert_message_id consent_request_id
     alert_action="$(jq -r '.automation.alert.action // "skip"' "$REPORT_PATH")"
     if [[ "$alert_action" == "send" ]]; then
         alert_text="$(jq -r '.automation.alert.text // ""' "$REPORT_PATH")"
+        alert_reply_markup="$(jq -r '.automation.alert.reply_markup_json // ""' "$REPORT_PATH")"
+        consent_request_id="$(jq -r '.followup.consent.pending_state.request_id // ""' "$REPORT_PATH")"
         if [[ ! -x "$TELEGRAM_SEND_SCRIPT" ]]; then
             patch_report_alert_failure "не найден или не исполняем telegram sender script: ${TELEGRAM_SEND_SCRIPT}"
         elif [[ -z "$resolved_chat_id" ]]; then
             patch_report_alert_failure "не удалось определить telegram chat id"
         else
+            if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -n "$consent_request_id" ]]; then
+                set +e
+                persist_authoritative_consent_request
+                send_code=$?
+                set -e
+                if [[ $send_code -ne 0 ]]; then
+                    patch_report_alert_failure "не удалось записать authoritative consent request в shared store"
+                    alert_action="skip"
+                fi
+            fi
+        fi
+        if [[ "$alert_action" == "send" && -x "$TELEGRAM_SEND_SCRIPT" && -n "$resolved_chat_id" ]]; then
             set +e
-            telegram_output="$(run_telegram_sender "$resolved_chat_id" "$alert_text" 2>&1)"
+            telegram_output="$(run_telegram_sender "$resolved_chat_id" "$alert_text" "" "$alert_reply_markup" 2>&1)"
             send_code=$?
             set -e
             if [[ $send_code -eq 0 ]]; then
                 alert_message_id="$(printf '%s' "$telegram_output" | jq -r '.result.message_id // ""' 2>/dev/null || true)"
+                if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -n "$consent_request_id" && -n "$alert_message_id" ]]; then
+                    bind_authoritative_consent_message_id "$consent_request_id" "$alert_message_id" || true
+                fi
                 patch_report_alert_success "$resolved_chat_id" "$alert_message_id"
             else
                 patch_report_alert_failure "${telegram_output:-telegram sender exited with status ${send_code}}"

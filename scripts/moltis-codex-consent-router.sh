@@ -1,0 +1,418 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+DEFAULT_STORE_SCRIPT="${PROJECT_ROOT}/scripts/codex-telegram-consent-store.sh"
+DEFAULT_TELEGRAM_SEND_SCRIPT="${PROJECT_ROOT}/scripts/telegram-bot-send.sh"
+
+STORE_SCRIPT="${CODEX_TELEGRAM_CONSENT_STORE_SCRIPT:-${DEFAULT_STORE_SCRIPT}}"
+STORE_DIR="${CODEX_TELEGRAM_CONSENT_STORE_DIR:-${PROJECT_ROOT}/.tmp/current/codex-telegram-consent-store}"
+TELEGRAM_SEND_SCRIPT="${CODEX_TELEGRAM_CONSENT_ROUTER_SEND_SCRIPT:-${DEFAULT_TELEGRAM_SEND_SCRIPT}}"
+TELEGRAM_ENV_FILE="${CODEX_TELEGRAM_CONSENT_ROUTER_ENV_FILE:-${MOLTIS_ENV_FILE:-}}"
+SEND_REPLY="${CODEX_TELEGRAM_CONSENT_ROUTER_SEND_REPLY:-true}"
+
+EVENT_FILE=""
+COMMAND_TEXT=""
+CALLBACK_DATA=""
+CHAT_ID=""
+ACTOR_ID=""
+REPLY_TO_MESSAGE_ID=""
+JSON_OUT=""
+STDOUT_FORMAT="json"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  moltis-codex-consent-router.sh [options]
+
+Route one Codex consent action from the authoritative Telegram ingress.
+
+Options:
+  --event-file PATH            Read one inbound event JSON from PATH
+  --command-text TEXT          Structured fallback command text
+  --callback-data TEXT         Telegram callback data
+  --chat-id ID                 Telegram chat id
+  --actor-id ID                Telegram actor id
+  --reply-to MESSAGE_ID        Reply to this Telegram message id
+  --store-script PATH          Consent store helper path
+  --store-dir PATH             Consent store directory
+  --telegram-send-script PATH  Telegram sender script for contextual replies
+  --telegram-env-file PATH     Env file for Telegram sender token loading
+  --send-reply true|false      Whether to send a contextual reply (default: true)
+  --json-out PATH              Write JSON result to PATH
+  --stdout MODE                json|none (default: json)
+  -h, --help                   Show help
+EOF
+}
+
+fail() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || fail "Missing required dependency: $1"
+}
+
+ensure_parent_dir() {
+    mkdir -p "$(dirname "$1")"
+}
+
+normalize_bool() {
+    case "${1:-}" in
+        true|1|yes|on) printf 'true\n' ;;
+        false|0|no|off|'') printf 'false\n' ;;
+        *) fail "Invalid boolean value: $1" ;;
+    esac
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --event-file)
+                EVENT_FILE="${2:?missing value for --event-file}"
+                shift 2
+                ;;
+            --command-text)
+                COMMAND_TEXT="${2:?missing value for --command-text}"
+                shift 2
+                ;;
+            --callback-data)
+                CALLBACK_DATA="${2:?missing value for --callback-data}"
+                shift 2
+                ;;
+            --chat-id)
+                CHAT_ID="${2:?missing value for --chat-id}"
+                shift 2
+                ;;
+            --actor-id)
+                ACTOR_ID="${2:?missing value for --actor-id}"
+                shift 2
+                ;;
+            --reply-to)
+                REPLY_TO_MESSAGE_ID="${2:?missing value for --reply-to}"
+                shift 2
+                ;;
+            --store-script)
+                STORE_SCRIPT="${2:?missing value for --store-script}"
+                shift 2
+                ;;
+            --store-dir)
+                STORE_DIR="${2:?missing value for --store-dir}"
+                shift 2
+                ;;
+            --telegram-send-script)
+                TELEGRAM_SEND_SCRIPT="${2:?missing value for --telegram-send-script}"
+                shift 2
+                ;;
+            --telegram-env-file)
+                TELEGRAM_ENV_FILE="${2:?missing value for --telegram-env-file}"
+                shift 2
+                ;;
+            --send-reply)
+                SEND_REPLY="$(normalize_bool "${2:?missing value for --send-reply}")"
+                shift 2
+                ;;
+            --json-out)
+                JSON_OUT="${2:?missing value for --json-out}"
+                shift 2
+                ;;
+            --stdout)
+                STDOUT_FORMAT="${2:?missing value for --stdout}"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                fail "Unknown argument: $1"
+                ;;
+        esac
+    done
+
+    case "$STDOUT_FORMAT" in
+        json|none) ;;
+        *) fail "Invalid --stdout mode: $STDOUT_FORMAT" ;;
+    esac
+}
+
+read_event_json() {
+    if [[ -n "$EVENT_FILE" ]]; then
+        [[ -f "$EVENT_FILE" ]] || fail "Event file not found: $EVENT_FILE"
+        cat "$EVENT_FILE"
+        return 0
+    fi
+
+    if [[ -z "$COMMAND_TEXT" && -z "$CALLBACK_DATA" && -z "$CHAT_ID" && -z "$ACTOR_ID" && -z "$REPLY_TO_MESSAGE_ID" && ! -t 0 ]]; then
+        cat
+        return 0
+    fi
+
+    printf '{}\n'
+}
+
+extract_if_missing() {
+    local field="$1"
+    local event_json="$2"
+    case "$field" in
+        callback)
+            if [[ -z "$CALLBACK_DATA" ]]; then
+                CALLBACK_DATA="$(jq -r '
+                    .callback_query.data //
+                    .callback.data //
+                    .telegram.callback_query.data //
+                    ""
+                ' <<<"$event_json")"
+            fi
+            ;;
+        command)
+            if [[ -z "$COMMAND_TEXT" ]]; then
+                COMMAND_TEXT="$(jq -r '
+                    .command.text //
+                    .message.text //
+                    .telegram.message.text //
+                    .text //
+                    ""
+                ' <<<"$event_json")"
+            fi
+            ;;
+        chat)
+            if [[ -z "$CHAT_ID" ]]; then
+                CHAT_ID="$(jq -r '
+                    (.callback_query.message.chat.id // .message.chat.id // .chat.id // .chat_id // "") | tostring
+                ' <<<"$event_json")"
+            fi
+            ;;
+        actor)
+            if [[ -z "$ACTOR_ID" ]]; then
+                ACTOR_ID="$(jq -r '
+                    (.callback_query.from.id // .message.from.id // .from.id // .actor_id // "") | tostring
+                ' <<<"$event_json")"
+            fi
+            ;;
+        reply_to)
+            if [[ -z "$REPLY_TO_MESSAGE_ID" ]]; then
+                REPLY_TO_MESSAGE_ID="$(jq -r '
+                    (.callback_query.message.message_id // .message.message_id // .reply_to_message_id // 0) | tostring
+                ' <<<"$event_json")"
+                if [[ "$REPLY_TO_MESSAGE_ID" == "0" ]]; then
+                    REPLY_TO_MESSAGE_ID=""
+                fi
+            fi
+            ;;
+    esac
+}
+
+run_sender() {
+    local chat_id="$1"
+    local text="$2"
+    local reply_to="$3"
+    local -a cmd=("$TELEGRAM_SEND_SCRIPT" --chat-id "$chat_id" --text "$text" --json)
+
+    if [[ -n "$reply_to" ]]; then
+        cmd+=(--reply-to "$reply_to")
+    fi
+
+    if [[ -n "$TELEGRAM_ENV_FILE" ]]; then
+        MOLTIS_ENV_FILE="$TELEGRAM_ENV_FILE" "${cmd[@]}"
+    else
+        "${cmd[@]}"
+    fi
+}
+
+resolve_store_record() {
+    local request_id="$1"
+    "$STORE_SCRIPT" get --store-dir "$STORE_DIR" --request-id "$request_id" --json
+}
+
+result_json() {
+    local handled="$1"
+    local suppress_generic="$2"
+    local decision="$3"
+    local request_id="$4"
+    local resolved_via="$5"
+    local reply_text="$6"
+    local reply_status="$7"
+    local reply_error="$8"
+
+    jq -cn \
+        --argjson handled "$handled" \
+        --argjson suppress_generic "$suppress_generic" \
+        --arg decision "$decision" \
+        --arg request_id "$request_id" \
+        --arg resolved_via "$resolved_via" \
+        --arg reply_text "$reply_text" \
+        --arg reply_status "$reply_status" \
+        --arg reply_error "$reply_error" \
+        '{
+            handled: $handled,
+            suppress_generic: $suppress_generic,
+            decision: $decision,
+            request_id: $request_id,
+            resolved_via: $resolved_via,
+            reply_text: $reply_text,
+            delivery: {
+                status: $reply_status,
+                error: (if $reply_error == "" then null else $reply_error end)
+            }
+        }'
+}
+
+main() {
+    require_command jq
+    require_command python3
+    [[ -x "$STORE_SCRIPT" ]] || fail "Consent store helper is not executable: $STORE_SCRIPT"
+
+    parse_args "$@"
+
+    local event_json parse_mode action request_id action_token raw_input resolved_via
+    local record_json record_path stored_chat_id stored_token stored_status expires_at now_epoch expiry_epoch
+    local decision reply_text reply_status reply_error result actor_id
+
+    event_json="$(read_event_json)"
+    extract_if_missing callback "$event_json"
+    extract_if_missing command "$event_json"
+    extract_if_missing chat "$event_json"
+    extract_if_missing actor "$event_json"
+    extract_if_missing reply_to "$event_json"
+
+    action=""
+    request_id=""
+    action_token=""
+    raw_input=""
+    resolved_via=""
+
+    if [[ -n "$CALLBACK_DATA" && "$CALLBACK_DATA" =~ ^codex-consent:(accept|decline):([A-Za-z0-9._-]+):([A-Za-z0-9._-]+)$ ]]; then
+        action="${BASH_REMATCH[1]}"
+        request_id="${BASH_REMATCH[2]}"
+        action_token="${BASH_REMATCH[3]}"
+        raw_input="$CALLBACK_DATA"
+        resolved_via="callback_query"
+    elif [[ -n "$COMMAND_TEXT" && "$COMMAND_TEXT" =~ ^/?codex-followup[[:space:]]+(accept|decline)[[:space:]]+([A-Za-z0-9._-]+)[[:space:]]+([A-Za-z0-9._-]+)$ ]]; then
+        action="${BASH_REMATCH[1]}"
+        request_id="${BASH_REMATCH[2]}"
+        action_token="${BASH_REMATCH[3]}"
+        raw_input="$COMMAND_TEXT"
+        resolved_via="command_fallback"
+    fi
+
+    if [[ -z "$action" || -z "$request_id" || -z "$action_token" ]]; then
+        result="$(result_json false false no_match \"\" \"\" \"\" skipped \"\")"
+        if [[ -n "$JSON_OUT" ]]; then
+            ensure_parent_dir "$JSON_OUT"
+            printf '%s\n' "$result" > "$JSON_OUT"
+        fi
+        [[ "$STDOUT_FORMAT" == "json" ]] && printf '%s\n' "$result"
+        return 0
+    fi
+
+    record_json="$(resolve_store_record "$request_id" 2>/dev/null || true)"
+    if [[ -z "$record_json" ]]; then
+        reply_text="Не удалось найти активный запрос на рекомендации. Дождитесь нового уведомления."
+        result="$(result_json true true invalid "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
+        if [[ "$SEND_REPLY" == "true" && -n "$CHAT_ID" && -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+            set +e
+            run_sender "$CHAT_ID" "$reply_text" "$REPLY_TO_MESSAGE_ID" >/dev/null 2>&1
+            set -e
+        fi
+    else
+        stored_chat_id="$(jq -r '.request.chat_id' <<<"$record_json")"
+        stored_token="$(jq -r '.request.action_token' <<<"$record_json")"
+        stored_status="$(jq -r '.request.status' <<<"$record_json")"
+        expires_at="$(jq -r '.request.expires_at' <<<"$record_json")"
+        now_epoch="$(date -u +%s)"
+        expiry_epoch="$(python3 - <<'PY' "$expires_at"
+import datetime as dt
+import sys
+value = sys.argv[1]
+try:
+    print(int(dt.datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()))
+except Exception:
+    print(0)
+PY
+)"
+
+        if [[ -n "$CHAT_ID" && "$stored_chat_id" != "$CHAT_ID" ]]; then
+            decision="invalid"
+            reply_text="Этот запрос на рекомендации относится к другому чату и не может быть подтверждён отсюда."
+            result="$(result_json true true "$decision" "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
+        elif [[ "$stored_token" != "$action_token" ]]; then
+            decision="invalid"
+            reply_text="Не удалось подтвердить токен действия. Дождитесь нового уведомления."
+            result="$(result_json true true "$decision" "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
+        elif [[ "$expiry_epoch" -gt 0 && "$now_epoch" -gt "$expiry_epoch" ]]; then
+            "$STORE_SCRIPT" resolve \
+                --store-dir "$STORE_DIR" \
+                --request-id "$request_id" \
+                --decision expired \
+                --resolved-via "$resolved_via" \
+                --telegram-actor-id "${ACTOR_ID:-$CHAT_ID}" \
+                --raw-input "$raw_input" \
+                --note "expired before authoritative routing" \
+                --json >/dev/null
+            decision="expired"
+            reply_text="Окно подтверждения уже истекло. Дождитесь нового уведомления, если рекомендации всё ещё нужны."
+            result="$(result_json true true "$decision" "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
+        elif [[ "$stored_status" != "pending" ]]; then
+            "$STORE_SCRIPT" resolve \
+                --store-dir "$STORE_DIR" \
+                --request-id "$request_id" \
+                --decision duplicate \
+                --resolved-via "$resolved_via" \
+                --telegram-actor-id "${ACTOR_ID:-$CHAT_ID}" \
+                --raw-input "$raw_input" \
+                --note "duplicate action after resolved state" \
+                --json >/dev/null
+            decision="duplicate"
+            reply_text="Этот ответ уже был обработан раньше. Повторно ничего делать не нужно."
+            result="$(result_json true true "$decision" "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
+        else
+            if [[ "$action" == "accept" ]]; then
+                decision="accept"
+                reply_text="Согласие зафиксировано. Практические рекомендации для проекта будут подготовлены следующим шагом."
+            else
+                decision="decline"
+                reply_text="Понял. Практические рекомендации по этому обновлению отправляться не будут."
+            fi
+            "$STORE_SCRIPT" resolve \
+                --store-dir "$STORE_DIR" \
+                --request-id "$request_id" \
+                --decision "$decision" \
+                --resolved-via "$resolved_via" \
+                --telegram-actor-id "${ACTOR_ID:-$CHAT_ID}" \
+                --raw-input "$raw_input" \
+                --json >/dev/null
+            result="$(result_json true true "$decision" "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
+        fi
+    fi
+
+    reply_status="$(jq -r '.delivery.status' <<<"$result")"
+    reply_error=""
+    if [[ "$SEND_REPLY" == "true" && -n "$CHAT_ID" && -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+        set +e
+        if run_sender "$CHAT_ID" "$(jq -r '.reply_text' <<<"$result")" "$REPLY_TO_MESSAGE_ID" >/dev/null 2>&1; then
+            reply_status="sent"
+        else
+            reply_status="failed"
+            reply_error="failed to send contextual Telegram reply"
+        fi
+        set -e
+        result="$(jq \
+            --arg reply_status "$reply_status" \
+            --arg reply_error "$reply_error" \
+            '.delivery.status = $reply_status | .delivery.error = (if $reply_error == "" then null else $reply_error end)' \
+            <<<"$result")"
+    fi
+
+    if [[ -n "$JSON_OUT" ]]; then
+        ensure_parent_dir "$JSON_OUT"
+        printf '%s\n' "$result" > "$JSON_OUT"
+    fi
+    if [[ "$STDOUT_FORMAT" == "json" ]]; then
+        printf '%s\n' "$result"
+    fi
+}
+
+main "$@"

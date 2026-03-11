@@ -169,6 +169,7 @@ bash|component_codex_cli_upstream_watcher|Codex CLI upstream watcher component|$
 bash|component_codex_cli_update_advisor|Codex CLI update advisor component|$SCRIPT_DIR/component/test_codex_cli_update_advisor.sh
 bash|component_codex_cli_update_delivery|Codex CLI update delivery component|$SCRIPT_DIR/component/test_codex_cli_update_delivery.sh
 bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/component/test_codex_profile_launch.sh
+bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh
 bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
 LIST

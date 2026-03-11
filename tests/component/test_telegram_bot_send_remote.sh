@@ -125,6 +125,26 @@ SENDER
     assert_contains "$(cat "$FAKE_SSH_STATE_DIR/remote-args.txt")" "Строка 3" "Remote sender should receive the third line of the multiline text"
     test_pass
 
+    test_start "component_telegram_bot_send_remote_forwards_reply_markup_json"
+    output="$(
+        PATH="$FAKE_SSH_BIN_DIR:$PATH" \
+        FAKE_SSH_STATE_DIR="$FAKE_SSH_STATE_DIR" \
+        MOLTINGER_TELEGRAM_SSH_BIN="$FAKE_SSH_BIN_DIR/ssh" \
+        MOLTINGER_TELEGRAM_SSH_TARGET="fake-target" \
+        MOLTINGER_TELEGRAM_REMOTE_ROOT="$remote_root" \
+        MOLTINGER_TELEGRAM_REMOTE_ENV_FILE="$remote_env" \
+        bash "$REMOTE_SEND_SCRIPT" \
+            --chat-id 262872984 \
+            --text "codex consent prompt" \
+            --reply-markup-json '{"inline_keyboard":[[{"text":"Да","callback_data":"codex-consent:accept:req-1:tok-1"}]]}' \
+            --json
+    )"
+
+    assert_contains "$output" '"ok":true' "Remote wrapper should still return successful JSON with reply_markup"
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/remote-args.txt")" "--reply-markup-json" "Remote sender should preserve reply_markup flag"
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/remote-args.txt")" "inline_keyboard" "Remote sender should pass inline keyboard JSON through unchanged"
+    test_pass
+
     generate_report
 }
 

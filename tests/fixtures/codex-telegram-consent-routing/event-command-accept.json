@@ -1,0 +1,12 @@
+{
+  "message": {
+    "message_id": 201,
+    "text": "/codex-followup accept req-abc12345 tok-xyz789",
+    "chat": {
+      "id": "262872984"
+    },
+    "from": {
+      "id": "262872984"
+    }
+  }
+}

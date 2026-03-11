@@ -35,14 +35,49 @@
       ]
     },
     "telegram-bot-send-remote.sh": {
-      "version": "1.0.0",
-      "description": "Delegate Telegram bot sending to the Moltinger server runtime over SSH",
+      "version": "1.1.0",
+      "description": "Delegate Telegram bot sending with optional reply_markup payloads to the Moltinger server runtime over SSH",
       "entrypoint": true,
       "requires": [
         "ssh"
       ],
       "provides": [
         "telegram-bot-send-remote"
+      ]
+    },
+    "codex-telegram-consent-store.sh": {
+      "version": "1.0.0",
+      "description": "Persist authoritative Codex Telegram consent records in a shared machine-readable store",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "codex-telegram-consent-store"
+      ],
+      "env_vars": [
+        "CODEX_TELEGRAM_CONSENT_STORE_DIR"
+      ],
+      "ci": true
+    },
+    "moltis-codex-consent-router.sh": {
+      "version": "1.0.0",
+      "description": "Route tokenized Codex consent actions from Telegram into the authoritative shared consent store",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-consent-router"
+      ],
+      "env_vars": [
+        "CODEX_TELEGRAM_CONSENT_STORE_SCRIPT",
+        "CODEX_TELEGRAM_CONSENT_STORE_DIR",
+        "CODEX_TELEGRAM_CONSENT_ROUTER_SEND_SCRIPT",
+        "CODEX_TELEGRAM_CONSENT_ROUTER_ENV_FILE",
+        "CODEX_TELEGRAM_CONSENT_ROUTER_SEND_REPLY",
+        "MOLTIS_ENV_FILE"
       ]
     },
     "codex-cli-update-monitor.sh": {
@@ -61,8 +96,8 @@
       "ci": true
     },
     "codex-cli-upstream-watcher.sh": {
-      "version": "2.0.0",
-      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and consent-based project recommendations",
+      "version": "2.1.0",
+      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and authoritative consent-based project recommendations",
       "entrypoint": true,
       "requires": [
         "curl",
@@ -93,6 +128,9 @@
         "CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT",
         "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED",
         "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_WINDOW_HOURS",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_SCRIPT",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR",
         "CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE",
         "CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES",
         "TELEGRAM_BOT_TOKEN",
