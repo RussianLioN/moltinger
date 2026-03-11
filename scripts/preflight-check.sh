@@ -495,18 +495,18 @@ check_clawdiy_runtime_config() {
         and .gateway.bind == "custom"
         and .gateway.customBindHost == "0.0.0.0"
         and (.gateway.port | type == "number")
-        and (.gateway.publicBaseUrl | type == "string" and length > 0)
         and .gateway.auth.mode == "password"
         and .gateway.auth.password.source == "env"
-        and .gateway.auth.password.provider == "runtimeEnv"
+        and .gateway.auth.password.provider == "default"
         and .gateway.auth.password.id == "OPENCLAW_GATEWAY_PASSWORD"
-        and (.controlUi.allowedOrigins | type == "array" and length > 0)
+        and .gateway.controlUi.enabled == true
+        and (.gateway.controlUi.allowedOrigins | type == "array" and length > 0)
         and (.agents.list | type == "array" and any(.id == "main" and .identity.name == "Clawdiy"))
         and .channels.telegram.enabled == true
         and .channels.telegram.dmPolicy == "allowlist"
         and (.channels.telegram.allowFrom | type == "array")
         and .channels.telegram.botToken.source == "env"
-        and .channels.telegram.botToken.provider == "runtimeEnv"
+        and .channels.telegram.botToken.provider == "default"
         and .channels.telegram.botToken.id == "TELEGRAM_BOT_TOKEN"
     ' "$RUNTIME_CONFIG_PATH" >/dev/null 2>&1; then
         add_check "runtime_config_shape" "fail" "Clawdiy runtime config is missing required official OpenClaw gateway, control UI, agent identity, or Telegram fields" "error"
@@ -514,7 +514,7 @@ check_clawdiy_runtime_config() {
     fi
 
     CLAWDIY_AGENT_ID="$TARGET"
-    CLAWDIY_BASE_URL="$(jq -r '.gateway.publicBaseUrl' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_BASE_URL="$(jq -r '.gateway.controlUi.allowedOrigins[0]' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_RUNTIME_NAME="$(jq -r '.agents.list[] | select(.id == "main") | .identity.name' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_MODE="$(jq -r '.channels.telegram.dmPolicy' "$RUNTIME_CONFIG_PATH")"
     CLAWDIY_TELEGRAM_ALLOW_FROM_COUNT="$(jq -r '.channels.telegram.allowFrom | length' "$RUNTIME_CONFIG_PATH")"
@@ -656,7 +656,7 @@ check_clawdiy_identity_alignment() {
     registry_host="$(normalize_host "$CLAWDIY_REGISTRY_WEB")"
 
     if [[ "$runtime_host" != "$registry_host" ]]; then
-        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime publicBaseUrl and registry web endpoint must resolve to the same host" "error"
+        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime control UI origin and registry web endpoint must resolve to the same host" "error"
         return
     fi
 
@@ -665,7 +665,7 @@ check_clawdiy_identity_alignment() {
         return
     fi
 
-    add_check "fleet_identity_alignment" "pass" "Clawdiy runtime publicBaseUrl and agent identity align with the fleet registry" "error"
+    add_check "fleet_identity_alignment" "pass" "Clawdiy runtime control UI origin and agent identity align with the fleet registry" "error"
 }
 
 check_clawdiy_secret_isolation() {

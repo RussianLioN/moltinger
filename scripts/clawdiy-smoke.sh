@@ -195,7 +195,7 @@ load_runtime_config() {
     fi
 
     local base_url server_port
-    base_url="$(jq -r '.gateway.publicBaseUrl' "$CLAWDIY_CONFIG_FILE")"
+    base_url="$(jq -r '.gateway.controlUi.allowedOrigins[0]' "$CLAWDIY_CONFIG_FILE")"
     server_port="$(jq -r '.gateway.port // 18789' "$CLAWDIY_CONFIG_FILE")"
 
     CLAWDIY_PUBLIC_BASE_URL="${base_url%/}"
@@ -626,12 +626,12 @@ verify_extraction_readiness_stage() {
     if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" --slurpfile registry "$FLEET_REGISTRY_FILE" '
         ($runtime[0]) as $rt
         | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
-        | .gateway.publicBaseUrl == $cl.public_endpoints.web
+        | .gateway.controlUi.allowedOrigins[0] == $cl.public_endpoints.web
         and (.agents.list | any(.id == "main" and .identity.name == $cl.display_name))
       ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
-        add_check "extraction_runtime_alignment" "pass" "Clawdiy runtime publicBaseUrl and main agent identity stay aligned with the fleet registry" "error"
+        add_check "extraction_runtime_alignment" "pass" "Clawdiy runtime control UI origin and main agent identity stay aligned with the fleet registry" "error"
     else
-        add_check "extraction_runtime_alignment" "fail" "Clawdiy runtime publicBaseUrl or main agent identity diverges from the fleet registry" "error"
+        add_check "extraction_runtime_alignment" "fail" "Clawdiy runtime control UI origin or main agent identity diverges from the fleet registry" "error"
     fi
 
     if jq -e --slurpfile policy "$FLEET_POLICY_FILE" '
