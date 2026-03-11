@@ -234,6 +234,14 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy smoke script must avoid jq reserved variable names when reading docker labels"
     fi
 
+    test_start "static_clawdiy_smoke_resolves_bind_backed_volume_devices"
+    if rg -q 'docker volume inspect "\$mount_name"' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh" && \
+       rg -q '\.\[0\]\.Options\.device // \.\[0\]\.Mountpoint // empty' "$PROJECT_ROOT/scripts/clawdiy-smoke.sh"; then
+        test_pass
+    else
+        test_fail "Clawdiy smoke script must resolve bind-backed local Docker volumes to their effective host device paths"
+    fi
+
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \
