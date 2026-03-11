@@ -385,6 +385,32 @@ async function locateComposer(page) {
   return null;
 }
 
+async function locateSendButton(page) {
+  const candidates = [
+    'button[aria-label*="Send" i]',
+    'button[title*="Send" i]',
+    ".btn-send",
+    "button.send",
+    ".new-message-send",
+  ];
+  for (const candidate of candidates) {
+    const locator = page.locator(candidate).first();
+    if (await locator.isVisible().catch(() => false)) return locator;
+  }
+  return null;
+}
+
+async function waitForOutgoingProbe(page, probeText, minMidExclusive, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(400);
+    const nowMessages = await collectMessages(page);
+    const sentMessage = findOutgoingProbeMessage(nowMessages, probeText, minMidExclusive);
+    if (sentMessage) return sentMessage;
+  }
+  return null;
+}
+
 async function waitForTelegramUi(page, timeoutMs = 45_000) {
   const deadline = Date.now() + timeoutMs;
   let lastStats = null;
@@ -860,15 +886,33 @@ async function main() {
     await page.keyboard.press("Backspace");
     await page.keyboard.type(text, { delay: 20 });
     const preSendDebug = debug ? await collectSendDebugSnapshot(page, text, beforeMaxMid) : null;
-    await page.keyboard.press("Enter");
+    let sendMethod = "enter";
+    const sendButton = await locateSendButton(page);
+    if (sendButton) {
+      sendMethod = "button";
+      await sendButton.click({ timeout: 5_000 }).catch(async () => {
+        sendMethod = "enter";
+        await page.keyboard.press("Enter");
+      });
+    } else {
+      await page.keyboard.press("Enter");
+    }
 
     const sentObservedAtMs = Date.now();
-    let sentMessage = null;
-    const sendObservedDeadline = Date.now() + Math.min(timeoutSec * 1000, 12_000);
-    while (!sentMessage && Date.now() < sendObservedDeadline) {
-      await page.waitForTimeout(500);
-      const nowMessages = await collectMessages(page);
-      sentMessage = findOutgoingProbeMessage(nowMessages, text, beforeMaxMid);
+    let sentMessage = await waitForOutgoingProbe(page, text, beforeMaxMid, 2_500);
+
+    if (!sentMessage && sendMethod === "button") {
+      await composer.focus().catch(() => {});
+      await page.keyboard.press("Enter").catch(() => {});
+      sendMethod = "button_then_enter";
+      sentMessage = await waitForOutgoingProbe(page, text, beforeMaxMid, Math.min(timeoutSec * 1000, 10_000));
+    } else if (!sentMessage && sendMethod === "enter") {
+      const retrySendButton = await locateSendButton(page);
+      if (retrySendButton) {
+        await retrySendButton.click({ timeout: 5_000 }).catch(() => {});
+        sendMethod = "enter_then_button";
+        sentMessage = await waitForOutgoingProbe(page, text, beforeMaxMid, Math.min(timeoutSec * 1000, 10_000));
+      }
     }
 
     if (!sentMessage) {
@@ -892,6 +936,7 @@ async function main() {
             diagnosticContext: {
               target,
               sent_text: text,
+              send_method_attempted: sendMethod,
               chat_open_check: lastChatOpenCheck,
             },
             stats: await pageStats(page),
@@ -899,6 +944,7 @@ async function main() {
               debug && (preSendDebug || postSendDebug)
                 ? {
                     restricted_debug: {
+                      send_method_attempted: sendMethod,
                       pre_send_snapshot: preSendDebug,
                       post_send_snapshot: postSendDebug,
                     },
@@ -963,6 +1009,7 @@ async function main() {
             diagnosticContext: {
               target,
               sent_text: text,
+              send_method_attempted: sendMethod,
               timeout_seconds: timeoutSec,
               outgoing_sent: outgoingSent,
               possible_reason: verificationBlocked ? "bot_requires_verification_code" : null,
