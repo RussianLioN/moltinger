@@ -61,6 +61,7 @@ After an audit or apply run, the operator gets a durable journal showing what wa
 - What happens when live topology changed after the plan was generated but before apply runs?
 - What happens when the current tracker database cannot safely import due to prefix mismatch or other non-owner-related drift?
 - What happens when one recovery in a batch fails after earlier recoveries already succeeded?
+- What happens when an agent session runs repo-local `bd` commands without `direnv` having loaded `BEADS_DB`?
 
 ## Requirements *(mandatory)*
 
@@ -81,6 +82,7 @@ After an audit or apply run, the operator gets a durable journal showing what wa
 - **FR-013**: System MUST indicate whether canonical root cleanup remains prohibited after each run.
 - **FR-014**: System MUST support safe reruns without duplicating previously recovered issues.
 - **FR-015**: System MUST degrade gracefully when the local tracker database cannot safely import and still preserve file-level recovery evidence when allowed.
+- **FR-016**: System MUST provide a fail-closed repo-local entrypoint for Beads commands used in agent sessions so repo-local tracker writes do not silently fall back to the canonical root tracker when `direnv` is inactive.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -99,3 +101,4 @@ After an audit or apply run, the operator gets a durable journal showing what wa
 - **SC-003**: An apply run modifies only worktrees listed as safe in the plan and leaves blocked items untouched in 100% of acceptance-test scenarios.
 - **SC-004**: Every apply run leaves one durable journal and at least one rollback-relevant backup for each modified worktree.
 - **SC-005**: After an apply run with unresolved blockers, the workflow explicitly reports that canonical root cleanup remains prohibited.
+- **SC-006**: Repo-local Beads workflow commands (`ready`, `show`, `update`, `close`, `sync`, `create`) resolve to the current worktree without requiring the operator to manually export `BEADS_DB`.

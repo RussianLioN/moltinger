@@ -6,10 +6,13 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 ENVRC_FILE="$PROJECT_ROOT/.envrc"
+LOCAL_BD_SCRIPT="$PROJECT_ROOT/scripts/bd-local.sh"
 PHASE_A_SCRIPT="$PROJECT_ROOT/scripts/worktree-phase-a.sh"
 LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
 BATCH_SCRIPT="$PROJECT_ROOT/scripts/beads-recovery-batch.sh"
 OWNERSHIP_MAP="$PROJECT_ROOT/docs/beads-recovery-ownership.json"
+SHARED_INSTRUCTIONS="$PROJECT_ROOT/.ai/instructions/shared-core.md"
+OPERATING_MODEL="$PROJECT_ROOT/docs/CODEX-OPERATING-MODEL.md"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -19,6 +22,15 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail ".envrc must export a worktree-local BEADS_DB"
+    fi
+
+    test_start "static_bd_local_wrapper_exists_and_pins_local_db"
+    if [[ -x "$LOCAL_BD_SCRIPT" ]] && \
+       rg -q 'export BEADS_DB="\$\{local_db_path\}"' "$LOCAL_BD_SCRIPT" && \
+       rg -q 'beads-worktree-localize\.sh first' "$LOCAL_BD_SCRIPT"; then
+        test_pass
+    else
+        test_fail "The repo must provide a fail-closed wrapper for local Beads ownership"
     fi
 
     test_start "static_phase_a_uses_git_worktree_add"
@@ -44,6 +56,14 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "Batch recovery automation must use the localized worktree and single-issue recovery helpers"
+    fi
+
+    test_start "static_docs_route_repo_local_beads_commands_via_wrapper"
+    if rg -q '\./scripts/bd-local\.sh sync' "$SHARED_INSTRUCTIONS" && \
+       rg -q '\./scripts/bd-local\.sh' "$OPERATING_MODEL"; then
+        test_pass
+    else
+        test_fail "High-traffic instructions must route repo-local Beads commands through the local wrapper"
     fi
 
     generate_report

@@ -92,6 +92,9 @@
 - [x] T019 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile checkbox state and artifact links in `specs/010-beads-recovery-batch/tasks.md`
 - [x] T020 [EXECUTOR: MAIN] [SEQUENTIAL] Run quality gates for the feature using `bash -n scripts/beads-recovery-batch.sh`, `tests/unit/test_beads_recover_issue.sh`, `tests/unit/test_beads_recovery_batch.sh`, `tests/static/test_beads_worktree_ownership.sh`, `scripts/scripts-verify.sh`, and `make codex-check`
 - [x] T021 [EXECUTOR: MAIN] [SEQUENTIAL] Refresh topology documentation after the new feature branch mutation via `scripts/git-topology-registry.sh refresh --write-doc`
+- [x] T022 [EXECUTOR: MAIN] [SEQUENTIAL] Add a fail-closed repo-local Beads wrapper in `scripts/bd-local.sh` plus unit coverage in `tests/unit/test_bd_local.sh`
+- [x] T023 [EXECUTOR: MAIN] [SEQUENTIAL] Route high-traffic repo instructions and Beads workflow docs through the local wrapper in `.ai/instructions/shared-core.md`, `CLAUDE.md`, `.claude/commands/`, `.claude/skills/`, and `docs/CODEX-OPERATING-MODEL.md`
+- [x] T024 [EXECUTOR: MAIN] [SEQUENTIAL] Add wrapper guardrails to `tests/static/test_beads_worktree_ownership.sh` and `scripts/codex-check.sh`
 
 ---
 

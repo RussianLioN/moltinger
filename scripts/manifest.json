@@ -96,6 +96,19 @@
         "beads-recovery-batch"
       ]
     },
+    "bd-local.sh": {
+      "version": "1.0.0",
+      "description": "Fail-closed wrapper that binds Beads commands to the current worktree-local tracker database",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git"
+      ],
+      "provides": [
+        "bd-local"
+      ]
+    },
     "beads-worktree-localize.sh": {
       "version": "1.0.0",
       "description": "Remove stale Beads redirect metadata and bootstrap a worktree-local tracker database",

@@ -109,8 +109,10 @@ check_instruction_references() {
   local failures=0
   assert_contains ".ai/instructions/shared-core.md" "Speckit Artifact Guard" "root Speckit guard" || failures=1
   assert_contains ".ai/instructions/shared-core.md" "docs/GIT-TOPOLOGY-REGISTRY.md" "topology registry reference" || failures=1
+  assert_contains ".ai/instructions/shared-core.md" "./scripts/bd-local.sh sync" "safe Beads sync guidance" || failures=1
   assert_contains ".ai/instructions/codex-adapter.md" "docs/CODEX-OPERATING-MODEL.md" "operating model reference" || failures=1
   assert_contains ".ai/instructions/codex-adapter.md" "make codex-check" "Codex governance check command" || failures=1
+  assert_contains "docs/CODEX-OPERATING-MODEL.md" "./scripts/bd-local.sh" "local Beads wrapper guidance" || failures=1
 
   return "${failures}"
 }

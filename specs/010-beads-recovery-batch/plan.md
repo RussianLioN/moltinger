@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add a script-first batch recovery workflow that audits leaked issues in the canonical root tracker, produces a deterministic plan, and applies only high-confidence recoveries into localized owner worktrees. Reuse the existing single-issue recovery and localization helpers, add explicit ownership overrides for ambiguous cases, and leave canonical root cleanup out of scope for the same command.
+Add a script-first batch recovery workflow that audits leaked issues in the canonical root tracker, produces a deterministic plan, and applies only high-confidence recoveries into localized owner worktrees. Reuse the existing single-issue recovery and localization helpers, add explicit ownership overrides for ambiguous cases, leave canonical root cleanup out of scope for the same command, and harden day-to-day Beads commands behind a fail-closed repo-local wrapper so agent sessions do not leak back into the canonical root when `direnv` is inactive.
 
 ## Technical Context
 
@@ -16,7 +16,7 @@ Add a script-first batch recovery workflow that audits leaked issues in the cano
 **Target Platform**: macOS/Linux developer machines with multiple git worktrees
 **Project Type**: Repository workflow automation + Beads state repair  
 **Performance Goals**: audit in under 10 seconds and safe apply in under 15 seconds on the current repo topology  
-**Constraints**: fail closed on ambiguous ownership, do not rewrite canonical root in the same command, tolerate current `molt` vs `moltinger-*` prefix mismatch, produce deterministic machine-readable artifacts  
+**Constraints**: fail closed on ambiguous ownership, do not rewrite canonical root in the same command, tolerate current `molt` vs `moltinger-*` prefix mismatch, treat `direnv` as non-authoritative in agent sessions, produce deterministic machine-readable artifacts
 **Scale/Scope**: single repository, dozens of worktrees at most, hundreds of tracker records, small batches of leaked issues per run
 
 ## Constitution Check
@@ -89,6 +89,7 @@ tests/static/
 - One committed ownership override artifact under `docs/`.
 - Deterministic JSON plan and journal artifacts generated under a repo-local temp or output path.
 - Reuse of `scripts/beads-worktree-localize.sh` and `scripts/beads-recover-issue.sh` for actual worktree repair.
+- One repo-local `bd` wrapper that pins `BEADS_DB` to the current worktree and blocks redirected state.
 - Unit/static coverage for audit/apply safety boundaries.
 - Documentation updates for the new recovery workflow.
 

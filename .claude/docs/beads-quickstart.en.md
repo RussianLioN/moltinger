@@ -2,6 +2,8 @@
 
 > **Attribution**: [Beads](https://github.com/steveyegge/beads) methodology by [Steve Yegge](https://github.com/steveyegge)
 
+> **Moltinger repo note**: for repo-local Beads commands, use `./scripts/bd-local.sh` so the current worktree does not fall back to the canonical root tracker.
+
 ---
 
 ## SESSION CLOSE PROTOCOL (MANDATORY!)
@@ -11,9 +13,9 @@
 ```bash
 git status              # 1. What changed?
 git add <files>         # 2. Stage code
-bd sync                 # 3. Sync beads
+./scripts/bd-local.sh sync  # 3. Sync beads
 git commit -m "... (PREFIX-xxx)"  # 4. Commit with issue ID
-bd sync                 # 5. Sync new changes
+./scripts/bd-local.sh sync  # 5. Sync new changes
 git push                # 6. Push to remote
 ```
 
@@ -26,9 +28,9 @@ git push                # 6. Push to remote
 | Scenario | Tool | Command |
 |----------|------|---------|
 | Big feature (>1 day) | Spec-kit → Beads | `/speckit.specify` → `/speckit.tobeads` |
-| Small feature (<1 day) | Beads | `bd create -t feature` |
-| Bug | Beads | `bd create -t bug` |
-| Tech debt | Beads | `bd create -t chore` |
+| Small feature (<1 day) | Beads | `./scripts/bd-local.sh create -t feature` |
+| Bug | Beads | `./scripts/bd-local.sh create -t bug` |
+| Tech debt | Beads | `./scripts/bd-local.sh create -t chore` |
 | Research/spike | Beads formula | `bd mol wisp exploration` |
 | Hotfix (urgent!) | Beads formula | `bd mol wisp hotfix` |
 | Health check | Workflow | `bd mol wisp healthcheck` |
@@ -40,17 +42,17 @@ git push                # 6. Push to remote
 
 ```bash
 # === START ===
-bd prime                    # Restore context
-bd ready                    # What's available?
+./scripts/bd-local.sh prime                    # Restore context
+./scripts/bd-local.sh ready                    # What's available?
 
 # === WORK ===
-bd update ID --status in_progress   # Take task
+./scripts/bd-local.sh update ID --status in_progress   # Take task
 # ... do work ...
-bd close ID --reason "Description"  # Complete task
+./scripts/bd-local.sh close ID --reason "Description"  # Complete task
 /push patch                         # Commit
 
 # === END (MANDATORY) ===
-bd sync                     # Sync before exit
+./scripts/bd-local.sh sync                     # Sync before exit
 ```
 
 ---
@@ -59,7 +61,7 @@ bd sync                     # Sync before exit
 
 ### Basic Command
 ```bash
-bd create "Title" -t type -p priority -d "description"
+./scripts/bd-local.sh create "Title" -t type -p priority -d "description"
 ```
 
 ### Types (-t)
@@ -84,13 +86,13 @@ bd create "Title" -t type -p priority -d "description"
 ### Examples
 ```bash
 # Simple task
-bd create "Add logout button" -t feature -p 3
+./scripts/bd-local.sh create "Add logout button" -t feature -p 3
 
 # With description
-bd create "DEBT-001: Refactoring" -t chore -p 2 -d "Details..."
+./scripts/bd-local.sh create "DEBT-001: Refactoring" -t chore -p 2 -d "Details..."
 
 # Bug with source link
-bd create "Button not working" -t bug -p 1 --deps discovered-from:PREFIX-abc
+./scripts/bd-local.sh create "Button not working" -t bug -p 1 --deps discovered-from:PREFIX-abc
 ```
 
 ---
@@ -99,7 +101,7 @@ bd create "Button not working" -t bug -p 1 --deps discovered-from:PREFIX-abc
 
 ```bash
 # On creation
-bd create "Task" -t feature --deps TYPE:ID
+./scripts/bd-local.sh create "Task" -t feature --deps TYPE:ID
 
 # Add to existing
 bd dep add ISSUE DEPENDS_ON
@@ -118,14 +120,14 @@ bd dep add ISSUE DEPENDS_ON
 
 ```bash
 # Create epic
-bd create "User Authentication" -t epic -p 2
+./scripts/bd-local.sh create "User Authentication" -t epic -p 2
 
 # Add child tasks
-bd create "Login form" -t feature --deps parent:PREFIX-epic-id
-bd create "JWT tokens" -t feature --deps parent:PREFIX-epic-id
+./scripts/bd-local.sh create "Login form" -t feature --deps parent:PREFIX-epic-id
+./scripts/bd-local.sh create "JWT tokens" -t feature --deps parent:PREFIX-epic-id
 
 # View structure
-bd show PREFIX-epic-id --tree
+./scripts/bd-local.sh show PREFIX-epic-id --tree
 ```
 
 ---
@@ -169,10 +171,10 @@ bd mol burn WISP_ID    # Discard
 
 ```bash
 # Terminal 1: acquired lock
-bd update PREFIX-abc --status in_progress
+./scripts/bd-local.sh update PREFIX-abc --status in_progress
 
 # Terminal 2: find unlocked
-bd list --unlocked
+./scripts/bd-local.sh list --unlocked
 ```
 
 ---
@@ -181,10 +183,10 @@ bd list --unlocked
 
 ```bash
 # Found bug while working
-bd create "Found bug: ..." -t bug --deps discovered-from:PREFIX-current
+./scripts/bd-local.sh create "Found bug: ..." -t bug --deps discovered-from:PREFIX-current
 
 # Realized need another task
-bd create "Also need to..." -t feature --deps blocks:PREFIX-current
+./scripts/bd-local.sh create "Also need to..." -t feature --deps blocks:PREFIX-current
 ```
 
 ---
@@ -192,13 +194,13 @@ bd create "Also need to..." -t feature --deps blocks:PREFIX-current
 ## Search and Filter
 
 ```bash
-bd ready                    # Ready to work
-bd list                     # All open
-bd list --all               # Including closed
-bd list -t bug              # Only bugs
-bd list -p 1                # Only P1
-bd show ID                  # Task details
-bd show ID --tree           # With hierarchy
+./scripts/bd-local.sh ready                    # Ready to work
+./scripts/bd-local.sh list                     # All open
+./scripts/bd-local.sh list --all               # Including closed
+./scripts/bd-local.sh list -t bug              # Only bugs
+./scripts/bd-local.sh list -p 1                # Only P1
+./scripts/bd-local.sh show ID                  # Task details
+./scripts/bd-local.sh show ID --tree           # With hierarchy
 ```
 
 ---
@@ -207,19 +209,19 @@ bd show ID --tree           # With hierarchy
 
 ```bash
 # Change status
-bd update ID --status in_progress
-bd update ID --status blocked
-bd update ID --status open
+./scripts/bd-local.sh update ID --status in_progress
+./scripts/bd-local.sh update ID --status blocked
+./scripts/bd-local.sh update ID --status open
 
 # Change priority
-bd update ID --priority 1
+./scripts/bd-local.sh update ID --priority 1
 
 # Add label
-bd update ID --add-label security
+./scripts/bd-local.sh update ID --add-label security
 
 # Close
-bd close ID --reason "Done"
-bd close ID1 ID2 ID3 --reason "Batch done"
+./scripts/bd-local.sh close ID --reason "Done"
+./scripts/bd-local.sh close ID1 ID2 ID3 --reason "Batch done"
 ```
 
 ---
@@ -227,9 +229,9 @@ bd close ID1 ID2 ID3 --reason "Batch done"
 ## Diagnostics
 
 ```bash
-bd doctor     # Health check
-bd info       # Project status
-bd prime      # Workflow context
+./scripts/bd-local.sh doctor     # Health check
+./scripts/bd-local.sh info       # Project status
+./scripts/bd-local.sh prime      # Workflow context
 ```
 
 ---
@@ -238,17 +240,17 @@ bd prime      # Workflow context
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ START     bd prime / bd ready                    │
-│ TAKE      bd update ID --status in_progress      │
-│ CREATE    bd create "..." -t type -p N           │
-│ CLOSE     bd close ID --reason "..."             │
+│ START     ./scripts/bd-local.sh prime / ready    │
+│ TAKE      ./scripts/bd-local.sh update ID ...    │
+│ CREATE    ./scripts/bd-local.sh create "..."     │
+│ CLOSE     ./scripts/bd-local.sh close ID ...     │
 ├──────────────────────────────────────────────────┤
 │ SESSION END (ALL 6 STEPS!)                       │
 │   1. git status                                  │
 │   2. git add <files>                             │
-│   3. bd sync                                     │
+│   3. ./scripts/bd-local.sh sync                  │
 │   4. git commit -m "... (PREFIX-xxx)"            │
-│   5. bd sync                                     │
+│   5. ./scripts/bd-local.sh sync                  │
 │   6. git push                                    │
 ├──────────────────────────────────────────────────┤
 │ WORKFLOWS bd formula list                        │

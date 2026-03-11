@@ -1,5 +1,7 @@
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+In this repository, run repo-local Beads commands from the worktree root via `./scripts/bd-local.sh`. It pins `BEADS_DB` to the current worktree and fails closed if redirect metadata is still present.
+
 ## Git Topology Reference
 
 Current branch/worktree registry lives in:
@@ -22,11 +24,11 @@ In Codex/App sessions, `refresh --write-doc` may require approval if the shared 
 ## Quick Reference
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
+./scripts/bd-local.sh ready              # Find available work
+./scripts/bd-local.sh show <id>          # View issue details
+./scripts/bd-local.sh update <id> --status in_progress  # Claim work
+./scripts/bd-local.sh close <id>         # Complete work
+./scripts/bd-local.sh sync               # Sync with git
 ```
 
 ## Speckit Artifact Guard
@@ -86,7 +88,7 @@ Forbidden:
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   ./scripts/bd-local.sh sync
    git push
    git status  # MUST show "up to date with origin"
    ```

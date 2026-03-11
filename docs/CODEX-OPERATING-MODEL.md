@@ -109,11 +109,13 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 1. Managed sibling worktrees in this repo must keep Beads tracker ownership local to the checked-out branch/worktree.
 2. `.beads/issues.jsonl` and `.beads/config.yaml` are branch-local git state; `.beads/beads.db` must resolve to the current worktree, not the canonical root.
 3. `.envrc` is the default selector for this contract and must export `BEADS_DB="$(git rev-parse --show-toplevel)/.beads/beads.db"`.
-4. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
-5. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
-6. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
-7. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
-8. Canonical root cleanup is a separate gated action and must not happen in the same command that performs recovery apply.
+4. In Codex/App/agent sessions, repo-local Beads commands must go through `./scripts/bd-local.sh`, because `direnv` is not guaranteed to be loaded and bare `bd` can still fall back to the canonical root tracker.
+5. `./scripts/bd-local.sh` must fail closed when `.beads/redirect` is present; localize that worktree before resuming normal Beads commands.
+6. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
+7. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
+8. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
+9. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
+10. Canonical root cleanup is a separate gated action and must not happen in the same command that performs recovery apply.
 
 ### Preferred Branch Prefixes
 

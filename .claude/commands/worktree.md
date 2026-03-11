@@ -43,7 +43,7 @@ Treat these as `finish`:
 
 If command is empty (`/worktree`):
 1. Try to detect issue id from recent context or current branch.
-2. If missing, run `bd ready` and pick the top ready issue.
+2. If missing, run `./scripts/bd-local.sh ready` and pick the top ready issue.
 3. If multiple equal candidates exist, ask one short clarification.
 4. If one strong candidate exists, continue with `start` automatically.
 
@@ -69,7 +69,7 @@ When the user gives an issue id and slug:
 1. Use the issue-aware template:
    - branch: `feat/<issue-lower>-<slug>`
    - worktree dir: `../<repo>-<issue-short>-<slug>`
-2. If the issue title lookup is needed and `bd show <ISSUE_ID>` fails because SQLite is readonly/locked/unavailable, retry with `bd show --no-db <ISSUE_ID>` from the canonical root worktree.
+2. If the issue title lookup is needed and `./scripts/bd-local.sh show <ISSUE_ID>` fails because SQLite is readonly/locked/unavailable, retry with `bd show --no-db <ISSUE_ID>` from the canonical root worktree.
 
 When the request is clearly Speckit-oriented:
 1. Treat create/start as Speckit-aware if either is true:
@@ -199,7 +199,7 @@ Process:
    - `git -C <canonical-root> pull --rebase`
    - Do not run `git pull --rebase origin main` for this workflow; rely on the configured upstream of `main`.
    - In Codex/App, keep this as its own approval step when escalation is required. Do not bundle it with create/refresh/handoff commands.
-7. If issue id exists and the slug was omitted, derive the slug from the issue title using `bd show`, with `--no-db` fallback if needed.
+7. If issue id exists and the slug was omitted, derive the slug from the issue title using `./scripts/bd-local.sh show`, with `--no-db` fallback if needed.
 8. Create or attach the worktree with beads integration:
    - new branch: use the deterministic executor instead of raw `bd worktree create`
      - `scripts/worktree-phase-a.sh create-from-base --canonical-root <canonical-root> --base-ref main --branch <branch> --path <absolute-worktree-path>`
@@ -223,12 +223,12 @@ Process:
      - `git add docs/GIT-TOPOLOGY-REGISTRY.md`
      - `git commit -m "docs(topology): refresh registry after worktree mutation"`
      - `git pull --rebase`
-     - `bd sync`
+     - `./scripts/bd-local.sh sync`
      - `git push`
    - If this landing sequence fails, stop and report the exact blocking command/result instead of continuing to handoff.
    - Treat the committed registry mutation as owned by the invoking branch, not by the target worktree branch.
    - Do not run a second refresh/commit/push cycle in the same Phase A run.
-12. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
+12. If issue id exists: `./scripts/bd-local.sh update <ISSUE_ID> --status in_progress`
    - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
 13. If the request contains explicit downstream work for the target worktree, extract it as `pending_summary` using the user's wording as closely as possible.
     - Keep it to one sentence.
@@ -305,18 +305,18 @@ Inputs:
 Process:
 1. Resolve issue id.
 2. Run quality gate:
-   - `bd preflight --check`
+   - `./scripts/bd-local.sh preflight --check`
    - if unavailable, fallback to project default fast checks.
-3. `bd sync`
+3. `./scripts/bd-local.sh sync`
 4. If working tree has changes:
    - create commit message (short, include issue id)
    - `git add -A && git commit -m "..."`
 5. `git pull --rebase`
-6. `bd sync`
+6. `./scripts/bd-local.sh sync`
 7. `git push -u origin <current-branch>`
 8. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
    - if stale, report: `Run command-session-summary or scripts/git-topology-registry.sh refresh --write-doc from the authoritative worktree before ending the session`
-9. `bd close <ISSUE_ID> --reason "<reason>"`
+9. `./scripts/bd-local.sh close <ISSUE_ID> --reason "<reason>"`
    - if direct DB access fails in the current environment, retry with `bd close --no-db <ISSUE_ID> --reason "<reason>"`
    - if no issue id can be resolved confidently, print `Issue: n/a` and skip the close step
    - do not invent a follow-up issue or infer an unrelated issue from prose context

@@ -56,12 +56,12 @@ This creates:
 
 ```bash
 # Find available work
-bd ready
+./scripts/bd-local.sh ready
 
 # Work on task
-bd update PREFIX-xxx --status in_progress
+./scripts/bd-local.sh update PREFIX-xxx --status in_progress
 # ... implement ...
-bd close PREFIX-xxx --reason "Completed"
+./scripts/bd-local.sh close PREFIX-xxx --reason "Completed"
 /push patch
 
 # Repeat until epic done
@@ -91,7 +91,7 @@ The tasks.md file is **frozen** after import. All new work goes through Beads:
 
 ```bash
 # Found new task during implementation?
-bd create "Also need to add caching" -t feature --deps discovered-from:PREFIX-xxx
+./scripts/bd-local.sh create "Also need to add caching" -t feature --deps discovered-from:PREFIX-xxx
 
 # DON'T edit tasks.md - use Beads instead
 ```

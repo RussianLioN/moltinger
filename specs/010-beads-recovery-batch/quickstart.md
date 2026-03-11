@@ -1,5 +1,7 @@
 # Quickstart: Safe Batch Recovery of Leaked Beads Issues
 
+Repo note: after recovery/localization, use `./scripts/bd-local.sh` for repo-local Beads workflow commands so agent sessions do not fall back to the canonical root tracker when `direnv` is inactive.
+
 ## 1. Audit current leakage
 
 Run the audit workflow and write a reviewable plan file:
@@ -48,7 +50,9 @@ Expected result:
 Run the targeted validation set:
 
 ```bash
+bash -n scripts/bd-local.sh
 bash -n scripts/beads-recovery-batch.sh
+tests/unit/test_bd_local.sh
 tests/unit/test_beads_recover_issue.sh
 tests/unit/test_beads_recovery_batch.sh
 tests/static/test_beads_worktree_ownership.sh

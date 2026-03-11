@@ -15,7 +15,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 Verify Beads is installed and initialized:
 ```bash
 bd version
-bd info
+./scripts/bd-local.sh info
 ```
 
 If not installed, instruct user to run `/beads-init` first.
@@ -38,28 +38,28 @@ If not installed, instruct user to run `/beads-init` first.
 
 4. Get issue prefix from Beads config:
    ```bash
-   bd info | grep prefix
+   ./scripts/bd-local.sh info | grep prefix
    ```
 
 5. Create Epic in Beads:
    ```bash
-   bd create "Feature: <feature-name>" -t epic -p 2 -d "<spec-path>"
+   ./scripts/bd-local.sh create "Feature: <feature-name>" -t epic -p 2 -d "<spec-path>"
    ```
    Save the returned epic ID.
 
 6. For each Phase, create a parent task:
    ```bash
-   bd create "Phase N: <title>" -t task -p 2 --parent <epic-id>
+   ./scripts/bd-local.sh create "Phase N: <title>" -t task -p 2 --parent <epic-id>
    ```
 
 7. For each task within a phase:
    ```bash
-   bd create "<task-description>" -t task -p 2 --parent <phase-id>
+   ./scripts/bd-local.sh create "<task-description>" -t task -p 2 --parent <phase-id>
    ```
 
    If task has `[USn]` marker, add label:
    ```bash
-   bd label add <task-id> usN
+   ./scripts/bd-local.sh label add <task-id> usN
    ```
 
 8. Set up dependencies:
@@ -67,12 +67,12 @@ If not installed, instruct user to run `/beads-init` first.
    - First task of Phase N+1 depends on last task of Phase N
 
    ```bash
-   bd dep add <child-id> <parent-id>
+   ./scripts/bd-local.sh dep add <child-id> <parent-id>
    ```
 
 9. Sync to git:
    ```bash
-   bd sync
+   ./scripts/bd-local.sh sync
    ```
 
 ## Output
@@ -98,7 +98,7 @@ Report the import results:
 - PREFIX-ghi789 → PREFIX-jkl012 (phase transition)
 
 ### Next Steps
-Run `bd ready` to see available tasks.
+Run `./scripts/bd-local.sh ready` to see available tasks.
 ```
 
 ## Error Handling

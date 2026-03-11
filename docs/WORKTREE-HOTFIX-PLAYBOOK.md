@@ -106,7 +106,7 @@ git status
 git add ...
 git commit -m "fix(worktree): <short description>"
 git pull --rebase
-bd sync
+./scripts/bd-local.sh sync
 git push
 git status
 ```

@@ -11,9 +11,11 @@ argument-hint: ""
 
 Beads is a git-backed, AI-native issue tracking system. This skill helps AI agents work with Beads effectively.
 
+Repo note for Moltinger: use `./scripts/bd-local.sh` for repo-local tracker commands so the current worktree keeps ownership even when `direnv` is not active.
+
 ## When to Use
 
-- Starting a new work session (bd prime → bd ready)
+- Starting a new work session (`./scripts/bd-local.sh prime` → `./scripts/bd-local.sh ready`)
 - Creating, updating, or closing issues
 - Managing task dependencies
 - Running workflow formulas
@@ -25,17 +27,17 @@ Beads is a git-backed, AI-native issue tracking system. This skill helps AI agen
 
 ```bash
 # START
-bd prime                    # Inject context
-bd ready                    # Find available work
+./scripts/bd-local.sh prime                    # Inject context
+./scripts/bd-local.sh ready                    # Find available work
 
 # WORK
-bd update ID --status in_progress  # Take task
+./scripts/bd-local.sh update ID --status in_progress  # Take task
 # ... implement ...
-bd close ID --reason "Done"        # Complete task
+./scripts/bd-local.sh close ID --reason "Done"        # Complete task
 /push patch                        # Commit
 
 # END (MANDATORY!)
-bd sync
+./scripts/bd-local.sh sync
 git push
 ```
 
@@ -43,13 +45,13 @@ git push
 
 ```bash
 # Basic
-bd create "Title" -t type -p priority
+./scripts/bd-local.sh create "Title" -t type -p priority
 
 # With files (auto-labels)
-bd create "Fix button" --files src/components/Button.tsx
+./scripts/bd-local.sh create "Fix button" --files src/components/Button.tsx
 
 # Emergent work
-bd create "Found bug" -t bug --deps discovered-from:current-id
+./scripts/bd-local.sh create "Found bug" -t bug --deps discovered-from:current-id
 ```
 
 ### Types & Priorities
@@ -96,7 +98,7 @@ For large features (>1 day):
 2. `/speckit.plan` → design
 3. `/speckit.tasks` → task breakdown
 4. `/speckit.tobeads` → import to Beads
-5. `bd ready` → work with Beads
+5. `./scripts/bd-local.sh ready` → work with Beads
 
 ## Links
 
