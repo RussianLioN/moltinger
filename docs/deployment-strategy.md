@@ -12,6 +12,7 @@ This document is the operator summary for deploying the two-agent platform:
 | Unit | Workflow / entrypoint | Scope |
 |------|------------------------|-------|
 | Moltinger baseline | `.github/workflows/deploy.yml` | Main application deploy and shared platform baseline |
+| Moltis version update runbook | `docs/runbooks/moltis-backup-safe-update.md` | Backup-safe image bump with restore-check and rollback evidence |
 | Clawdiy same-host rollout | `.github/workflows/deploy-clawdiy.yml` | Clawdiy-only deploy, smoke, auth rendering, restore-readiness checks |
 | Rollback drill | `.github/workflows/rollback-drill.yml` | Backup integrity and restore-readiness verification |
 

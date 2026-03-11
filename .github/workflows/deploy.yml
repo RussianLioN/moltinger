@@ -411,6 +411,7 @@ jobs:
     if: needs.preflight.outputs.should_deploy == 'true' && github.event.inputs.rollback != 'true'
     outputs:
       backup_file: ${{ steps.backup.outputs.backup_file }}
+      restore_check_file: ${{ steps.restore_readiness.outputs.restore_check_file }}
 
     steps:
       - name: Setup SSH
@@ -436,6 +437,7 @@ jobs:
             CONFIG_DIR="$DEPLOY_DIR/config"
             DATA_DIR="$DEPLOY_DIR/data"
             ENV_FILE="$DEPLOY_DIR/.env"
+            COMPOSE_FILE_MAIN="$DEPLOY_DIR/docker-compose.yml"
             COMPOSE_FILE="$DEPLOY_DIR/docker-compose.prod.yml"
 
             mkdir -p "$BACKUP_DIR"
@@ -473,6 +475,14 @@ jobs:
               exit 1
             fi
 
+            # Backup docker-compose.yml separately so full GitOps state can be restored
+            if [ -f "$COMPOSE_FILE_MAIN" ]; then
+              cp "$COMPOSE_FILE_MAIN" "$BACKUP_FILE.compose-main"
+            else
+              echo "::error::Missing compose file for rollback: $COMPOSE_FILE_MAIN"
+              exit 1
+            fi
+
             # Save image version metadata
             echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
 
@@ -491,12 +501,18 @@ jobs:
               exit 1
             fi
 
+            if [ ! -f "$BACKUP_FILE.compose-main" ]; then
+              echo "::error::Backup main compose metadata missing"
+              exit 1
+            fi
+
             echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
 
             # Rotate old backups (keep last 10)
             cd "$BACKUP_DIR"
             ls -t pre_deploy_*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
             ls -t pre_deploy_*.compose 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+            ls -t pre_deploy_*.compose-main 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
             ls -t pre_deploy_*.version 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
           EOF
 
@@ -508,6 +524,86 @@ jobs:
 
           echo "backup_timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
           echo "backup_file=$LATEST_BACKUP" >> $GITHUB_OUTPUT
+
+      - name: Validate Moltis restore readiness
+        id: restore_readiness
+        run: |
+          set -euo pipefail
+          echo "::group::Validate Moltis restore readiness"
+
+          RESULT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+
+            BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
+            EVIDENCE_ROOT="$DEPLOY_DIR/data/moltis/audit/restore-checks"
+            TMP_DIR=$(mktemp -d /tmp/moltis-restore-readiness.XXXXXX)
+            trap 'rm -rf "$TMP_DIR"' EXIT
+
+            mkdir -p "$EVIDENCE_ROOT"
+
+            tar -tzf "$BACKUP_FILE" > /dev/null
+            tar -xzf "$BACKUP_FILE" -C "$TMP_DIR"
+
+            HAS_CONFIG=false
+            HAS_DATA=false
+            HAS_ENV=false
+            HAS_COMPOSE_PROD_SIDECAR=false
+            HAS_COMPOSE_MAIN_SIDECAR=false
+            HAS_VERSION=false
+
+            [ -d "$TMP_DIR/config" ] && HAS_CONFIG=true
+            [ -d "$TMP_DIR/data" ] && HAS_DATA=true
+            [ -f "$TMP_DIR/.env" ] && HAS_ENV=true
+            [ -f "${BACKUP_FILE}.compose" ] && HAS_COMPOSE_PROD_SIDECAR=true
+            [ -f "${BACKUP_FILE}.compose-main" ] && HAS_COMPOSE_MAIN_SIDECAR=true
+            [ -f "${BACKUP_FILE}.version" ] && HAS_VERSION=true
+
+            RESTORE_CHECK_FILE="$EVIDENCE_ROOT/restore-check-$(date -u +%Y%m%dT%H%M%SZ).json"
+            cat > "$RESTORE_CHECK_FILE" <<JSON
+            {
+              "schema_version": "v1",
+              "target": "moltis",
+              "checked_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "backup_reference": "$BACKUP_FILE",
+              "has_config": $HAS_CONFIG,
+              "has_data": $HAS_DATA,
+              "has_env": $HAS_ENV,
+              "has_compose_prod_sidecar": $HAS_COMPOSE_PROD_SIDECAR,
+              "has_compose_main_sidecar": $HAS_COMPOSE_MAIN_SIDECAR,
+              "has_version_sidecar": $HAS_VERSION,
+              "status": "$([ "$HAS_CONFIG" = true ] && [ "$HAS_DATA" = true ] && [ "$HAS_ENV" = true ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = true ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = true ] && [ "$HAS_VERSION" = true ] && printf 'passed' || printf 'failed')"
+            }
+            JSON
+
+            echo "restore_check_file=$RESTORE_CHECK_FILE"
+            echo "has_config=$HAS_CONFIG"
+            echo "has_data=$HAS_DATA"
+            echo "has_env=$HAS_ENV"
+            echo "has_compose_prod_sidecar=$HAS_COMPOSE_PROD_SIDECAR"
+            echo "has_compose_main_sidecar=$HAS_COMPOSE_MAIN_SIDECAR"
+            echo "has_version=$HAS_VERSION"
+          EOF
+          )
+
+          echo "$RESULT"
+
+          RESTORE_CHECK_FILE=$(echo "$RESULT" | grep '^restore_check_file=' | cut -d= -f2-)
+          HAS_CONFIG=$(echo "$RESULT" | grep '^has_config=' | cut -d= -f2-)
+          HAS_DATA=$(echo "$RESULT" | grep '^has_data=' | cut -d= -f2-)
+          HAS_ENV=$(echo "$RESULT" | grep '^has_env=' | cut -d= -f2-)
+          HAS_COMPOSE_PROD_SIDECAR=$(echo "$RESULT" | grep '^has_compose_prod_sidecar=' | cut -d= -f2-)
+          HAS_COMPOSE_MAIN_SIDECAR=$(echo "$RESULT" | grep '^has_compose_main_sidecar=' | cut -d= -f2-)
+          HAS_VERSION=$(echo "$RESULT" | grep '^has_version=' | cut -d= -f2-)
+
+          if [ "$HAS_CONFIG" != "true" ] || [ "$HAS_DATA" != "true" ] || [ "$HAS_ENV" != "true" ] || [ "$HAS_COMPOSE_PROD_SIDECAR" != "true" ] || [ "$HAS_COMPOSE_MAIN_SIDECAR" != "true" ] || [ "$HAS_VERSION" != "true" ]; then
+            echo "::error::Pre-update backup is not restore-ready for Moltis rollout"
+            exit 1
+          fi
+
+          echo "restore_check_file=$RESTORE_CHECK_FILE" >> "$GITHUB_OUTPUT"
+          echo "::notice::Restore readiness validated: $RESTORE_CHECK_FILE"
+          echo "::endgroup::"
 
   # ===========================================
   # Deploy Moltis container
@@ -846,6 +942,13 @@ jobs:
               exit 1
             fi
 
+            if [ -f "${BACKUP_FILE}.compose-main" ]; then
+              cp "${BACKUP_FILE}.compose-main" docker-compose.yml
+            else
+              echo "::error::Rollback compose metadata missing: ${BACKUP_FILE}.compose-main"
+              exit 1
+            fi
+
             BACKUP_VERSION=$(cat "${BACKUP_FILE}.version" 2>/dev/null || echo "unknown")
             if [ "$BACKUP_VERSION" != "unknown" ]; then
               docker pull "$BACKUP_VERSION" || true
@@ -921,6 +1024,8 @@ jobs:
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backup | \`${{ needs.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Restore Check | \`${{ needs.backup.outputs.restore_check_file }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
           echo "| Auto Rollback | $ROLLED_BACK |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
@@ -1089,6 +1194,11 @@ jobs:
             if [ -f "${BACKUP_FILE}.compose" ]; then
               cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
               echo "Restored docker-compose.prod.yml from backup"
+            fi
+
+            if [ -f "${BACKUP_FILE}.compose-main" ]; then
+              cp "${BACKUP_FILE}.compose-main" docker-compose.yml
+              echo "Restored docker-compose.yml from backup"
             fi
 
             # Pull the backed-up image version if known
