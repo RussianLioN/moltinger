@@ -179,6 +179,11 @@ require_commands() {
 }
 
 load_runtime_config() {
+    local rendered_runtime_config="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
+    if [[ -f "$rendered_runtime_config" ]]; then
+        CLAWDIY_CONFIG_FILE="$rendered_runtime_config"
+    fi
+
     if [[ ! -f "$CLAWDIY_CONFIG_FILE" ]]; then
         add_check "runtime_config" "fail" "Clawdiy runtime config not found: $CLAWDIY_CONFIG_FILE" "error"
         return 1
@@ -189,16 +194,14 @@ load_runtime_config() {
         return 1
     fi
 
-    local base_url server_port health_path metrics_path
-    base_url="$(jq -r '.server.base_url' "$CLAWDIY_CONFIG_FILE")"
-    server_port="$(jq -r '.server.port // 18789' "$CLAWDIY_CONFIG_FILE")"
-    health_path="$(jq -r '.server.health_path // "/health"' "$CLAWDIY_CONFIG_FILE")"
-    metrics_path="$(jq -r '.server.metrics_path // "/metrics"' "$CLAWDIY_CONFIG_FILE")"
+    local base_url server_port
+    base_url="$(jq -r '.gateway.publicBaseUrl' "$CLAWDIY_CONFIG_FILE")"
+    server_port="$(jq -r '.gateway.port // 18789' "$CLAWDIY_CONFIG_FILE")"
 
     CLAWDIY_PUBLIC_BASE_URL="${base_url%/}"
-    CLAWDIY_PUBLIC_HEALTH_URL="${CLAWDIY_PUBLIC_BASE_URL}${health_path}"
-    CLAWDIY_LOCAL_HEALTH_URL="http://127.0.0.1:${server_port}${health_path}"
-    CLAWDIY_LOCAL_METRICS_URL="http://127.0.0.1:${server_port}${metrics_path}"
+    CLAWDIY_PUBLIC_HEALTH_URL="${CLAWDIY_PUBLIC_BASE_URL}/health"
+    CLAWDIY_LOCAL_HEALTH_URL="http://127.0.0.1:${server_port}/health"
+    CLAWDIY_LOCAL_METRICS_URL="http://127.0.0.1:${server_port}/metrics"
 
     add_check "runtime_config" "pass" "Loaded Clawdiy runtime config from $CLAWDIY_CONFIG_FILE" "error"
     return 0
@@ -397,19 +400,17 @@ verify_handoff_stage() {
         add_check "handoff_sample_envelope" "fail" "Sample handoff envelope is invalid for Moltinger -> Clawdiy contract smoke" "error"
     fi
 
-    if jq -e '
-        (.control_plane.submit_path == "/internal/v1/agent-handoffs")
-        and (.control_plane.ack_path_template == "/internal/v1/agent-handoffs/{correlation_id}/acks")
-        and (.control_plane.status_path_template == "/internal/v1/agent-handoffs/{correlation_id}")
-        and (.control_plane.cancel_path_template == "/internal/v1/agent-handoffs/{correlation_id}/cancel")
-        and (.control_plane.required_ack_types | index("delivery") != null)
-        and (.control_plane.required_ack_types | index("accept") != null)
-        and (.control_plane.required_ack_types | index("start") != null)
-        and (.control_plane.required_ack_types | index("terminal") != null)
-      ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
-        add_check "clawdiy_control_plane_contract" "pass" "Clawdiy control-plane config exposes handoff paths, required acknowledgements, and correlation metadata" "error"
+    if jq -e --slurpfile policy "$FLEET_POLICY_FILE" '
+        ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $route
+        | .agents[] | select(.agent_id == "clawdiy")
+        | .endpoint_paths.handoff_submit == $route.endpoint
+        and .endpoint_paths.handoff_ack == $route.ack_endpoint
+        and .endpoint_paths.handoff_status == $route.status_endpoint
+        and .endpoint_paths.handoff_cancel == $route.cancel_endpoint
+      ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
+        add_check "clawdiy_control_plane_contract" "pass" "Fleet registry and policy expose the authoritative Clawdiy handoff paths" "error"
     else
-        add_check "clawdiy_control_plane_contract" "fail" "Clawdiy control-plane config is missing required handoff contract fields" "error"
+        add_check "clawdiy_control_plane_contract" "fail" "Fleet registry and policy diverge on the authoritative Clawdiy handoff paths" "error"
     fi
 
     if toml_contains_line "$MOLTIS_CONFIG_FILE" '^[[:space:]]*MOLTIS_FLEET_HANDOFF_SUBMIT_PATH[[:space:]]*=[[:space:]]*"/internal/v1/agent-handoffs"' \
@@ -421,22 +422,17 @@ verify_handoff_stage() {
         add_check "moltis_handoff_env_contract" "fail" "Moltis config is missing sender-side handoff env metadata" "error"
     fi
 
-    if jq -e --slurpfile registry "$FLEET_REGISTRY_FILE" --slurpfile policy "$FLEET_POLICY_FILE" '
-        .control_plane as $cp
-        | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $clawdiy
-        | ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $route
-        | ($clawdiy.endpoint_paths.handoff_submit | endswith($cp.submit_path))
-        and ($clawdiy.endpoint_paths.handoff_ack | endswith($cp.ack_path_template))
-        and ($clawdiy.endpoint_paths.handoff_status | endswith($cp.status_path_template))
-        and ($clawdiy.endpoint_paths.handoff_cancel | endswith($cp.cancel_path_template))
-        and ($route.endpoint | endswith($cp.submit_path))
-        and ($route.ack_endpoint | endswith($cp.ack_path_template))
-        and ($route.status_endpoint | endswith($cp.status_path_template))
-        and ($route.cancel_endpoint | endswith($cp.cancel_path_template))
-      ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
-        add_check "handoff_route_alignment" "pass" "Clawdiy runtime, fleet registry, and policy routes agree on authoritative handoff endpoints" "error"
+    if jq -e --slurpfile policy "$FLEET_POLICY_FILE" '
+        ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $route
+        | .agents[] | select(.agent_id == "clawdiy")
+        | .endpoint_paths.handoff_submit == $route.endpoint
+        and .endpoint_paths.handoff_ack == $route.ack_endpoint
+        and .endpoint_paths.handoff_status == $route.status_endpoint
+        and .endpoint_paths.handoff_cancel == $route.cancel_endpoint
+      ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
+        add_check "handoff_route_alignment" "pass" "Fleet registry and policy routes agree on authoritative handoff endpoints" "error"
     else
-        add_check "handoff_route_alignment" "fail" "Clawdiy runtime, fleet registry, and policy routes diverge on handoff endpoints" "error"
+        add_check "handoff_route_alignment" "fail" "Fleet registry and policy routes diverge on handoff endpoints" "error"
     fi
 
     write_handoff_smoke_artifact || return 1
@@ -601,60 +597,54 @@ verify_extraction_readiness_stage() {
         return 1
     fi
 
-    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
+    if jq -e '
         def host:
             tostring
             | sub("^https?://"; "")
             | split("/")[0]
             | ascii_downcase;
-        ($runtime[0]) as $rt
-        | (.agents[] | select(.agent_id == "clawdiy")) as $cl
+        (.agents[] | select(.agent_id == "clawdiy")) as $cl
         | .topology_profiles.same_host.transport == "http-json"
         and .topology_profiles.remote_node.transport == "http-json"
         and .topology_profiles.same_host.network_plane == "fleet-internal"
         and .topology_profiles.remote_node.network_plane == "private-overlay"
-        and $cl.logical_address == $rt.control_plane.reply_to
+        and $cl.logical_address == "agent://clawdiy"
         and $cl.topology.active_profile == "same_host"
         and (($cl.topology.supported_profiles | index("same_host")) != null)
         and (($cl.topology.supported_profiles | index("remote_node")) != null)
         and $cl.topology.placement_profiles.same_host.internal_endpoint == $cl.internal_endpoint
         and ($cl.topology.placement_profiles.same_host.internal_endpoint | host) != ($cl.topology.placement_profiles.remote_node.internal_endpoint | host)
         and ($cl.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
-        and ($cl.topology.placement_profiles.remote_node.health_endpoint | endswith($rt.server.health_path))
-        and ($cl.topology.placement_profiles.remote_node.metrics_endpoint | endswith($rt.server.metrics_path))
+        and ($cl.topology.placement_profiles.remote_node.health_endpoint | endswith("/health"))
+        and ($cl.topology.placement_profiles.remote_node.metrics_endpoint | endswith("/metrics"))
       ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
         add_check "extraction_topology_profiles" "pass" "Clawdiy registry preserves logical address and route placement invariants across same_host and remote_node profiles" "error"
     else
         add_check "extraction_topology_profiles" "fail" "Clawdiy registry is missing a stable same_host/remote_node extraction contract" "error"
     fi
 
-    if jq -e --slurpfile registry "$FLEET_REGISTRY_FILE" '
-        ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
-        | .topology.logical_address == $cl.logical_address
-        and .topology.active_profile == $cl.topology.active_profile
-        and .topology.placement_profiles.same_host.internal_endpoint == $cl.topology.placement_profiles.same_host.internal_endpoint
-        and .topology.placement_profiles.remote_node.internal_endpoint == $cl.topology.placement_profiles.remote_node.internal_endpoint
-        and .topology.route_invariants.handoff_submit_path == $cl.topology.route_invariants.handoff_submit_path
-        and .topology.route_invariants.handoff_ack_path == $cl.topology.route_invariants.handoff_ack_path
-        and .topology.route_invariants.handoff_status_path == $cl.topology.route_invariants.handoff_status_path
-        and .topology.route_invariants.handoff_cancel_path == $cl.topology.route_invariants.handoff_cancel_path
+    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" --slurpfile registry "$FLEET_REGISTRY_FILE" '
+        ($runtime[0]) as $rt
+        | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
+        | .gateway.publicBaseUrl == $cl.public_endpoints.web
+        and (.agents.list | any(.id == "main" and .identity.name == $cl.display_name))
       ' "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
-        add_check "extraction_runtime_alignment" "pass" "Clawdiy runtime topology block stays aligned with the fleet registry extraction contract" "error"
+        add_check "extraction_runtime_alignment" "pass" "Clawdiy runtime publicBaseUrl and main agent identity stay aligned with the fleet registry" "error"
     else
-        add_check "extraction_runtime_alignment" "fail" "Clawdiy runtime topology block diverges from the fleet registry extraction contract" "error"
+        add_check "extraction_runtime_alignment" "fail" "Clawdiy runtime publicBaseUrl or main agent identity diverges from the fleet registry" "error"
     fi
 
-    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
-        ($runtime[0]) as $rt
+    if jq -e --slurpfile policy "$FLEET_POLICY_FILE" '
+        ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $route
         | (.agents[] | select(.agent_id == "clawdiy")) as $cl
-        | ($cl.topology.route_invariants.handoff_submit_path | endswith($rt.control_plane.submit_path))
-        and ($cl.topology.route_invariants.handoff_ack_path | endswith($rt.control_plane.ack_path_template))
-        and ($cl.topology.route_invariants.handoff_status_path | endswith($rt.control_plane.status_path_template))
-        and ($cl.topology.route_invariants.handoff_cancel_path | endswith($rt.control_plane.cancel_path_template))
-        and ($cl.endpoint_paths.handoff_submit == $cl.topology.route_invariants.handoff_submit_path)
+        | ($cl.endpoint_paths.handoff_submit == $cl.topology.route_invariants.handoff_submit_path)
         and ($cl.endpoint_paths.handoff_ack == $cl.topology.route_invariants.handoff_ack_path)
         and ($cl.endpoint_paths.handoff_status == $cl.topology.route_invariants.handoff_status_path)
         and ($cl.endpoint_paths.handoff_cancel == $cl.topology.route_invariants.handoff_cancel_path)
+        and ($cl.topology.route_invariants.handoff_submit_path == $route.endpoint)
+        and ($cl.topology.route_invariants.handoff_ack_path == $route.ack_endpoint)
+        and ($cl.topology.route_invariants.handoff_status_path == $route.status_endpoint)
+        and ($cl.topology.route_invariants.handoff_cancel_path == $route.cancel_endpoint)
       ' "$FLEET_REGISTRY_FILE" >/dev/null 2>&1; then
         add_check "extraction_handoff_invariants" "pass" "Clawdiy handoff submit, ack, status, and cancel paths remain stable for future-node extraction" "error"
     else
@@ -736,12 +726,12 @@ verify_same_host_stage() {
     fi
 
     local config_source registry_source state_source audit_source
-    config_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw")"
+    config_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/openclaw.json")"
     registry_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/registry")"
     state_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/state")"
     audit_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/audit")"
 
-    if [[ "$config_source" == */config/clawdiy && "$registry_source" == */config/fleet && "$state_source" == */data/clawdiy/state && "$audit_source" == */data/clawdiy/audit ]]; then
+    if [[ "$config_source" == */data/clawdiy/runtime/openclaw.json && "$registry_source" == */config/fleet && "$state_source" == */data/clawdiy/state && "$audit_source" == */data/clawdiy/audit ]]; then
         add_check "clawdiy_mounts" "pass" "Clawdiy mounts are isolated for config, registry, state, and audit roots" "error"
     else
         add_check "clawdiy_mounts" "fail" "Clawdiy mounts are not wired to the expected isolated roots" "error"

@@ -88,6 +88,28 @@
       ],
       "ci": true
     },
+    "render-clawdiy-runtime-config.sh": {
+      "version": "1.0.0",
+      "description": "Render the deployable Clawdiy OpenClaw runtime config from the tracked template and dedicated env file",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq"
+      ],
+      "provides": [
+        "render-clawdiy-runtime-config"
+      ],
+      "env_vars": [
+        "TEMPLATE_FILE",
+        "OUTPUT_FILE",
+        "ENV_FILE",
+        "CLAWDIY_DOMAIN",
+        "CLAWDIY_PUBLIC_BASE_URL",
+        "CLAWDIY_INTERNAL_PORT",
+        "CLAWDIY_TELEGRAM_ALLOWED_USERS"
+      ],
+      "ci": true
+    },
     "clawdiy-smoke.sh": {
       "version": "1.0.0",
       "description": "Clawdiy rollout verification for same-host, handoff, restart isolation, and auth gates",

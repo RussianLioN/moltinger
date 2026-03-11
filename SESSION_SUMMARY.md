@@ -50,6 +50,18 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
+### Current Session Update (2026-03-09)
+
+- Branch in progress: `011-clawdiy-openclaw-runtime-fix`
+- Clawdiy remote rollout is still pending; no new live OpenClaw launch happened in this fix session
+- `config/clawdiy/openclaw.json` now serves as the tracked OpenClaw runtime template, while the deployable artifact is rendered to `data/clawdiy/runtime/openclaw.json`
+- `scripts/render-clawdiy-runtime-config.sh` renders the runtime file from the dedicated Clawdiy env before preflight/deploy
+- `scripts/clawdiy-auth-check.sh` now treats `TELEGRAM_BOT_TOKEN` inside `/opt/moltinger/clawdiy/.env` as a runtime alias for Clawdiy only, not as evidence of Moltinger secret reuse
+- Verified in this session:
+  - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+  - `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
+  - `./scripts/preflight-check.sh --ci --target clawdiy --json`
+
 ---
 
 ## 📁 Key Files

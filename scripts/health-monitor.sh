@@ -19,7 +19,7 @@ MOLTIS_HEALTH_URL="${MOLTIS_HEALTH_URL:-http://localhost:13131/health}"
 MOLTIS_METRICS_URL="${MOLTIS_METRICS_URL:-http://localhost:13131/metrics}"
 MOLTIS_EVIDENCE_ROOT="${MOLTIS_EVIDENCE_ROOT:-$PROJECT_ROOT/data/.deployment-info}"
 CLAWDIY_CONTAINER_NAME="${CLAWDIY_CONTAINER_NAME:-clawdiy}"
-CLAWDIY_RUNTIME_CONFIG="${CLAWDIY_RUNTIME_CONFIG:-$PROJECT_ROOT/config/clawdiy/openclaw.json}"
+CLAWDIY_RUNTIME_CONFIG="${CLAWDIY_RUNTIME_CONFIG:-$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json}"
 CLAWDIY_ENV_FILE="${CLAWDIY_ENV_FILE:-$PROJECT_ROOT/.env.clawdiy}"
 CLAWDIY_AUDIT_ROOT="${CLAWDIY_AUDIT_ROOT:-$PROJECT_ROOT/data/clawdiy/audit}"
 CLAWDIY_HEALTH_URL="${CLAWDIY_HEALTH_URL:-http://localhost:18789/health}"
@@ -73,12 +73,10 @@ get_timestamp() {
 
 resolve_clawdiy_endpoints() {
     if [[ -f "$CLAWDIY_RUNTIME_CONFIG" ]] && jq empty "$CLAWDIY_RUNTIME_CONFIG" >/dev/null 2>&1; then
-        local port health_path metrics_path
-        port="$(jq -r '.server.port // 18789' "$CLAWDIY_RUNTIME_CONFIG")"
-        health_path="$(jq -r '.server.health_path // "/health"' "$CLAWDIY_RUNTIME_CONFIG")"
-        metrics_path="$(jq -r '.server.metrics_path // "/metrics"' "$CLAWDIY_RUNTIME_CONFIG")"
-        CLAWDIY_HEALTH_URL="http://localhost:${port}${health_path}"
-        CLAWDIY_METRICS_URL="http://localhost:${port}${metrics_path}"
+        local port
+        port="$(jq -r '.gateway.port // 18789' "$CLAWDIY_RUNTIME_CONFIG")"
+        CLAWDIY_HEALTH_URL="http://localhost:${port}/health"
+        CLAWDIY_METRICS_URL="http://localhost:${port}/metrics"
     fi
 }
 

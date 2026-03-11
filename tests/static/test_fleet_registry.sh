@@ -75,9 +75,10 @@ run_fleet_registry_tests() {
     if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
         ($runtime[0]) as $rt
         | .agents[] | select(.agent_id == "clawdiy")
-        | (.internal_endpoint == $rt.identity.internal_endpoint)
-        and (.public_endpoints.web == $rt.server.base_url)
-        and (.public_endpoints.telegram == $rt.identity.telegram_bot)
+        | (.internal_endpoint == .topology.placement_profiles.same_host.internal_endpoint)
+        and (.public_endpoints.web == $rt.gateway.publicBaseUrl)
+        and (.display_name == ($rt.agents.list[] | select(.id == "main") | .identity.name))
+        and (.public_endpoints.telegram == "@clawdiy_bot")
       ' "$REGISTRY_FILE" >/dev/null 2>&1; then
         test_pass
     else
@@ -171,20 +172,20 @@ run_fleet_registry_tests() {
     fi
 
     test_start "fleet_registry_extraction_invariants_defined"
-    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
-        ($runtime[0]) as $rt
+    if jq -e --slurpfile policy "$POLICY_FILE" '
+        ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $route
         | .agents[] | select(.agent_id == "clawdiy")
-        | .logical_address == $rt.topology.logical_address
-        and .topology.active_profile == $rt.topology.active_profile
-        and (.topology.placement_profiles.same_host.internal_endpoint == $rt.identity.internal_endpoint)
+        | .logical_address == "agent://clawdiy"
+        and .topology.active_profile == "same_host"
+        and (.topology.placement_profiles.same_host.internal_endpoint == .internal_endpoint)
         and (.topology.placement_profiles.remote_node.internal_endpoint != .topology.placement_profiles.same_host.internal_endpoint)
         and (.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
-        and (.topology.placement_profiles.remote_node.health_endpoint | endswith($rt.server.health_path))
-        and (.topology.placement_profiles.remote_node.metrics_endpoint | endswith($rt.server.metrics_path))
-        and .topology.route_invariants.handoff_submit_path == ("POST " + $rt.control_plane.submit_path)
-        and .topology.route_invariants.handoff_ack_path == ("POST " + $rt.control_plane.ack_path_template)
-        and .topology.route_invariants.handoff_status_path == ("GET " + $rt.control_plane.status_path_template)
-        and .topology.route_invariants.handoff_cancel_path == ("POST " + $rt.control_plane.cancel_path_template)
+        and (.topology.placement_profiles.remote_node.health_endpoint | endswith("/health"))
+        and (.topology.placement_profiles.remote_node.metrics_endpoint | endswith("/metrics"))
+        and .topology.route_invariants.handoff_submit_path == $route.endpoint
+        and .topology.route_invariants.handoff_ack_path == $route.ack_endpoint
+        and .topology.route_invariants.handoff_status_path == $route.status_endpoint
+        and .topology.route_invariants.handoff_cancel_path == $route.cancel_endpoint
       ' "$REGISTRY_FILE" >/dev/null 2>&1; then
         test_pass
     else

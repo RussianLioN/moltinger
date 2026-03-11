@@ -22,6 +22,7 @@ Recover or rotate Clawdiy auth material without changing Moltinger auth state.
 - Repeat-auth events must produce operator-visible evidence
 - `deploy-clawdiy.yml` is the only workflow that may render `/opt/moltinger/clawdiy/.env`
 - `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` must stay compact single-line JSON with `provider=codex-oauth`, `auth_type=oauth`, `granted_scopes`, and `allowed_models`
+- Inside `/opt/moltinger/clawdiy/.env`, `TELEGRAM_BOT_TOKEN` is a runtime-only alias for OpenClaw and mirrors `CLAWDIY_TELEGRAM_BOT_TOKEN`; do not treat that alias as Moltinger auth material during audits
 
 ## Verification Commands
 

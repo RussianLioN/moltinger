@@ -59,6 +59,8 @@ TARGET_NOTIFICATION_NAME=""
 TARGET_REQUIRED_NETWORKS=()
 TARGET_AUXILIARY_SERVICES=()
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
+CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
+CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
@@ -297,21 +299,11 @@ configure_target() {
             )
             TARGET_AUXILIARY_SERVICES=()
 
-            if [[ -f "$CLAWDIY_CONFIG_FILE" ]] && jq empty "$CLAWDIY_CONFIG_FILE" >/dev/null 2>&1; then
-                local server_port
-                local health_path
-                local metrics_path
-
-                server_port="$(jq -r '.server.port // 18789' "$CLAWDIY_CONFIG_FILE")"
-                health_path="$(jq -r '.server.health_path // "/health"' "$CLAWDIY_CONFIG_FILE")"
-                metrics_path="$(jq -r '.server.metrics_path // "/metrics"' "$CLAWDIY_CONFIG_FILE")"
-
-                TARGET_HEALTH_URL="http://localhost:${server_port}${health_path}"
-                TARGET_METRICS_URL="http://localhost:${server_port}${metrics_path}"
-            else
-                TARGET_HEALTH_URL="http://localhost:18789/health"
-                TARGET_METRICS_URL="http://localhost:18789/metrics"
-            fi
+            local server_port
+            server_port="$(read_env_file_value "CLAWDIY_INTERNAL_PORT" || true)"
+            server_port="${server_port:-18789}"
+            TARGET_HEALTH_URL="http://localhost:${server_port}/health"
+            TARGET_METRICS_URL="http://localhost:${server_port}/metrics"
             ;;
         *)
             echo "Unsupported target: $TARGET" >&2
@@ -334,6 +326,7 @@ ensure_clawdiy_runtime_paths() {
         "$PROJECT_ROOT/data/clawdiy"
         "$PROJECT_ROOT/config/clawdiy"
         "$PROJECT_ROOT/config/fleet"
+        "$PROJECT_ROOT/data/clawdiy/runtime"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"
         "$PROJECT_ROOT/data/clawdiy/audit/rollback-evidence"
@@ -342,6 +335,32 @@ ensure_clawdiy_runtime_paths() {
     for path in "${required_paths[@]}"; do
         mkdir -p "$path"
     done
+}
+
+render_clawdiy_runtime_config() {
+    if [[ "$TARGET" != "clawdiy" ]]; then
+        return 0
+    fi
+
+    if [[ ! -x "$CLAWDIY_RUNTIME_RENDER_SCRIPT" ]]; then
+        log_error "Clawdiy runtime render script is missing or not executable: $CLAWDIY_RUNTIME_RENDER_SCRIPT"
+        exit 2
+    fi
+
+    local -a args=(
+        --template "$CLAWDIY_CONFIG_FILE"
+        --output "$CLAWDIY_RENDERED_CONFIG_FILE"
+    )
+
+    if [[ -n "$ENV_FILE" && -f "$ENV_FILE" ]]; then
+        args+=(--env-file "$ENV_FILE")
+    fi
+
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        "$CLAWDIY_RUNTIME_RENDER_SCRIPT" "${args[@]}" --json >/dev/null
+    else
+        "$CLAWDIY_RUNTIME_RENDER_SCRIPT" "${args[@]}"
+    fi
 }
 
 count_files_under() {
@@ -482,9 +501,10 @@ check_prerequisites() {
         fi
     fi
 
-    if [[ "$TARGET" == "clawdiy" && ("$action" == "deploy" || "$action" == "start" || "$action" == "restart") ]]; then
+    if [[ "$TARGET" == "clawdiy" && ("$action" == "deploy" || "$action" == "rollback" || "$action" == "start" || "$action" == "restart") ]]; then
         require_clawdiy_image_ref
         ensure_clawdiy_runtime_paths
+        render_clawdiy_runtime_config
     fi
 
     if ! compose_cmd allow-placeholder config --quiet >/dev/null 2>&1; then
@@ -684,7 +704,11 @@ cmd_deploy() {
     DEPLOY_START_TIME=$(date +%s)
 
     if type gitops_guard_deploy >/dev/null 2>&1; then
-        gitops_guard_deploy "deploy.sh $TARGET"
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            gitops_guard_deploy "deploy.sh $TARGET" 1>&2
+        else
+            gitops_guard_deploy "deploy.sh $TARGET"
+        fi
     fi
 
     log_info "=========================================="

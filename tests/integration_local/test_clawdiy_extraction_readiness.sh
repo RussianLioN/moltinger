@@ -58,10 +58,9 @@ run_integration_local_clawdiy_extraction_readiness_tests() {
     fi
 
     test_start "integration_local_clawdiy_extraction_logical_address"
-    if jq -e --slurpfile runtime "$CLAWDIY_CONFIG_FILE" '
-        ($runtime[0]) as $rt
-        | .agents[] | select(.agent_id == "clawdiy")
-        | .logical_address == $rt.control_plane.reply_to
+    if jq -e '
+        .agents[] | select(.agent_id == "clawdiy")
+        | .logical_address == "agent://clawdiy"
       ' "$REGISTRY_FILE" >/dev/null 2>&1; then
         test_pass
     else

@@ -62,14 +62,10 @@ POLICY_CONFIG_PATH=""
 
 # Clawdiy runtime cache
 CLAWDIY_AGENT_ID=""
-CLAWDIY_DOMAIN=""
 CLAWDIY_BASE_URL=""
-CLAWDIY_TELEGRAM_BOT=""
-CLAWDIY_HUMAN_AUTH_REF=""
-CLAWDIY_SERVICE_AUTH_REF=""
-CLAWDIY_TELEGRAM_TOKEN_REF=""
-CLAWDIY_TELEGRAM_ALLOWLIST_REF=""
-CLAWDIY_PROVIDER_AUTH_REF=""
+CLAWDIY_RUNTIME_NAME=""
+CLAWDIY_TELEGRAM_MODE=""
+CLAWDIY_TELEGRAM_ALLOW_FROM_COUNT=""
 CLAWDIY_LOGICAL_ADDRESS=""
 CLAWDIY_REGISTRY_WEB=""
 CLAWDIY_REGISTRY_TELEGRAM=""
@@ -481,6 +477,11 @@ check_ollama_secret() {
 }
 
 check_clawdiy_runtime_config() {
+    local rendered_runtime_config="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
+    if [[ -f "$rendered_runtime_config" ]]; then
+        RUNTIME_CONFIG_PATH="$rendered_runtime_config"
+    fi
+
     if ! validate_json_file \
         "$RUNTIME_CONFIG_PATH" \
         "runtime_config_valid" \
@@ -490,49 +491,33 @@ check_clawdiy_runtime_config() {
     fi
 
     if ! jq -e '
-        .schema_version == "v1alpha1"
-        and (.agent.agent_id | type == "string" and length > 0)
-        and (.server.base_url | type == "string" and length > 0)
-        and (.identity.domain | type == "string" and length > 0)
-        and (.identity.telegram_bot | type == "string" and length > 0)
-        and (.topology.active_profile == "same_host")
-        and (.topology.logical_address == .control_plane.reply_to)
-        and ((.topology.supported_profiles | index("same_host")) != null)
-        and ((.topology.supported_profiles | index("remote_node")) != null)
-        and (.topology.placement_profiles.same_host.internal_endpoint == .identity.internal_endpoint)
-        and (.topology.placement_profiles.remote_node.internal_endpoint != .topology.placement_profiles.same_host.internal_endpoint)
-        and (.topology.placement_profiles.remote_node.network_plane == "private-overlay")
-        and (.control_plane.authoritative_transport == "http-json")
-        and (.auth.human_auth_secret_ref | type == "string" and length > 0)
-        and (.auth.service_auth.mode == "bearer")
-        and (.auth.service_auth.authorization_header == "Authorization")
-        and (.auth.service_auth.bind_token_to_agent_header == "X-Agent-Id")
-        and (.auth.service_auth_secret_ref | type == "string" and length > 0)
-        and (.auth.telegram_token_ref | type == "string" and length > 0)
-        and (.auth.telegram_allowed_users_ref | type == "string" and length > 0)
-        and (.channels.telegram.allowlist_secret_ref == .auth.telegram_allowed_users_ref)
-        and (.channels.telegram.fail_closed_on_token_error == true)
-        and (.auth.provider_auth_profiles["codex-oauth"].secret_ref | type == "string" and length > 0)
-        and (.auth.provider_auth_profiles["codex-oauth"].profile_format == "json")
-        and (.auth.provider_auth_profiles["codex-oauth"].auth_type == "oauth")
-        and (.auth.provider_auth_profiles["codex-oauth"].required_scopes | index("api.responses.write") != null)
-        and (.auth.provider_auth_profiles["codex-oauth"].allowed_models | index("gpt-5.4") != null)
-        and (.auth.provider_auth_profiles["codex-oauth"].fail_closed_on_scope_error == true)
+        .gateway.mode == "local"
+        and .gateway.bind == "custom"
+        and .gateway.customBindHost == "0.0.0.0"
+        and (.gateway.port | type == "number")
+        and (.gateway.publicBaseUrl | type == "string" and length > 0)
+        and .gateway.auth.mode == "password"
+        and .gateway.auth.password.source == "env"
+        and .gateway.auth.password.provider == "runtimeEnv"
+        and .gateway.auth.password.id == "OPENCLAW_GATEWAY_PASSWORD"
+        and (.controlUi.allowedOrigins | type == "array" and length > 0)
+        and (.agents.list | type == "array" and any(.id == "main" and .identity.name == "Clawdiy"))
+        and .channels.telegram.enabled == true
+        and .channels.telegram.dmPolicy == "allowlist"
+        and (.channels.telegram.allowFrom | type == "array")
+        and .channels.telegram.botToken.source == "env"
+        and .channels.telegram.botToken.provider == "runtimeEnv"
+        and .channels.telegram.botToken.id == "TELEGRAM_BOT_TOKEN"
     ' "$RUNTIME_CONFIG_PATH" >/dev/null 2>&1; then
-        add_check "runtime_config_shape" "fail" "Clawdiy runtime config is missing required identity, transport, or auth fields" "error"
+        add_check "runtime_config_shape" "fail" "Clawdiy runtime config is missing required official OpenClaw gateway, control UI, agent identity, or Telegram fields" "error"
         return
     fi
 
-    CLAWDIY_AGENT_ID="$(jq -r '.agent.agent_id' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_DOMAIN="$(jq -r '.identity.domain' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_BASE_URL="$(jq -r '.server.base_url' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_TELEGRAM_BOT="$(jq -r '.identity.telegram_bot' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_LOGICAL_ADDRESS="$(jq -r '.topology.logical_address' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_HUMAN_AUTH_REF="$(jq -r '.auth.human_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_SERVICE_AUTH_REF="$(jq -r '.auth.service_auth_secret_ref' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_TELEGRAM_TOKEN_REF="$(jq -r '.auth.telegram_token_ref' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_TELEGRAM_ALLOWLIST_REF="$(jq -r '.auth.telegram_allowed_users_ref' "$RUNTIME_CONFIG_PATH")"
-    CLAWDIY_PROVIDER_AUTH_REF="$(jq -r '.auth.provider_auth_profiles["codex-oauth"].secret_ref' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_AGENT_ID="$TARGET"
+    CLAWDIY_BASE_URL="$(jq -r '.gateway.publicBaseUrl' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_RUNTIME_NAME="$(jq -r '.agents.list[] | select(.id == "main") | .identity.name' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_TELEGRAM_MODE="$(jq -r '.channels.telegram.dmPolicy' "$RUNTIME_CONFIG_PATH")"
+    CLAWDIY_TELEGRAM_ALLOW_FROM_COUNT="$(jq -r '.channels.telegram.allowFrom | length' "$RUNTIME_CONFIG_PATH")"
 
     add_check "runtime_config_shape" "pass" "Clawdiy runtime config fields parsed successfully" "error"
 }
@@ -655,117 +640,78 @@ check_fleet_policy_config() {
 }
 
 check_clawdiy_identity_alignment() {
-    if [[ -z "$CLAWDIY_AGENT_ID" || -z "$CLAWDIY_DOMAIN" || -z "$CLAWDIY_REGISTRY_WEB" ]]; then
+    if [[ -z "$CLAWDIY_AGENT_ID" || -z "$CLAWDIY_BASE_URL" || -z "$CLAWDIY_REGISTRY_WEB" || -z "$CLAWDIY_RUNTIME_NAME" ]]; then
         add_check "fleet_identity_alignment" "fail" "Clawdiy identity alignment could not be evaluated because required config parsing did not complete" "error"
         return
     fi
 
-    local runtime_host
-    local registry_host
-    local base_url_host
-    local runtime_tg
-    local registry_tg
-
-    runtime_host="$(normalize_host "$CLAWDIY_DOMAIN")"
-    registry_host="$(normalize_host "$CLAWDIY_REGISTRY_WEB")"
-    base_url_host="$(normalize_host "$CLAWDIY_BASE_URL")"
-    runtime_tg="$(normalize_telegram "$CLAWDIY_TELEGRAM_BOT")"
-    registry_tg="$(normalize_telegram "$CLAWDIY_REGISTRY_TELEGRAM")"
+    local runtime_host registry_host
 
     if [[ "$CLAWDIY_AGENT_ID" != "$TARGET" ]]; then
         add_check "fleet_identity_alignment" "fail" "Clawdiy runtime agent_id must match target $TARGET" "error"
         return
     fi
 
-    if [[ "$runtime_host" != "$registry_host" || "$runtime_host" != "$base_url_host" ]]; then
-        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime domain, registry web endpoint, and base_url must resolve to the same host" "error"
+    runtime_host="$(normalize_host "$CLAWDIY_BASE_URL")"
+    registry_host="$(normalize_host "$CLAWDIY_REGISTRY_WEB")"
+
+    if [[ "$runtime_host" != "$registry_host" ]]; then
+        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime publicBaseUrl and registry web endpoint must resolve to the same host" "error"
         return
     fi
 
-    if [[ "$runtime_tg" != "$registry_tg" ]]; then
-        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime Telegram bot must match the fleet registry entry" "error"
+    if [[ "$CLAWDIY_RUNTIME_NAME" != "Clawdiy" ]]; then
+        add_check "fleet_identity_alignment" "fail" "Clawdiy runtime main agent identity must stay named Clawdiy" "error"
         return
     fi
 
-    add_check "fleet_identity_alignment" "pass" "Clawdiy runtime identity matches registry and base URL" "error"
+    add_check "fleet_identity_alignment" "pass" "Clawdiy runtime publicBaseUrl and agent identity align with the fleet registry" "error"
 }
 
 check_clawdiy_secret_isolation() {
-    if [[ -z "$CLAWDIY_HUMAN_AUTH_REF" || -z "$CLAWDIY_SERVICE_AUTH_REF" || -z "$CLAWDIY_TELEGRAM_TOKEN_REF" || -z "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" || -z "$CLAWDIY_PROVIDER_AUTH_REF" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy secret isolation could not be evaluated because runtime config parsing did not complete" "error"
+    if [[ -z "$CLAWDIY_POLICY_HUMAN_REF" || -z "$CLAWDIY_POLICY_SERVICE_REF" || -z "$CLAWDIY_POLICY_TELEGRAM_REF" || -z "$CLAWDIY_POLICY_ALLOWLIST_REF" || -z "$CLAWDIY_POLICY_PROVIDER_REF" ]]; then
+        add_check "fleet_secret_isolation" "fail" "Clawdiy secret isolation could not be evaluated because fleet policy parsing did not complete" "error"
         return
     fi
 
-    if [[ "$CLAWDIY_HUMAN_AUTH_REF" == "github-secret:MOLTIS_PASSWORD" ]]; then
+    if [[ "$CLAWDIY_POLICY_HUMAN_REF" == "github-secret:MOLTIS_PASSWORD" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy human auth secret must not reuse MOLTIS_PASSWORD" "error"
         return
     fi
 
-    if [[ "$CLAWDIY_SERVICE_AUTH_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" ]]; then
+    if [[ "$CLAWDIY_POLICY_SERVICE_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy service auth secret must not reuse MOLTINGER_SERVICE_TOKEN" "error"
         return
     fi
 
-    if [[ "$CLAWDIY_TELEGRAM_TOKEN_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
+    if [[ "$CLAWDIY_POLICY_TELEGRAM_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy Telegram token ref must not reuse TELEGRAM_BOT_TOKEN" "error"
         return
     fi
 
-    if [[ "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" == "github-secret:TELEGRAM_ALLOWED_USERS" ]]; then
+    if [[ "$CLAWDIY_POLICY_ALLOWLIST_REF" == "github-secret:TELEGRAM_ALLOWED_USERS" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy Telegram allowlist ref must not reuse TELEGRAM_ALLOWED_USERS" "error"
         return
     fi
 
-    if [[ "$CLAWDIY_PROVIDER_AUTH_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" || "$CLAWDIY_PROVIDER_AUTH_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
+    if [[ "$CLAWDIY_POLICY_PROVIDER_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" || "$CLAWDIY_POLICY_PROVIDER_REF" == "github-secret:TELEGRAM_BOT_TOKEN" ]]; then
         add_check "fleet_secret_isolation" "fail" "Clawdiy provider auth profile ref must stay isolated from Moltinger auth secrets" "error"
         return
     fi
 
-    if [[ -n "$CLAWDIY_POLICY_HUMAN_REF" && "$CLAWDIY_HUMAN_AUTH_REF" != "$CLAWDIY_POLICY_HUMAN_REF" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime human auth ref must match fleet policy secret_refs.clawdiy_human_auth" "error"
-        return
-    fi
-
-    if [[ -n "$CLAWDIY_POLICY_SERVICE_REF" && "$CLAWDIY_SERVICE_AUTH_REF" != "$CLAWDIY_POLICY_SERVICE_REF" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime service auth ref must match fleet policy secret_refs.clawdiy_service_auth" "error"
-        return
-    fi
-
-    if [[ -n "$CLAWDIY_POLICY_TELEGRAM_REF" && "$CLAWDIY_TELEGRAM_TOKEN_REF" != "$CLAWDIY_POLICY_TELEGRAM_REF" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime Telegram token ref must match fleet policy secret_refs.clawdiy_telegram_auth" "error"
-        return
-    fi
-
-    if [[ -n "$CLAWDIY_POLICY_ALLOWLIST_REF" && "$CLAWDIY_TELEGRAM_ALLOWLIST_REF" != "$CLAWDIY_POLICY_ALLOWLIST_REF" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime Telegram allowlist ref must match fleet policy secret_refs.clawdiy_telegram_allowlist" "error"
-        return
-    fi
-
-    if [[ -n "$CLAWDIY_POLICY_PROVIDER_REF" && "$CLAWDIY_PROVIDER_AUTH_REF" != "$CLAWDIY_POLICY_PROVIDER_REF" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy runtime provider auth ref must match fleet policy secret_refs.clawdiy_openai_codex_auth_profile" "error"
-        return
-    fi
-
-    add_check "fleet_secret_isolation" "pass" "Clawdiy auth, Telegram, and provider auth refs are isolated from Moltinger and aligned with fleet policy" "error"
+    add_check "fleet_secret_isolation" "pass" "Clawdiy auth, Telegram, and provider auth refs are isolated from Moltinger in the fleet policy catalog" "error"
 }
 
 check_clawdiy_topology_alignment() {
-    if [[ -z "$CLAWDIY_LOGICAL_ADDRESS" ]]; then
-        add_check "fleet_topology_alignment" "fail" "Clawdiy topology alignment could not be evaluated because runtime parsing did not complete" "error"
-        return
-    fi
-
-    if ! jq -e --slurpfile runtime "$RUNTIME_CONFIG_PATH" --slurpfile registry "$REGISTRY_CONFIG_PATH" --slurpfile policy "$POLICY_CONFIG_PATH" '
-        ($runtime[0]) as $rt
-        | ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
+    if ! jq -e --slurpfile registry "$REGISTRY_CONFIG_PATH" --slurpfile policy "$POLICY_CONFIG_PATH" '
+        ($registry[0].agents[] | select(.agent_id == "clawdiy")) as $cl
         | ($policy[0].routes[] | select(.caller == "moltinger" and .recipient == "clawdiy")) as $to_clawdiy
         | ($policy[0].routes[] | select(.caller == "clawdiy" and .recipient == "moltinger")) as $to_moltinger
-        | $rt.topology.logical_address == $rt.control_plane.reply_to
-        and $cl.logical_address == $rt.topology.logical_address
-        and $cl.topology.active_profile == $rt.topology.active_profile
+        | $cl.logical_address == "agent://clawdiy"
+        and $cl.topology.active_profile == "same_host"
         and ($cl.topology.supported_profiles | index("same_host")) != null
         and ($cl.topology.supported_profiles | index("remote_node")) != null
-        and $cl.topology.placement_profiles.same_host.internal_endpoint == $rt.identity.internal_endpoint
+        and ($cl.topology.placement_profiles.same_host.internal_endpoint | endswith("/internal/v1"))
         and ($cl.topology.placement_profiles.remote_node.internal_endpoint | endswith("/internal/v1"))
         and ($to_clawdiy.supported_topology_profiles | index("same_host")) != null
         and ($to_clawdiy.supported_topology_profiles | index("remote_node")) != null
@@ -773,11 +719,11 @@ check_clawdiy_topology_alignment() {
         and ($to_moltinger.supported_topology_profiles | index("remote_node")) != null
         and $policy[0].defaults.require_topology_profile_alignment == true
       ' "$POLICY_CONFIG_PATH" >/dev/null 2>&1; then
-        add_check "fleet_topology_alignment" "fail" "Clawdiy runtime, registry, and policy must keep topology-profile and logical-address alignment fail-closed" "error"
+        add_check "fleet_topology_alignment" "fail" "Clawdiy registry and policy must keep topology-profile and logical-address alignment fail-closed" "error"
         return
     fi
 
-    add_check "fleet_topology_alignment" "pass" "Clawdiy runtime, registry, and policy stay aligned on same_host/remote_node topology profiles" "error"
+    add_check "fleet_topology_alignment" "pass" "Clawdiy registry and policy stay aligned on same_host/remote_node topology profiles" "error"
 }
 
 check_target_specific_config() {

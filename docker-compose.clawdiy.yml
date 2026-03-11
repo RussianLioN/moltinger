@@ -35,7 +35,7 @@ services:
 
     volumes:
       - type: bind
-        source: ./config/clawdiy/openclaw.json
+        source: ./data/clawdiy/runtime/openclaw.json
         target: /home/node/.openclaw/openclaw.json
         read_only: true
       - type: bind
@@ -52,11 +52,12 @@ services:
       CLAWDIY_AGENT_ID: ${CLAWDIY_AGENT_ID:-clawdiy}
       CLAWDIY_DOMAIN: ${CLAWDIY_DOMAIN:-clawdiy.ainetic.tech}
       CLAWDIY_INTERNAL_PORT: ${CLAWDIY_INTERNAL_PORT:-18789}
+      CLAWDIY_PUBLIC_BASE_URL: ${CLAWDIY_PUBLIC_BASE_URL:-https://clawdiy.ainetic.tech}
       OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
       OPENCLAW_REGISTRY_ROOT: /home/node/.openclaw/registry
-      OPENCLAW_STATE_ROOT: /home/node/.openclaw-data/state
-      OPENCLAW_AUDIT_ROOT: /home/node/.openclaw-data/audit
-      # Secret and provider env wiring lands in T003/T024 after inventory is defined.
+      OPENCLAW_STATE_DIR: /home/node/.openclaw-data/state
+      OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
 
     healthcheck:
       <<: *clawdiy-healthcheck
