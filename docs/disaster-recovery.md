@@ -43,7 +43,7 @@ Capture these before changing runtime:
 - `./scripts/clawdiy-smoke.sh --json --stage same-host | jq .`
 - latest files under `data/clawdiy/audit/`
 - latest files under `data/clawdiy/audit/rollback-evidence/`
-- latest backup archive under `/var/backups/moltis/{daily,weekly,monthly}/`
+- latest backup reference from `data/clawdiy/.last-backup`, with fallback to `/var/backups/moltis/pre_deploy_*.tar.gz*` and then legacy `/var/backups/moltis/{daily,weekly,monthly}/`
 
 ### Decision Table
 

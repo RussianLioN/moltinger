@@ -85,7 +85,17 @@ run_clawdiy_rollback_resilience_tests() {
 
     test_start "resilience_clawdiy_restore_readiness"
     local latest_backup
-    latest_backup=$(ls -t "$BACKUP_DIR"/daily/moltis_* "$BACKUP_DIR"/weekly/moltis_* "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1 || true)
+    if [[ -f "$PROJECT_ROOT/data/clawdiy/.last-backup" ]]; then
+        latest_backup="$(cat "$PROJECT_ROOT/data/clawdiy/.last-backup")"
+    else
+        latest_backup=""
+    fi
+    if [[ -z "$latest_backup" || ! -f "$latest_backup" ]]; then
+        latest_backup=$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'pre_deploy_*.tar.gz*' | sort | tail -1 || true)
+    fi
+    if [[ -z "$latest_backup" || ! -f "$latest_backup" ]]; then
+        latest_backup=$(ls -t "$BACKUP_DIR"/daily/moltis_* "$BACKUP_DIR"/weekly/moltis_* "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1 || true)
+    fi
     if [[ -z "$latest_backup" ]]; then
         test_fail "Expected a backup archive for Clawdiy restore readiness"
     elif "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh" verify "$latest_backup" >/dev/null 2>&1; then
