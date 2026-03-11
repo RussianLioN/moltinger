@@ -105,6 +105,26 @@ SENDER
     assert_eq "$remote_env" "$(cat "$FAKE_SSH_STATE_DIR/remote-env.txt")" "Remote sender should load TELEGRAM_BOT_TOKEN from the configured remote env file"
     test_pass
 
+    test_start "component_telegram_bot_send_remote_preserves_multiline_text"
+    output="$(
+        PATH="$FAKE_SSH_BIN_DIR:$PATH" \
+        FAKE_SSH_STATE_DIR="$FAKE_SSH_STATE_DIR" \
+        MOLTINGER_TELEGRAM_SSH_BIN="$FAKE_SSH_BIN_DIR/ssh" \
+        MOLTINGER_TELEGRAM_SSH_TARGET="fake-target" \
+        MOLTINGER_TELEGRAM_REMOTE_ROOT="$remote_root" \
+        MOLTINGER_TELEGRAM_REMOTE_ENV_FILE="$remote_env" \
+        bash "$REMOTE_SEND_SCRIPT" \
+            --chat-id 262872984 \
+            --text $'Строка 1\nСтрока 2\nСтрока 3' \
+            --json
+    )"
+
+    assert_contains "$output" '"ok":true' "Remote wrapper should keep returning remote sender JSON for multiline text"
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/remote-args.txt")" "Строка 1" "Remote sender should receive the first line of the multiline text"
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/remote-args.txt")" "Строка 2" "Remote sender should receive the second line of the multiline text"
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/remote-args.txt")" "Строка 3" "Remote sender should receive the third line of the multiline text"
+    test_pass
+
     generate_report
 }
 

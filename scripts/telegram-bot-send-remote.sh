@@ -82,23 +82,38 @@ if [[ -z "$CHAT_ID" || -z "$TEXT" ]]; then
     exit 2
 fi
 
+payload_b64="$(
+    jq -cn \
+        --arg remote_root "$REMOTE_ROOT" \
+        --arg remote_env_file "$REMOTE_ENV_FILE" \
+        --arg chat_id "$CHAT_ID" \
+        --arg text "$TEXT" \
+        --arg parse_mode "$PARSE_MODE" \
+        --argjson disable_notification "$DISABLE_NOTIFICATION" \
+        --arg reply_to "$REPLY_TO" \
+        '{
+            remote_root: $remote_root,
+            remote_env_file: $remote_env_file,
+            chat_id: $chat_id,
+            text: $text,
+            parse_mode: $parse_mode,
+            disable_notification: $disable_notification,
+            reply_to: $reply_to
+        }' | base64 | tr -d '\n'
+)"
+
 "$SSH_BIN" -o BatchMode=yes -o ConnectTimeout="$SSH_CONNECT_TIMEOUT" "$SSH_TARGET" /bin/bash -s -- \
-    "$REMOTE_ROOT" \
-    "$REMOTE_ENV_FILE" \
-    "$CHAT_ID" \
-    "$TEXT" \
-    "$PARSE_MODE" \
-    "$DISABLE_NOTIFICATION" \
-    "$REPLY_TO" <<'EOF'
+    "$payload_b64" <<'EOF'
 set -euo pipefail
 
-remote_root="$1"
-remote_env_file="$2"
-chat_id="$3"
-text="$4"
-parse_mode="$5"
-disable_notification="$6"
-reply_to="$7"
+payload_json="$(printf '%s' "$1" | base64 --decode)"
+remote_root="$(jq -r '.remote_root' <<<"$payload_json")"
+remote_env_file="$(jq -r '.remote_env_file' <<<"$payload_json")"
+chat_id="$(jq -r '.chat_id' <<<"$payload_json")"
+text="$(jq -r '.text' <<<"$payload_json")"
+parse_mode="$(jq -r '.parse_mode' <<<"$payload_json")"
+disable_notification="$(jq -r '.disable_notification' <<<"$payload_json")"
+reply_to="$(jq -r '.reply_to' <<<"$payload_json")"
 
 cd "$remote_root"
 
