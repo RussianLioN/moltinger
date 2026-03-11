@@ -1,5 +1,10 @@
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Communication Language (Mandatory)
+
+- If the user writes in Russian or explicitly asks for Russian-only communication, respond only in Russian unless the user later asks to switch languages.
+- Do not alternate between Russian and English in user-facing replies unless the user explicitly requests bilingual output or translation.
+
 ## Git Topology Reference
 
 Current branch/worktree registry lives in:
