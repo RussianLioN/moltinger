@@ -22,7 +22,9 @@
 | `moltinger-pr41` | `tmp-pr41-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr42` | `tmp-pr42-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-1-moltis-backup-rollback-baseline` | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `sibling-worktree` | Needs decision |
+| `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-3-moltis-git-container-update` | `feat/moltinger-z8m-3-moltis-git-container-update` | `sibling-worktree` | Needs decision |
+| `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
 | `moltis-real-user-tests` | `feat/moltis-real-user-tests` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
@@ -57,7 +59,9 @@
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
 | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `none` | Needs decision |
+| `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `none` | Needs decision |
+| `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `none` | Needs decision |
 | `feat/moltis-real-user-tests` | `origin/feat/moltis-real-user-tests` | Needs decision |
 | `tmp-pr35-fix` | `origin/011-worktree-handoff-hardening` | Needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
