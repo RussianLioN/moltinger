@@ -24,6 +24,8 @@ TARGET="$DEFAULT_TARGET"
 TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
+CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
+CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -334,6 +336,20 @@ ensure_clawdiy_runtime_paths() {
 
     for path in "${required_paths[@]}"; do
         mkdir -p "$path"
+    done
+
+    if [[ "$EUID" -ne 0 ]]; then
+        log_warn "Skipping Clawdiy state ownership normalization because deploy.sh is not running as root"
+        return 0
+    fi
+
+    local runtime_paths=(
+        "$PROJECT_ROOT/data/clawdiy/state"
+        "$PROJECT_ROOT/data/clawdiy/audit"
+    )
+
+    for path in "${runtime_paths[@]}"; do
+        chown -R "${CLAWDIY_RUNTIME_UID}:${CLAWDIY_RUNTIME_GID}" "$path"
     done
 }
 

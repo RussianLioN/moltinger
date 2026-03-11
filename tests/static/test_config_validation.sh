@@ -214,6 +214,16 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy script must keep last-image and backup markers under ignored data/clawdiy state"
     fi
 
+    test_start "static_clawdiy_deploy_script_normalizes_runtime_state_ownership"
+    if rg -q 'CLAWDIY_RUNTIME_UID="\$\{CLAWDIY_RUNTIME_UID:-1000\}"' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_RUNTIME_GID="\$\{CLAWDIY_RUNTIME_GID:-1000\}"' "$DEPLOY_SCRIPT" && \
+       rg -q 'Skipping Clawdiy state ownership normalization because deploy\.sh is not running as root' "$DEPLOY_SCRIPT" && \
+       rg -q 'chown -R "\$\{CLAWDIY_RUNTIME_UID\}:\$\{CLAWDIY_RUNTIME_GID\}" "\$path"' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy script must normalize state and audit ownership for the node runtime user during server-side rollout"
+    fi
+
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \
