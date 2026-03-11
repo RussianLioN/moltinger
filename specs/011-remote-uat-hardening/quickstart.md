@@ -23,6 +23,22 @@ Give operators one authoritative manual flow to answer: does the deployed produc
 4. If a fix is applied or the root cause is narrowed, rerun the same authoritative path and compare evidence.
 5. Only after that comparison, decide whether optional MTProto fallback diagnostics are still necessary for production operations.
 
+## Shipped Baseline Comparison
+
+| Path | Already shipped on `main` | Role after this feature | Production-aware status |
+|------|----------------------------|-------------------------|-------------------------|
+| `synthetic` | Да, через локальный/API chat compatibility path | Hermetic compatibility signal only | Не authoritative для real Telegram user path |
+| `real_user` (MTProto) | Да, как optional `real_user` / Telethon path | Secondary diagnostics only | Не обязателен для MVP, не source of truth |
+| standalone Telegram Web probe | Да, как отдельный browser probe/monitor path | Authoritative live path | Да, canonical post-deploy verdict path |
+| `telegram-e2e-on-demand.yml` manual workflow | Да, как manual entrypoint | Canonical operator trigger | Да, но только manual/opt-in |
+
+### Delta vs shipped baseline
+
+- Фича не добавляет отправку от имени пользователя с нуля: оба user-path уже существовали.
+- Основное изменение: Telegram Web path теперь дает один canonical verdict artifact вместо разрозненных helper results.
+- MTProto сохранен, но намеренно понижен до explicit secondary cross-check.
+- Основная операторская ценность теперь в before/after comparable evidence, deterministic failure classes и `recommended_action`.
+
 ## MVP Expectations
 
 - Telegram Web is the authoritative path.
@@ -59,3 +75,10 @@ After the probe is hardened or the root cause is narrowed:
 - Did the run preserve production polling mode?
 - Was the check manual/on-demand rather than scheduled or CI-blocking?
 - Were before/after artifacts stored under `tests/fixtures/telegram-web/` after the real post-deploy run?
+
+## Acceptance Evidence
+
+- Failing baseline artifact: [2026-03-11-before-send-failure-review-safe.json](/Users/rl/.codex/worktrees/remote-uat-hardening/tests/fixtures/telegram-web/2026-03-11-before-send-failure-review-safe.json)
+- Passing post-fix artifact: [2026-03-11-after-pass-review-safe.json](/Users/rl/.codex/worktrees/remote-uat-hardening/tests/fixtures/telegram-web/2026-03-11-after-pass-review-safe.json)
+- Before run: GitHub Actions `22976837805`, verdict `failed`, `stage=send`, `failure=send_failure`
+- After run: GitHub Actions `22977239309`, verdict `passed`, `stage=wait_reply`, attribution `proven`

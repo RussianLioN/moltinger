@@ -64,6 +64,32 @@ The review artifact MUST remain suitable for operator review and RCA:
 - includes enough context to compare failing and post-fix rerun outcomes
 - excludes or redacts sensitive credentials, tokens, or private session material
 
+## Schema Delta From Previous Output
+
+Compared with the earlier `telegram-e2e-result.json` output shape, the target contract adds or tightens:
+
+- top-level `schema_version`
+- normalized `run.*` block with:
+  - `target_environment`
+  - `trigger_source`
+  - `authoritative_path`
+  - `production_transport_mode`
+  - `operator_intent`
+  - `transport`
+- normalized top-level `failure` object instead of ad hoc helper error fields
+- stable `attribution_evidence` object for current-run request/reply proof
+- review-safe `diagnostic_context` instead of raw helper payload leakage
+- explicit `fallback_assessment` describing whether MTProto was requested, available, or useful
+- top-level `recommended_action`
+- `artifact_status`, `redactions_applied`, and `debug_bundle.available`
+
+The target contract intentionally removes ambiguity that existed in the older helper-oriented output:
+
+- helper-specific raw fields are no longer the primary operator surface
+- success/failure no longer depends on implicit stderr inspection
+- artifact consumers no longer need to infer whether attribution was proven
+- restricted diagnostics stay out of the review-safe artifact by default
+
 ## Secondary Diagnostic Contract
 
 - Optional fallback diagnostics MAY be requested only after the authoritative Telegram Web verdict is known.

@@ -7,6 +7,28 @@
 
 Harden Moltinger’s production-aware remote UAT so operators get one decision-grade post-deploy verdict for the real Telegram user path. Reuse the existing Telegram Web probe, MTProto `real_user` path, and on-demand workflow, but promote Telegram Web to the primary verdict path, keep MTProto as an explicit secondary cross-check, enforce security and operational guardrails up front, and preserve polling mode plus manual-only execution.
 
+## Implementation Delta Summary
+
+This feature intentionally hardened existing runtime surfaces instead of introducing a new remote-UAT stack.
+
+Delivered delta:
+
+- `scripts/telegram-e2e-on-demand.sh` became the canonical authoritative wrapper with:
+  - review-safe artifact output
+  - restricted debug bundle separation
+  - `recommended_action`
+  - `fallback_assessment`
+  - shared-target serialization
+- `scripts/telegram-web-user-probe.mjs` now emits:
+  - stable failure taxonomy
+  - fail-closed attribution evidence
+  - richer restricted debug for send-path RCA
+  - normalized Telegram Web bubble parsing
+  - hardened send strategy for Telegram Web UI interaction
+- `.github/workflows/telegram-e2e-on-demand.yml` now runs the current branch logic against the remote target as one manual authoritative entrypoint
+- MTProto remains available only as secondary diagnostics
+- before/after review-safe acceptance evidence is now stored in `tests/fixtures/telegram-web/`
+
 ## Technical Context
 
 **Language/Version**: Bash, Node.js ESM on Node `>=18`, Python 3 for optional MTProto diagnostics  
@@ -108,6 +130,27 @@ Implementation will proceed in this order:
 4. Harden DOM/send confirmation, deterministic failure classification, and fail-closed attribution in the Telegram Web path.
 5. Update operator workflow, rerun procedure, and proof-of-value artifacts.
 6. Evaluate MTProto only as a controlled secondary cross-check after the primary path is fixed or narrowed to root cause.
+
+## Acceptance Proof
+
+Acceptance for this feature is satisfied by the combination of local regression proof and live production-aware rerun proof:
+
+- Local proof:
+  - `./tests/run.sh --lane component --json`
+  - targeted Telegram component regression for probe correlation, monitor debug propagation, and remote UAT contract
+- Live proof:
+  - failing baseline run `22976837805` on branch SHA `d08dbb1`
+  - successful post-fix run `22977239309` on branch SHA `2924b12`
+- Stored review-safe evidence:
+  - [2026-03-11-before-send-failure-review-safe.json](/Users/rl/.codex/worktrees/remote-uat-hardening/tests/fixtures/telegram-web/2026-03-11-before-send-failure-review-safe.json)
+  - [2026-03-11-after-pass-review-safe.json](/Users/rl/.codex/worktrees/remote-uat-hardening/tests/fixtures/telegram-web/2026-03-11-after-pass-review-safe.json)
+
+The before/after pair proves the intended user value:
+
+- the authoritative path remains Telegram Web
+- production remains on polling
+- the check remains manual/opt-in
+- the operator can now get either a deterministic red verdict with RCA-grade evidence or a provable green result for the real Telegram user path
 
 ## Complexity Tracking
 

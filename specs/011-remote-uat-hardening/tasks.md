@@ -17,10 +17,10 @@
 
 **Purpose**: Freeze what is already shipped in `main`, capture the current production-aware gap, and convert the package from generic planning into a precise delta backlog.
 
-- [ ] T001 Compare the shipped baseline for `synthetic`, `real_user`, and standalone Telegram Web paths in `specs/011-remote-uat-hardening/quickstart.md`
+- [X] T001 Compare the shipped baseline for `synthetic`, `real_user`, and standalone Telegram Web paths in `specs/011-remote-uat-hardening/quickstart.md`
 - [X] T002 Capture the current failing production-aware Telegram Web artifact and execution notes in `tests/fixtures/telegram-web/`
-- [ ] T003 Document the schema delta between the current `telegram-e2e-result.json` output and the target contract in `specs/011-remote-uat-hardening/contracts/remote-uat-contract.md`
-- [ ] T004 Rewrite the implementation delta summary and acceptance proof section in `specs/011-remote-uat-hardening/plan.md`
+- [X] T003 Document the schema delta between the current `telegram-e2e-result.json` output and the target contract in `specs/011-remote-uat-hardening/contracts/remote-uat-contract.md`
+- [X] T004 Rewrite the implementation delta summary and acceptance proof section in `specs/011-remote-uat-hardening/plan.md`
 
 ---
 
