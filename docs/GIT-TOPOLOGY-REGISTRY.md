@@ -25,7 +25,6 @@
 | `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-3-moltis-git-container-update` | `feat/moltinger-z8m-3-moltis-git-container-update` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
-| `moltis-real-user-tests` | `feat/moltis-real-user-tests` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-010` | `010-beads-recovery-batch` | `dedicated-feature-worktree` | Needs decision |
@@ -60,7 +59,6 @@
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `none` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `none` | Needs decision |
-| `feat/moltis-real-user-tests` | `origin/feat/moltis-real-user-tests` | Needs decision |
 | `tmp-pr35-fix` | `origin/011-worktree-handoff-hardening` | Needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -86,6 +84,7 @@
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltinger-ejy-beads-redirect-fix` | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
+| `feat/moltis-real-user-tests` | `origin/feat/moltis-real-user-tests` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
