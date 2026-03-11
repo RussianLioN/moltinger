@@ -8,17 +8,19 @@
 
 | Scenario | Source | Status | Notes |
 |----------|--------|--------|-------|
-| Existing branch, manual handoff | `quickstart.md` Scenario 1 | pending | |
-| Existing branch with blocked environment | `quickstart.md` Scenario 2 | pending | |
+| Existing branch, manual handoff | `quickstart.md` Scenario 1 | pass | Covered across attach preview, boundary, and rich-handoff fixtures in `tests/unit/test_worktree_ready.sh` |
+| Existing branch with blocked environment | `quickstart.md` Scenario 2 | pass | Covered by blocked-env attach handoff contract fixture in `tests/unit/test_worktree_ready.sh` |
 | New task, new branch flow | `quickstart.md` Scenario 3 | pending | |
 | One-shot slug-only clean start | `quickstart.md` Scenario 4 | pass | Covered by `tests/unit/test_worktree_ready.sh` plan-mode fixture |
 | Similar-name ambiguity | `quickstart.md` Scenario 5 | pass | Covered by `tests/unit/test_worktree_ready.sh` similar-branch fixture |
 | Doctor mode | `quickstart.md` Scenario 6 | pending | |
 | Stale registry during start flow | `quickstart.md` Scenario 7 | pending | |
-| Opt-in terminal or Codex handoff | `quickstart.md` Scenario 8 | pending | |
-| Stop-and-handoff boundary after create | `quickstart.md` Scenario 9 | pending | |
-| Machine-readable handoff contract | `quickstart.md` Scenario 10 | pending | |
-| Manual next steps are copy-paste friendly | `quickstart.md` Scenario 11 | pending | |
+| Opt-in terminal or Codex handoff | `quickstart.md` Scenario 8 | pass | Covered by explicit terminal dry-run launch and codex fallback fixtures in `tests/unit/test_worktree_ready.sh` |
+| Stop-and-handoff boundary after create | `quickstart.md` Scenario 9 | pass | Covered by create boundary and mixed-request handoff fixtures in `tests/unit/test_worktree_ready.sh` |
+| Machine-readable handoff contract | `quickstart.md` Scenario 10 | pass | Covered by create/attach `--format env` boundary and payload fixtures in `tests/unit/test_worktree_ready.sh` |
+| Manual next steps are copy-paste friendly | `quickstart.md` Scenario 11 | pass | Covered by manual create handoff fixture that asserts fenced `bash` commands in `tests/unit/test_worktree_ready.sh` |
+| Mixed request preserves downstream intent without breaking the boundary | `quickstart.md` Scenario 12 | pass | Verified by create rich-payload fixture, concise `pending`, and absence of duplicate short seed block in `tests/unit/test_worktree_ready.sh` |
+| Attach flow preserves rich deferred payload | `quickstart.md` Scenario 13 | pass | Verified by attach rich-payload fixture plus attach boundary contract assertions in `tests/unit/test_worktree_ready.sh` |
 | Clean-create always starts from canonical main | latest mixed-request UAT | pending | Needs deterministic Phase A executor coverage |
 | Mixed request does not create downstream artifacts | latest mixed-request UAT | pending | Must prove no Beads/spec side effects during Phase A |
 
@@ -69,9 +71,37 @@
 - Goal:
   - preserve explicit downstream intent in the handoff payload without weakening the hard Phase A/Phase B boundary
 - Checks:
-  - `scripts/worktree-ready.sh create ... --pending-summary "<text>"` replaces the generic `Pending` value
-  - command-worktree guidance allows an optional `Phase B Seed Prompt (optional, not executed)` only after the fenced `bash` block
-  - the seed prompt remains advisory and does not imply Phase B execution in the originating session
+  - `scripts/worktree-ready.sh create ... --pending-summary "<text>"` replaces the generic `Pending` value with a short summary
+  - `scripts/worktree-ready.sh create ... --phase-b-seed-payload "<text>"` preserves richer deferred Phase B context separately
+  - command-worktree guidance allows a dedicated `Phase B Seed Payload (deferred, not executed)` block only after the fenced `bash` block
+  - the richer deferred payload remains advisory and does not imply Phase B execution in the originating session
+
+### 2026-03-11 - Contract alignment targets for boundary hardening
+
+- Goal:
+  - align command guidance, helper schema, and manual handoff rendering around one short summary plus one optional richer deferred payload
+- Checks:
+  - both `create` and `attach` document the same hard stop-after-Phase-A boundary
+  - `pending` is documented as concise summary-only
+  - `phase_b_seed_payload` is documented as the richer deferred carrier for structured downstream requests
+  - helper human output is treated as the canonical manual handoff payload
+- Follow-up:
+  - confirm runtime helper and regression tests match this documented contract once the parallel runtime changes land
+
+### 2026-03-11 - Boundary and handoff hardening implementation pass
+
+- Commands:
+  - `bash -n scripts/worktree-ready.sh`
+  - `bash -n tests/unit/test_worktree_ready.sh`
+  - `./tests/unit/test_worktree_ready.sh`
+- Observed:
+  - create and attach handoff env output exposes the hard boundary plus separate optional `phase_b_seed_payload`
+  - manual handoff renders the short `Phase B only` block only when no richer payload is present
+  - structured downstream requests preserve a concise `Pending` summary plus a separate `Phase B Seed Payload (deferred, not executed)` block
+  - opt-in terminal handoff can report `handoff_launched` without weakening the attach boundary
+  - failed opt-in codex launch degrades to manual handoff while preserving `stop_after_attach`
+- Result:
+  - Scenarios 1, 2, 8, 9, 10, 11, 12, and 13 are now covered by the unit regression suite
 
 ### 2026-03-09 - Deterministic Phase A hardening
 

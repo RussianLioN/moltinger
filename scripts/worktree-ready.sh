@@ -22,6 +22,8 @@ Common Options:
   --repo <path>              Repository root override
   --handoff <profile>        Handoff profile (manual|terminal|codex)
   --pending-summary <text>   Concrete deferred Phase B summary for handoff output
+  --phase-b-seed-payload <text>
+                            Structured deferred Phase B payload for rich handoff output
   --format <kind>            Output format (human|env)
   --existing <branch>        Existing branch hint for create flows
   -h, --help                 Show this help
@@ -72,6 +74,7 @@ handoff_profile="manual"
 existing_branch=""
 output_format="human"
 pending_summary=""
+phase_b_seed_payload=""
 path_preview=""
 resolved_repo_root=""
 resolved_common_dir=""
@@ -95,6 +98,7 @@ report_approval_required="false"
 report_launch_command=""
 report_repair_command=""
 report_pending_work=""
+report_phase_b_seed_payload=""
 report_worktree_action="unchanged"
 report_issue_title=""
 report_bootstrap_source_ref=""
@@ -201,6 +205,13 @@ parse_args() {
         pending_summary="${2:-}"
         if [[ -z "${pending_summary}" ]]; then
           die "--pending-summary requires a value"
+        fi
+        shift 2
+        ;;
+      --phase-b-seed-payload)
+        phase_b_seed_payload="${2:-}"
+        if [[ -z "${phase_b_seed_payload}" ]]; then
+          die "--phase-b-seed-payload requires a value"
         fi
         shift 2
         ;;
@@ -1527,6 +1538,7 @@ reset_report() {
   report_launch_command=""
   report_repair_command=""
   report_pending_work=""
+  report_phase_b_seed_payload=""
   report_worktree_action="unchanged"
   report_issue_title=""
   report_bootstrap_source_ref=""
@@ -1794,6 +1806,9 @@ set_handoff_contract() {
       if [[ -n "${pending_summary}" ]]; then
         report_pending_work="${pending_summary}"
       fi
+      if [[ -n "${phase_b_seed_payload}" ]]; then
+        report_phase_b_seed_payload="${phase_b_seed_payload}"
+      fi
       ;;
   esac
 }
@@ -2037,7 +2052,7 @@ render_fenced_bash_block() {
 }
 
 render_phase_b_seed_prompt() {
-  if [[ -z "${report_pending_work}" ]]; then
+  if [[ -z "${report_pending_work}" || -n "${report_phase_b_seed_payload}" ]]; then
     return 0
   fi
 
@@ -2047,6 +2062,24 @@ render_phase_b_seed_prompt() {
   printf 'Branch: %s\n' "${report_branch_name:-n/a}"
   printf 'Task: %s\n' "${report_pending_work}"
   printf 'Phase A is complete. Do not repeat worktree setup. Do not create or update issues, specs, or plans unless explicitly requested in the target session.\n'
+  printf '```\n'
+}
+
+render_phase_b_seed_payload() {
+  if [[ -z "${report_phase_b_seed_payload}" ]]; then
+    return 0
+  fi
+
+  printf '```text\n'
+  printf 'Phase B Seed Payload (deferred, not executed).\n'
+  printf 'Worktree: %s\n' "${report_worktree_path:-n/a}"
+  printf 'Branch: %s\n' "${report_branch_name:-n/a}"
+  if [[ -n "${report_pending_work}" ]]; then
+    printf 'Pending Summary: %s\n' "${report_pending_work}"
+  fi
+  printf 'Payload:\n'
+  printf '%s\n' "${report_phase_b_seed_payload}"
+  printf 'Phase A is complete. Do not repeat worktree setup in the originating session.\n'
   printf '```\n'
 }
 
@@ -2175,6 +2208,9 @@ render_readiness_report() {
     if [[ -n "${report_pending_work}" ]]; then
       render_env_kv "pending" "${report_pending_work}"
     fi
+    if [[ -n "${report_phase_b_seed_payload}" ]]; then
+      render_env_kv "phase_b_seed_payload" "${report_phase_b_seed_payload}"
+    fi
     if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
       render_env_array "issue_artifact" "${report_issue_artifacts[@]}"
     fi
@@ -2233,6 +2269,7 @@ render_readiness_report() {
   if [[ "${report_handoff_mode}" == "manual" ]]; then
     render_fenced_bash_block "${report_next_steps[@]}"
     render_phase_b_seed_prompt
+    render_phase_b_seed_payload
   fi
 }
 
@@ -2272,6 +2309,7 @@ render_context_summary() {
   debug "repo=${repo_root:-<auto>}"
   debug "handoff=${handoff_profile}"
   debug "pending=${pending_summary:-<unset>}"
+  debug "phase_b_seed_payload=${phase_b_seed_payload:+<set>}"
   debug "existing=${existing_branch:-<unset>}"
 }
 

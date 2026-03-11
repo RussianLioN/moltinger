@@ -32,6 +32,8 @@
 - Creates a new worktree for an already existing branch.
 - Must not imply creation of a new branch.
 - Must detect when the branch is already attached to another worktree and report that path.
+- Must obey the same hard stop-after-Phase-A boundary as clean-create flows.
+- Must not continue downstream task execution in the originating session after a successful attach handoff.
 
 ### `doctor`
 
@@ -50,10 +52,11 @@ If explicit flags are not used, natural-language requests such as "открой 
 
 - `start`, `create`, and `attach` are **boundary commands**.
 - After the managed create/attach flow completes, the command must stop after returning a handoff block.
-- The originating session must not continue the broader user task after this point unless the user explicitly overrides the boundary.
+- The originating session must not continue the broader user task after this point unless a supported launched handoff session actually takes over.
 - Requests that say "работай из нового worktree", "там подтверди cwd/branch", or "после перехода продолжи" must still stop after Phase A unless a supported automatic handoff actually launches.
 - Mixed requests do not expand Phase A permissions.
 - During Phase A, the command must not create or update downstream artifacts such as Beads issues, specs, plans, checklists, or implementation notes.
+- Manual handoff remains the default boundary-safe mode.
 
 ## Output Block
 
@@ -64,9 +67,24 @@ Issue: <issue-id-or-n/a>
 Status: <created|needs_env_approval|ready_for_codex|action_required>
 Boundary: <stop_after_create|stop_after_attach|stop_after_handoff|none>
 Final State: <handoff_ready|handoff_needs_env_approval|handoff_needs_manual_readiness|handoff_launched|blocked_*>
+Pending: <one-sentence deferred Phase B summary>
 Next:
   1. <first exact step>
   2. <second exact step if needed>
+```
+
+`Pending` is a short summary carrier only. It must stay concise even when the original downstream request is long and structured.
+
+When the originating request contains richer deferred Phase B intent, the canonical manual handoff payload may also append a separate fenced `text` block:
+
+```text
+Phase B Seed Payload (deferred, not executed).
+Worktree: <absolute-path>
+Branch: <branch-name>
+Pending Summary: <same short summary as Pending>
+Payload:
+<exact richer deferred Phase B seed payload>
+Phase A is complete. Do not repeat worktree setup in the originating session.
 ```
 
 ## Machine-Readable Contract
@@ -74,6 +92,9 @@ Next:
 - `scripts/worktree-ready.sh` must support `--format env`.
 - For `create`, `attach`, and `handoff`, the helper emits shell-safe `key=value` lines with schema `worktree-handoff/v1`.
 - The command workflow may use this contract for automation, but even without machine parsing the human-facing behavior must respect the same boundary.
+- `pending` remains the concise summary carrier.
+- `phase_b_seed_payload` is a distinct richer deferred-intent carrier when the originating request includes structured Phase B details.
+- For manual handoff, the helper human output is canonical. The command must relay that payload unchanged instead of rebuilding it locally.
 
 ## Behavioral Guarantees
 
@@ -85,6 +106,7 @@ Next:
 - Slug-only start flows must derive a safe default branch/path template automatically.
 - The workflow must not ask more than one clarification question when exact or similar-name collisions are detected.
 - The command must not prove "we are already in the new worktree" via `git -C` or path-targeted commands from the originating session.
-- If the originating request already contains explicit downstream work, `Pending` should preserve that concrete deferred intent instead of generic placeholder text.
-- A manual handoff MAY append an optional `Phase B Seed Prompt` block after the fenced `bash` block, but it must remain advisory and must not imply that Phase B already started.
+- If the originating request already contains explicit downstream work, `Pending` should preserve a concise concrete deferred summary instead of generic placeholder text.
+- Richer downstream constraints, exact feature descriptions, defaults, and stop conditions must be preserved separately via `phase_b_seed_payload` or equivalent helper-rendered deferred payload block instead of being collapsed into `Pending`.
+- A manual handoff MAY append a `Phase B Seed Payload (deferred, not executed)` block after the fenced `bash` block, but it must remain advisory and must not imply that Phase B already started.
 - Clean-create flows must be single-pass: one ancestry verification, one topology refresh, and at most one invoking-branch landing cycle.
