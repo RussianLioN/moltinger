@@ -58,7 +58,7 @@
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `tmp-pr40-fix` | `origin/012-clawdiy-live-runtime-fix` | Needs decision |
 | `tmp-pr41-fix` | `gone` | Tracking ref is gone; needs decision |
-| `tmp-pr42-fix` | `origin/010-beads-recovery-batch` | Needs decision |
+| `tmp-pr42-fix` | `gone` | Tracking ref is gone; needs decision |
 | `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
