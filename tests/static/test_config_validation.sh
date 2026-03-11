@@ -308,6 +308,7 @@ run_static_config_validation_tests() {
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
        rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
        rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'clawdiy-workspace:/home/node/\.openclaw/workspace' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
        rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
        rg -q '/tmp:rw,noexec,nosuid,nodev,size=64m' "$COMPOSE_CLAWDIY" && \
@@ -315,6 +316,15 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Clawdiy compose file must keep init, privilege drops, hardened tmpfs, and no docker socket mount"
+    fi
+
+    test_start "static_clawdiy_deploy_normalizes_workspace_permissions"
+    if rg -q '\$PROJECT_ROOT/data/clawdiy/workspace' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_RUNTIME_UID' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_RUNTIME_GID' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "deploy.sh must create and normalize the dedicated Clawdiy workspace path for the runtime uid/gid"
     fi
 
     test_start "static_clawdiy_policy_header_binding_fail_closed"

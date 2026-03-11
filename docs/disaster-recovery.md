@@ -21,6 +21,7 @@ The main rule is unchanged: protect Moltinger first. Clawdiy is allowed to degra
 | Moltis LLM failover | GLM/Ollama/Gemini | provider chain + circuit state | Clawdiy runtime rollback |
 | Clawdiy runtime | `clawdiy` | `docker-compose.clawdiy.yml` | Moltinger state and secrets |
 | Clawdiy evidence | `data/clawdiy/audit` | backup + rollback manifests | repo root temp files |
+| Clawdiy workspace | `data/clawdiy/workspace` | runtime work directory for OpenClaw execution | ad-hoc root-owned files |
 
 ## Clawdiy Single-Agent Recovery
 

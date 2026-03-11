@@ -329,6 +329,7 @@ ensure_clawdiy_runtime_paths() {
         "$PROJECT_ROOT/config/clawdiy"
         "$PROJECT_ROOT/config/fleet"
         "$PROJECT_ROOT/data/clawdiy/runtime"
+        "$PROJECT_ROOT/data/clawdiy/workspace"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"
         "$PROJECT_ROOT/data/clawdiy/audit/rollback-evidence"
@@ -344,6 +345,7 @@ ensure_clawdiy_runtime_paths() {
     fi
 
     local runtime_paths=(
+        "$PROJECT_ROOT/data/clawdiy/workspace"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"
     )
