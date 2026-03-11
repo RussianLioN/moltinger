@@ -129,11 +129,11 @@
 **Goal**: Prove that the extracted repo is portable and parity-safe.
 
 - [x] T045 [US1] Add core smoke validation in `worktree-skill/tests/unit/test_worktree_ready.sh`
-- [ ] T046 [P] [US1] Add deterministic create validation in `worktree-skill/tests/unit/test_worktree_phase_a.sh`
-- [ ] T047 [P] [US1] Add topology registry validation in `worktree-skill/tests/unit/test_git_topology_registry.sh`
-- [ ] T048 [P] [US2] Add Codex adapter discovery validation in `worktree-skill/tests/integration/test_codex_adapter.sh`
-- [ ] T049 [P] [US3] Add OpenCode adapter discovery validation in `worktree-skill/tests/integration/test_opencode_adapter.sh`
-- [ ] T050 [P] [US4] Add Speckit coexistence validation in `worktree-skill/tests/integration/test_speckit_bridge.sh`
+- [x] T046 [P] [US1] Add deterministic create validation in `worktree-skill/tests/unit/test_worktree_phase_a.sh`
+- [x] T047 [P] [US1] Add topology registry validation in `worktree-skill/tests/unit/test_git_topology_registry.sh`
+- [x] T048 [P] [US2] Add Codex adapter discovery validation in `worktree-skill/tests/integration/test_codex_adapter.sh`
+- [x] T049 [P] [US3] Add OpenCode adapter discovery validation in `worktree-skill/tests/integration/test_opencode_adapter.sh`
+- [x] T050 [P] [US4] Add Speckit coexistence validation in `worktree-skill/tests/integration/test_speckit_bridge.sh`
 - [x] T051 [US5] Record portable repo acceptance evidence in `worktree-skill/docs/acceptance-evidence.md`
 
 ---
