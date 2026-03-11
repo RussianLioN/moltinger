@@ -3,8 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STANDALONE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HOST_PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-source "$HOST_PROJECT_ROOT/tests/lib/test_helpers.sh"
+source "$STANDALONE_ROOT/tests/lib/core.sh"
 
 BOOTSTRAP_SCRIPT="$STANDALONE_ROOT/install/bootstrap.sh"
 VERIFY_SCRIPT="$STANDALONE_ROOT/install/verify.sh"

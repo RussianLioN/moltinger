@@ -64,6 +64,7 @@ fi
 git_common_dir="$(git rev-parse --git-common-dir)"
 canonical_root="$(cd "${git_common_dir}" && cd .. && pwd -P)"
 current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+canonical_branch="${WORKTREE_SKILL_CANONICAL_BRANCH:-main}"
 state_dir="${git_common_dir}/topology-registry"
 state_file="${state_dir}/health.env"
 draft_file="${state_dir}/registry.draft.md"
@@ -588,7 +589,7 @@ default_branch_note() {
 
   case "${intent}" in
     active)
-      if [[ "${branch}" == "main" ]]; then
+      if [[ "${branch}" == "${canonical_branch}" ]]; then
         printf 'Canonical source of truth\n'
       elif [[ "${has_worktree}" == "true" ]]; then
         printf 'Dedicated worktree exists\n'
@@ -780,7 +781,7 @@ collect_local_branches() {
     fi
     note="$(note_or_default "${note}" "$(default_branch_note "${branch}" "${tracking_state}" "${has_worktree}" "${intent}")")"
 
-    if [[ "${branch}" == "main" ]]; then
+    if [[ "${branch}" == "${canonical_branch}" ]]; then
       sort_group="0"
     elif [[ "${has_worktree}" == "true" ]]; then
       sort_group="1"
@@ -814,11 +815,11 @@ collect_remote_branches() {
   : > "${remote_branches_file}"
 
   while IFS= read -r remote_ref || [[ -n "${remote_ref}" ]]; do
-    if [[ -z "${remote_ref}" || "${remote_ref}" == "origin/HEAD" || "${remote_ref}" == "origin/main" ]]; then
+    if [[ -z "${remote_ref}" || "${remote_ref}" == "origin/HEAD" || "${remote_ref}" == "origin/${canonical_branch}" ]]; then
       continue
     fi
 
-    if git merge-base --is-ancestor "${remote_ref}" "refs/remotes/origin/main" 2>/dev/null; then
+    if git merge-base --is-ancestor "${remote_ref}" "refs/remotes/origin/${canonical_branch}" 2>/dev/null; then
       continue
     fi
 
@@ -922,7 +923,7 @@ EOF
 
     cat <<'EOF'
 
-## Remote Branches Not Merged Into `origin/main`
+## Remote Branches Not Merged Into `origin/${canonical_branch}`
 
 | Remote Branch | Current Intent |
 |---|---|
@@ -966,7 +967,7 @@ EOF
 
 ## Operating Rules
 
-1. `main` remains the only operational source of truth.
+1. `${canonical_branch}` remains the only operational source of truth.
 2. If a branch has a dedicated worktree, treat that worktree as the authoritative place for edits.
 3. Before deleting or merging branches, verify this registry and then verify live `git` state again.
 4. If branch/worktree state changes, this artifact must be refreshed in the same session or at the next session boundary.

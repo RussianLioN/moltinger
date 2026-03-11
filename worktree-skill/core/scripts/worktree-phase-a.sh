@@ -89,7 +89,6 @@ parse_args() {
 
 ensure_prerequisites() {
   command -v git >/dev/null 2>&1 || die "git is required"
-  command -v bd >/dev/null 2>&1 || die "bd is required"
   [[ -d "${canonical_root}/.git" || -f "${canonical_root}/.git" ]] || die "Canonical root is not a git worktree: ${canonical_root}"
   [[ ! -e "${target_path}" ]] || die "Target worktree path already exists: ${target_path}"
   git -C "${canonical_root}" rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1 || die "Base ref does not resolve to a commit: ${base_ref}"
@@ -144,10 +143,14 @@ create_from_base() {
     git -C "${canonical_root}" branch "${branch}" "${base_sha}" >/dev/null
   fi
 
-  (
-    cd "${canonical_root}"
-    bd worktree create "${target_path}" --branch "${branch}" >/dev/null
-  )
+  if command -v bd >/dev/null 2>&1; then
+    (
+      cd "${canonical_root}"
+      bd worktree create "${target_path}" --branch "${branch}" >/dev/null
+    )
+  else
+    git -C "${canonical_root}" worktree add "${target_path}" "${branch}" >/dev/null
+  fi
 
   head_sha="$(git -C "${target_path}" rev-parse HEAD)"
   if [[ "${head_sha}" != "${base_sha}" ]]; then
