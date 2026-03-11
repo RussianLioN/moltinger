@@ -294,6 +294,7 @@ Related diagnostics rules:
 - Keep the result compact; prefer one corrective path over a long troubleshooting checklist.
 - If a branch exists but no worktree is attached, route the user back into the managed attach flow instead of suggesting raw `bd worktree create`.
 - Distinguish missing readiness state from unavailable probes: do not claim beads or guard are missing when the probe itself could not be executed.
+- If the Beads probe shows missing local ownership in an existing dedicated worktree, route recovery through `./scripts/beads-worktree-localize.sh --path <worktree>` and keep any canonical-root cleanup note separate from that recovery step.
 
 ## Finish Workflow
 

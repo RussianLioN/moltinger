@@ -29,6 +29,14 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Beads Worktree Ownership
+
+Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
+
+- The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
+- If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
+- Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
+
 ## Speckit Artifact Guard
 
 If work is driven by a Speckit package (`specs/<feature>/`):

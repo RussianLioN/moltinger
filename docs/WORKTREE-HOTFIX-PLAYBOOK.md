@@ -7,6 +7,7 @@ Examples:
 - it continues work in the old session instead of stopping at handoff
 - `doctor` suggests the wrong next step
 - a readiness probe reports the wrong state
+- a dedicated worktree falls back to the canonical root tracker instead of using its local `.beads/` ownership
 
 ## Core Rule
 
@@ -65,12 +66,21 @@ Use the file that matches the real defect:
   - `./claude/commands/worktree.md`
 - helper status, report, next steps:
   - `scripts/worktree-ready.sh`
+- Beads ownership dispatch or localization:
+  - `bin/bd`
+  - `scripts/beads-resolve-db.sh`
+  - `scripts/beads-worktree-localize.sh`
 - deterministic create/start execution:
   - `scripts/worktree-phase-a.sh`
 - topology reconcile, stale state, locks:
   - `scripts/git-topology-registry.sh`
 
 If you are not sure, start with the helper and the unit tests. Most user-facing `command-worktree` bugs end there.
+
+If the hotfix touches Beads ownership:
+- keep plain `bd` as the only normal-path user command
+- preserve worktree-local ownership and fail closed before canonical-root fallback
+- treat residual canonical-root cleanup as a separate issue instead of folding it into the hotfix
 
 ## Step 5: Add a Regression Test First
 

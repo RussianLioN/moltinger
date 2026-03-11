@@ -1,5 +1,7 @@
 # Beads Commands Quick Reference
 
+In this repository, these commands assume the repo-local plain `bd` shim is active through `.envrc` or the managed worktree/Codex bootstrap path.
+
 ## View Issues
 
 ```bash

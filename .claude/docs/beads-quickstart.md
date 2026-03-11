@@ -2,6 +2,8 @@
 
 > **Attribution**: [Beads](https://github.com/steveyegge/beads) — методология [Steve Yegge](https://github.com/steveyegge)
 
+> **Moltinger repo note**: внутри этого репо для обычной работы используйте plain `bd`. Безопасный repo-local dispatch приходит через `.envrc` или managed worktree/Codex handoff; отдельную wrapper-команду выбирать не нужно.
+
 ---
 
 ## SESSION CLOSE PROTOCOL (ОБЯЗАТЕЛЬНО!)

@@ -33,6 +33,7 @@ base_ref="main"
 branch=""
 target_path=""
 output_format="human"
+bd_command=""
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
@@ -89,7 +90,15 @@ parse_args() {
 
 ensure_prerequisites() {
   command -v git >/dev/null 2>&1 || die "git is required"
-  command -v bd >/dev/null 2>&1 || die "bd is required"
+
+  if [[ -x "${canonical_root}/bin/bd" ]]; then
+    bd_command="${canonical_root}/bin/bd"
+  elif command -v bd >/dev/null 2>&1; then
+    bd_command="$(command -v bd)"
+  else
+    die "bd is required"
+  fi
+
   [[ -d "${canonical_root}/.git" || -f "${canonical_root}/.git" ]] || die "Canonical root is not a git worktree: ${canonical_root}"
   [[ ! -e "${target_path}" ]] || die "Target worktree path already exists: ${target_path}"
   git -C "${canonical_root}" rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1 || die "Base ref does not resolve to a commit: ${base_ref}"
@@ -146,7 +155,7 @@ create_from_base() {
 
   (
     cd "${canonical_root}"
-    bd worktree create "${target_path}" --branch "${branch}" >/dev/null
+    "${bd_command}" worktree create "${target_path}" --branch "${branch}" >/dev/null
   )
 
   head_sha="$(git -C "${target_path}" rev-parse HEAD)"

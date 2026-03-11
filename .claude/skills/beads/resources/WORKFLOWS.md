@@ -1,5 +1,7 @@
 # Beads Common Workflows
 
+In this repository, run these workflows with plain `bd`; the safe repo-local dispatch path should come from `.envrc` or the managed worktree/Codex bootstrap flow rather than a separate wrapper command.
+
 ## Daily Session
 
 ```bash

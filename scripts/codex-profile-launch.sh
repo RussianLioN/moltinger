@@ -42,6 +42,10 @@ shift
 MODEL="${CODEX_MODEL:-gpt-5.4}"
 BASE_BRANCH="${CODEX_BASE_BRANCH:-main}"
 
+if [[ -d "${REPO_ROOT}/bin" ]]; then
+  export PATH="${REPO_ROOT}/bin:${PATH}"
+fi
+
 if ! command -v codex >/dev/null 2>&1; then
   echo "codex CLI not found in PATH" >&2
   exit 1
