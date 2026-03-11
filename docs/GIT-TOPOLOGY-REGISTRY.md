@@ -19,9 +19,9 @@
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-010` | `010-beads-recovery-batch` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-011` | `011-clawdiy-openclaw-runtime-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-011` | `011-remote-uat-hardening` | `codex-managed` | Needs decision |
 | `primary-feature-011` | `011-worktree-handoff-hardening` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-012` | `012-clawdiy-live-runtime-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
@@ -34,9 +34,9 @@
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `010-beads-recovery-batch` | `origin/010-beads-recovery-batch` | Needs decision |
-| `011-clawdiy-openclaw-runtime-fix` | `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `011-remote-uat-hardening` | `none` | Needs decision |
 | `011-worktree-handoff-hardening` | `none` | Needs decision |
+| `012-clawdiy-live-runtime-fix` | `none` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
@@ -49,6 +49,7 @@
 | `001-moltis-docker-deploy` | `origin/001-moltis-docker-deploy` | Historical branch with local drift. |
 | `003-testing-infrastructure` | `origin/003-testing-infrastructure` | Historical planning branch. |
 | `008-clawdiy-rollout-bootstrap-fix` | `gone` | Tracking ref is gone; needs decision |
+| `011-clawdiy-openclaw-runtime-fix` | `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/remote-uat-hardening` | `none` | Needs decision |
@@ -71,7 +72,6 @@
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `origin/010-beads-recovery-batch` | Needs decision |
-| `origin/011-clawdiy-openclaw-runtime-fix` | Needs decision |
 | `origin/011-worktree-skill-extraction` | Needs decision |
 | `origin/012-codex-upstream-watcher` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
