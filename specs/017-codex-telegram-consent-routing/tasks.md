@@ -51,11 +51,11 @@
 
 **Independent Test**: Accept a valid consent request through the authoritative router and confirm the second recommendation message is sent once, while decline closes the state without sending it.
 
-- [ ] T020 [US2] Implement immediate follow-up recommendation delivery from the authoritative runtime path
-- [ ] T021 [US2] Make acceptance and decline idempotent in the shared consent store
-- [ ] T022 [P] [US2] Add component coverage for accept, decline, duplicate accept, and follow-up send failure/retry behavior
-- [ ] T023 [US2] Update watcher output so it advertises consent only when the authoritative router is available
-- [ ] T024 [US2] Document the immediate follow-up behavior and operator expectations
+- [x] T020 [US2] Implement immediate follow-up recommendation delivery from the authoritative runtime path
+- [x] T021 [US2] Make acceptance and decline idempotent in the shared consent store
+- [x] T022 [P] [US2] Add component coverage for accept, decline, duplicate accept, and follow-up send failure/retry behavior
+- [x] T023 [US2] Update watcher output so it advertises consent only when the authoritative router is available
+- [x] T024 [US2] Document the immediate follow-up behavior and operator expectations
 
 ---
 

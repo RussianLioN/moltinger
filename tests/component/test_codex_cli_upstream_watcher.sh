@@ -182,6 +182,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "pending" "$(jq -r '.followup.consent.status' "$report")" "Scheduler alert should open a pending consent flow"
     assert_eq "authoritative" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should advertise authoritative consent routing"
     assert_eq "true" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Router flag should be exposed in the report"
+    assert_eq "true" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Watcher should expose that the authoritative router is ready"
     assert_file_exists "$store_record" "Watcher should persist a shared consent record for the authoritative router"
     assert_contains "$call_text" "Хотите получить практические рекомендации" "Alert message should ask whether recommendations are needed"
     assert_contains "$call_text" "/codex-followup accept" "Alert message should include explicit fallback command"
@@ -203,6 +204,33 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "suppress" "$(jq -r '.decision.status' "$report")" "Repeated scheduler run should not resend the same upstream event"
     assert_eq "1" "$(wc -l < "$FAKE_TELEGRAM_STATE_DIR/calls.log" | tr -d ' ')" "Repeated scheduler run should not trigger a second Telegram message"
     test_pass
+
+    test_start "component_codex_cli_upstream_watcher_router_disabled_sends_one_way_alert"
+    setup_fake_telegram_sender
+    export FAKE_TELEGRAM_STATE_DIR
+    work_dir="$(secure_temp_dir codex-upstream-watcher-one-way)"
+    state_file="$work_dir/state.json"
+    run_watcher scheduler "$work_dir" "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
+        --include-issue-signals \
+        --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
+        --telegram-enabled \
+        --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+        --telegram-consent-router-disabled
+    report="$work_dir/report.json"
+    call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
+    assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Router-disabled scheduler run should still deliver the upstream alert"
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should disable consent when the authoritative router is unavailable"
+    assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should mark the alert as one-way only"
+    assert_eq "false" "$(jq -r '.automation.alert.consent_requested' "$report")" "Watcher should not advertise consent when the router is unavailable"
+    assert_eq "false" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Report should expose that the router is disabled"
+    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that the router is not ready"
+    if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+        test_fail "One-way alert should not ask a broken consent question"
+    else
+        test_pass
+    fi
 
     test_start "component_codex_cli_upstream_watcher_surfaces_primary_parse_investigate"
     work_dir="$(secure_temp_dir codex-upstream-watcher-investigate)"

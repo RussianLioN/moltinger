@@ -227,6 +227,78 @@ resolve_store_record() {
     "$STORE_SCRIPT" get --store-dir "$STORE_DIR" --request-id "$request_id" --json
 }
 
+store_mark_delivery() {
+    local request_id="$1"
+    local delivery_status="$2"
+    local message_id="${3:-}"
+    local delivery_error="${4:-}"
+    local note="${5:-}"
+    local -a cmd=(
+        "$STORE_SCRIPT"
+        mark-delivery
+        --store-dir "$STORE_DIR"
+        --request-id "$request_id"
+        --delivery-status "$delivery_status"
+        --json
+    )
+
+    if [[ -n "$message_id" ]]; then
+        cmd+=(--message-id "$message_id")
+    fi
+    if [[ -n "$delivery_error" ]]; then
+        cmd+=(--delivery-error "$delivery_error")
+    fi
+    if [[ -n "$note" ]]; then
+        cmd+=(--note "$note")
+    fi
+
+    "${cmd[@]}" >/dev/null
+}
+
+build_recommendations_reply() {
+    local record_json="$1"
+    python3 - <<'PY' "$record_json"
+import json
+import sys
+
+record = json.loads(sys.argv[1])
+summary = str(record.get("recommendations", {}).get("summary", "")).strip()
+items = record.get("recommendations", {}).get("items", []) or []
+
+lines = [
+    "Практические рекомендации по обновлению Codex CLI",
+    "",
+]
+
+if summary:
+    lines.append(summary)
+    lines.append("")
+
+if items:
+    lines.append("Что можно сделать в проекте:")
+    for item in items[:3]:
+        title = str(item.get("title", "")).strip()
+        rationale = str(item.get("rationale", "")).strip()
+        impacted = [str(value).strip() for value in item.get("impacted_paths", []) if str(value).strip()]
+        next_steps = [str(value).strip() for value in item.get("next_steps", []) if str(value).strip()]
+
+        if title:
+            lines.append(f"- {title}")
+        if rationale:
+            lines.append(f"  Почему: {rationale}")
+        if impacted:
+            lines.append(f"  Затронутые пути: {', '.join(impacted[:4])}")
+        for step in next_steps[:3]:
+            lines.append(f"  Дальше: {step}")
+    if len(items) > 3:
+        lines.append(f"- И ещё {len(items) - 3} рекомендаций в подготовленном payload.")
+else:
+    lines.append("Подробный список не был подготовлен, но стоит проверить связанные инструкции и workflow проекта вручную.")
+
+print("\n".join(lines).strip())
+PY
+}
+
 result_json() {
     local handled="$1"
     local suppress_generic="$2"
@@ -269,7 +341,10 @@ main() {
 
     local event_json parse_mode action request_id action_token raw_input resolved_via
     local record_json record_path stored_chat_id stored_token stored_status expires_at now_epoch expiry_epoch
+    local stored_delivery_status stored_question_message_id
     local decision reply_text reply_status reply_error result actor_id
+    local outbound_reply_to followup_delivery_on_success followup_delivery_on_failure
+    local followup_note followup_delivery_message_id sender_output recommendations_text
 
     event_json="$(read_event_json)"
     extract_if_missing callback "$event_json"
@@ -283,6 +358,11 @@ main() {
     action_token=""
     raw_input=""
     resolved_via=""
+    outbound_reply_to=""
+    followup_delivery_on_success=""
+    followup_delivery_on_failure=""
+    followup_note=""
+    followup_delivery_message_id=""
 
     if [[ -n "$CALLBACK_DATA" && "$CALLBACK_DATA" =~ ^codex-consent:(accept|decline):([A-Za-z0-9._-]+):([A-Za-z0-9._-]+)$ ]]; then
         action="${BASH_REMATCH[1]}"
@@ -321,6 +401,8 @@ main() {
         stored_chat_id="$(jq -r '.request.chat_id' <<<"$record_json")"
         stored_token="$(jq -r '.request.action_token' <<<"$record_json")"
         stored_status="$(jq -r '.request.status' <<<"$record_json")"
+        stored_delivery_status="$(jq -r '.delivery.status // "not_sent"' <<<"$record_json")"
+        stored_question_message_id="$(jq -r '(.request.question_message_id // 0) | tostring' <<<"$record_json")"
         expires_at="$(jq -r '.request.expires_at' <<<"$record_json")"
         now_epoch="$(date -u +%s)"
         expiry_epoch="$(python3 - <<'PY' "$expires_at"
@@ -366,15 +448,32 @@ PY
                 --note "duplicate action after resolved state" \
                 --json >/dev/null
             decision="duplicate"
-            reply_text="Этот ответ уже был обработан раньше. Повторно ничего делать не нужно."
+            if [[ "$stored_status" == "failed" || "$stored_delivery_status" == "retry" || "$stored_delivery_status" == "failed" ]]; then
+                reply_text="Этот ответ уже был обработан. Предыдущая отправка рекомендаций не завершилась успешно; нужен повтор со стороны оператора."
+            else
+                reply_text="Этот ответ уже был обработан раньше. Повторно ничего делать не нужно."
+            fi
             result="$(result_json true true "$decision" "$request_id" "$resolved_via" "$reply_text" skipped \"\")"
         else
+            if [[ "$stored_question_message_id" != "0" ]]; then
+                outbound_reply_to="$stored_question_message_id"
+            elif [[ -n "$REPLY_TO_MESSAGE_ID" ]]; then
+                outbound_reply_to="$REPLY_TO_MESSAGE_ID"
+            fi
+
             if [[ "$action" == "accept" ]]; then
                 decision="accept"
-                reply_text="Согласие зафиксировано. Практические рекомендации для проекта будут подготовлены следующим шагом."
+                recommendations_text="$(build_recommendations_reply "$record_json")"
+                reply_text="$recommendations_text"
+                if [[ "$SEND_REPLY" == "true" ]]; then
+                    followup_delivery_on_success="sent"
+                    followup_delivery_on_failure="retry"
+                    followup_note="recommendations delivered from authoritative router"
+                fi
             else
                 decision="decline"
                 reply_text="Понял. Практические рекомендации по этому обновлению отправляться не будут."
+                store_mark_delivery "$request_id" "suppressed" "" "" "user declined recommendations" || true
             fi
             "$STORE_SCRIPT" resolve \
                 --store-dir "$STORE_DIR" \
@@ -390,20 +489,47 @@ PY
 
     reply_status="$(jq -r '.delivery.status' <<<"$result")"
     reply_error=""
-    if [[ "$SEND_REPLY" == "true" && -n "$CHAT_ID" && -x "$TELEGRAM_SEND_SCRIPT" ]]; then
-        set +e
-        if run_sender "$CHAT_ID" "$(jq -r '.reply_text' <<<"$result")" "$REPLY_TO_MESSAGE_ID" >/dev/null 2>&1; then
-            reply_status="sent"
+    if [[ "$SEND_REPLY" == "true" ]]; then
+        if [[ -z "$CHAT_ID" ]]; then
+            if [[ -n "$followup_delivery_on_failure" ]]; then
+                reply_status="failed"
+                reply_error="chat id is required for immediate follow-up delivery"
+                store_mark_delivery "$request_id" "$followup_delivery_on_failure" "" "$reply_error" "follow-up delivery skipped because chat id was missing" || true
+            fi
+        elif [[ ! -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+            if [[ -n "$followup_delivery_on_failure" ]]; then
+                reply_status="failed"
+                reply_error="telegram sender script is not executable: $TELEGRAM_SEND_SCRIPT"
+                store_mark_delivery "$request_id" "$followup_delivery_on_failure" "" "$reply_error" "follow-up delivery skipped because sender script was unavailable" || true
+            fi
         else
-            reply_status="failed"
-            reply_error="failed to send contextual Telegram reply"
+            set +e
+            sender_output="$(run_sender "$CHAT_ID" "$(jq -r '.reply_text' <<<"$result")" "$outbound_reply_to" 2>&1)"
+            if [[ $? -eq 0 ]]; then
+                reply_status="sent"
+                followup_delivery_message_id="$(jq -r '.result.message_id // ""' <<<"$sender_output" 2>/dev/null || true)"
+                if [[ -n "$followup_delivery_on_success" ]]; then
+                    store_mark_delivery "$request_id" "$followup_delivery_on_success" "$followup_delivery_message_id" "" "$followup_note" || true
+                fi
+            else
+                reply_status="failed"
+                reply_error="${sender_output:-failed to send contextual Telegram reply}"
+                if [[ -n "$followup_delivery_on_failure" ]]; then
+                    store_mark_delivery "$request_id" "$followup_delivery_on_failure" "" "$reply_error" "follow-up delivery failed in authoritative router" || true
+                fi
+            fi
+            set -e
         fi
-        set -e
+
         result="$(jq \
             --arg reply_status "$reply_status" \
             --arg reply_error "$reply_error" \
+            --arg reply_message_id "$followup_delivery_message_id" \
             '.delivery.status = $reply_status | .delivery.error = (if $reply_error == "" then null else $reply_error end)' \
             <<<"$result")"
+        if [[ -n "$followup_delivery_message_id" ]]; then
+            result="$(jq --arg reply_message_id "$followup_delivery_message_id" '.delivery.message_id = ($reply_message_id | tonumber)' <<<"$result")"
+        fi
     fi
 
     if [[ -n "$JSON_OUT" ]]; then

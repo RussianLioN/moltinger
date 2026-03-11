@@ -16,6 +16,8 @@ RESOLVED_VIA=""
 TELEGRAM_ACTOR_ID=""
 RAW_INPUT=""
 NOTE=""
+DELIVERY_STATUS=""
+DELIVERY_ERROR=""
 JSON_OUTPUT=true
 
 usage() {
@@ -29,6 +31,7 @@ Commands:
   find-by-token   Print one record by action token
   bind-message    Attach Telegram question_message_id to an existing record
   resolve         Persist a consent decision for an existing record
+  mark-delivery   Persist follow-up delivery status for an existing record
 
 Common options:
   --store-dir PATH          Consent store directory
@@ -41,6 +44,8 @@ Common options:
   --telegram-actor-id ID    Telegram actor id for resolve
   --raw-input TEXT          Raw callback data or command text for resolve
   --note TEXT               Optional audit note for resolve
+  --delivery-status VALUE   not_sent|sent|suppressed|retry|failed
+  --delivery-error TEXT     Optional delivery error text
   --json                    Print resulting JSON (default)
   -h, --help                Show help
 EOF
@@ -148,6 +153,14 @@ parse_args() {
                 ;;
             --note)
                 NOTE="${2:?missing value for --note}"
+                shift 2
+                ;;
+            --delivery-status)
+                DELIVERY_STATUS="${2:?missing value for --delivery-status}"
+                shift 2
+                ;;
+            --delivery-error)
+                DELIVERY_ERROR="${2:?missing value for --delivery-error}"
                 shift 2
                 ;;
             --json)
@@ -275,6 +288,61 @@ resolve_record() {
     render_json "$path"
 }
 
+mark_delivery() {
+    [[ -n "$REQUEST_ID" ]] || fail "--request-id is required for mark-delivery"
+    [[ -n "$DELIVERY_STATUS" ]] || fail "--delivery-status is required for mark-delivery"
+
+    case "$DELIVERY_STATUS" in
+        not_sent|sent|suppressed|retry|failed) ;;
+        *) fail "invalid delivery status: $DELIVERY_STATUS" ;;
+    esac
+
+    if [[ -n "$MESSAGE_ID" ]] && [[ ! "$MESSAGE_ID" =~ ^[1-9][0-9]*$ ]]; then
+        fail "--message-id must be a positive integer"
+    fi
+
+    local path tmp recorded_at
+    path="$(record_path_for "$REQUEST_ID")"
+    [[ -f "$path" ]] || fail "consent record not found: $REQUEST_ID"
+    recorded_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    tmp="${path}.tmp"
+
+    jq \
+        --arg delivery_status "$DELIVERY_STATUS" \
+        --arg message_id "$MESSAGE_ID" \
+        --arg delivery_error "$DELIVERY_ERROR" \
+        --arg recorded_at "$recorded_at" \
+        --arg note "$NOTE" \
+        '
+        .delivery.status = $delivery_status
+        | .delivery.message_id = (if $message_id == "" then null else ($message_id | tonumber) end)
+        | (
+            if $delivery_status == "sent" then
+                .delivery.sent_at = $recorded_at
+            else
+                del(.delivery.sent_at)
+            end
+          )
+        | (
+            if $delivery_error == "" then
+                del(.delivery.error)
+            else
+                .delivery.error = $delivery_error
+            end
+          )
+        | .request.status = (
+            if $delivery_status == "sent" then "delivered"
+            elif ($delivery_status == "retry" or $delivery_status == "failed") then "failed"
+            else .request.status
+            end
+          )
+        | .audit_notes = ((.audit_notes // []) + ["delivery:" + $delivery_status])
+        | (if $note != "" then .audit_notes = (.audit_notes + [$note]) else . end)
+        ' "$path" > "$tmp"
+    mv "$tmp" "$path"
+    render_json "$path"
+}
+
 main() {
     require_command jq
     [[ -n "$COMMAND" ]] || {
@@ -298,6 +366,9 @@ main() {
             ;;
         resolve)
             resolve_record
+            ;;
+        mark-delivery)
+            mark_delivery
             ;;
         -h|--help)
             usage

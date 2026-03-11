@@ -85,7 +85,7 @@ Options:
   --telegram-send-script PATH    Путь к telegram sender script
   --telegram-consent-disabled    Не спрашивать о практических рекомендациях в Telegram
   --telegram-consent-window-hours N Сколько часов ждать ответ пользователя в Telegram
-  --telegram-consent-router-disabled Выключить authoritative consent router и оставить legacy follow-up режим
+  --telegram-consent-router-disabled Выключить authoritative consent router и отправлять только one-way alert
   --telegram-consent-store-script PATH Путь к consent store helper
   --telegram-consent-store-dir PATH Директория shared consent store
   --telegram-updates-file PATH   Читать ответы Telegram из локального JSON-файла
@@ -878,6 +878,7 @@ main() {
 
     local release_source_path issue_source_path updates_source_path
     local release_source_id issue_source_id previous_chat_id resolved_chat_id advisor_bridge_path
+    local telegram_consent_router_ready
     release_source_path="${TEMP_DIR}/release-source"
     issue_source_path="${TEMP_DIR}/issue-source"
     updates_source_path=""
@@ -886,6 +887,7 @@ main() {
     previous_chat_id=""
     resolved_chat_id=""
     advisor_bridge_path=""
+    telegram_consent_router_ready="false"
 
     fetch_source "release" "$RELEASE_FILE" "$RELEASE_URL" "$DEFAULT_RELEASE_URL" "$release_source_path" || true
     release_source_id="$FETCH_SOURCE_ID"
@@ -902,11 +904,17 @@ main() {
         fi
     fi
 
+    if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -x "$TELEGRAM_CONSENT_STORE_SCRIPT" ]]; then
+        telegram_consent_router_ready="true"
+    elif [[ "$TELEGRAM_ENABLED" == "true" && "$TELEGRAM_CONSENT_ENABLED" == "true" && "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" ]]; then
+        add_warning "Authoritative consent router включён, но shared consent store helper сейчас недоступен; watcher перейдёт в one-way alert режим."
+    fi
+
     if [[ "$ADVISOR_BRIDGE_ENABLED" == "true" ]]; then
         advisor_bridge_path="$(build_advisor_bridge "$release_source_path" "$issue_source_path" || true)"
     fi
 
-    if [[ "$TELEGRAM_ENABLED" == "true" && "$TELEGRAM_CONSENT_ENABLED" == "true" && "$TELEGRAM_CONSENT_ROUTER_ENABLED" != "true" && "$(state_has_pending_consent "$STATE_FILE"; printf '%s' "$?")" == "0" ]]; then
+    if [[ "$TELEGRAM_ENABLED" == "true" && "$TELEGRAM_CONSENT_ENABLED" == "true" && "$TELEGRAM_ALLOW_GETUPDATES" == "true" && "$telegram_consent_router_ready" != "true" && "$(state_has_pending_consent "$STATE_FILE"; printf '%s' "$?")" == "0" ]]; then
         local updates_path next_offset
         updates_path="${TEMP_DIR}/telegram-updates.json"
         next_offset="$(state_next_update_offset "$STATE_FILE")"
@@ -938,6 +946,8 @@ main() {
         "$TELEGRAM_CONSENT_ENABLED" \
         "$TELEGRAM_CONSENT_WINDOW_HOURS" \
         "$TELEGRAM_CONSENT_ROUTER_ENABLED" \
+        "$telegram_consent_router_ready" \
+        "$TELEGRAM_ALLOW_GETUPDATES" \
         "$updates_source_path" \
         "$(printf '%s\n' "${WARNINGS[@]:-}" | jq -R . | jq -s .)" \
         > "$REPORT_PATH" <<'PY'
@@ -971,8 +981,10 @@ advisor_bridge_path = pathlib.Path(sys.argv[19]) if sys.argv[19] else None
 telegram_consent_enabled = sys.argv[20] == "true"
 telegram_consent_window_hours = int(sys.argv[21])
 telegram_consent_router_enabled = sys.argv[22] == "true"
-updates_source_path = pathlib.Path(sys.argv[23]) if sys.argv[23] else None
-warnings = json.loads(sys.argv[24])
+telegram_consent_router_ready = sys.argv[23] == "true"
+telegram_allow_getupdates = sys.argv[24] == "true"
+updates_source_path = pathlib.Path(sys.argv[25]) if sys.argv[25] else None
+warnings = json.loads(sys.argv[26])
 
 checked_dt = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
 checked_at = checked_dt.isoformat().replace("+00:00", "Z")
@@ -1741,12 +1753,27 @@ consent_expires_at = ""
 
 pending_consent = previous_state.get("pending_consent")
 if telegram_consent_enabled:
-    if telegram_consent_router_enabled:
+    if telegram_consent_router_ready:
         state.pop("pending_consent", None)
         consent_status = "none"
         consent_reason = "Authoritative router готов принимать токенизированные ответы на новые уведомления."
-    else:
+    elif telegram_allow_getupdates:
+        consent_status = "disabled"
+        consent_reason = "Authoritative router недоступен; interactive follow-up отключён. Legacy polling разрешён только для уже существующих тестовых запросов."
         if pending_consent and isinstance(pending_consent, dict):
+            consent_status = "none"
+            consent_reason = "Legacy polling включён только для совместимости со старыми test-state запросами."
+        else:
+            state.pop("pending_consent", None)
+    else:
+        state.pop("pending_consent", None)
+        consent_status = "disabled"
+        if telegram_consent_router_enabled:
+            consent_reason = "Authoritative router сейчас недоступен, поэтому уведомление будет one-way без вопроса о рекомендациях."
+        else:
+            consent_reason = "Authoritative router выключен, поэтому уведомление будет one-way без вопроса о рекомендациях."
+
+    if (not telegram_consent_router_ready) and telegram_allow_getupdates and pending_consent and isinstance(pending_consent, dict):
             expires_at = parse_datetime(str(pending_consent.get("expires_at", "")))
             consent_expires_at = str(pending_consent.get("expires_at", "")).strip()
             if expires_at and checked_dt > expires_at:
@@ -1809,10 +1836,7 @@ if telegram_consent_enabled:
                 else:
                     state["pending_consent"] = pending_consent
                     consent_status = "pending"
-                    consent_reason = "Вопрос о практических рекомендациях уже отправлен, ждём ответ пользователя."
-        else:
-            consent_status = "none"
-            consent_reason = "Сейчас нет активного вопроса о практических рекомендациях."
+                    consent_reason = "Legacy polling ждёт ответ только для уже существующего тестового запроса."
 
 decision_status = "investigate"
 decision_reason = "Официальная лента изменений сейчас недоступна."
@@ -1836,14 +1860,12 @@ else:
     ask_for_consent = (
         telegram_enabled
         and telegram_consent_enabled
+        and telegram_consent_router_ready
         and advisor_bridge["status"] == "ready"
         and bool(advisor_bridge["practical_recommendations"])
-        and (
-            telegram_consent_router_enabled
-            or "pending_consent" not in state
-        )
+        and "pending_consent" not in state
     )
-    if ask_for_consent and telegram_consent_router_enabled and telegram_chat_id:
+    if ask_for_consent and telegram_chat_id:
         consent_request = build_consent_request(
             fingerprint,
             telegram_chat_id,
@@ -1995,10 +2017,10 @@ if (
             "recommendations": advisor_bridge["practical_recommendations"],
         }
     consent_status = "pending"
-    if telegram_consent_router_enabled:
+    if telegram_consent_router_ready:
         consent_reason = "После уведомления пользователь сможет нажать кнопку или отправить токенизированную команду; authoritative router зафиксирует ответ."
     else:
-        consent_reason = "После уведомления пользователь сможет ответить в Telegram и получить проектные рекомендации."
+        consent_reason = "Interactive follow-up сейчас недоступен; watcher отправит только one-way alert."
     consent_expires_at = pending_consent_state["expires_at"]
 elif consent_status == "pending" and pending_consent:
     consent_expires_at = str(pending_consent.get("expires_at", "")).strip()
@@ -2034,6 +2056,7 @@ report = {
         "enabled": telegram_enabled,
         "consent_enabled": telegram_consent_enabled,
         "consent_router_enabled": telegram_consent_router_enabled,
+        "consent_router_ready": telegram_consent_router_ready,
     },
     "followup": {
         "digest": followup_digest,
@@ -2042,7 +2065,7 @@ report = {
             "reason": consent_reason,
             "expires_at": consent_expires_at,
             "question": advisor_bridge["question"],
-            "router_mode": "authoritative" if telegram_consent_router_enabled else "legacy",
+            "router_mode": ("authoritative" if telegram_consent_router_ready else ("legacy" if telegram_allow_getupdates else "one_way_only")),
             "pending_state": pending_consent_state,
         },
     },
@@ -2081,7 +2104,7 @@ PY
         elif [[ -z "$resolved_chat_id" ]]; then
             patch_report_alert_failure "не удалось определить telegram chat id"
         else
-            if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -n "$consent_request_id" ]]; then
+            if [[ "$telegram_consent_router_ready" == "true" && -n "$consent_request_id" ]]; then
                 set +e
                 persist_authoritative_consent_request
                 send_code=$?
@@ -2099,7 +2122,7 @@ PY
             set -e
             if [[ $send_code -eq 0 ]]; then
                 alert_message_id="$(printf '%s' "$telegram_output" | jq -r '.result.message_id // ""' 2>/dev/null || true)"
-                if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -n "$consent_request_id" && -n "$alert_message_id" ]]; then
+                if [[ "$telegram_consent_router_ready" == "true" && -n "$consent_request_id" && -n "$alert_message_id" ]]; then
                     bind_authoritative_consent_message_id "$consent_request_id" "$alert_message_id" || true
                 fi
                 patch_report_alert_success "$resolved_chat_id" "$alert_message_id"

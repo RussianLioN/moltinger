@@ -9,6 +9,9 @@ ROUTER_SCRIPT="$PROJECT_ROOT/scripts/moltis-codex-consent-router.sh"
 STORE_SCRIPT="$PROJECT_ROOT/scripts/codex-telegram-consent-store.sh"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-telegram-consent-routing"
 REPORT_FINALIZED=false
+FAKE_TELEGRAM_BIN_DIR=""
+FAKE_TELEGRAM_STATE_DIR=""
+FAKE_TELEGRAM_ENV_FILE=""
 
 finalize_component_codex_consent_router_report() {
     local exit_code="${1:-0}"
@@ -38,6 +41,38 @@ on_component_codex_consent_router_exit() {
 setup_component_codex_consent_router() {
     require_commands_or_skip bash jq python3 || return 2
     return 0
+}
+
+setup_fake_telegram_sender() {
+    FAKE_TELEGRAM_BIN_DIR="$(secure_temp_dir fake-consent-telegram-bin)"
+    FAKE_TELEGRAM_STATE_DIR="$(secure_temp_dir fake-consent-telegram-state)"
+    FAKE_TELEGRAM_ENV_FILE="$FAKE_TELEGRAM_STATE_DIR/fake.env"
+    : > "$FAKE_TELEGRAM_STATE_DIR/calls.log"
+
+    cat > "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" <<'SEND'
+#!/usr/bin/env bash
+set -euo pipefail
+state_dir="${FAKE_TELEGRAM_STATE_DIR:?}"
+count_file="$state_dir/count.txt"
+count=0
+if [[ -f "$count_file" ]]; then
+  count="$(cat "$count_file")"
+fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$count_file"
+printf 'call\n' >> "$state_dir/calls.log"
+printf '%s\n' "$*" > "$state_dir/call-${count}.txt"
+if [[ "${FAKE_TELEGRAM_FAIL:-0}" == "1" ]]; then
+  echo "fake telegram failure" >&2
+  exit 1
+fi
+printf '{"ok":true,"result":{"message_id":%s}}\n' "$count"
+SEND
+    chmod +x "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
+
+    cat > "$FAKE_TELEGRAM_ENV_FILE" <<'ENV'
+TELEGRAM_BOT_TOKEN=fake-token
+ENV
 }
 
 copy_fixture_record() {
@@ -123,6 +158,108 @@ run_component_codex_consent_router_tests() {
     )"
     assert_json_value "$output" '.decision' "accept" "Callback query should be routed as accept"
     assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.decision.resolved_via' "callback_query" "Store should record callback_query origin"
+    test_pass
+
+    test_start "component_codex_consent_router_accept_sends_recommendations_immediately"
+    setup_fake_telegram_sender
+    export FAKE_TELEGRAM_STATE_DIR
+    work_dir="$(secure_temp_dir codex-consent-router-followup)"
+    store_dir="$work_dir/store"
+    copy_fixture_record "$store_dir" "consent-record-pending.json"
+    output="$(
+        bash "$ROUTER_SCRIPT" \
+            --store-script "$STORE_SCRIPT" \
+            --store-dir "$store_dir" \
+            --event-file "$FIXTURE_DIR/event-command-accept.json" \
+            --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+            --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+            --send-reply true \
+            --stdout json
+    )"
+    assert_json_value "$output" '.decision' "accept" "Accept should still resolve as accept when follow-up delivery is enabled"
+    assert_json_value "$output" '.delivery.status' "sent" "Accept should send recommendations immediately"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.request.status' "delivered" "Successful recommendation delivery should promote the request to delivered"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.delivery.status' "sent" "Store should persist sent delivery state"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.delivery.message_id' "1" "Store should persist the Telegram message id of the follow-up"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")" "Практические рекомендации по обновлению Codex CLI" "Follow-up message should contain the recommendations headline"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")" "Что можно сделать в проекте" "Follow-up message should contain project actions"
+    test_pass
+
+    test_start "component_codex_consent_router_decline_suppresses_recommendation_followup"
+    work_dir="$(secure_temp_dir codex-consent-router-decline)"
+    store_dir="$work_dir/store"
+    copy_fixture_record "$store_dir" "consent-record-pending.json"
+    output="$(
+        bash "$ROUTER_SCRIPT" \
+            --store-script "$STORE_SCRIPT" \
+            --store-dir "$store_dir" \
+            --event-file "$FIXTURE_DIR/event-command-decline.json" \
+            --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+            --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+            --send-reply false \
+            --stdout json
+    )"
+    assert_json_value "$output" '.decision' "decline" "Decline should resolve explicitly"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.request.status' "declined" "Decline should close the request as declined"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.delivery.status' "suppressed" "Decline should suppress recommendation follow-up delivery"
+    test_pass
+
+    test_start "component_codex_consent_router_duplicate_accept_does_not_send_recommendations_twice"
+    setup_fake_telegram_sender
+    export FAKE_TELEGRAM_STATE_DIR
+    work_dir="$(secure_temp_dir codex-consent-router-duplicate-followup)"
+    store_dir="$work_dir/store"
+    copy_fixture_record "$store_dir" "consent-record-pending.json"
+    output="$(
+        bash "$ROUTER_SCRIPT" \
+            --store-script "$STORE_SCRIPT" \
+            --store-dir "$store_dir" \
+            --event-file "$FIXTURE_DIR/event-command-accept.json" \
+            --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+            --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+            --send-reply true \
+            --stdout json
+    )"
+    assert_json_value "$output" '.delivery.status' "sent" "First accept should send the recommendation follow-up"
+    output="$(
+        bash "$ROUTER_SCRIPT" \
+            --store-script "$STORE_SCRIPT" \
+            --store-dir "$store_dir" \
+            --event-file "$FIXTURE_DIR/event-command-accept.json" \
+            --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+            --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+            --send-reply true \
+            --stdout json
+    )"
+    assert_json_value "$output" '.decision' "duplicate" "Second identical accept should resolve as duplicate"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/call-2.txt")" "уже был обработан" "Duplicate accept should produce only a duplicate acknowledgement"
+    if grep -q "Практические рекомендации по обновлению Codex CLI" "$FAKE_TELEGRAM_STATE_DIR/call-2.txt"; then
+        test_fail "Duplicate accept should not send the recommendation headline a second time"
+    else
+        test_pass
+    fi
+
+    test_start "component_codex_consent_router_accept_marks_retry_when_followup_send_fails"
+    setup_fake_telegram_sender
+    export FAKE_TELEGRAM_STATE_DIR
+    work_dir="$(secure_temp_dir codex-consent-router-followup-fail)"
+    store_dir="$work_dir/store"
+    copy_fixture_record "$store_dir" "consent-record-pending.json"
+    output="$(
+        FAKE_TELEGRAM_FAIL=1 \
+        bash "$ROUTER_SCRIPT" \
+            --store-script "$STORE_SCRIPT" \
+            --store-dir "$store_dir" \
+            --event-file "$FIXTURE_DIR/event-command-accept.json" \
+            --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+            --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+            --send-reply true \
+            --stdout json
+    )"
+    assert_json_value "$output" '.decision' "accept" "Delivery failure should not erase the original consent decision"
+    assert_json_value "$output" '.delivery.status' "failed" "Router should report failed follow-up delivery when sender exits non-zero"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.request.status' "failed" "Failed follow-up delivery should move the request into failed state"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.delivery.status' "retry" "Store should remember that the recommendation follow-up needs retry"
     test_pass
 
     test_start "component_codex_consent_router_rejects_invalid_chat_context"
