@@ -26,9 +26,9 @@ on:
           - production
           - staging
       version:
-        description: 'Moltis image version (leave blank to use tracked git version, e.g. v0.10.18)'
+        description: 'Moltis image version (leave blank to use tracked git version, typically latest per official Docker docs)'
         required: false
-        default: 'v0.10.18'
+        default: 'latest'
         type: string
       rollback:
         description: 'Rollback to previous version'

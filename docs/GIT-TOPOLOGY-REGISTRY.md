@@ -18,6 +18,7 @@
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-main-merge.hsq6oh` | `main` | `sibling-worktree` | Needs decision |
+| `moltinger-moltis-official-docker-update-v0-10-18` | `fix/moltis-official-docker-latest-channel` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
 | `moltinger-pr39` | `tmp-pr39-fix` | `sibling-worktree` | Needs decision |
@@ -29,7 +30,6 @@
 | `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-3-moltis-git-container-update` | `feat/moltinger-z8m-3-moltis-git-container-update` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
-| `moltis-official-docker-update-v0-10-18` | `feat/moltis-official-docker-update-v0-10-18` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
@@ -64,9 +64,9 @@
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
-| `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `fix/beads-root-fallback-hardening` | `none` | Needs decision |
+| `fix/beads-root-fallback-hardening` | `origin/fix/beads-root-fallback-hardening` | Needs decision |
+| `fix/moltis-official-docker-latest-channel` | `origin/main` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -99,6 +99,7 @@
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
+| `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
@@ -131,8 +132,8 @@
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
-| `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
+| `origin/fix/beads-root-fallback-hardening` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
