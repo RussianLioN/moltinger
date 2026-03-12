@@ -165,6 +165,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     work_dir="$(secure_temp_dir codex-upstream-watcher-telegram)"
     state_file="$work_dir/state.json"
     consent_store_dir="$work_dir/consent-store"
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true \
     run_watcher scheduler "$work_dir" "$state_file" \
         --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
         --include-issue-signals \
@@ -195,6 +196,33 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex_net" "Reply keyboard should send the short decline command"
     assert_eq "1" "$(jq -r '.request.question_message_id' "$store_record")" "Shared consent record should be bound to the Telegram alert message id"
     test_pass
+
+    test_start "component_codex_cli_upstream_watcher_without_confirmed_command_hook_degrades_to_one_way_alert"
+    setup_fake_telegram_sender
+    export FAKE_TELEGRAM_STATE_DIR
+    work_dir="$(secure_temp_dir codex-upstream-watcher-unconfirmed-command)"
+    state_file="$work_dir/state.json"
+    consent_store_dir="$work_dir/consent-store"
+    run_watcher scheduler "$work_dir" "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
+        --include-issue-signals \
+        --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
+        --telegram-enabled \
+        --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
+        --telegram-consent-store-script "$CONSENT_STORE_SCRIPT" \
+        --telegram-consent-store-dir "$consent_store_dir"
+    report="$work_dir/report.json"
+    call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should disable consent until the runtime confirms command-hook support"
+    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that command-hook support is not confirmed"
+    assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should degrade to one-way alert when command-hook support is unconfirmed"
+    assert_contains "$(jq -r '.notes[]' "$report")" "Telegram-команды доходят" "Watcher should explain why the live consent path was disabled"
+    if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+        test_fail "One-way alert should not promise a consent flow when command-hook support is unconfirmed"
+    else
+        test_pass
+    fi
 
     test_start "component_codex_cli_upstream_watcher_remote_sender_degrades_to_one_way_alert"
     setup_fake_telegram_sender

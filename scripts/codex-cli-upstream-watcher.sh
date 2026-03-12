@@ -45,6 +45,7 @@ TELEGRAM_CONSENT_STORE_SCRIPT="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_S
 TELEGRAM_CONSENT_STORE_DIR="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR:-${DEFAULT_CONSENT_STORE_DIR}}"
 TELEGRAM_UPDATES_FILE="${CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE:-}"
 TELEGRAM_ALLOW_GETUPDATES="${CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES:-false}"
+TELEGRAM_COMMAND_HOOK_READY="${CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY:-false}"
 
 TEMP_DIR=""
 REPORT_PATH=""
@@ -115,6 +116,7 @@ Environment overrides:
   CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR
   CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE
   CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES
+  CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY
 USAGE
 }
 
@@ -907,6 +909,8 @@ main() {
     if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -x "$TELEGRAM_CONSENT_STORE_SCRIPT" ]]; then
         if [[ "$(basename "$TELEGRAM_SEND_SCRIPT")" == "telegram-bot-send-remote.sh" ]]; then
             add_warning "Consent follow-up отключён: watcher отправляет Telegram через remote sender, а authoritative router ожидает store на том же runtime. Для live follow-up запускайте watcher на Moltinger host."
+        elif [[ "$TELEGRAM_COMMAND_HOOK_READY" != "true" ]]; then
+            add_warning "Consent follow-up отключён: Moltis runtime пока не подтвердил, что Telegram-команды доходят до repo-managed router раньше generic-ответа. Watcher перейдёт в one-way alert режим."
         else
             telegram_consent_router_ready="true"
         fi

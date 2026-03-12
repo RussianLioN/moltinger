@@ -346,6 +346,7 @@ run_hermetic() {
 
     log "Running consent-capable watcher alert"
     CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$fake_state_dir" \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true \
     bash "$WATCHER_SCRIPT" \
         --mode scheduler \
         --state-file "$watcher_state" \
@@ -370,23 +371,20 @@ run_hermetic() {
     [[ -n "$request_id" ]] || upstream_fail "Watcher report did not expose request_id for the consent flow"
     consent_record="${consent_store_dir}/${request_id}.json"
     [[ -f "$consent_record" ]] || upstream_fail "Watcher did not persist the shared consent record"
-    action_token="$(jq -r '.request.action_token // ""' "$consent_record")"
     chat_id="$(jq -r '.request.chat_id // ""' "$consent_record")"
-    [[ -n "$action_token" && -n "$chat_id" ]] || upstream_fail "Consent record is missing action token or chat id"
+    [[ -n "$chat_id" ]] || upstream_fail "Consent record is missing chat id"
 
     alert_text="$(jq -r '.text // ""' "${fake_state_dir}/call-1.json")"
     assert_text_contains "$alert_text" "Хотите получить практические рекомендации" "Consent-capable alert should ask for recommendations"
-    assert_text_contains "$alert_text" "/codex-followup accept" "Consent-capable alert should expose the fallback accept command"
+    assert_text_contains "$alert_text" "/codex_da" "Consent-capable alert should expose the short accept command"
 
     router_event="${TMP_DIR}/accept-event.json"
     jq -n \
         --arg chat_id "$chat_id" \
-        --arg request_id "$request_id" \
-        --arg action_token "$action_token" \
         '{
             message: {
                 message_id: 501,
-                text: ("/codex-followup accept " + $request_id + " " + $action_token),
+                text: "/codex_da",
                 chat: {id: $chat_id},
                 from: {id: $chat_id}
             }
@@ -445,7 +443,6 @@ run_hermetic() {
         --arg degraded_report "$degraded_report" \
         --arg consent_record "$consent_record" \
         --arg request_id "$request_id" \
-        --arg action_token "$action_token" \
         --arg alert_text "$alert_text" \
         --arg followup_text "$consent_text" \
         --arg degraded_text "$degraded_text" \
@@ -453,7 +450,6 @@ run_hermetic() {
         '{
             alert: {
                 request_id: $request_id,
-                action_token: $action_token,
                 text: $alert_text,
                 report_path: $alert_report,
                 consent_record_path: $consent_record

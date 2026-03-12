@@ -132,6 +132,12 @@ Scheduler-режим умеет не только отправлять alert, н
    - длинная tokenized fallback-команда остаётся только как технический резерв
 5. дальнейший ответ должен принимать authoritative router, а не watcher-side `getUpdates`
 
+Важно для production:
+
+- пока Moltis core явно не подтвердил, что Telegram-команды доходят до repo-managed router раньше generic-ответа, watcher должен работать только как one-way alert;
+- для этого runtime должен выставить `CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true`;
+- без этого флага watcher не задаёт вопрос о рекомендациях и не показывает кнопки, чтобы не создавать ложное ожидание сломанного follow-up.
+
 Простыми словами:
 
 - сначала приходит короткое уведомление
@@ -141,6 +147,7 @@ Scheduler-режим умеет не только отправлять alert, н
 Важно:
 
 - если watcher запущен локально, а Telegram отправляется через `telegram-bot-send-remote.sh`, интерактивный follow-up автоматически отключается;
+- если runtime не подтвердил поддержку Telegram command ingress через `CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true`, интерактивный follow-up тоже автоматически отключается;
 - в таком режиме watcher не должен обещать кнопку с продолжением, потому что authoritative router и consent store живут на Moltinger host, а не в локальном процессе;
 - для настоящего live consent-flow watcher нужно запускать на том же runtime, где живут `moltis-codex-consent-router.sh` и `codex-telegram-consent-store.sh`.
 
