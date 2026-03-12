@@ -58,16 +58,16 @@ Run `check` before branch cleanup, worktree operations, or session handoff. Run 
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-In this repository, run repo-local Beads commands from the worktree root via `./scripts/bd-local.sh`. It pins `BEADS_DB` to the current worktree and fails closed if redirect metadata is still present.
+In this repository, ordinary repo-local Beads work should use plain `bd`. The repo-local shim in `bin/bd` keeps dedicated-worktree ownership local, and `./scripts/bd-local.sh` remains a compatibility helper only when you need an explicit recovery/troubleshooting path.
 
 ## Quick Reference
 
 ```bash
-./scripts/bd-local.sh ready              # Find available work
-./scripts/bd-local.sh show <id>          # View issue details
-./scripts/bd-local.sh update <id> --status in_progress  # Claim work
-./scripts/bd-local.sh close <id>         # Complete work
-./scripts/bd-local.sh sync               # Sync with git
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+bd sync               # Sync with git
 ```
 
 ## ⚠️ Pre-Change Checklists
@@ -210,7 +210,7 @@ ANY command with exit code != 0
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   ./scripts/bd-local.sh sync
+   bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -577,23 +577,23 @@ BEFORE ssh/scp → ASK YOURSELF:
 
 If project uses Beads (`/beads-init` was run), follow this workflow:
 
-Repo note for Moltinger: use `./scripts/bd-local.sh` for repo-local tracker commands.
+Repo note for Moltinger: ordinary repo-local tracker commands should use plain `bd`.
 
 ### Session Workflow
 
 ```bash
 # START
-./scripts/bd-local.sh prime                    # Restore context
-./scripts/bd-local.sh ready                    # Find available work
+bd prime                    # Restore context
+bd ready                    # Find available work
 
 # WORK
-./scripts/bd-local.sh update ID --status in_progress  # Take task
+bd update ID --status in_progress  # Take task
 # ... implement ...
-./scripts/bd-local.sh close ID --reason "Done"        # Complete task
+bd close ID --reason "Done"        # Complete task
 /push patch                        # Commit
 
 # END (MANDATORY!)
-./scripts/bd-local.sh sync
+bd sync
 git push
 ```
 
@@ -602,16 +602,16 @@ git push
 | Scenario | Tool |
 |----------|------|
 | Large feature (>1 day) | `/speckit.specify` → `/speckit.tobeads` |
-| Small feature (<1 day) | `./scripts/bd-local.sh create -t feature` |
-| Bug | `./scripts/bd-local.sh create -t bug` |
-| Tech debt | `./scripts/bd-local.sh create -t chore` |
+| Small feature (<1 day) | `bd create -t feature` |
+| Bug | `bd create -t bug` |
+| Tech debt | `bd create -t chore` |
 | Research/spike | `bd mol wisp exploration` |
 
 ### Emergent Work
 
 Found something during current task?
 ```bash
-./scripts/bd-local.sh create "Found: ..." -t bug --deps discovered-from:PREFIX-current
+bd create "Found: ..." -t bug --deps discovered-from:PREFIX-current
 ```
 
 ### Initialize Beads

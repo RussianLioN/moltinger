@@ -108,9 +108,9 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 
 1. Managed sibling worktrees in this repo must keep Beads tracker ownership local to the checked-out branch/worktree.
 2. `.beads/issues.jsonl` and `.beads/config.yaml` are branch-local git state; `.beads/beads.db` must resolve to the current worktree, not the canonical root.
-3. `.envrc` is the default selector for this contract and must export `BEADS_DB="$(git rev-parse --show-toplevel)/.beads/beads.db"`.
-4. In Codex/App/agent sessions, repo-local Beads commands must go through `./scripts/bd-local.sh`, because `direnv` is not guaranteed to be loaded and bare `bd` can still fall back to the canonical root tracker.
-5. `./scripts/bd-local.sh` must fail closed when `.beads/redirect` is present; localize that worktree before resuming normal Beads commands.
+3. `.envrc` is a convenience bootstrap only: it should prepend the current worktree `bin/` directory to `PATH`, but dedicated-worktree safety must not depend solely on `direnv`.
+4. The normal repo-local command is plain `bd`, provided by `bin/bd`; managed Codex/worktree handoff flows and tracked git hooks must also prepend the current worktree `bin/` directory so the repo-local shim wins even when `direnv` is inactive.
+5. `./scripts/bd-local.sh` remains a compatibility/troubleshooting helper, not the normal daily entrypoint; if `.beads/redirect` is present, localize that worktree before resuming plain `bd`.
 6. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
 7. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
 8. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
@@ -130,7 +130,7 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 For Beads in dedicated worktrees, ordinary work should use plain `bd`.
 
 1. The ownership source of truth is the current worktree's local `.beads/` state.
-2. The repo-local bootstrap path comes from `.envrc` or the managed worktree/Codex handoff, not from asking the user to choose a wrapper.
+2. The repo-local bootstrap path comes from `.envrc`, the managed worktree/Codex handoff, or tracked git-hook bootstrap, not from asking the user to choose a wrapper.
 3. If a dedicated worktree has legacy redirect residue or a partial local foundation, recover it in place with `./scripts/beads-worktree-localize.sh --path <worktree>`.
 4. Silent fallback to the canonical root tracker is not an acceptable recovery path.
 5. Residual cleanup in canonical `main` is a separate follow-up and must not be mixed into day-to-day worktree recovery.

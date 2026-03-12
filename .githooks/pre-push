@@ -4,6 +4,8 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# shellcheck source=.githooks/_repo-local-path.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/_repo-local-path.sh"
 GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
 REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
 

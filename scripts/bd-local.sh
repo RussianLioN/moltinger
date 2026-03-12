@@ -18,6 +18,7 @@ config_path="${beads_dir}/config.yaml"
 issues_path="${beads_dir}/issues.jsonl"
 redirect_path="${beads_dir}/redirect"
 local_db_path="${beads_dir}/beads.db"
+repo_bd_path="${repo_root}/bin/bd"
 
 if [[ -f "${redirect_path}" ]]; then
   fail "redirected Beads metadata detected at ${redirect_path}. Run ${script_dir}/beads-worktree-localize.sh first." 3
@@ -36,4 +37,8 @@ if [[ "${#missing[@]}" -gt 0 ]]; then
 fi
 
 export BEADS_DB="${local_db_path}"
+if [[ -x "${repo_bd_path}" ]]; then
+  exec "${repo_bd_path}" "$@"
+fi
+
 exec bd "$@"
