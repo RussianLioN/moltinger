@@ -625,6 +625,8 @@ ownership_branch_for_issue() {
   local override_branch=""
   local branch_matches=""
   local branch_count=""
+  local child_branch_only="true"
+  local branch_name=""
 
   if [[ -f "${ownership_map}" ]]; then
     override_branch="$(jq -r --arg id "${issue_id}" '
@@ -652,7 +654,23 @@ ownership_branch_for_issue() {
       printf '__OWNER__:%s:%s\n' "${branch_matches}" "branch_contains_issue_id"
       ;;
     *)
-      printf '__BLOCKED__:%s\n' "ambiguous_branch_owner"
+      while IFS= read -r branch_name; do
+        [[ -n "${branch_name}" ]] || continue
+        case "${branch_name}" in
+          *"${issue_id}"-[0-9]*)
+            ;;
+          *)
+            child_branch_only="false"
+            break
+            ;;
+        esac
+      done < <(printf '%s\n' "${branch_matches}" | sed '/^$/d')
+
+      if [[ "${child_branch_only}" == "true" ]]; then
+        printf '__BLOCKED__:%s\n' "parent_issue_child_branches_only"
+      else
+        printf '__BLOCKED__:%s\n' "ambiguous_branch_owner"
+      fi
       ;;
   esac
 }

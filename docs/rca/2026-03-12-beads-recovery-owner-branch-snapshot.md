@@ -21,7 +21,7 @@ On the real `stash@{0}` residue this obscured the true picture:
 
 - `molt-2` and `moltinger-ejy` were already present in their owner branch snapshots;
 - `moltinger-248`, `moltinger-dmi`, and `moltinger-jb6` were already present in owner worktrees;
-- only `moltinger-z8m` remained genuinely unresolved because ownership was ambiguous.
+- only `moltinger-z8m` remained genuinely unresolved because the parent issue had child branches but no explicit owner branch.
 
 ## Анализ 5 Почему
 
