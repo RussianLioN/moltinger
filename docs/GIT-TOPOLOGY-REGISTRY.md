@@ -66,7 +66,7 @@
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `fix/beads-root-fallback-hardening` | `origin/fix/beads-root-fallback-hardening` | Needs decision |
-| `fix/moltis-official-docker-latest-channel` | `origin/main` | Needs decision |
+| `fix/moltis-official-docker-latest-channel` | `origin/fix/moltis-official-docker-latest-channel` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -133,7 +133,6 @@
 | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `origin/fix/beads-root-fallback-hardening` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
