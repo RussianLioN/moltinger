@@ -165,12 +165,20 @@ agent_factory_suite_entries() {
     case "$lane" in
         component)
             optional_suite_entry bash component_agent_factory_artifacts "Agent factory artifacts" "$SCRIPT_DIR/component/test_agent_factory_artifacts.sh"
+            optional_suite_entry bash component_agent_factory_discovery "Agent factory discovery" "$SCRIPT_DIR/component/test_agent_factory_discovery.sh"
+            optional_suite_entry bash component_agent_factory_brief "Agent factory brief" "$SCRIPT_DIR/component/test_agent_factory_brief.sh"
+            optional_suite_entry bash component_agent_factory_examples "Agent factory examples" "$SCRIPT_DIR/component/test_agent_factory_examples.sh"
             optional_suite_entry bash component_agent_factory_escalation "Agent factory escalation" "$SCRIPT_DIR/component/test_agent_factory_escalation.sh"
+            optional_suite_entry bash component_agent_factory_handoff "Agent factory handoff" "$SCRIPT_DIR/component/test_agent_factory_handoff.sh"
             optional_suite_entry bash component_agent_factory_playground "Agent factory playground" "$SCRIPT_DIR/component/test_agent_factory_playground.sh"
             optional_suite_entry bash component_agent_factory_context_mirror "Agent factory context mirror" "$SCRIPT_DIR/component/test_agent_factory_context_mirror.sh"
             ;;
         integration_local)
+            optional_suite_entry bash integration_local_agent_factory_discovery_flow "Agent factory discovery flow" "$SCRIPT_DIR/integration_local/test_agent_factory_discovery_flow.sh"
+            optional_suite_entry bash integration_local_agent_factory_confirmation "Agent factory confirmation" "$SCRIPT_DIR/integration_local/test_agent_factory_confirmation.sh"
+            optional_suite_entry bash integration_local_agent_factory_handoff "Agent factory handoff" "$SCRIPT_DIR/integration_local/test_agent_factory_handoff.sh"
             optional_suite_entry bash integration_local_agent_factory_intake "Agent factory intake" "$SCRIPT_DIR/integration_local/test_agent_factory_intake.sh"
+            optional_suite_entry bash integration_local_agent_factory_resume "Agent factory resume" "$SCRIPT_DIR/integration_local/test_agent_factory_resume.sh"
             optional_suite_entry bash integration_local_agent_factory_review "Agent factory review" "$SCRIPT_DIR/integration_local/test_agent_factory_review.sh"
             optional_suite_entry bash integration_local_agent_factory_swarm "Agent factory swarm" "$SCRIPT_DIR/integration_local/test_agent_factory_swarm.sh"
             ;;

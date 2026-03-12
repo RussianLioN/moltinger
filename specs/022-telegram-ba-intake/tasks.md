@@ -30,10 +30,10 @@
 
 **⚠️ CRITICAL**: No user story work should be treated as complete until this phase is done.
 
-- [ ] T001 Update discovery-first factory identity and state-path anchors in `config/moltis.toml`
-- [ ] T002 [P] Create a source-first requirements brief template in `docs/templates/agent-factory/requirements-brief.md`
-- [ ] T003 [P] Create reusable discovery fixtures in `tests/fixtures/agent-factory/discovery/`
-- [ ] T004 Wire future discovery tests into `tests/run.sh`
+- [x] T001 Update discovery-first factory identity and state-path anchors in `config/moltis.toml`
+- [x] T002 [P] Create a source-first requirements brief template in `docs/templates/agent-factory/requirements-brief.md`
+- [x] T003 [P] Create reusable discovery fixtures in `tests/fixtures/agent-factory/discovery/`
+- [x] T004 Wire future discovery tests into `tests/run.sh`
 
 **Checkpoint**: Discovery config, brief template, fixtures, and test harness are ready.
 

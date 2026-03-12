@@ -1,0 +1,68 @@
+{
+  "project_key": "invoice-approval-discovery-demo",
+  "discovery_session": {
+    "discovery_session_id": "discovery-session-invoice-approval-demo",
+    "project_key": "invoice-approval-discovery-demo",
+    "request_channel": "telegram",
+    "requester_identity": {
+      "telegram_user_id": "demo-business-user",
+      "display_name": "Ольга"
+    },
+    "working_language": "ru",
+    "status": "in_progress",
+    "current_topic": "problem",
+    "next_recommended_action": "ask_target_users",
+    "latest_brief_version": "",
+    "created_at": "2026-03-13T08:00:00Z",
+    "updated_at": "2026-03-13T08:01:00Z"
+  },
+  "conversation_turns": [
+    {
+      "turn_id": "turn-001",
+      "actor": "user",
+      "turn_type": "idea_statement",
+      "raw_text": "Хочу автоматизировать проверку заявок на оплату счетов, чтобы команда не тратила время на ручную сверку.",
+      "extracted_topics": [
+        "problem",
+        "goal"
+      ],
+      "linked_clarification_ids": [],
+      "recorded_at": "2026-03-13T08:00:00Z"
+    },
+    {
+      "turn_id": "turn-002",
+      "actor": "agent",
+      "turn_type": "clarifying_question",
+      "raw_text": "Кто сейчас принимает решение по таким заявкам и для кого результат автоматизации будет наиболее полезным?",
+      "extracted_topics": [
+        "actor",
+        "target_users"
+      ],
+      "linked_clarification_ids": [],
+      "recorded_at": "2026-03-13T08:01:00Z"
+    }
+  ],
+  "requirement_topics": [
+    {
+      "topic_id": "topic-problem",
+      "topic_name": "problem",
+      "category": "problem",
+      "status": "partial",
+      "summary": "Нужно сократить ручную сверку заявок на оплату счетов.",
+      "source_turn_ids": [
+        "turn-001"
+      ],
+      "last_updated_at": "2026-03-13T08:00:00Z"
+    },
+    {
+      "topic_id": "topic-target-users",
+      "topic_name": "target_users",
+      "category": "actor",
+      "status": "unasked",
+      "summary": "",
+      "source_turn_ids": [],
+      "last_updated_at": "2026-03-13T08:01:00Z"
+    }
+  ],
+  "clarification_items": []
+}

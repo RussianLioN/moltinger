@@ -70,6 +70,11 @@ GitOps Compliance: Enforced ✅
 - Imported `specs/022-telegram-ba-intake/tasks.md` into Beads under `molt-s5i` as 8 phase parents and 29 child tasks with user-story labels (`us1`-`us5`) and sequential plus phase-gating dependencies.
 - Closed the already completed planning tasks `P001`-`P004` and phase parent `molt-s5i.1` during import so the new Beads graph matches the real Speckit state instead of showing planning as still pending.
 - Added phase-parent gating dependencies so `bd ready` now exposes the correct execution order: Phase 1 Foundational (`T001`-`T004`) is the current entry point, while later user stories remain blocked until earlier phase parents are closed.
+- Completed Phase 1 Foundational for `022-telegram-ba-intake`: updated `config/moltis.toml` and `tests/fixtures/config/moltis.toml` with discovery-first identity, upstream/downstream spec anchors, repo-local discovery state paths, future `agent-factory-discovery.py` hook, brief-template reference, allowed state enums, confirmation gate, and resume policy.
+- Added the source-first brief template `docs/templates/agent-factory/requirements-brief.md` so later discovery sessions can render one reviewable business-readable brief before any concept-pack generation begins.
+- Added reusable discovery fixtures under `tests/fixtures/agent-factory/discovery/` for four baseline states: `session-new`, `session-awaiting-clarification`, `brief-awaiting-confirmation`, and `brief-confirmed-handoff`, plus updated the parent fixtures README to advertise the new discovery sub-tree.
+- Wired future discovery validation suites into `tests/run.sh` with optional registrations for `component_agent_factory_discovery`, `component_agent_factory_brief`, `component_agent_factory_examples`, `component_agent_factory_handoff`, `integration_local_agent_factory_discovery_flow`, `integration_local_agent_factory_confirmation`, `integration_local_agent_factory_handoff`, and `integration_local_agent_factory_resume`.
+- Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T001` through `T004` are now marked complete; once the corresponding Beads tasks are closed, the next ready queue begins at User Story 1 (`molt-s5i.3.*`).
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
@@ -80,6 +85,10 @@ GitOps Compliance: Enforced ✅
   - `bd dep cycles`
   - `bd ready`
   - `bd sync`
+  - `python3 - <<'PY' ... json.loads(...) ... PY` for discovery fixtures JSON validation
+  - `bash -n tests/run.sh`
+  - `python3 - <<'PY' ... tomllib.load(...) ... PY` for `config/moltis.toml` and `tests/fixtures/config/moltis.toml`
+  - `./tests/run.sh --lane static --filter static_config_validation --json`
 
 ### Previous Session Update (2026-03-12)
 

@@ -1,0 +1,87 @@
+{
+  "project_key": "invoice-approval-discovery-demo",
+  "discovery_session": {
+    "discovery_session_id": "discovery-session-invoice-approval-demo",
+    "project_key": "invoice-approval-discovery-demo",
+    "request_channel": "telegram",
+    "requester_identity": {
+      "telegram_user_id": "demo-business-user",
+      "display_name": "Ольга"
+    },
+    "working_language": "ru",
+    "status": "confirmed",
+    "current_topic": "handoff",
+    "next_recommended_action": "start_concept_pack_handoff",
+    "latest_brief_version": "1.1",
+    "created_at": "2026-03-13T08:00:00Z",
+    "updated_at": "2026-03-13T08:40:00Z"
+  },
+  "requirement_brief": {
+    "brief_id": "brief-invoice-approval-demo",
+    "discovery_session_id": "discovery-session-invoice-approval-demo",
+    "project_key": "invoice-approval-discovery-demo",
+    "version": "1.1",
+    "problem_statement": "Ручная сверка заявок на оплату счетов перегружает финансовый контроль и замедляет согласование.",
+    "target_users": [
+      "Финансовый контролер",
+      "Руководитель подразделения"
+    ],
+    "current_process": "Контролер вручную сверяет лимиты, реквизиты и комплектность документов, затем эскалирует исключения руководителю.",
+    "desired_outcome": "Автоматически отфильтровывать типовые заявки и подсказывать, когда нужна эскалация или отказ.",
+    "scope_boundaries": [
+      "Только внутренняя проверка заявок на оплату счетов",
+      "Без автоматического списания денег или отправки платежа"
+    ],
+    "user_story": "Как финансовый контролер, я хочу быстро видеть, какие заявки проходят правила, а какие требуют дополнительного согласования.",
+    "input_examples": [
+      "Заявка на оплату с суммой выше лимита подразделения",
+      "Заявка без подписанного договора"
+    ],
+    "expected_outputs": [
+      "Статус проверки заявки",
+      "Причина блокировки или рекомендация по дальнейшему шагу"
+    ],
+    "business_rules": [
+      "Превышение лимита требует дополнительного согласования",
+      "Без обязательных документов заявка не должна проходить дальше"
+    ],
+    "exceptions": [
+      "Срочные платежи CFO идут по отдельному сценарию и фиксируются как open risk для MVP0"
+    ],
+    "constraints": [
+      "Использовать только sanitized examples на этапе прототипа",
+      "Не требовать от пользователя технических формулировок"
+    ],
+    "success_metrics": [
+      "Сократить время первичной проверки минимум на 50 процентов",
+      "Снизить долю ручных возвратов из-за неполного комплекта документов"
+    ],
+    "open_risks": [
+      "Отдельный сценарий для срочных платежей CFO останется вне первого прототипа"
+    ],
+    "status": "confirmed",
+    "created_at": "2026-03-13T08:20:00Z",
+    "updated_at": "2026-03-13T08:40:00Z"
+  },
+  "confirmation_snapshot": {
+    "confirmation_snapshot_id": "confirmation-snapshot-001",
+    "brief_id": "brief-invoice-approval-demo",
+    "brief_version": "1.1",
+    "confirmed_by": "demo-business-user",
+    "confirmation_text": "Да, это верное описание требований для первого прототипа.",
+    "confirmed_at": "2026-03-13T08:39:00Z",
+    "status": "active"
+  },
+  "factory_handoff_record": {
+    "factory_handoff_id": "factory-handoff-invoice-approval-demo-v1-1",
+    "discovery_session_id": "discovery-session-invoice-approval-demo",
+    "brief_id": "brief-invoice-approval-demo",
+    "brief_version": "1.1",
+    "confirmation_snapshot_id": "confirmation-snapshot-001",
+    "handoff_status": "ready",
+    "next_stage": "concept_pack_generation",
+    "downstream_target": "specs/020-agent-factory-prototype",
+    "created_at": "2026-03-13T08:40:00Z",
+    "consumed_at": ""
+  }
+}

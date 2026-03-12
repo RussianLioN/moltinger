@@ -1,0 +1,112 @@
+{
+  "project_key": "invoice-approval-discovery-demo",
+  "discovery_session": {
+    "discovery_session_id": "discovery-session-invoice-approval-demo",
+    "project_key": "invoice-approval-discovery-demo",
+    "request_channel": "telegram",
+    "requester_identity": {
+      "telegram_user_id": "demo-business-user",
+      "display_name": "Ольга"
+    },
+    "working_language": "ru",
+    "status": "awaiting_clarification",
+    "current_topic": "input_examples",
+    "next_recommended_action": "resolve_unsafe_data_example",
+    "latest_brief_version": "brief-v0",
+    "created_at": "2026-03-13T08:00:00Z",
+    "updated_at": "2026-03-13T08:12:00Z"
+  },
+  "requirement_topics": [
+    {
+      "topic_id": "topic-problem",
+      "topic_name": "problem",
+      "category": "problem",
+      "status": "confirmed",
+      "summary": "Сократить ручную сверку заявок на оплату счетов и ускорить согласование.",
+      "source_turn_ids": [
+        "turn-001",
+        "turn-003"
+      ],
+      "last_updated_at": "2026-03-13T08:05:00Z"
+    },
+    {
+      "topic_id": "topic-target-users",
+      "topic_name": "target_users",
+      "category": "actor",
+      "status": "clarified",
+      "summary": "Финансовый контролер и руководитель подразделения.",
+      "source_turn_ids": [
+        "turn-004"
+      ],
+      "last_updated_at": "2026-03-13T08:06:00Z"
+    },
+    {
+      "topic_id": "topic-current-workflow",
+      "topic_name": "current_workflow",
+      "category": "workflow",
+      "status": "clarified",
+      "summary": "Сотрудник присылает пакет документов, контролер вручную сверяет лимит, договор и корректность реквизитов.",
+      "source_turn_ids": [
+        "turn-005"
+      ],
+      "last_updated_at": "2026-03-13T08:07:00Z"
+    },
+    {
+      "topic_id": "topic-success-metric",
+      "topic_name": "success_metrics",
+      "category": "success_metric",
+      "status": "partial",
+      "summary": "Сократить время обработки хотя бы на 50 процентов.",
+      "source_turn_ids": [
+        "turn-006"
+      ],
+      "last_updated_at": "2026-03-13T08:08:00Z"
+    },
+    {
+      "topic_id": "topic-input-examples",
+      "topic_name": "input_examples",
+      "category": "input",
+      "status": "unresolved",
+      "summary": "Пользователь прислал пример с чувствительными реквизитами поставщика.",
+      "source_turn_ids": [
+        "turn-007"
+      ],
+      "last_updated_at": "2026-03-13T08:10:00Z"
+    }
+  ],
+  "clarification_items": [
+    {
+      "clarification_item_id": "clarification-unsafe-example-001",
+      "topic_name": "input_examples",
+      "reason": "unsafe_data_example",
+      "status": "open",
+      "question_text": "Можешь прислать тот же пример без реальных реквизитов и названий контрагентов?",
+      "opened_at": "2026-03-13T08:10:30Z",
+      "resolved_at": ""
+    }
+  ],
+  "example_cases": [
+    {
+      "example_case_id": "example-case-001",
+      "case_type": "representative",
+      "input_summary": "Заявка на оплату маркетингового счета выше лимита подразделения.",
+      "expected_output_summary": "Сигнал о превышении лимита и рекомендация отправить на дополнительное согласование.",
+      "linked_rules": [
+        "Превышение лимита требует дополнительного согласования."
+      ],
+      "exception_notes": "",
+      "data_safety_status": "sanitized"
+    },
+    {
+      "example_case_id": "example-case-002",
+      "case_type": "representative",
+      "input_summary": "Исходный пример содержал реальные банковские реквизиты поставщика.",
+      "expected_output_summary": "Нужно запросить обезличенную версию примера.",
+      "linked_rules": [
+        "Prototype intake принимает только sanitized или synthetic examples."
+      ],
+      "exception_notes": "",
+      "data_safety_status": "needs_redaction"
+    }
+  ]
+}
