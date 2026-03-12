@@ -18,7 +18,7 @@
 | Компонент | Технология |
 |-----------|------------|
 | **Container** | Docker Compose |
-| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:v0.10.18) |
+| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:0.9.10) |
 | **Telegram Bot** | @moltinger_bot |
 | **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
 | **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
@@ -241,7 +241,7 @@ GitOps Compliance: Enforced ✅
 
 **Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session
 
-- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:v0.10.18` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
+- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:0.9.10` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
 - Hardened `scripts/deploy.sh` against ad-hoc `MOLTIS_VERSION` drift, added fallback discovery for `pre_deploy_*.tar.gz` backups and restore-check evidence, and kept rollback on the same tracked contract.
 - Removed the unsafe manual version path from `.github/workflows/uat-gate.yml`; UAT now derives the version from git and deploys Moltis only through `./scripts/deploy.sh --json moltis deploy`.
 - Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `data/moltis/.last-deployed-image`, `data/moltis/.last-moltis-backup`, and `data/moltis/.last-moltis-restore-check` so CI-created evidence is reusable during rollback without polluting the git-managed root.
