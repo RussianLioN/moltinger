@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
 
 ---
 
@@ -50,7 +50,32 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-12)
+### Current Session Update (2026-03-13)
+
+- Branch in progress: `022-telegram-ba-intake`
+- Confirmed the next factory priority after completed MVP0 is a new upstream discovery-first slice: the first user-facing agent must behave as a Telegram business analyst that elicits and confirms requirements before the existing concept-pack flow starts.
+- Created the new Speckit package `specs/022-telegram-ba-intake/` with:
+  - `spec.md`
+  - `checklists/requirements.md`
+  - `research.md`
+  - `plan.md`
+  - `data-model.md`
+  - `quickstart.md`
+  - `contracts/`
+  - `tasks.md`
+- Scoped the new feature around Telegram multi-turn discovery, business-readable requirements brief generation, explicit brief confirmation, example-driven clarification, downstream handoff into `020-agent-factory-prototype`, and interrupted-session recovery.
+- Explicitly separated the new discovery gate from the already existing downstream defense gate: confirmation of the requirements brief now sits before concept-pack generation, not inside the later approval/rework workflow.
+- Refreshed `docs/GIT-TOPOLOGY-REGISTRY.md` after switching from the completed `020-agent-factory-prototype` branch to the new `022-telegram-ba-intake` feature branch.
+- Created Beads epic `molt-s5i` (`Feature: Telegram business analyst intake`) linked to spec id `022-telegram-ba-intake`; task import into child issues is not done yet.
+- Verified in this session:
+  - `git fetch --all --prune`
+  - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
+  - `scripts/git-topology-registry.sh refresh --write-doc`
+  - `.specify/scripts/bash/setup-plan.sh --json`
+  - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `bd sync`
+
+### Previous Session Update (2026-03-12)
 
 - Branch in progress: `020-agent-factory-prototype`
 - Verified that the local clone of `ASC-AI-agent-fabrique` matches upstream GitHub `HEAD`, then mirrored the current top-level ASC roadmap and concept docs into this repository under `docs/asc-roadmap/` and `docs/concept/`.
