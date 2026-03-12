@@ -227,6 +227,34 @@ resolve_store_record() {
     "$STORE_SCRIPT" get --store-dir "$STORE_DIR" --request-id "$request_id" --json
 }
 
+find_single_pending_record_for_chat() {
+    local chat_id="$1"
+    [[ -n "$chat_id" ]] || return 2
+
+    local path matched_path="" match_count=0
+    shopt -s nullglob
+    for path in "$STORE_DIR"/*.json; do
+        if jq -e --arg chat_id "$chat_id" '
+            (.request.chat_id == $chat_id) and
+            (.request.status == "pending") and
+            ((try (.request.expires_at | fromdateiso8601) catch 0) > now)
+        ' "$path" >/dev/null 2>&1; then
+            matched_path="$path"
+            match_count=$((match_count + 1))
+        fi
+    done
+    shopt -u nullglob
+
+    if [[ $match_count -eq 1 ]]; then
+        cat "$matched_path"
+        return 0
+    fi
+    if [[ $match_count -eq 0 ]]; then
+        return 3
+    fi
+    return 4
+}
+
 store_mark_delivery() {
     local request_id="$1"
     local delivery_status="$2"
@@ -339,7 +367,7 @@ main() {
 
     parse_args "$@"
 
-    local event_json parse_mode action request_id action_token raw_input resolved_via
+    local event_json parse_mode action request_id action_token raw_input resolved_via alias_lookup_code
     local record_json record_path stored_chat_id stored_token stored_status expires_at now_epoch expiry_epoch
     local stored_delivery_status stored_question_message_id
     local decision reply_text reply_status reply_error result actor_id
@@ -370,12 +398,90 @@ main() {
         action_token="${BASH_REMATCH[3]}"
         raw_input="$CALLBACK_DATA"
         resolved_via="callback_query"
-    elif [[ -n "$COMMAND_TEXT" && "$COMMAND_TEXT" =~ ^/?codex-followup[[:space:]]+(accept|decline)[[:space:]]+([A-Za-z0-9._-]+)[[:space:]]+([A-Za-z0-9._-]+)$ ]]; then
-        action="${BASH_REMATCH[1]}"
-        request_id="${BASH_REMATCH[2]}"
-        action_token="${BASH_REMATCH[3]}"
+    elif [[ -n "$COMMAND_TEXT" && "$COMMAND_TEXT" =~ ^/?codex-followup(@[A-Za-z0-9_]+)?[[:space:]]+(accept|decline)[[:space:]]+([A-Za-z0-9._-]+)[[:space:]]+([A-Za-z0-9._-]+)$ ]]; then
+        action="${BASH_REMATCH[2]}"
+        request_id="${BASH_REMATCH[3]}"
+        action_token="${BASH_REMATCH[4]}"
         raw_input="$COMMAND_TEXT"
         resolved_via="command_fallback"
+    elif [[ -n "$COMMAND_TEXT" && "$COMMAND_TEXT" =~ ^/?codex_da(@[A-Za-z0-9_]+)?$ ]]; then
+        action="accept"
+        raw_input="$COMMAND_TEXT"
+        resolved_via="command_alias"
+    elif [[ -n "$COMMAND_TEXT" && "$COMMAND_TEXT" =~ ^/?codex_net(@[A-Za-z0-9_]+)?$ ]]; then
+        action="decline"
+        raw_input="$COMMAND_TEXT"
+        resolved_via="command_alias"
+    fi
+
+    if [[ "$resolved_via" == "command_alias" ]]; then
+        if [[ -z "$CHAT_ID" ]]; then
+            reply_text="Не удалось определить чат для короткой команды. Откройте последнее уведомление и попробуйте ещё раз."
+            result="$(result_json true true invalid "" "$resolved_via" "$reply_text" skipped "")"
+            if [[ -n "$JSON_OUT" ]]; then
+                ensure_parent_dir "$JSON_OUT"
+                printf '%s\n' "$result" > "$JSON_OUT"
+            fi
+            [[ "$STDOUT_FORMAT" == "json" ]] && printf '%s\n' "$result"
+            return 0
+        fi
+
+        set +e
+        record_json="$(find_single_pending_record_for_chat "$CHAT_ID" 2>/dev/null)"
+        alias_lookup_code=$?
+        set -e
+
+        case "$alias_lookup_code" in
+            0)
+                request_id="$(jq -r '.request.request_id' <<<"$record_json")"
+                action_token="$(jq -r '.request.action_token' <<<"$record_json")"
+                ;;
+            3)
+                reply_text="Сейчас нет активного запроса на рекомендации. Дождитесь нового уведомления."
+                result="$(result_json true true invalid "" "$resolved_via" "$reply_text" skipped "")"
+                if [[ "$SEND_REPLY" == "true" && -n "$CHAT_ID" && -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+                    set +e
+                    run_sender "$CHAT_ID" "$reply_text" "$REPLY_TO_MESSAGE_ID" >/dev/null 2>&1
+                    set -e
+                fi
+                if [[ -n "$JSON_OUT" ]]; then
+                    ensure_parent_dir "$JSON_OUT"
+                    printf '%s\n' "$result" > "$JSON_OUT"
+                fi
+                [[ "$STDOUT_FORMAT" == "json" ]] && printf '%s\n' "$result"
+                return 0
+                ;;
+            4)
+                reply_text="В этом чате сейчас несколько активных запросов. Используйте резервную длинную команду из нужного уведомления."
+                result="$(result_json true true invalid "" "$resolved_via" "$reply_text" skipped "")"
+                if [[ "$SEND_REPLY" == "true" && -n "$CHAT_ID" && -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+                    set +e
+                    run_sender "$CHAT_ID" "$reply_text" "$REPLY_TO_MESSAGE_ID" >/dev/null 2>&1
+                    set -e
+                fi
+                if [[ -n "$JSON_OUT" ]]; then
+                    ensure_parent_dir "$JSON_OUT"
+                    printf '%s\n' "$result" > "$JSON_OUT"
+                fi
+                [[ "$STDOUT_FORMAT" == "json" ]] && printf '%s\n' "$result"
+                return 0
+                ;;
+            *)
+                reply_text="Не удалось сопоставить короткую команду с активным запросом. Попробуйте ещё раз из последнего уведомления."
+                result="$(result_json true true invalid "" "$resolved_via" "$reply_text" skipped "")"
+                if [[ "$SEND_REPLY" == "true" && -n "$CHAT_ID" && -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+                    set +e
+                    run_sender "$CHAT_ID" "$reply_text" "$REPLY_TO_MESSAGE_ID" >/dev/null 2>&1
+                    set -e
+                fi
+                if [[ -n "$JSON_OUT" ]]; then
+                    ensure_parent_dir "$JSON_OUT"
+                    printf '%s\n' "$result" > "$JSON_OUT"
+                fi
+                [[ "$STDOUT_FORMAT" == "json" ]] && printf '%s\n' "$result"
+                return 0
+                ;;
+        esac
     fi
 
     if [[ -z "$action" || -z "$request_id" || -z "$action_token" ]]; then

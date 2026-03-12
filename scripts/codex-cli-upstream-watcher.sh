@@ -618,7 +618,7 @@ patch_report_alert_success() {
                 .state.last_consent_request_id = .followup.consent.pending_state.request_id |
                 .state |= del(.pending_consent) |
                 .followup.consent.status = "pending" |
-                .followup.consent.reason = "В Telegram отправлен токенизированный запрос; дальнейший ответ принимает authoritative router."
+                .followup.consent.reason = "В Telegram отправлен запрос на рекомендации; дальнейший ответ принимает authoritative router."
               else
                 .state.pending_consent = (
                   .followup.consent.pending_state +
@@ -1577,6 +1577,8 @@ def build_consent_request(
     seed = f"{fingerprint}:{chat_id}:{checked_at}"
     request_id = "req-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
     action_token = "tok-" + hashlib.sha256((seed + ":token").encode("utf-8")).hexdigest()[:8]
+    short_accept_command = "/codex_da"
+    short_decline_command = "/codex_net"
     accept_command = f"/codex-followup accept {request_id} {action_token}"
     decline_command = f"/codex-followup decline {request_id} {action_token}"
     return {
@@ -1591,18 +1593,20 @@ def build_consent_request(
         "status": "pending",
         "delivery_mode": "command_keyboard",
         "router_mode": "authoritative",
+        "command_alias_accept": short_accept_command,
+        "command_alias_decline": short_decline_command,
         "command_accept": accept_command,
         "command_decline": decline_command,
         "callback_accept": f"codex-consent:accept:{request_id}:{action_token}",
         "callback_decline": f"codex-consent:decline:{request_id}:{action_token}",
         "reply_markup": {
             "keyboard": [
-                [{"text": accept_command}],
-                [{"text": decline_command}],
+                [{"text": short_accept_command}],
+                [{"text": short_decline_command}],
             ],
             "resize_keyboard": True,
             "one_time_keyboard": True,
-            "input_field_placeholder": "Выберите действие для этого обновления Codex CLI",
+            "input_field_placeholder": "Выберите: прислать рекомендации или не сейчас",
         },
         "recommendations": advisor_bridge["practical_recommendations"],
     }
@@ -1660,10 +1664,13 @@ def build_alert_message(
         lines.append("")
         lines.append(advisor_bridge["question"])
         if consent_request is not None:
-            lines.append("Нажмите кнопку-команду ниже. Если клавиатура не показалась, используйте одну из команд:")
+            lines.append("Нажмите одну из кнопок ниже.")
+            lines.append("Если клавиатура не показалась, можно отправить короткую команду вручную:")
+            lines.append(f"- {consent_request['command_alias_accept']} — прислать рекомендации")
+            lines.append(f"- {consent_request['command_alias_decline']} — не присылать сейчас")
+            lines.append("Если увидите сообщение о нескольких активных запросах, используйте резервную команду из этого уведомления:")
             lines.append(f"- {consent_request['command_accept']}")
-            lines.append(f"- {consent_request['command_decline']}")
-            lines.append(f"- Идентификатор запроса: {consent_request['request_id']}")
+            lines.append(f"- Код запроса: {consent_request['request_id']}")
         else:
             lines.append("Ответьте в этом чате: да или нет.")
 

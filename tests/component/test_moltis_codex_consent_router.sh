@@ -131,6 +131,26 @@ run_component_codex_consent_router_tests() {
     assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.decision.resolved_via' "command_fallback" "Store should record command routing path"
     test_pass
 
+    test_start "component_codex_consent_router_accepts_short_command_alias"
+    work_dir="$(secure_temp_dir codex-consent-router-short-alias)"
+    store_dir="$work_dir/store"
+    copy_fixture_record "$store_dir" "consent-record-pending.json"
+    output="$(
+        bash "$ROUTER_SCRIPT" \
+            --store-script "$STORE_SCRIPT" \
+            --store-dir "$store_dir" \
+            --command-text "/codex_da" \
+            --chat-id 262872984 \
+            --actor-id 262872984 \
+            --send-reply false \
+            --stdout json
+    )"
+    assert_json_value "$output" '.handled' "true" "Router should handle the short accept command"
+    assert_json_value "$output" '.decision' "accept" "Short accept command should resolve as accept"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.request.status' "accepted" "Short accept command should resolve the pending request"
+    assert_json_value "$(cat "$store_dir/req-abc12345.json")" '.decision.resolved_via' "command_alias" "Store should record the short command alias path"
+    test_pass
+
     test_start "component_codex_consent_router_marks_duplicate_after_already_resolved_action"
     output="$(
         bash "$ROUTER_SCRIPT" \

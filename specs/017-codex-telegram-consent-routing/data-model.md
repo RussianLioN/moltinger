@@ -45,7 +45,7 @@ Represents one resolved user action.
 | `request_id` | string | Matched consent request id |
 | `decision` | enum | `accept`, `decline`, `expired`, `invalid`, `duplicate` |
 | `resolved_at` | string | ISO timestamp |
-| `resolved_via` | enum | `callback_query`, `command_fallback`, `operator_override` |
+| `resolved_via` | enum | `callback_query`, `command_fallback`, `command_alias`, `operator_override` |
 | `telegram_actor_id` | string | Telegram user/chat identity that triggered the decision |
 | `raw_input` | string | Original callback payload or command text |
 | `note` | string | Optional explanatory note for duplicate/invalid cases |
@@ -90,6 +90,7 @@ Tracks whether the second recommendation message was sent.
 
 ## Operational Notes
 
-- `request_id` and `action_token` should be short enough for Telegram callback data constraints.
+- Short chat-friendly commands such as `/codex_da` and `/codex_net` can resolve through chat-scoped lookup when exactly one pending request exists.
+- `request_id` and `action_token` should be short enough for Telegram callback data constraints and rare fallback cases.
 - The authoritative store should be append-safe and audit-friendly.
 - Watcher-local pending consent is no longer sufficient as the only source of truth in production.

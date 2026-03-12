@@ -85,7 +85,7 @@
         "resolved_at": { "type": "string", "minLength": 1 },
         "resolved_via": {
           "type": "string",
-          "enum": ["callback_query", "command_fallback", "operator_override"]
+          "enum": ["callback_query", "command_fallback", "command_alias", "operator_override"]
         },
         "telegram_actor_id": { "type": "string", "minLength": 1 },
         "raw_input": { "type": "string", "minLength": 1 },

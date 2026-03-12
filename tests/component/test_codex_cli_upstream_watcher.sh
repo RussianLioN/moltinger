@@ -186,10 +186,13 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "command_keyboard" "$(jq -r '.followup.consent.pending_state.delivery_mode' "$report")" "Watcher should prefer command-keyboard delivery for current Moltis ingress"
     assert_file_exists "$store_record" "Watcher should persist a shared consent record for the authoritative router"
     assert_contains "$call_text" "Хотите получить практические рекомендации" "Alert message should ask whether recommendations are needed"
-    assert_contains "$call_text" "/codex-followup accept" "Alert message should include explicit fallback command"
+    assert_contains "$call_text" "/codex_da" "Alert message should expose the short accept command"
+    assert_contains "$call_text" "/codex_net" "Alert message should expose the short decline command"
+    assert_contains "$call_text" "/codex-followup accept" "Alert message should still keep a technical fallback command for recovery"
     assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "--reply-markup-json" "Watcher should pass reply_markup for explicit actions"
     assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "\"keyboard\"" "Watcher should send command-keyboard reply_markup rather than callback-only markup"
-    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex-followup accept" "Reply keyboard should send the structured accept command"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex_da" "Reply keyboard should send the short accept command"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex_net" "Reply keyboard should send the short decline command"
     assert_eq "1" "$(jq -r '.request.question_message_id' "$store_record")" "Shared consent record should be bound to the Telegram alert message id"
     test_pass
 

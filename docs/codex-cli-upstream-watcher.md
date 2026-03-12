@@ -128,14 +128,14 @@ Scheduler-режим умеет не только отправлять alert, н
 2. отправляет одно Telegram-сообщение
 3. watcher создаёт shared consent record в `codex-telegram-consent-store`
 4. в Telegram приходят явные affordances:
-   - кнопки-команды, которые сразу отправляют `/codex-followup ...`
-   - fallback-команды вида `/codex-followup accept <request_id> <token>`
+   - короткие кнопки-команды `/codex_da` и `/codex_net`
+   - длинная tokenized fallback-команда остаётся только как технический резерв
 5. дальнейший ответ должен принимать authoritative router, а не watcher-side `getUpdates`
 
 Простыми словами:
 
 - сначала приходит короткое уведомление
-- затем пользователь видит явные токенизированные действия вместо неоднозначного `да/нет`
+- затем пользователь видит короткие понятные кнопки вместо длинных технических команд
 - ответ попадает в shared consent store и не должен зависеть от второго Telegram consumer-а
 
 Важно:
@@ -151,9 +151,11 @@ Scheduler-режим умеет не только отправлять alert, н
 Новый ожидаемый UX такой:
 
 1. приходит alert про новую версию Codex CLI;
-2. пользователь нажимает кнопку-команду или отправляет `/codex-followup accept <request_id> <token>`;
-3. authoritative router валидирует токен и chat context;
+2. пользователь нажимает короткую кнопку `/codex_da` или `/codex_net`;
+3. authoritative router находит единственный активный запрос для этого чата и валидирует контекст;
 4. practical recommendations уходят сразу в тот же чат, без ожидания следующего cron-run.
+
+Если в чате одновременно висит несколько активных запросов, router попросит использовать длинную резервную команду из нужного уведомления.
 
 Если пользователь выбирает отказ:
 
@@ -199,7 +201,7 @@ make codex-consent-e2e
 Он делает три вещи подряд:
 
 1. поднимает consent-capable alert на fixture-входах;
-2. проводит токенизированный `accept` через authoritative router;
+2. проводит `accept` через authoritative router;
 3. проверяет degraded режим, где alert становится one-way only.
 
 Артефакт по умолчанию:

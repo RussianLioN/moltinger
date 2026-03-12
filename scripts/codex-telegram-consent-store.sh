@@ -40,7 +40,7 @@ Common options:
   --record-file PATH        JSON file to read for open
   --message-id N            Telegram message id for bind-message
   --decision VALUE          accept|decline|expired|invalid|duplicate
-  --resolved-via VALUE      callback_query|command_fallback|operator_override
+  --resolved-via VALUE      callback_query|command_fallback|command_alias|operator_override
   --telegram-actor-id ID    Telegram actor id for resolve
   --raw-input TEXT          Raw callback data or command text for resolve
   --note TEXT               Optional audit note for resolve
@@ -248,7 +248,7 @@ resolve_record() {
         *) fail "invalid decision: $DECISION" ;;
     esac
     case "$RESOLVED_VIA" in
-        callback_query|command_fallback|operator_override) ;;
+        callback_query|command_fallback|command_alias|operator_override) ;;
         *) fail "invalid resolved-via value: $RESOLVED_VIA" ;;
     esac
 
