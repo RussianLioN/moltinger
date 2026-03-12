@@ -13,8 +13,8 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the producer-to-Moltis advisory contract skeleton in `specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json`
-- [ ] T002 [P] Create or update the Moltis-facing runbook for the new advisory ownership model in `docs/`
+- [ ] T001 Validate and, if needed, extend the producer-to-Moltis advisory contract in `specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json`
+- [ ] T002 [P] Create or update the migration/runbook documentation for the new ownership model in repository docs and Moltis-facing handoff notes
 - [ ] T003 [P] Add fixture samples for normalized advisory events in `tests/fixtures/`
 - [ ] T004 Create validation coverage for producer-side advisory event generation in `tests/component/`
 

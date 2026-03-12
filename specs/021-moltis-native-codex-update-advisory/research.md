@@ -19,6 +19,15 @@
 4. The safe current production state is `one-way alert`; interactive follow-up must not be advertised until the Moltis-native path exists.
 5. The existing watcher/advisor work should be preserved as producer-side logic instead of being reimplemented from scratch inside Moltis.
 
+## Boundary Note
+
+This feature is intentionally cross-boundary:
+
+- this repository remains responsible for Codex update evidence, recommendation preparation, and the normalized contract;
+- Moltis runtime is expected to own the final interactive Telegram UX, callback handling, and follow-up delivery.
+
+That means the Speckit package can be prepared and tracked here even though part of the future implementation will land outside this repository.
+
 ## Decisions
 
 ### Decision 1: Keep watcher/advisor as producer-side logic

@@ -72,7 +72,7 @@ docs/
 `-- codex-cli-upstream-watcher.md
 ```
 
-**Structure Decision**: Keep watcher/advisor logic in the repository as producer-side tooling, but define a clean contract so Moltis can own the live Telegram advisory UX natively.
+**Structure Decision**: Keep watcher/advisor logic in this repository as producer-side tooling, but define a clean contract so Moltis can own the live Telegram advisory UX natively. Execution is expected to span this repository plus Moltis runtime changes; this package is the planning and coordination source of truth for that migration.
 
 ## Phase 0: Research Decisions (to `research.md`)
 
