@@ -33,3 +33,4 @@
 
 - The specification intentionally fixes the product contract for MVP0 while keeping concrete runtime and library choices for `plan.md`.
 - Deployment of the produced agent is explicitly excluded from this feature package and reserved for MVP1.
+- Final polish verification rerun on `2026-03-13`: Speckit prerequisites passed, quickstart validation stayed repo-local, and no additional MVP0 blockers were found.

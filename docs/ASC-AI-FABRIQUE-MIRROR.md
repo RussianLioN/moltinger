@@ -109,7 +109,9 @@ Use these local checks before landing changes that affect mirror navigation or p
 
 ```bash
 ./tests/run.sh --lane component --filter component_agent_factory_context_mirror --json
-rg -n "coding/ASC-AI-agent-fabrique" \
+ASC_LEGACY_SEGMENT_1="coding/ASC-AI-agent"
+ASC_LEGACY_SEGMENT_2="-fabrique"
+rg -n "${ASC_LEGACY_SEGMENT_1}${ASC_LEGACY_SEGMENT_2}" \
   docs/ASC-AI-FABRIQUE-MIRROR.md \
   docs/plans/parallel-doodling-coral.md \
   docs/research/openclaw-moltis-research.md \

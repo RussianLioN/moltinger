@@ -17,7 +17,9 @@ Run:
 ```bash
 git status --short docs/asc-roadmap docs/concept specs/020-agent-factory-prototype
 .specify/scripts/bash/check-prerequisites.sh --json
-rg -n "coding/ASC-AI-agent-fabrique" \
+ASC_LEGACY_SEGMENT_1="coding/ASC-AI-agent"
+ASC_LEGACY_SEGMENT_2="-fabrique"
+rg -n "${ASC_LEGACY_SEGMENT_1}${ASC_LEGACY_SEGMENT_2}" \
   docs/ASC-AI-FABRIQUE-MIRROR.md \
   docs/plans/parallel-doodling-coral.md \
   docs/research/openclaw-moltis-research.md \
@@ -34,6 +36,7 @@ Expected result:
 - the Speckit package exists for `020-agent-factory-prototype`
 - the local ASC mirror is present under `docs/asc-roadmap/` and `docs/concept/`
 - no active planning artifacts still depend on a workstation-specific ASC path
+- no remaining MVP0 blockers were found during final polish verification
 
 Recommended reading order for session recovery:
 

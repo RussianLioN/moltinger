@@ -156,10 +156,10 @@
 
 **Purpose**: Reconcile documentation, tests, and landing checks across the full prototype path.
 
-- [ ] T031 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/020-agent-factory-prototype/checklists/requirements.md`
-- [ ] T032 [P] Refresh topology documentation after the feature-branch mutation in `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T033 Reconcile session handoff and operator summary in `SESSION_SUMMARY.md`
-- [ ] T034 Run quickstart verification from `specs/020-agent-factory-prototype/quickstart.md` and record any remaining blockers
+- [x] T031 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/020-agent-factory-prototype/checklists/requirements.md`
+- [x] T032 [P] Refresh topology documentation after the feature-branch mutation in `docs/GIT-TOPOLOGY-REGISTRY.md`
+- [x] T033 Reconcile session handoff and operator summary in `SESSION_SUMMARY.md`
+- [x] T034 Run quickstart verification from `specs/020-agent-factory-prototype/quickstart.md` and record any remaining blockers
 
 ---
 

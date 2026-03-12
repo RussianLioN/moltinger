@@ -95,6 +95,10 @@ GitOps Compliance: Enforced ✅
 - Completed User Story 5 for `020-agent-factory-prototype`: added `tests/component/test_agent_factory_context_mirror.sh` to assert mirror provenance, repo-path-only navigation, and existence of referenced docs/spec artifacts so future sessions can recover context from repository files alone.
 - Expanded `docs/ASC-AI-FABRIQUE-MIRROR.md` with an explicit session-recovery path, integrity-check commands, and active prototype references including `quickstart.md`; updated `specs/020-agent-factory-prototype/quickstart.md` so recovery order starts from the local mirror index rather than any workstation-specific clone.
 - Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T029` through `T030` are now marked complete; the next implementation queue starts at Phase 8 Polish (`molt-qgg.9.*`).
+- Completed Phase 8 Polish for `020-agent-factory-prototype`: reran `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`, refreshed the quickstart integrity scan so it no longer self-matches a workstation-path detector, updated `specs/020-agent-factory-prototype/checklists/requirements.md`, and confirmed that no additional MVP0 blockers remain.
+- Re-ran the full agent-factory validation slice as one package: static config/fleet checks, all `component_agent_factory_*` suites, and all `integration_local_agent_factory_*` suites passed together after the final polish pass.
+- Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T031` through `T034` are now marked complete; the MVP0 Speckit package has no remaining open tasks.
+- Closed Beads phase `molt-qgg.9` and epic `molt-qgg`; the prototype AI agent factory MVP0 is now complete on branch `020-agent-factory-prototype`.
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -123,6 +127,10 @@ GitOps Compliance: Enforced ✅
   - `./tests/run.sh --lane component --filter component_agent_factory_ --json`
   - `bash -n tests/component/test_agent_factory_context_mirror.sh`
   - `./tests/run.sh --lane component --filter component_agent_factory_context_mirror --json`
+  - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+  - `./tests/run.sh --lane component --filter component_agent_factory_ --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_ --json`
 
 ### Previous Session Update (2026-03-11)
 
