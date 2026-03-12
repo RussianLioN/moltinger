@@ -46,6 +46,7 @@ MOLTIS_FACTORY_TERMINAL_OUTPUT = "playground_package"
 MOLTIS_FACTORY_DEPLOY_STAGE = "mvp1"
 MOLTIS_FACTORY_INTAKE_SCRIPT = "scripts/agent-factory-intake.py"
 MOLTIS_FACTORY_ARTIFACT_SCRIPT = "scripts/agent-factory-artifacts.py"
+MOLTIS_FACTORY_REVIEW_SCRIPT = "scripts/agent-factory-review.py"
 MOLTIS_FACTORY_ARTIFACT_OUTPUT_ROOT = "data/agent-factory/concepts"
 MOLTIS_FACTORY_ARTIFACT_MANIFEST_NAME = "concept-pack.json"
 MOLTIS_FACTORY_WORKING_SUBDIR = "working"
@@ -54,6 +55,8 @@ MOLTIS_FACTORY_DOWNLOAD_CHANNEL = "telegram"
 MOLTIS_FACTORY_DOWNLOADABLE_FORMATS = "md"
 MOLTIS_FACTORY_INTAKE_REQUIRED_FIELDS = "target_business_problem,target_users,current_workflow_summary,constraints_or_exclusions,measurable_success_expectation"
 MOLTIS_FACTORY_INTAKE_FINAL_STATE = "ready_for_pack"
+MOLTIS_FACTORY_DEFENSE_ALLOWED_OUTCOMES = "approved,rework_requested,rejected,pending_decision"
+MOLTIS_FACTORY_PRODUCTION_READY_STATE = "approved"
 
 [tls]
 enabled = false

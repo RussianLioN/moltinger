@@ -17,6 +17,7 @@ from agent_factory_common import (
     alignment_digest,
     build_alignment_payload,
     load_json,
+    next_artifact_revision,
     normalize_list,
     normalize_text,
     parse_alignment_comment,
@@ -70,7 +71,7 @@ def derive_artifact_context(source: dict[str, Any], concept_record: dict[str, An
     }
 
 
-def load_source_document(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def load_source_document(path: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     source = load_json(path)
     if not isinstance(source, dict):
         raise ValueError("input document must be a JSON object")
@@ -81,7 +82,7 @@ def load_source_document(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
     if not isinstance(concept_record, dict):
         raise ValueError("concept_record must be a JSON object")
     artifact_context = derive_artifact_context(source, concept_record)
-    return concept_record, artifact_context
+    return source, concept_record, artifact_context
 
 
 def build_render_context(concept_record: dict[str, Any], artifact_context: dict[str, Any], artifact_revision: str) -> dict[str, str]:
@@ -190,18 +191,110 @@ def build_render_context(concept_record: dict[str, Any], artifact_context: dict[
     }
 
 
+def normalize_dict_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def resolve_artifact_revision(existing_manifest: dict[str, Any] | None, concept_version: str, requested_revision: str) -> str:
+    if not existing_manifest:
+        return requested_revision
+    existing_version = normalize_text(existing_manifest.get("concept_version"))
+    existing_revision = normalize_text(existing_manifest.get("artifact_revision"))
+    if requested_revision != "r1":
+        return requested_revision
+    if existing_version != concept_version or not existing_revision:
+        return "r1"
+    return next_artifact_revision(existing_revision)
+
+
+def archive_existing_pack(
+    output_dir: Path,
+    existing_manifest: dict[str, Any],
+    history_reason: str,
+    current_review: dict[str, Any] | None,
+) -> dict[str, Any]:
+    archived_at = utc_now()
+    concept_version = normalize_text(existing_manifest.get("concept_version")) or "unknown"
+    artifact_revision = normalize_text(existing_manifest.get("artifact_revision")) or "unknown"
+    safe_timestamp = archived_at.replace(":", "").replace("-", "").replace("T", "_")
+    archive_dir = output_dir / "history" / f"{concept_version}__{artifact_revision}__{safe_timestamp}"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    for item_name in ("concept-pack.json", "concept-record.json", "working", "downloads"):
+        source_path = output_dir / item_name
+        if not source_path.exists():
+            continue
+        target_path = archive_dir / item_name
+        if source_path.is_dir():
+            shutil.copytree(source_path, target_path, dirs_exist_ok=True)
+        else:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+
+    return {
+        "concept_version": concept_version,
+        "artifact_revision": artifact_revision,
+        "decision_state": normalize_text(existing_manifest.get("decision_state")) or "draft",
+        "archived_at": archived_at,
+        "archive_ref": str(archive_dir),
+        "reason": history_reason or "regenerated",
+        "review_id": normalize_text(current_review.get("review_id")) if current_review else "",
+        "outcome": normalize_text(current_review.get("outcome")) if current_review else "",
+    }
+
+
+def build_approval_gate(concept_record: dict[str, Any], production_approval: dict[str, Any] | None) -> dict[str, Any]:
+    decision_state = normalize_text(concept_record.get("decision_state"))
+    concept_version = normalize_text(concept_record.get("current_version"))
+    is_active = (
+        isinstance(production_approval, dict)
+        and normalize_text(production_approval.get("status")) == "active"
+        and normalize_text(production_approval.get("approved_version")) == concept_version
+        and decision_state == "approved"
+    )
+    return {
+        "status": "unlocked" if is_active else "blocked",
+        "required_version": concept_version,
+        "approval_id": normalize_text(production_approval.get("approval_id")) if is_active else "",
+        "reason": "explicit approval recorded" if is_active else "explicit approval for this concept version is missing",
+    }
+
+
 def generate_pack(args: argparse.Namespace) -> int:
-    concept_record, artifact_context = load_source_document(args.input)
+    source, concept_record, artifact_context = load_source_document(args.input)
     output_dir = Path(args.output_dir)
     working_dir = output_dir / "working"
     download_dir = output_dir / "downloads"
+
+    existing_manifest_path = output_dir / "concept-pack.json"
+    existing_manifest = load_json(existing_manifest_path) if existing_manifest_path.is_file() else None
+    artifact_revision = resolve_artifact_revision(existing_manifest, normalize_text(concept_record.get("current_version")), args.artifact_revision)
+
+    current_review = source.get("defense_review") if isinstance(source.get("defense_review"), dict) else None
+    current_feedback_items = normalize_dict_list(source.get("feedback_items"))
+    review_history = normalize_dict_list(concept_record.get("review_history", source.get("review_history")))
+    feedback_history = normalize_dict_list(concept_record.get("feedback_history", source.get("feedback_history")))
+    production_approval = source.get("production_approval") if isinstance(source.get("production_approval"), dict) else concept_record.get("production_approval")
+    if not isinstance(production_approval, dict):
+        production_approval = None
+    post_defense_summary = source.get("post_defense_summary") if isinstance(source.get("post_defense_summary"), dict) else {}
+    next_action = normalize_text(source.get("next_action")) or "await_defense"
+    history_reason = normalize_text(source.get("history_reason"))
+
+    history_entries = normalize_dict_list(existing_manifest.get("history")) if isinstance(existing_manifest, dict) else []
+    if existing_manifest is not None:
+        history_entries.append(archive_existing_pack(output_dir, existing_manifest, history_reason, current_review))
+
     working_dir.mkdir(parents=True, exist_ok=True)
     download_dir.mkdir(parents=True, exist_ok=True)
 
-    render_context = build_render_context(concept_record, artifact_context, args.artifact_revision)
-    alignment_payload = build_alignment_payload(concept_record, artifact_context, args.artifact_revision)
+    render_context = build_render_context(concept_record, artifact_context, artifact_revision)
+    alignment_payload = build_alignment_payload(concept_record, artifact_context, artifact_revision)
     sync_hash = alignment_digest(alignment_payload)
     generated_at = utc_now()
+    approval_gate = build_approval_gate(concept_record, production_approval)
 
     manifest: dict[str, Any] = {
         "status": "generated",
@@ -210,11 +303,24 @@ def generate_pack(args: argparse.Namespace) -> int:
         "generated_at": generated_at,
         "concept_id": concept_record["concept_id"],
         "concept_version": concept_record["current_version"],
-        "artifact_revision": args.artifact_revision,
+        "artifact_revision": artifact_revision,
+        "decision_state": normalize_text(concept_record.get("decision_state")) or "draft",
+        "owner": artifact_context["owner"],
         "working_root": str(working_dir),
         "download_root": str(download_dir),
+        "artifact_context": artifact_context,
         "alignment_snapshot": alignment_payload,
         "sync_hash": sync_hash,
+        "next_action": next_action,
+        "approval_gate": approval_gate,
+        "production_ready": approval_gate["status"] == "unlocked",
+        "current_defense_review": current_review,
+        "current_feedback_items": current_feedback_items,
+        "review_history": review_history,
+        "feedback_history": feedback_history,
+        "production_approval": production_approval,
+        "post_defense_summary": post_defense_summary,
+        "history": history_entries,
         "artifacts": {},
     }
 
@@ -317,6 +423,7 @@ def check_alignment(args: argparse.Namespace) -> int:
         "sync_hash": expected_hash,
         "concept_id": manifest.get("concept_id"),
         "concept_version": manifest.get("concept_version"),
+        "approval_gate_status": normalize_text(manifest.get("approval_gate", {}).get("status")) if isinstance(manifest.get("approval_gate"), dict) else "",
     }
     write_json(report, args.output)
     return 0 if not issues else 1

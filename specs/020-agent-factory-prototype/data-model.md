@@ -52,6 +52,9 @@ Canonical, versioned representation of one future agent concept after intake is 
 - `applied_factory_patterns`
 - `current_version`
 - `decision_state`
+- `review_history`
+- `feedback_history`
+- `production_approval`
 - `created_at`
 - `updated_at`
 
@@ -59,6 +62,7 @@ Canonical, versioned representation of one future agent concept after intake is 
 
 - `draft`
 - `in_defense`
+- `pending_decision`
 - `rework_requested`
 - `approved`
 - `rejected`

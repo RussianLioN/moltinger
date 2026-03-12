@@ -96,6 +96,22 @@
         "MOLTIS_FACTORY_WORKING_SUBDIR"
       ]
     },
+    "agent-factory-review.py": {
+      "version": "1.0.0",
+      "description": "Record defense review outcomes, structured feedback, and approval state for the agent factory MVP0 flow",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-review"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_REVIEW_SCRIPT",
+        "MOLTIS_FACTORY_DEFENSE_ALLOWED_OUTCOMES",
+        "MOLTIS_FACTORY_PRODUCTION_READY_STATE"
+      ]
+    },
     "agent-factory-intake.py": {
       "version": "1.0.0",
       "description": "Normalize one Telegram-style intake request into a canonical concept record for the agent factory MVP0 flow",

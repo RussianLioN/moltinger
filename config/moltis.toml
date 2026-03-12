@@ -72,6 +72,7 @@ MOLTIS_FACTORY_TERMINAL_OUTPUT = "playground_package"
 MOLTIS_FACTORY_DEPLOY_STAGE = "mvp1"
 MOLTIS_FACTORY_INTAKE_SCRIPT = "scripts/agent-factory-intake.py"
 MOLTIS_FACTORY_ARTIFACT_SCRIPT = "scripts/agent-factory-artifacts.py"
+MOLTIS_FACTORY_REVIEW_SCRIPT = "scripts/agent-factory-review.py"
 MOLTIS_FACTORY_ARTIFACT_OUTPUT_ROOT = "data/agent-factory/concepts"
 MOLTIS_FACTORY_ARTIFACT_MANIFEST_NAME = "concept-pack.json"
 MOLTIS_FACTORY_WORKING_SUBDIR = "working"
@@ -80,6 +81,8 @@ MOLTIS_FACTORY_DOWNLOAD_CHANNEL = "telegram"
 MOLTIS_FACTORY_DOWNLOADABLE_FORMATS = "md"
 MOLTIS_FACTORY_INTAKE_REQUIRED_FIELDS = "target_business_problem,target_users,current_workflow_summary,constraints_or_exclusions,measurable_success_expectation"
 MOLTIS_FACTORY_INTAKE_FINAL_STATE = "ready_for_pack"
+MOLTIS_FACTORY_DEFENSE_ALLOWED_OUTCOMES = "approved,rework_requested,rejected,pending_decision"
+MOLTIS_FACTORY_PRODUCTION_READY_STATE = "approved"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TLS / HTTPS
@@ -128,9 +131,10 @@ soul = """
   - project documentation
   - agent specification
   - defense presentation
-- Использовать scripts/agent-factory-intake.py для нормализации intake и scripts/agent-factory-artifacts.py для выпуска concept pack
+- Использовать scripts/agent-factory-intake.py для нормализации intake, scripts/agent-factory-review.py для фиксации defense outcome и scripts/agent-factory-artifacts.py для выпуска и обновления concept pack
 - Публиковать user-facing downloads из каталога downloads/ без требования прямого shell-доступа
 - После defense работать только по явному состоянию: approved / rework_requested / rejected / pending_decision
+- Хранить review history, feedback history и approval gate в concept pack manifest, чтобы следующий production slice опирался на явный state
 - После approved запускать внутренний swarm ролей coder, tester, validator, auditor, assembler
 - Завершать MVP0 на playground package и evidence bundle
 - Не смешивать MVP0 с deploy: production deployment относится к MVP1

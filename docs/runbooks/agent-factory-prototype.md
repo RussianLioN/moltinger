@@ -2,16 +2,18 @@
 
 ## Purpose
 
-This runbook describes the MVP0 intake-to-concept-pack path for `020-agent-factory-prototype`.
+This runbook describes the MVP0 intake-to-concept-pack and defense-loop path for `020-agent-factory-prototype`.
 
 Current scope:
 
 1. normalize one Telegram-style intake request
 2. create one canonical concept record
 3. generate a synchronized concept pack
-4. expose working and downloadable artifact files
+4. record one defense outcome with structured feedback
+5. regenerate the concept pack without losing previous reviewed state
+6. expose working and downloadable artifact files
 
-Defense loop and swarm production are documented in the spec but are not part of this runbook section yet.
+Swarm production is documented in the spec but is not part of this runbook section yet.
 
 ## Inputs
 
@@ -88,6 +90,42 @@ Expected result:
 - exit `0` and `status = aligned` for a fresh pack
 - exit `1` and `status = drift_detected` if any artifact diverges
 
+### 4. Record defense outcome
+
+```bash
+python3 scripts/agent-factory-review.py \
+  --manifest /tmp/agent-factory-pack/concept-pack.json \
+  --feedback tests/fixtures/agent-factory/defense-feedback.json \
+  --output /tmp/agent-factory-review.json
+```
+
+Expected result:
+
+- `status = review_recorded`
+- `outcome` stored in `defense_review`
+- `next_action` becomes one of:
+  - `ready_for_production`
+  - `regenerate_artifacts`
+  - `concept_rejected`
+  - `wait_for_decision`
+- `production_approval` exists only for `approved`
+
+### 5. Regenerate after review or rework
+
+```bash
+python3 scripts/agent-factory-artifacts.py generate \
+  --input /tmp/agent-factory-review.json \
+  --output-dir /tmp/agent-factory-pack \
+  --output /tmp/agent-factory-pack-after-review.json
+```
+
+Expected result:
+
+- same-version review updates auto-bump `artifact_revision`
+- `rework_requested` bumps `concept_version` and resets artifact revision to `r1`
+- previous current pack is archived under `history/`
+- manifest exposes `approval_gate.status = unlocked|blocked`
+
 ## Delivery Semantics
 
 For MVP0 the user-facing downloads are the files under `downloads/`.
@@ -113,18 +151,28 @@ Each artifact must carry:
 - `artifact_revision`
 - one shared alignment marker with the same `sync_hash`
 
+Concept pack manifest must also carry:
+
+- `artifact_context`
+- `review_history`
+- `feedback_history`
+- `approval_gate`
+- `history`
+
 ## Current Validation
 
 Implemented tests:
 
 - `tests/component/test_agent_factory_artifacts.sh`
 - `tests/integration_local/test_agent_factory_intake.sh`
+- `tests/integration_local/test_agent_factory_review.sh`
 
 Typical local validation:
 
 ```bash
 ./tests/run.sh --lane component --filter component_agent_factory_artifacts --json
 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_intake --json
+./tests/run.sh --lane integration_local --filter integration_local_agent_factory_review --json
 ```
 
 ## Known Boundaries
@@ -132,3 +180,4 @@ Typical local validation:
 - The concept pack is Markdown-first in this MVP0 slice.
 - Downloadable outputs currently use Markdown copies; export to additional formats is a later enhancement.
 - Telegram publishing is represented by manifest-ready download refs, not by live bot file sending in this slice.
+- Defense review records and approval gate are implemented; production swarm still starts only in a later slice.

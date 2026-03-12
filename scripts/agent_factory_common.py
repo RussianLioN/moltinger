@@ -77,6 +77,18 @@ def normalize_list(value: Any) -> list[str]:
     return [part.strip(" -") for part in parts if part.strip(" -")]
 
 
+def dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        text = normalize_text(value)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        ordered.append(text)
+    return ordered
+
+
 def slugify(value: str, fallback_prefix: str = "concept") -> str:
     text = normalize_text(value).lower()
     ascii_text = text.encode("ascii", "ignore").decode("ascii")
@@ -85,6 +97,23 @@ def slugify(value: str, fallback_prefix: str = "concept") -> str:
         return slug[:80]
     digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
     return f"{fallback_prefix}-{digest}"
+
+
+def bump_minor_version(version: str) -> str:
+    text = normalize_text(version)
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", text)
+    if not match:
+        raise ValueError(f"unsupported concept version format: {version}")
+    major, minor, _patch = (int(part) for part in match.groups())
+    return f"{major}.{minor + 1}.0"
+
+
+def next_artifact_revision(revision: str) -> str:
+    text = normalize_text(revision)
+    match = re.fullmatch(r"r(\d+)", text)
+    if not match:
+        raise ValueError(f"unsupported artifact revision format: {revision}")
+    return f"r{int(match.group(1)) + 1}"
 
 
 def trim_words(text: str, limit: int) -> str:

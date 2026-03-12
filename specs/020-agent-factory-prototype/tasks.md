@@ -80,13 +80,13 @@
 
 ### Validation for User Story 2
 
-- [ ] T015 [P] [US2] Create defense-state integration coverage in `tests/integration_local/test_agent_factory_review.sh`
+- [x] T015 [P] [US2] Create defense-state integration coverage in `tests/integration_local/test_agent_factory_review.sh`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [P] [US2] Implement defense review and feedback capture in `scripts/agent-factory-review.py`
-- [ ] T017 [US2] Extend artifact revision handling for feedback-driven updates in `scripts/agent-factory-artifacts.py`
-- [ ] T018 [US2] Document approval, rejection, and rework rules in `docs/runbooks/agent-factory-prototype.md`
+- [x] T016 [P] [US2] Implement defense review and feedback capture in `scripts/agent-factory-review.py`
+- [x] T017 [US2] Extend artifact revision handling for feedback-driven updates in `scripts/agent-factory-artifacts.py`
+- [x] T018 [US2] Document approval, rejection, and rework rules in `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: Concept approval is explicit and version-safe before production.
 

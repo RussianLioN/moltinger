@@ -77,6 +77,10 @@ GitOps Compliance: Enforced ✅
 - Added US1 validation coverage in `tests/component/test_agent_factory_artifacts.sh` and `tests/integration_local/test_agent_factory_intake.sh`, covering fresh-pack alignment, drift detection, ready-for-pack intake, concept-pack generation, and clarifying-state fallback when critical fields are missing.
 - Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T009` through `T014` are now marked complete; the next implementation queue starts at User Story 2 (`molt-qgg.5.*`).
 - Closed Beads tasks `molt-qgg.4.1` through `molt-qgg.4.6` plus the phase parent `molt-qgg.4`; User Story 2 is now the next ready implementation slice.
+- Completed User Story 2 for `020-agent-factory-prototype`: added `scripts/agent-factory-review.py` to record `approved`, `rework_requested`, `rejected`, and `pending_decision` outcomes with structured feedback and post-defense summary, and extended `scripts/agent-factory-artifacts.py` so regenerated concept packs preserve review history, feedback history, archived prior packs, and an explicit approval gate.
+- Extended `config/moltis.toml`, `tests/fixtures/config/moltis.toml`, and `scripts/manifest.json` with review-stage anchors (`MOLTIS_FACTORY_REVIEW_SCRIPT`, allowed defense outcomes, production-ready state) so the defense loop is now part of the repo-local factory runtime contract.
+- Added `tests/integration_local/test_agent_factory_review.sh` to cover all four defense outcomes, including version bump plus archived history on `rework_requested` and gate unlock only on `approved`; updated `docs/runbooks/agent-factory-prototype.md` and `specs/020-agent-factory-prototype/data-model.md` so runbook and entity model match the implemented review loop.
+- Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T015` through `T018` are now marked complete; the next implementation queue starts at User Story 3 (`molt-qgg.6.*`).
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -91,6 +95,9 @@ GitOps Compliance: Enforced ✅
   - `bash scripts/scripts-verify.sh`
   - `./tests/run.sh --lane component --filter component_agent_factory_artifacts --json`
   - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_intake --json`
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-intake.py scripts/agent-factory-review.py scripts/agent-factory-artifacts.py`
+  - `./tests/run.sh --lane static --filter static_config_validation --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_review --json`
 
 ### Previous Session Update (2026-03-11)
 
