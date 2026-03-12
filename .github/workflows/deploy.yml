@@ -567,22 +567,35 @@ jobs:
             [ -f "${BACKUP_FILE}.compose-main" ] && HAS_COMPOSE_MAIN_SIDECAR=true
             [ -f "${BACKUP_FILE}.version" ] && HAS_VERSION=true
 
+            STATUS=failed
+            if [ "$HAS_CONFIG" = "true" ] && [ "$HAS_DATA" = "true" ] && [ "$HAS_ENV" = "true" ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = "true" ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = "true" ] && [ "$HAS_VERSION" = "true" ]; then
+              STATUS=passed
+            fi
+
             RESTORE_CHECK_FILE="$EVIDENCE_ROOT/restore-check-$(date -u +%Y%m%dT%H%M%SZ).json"
-            cat > "$RESTORE_CHECK_FILE" <<JSON
-            {
-              "schema_version": "v1",
-              "target": "moltis",
-              "checked_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-              "backup_reference": "$BACKUP_FILE",
-              "has_config": $HAS_CONFIG,
-              "has_data": $HAS_DATA,
-              "has_env": $HAS_ENV,
-              "has_compose_prod_sidecar": $HAS_COMPOSE_PROD_SIDECAR,
-              "has_compose_main_sidecar": $HAS_COMPOSE_MAIN_SIDECAR,
-              "has_version_sidecar": $HAS_VERSION,
-              "status": "$([ "$HAS_CONFIG" = true ] && [ "$HAS_DATA" = true ] && [ "$HAS_ENV" = true ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = true ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = true ] && [ "$HAS_VERSION" = true ] && printf 'passed' || printf 'failed')"
-            }
-            JSON
+            jq -n \
+              --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg backup_reference "$BACKUP_FILE" \
+              --argjson has_config "$HAS_CONFIG" \
+              --argjson has_data "$HAS_DATA" \
+              --argjson has_env "$HAS_ENV" \
+              --argjson has_compose_prod_sidecar "$HAS_COMPOSE_PROD_SIDECAR" \
+              --argjson has_compose_main_sidecar "$HAS_COMPOSE_MAIN_SIDECAR" \
+              --argjson has_version_sidecar "$HAS_VERSION" \
+              --arg status "$STATUS" \
+              '{
+                schema_version: "v1",
+                target: "moltis",
+                checked_at: $checked_at,
+                backup_reference: $backup_reference,
+                has_config: $has_config,
+                has_data: $has_data,
+                has_env: $has_env,
+                has_compose_prod_sidecar: $has_compose_prod_sidecar,
+                has_compose_main_sidecar: $has_compose_main_sidecar,
+                has_version_sidecar: $has_version_sidecar,
+                status: $status
+              }' > "$RESTORE_CHECK_FILE"
 
             echo "restore_check_file=$RESTORE_CHECK_FILE"
             echo "has_config=$HAS_CONFIG"
