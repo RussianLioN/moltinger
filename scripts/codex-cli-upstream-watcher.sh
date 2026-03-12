@@ -905,7 +905,11 @@ main() {
     fi
 
     if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -x "$TELEGRAM_CONSENT_STORE_SCRIPT" ]]; then
-        telegram_consent_router_ready="true"
+        if [[ "$(basename "$TELEGRAM_SEND_SCRIPT")" == "telegram-bot-send-remote.sh" ]]; then
+            add_warning "Consent follow-up отключён: watcher отправляет Telegram через remote sender, а authoritative router ожидает store на том же runtime. Для live follow-up запускайте watcher на Moltinger host."
+        else
+            telegram_consent_router_ready="true"
+        fi
     elif [[ "$TELEGRAM_ENABLED" == "true" && "$TELEGRAM_CONSENT_ENABLED" == "true" && "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" ]]; then
         add_warning "Authoritative consent router включён, но shared consent store helper сейчас недоступен; watcher перейдёт в one-way alert режим."
     fi
@@ -1585,19 +1589,20 @@ def build_consent_request(
         "question": advisor_bridge["question"],
         "summary": advisor_bridge["summary"],
         "status": "pending",
-        "delivery_mode": "inline_callback",
+        "delivery_mode": "command_keyboard",
         "router_mode": "authoritative",
         "command_accept": accept_command,
         "command_decline": decline_command,
         "callback_accept": f"codex-consent:accept:{request_id}:{action_token}",
         "callback_decline": f"codex-consent:decline:{request_id}:{action_token}",
         "reply_markup": {
-            "inline_keyboard": [
-                [
-                    {"text": "Получить рекомендации", "callback_data": f"codex-consent:accept:{request_id}:{action_token}"},
-                    {"text": "Не нужно", "callback_data": f"codex-consent:decline:{request_id}:{action_token}"},
-                ]
-            ]
+            "keyboard": [
+                [{"text": accept_command}],
+                [{"text": decline_command}],
+            ],
+            "resize_keyboard": True,
+            "one_time_keyboard": True,
+            "input_field_placeholder": "Выберите действие для этого обновления Codex CLI",
         },
         "recommendations": advisor_bridge["practical_recommendations"],
     }
@@ -1655,7 +1660,7 @@ def build_alert_message(
         lines.append("")
         lines.append(advisor_bridge["question"])
         if consent_request is not None:
-            lines.append("Нажмите кнопку ниже. Если кнопки недоступны, используйте одну из команд:")
+            lines.append("Нажмите кнопку-команду ниже. Если клавиатура не показалась, используйте одну из команд:")
             lines.append(f"- {consent_request['command_accept']}")
             lines.append(f"- {consent_request['command_decline']}")
             lines.append(f"- Идентификатор запроса: {consent_request['request_id']}")

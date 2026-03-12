@@ -183,12 +183,44 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "authoritative" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should advertise authoritative consent routing"
     assert_eq "true" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Router flag should be exposed in the report"
     assert_eq "true" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Watcher should expose that the authoritative router is ready"
+    assert_eq "command_keyboard" "$(jq -r '.followup.consent.pending_state.delivery_mode' "$report")" "Watcher should prefer command-keyboard delivery for current Moltis ingress"
     assert_file_exists "$store_record" "Watcher should persist a shared consent record for the authoritative router"
     assert_contains "$call_text" "Хотите получить практические рекомендации" "Alert message should ask whether recommendations are needed"
     assert_contains "$call_text" "/codex-followup accept" "Alert message should include explicit fallback command"
     assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "--reply-markup-json" "Watcher should pass reply_markup for explicit actions"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "\"keyboard\"" "Watcher should send command-keyboard reply_markup rather than callback-only markup"
+    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex-followup accept" "Reply keyboard should send the structured accept command"
     assert_eq "1" "$(jq -r '.request.question_message_id' "$store_record")" "Shared consent record should be bound to the Telegram alert message id"
     test_pass
+
+    test_start "component_codex_cli_upstream_watcher_remote_sender_degrades_to_one_way_alert"
+    setup_fake_telegram_sender
+    export FAKE_TELEGRAM_STATE_DIR
+    cp "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send-remote.sh"
+    chmod +x "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send-remote.sh"
+    work_dir="$(secure_temp_dir codex-upstream-watcher-remote-sender)"
+    state_file="$work_dir/state.json"
+    consent_store_dir="$work_dir/consent-store"
+    run_watcher scheduler "$work_dir" "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
+        --include-issue-signals \
+        --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
+        --telegram-enabled \
+        --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
+        --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send-remote.sh" \
+        --telegram-consent-store-script "$CONSENT_STORE_SCRIPT" \
+        --telegram-consent-store-dir "$consent_store_dir"
+    report="$work_dir/report.json"
+    call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
+    assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Remote sender should still deliver the upstream alert"
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Remote sender should disable consent when store and router are on a different runtime"
+    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Remote sender should mark authoritative router unavailable for this local run"
+    assert_contains "$(jq -r '.notes[]' "$report")" "remote sender" "Watcher should explain why consent was disabled"
+    if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+        test_fail "Remote-sender alert should not promise an unreachable follow-up path"
+    else
+        test_pass
+    fi
 
     test_start "component_codex_cli_upstream_watcher_repeat_scheduler_run_is_suppressed_without_legacy_getupdates"
     run_watcher scheduler "$work_dir" "$state_file" \

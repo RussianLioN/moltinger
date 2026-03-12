@@ -128,7 +128,7 @@ Scheduler-режим умеет не только отправлять alert, н
 2. отправляет одно Telegram-сообщение
 3. watcher создаёт shared consent record в `codex-telegram-consent-store`
 4. в Telegram приходят явные affordances:
-   - inline-кнопки
+   - кнопки-команды, которые сразу отправляют `/codex-followup ...`
    - fallback-команды вида `/codex-followup accept <request_id> <token>`
 5. дальнейший ответ должен принимать authoritative router, а не watcher-side `getUpdates`
 
@@ -138,14 +138,20 @@ Scheduler-режим умеет не только отправлять alert, н
 - затем пользователь видит явные токенизированные действия вместо неоднозначного `да/нет`
 - ответ попадает в shared consent store и не должен зависеть от второго Telegram consumer-а
 
+Важно:
+
+- если watcher запущен локально, а Telegram отправляется через `telegram-bot-send-remote.sh`, интерактивный follow-up автоматически отключается;
+- в таком режиме watcher не должен обещать кнопку с продолжением, потому что authoritative router и consent store живут на Moltinger host, а не в локальном процессе;
+- для настоящего live consent-flow watcher нужно запускать на том же runtime, где живут `moltis-codex-consent-router.sh` и `codex-telegram-consent-store.sh`.
+
 ## Что происходит после согласия
 
-Если пользователь подтверждает запрос через inline-кнопку или fallback-команду, authoritative router должен сразу отправить второе сообщение с практическими рекомендациями.
+Если пользователь подтверждает запрос через кнопку-команду или fallback-команду, authoritative router должен сразу отправить второе сообщение с практическими рекомендациями.
 
 Новый ожидаемый UX такой:
 
 1. приходит alert про новую версию Codex CLI;
-2. пользователь нажимает кнопку или отправляет `/codex-followup accept <request_id> <token>`;
+2. пользователь нажимает кнопку-команду или отправляет `/codex-followup accept <request_id> <token>`;
 3. authoritative router валидирует токен и chat context;
 4. practical recommendations уходят сразу в тот же чат, без ожидания следующего cron-run.
 

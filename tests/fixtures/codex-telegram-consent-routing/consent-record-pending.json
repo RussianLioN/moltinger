@@ -10,7 +10,7 @@
     "status": "pending",
     "action_token": "tok-xyz789",
     "question_text": "Хотите получить практические рекомендации?",
-    "delivery_mode": "inline_callback"
+    "delivery_mode": "command_keyboard"
   },
   "recommendations": {
     "summary": "Можно подготовить конкретные шаги для проекта.",

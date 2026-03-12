@@ -16,7 +16,7 @@ Represents one active interactive follow-up opened by a Codex watcher alert.
 | `status` | enum | `pending`, `accepted`, `declined`, `expired`, `delivered`, `failed` |
 | `action_token` | string | Compact token embedded into callback data or fallback command |
 | `question_text` | string | Human-facing Russian question shown to the user |
-| `delivery_mode` | enum | `inline_callback`, `command_fallback`, `one_way_only` |
+| `delivery_mode` | enum | `command_keyboard`, `command_fallback`, `one_way_only` |
 
 ## RecommendationPayload
 

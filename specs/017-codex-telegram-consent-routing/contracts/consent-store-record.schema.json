@@ -40,7 +40,7 @@
         "question_text": { "type": "string", "minLength": 1 },
         "delivery_mode": {
           "type": "string",
-          "enum": ["inline_callback", "command_fallback", "one_way_only"]
+          "enum": ["command_keyboard", "command_fallback", "one_way_only"]
         }
       },
       "additionalProperties": false
