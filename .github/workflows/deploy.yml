@@ -153,8 +153,23 @@ jobs:
             done
           fi
 
-          # Check 7: server worktree cleanliness (hard block)
-          echo "=== Check 7: server git status --porcelain ==="
+          # Check 7: migrate legacy runtime pointers out of git-managed root
+          echo "=== Check 7: migrate legacy Moltis runtime pointers ==="
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            mkdir -p data/moltis
+
+            for MARKER in .last-deployed-image .last-moltis-backup .last-moltis-restore-check; do
+              if [ -f "$MARKER" ]; then
+                mv "$MARKER" "data/moltis/$MARKER"
+              fi
+            done
+          EOF
+
+          # Check 8: server worktree cleanliness (hard block)
+          echo "=== Check 8: server git status --porcelain ==="
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
             echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
@@ -491,8 +506,9 @@ jobs:
 
             # Refresh rollback pointers so deploy.sh rollback can recover the
             # exact pre-update state even when CI created the backup.
-            echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/.last-deployed-image"
-            echo "$BACKUP_FILE" > "$DEPLOY_DIR/.last-moltis-backup"
+            mkdir -p "$DEPLOY_DIR/data/moltis"
+            echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/data/moltis/.last-deployed-image"
+            echo "$BACKUP_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-backup"
 
             if [ ! -f "$BACKUP_FILE" ]; then
               echo "::error::Backup archive was not created"
@@ -606,7 +622,8 @@ jobs:
             echo "has_version=$HAS_VERSION"
 
             if [ "$HAS_CONFIG" = "true" ] && [ "$HAS_DATA" = "true" ] && [ "$HAS_ENV" = "true" ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = "true" ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = "true" ] && [ "$HAS_VERSION" = "true" ]; then
-              echo "$RESTORE_CHECK_FILE" > "$DEPLOY_DIR/.last-moltis-restore-check"
+              mkdir -p "$DEPLOY_DIR/data/moltis"
+              echo "$RESTORE_CHECK_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-restore-check"
             fi
           EOF
           )
@@ -1154,20 +1171,20 @@ jobs:
             RESTORE_CHECK_FILE=""
             PREVIOUS_IMAGE=""
 
-            if [ -f .last-moltis-backup ] && [ -s .last-moltis-backup ]; then
-              BACKUP_FILE=$(cat .last-moltis-backup)
+            if [ -f data/moltis/.last-moltis-backup ] && [ -s data/moltis/.last-moltis-backup ]; then
+              BACKUP_FILE=$(cat data/moltis/.last-moltis-backup)
             else
               BACKUP_FILE=$(ls -t "${{ env.BACKUP_PATH }}"/pre_deploy_*.tar.gz 2>/dev/null | head -1 || true)
             fi
 
-            if [ -f .last-moltis-restore-check ] && [ -s .last-moltis-restore-check ]; then
-              RESTORE_CHECK_FILE=$(cat .last-moltis-restore-check)
+            if [ -f data/moltis/.last-moltis-restore-check ] && [ -s data/moltis/.last-moltis-restore-check ]; then
+              RESTORE_CHECK_FILE=$(cat data/moltis/.last-moltis-restore-check)
             else
               RESTORE_CHECK_FILE=$(find data/moltis/audit/restore-checks -type f -name 'restore-check-*.json' 2>/dev/null | sort | tail -1 || true)
             fi
 
-            if [ -f .last-deployed-image ] && [ -s .last-deployed-image ]; then
-              PREVIOUS_IMAGE=$(cat .last-deployed-image)
+            if [ -f data/moltis/.last-deployed-image ] && [ -s data/moltis/.last-deployed-image ]; then
+              PREVIOUS_IMAGE=$(cat data/moltis/.last-deployed-image)
             fi
 
             if [ -z "$BACKUP_FILE" ]; then

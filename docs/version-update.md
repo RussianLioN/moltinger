@@ -45,7 +45,7 @@ Preferred operator runbook:
 
 ```bash
 ./scripts/backup-moltis-enhanced.sh --json backup
-BACKUP_FILE="$(cat .last-moltis-backup)"
+BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 ./scripts/backup-moltis-enhanced.sh restore-check "$BACKUP_FILE"
 ./scripts/deploy.sh --json moltis deploy
 ```
@@ -77,6 +77,9 @@ If the update regresses, rollback must preserve:
 
 Runtime audit paths:
 
+- `data/moltis/.last-deployed-image`
+- `data/moltis/.last-moltis-backup`
+- `data/moltis/.last-moltis-restore-check`
 - `data/moltis/audit/restore-checks/`
 - `data/moltis/audit/rollback-evidence/`
 

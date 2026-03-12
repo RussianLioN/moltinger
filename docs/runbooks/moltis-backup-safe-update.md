@@ -39,8 +39,9 @@ Runtime evidence locations:
 
 - restore-check evidence: `data/moltis/audit/restore-checks/restore-check-*.json`
 - rollback evidence: `data/moltis/audit/rollback-evidence/rollback-*.json`
-- latest backup pointer: `.last-moltis-backup`
-- latest restore-check pointer: `.last-moltis-restore-check`
+- latest deployed image pointer: `data/moltis/.last-deployed-image`
+- latest backup pointer: `data/moltis/.last-moltis-backup`
+- latest restore-check pointer: `data/moltis/.last-moltis-restore-check`
 
 ## Preferred Update Path
 
@@ -74,7 +75,7 @@ The backup must include:
 ### 3. Run restore-check before deploy
 
 ```bash
-BACKUP_FILE="$(cat .last-moltis-backup)"
+BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 ./scripts/backup-moltis-enhanced.sh restore-check "$BACKUP_FILE"
 ```
 
