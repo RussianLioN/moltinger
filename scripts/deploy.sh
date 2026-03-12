@@ -354,9 +354,9 @@ configure_target() {
             TARGET_SERVICE="moltis"
             TARGET_HEALTH_URL="http://localhost:13131/health"
             TARGET_METRICS_URL="http://localhost:13131/metrics"
-            TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/.last-deployed-image"
-            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/.last-moltis-backup"
-            TARGET_LAST_RESTORE_CHECK_FILE="$PROJECT_ROOT/.last-moltis-restore-check"
+            TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/data/moltis/.last-deployed-image"
+            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/data/moltis/.last-moltis-backup"
+            TARGET_LAST_RESTORE_CHECK_FILE="$PROJECT_ROOT/data/moltis/.last-moltis-restore-check"
             TARGET_NOTIFICATION_NAME="Moltis"
             TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
             TARGET_REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
@@ -507,6 +507,7 @@ latest_restore_check_path() {
 
 ensure_moltis_audit_paths() {
     mkdir -p \
+        "$PROJECT_ROOT/data/moltis" \
         "$PROJECT_ROOT/data/moltis/audit/restore-checks" \
         "$PROJECT_ROOT/data/moltis/audit/rollback-evidence"
 }

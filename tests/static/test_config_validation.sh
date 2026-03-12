@@ -248,7 +248,7 @@ PY
 
     test_start "static_deploy_script_enforces_moltis_backup_safe_rollout"
     if rg -q 'restore-check "\$backup_path"' "$DEPLOY_SCRIPT" && \
-       rg -q '\.last-moltis-restore-check' "$DEPLOY_SCRIPT" && \
+       rg -q 'data/moltis/\.last-moltis-restore-check' "$DEPLOY_SCRIPT" && \
        rg -q 'data/moltis/audit/rollback-evidence' "$DEPLOY_SCRIPT" && \
        rg -q 'pre_deploy_\*\.tar\.gz' "$DEPLOY_SCRIPT" && \
        rg -q 'latest_file_under "\$PROJECT_ROOT/data/moltis/audit/restore-checks"' "$DEPLOY_SCRIPT"; then
@@ -258,13 +258,14 @@ PY
     fi
 
     test_start "static_deploy_workflow_tracks_git_managed_rollback_pointers"
-    if rg -q '\.last-deployed-image' "$DEPLOY_WORKFLOW" && \
-       rg -q '\.last-moltis-backup' "$DEPLOY_WORKFLOW" && \
-       rg -q '\.last-moltis-restore-check' "$DEPLOY_WORKFLOW" && \
+    if rg -q 'data/moltis/\.last-deployed-image' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/moltis/\.last-moltis-backup' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/moltis/\.last-moltis-restore-check' "$DEPLOY_WORKFLOW" && \
+       rg -q 'migrate legacy Moltis runtime pointers' "$DEPLOY_WORKFLOW" && \
        rg -q 'deploy\.sh --json moltis rollback' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
-        test_fail "Deploy workflow must refresh rollback pointers and route rollback through deploy.sh"
+        test_fail "Deploy workflow must keep Moltis rollback pointers under data/moltis, migrate legacy root markers, and route rollback through deploy.sh"
     fi
 
     test_start "static_uat_gate_uses_tracked_git_version_and_backup_safe_deploy"

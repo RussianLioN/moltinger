@@ -244,7 +244,7 @@ GitOps Compliance: Enforced ✅
 - Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:v0.10.18` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
 - Hardened `scripts/deploy.sh` against ad-hoc `MOLTIS_VERSION` drift, added fallback discovery for `pre_deploy_*.tar.gz` backups and restore-check evidence, and kept rollback on the same tracked contract.
 - Removed the unsafe manual version path from `.github/workflows/uat-gate.yml`; UAT now derives the version from git and deploys Moltis only through `./scripts/deploy.sh --json moltis deploy`.
-- Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `.last-deployed-image`, `.last-moltis-backup`, and `.last-moltis-restore-check` so CI-created evidence is reusable during rollback.
+- Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `data/moltis/.last-deployed-image`, `data/moltis/.last-moltis-backup`, and `data/moltis/.last-moltis-restore-check` so CI-created evidence is reusable during rollback without polluting the git-managed root.
 - Extended static coverage for the pinned version helper, tracked rollback pointers, and the new UAT/deploy workflow invariants; updated rollout docs and fixed rebased absolute links.
 
 **Validated**

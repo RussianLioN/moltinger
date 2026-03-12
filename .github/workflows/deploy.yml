@@ -202,8 +202,23 @@ jobs:
             done
           fi
 
-          # Check 7: server worktree cleanliness (hard block unless repairable)
-          echo "=== Check 7: server git status --porcelain ==="
+          # Check 7: migrate legacy runtime pointers out of git-managed root
+          echo "=== Check 7: migrate legacy Moltis runtime pointers ==="
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            mkdir -p data/moltis
+
+            for MARKER in .last-deployed-image .last-moltis-backup .last-moltis-restore-check; do
+              if [ -f "$MARKER" ]; then
+                mv "$MARKER" "data/moltis/$MARKER"
+              fi
+            done
+          EOF
+
+          # Check 8: server worktree cleanliness (hard block unless repairable)
+          echo "=== Check 8: server git status --porcelain ==="
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
             echo "::warning::Server working tree is dirty before deploy."
@@ -617,6 +632,12 @@ jobs:
             # Save image version metadata
             echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
 
+            # Refresh rollback pointers so deploy.sh rollback can recover the
+            # exact pre-update state even when CI created the backup.
+            mkdir -p "$DEPLOY_DIR/data/moltis"
+            echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/data/moltis/.last-deployed-image"
+            echo "$BACKUP_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-backup"
+
             if [ ! -f "$BACKUP_FILE" ]; then
               echo "::error::Backup archive was not created"
               exit 1
@@ -714,6 +735,11 @@ jobs:
             echo "has_compose_prod_sidecar=$HAS_COMPOSE_PROD_SIDECAR"
             echo "has_compose_main_sidecar=$HAS_COMPOSE_MAIN_SIDECAR"
             echo "has_version=$HAS_VERSION"
+
+            if [ "$HAS_CONFIG" = "true" ] && [ "$HAS_DATA" = "true" ] && [ "$HAS_ENV" = "true" ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = "true" ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = "true" ] && [ "$HAS_VERSION" = "true" ]; then
+              mkdir -p "$DEPLOY_DIR/data/moltis"
+              echo "$RESTORE_CHECK_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-restore-check"
+            fi
           EOF
           )
 
@@ -1275,72 +1301,73 @@ jobs:
       - name: Find last backup
         id: backup
         run: |
-          echo "::group::Finding last backup"
+          echo "::group::Resolving tracked rollback evidence"
           BACKUP_INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            BACKUP_DIR="${{ env.BACKUP_PATH }}"
-            LATEST=$(ls -t $BACKUP_DIR/pre_deploy_*.tar.gz 2>/dev/null | head -1)
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
 
-            if [ -z "$LATEST" ]; then
+            BACKUP_FILE=""
+            RESTORE_CHECK_FILE=""
+            PREVIOUS_IMAGE=""
+
+            if [ -f data/moltis/.last-moltis-backup ] && [ -s data/moltis/.last-moltis-backup ]; then
+              BACKUP_FILE=$(cat data/moltis/.last-moltis-backup)
+            else
+              BACKUP_FILE=$(ls -t "${{ env.BACKUP_PATH }}"/pre_deploy_*.tar.gz 2>/dev/null | head -1 || true)
+            fi
+
+            if [ -f data/moltis/.last-moltis-restore-check ] && [ -s data/moltis/.last-moltis-restore-check ]; then
+              RESTORE_CHECK_FILE=$(cat data/moltis/.last-moltis-restore-check)
+            else
+              RESTORE_CHECK_FILE=$(find data/moltis/audit/restore-checks -type f -name 'restore-check-*.json' 2>/dev/null | sort | tail -1 || true)
+            fi
+
+            if [ -f data/moltis/.last-deployed-image ] && [ -s data/moltis/.last-deployed-image ]; then
+              PREVIOUS_IMAGE=$(cat data/moltis/.last-deployed-image)
+            fi
+
+            if [ -z "$BACKUP_FILE" ]; then
               echo "ERROR: No backup found"
               exit 1
             fi
 
-            VERSION=$(cat "${LATEST}.version" 2>/dev/null || echo "unknown")
-            echo "backup_file=$LATEST"
-            echo "backup_version=$VERSION"
+            echo "backup_file=$BACKUP_FILE"
+            echo "restore_check_file=$RESTORE_CHECK_FILE"
+            echo "previous_image=$PREVIOUS_IMAGE"
           EOF
           )
 
-          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep "backup_file=" | cut -d= -f2)
-          BACKUP_VERSION=$(echo "$BACKUP_INFO" | grep "backup_version=" | cut -d= -f2)
+          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep '^backup_file=' | cut -d= -f2-)
+          RESTORE_CHECK_FILE=$(echo "$BACKUP_INFO" | grep '^restore_check_file=' | cut -d= -f2-)
+          PREVIOUS_IMAGE=$(echo "$BACKUP_INFO" | grep '^previous_image=' | cut -d= -f2-)
 
           if [ -z "$BACKUP_FILE" ]; then
-            echo "::error::No backup found for rollback"
+            echo "::error::No rollback backup found"
             exit 1
           fi
 
           echo "backup_file=$BACKUP_FILE" >> $GITHUB_OUTPUT
-          echo "backup_version=$BACKUP_VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Found backup: $BACKUP_FILE (version: $BACKUP_VERSION)"
+          echo "restore_check_file=$RESTORE_CHECK_FILE" >> $GITHUB_OUTPUT
+          echo "previous_image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
+          echo "::notice::Rollback evidence resolved: $BACKUP_FILE"
           echo "::endgroup::"
 
-      - name: Restore backup
+      - name: Run tracked rollback
         run: |
-          BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
-          BACKUP_VERSION="${{ steps.backup.outputs.backup_version }}"
-
-          echo "::group::Restoring backup (GitOps)"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+          echo "::group::Running tracked rollback"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
             cd ${{ env.DEPLOY_PATH }}
 
-            # Stop container (use production compose file)
-            docker compose -f docker-compose.prod.yml stop moltis || true
+            OUTPUT=$(./scripts/deploy.sh --json moltis rollback)
+            echo "$OUTPUT"
 
-            # Restore config/data/.env to deployment directory
-            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
-
-            # Restore docker-compose.prod.yml from backup (GitOps: exact config restore)
-            if [ -f "${BACKUP_FILE}.compose" ]; then
-              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
-              echo "Restored docker-compose.prod.yml from backup"
+            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
+            if [ "$STATUS" != "success" ]; then
+              echo "::error::deploy.sh rollback failed"
+              exit 1
             fi
-
-            if [ -f "${BACKUP_FILE}.compose-main" ]; then
-              cp "${BACKUP_FILE}.compose-main" docker-compose.yml
-              echo "Restored docker-compose.yml from backup"
-            fi
-
-            # Pull the backed-up image version if known
-            if [ "$BACKUP_VERSION" != "unknown" ]; then
-              docker pull $BACKUP_VERSION
-            fi
-
-            # Start container (use production compose file)
-            docker compose -f docker-compose.prod.yml up -d moltis
-
-            echo "Rollback completed to version: $BACKUP_VERSION"
           EOF
           echo "::endgroup::"
 
@@ -1374,7 +1401,8 @@ jobs:
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Backup | \`${{ steps.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | \`${{ steps.backup.outputs.backup_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Restore Check | \`${{ steps.backup.outputs.restore_check_file }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Previous Image | \`${{ steps.backup.outputs.previous_image }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
