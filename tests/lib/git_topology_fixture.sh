@@ -108,12 +108,14 @@ git_topology_fixture_seed_registry_assets() {
   mkdir -p "${repo_dir}/docs" "${repo_dir}/scripts" "${repo_dir}/.githooks"
 
   cp "${project_root}/scripts/git-topology-registry.sh" "${repo_dir}/scripts/git-topology-registry.sh"
+  cp "${project_root}/.githooks/_repo-local-path.sh" "${repo_dir}/.githooks/_repo-local-path.sh"
   cp "${project_root}/.githooks/pre-push" "${repo_dir}/.githooks/pre-push"
   cp "${project_root}/.githooks/post-checkout" "${repo_dir}/.githooks/post-checkout"
   cp "${project_root}/.githooks/post-merge" "${repo_dir}/.githooks/post-merge"
   cp "${project_root}/.githooks/post-rewrite" "${repo_dir}/.githooks/post-rewrite"
 
   chmod +x \
+    "${repo_dir}/.githooks/_repo-local-path.sh" \
     "${repo_dir}/scripts/git-topology-registry.sh" \
     "${repo_dir}/.githooks/pre-push" \
     "${repo_dir}/.githooks/post-checkout" \

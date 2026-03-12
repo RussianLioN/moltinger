@@ -12,6 +12,11 @@ LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
 CODEX_LAUNCHER="$PROJECT_ROOT/scripts/codex-profile-launch.sh"
 WORKTREE_READY_SCRIPT="$PROJECT_ROOT/scripts/worktree-ready.sh"
 WORKTREE_PHASE_A_SCRIPT="$PROJECT_ROOT/scripts/worktree-phase-a.sh"
+HOOK_BOOTSTRAP="$PROJECT_ROOT/.githooks/_repo-local-path.sh"
+HOOK_PRE_COMMIT="$PROJECT_ROOT/.githooks/pre-commit"
+HOOK_POST_CHECKOUT="$PROJECT_ROOT/.githooks/post-checkout"
+HOOK_POST_MERGE="$PROJECT_ROOT/.githooks/post-merge"
+HOOK_PRE_PUSH="$PROJECT_ROOT/.githooks/pre-push"
 QUICKSTART_RU="$PROJECT_ROOT/.claude/docs/beads-quickstart.md"
 QUICKSTART_EN="$PROJECT_ROOT/.claude/docs/beads-quickstart.en.md"
 BEADS_SKILL="$PROJECT_ROOT/.claude/skills/beads/SKILL.md"
@@ -62,6 +67,15 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "Codex launcher must prepend the repo-local bin directory"
+    fi
+
+    test_start "static_git_hooks_bootstrap_repo_local_plain_bd"
+    if [[ -f "$HOOK_BOOTSTRAP" ]] && \
+       rg -q 'export PATH="\$\{PROJECT_ROOT\}/bin:\$\{PATH\}"' "$HOOK_BOOTSTRAP" && \
+       rg -q '_repo-local-path\.sh' "$HOOK_PRE_COMMIT" "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" "$HOOK_PRE_PUSH"; then
+        test_pass
+    else
+        test_fail "Tracked git hooks must source the repo-local PATH bootstrap before any bd resolution"
     fi
 
     test_start "static_worktree_helpers_bootstrap_plain_bd_and_avoid_raw_create_fallback"

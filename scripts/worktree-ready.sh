@@ -1617,7 +1617,7 @@ apply_discovery_to_report() {
   fi
 
   if [[ -n "${discovered_redirect_target}" || "${discovered_beads_state}" == "redirected" ]]; then
-    add_warning "Discovery found beads redirect metadata for the target worktree; localize it before running bd without BEADS_DB"
+    add_warning "Discovery found beads redirect metadata for the target worktree; localize it before running plain bd there"
   fi
 
   if [[ "${discovered_beads_probe_state}" == "probe_unavailable" ]]; then

@@ -12,6 +12,9 @@ REQUIRED_HOOKS=(
   post-merge
   post-rewrite
 )
+SUPPORT_FILES=(
+  _repo-local-path.sh
+)
 
 echo "Setting up tracked git hooks..."
 
@@ -22,6 +25,14 @@ for hook_name in "${REQUIRED_HOOKS[@]}"; do
     exit 1
   fi
   chmod +x "${hook_path}"
+done
+
+for support_name in "${SUPPORT_FILES[@]}"; do
+  support_path="${HOOKS_DIR}/${support_name}"
+  if [[ ! -f "${support_path}" ]]; then
+    echo "Missing tracked hook support file: ${support_path}" >&2
+    exit 1
+  fi
 done
 
 git config core.hooksPath .githooks
