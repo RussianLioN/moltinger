@@ -45,7 +45,7 @@
 | `012-codex-upstream-watcher-writable` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
 | `018-clawdiy-gateway-password-ui-fix` | `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
-| `020-agent-factory-prototype` | `none` | Needs decision |
+| `020-agent-factory-prototype` | `origin/020-agent-factory-prototype` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
@@ -78,6 +78,7 @@
 | `017-clawdiy-remote-oauth-lifecycle` | `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
 | `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
 | `019-asc-fabrique-prototype` | `none` | Needs decision |
+| `archive-feat-moltinger-ejy-beads-redirect-fix-20260312` | `none` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
@@ -85,7 +86,6 @@
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
-| `feat/moltinger-ejy-beads-redirect-fix` | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
@@ -105,14 +105,12 @@
 | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
-| `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
-| `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
+| `origin/020-agent-factory-prototype` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
-| `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
