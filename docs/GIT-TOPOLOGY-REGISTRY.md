@@ -27,12 +27,12 @@
 | `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-010` | `010-beads-recovery-batch` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher-writable` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-016` | `016-worktree-skill-bug-fix` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-017` | `017-clawdiy-workspace-mount-fix` | `dedicated-feature-worktree` | Needs decision |
-| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
+| `primary-feature-018` | `018-clawdiy-gateway-password-ui-fix` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-020` | `020-agent-factory-prototype` | `dedicated-feature-worktree` | Needs decision |
+| `primary-root` | `fix/beads-recovery-audit-localization` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
 
@@ -41,11 +41,11 @@
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
 | `008-codex-update-advisor` | `origin/008-codex-update-advisor` | Needs decision |
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
-| `010-beads-recovery-batch` | `origin/010-beads-recovery-batch` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `012-codex-upstream-watcher-writable` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
-| `017-clawdiy-workspace-mount-fix` | `none` | Needs decision |
+| `018-clawdiy-gateway-password-ui-fix` | `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
+| `020-agent-factory-prototype` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
@@ -55,12 +55,13 @@
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `none` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `none` | Needs decision |
+| `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `tmp-pr40-fix` | `origin/012-clawdiy-live-runtime-fix` | Needs decision |
 | `tmp-pr41-fix` | `gone` | Tracking ref is gone; needs decision |
-| `tmp-pr42-fix` | `origin/010-beads-recovery-batch` | Needs decision |
+| `tmp-pr42-fix` | `gone` | Tracking ref is gone; needs decision |
 | `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
@@ -74,6 +75,9 @@
 | `014-clawdiy-smoke-jq-fix` | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `015-clawdiy-smoke-mount-resolution` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `016-clawdiy-restore-readiness-fix` | `origin/016-clawdiy-restore-readiness-fix` | Needs decision |
+| `017-clawdiy-remote-oauth-lifecycle` | `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
+| `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
+| `019-asc-fabrique-prototype` | `none` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
@@ -101,6 +105,8 @@
 | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
+| `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
+| `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
@@ -109,6 +115,7 @@
 | `origin/feat/moltinger-ejy-beads-redirect-fix` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
+| `origin/fix/beads-recovery-audit-localization` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
