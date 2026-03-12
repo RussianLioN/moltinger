@@ -15,7 +15,7 @@ Commands:
   version         Print the tracked Moltis version from compose files
   image           Print the tracked Moltis image reference from compose files
   assert-tracked  Fail unless docker-compose.yml and docker-compose.prod.yml
-                  resolve to the same pinned Moltis image (not latest)
+                  resolve to the same git-managed Moltis image reference
 EOF
 }
 
@@ -77,10 +77,6 @@ assert_tracked_contract() {
         return 1
     fi
 
-    if [[ "$version" == "latest" ]]; then
-        echo "Tracked Moltis version must be pinned in git; 'latest' is forbidden" >&2
-        return 1
-    fi
 }
 
 main() {

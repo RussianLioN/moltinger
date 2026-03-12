@@ -91,13 +91,13 @@ run_static_config_validation_tests() {
         test_pass
     fi
 
-    test_start "static_moltis_version_contract_is_pinned"
+    test_start "static_moltis_version_contract_matches_official_docker_channel"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" == "latest" ]]; then
         test_pass
     else
-        test_fail "Tracked Moltis version must be pinned in git and validated by scripts/moltis-version.sh"
+        test_fail "Tracked Moltis version must match the official Docker channel in git and be validated by scripts/moltis-version.sh"
     fi
 
     test_start "static_fixture_disables_openai_for_pr_gate"
@@ -149,10 +149,10 @@ run_static_config_validation_tests() {
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production workflow_dispatch must use tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       ! rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+       rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass
     else
-        test_fail "Deploy workflow must resolve a tracked Moltis version and block feature-branch production deploys"
+        test_fail "Deploy workflow must resolve the tracked Moltis version, stay on the official latest channel, and block feature-branch production deploys"
     fi
 
     test_start "static_clawdiy_workflow_exists"
