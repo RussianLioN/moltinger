@@ -14,6 +14,7 @@ This flow exists to prevent a "successful" update from leaving production withou
 
 - Do not update Moltis by editing files directly on the server.
 - Do not use `sed` on the server to bump image tags.
+- Do not pin a GitHub release tag unless the matching GHCR container tag is actually published.
 - Do not pull or restart a new Moltis image without a fresh pre-update backup.
 - Do not continue rollout if restore-check fails for that fresh backup.
 - Do not treat "previous image exists" as sufficient rollback evidence by itself.

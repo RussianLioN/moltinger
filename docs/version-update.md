@@ -15,6 +15,8 @@ make version-check
 
 Production Moltis updates are git-based and backup-safe only.
 
+The tracked version must point to a published GHCR container tag, not only to a GitHub release tag.
+
 Allowed:
 
 - update `docker-compose.yml` and `docker-compose.prod.yml` in git
