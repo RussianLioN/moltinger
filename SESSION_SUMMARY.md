@@ -67,6 +67,9 @@ GitOps Compliance: Enforced ✅
   - `tasks.md`
 - Framed the prototype around Telegram intake, synchronized concept-pack generation, defense gate, autonomous swarm-to-playground execution, operator escalation, and local ASC context continuity; deployment remains explicitly out of scope for MVP1.
 - Created follow-up Beads epic `molt-qgg` (`Prototype AI agent factory MVP0`) linked to spec id `020-agent-factory-prototype`.
+- Imported `specs/020-agent-factory-prototype/tasks.md` into Beads under `molt-qgg` as 9 phase parents and 38 child tasks with hierarchical IDs (`molt-qgg.3.1`, `molt-qgg.4.3`, etc.), user-story labels (`us1`-`us5`), and 25 explicit blocker dependencies.
+- Marked the already completed planning/setup work as closed in Beads during import: 7 completed child tasks plus closed phase parents for Phase 0 and Phase 1.
+- Verified the imported Beads graph with `bd dep cycles` (no cycles) and `bd sync`; the next implementation queue starts from Phase 2 Foundational (`T004`-`T008`).
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -74,6 +77,8 @@ GitOps Compliance: Enforced ✅
   - `scripts/git-topology-registry.sh refresh --write-doc`
   - `scripts/git-topology-registry.sh check`
   - `git diff --check`
+  - `bd dep cycles`
+  - `bd sync`
 
 ### Previous Session Update (2026-03-11)
 
