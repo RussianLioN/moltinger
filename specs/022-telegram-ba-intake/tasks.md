@@ -17,10 +17,10 @@
 
 **Purpose**: Lock the discovery-first scope and assign implementation ownership before runtime changes begin.
 
-- [ ] P001 Analyze all tasks and identify executor domains for discovery state, brief generation, handoff, config, tests, and runbooks
-- [ ] P002 Create and reconcile the active Speckit package in `specs/022-telegram-ba-intake/`
-- [ ] P003 Confirm the downstream boundary to `specs/020-agent-factory-prototype/` so handoff changes do not drift into defense/swarm concerns
-- [ ] P004 Resolve planning blockers using local repo context without leaving unresolved clarification markers
+- [x] P001 Analyze all tasks and identify executor domains for discovery state, brief generation, handoff, config, tests, and runbooks
+- [x] P002 Create and reconcile the active Speckit package in `specs/022-telegram-ba-intake/`
+- [x] P003 Confirm the downstream boundary to `specs/020-agent-factory-prototype/` so handoff changes do not drift into defense/swarm concerns
+- [x] P004 Resolve planning blockers using local repo context without leaving unresolved clarification markers
 
 ---
 

@@ -66,13 +66,19 @@ GitOps Compliance: Enforced ✅
 - Scoped the new feature around Telegram multi-turn discovery, business-readable requirements brief generation, explicit brief confirmation, example-driven clarification, downstream handoff into `020-agent-factory-prototype`, and interrupted-session recovery.
 - Explicitly separated the new discovery gate from the already existing downstream defense gate: confirmation of the requirements brief now sits before concept-pack generation, not inside the later approval/rework workflow.
 - Refreshed `docs/GIT-TOPOLOGY-REGISTRY.md` after switching from the completed `020-agent-factory-prototype` branch to the new `022-telegram-ba-intake` feature branch.
-- Created Beads epic `molt-s5i` (`Feature: Telegram business analyst intake`) linked to spec id `022-telegram-ba-intake`; task import into child issues is not done yet.
+- Created Beads epic `molt-s5i` (`Feature: Telegram business analyst intake`) linked to spec id `022-telegram-ba-intake`.
+- Imported `specs/022-telegram-ba-intake/tasks.md` into Beads under `molt-s5i` as 8 phase parents and 29 child tasks with user-story labels (`us1`-`us5`) and sequential plus phase-gating dependencies.
+- Closed the already completed planning tasks `P001`-`P004` and phase parent `molt-s5i.1` during import so the new Beads graph matches the real Speckit state instead of showing planning as still pending.
+- Added phase-parent gating dependencies so `bd ready` now exposes the correct execution order: Phase 1 Foundational (`T001`-`T004`) is the current entry point, while later user stories remain blocked until earlier phase parents are closed.
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
   - `scripts/git-topology-registry.sh refresh --write-doc`
   - `.specify/scripts/bash/setup-plan.sh --json`
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `bd show molt-s5i`
+  - `bd dep cycles`
+  - `bd ready`
   - `bd sync`
 
 ### Previous Session Update (2026-03-12)
