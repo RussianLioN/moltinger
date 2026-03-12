@@ -112,10 +112,11 @@ Related planning package:
 | Scope | Secret refs |
 |-------|-------------|
 | Moltinger | `MOLTIS_PASSWORD`, `MOLTINGER_SERVICE_TOKEN`, `TELEGRAM_BOT_TOKEN` |
-| Clawdiy baseline | `CLAWDIY_PASSWORD`, `CLAWDIY_SERVICE_TOKEN`, `CLAWDIY_TELEGRAM_BOT_TOKEN`, `CLAWDIY_TELEGRAM_ALLOWED_USERS` |
+| Clawdiy baseline | `CLAWDIY_GATEWAY_TOKEN`, `CLAWDIY_SERVICE_TOKEN`, `CLAWDIY_TELEGRAM_BOT_TOKEN`, `CLAWDIY_TELEGRAM_ALLOWED_USERS` |
 | Clawdiy rollout gate | `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` |
 
 Canonical source of truth is GitHub Secrets. The server runtime copy is generated into `/opt/moltinger/.env` and `/opt/moltinger/clawdiy/.env` by CI.
+During the gateway-auth migration, `CLAWDIY_PASSWORD` remains an accepted compatibility fallback for rendering `OPENCLAW_GATEWAY_TOKEN`, but it is no longer the preferred secret.
 
 ## Rollout Gates
 

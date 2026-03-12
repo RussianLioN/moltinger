@@ -66,6 +66,8 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
 - Before asking user for env/secret values, check:
   `MEMORY.md` → `SESSION_SUMMARY.md` → `docs/SECRETS-MANAGEMENT.md` → `.github/workflows/deploy.yml`
 - Full rule: `docs/rules/context-discovery-before-questions.md`
+- Hosted Clawdiy/OpenClaw Control UI must use token auth, not password auth:
+  `docs/rules/clawdiy-hosted-control-ui-token-auth.md`
 
 ---
 

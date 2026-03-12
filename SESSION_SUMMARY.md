@@ -330,7 +330,12 @@ GitOps Compliance: Enforced ✅
 
 - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
 - `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
-- `env CLAWDIY_PASSWORD=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `env CLAWDIY_GATEWAY_TOKEN=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- Added hosted-Control-UI RCA and rule for Clawdiy gateway token auth:
+  `docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md`,
+  `docs/rules/clawdiy-hosted-control-ui-token-auth.md`
+- Follow-up Beads task for merge/rollout cleanup:
+  `molt-di3` — roll out canonical `CLAWDIY_GATEWAY_TOKEN` and retire legacy password fallback
 - `./scripts/clawdiy-smoke.sh --stage auth --json`
 
 **Next**

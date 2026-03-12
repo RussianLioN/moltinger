@@ -17,7 +17,8 @@ Current limitation:
 
 ## Auth Surfaces
 
-- Human/web auth: `CLAWDIY_PASSWORD`
+- Hosted Control UI auth: `CLAWDIY_GATEWAY_TOKEN`
+- Legacy compatibility fallback: `CLAWDIY_PASSWORD`
 - Service-to-service auth: `CLAWDIY_SERVICE_TOKEN`
 - Telegram ingress: `CLAWDIY_TELEGRAM_BOT_TOKEN`
 - Telegram allowlist: `CLAWDIY_TELEGRAM_ALLOWED_USERS`
@@ -30,6 +31,7 @@ Current limitation:
 - Repeat-auth events must produce operator-visible evidence
 - `deploy-clawdiy.yml` is the only workflow that may render `/opt/moltinger/clawdiy/.env`
 - `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` must stay compact single-line JSON with `provider=codex-oauth`, `auth_type=oauth`, `granted_scopes`, and `allowed_models`
+- `CLAWDIY_GATEWAY_TOKEN` is the canonical secret for hosted Control UI access; `CLAWDIY_PASSWORD` exists only as a migration fallback and should be rotated out
 - Inside `/opt/moltinger/clawdiy/.env`, `TELEGRAM_BOT_TOKEN` is a runtime-only alias for OpenClaw and mirrors `CLAWDIY_TELEGRAM_BOT_TOKEN`; do not treat that alias as Moltinger auth material during audits
 
 ## Verification Commands

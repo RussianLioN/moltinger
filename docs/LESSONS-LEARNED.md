@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-09
-**Total Lessons**: 19
+**Generated**: 2026-03-12
+**Total Lessons**: 20
 
 ---
 
@@ -18,7 +18,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (8 lessons)
+#### P2 (9 lessons)
+- [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
 - [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
 - [Диагностика remote rollout началась без повторного применения Traefik-first уроков](../docs/rca/2026-03-09-remote-rollout-diagnosis-skipped-traefik-lessons.md)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
@@ -56,7 +57,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (6 lessons)
+#### process (7 lessons)
+- [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
 - [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
 - [Диагностика remote rollout началась без повторного применения Traefik-first уроков](../docs/rca/2026-03-09-remote-rollout-diagnosis-skipped-traefik-lessons.md)
 - [Локальный runtime был поднят вместо работы с удалённым сервисом](../docs/rca/2026-03-08-remote-target-boundary-before-local-runtime.md)
@@ -76,8 +78,8 @@
 
 ### Popular Tags
 
+- `process` (6 lessons)
 - `rca` (5 lessons)
-- `process` (5 lessons)
 - `topology-registry` (4 lessons)
 - `git-worktree` (4 lessons)
 - `ux` (3 lessons)
@@ -94,10 +96,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 19 |
+| Total Lessons | 20 |
 | Critical (P0/P1) | 3 |
 | Categories | 5 |
-| Unique Tags | 46 |
+| Unique Tags | 51 |
 
 ---
 

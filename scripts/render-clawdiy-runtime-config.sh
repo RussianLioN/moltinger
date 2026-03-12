@@ -178,8 +178,14 @@ main() {
         read_env_file "$ENV_FILE"
     fi
 
-    if [[ -n "${CLAWDIY_PASSWORD:-}" && -z "${OPENCLAW_GATEWAY_PASSWORD:-}" ]]; then
-        export OPENCLAW_GATEWAY_PASSWORD="$CLAWDIY_PASSWORD"
+    if [[ -n "${CLAWDIY_GATEWAY_TOKEN:-}" && -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+        export OPENCLAW_GATEWAY_TOKEN="$CLAWDIY_GATEWAY_TOKEN"
+    fi
+
+    # Legacy compatibility: first-rollout branches may still only provide
+    # CLAWDIY_PASSWORD even though the hosted Control UI now uses token auth.
+    if [[ -n "${CLAWDIY_PASSWORD:-}" && -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+        export OPENCLAW_GATEWAY_TOKEN="$CLAWDIY_PASSWORD"
     fi
 
     if [[ -n "${CLAWDIY_TELEGRAM_BOT_TOKEN:-}" && -z "${TELEGRAM_BOT_TOKEN:-}" ]]; then
