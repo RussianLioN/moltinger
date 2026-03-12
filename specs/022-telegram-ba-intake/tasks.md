@@ -47,15 +47,15 @@
 
 ### Validation for User Story 1
 
-- [ ] T005 [P] [US1] Create component coverage for topic progress and next-question behavior in `tests/component/test_agent_factory_discovery.sh`
-- [ ] T006 [P] [US1] Create local discovery-flow integration coverage in `tests/integration_local/test_agent_factory_discovery_flow.sh`
+- [x] T005 [P] [US1] Create component coverage for topic progress and next-question behavior in `tests/component/test_agent_factory_discovery.sh`
+- [x] T006 [P] [US1] Create local discovery-flow integration coverage in `tests/integration_local/test_agent_factory_discovery_flow.sh`
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] Implement discovery-session orchestration in `scripts/agent-factory-discovery.py`
-- [ ] T008 [P] [US1] Extend shared normalization/state helpers in `scripts/agent_factory_common.py`
-- [ ] T009 [US1] Wire discovery entrypoint and runtime anchors in `config/moltis.toml`
-- [ ] T010 [US1] Document discovery-session behavior in `docs/runbooks/agent-factory-discovery.md`
+- [x] T007 [P] [US1] Implement discovery-session orchestration in `scripts/agent-factory-discovery.py`
+- [x] T008 [P] [US1] Extend shared normalization/state helpers in `scripts/agent_factory_common.py`
+- [x] T009 [US1] Wire discovery entrypoint and runtime anchors in `config/moltis.toml`
+- [x] T010 [US1] Document discovery-session behavior in `docs/runbooks/agent-factory-discovery.md`
 
 **Checkpoint**: The factory can guide a business user through a structured interview in Telegram.
 

@@ -96,6 +96,23 @@
         "MOLTIS_FACTORY_WORKING_SUBDIR"
       ]
     },
+    "agent-factory-discovery.py": {
+      "version": "1.0.0",
+      "description": "Run the discovery-first Telegram business analyst flow and emit one structured discovery session snapshot",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-discovery-run"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_DISCOVERY_SCRIPT",
+        "MOLTIS_FACTORY_DISCOVERY_ENTRYPOINT",
+        "MOLTIS_FACTORY_DISCOVERY_TOPIC_ORDER",
+        "MOLTIS_FACTORY_DISCOVERY_NEXT_ACTIONS"
+      ]
+    },
     "agent-factory-review.py": {
       "version": "1.0.0",
       "description": "Record defense review outcomes, structured feedback, and approval state for the agent factory MVP0 flow",

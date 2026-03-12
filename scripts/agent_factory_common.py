@@ -35,6 +35,89 @@ DEFAULT_NEXT_STEP_SUMMARY = "После согласования concept pack н
 ALIGNMENT_PREFIX = "<!-- agent-factory-alignment"
 ALIGNMENT_SUFFIX = "-->"
 
+DISCOVERY_TOPIC_SPECS = [
+    {
+        "name": "problem",
+        "category": "problem",
+        "question": "Какую конкретную бизнес-проблему должен решить будущий агент?",
+        "blocking": True,
+        "aliases": ["problem", "target_business_problem", "business_problem", "pain_point", "raw_problem_statement"],
+    },
+    {
+        "name": "target_users",
+        "category": "actor",
+        "question": "Кто будет основным пользователем или выгодоприобретателем результата?",
+        "blocking": True,
+        "aliases": ["target_users", "users", "beneficiaries"],
+    },
+    {
+        "name": "current_workflow",
+        "category": "workflow",
+        "question": "Как этот процесс работает сейчас и где основные потери?",
+        "blocking": True,
+        "aliases": ["current_workflow", "current_workflow_summary", "workflow", "current_process"],
+    },
+    {
+        "name": "desired_outcome",
+        "category": "goal",
+        "question": "Какой результат должен получать бизнес после автоматизации?",
+        "blocking": True,
+        "aliases": ["desired_outcome", "goal", "desired_result"],
+    },
+    {
+        "name": "user_story",
+        "category": "user_story",
+        "question": "Какому сотруднику и в какой ситуации агент должен помогать в первую очередь?",
+        "blocking": False,
+        "aliases": ["user_story"],
+    },
+    {
+        "name": "input_examples",
+        "category": "input",
+        "question": "Приведи 1-2 типовых примера входных данных или ситуаций, с которыми агент будет работать.",
+        "blocking": False,
+        "aliases": ["input_examples", "example_inputs", "examples"],
+    },
+    {
+        "name": "expected_outputs",
+        "category": "output",
+        "question": "Что пользователь должен получить на выходе по итогам обработки?",
+        "blocking": False,
+        "aliases": ["expected_outputs", "output_examples", "desired_outputs"],
+    },
+    {
+        "name": "constraints",
+        "category": "constraint",
+        "question": "Какие ограничения, запреты или исключения нужно учитывать?",
+        "blocking": True,
+        "aliases": ["constraints", "constraints_or_exclusions", "exclusions"],
+    },
+    {
+        "name": "success_metrics",
+        "category": "success_metric",
+        "question": "По каким признакам поймем, что решение действительно приносит пользу?",
+        "blocking": True,
+        "aliases": ["success_metrics", "measurable_success_expectation", "metrics"],
+    },
+]
+
+DISCOVERY_AMBIGUOUS_MARKERS = (
+    "не знаю",
+    "пока не знаю",
+    "еще не решили",
+    "ещё не решили",
+    "надо подумать",
+    "пока не уверен",
+    "пока не уверена",
+    "требует уточнения",
+    "нужно уточнить",
+    "unknown",
+    "tbd",
+)
+
+DISCOVERY_RESOLVED_STATUSES = {"clarified", "confirmed"}
+DISCOVERY_PENDING_STATUSES = {"unasked", "partial", "unresolved"}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -196,3 +279,183 @@ def parse_alignment_comment(text: str) -> dict[str, str]:
         key, value = line.split("=", 1)
         payload[key.strip()] = value.strip()
     return payload
+
+
+def discovery_topic_specs() -> list[dict[str, Any]]:
+    return [dict(spec) for spec in DISCOVERY_TOPIC_SPECS]
+
+
+def discovery_topic_names(*, blocking_only: bool = False) -> list[str]:
+    return [spec["name"] for spec in DISCOVERY_TOPIC_SPECS if not blocking_only or spec["blocking"]]
+
+
+def canonical_discovery_topic_name(name: Any) -> str:
+    text = normalize_text(name).lower().replace("-", "_").replace(" ", "_")
+    if not text:
+        return ""
+    for spec in DISCOVERY_TOPIC_SPECS:
+        if text == spec["name"]:
+            return spec["name"]
+        if text in {alias.lower().replace("-", "_").replace(" ", "_") for alias in spec["aliases"]}:
+            return spec["name"]
+    return ""
+
+
+def discovery_topic_question(topic_name: str) -> str:
+    canonical = canonical_discovery_topic_name(topic_name)
+    for spec in DISCOVERY_TOPIC_SPECS:
+        if spec["name"] == canonical:
+            return spec["question"]
+    return ""
+
+
+def discovery_topic_category(topic_name: str) -> str:
+    canonical = canonical_discovery_topic_name(topic_name)
+    for spec in DISCOVERY_TOPIC_SPECS:
+        if spec["name"] == canonical:
+            return spec["category"]
+    return ""
+
+
+def discovery_topic_is_blocking(topic_name: str) -> bool:
+    canonical = canonical_discovery_topic_name(topic_name)
+    for spec in DISCOVERY_TOPIC_SPECS:
+        if spec["name"] == canonical:
+            return bool(spec["blocking"])
+    return False
+
+
+def discovery_summary(value: Any) -> str:
+    if isinstance(value, list):
+        return "; ".join(dedupe_preserve_order(normalize_list(value)))
+    text = normalize_text(value)
+    if not text:
+        return ""
+    if "\n" in text:
+        parts = normalize_list(text)
+        if parts:
+            return "; ".join(dedupe_preserve_order(parts))
+    return trim_words(text, 28)
+
+
+def discovery_value_present(value: Any) -> bool:
+    if isinstance(value, list):
+        return len(normalize_list(value)) > 0
+    return bool(normalize_text(value))
+
+
+def discovery_value_is_ambiguous(value: Any) -> bool:
+    text = discovery_summary(value).lower()
+    if not text:
+        return False
+    return any(marker in text for marker in DISCOVERY_AMBIGUOUS_MARKERS)
+
+
+def discovery_topic_status(value: Any, existing_status: str = "") -> str:
+    status = normalize_text(existing_status)
+    if status == "confirmed":
+        return "confirmed"
+    if status == "unresolved":
+        return "unresolved"
+    if not discovery_value_present(value):
+        return "unasked"
+    if status == "clarified":
+        return "clarified"
+    summary = discovery_summary(value)
+    if discovery_value_is_ambiguous(value):
+        return "partial"
+    if len(summary.split()) < 4:
+        return "partial"
+    return "clarified"
+
+
+def discovery_topic_is_resolved(status: Any) -> bool:
+    return normalize_text(status) in DISCOVERY_RESOLVED_STATUSES
+
+
+def build_discovery_topic(
+    topic_name: str,
+    value: Any,
+    now: str,
+    *,
+    existing_topic: dict[str, Any] | None = None,
+    source_turn_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    canonical = canonical_discovery_topic_name(topic_name)
+    if not canonical:
+        raise ValueError(f"unsupported discovery topic: {topic_name}")
+
+    existing = existing_topic or {}
+    summary = discovery_summary(value) or normalize_text(existing.get("summary"))
+    existing_status = normalize_text(existing.get("status"))
+    existing_summary = normalize_text(existing.get("summary"))
+    if existing_status in {"confirmed", "clarified", "partial", "unresolved"} and summary == existing_summary:
+        status = existing_status
+    else:
+        status = discovery_topic_status(summary, existing_status)
+        if existing_status == "unresolved" and summary:
+            status = "unresolved"
+
+    return {
+        "topic_id": normalize_text(existing.get("topic_id")) or f"topic-{canonical}",
+        "topic_name": canonical,
+        "category": discovery_topic_category(canonical),
+        "status": status,
+        "summary": summary,
+        "source_turn_ids": source_turn_ids if source_turn_ids is not None else list(existing.get("source_turn_ids", [])),
+        "last_updated_at": now,
+    }
+
+
+def discovery_topic_sort_rank(status: Any) -> int:
+    normalized = normalize_text(status)
+    ranks = {
+        "unasked": 0,
+        "unresolved": 1,
+        "partial": 2,
+        "clarified": 3,
+        "confirmed": 4,
+    }
+    return ranks.get(normalized, 99)
+
+
+def discovery_next_topic(requirement_topics: list[dict[str, Any]]) -> str:
+    topics_by_name = {
+        canonical_discovery_topic_name(topic.get("topic_name")): topic for topic in requirement_topics if canonical_discovery_topic_name(topic.get("topic_name"))
+    }
+    for status in ("unasked", "unresolved", "partial"):
+        for topic_name in discovery_topic_names():
+            topic = topics_by_name.get(topic_name)
+            if topic and normalize_text(topic.get("status")) == status:
+                return topic_name
+    return ""
+
+
+def build_discovery_topic_progress(
+    requirement_topics: list[dict[str, Any]],
+    clarification_items: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    clarifications = [item for item in clarification_items or [] if normalize_text(item.get("status")) == "open"]
+    topics_by_name = {
+        canonical_discovery_topic_name(topic.get("topic_name")): topic for topic in requirement_topics if canonical_discovery_topic_name(topic.get("topic_name"))
+    }
+    ordered_topics = [topics_by_name[name] for name in discovery_topic_names() if name in topics_by_name]
+    resolved_topics = [topic["topic_name"] for topic in ordered_topics if discovery_topic_is_resolved(topic.get("status"))]
+    partial_topics = [topic["topic_name"] for topic in ordered_topics if normalize_text(topic.get("status")) == "partial"]
+    unresolved_topics = [topic["topic_name"] for topic in ordered_topics if normalize_text(topic.get("status")) == "unresolved"]
+    unasked_topics = [topic["topic_name"] for topic in ordered_topics if normalize_text(topic.get("status")) == "unasked"]
+    remaining_topics = [topic["topic_name"] for topic in ordered_topics if not discovery_topic_is_resolved(topic.get("status"))]
+    blocking_topics_remaining = [name for name in remaining_topics if discovery_topic_is_blocking(name)]
+
+    return {
+        "total_topics": len(ordered_topics),
+        "resolved_topics": len(resolved_topics),
+        "partial_topics": len(partial_topics),
+        "unresolved_topics": len(unresolved_topics),
+        "unasked_topics": len(unasked_topics),
+        "clarification_count": len(clarifications),
+        "resolved_topic_names": resolved_topics,
+        "remaining_topics": remaining_topics,
+        "blocking_topics_remaining": blocking_topics_remaining,
+        "ready_for_brief": len(remaining_topics) == 0 and len(clarifications) == 0,
+    }

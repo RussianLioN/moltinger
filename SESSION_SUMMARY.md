@@ -75,6 +75,12 @@ GitOps Compliance: Enforced ✅
 - Added reusable discovery fixtures under `tests/fixtures/agent-factory/discovery/` for four baseline states: `session-new`, `session-awaiting-clarification`, `brief-awaiting-confirmation`, and `brief-confirmed-handoff`, plus updated the parent fixtures README to advertise the new discovery sub-tree.
 - Wired future discovery validation suites into `tests/run.sh` with optional registrations for `component_agent_factory_discovery`, `component_agent_factory_brief`, `component_agent_factory_examples`, `component_agent_factory_handoff`, `integration_local_agent_factory_discovery_flow`, `integration_local_agent_factory_confirmation`, `integration_local_agent_factory_handoff`, and `integration_local_agent_factory_resume`.
 - Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T001` through `T004` are now marked complete; once the corresponding Beads tasks are closed, the next ready queue begins at User Story 1 (`molt-s5i.3.*`).
+- Completed User Story 1 for `022-telegram-ba-intake`: added `scripts/agent-factory-discovery.py` as the new discovery-session orchestrator that opens a Telegram-first requirements interview from a raw idea or existing session snapshot, emits structured topic progress, preserves pending agent questions, and resolves the next action as `ask_next_question`, `resolve_clarification`, or `prepare_brief`.
+- Extended `scripts/agent_factory_common.py` with reusable discovery topic catalog, alias normalization, status inference, progress summarization, next-topic selection, and helper builders so later slices can reuse one discovery state contract instead of re-encoding topic logic per phase.
+- Added US1 validation coverage in `tests/component/test_agent_factory_discovery.sh` and `tests/integration_local/test_agent_factory_discovery_flow.sh`, covering fresh-session progress, clarification prioritization, raw-idea onboarding without a template, advancement after free-form business answers, and blocking behavior when clarification items remain open.
+- Updated `config/moltis.toml`, `tests/fixtures/config/moltis.toml`, and `scripts/manifest.json` with the concrete discovery entrypoint (`run`), ordered topic contract, next-action contract, and new script inventory entry.
+- Added `docs/runbooks/agent-factory-discovery.md` so operator handoff now documents accepted input shapes, command examples, state mapping, and the current boundary between discovery and later brief/handoff phases.
+- Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T005` through `T010` are now marked complete; the next implementation queue begins at User Story 2 (`molt-s5i.4.*`).
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
@@ -89,6 +95,12 @@ GitOps Compliance: Enforced ✅
   - `bash -n tests/run.sh`
   - `python3 - <<'PY' ... tomllib.load(...) ... PY` for `config/moltis.toml` and `tests/fixtures/config/moltis.toml`
   - `./tests/run.sh --lane static --filter static_config_validation --json`
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-discovery.py`
+  - `bash -n tests/component/test_agent_factory_discovery.sh tests/integration_local/test_agent_factory_discovery_flow.sh`
+  - `python3 - <<'PY' ... json.loads(Path("scripts/manifest.json").read_text(...)) ... PY`
+  - `./tests/run.sh --lane component --filter component_agent_factory_discovery --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_discovery_flow --json`
+  - `bash scripts/scripts-verify.sh`
 
 ### Previous Session Update (2026-03-12)
 

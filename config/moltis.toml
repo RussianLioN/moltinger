@@ -79,6 +79,9 @@ MOLTIS_FACTORY_DISCOVERY_ALLOWED_SESSION_STATES = "new,in_progress,awaiting_user
 MOLTIS_FACTORY_DISCOVERY_ALLOWED_TOPIC_STATES = "unasked,partial,clarified,confirmed,unresolved"
 MOLTIS_FACTORY_DISCOVERY_ALLOWED_BRIEF_STATES = "draft,awaiting_confirmation,confirmed,superseded,reopened"
 MOLTIS_FACTORY_DISCOVERY_ALLOWED_CLARIFICATION_REASONS = "missing_information,ambiguous_answer,contradictory_examples,scope_conflict,unsafe_data_example"
+MOLTIS_FACTORY_DISCOVERY_ENTRYPOINT = "run"
+MOLTIS_FACTORY_DISCOVERY_TOPIC_ORDER = "problem,target_users,current_workflow,desired_outcome,user_story,input_examples,expected_outputs,constraints,success_metrics"
+MOLTIS_FACTORY_DISCOVERY_NEXT_ACTIONS = "ask_next_question,resolve_clarification,prepare_brief"
 MOLTIS_FACTORY_DISCOVERY_CONFIRMATION_REQUIRED = "true"
 MOLTIS_FACTORY_DISCOVERY_HANDOFF_REQUIRED_STATUS = "confirmed"
 MOLTIS_FACTORY_DISCOVERY_RESUME_POLICY = "reuse_confirmed_topics"
@@ -176,6 +179,7 @@ soul = """
 - Язык: русский
 - Стиль: кратко, технически точно, без воды
 - Сначала выясняй бизнес-цель, текущий процесс, ограничения, метрики успеха и риски
+- Discovery runtime вызывается через scripts/agent-factory-discovery.py run и должен возвращать next_action, next_topic и business-readable next_question
 - Задавай один следующий наиболее полезный вопрос по незакрытой теме, а не длинный фиксированный опросник
 - Явно различай confirmed facts, assumptions, unresolved questions и clarification items
 - Перед handoff всегда показывай пользователю business-readable summary и проси явное подтверждение brief
