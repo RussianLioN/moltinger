@@ -12,13 +12,16 @@ Provide one operator-facing place to record what was attempted, what evidence wa
 Primary operator path:
 
 1. Open the live Clawdiy UI at `https://clawdiy.ainetic.tech`
-2. Sign in with the current Clawdiy web credential
-3. Navigate to the Clawdiy Settings area for model/provider authentication
-4. Start the `OpenAI Codex` / `codex-oauth` login from the live UI
+2. Expect a disconnected dashboard shell on the first browser visit, not a dedicated welcome wizard
+3. Open `Overview` and use the `Gateway Access` card
+4. Enter the current hosted Clawdiy credential (`CLAWDIY_GATEWAY_TOKEN`) and connect
+5. Approve the new browser/device pairing
+6. Verify `Version` and `Health` normalize
+7. Inspect whether the live build actually exposes a provider-auth entrypoint for `OpenAI Codex` / `codex-oauth`
 
 Fallback path:
 
-- Use the remote CLI / paste-back flow only if the live UI path is unavailable or clearly fails to write auth into the actual runtime store.
+- Use the remote CLI / paste-back flow only if the live UI path lacks a provider-auth entrypoint or clearly fails to write auth into the actual runtime store.
 
 ## Evidence Inventory
 
@@ -39,6 +42,7 @@ ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
 
 ### After UI OAuth Attempt
 
+- [ ] Browser bootstrap was completed successfully before provider-auth conclusions were drawn
 - [ ] Runtime auth store path exists
 - [ ] Runtime auth store path is writable/readable by the Clawdiy runtime user
 - [ ] `codex-oauth` appears in runtime provider/model status
@@ -62,4 +66,4 @@ ssh root@ainetic.tech "docker exec clawdiy sh -lc 'ls -l /home/node/.openclaw-da
 
 | Timestamp | Attempt type | Runtime auth store result | Provider activation result | Canary result | Notes |
 |---|---|---|---|---|---|
-| pending | UI-first / CLI-fallback | pending | pending | pending | pending |
+| pending | browser-bootstrap-first / CLI-fallback | pending | pending | pending | pending |

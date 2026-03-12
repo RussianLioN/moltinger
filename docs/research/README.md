@@ -20,6 +20,7 @@
 |-------|-----------|--------|-------|
 | Codex CLI update monitoring | [Research](./codex-cli-update-monitoring-2026-03-09.md), [Speckit seed](../plans/codex-cli-update-monitoring-speckit-seed.md) | Research complete | Current local/latest CLI: `0.112.0`; recommended next step is a dedicated `codex-update-monitor` feature branch with a script-first monitor. |
 | Clawdiy remote OAuth runtime | [Research](./clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md), [Speckit package](../../specs/017-clawdiy-remote-oauth-lifecycle/spec.md) | Research complete, planning active | Covers official/community evidence for `codex-oauth` on remote containerized OpenClaw, compares 3 operator methods, and recommends target-runtime bootstrap now with artifactized lifecycle later. |
+| Clawdiy browser bootstrap | [Research](./clawdiy-openclaw-browser-bootstrap-2026-03-12.md), [Runbook](../runbooks/clawdiy-browser-bootstrap.md) | Research complete, operator-ready | Documents the real first-run hosted UI flow: disconnected dashboard shell, `Overview -> Gateway Access`, gateway token entry, and device pairing before any provider auth. |
 
 ---
 

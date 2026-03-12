@@ -1,25 +1,25 @@
 # RCA Index
 
 **Last Updated**: 2026-03-12
-**Version**: 1.4.0
+**Version**: 1.5.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 11 |
+| Total RCA | 12 |
 | Avg Resolution Time | N/A |
-| This Month | 11 |
+| This Month | 12 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 40% |
-| process | 4 | 36% |
-| cicd | 1 | 9% |
-| security | 1 | 10% |
-| shell | 1 | 9% |
+| generic | 4 | 33% |
+| process | 5 | 42% |
+| cicd | 1 | 8% |
+| security | 1 | 8% |
+| shell | 1 | 8% |
 
 ## By Severity
 
@@ -27,7 +27,7 @@
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
 | P1 | 1 | High - production impact |
-| P2 | 4 | Medium - process issue |
+| P2 | 5 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
 
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-012 | 2026-03-12 | process | P2 | resolved | Clawdiy browser bootstrap was documented as Settings/OAuth flow instead of verified dashboard token/pairing bootstrap | added browser-bootstrap runbook + rule + doc corrections |
 | RCA-011 | 2026-03-12 | process | P2 | resolved | Hosted Clawdiy UI used password auth modeled as server-side secret presence instead of browser-facing token flow | switched gateway auth to token + legacy fallback + rule |
 | RCA-010 | 2026-03-08 | cicd | P1 | resolved | Deploy workflow wrote audit markers into repo root and then detected them as drift | moved markers to `data/` + static guard |
 | RCA-009 | 2026-03-08 | process | P2 | resolved | No mandatory target-boundary check before local runtime actions | added runtime-target guardrail |
@@ -49,7 +50,7 @@
 
 ## Patterns Detected
 
-⚠️ Warning: 4+ RCA in category `process` - continue turning recurring operator mistakes into explicit rules/checklists.
+⚠️ Warning: 5+ RCA in category `process` - continue turning recurring operator mistakes into explicit rules/checklists.
 
 ---
 
