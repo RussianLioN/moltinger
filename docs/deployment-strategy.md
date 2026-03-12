@@ -86,6 +86,14 @@ If `fleet-internal` is absent on the first rollout, the GitHub deploy workflow o
 ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth --json
 ```
 
+Preferred first operator path:
+- open the live UI at `https://clawdiy.ainetic.tech`
+- start `OpenAI Codex` / `codex-oauth` login from the Clawdiy Settings area
+- treat SSH/CLI paste-back as fallback only if the UI path fails to write into the actual runtime store
+
+Related planning package:
+- [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md)
+
 ### 5. Recovery verification
 
 ```bash

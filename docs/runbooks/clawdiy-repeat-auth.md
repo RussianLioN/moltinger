@@ -13,6 +13,7 @@ Recover or rotate Clawdiy auth material without changing Moltinger auth state.
 Current limitation:
 - This runbook documents the current metadata-gated `codex-oauth` flow.
 - The production-grade runtime auth store lifecycle is tracked as a follow-on implementation in [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md).
+- Preferred first operator attempt for OAuth bootstrap is now the live Clawdiy web Settings path; the SSH/CLI paste-back flow is fallback, not default.
 
 ## Auth Surfaces
 
@@ -79,12 +80,19 @@ This is a later rollout gate, not a first-deploy requirement.
    {"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}
    ```
 3. Redeploy Clawdiy-only runtime so `/opt/moltinger/clawdiy/.env` is regenerated.
-4. Run:
+4. Preferred first bootstrap attempt:
+   - open `https://clawdiy.ainetic.tech`
+   - sign in to the live Clawdiy UI
+   - navigate to the provider/model auth settings for `OpenAI Codex`
+   - complete OAuth there so the auth lands in the live Clawdiy runtime locality
+5. Verify:
    ```bash
    ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
+   ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
    ```
-5. Promote Codex-backed capability only if post-auth verification passes.
-6. If the check reports missing `api.responses.write` or missing `gpt-5.4` authorization, keep the capability quarantined and repeat OAuth instead of forcing enablement.
+6. If the live UI path does not produce a real runtime auth store or does not surface `openai-codex` in runtime status, use the SSH/CLI paste-back flow only as fallback.
+7. Promote Codex-backed capability only if post-auth verification passes.
+8. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
 
 ## Failure Handling
 

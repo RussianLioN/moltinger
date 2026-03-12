@@ -16,9 +16,10 @@ Expected result:
 
 ## Stage 2: Bootstrap the real runtime auth store
 
-1. Use the approved operator bootstrap method against the actual target runtime auth store.
-2. Confirm the runtime auth artifact lands in the intended persistent location.
-3. Preserve repeat-auth evidence.
+1. Preferred first attempt: sign into `https://clawdiy.ainetic.tech`, open the live Clawdiy Settings area for provider/model auth, and start `OpenAI Codex` / `codex-oauth` login there.
+2. Only if the live UI path is unavailable or clearly fails to write into the actual runtime store, use the remote CLI paste-back flow as fallback.
+3. Confirm the runtime auth artifact lands in the intended persistent location.
+4. Preserve repeat-auth evidence.
 
 Expected result:
 - Runtime auth store exists in the authoritative Clawdiy path.

@@ -163,6 +163,19 @@ GitOps Compliance: Enforced ✅
   - `scripts/git-topology-registry.sh refresh --write-doc`
   - `git diff --check`
 
+### 2026-03-12: Clawdiy OAuth Planning Switched To UI-First Bootstrap
+
+**Статус**: ✅ operator path refined before runtime implementation
+
+- Updated [specs/017-clawdiy-remote-oauth-lifecycle/plan.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/plan.md) so the first practical OAuth attempt is now the live Clawdiy web Settings flow targeting the hosted runtime directly; SSH/CLI paste-back remains fallback only.
+- Updated [specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md) and created [specs/017-clawdiy-remote-oauth-lifecycle/validation.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/validation.md) so the first execution checklist now starts from the Clawdiy web UI and records runtime-store/provider evidence.
+- Updated [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md) and [docs/deployment-strategy.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/deployment-strategy.md) so operator docs match the new UI-first contract.
+- Reconciled [specs/017-clawdiy-remote-oauth-lifecycle/tasks.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/tasks.md) with the newly completed planning/doc tasks.
+
+**Validated**
+
+- `git diff --check`
+
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 
 **Статус**: ✅ RCA-010 captured and codified

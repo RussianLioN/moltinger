@@ -23,8 +23,8 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create runtime auth lifecycle design notes and evidence inventory in `specs/017-clawdiy-remote-oauth-lifecycle/validation.md`
-- [ ] T002 [P] Add cross-links from Clawdiy docs to the new runtime OAuth lifecycle package in `docs/runbooks/clawdiy-repeat-auth.md`, `docs/SECRETS-MANAGEMENT.md`, and `docs/deployment-strategy.md`
+- [x] T001 Create runtime auth lifecycle design notes and evidence inventory in `specs/017-clawdiy-remote-oauth-lifecycle/validation.md`
+- [x] T002 [P] Add cross-links from Clawdiy docs to the new runtime OAuth lifecycle package in `docs/runbooks/clawdiy-repeat-auth.md`, `docs/SECRETS-MANAGEMENT.md`, and `docs/deployment-strategy.md`
 - [ ] T003 [P] Extend config/static validation expectations for runtime auth store semantics in `tests/static/test_config_validation.sh`
 
 ---
@@ -63,11 +63,11 @@
 ### Tests
 
 - [ ] T014 [P] [US2] Add validation for documented repeat-auth evidence and fail-closed partial bootstrap handling in `tests/security_api/test_clawdiy_auth_boundaries.sh`
-- [ ] T015 [P] [US2] Add quickstart verification steps and evidence recording in `specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md` and `specs/017-clawdiy-remote-oauth-lifecycle/validation.md`
+- [x] T015 [P] [US2] Add quickstart verification steps and evidence recording in `specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md` and `specs/017-clawdiy-remote-oauth-lifecycle/validation.md`
 
 ### Implementation
 
-- [ ] T016 [US2] Rewrite `docs/runbooks/clawdiy-repeat-auth.md` to describe the practical-now target-runtime bootstrap method
+- [x] T016 [US2] Rewrite `docs/runbooks/clawdiy-repeat-auth.md` to describe the practical-now target-runtime bootstrap method
 - [ ] T017 [US2] Update `docs/SECRETS-MANAGEMENT.md` to separate metadata secret handling from runtime auth artifact handling
 - [ ] T018 [US2] Extend `deploy-clawdiy.yml` and `scripts/clawdiy-auth-check.sh` so repeat-auth evidence is preserved and surfaced
 
