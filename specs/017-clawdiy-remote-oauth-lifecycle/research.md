@@ -11,6 +11,7 @@ This feature inherits the Clawdiy platform baseline from [specs/001-clawdiy-agen
 
 ## Official Evidence
 
+- Official OpenClaw dashboard/control-ui/device docs describe hosted browser bootstrap as dashboard connection plus device pairing, not as guaranteed provider-auth onboarding.
 - Official OpenClaw docs still prescribe `openclaw models auth login --provider codex-oauth --set-default`.
 - Official remote/VPS FAQ still prescribes a manual paste-back callback flow through `http://localhost:1455/...`.
 - Official runtime docs treat auth profiles as runtime state, not only deploy metadata.
@@ -25,8 +26,10 @@ This feature inherits the Clawdiy platform baseline from [specs/001-clawdiy-agen
 ## Explicit Inference
 
 - The repository must stop treating `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` as if it were a real runtime auth artifact.
+- The repository must stop documenting browser bootstrap as if it were already a validated provider-auth UI path.
 - Production readiness requires three layers:
   - metadata gate
+  - browser bootstrap and pairing
   - runtime auth store
   - post-auth canary evidence
 

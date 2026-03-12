@@ -97,6 +97,7 @@ If `fleet-internal` is missing on the first rollout, use `deploy-clawdiy.yml` or
 - Deploy strategy: `docs/deployment-strategy.md`
 - Validation path: `specs/001-clawdiy-agent-platform/quickstart.md`
 - Clawdiy deploy runbook: `docs/runbooks/clawdiy-deploy.md`
+- Clawdiy browser bootstrap runbook: `docs/runbooks/clawdiy-browser-bootstrap.md`
 - Clawdiy repeat-auth runbook: `docs/runbooks/clawdiy-repeat-auth.md`
 - Clawdiy rollback runbook: `docs/runbooks/clawdiy-rollback.md`
 - Handoff incident runbook: `docs/runbooks/fleet-handoff-incident.md`

@@ -88,11 +88,14 @@ If `fleet-internal` is absent on the first rollout, the GitHub deploy workflow o
 
 Preferred first operator path:
 - open the live UI at `https://clawdiy.ainetic.tech`
-- start `OpenAI Codex` / `codex-oauth` login from the Clawdiy Settings area
-- treat SSH/CLI paste-back as fallback only if the UI path fails to write into the actual runtime store
+- complete hosted browser bootstrap through `Overview -> Gateway Access -> Gateway Token -> Connect -> device pairing`
+- do not expect a dedicated first-run wizard; on a fresh browser the normal initial state is `Version n/a` / `Health Offline`
+- only after browser bootstrap inspect whether the current build exposes a provider-auth UI entrypoint
+- treat SSH/CLI paste-back as fallback only if the UI layer still lacks a provider-auth path or fails to write into the actual runtime store
 
 Related planning package:
 - [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md)
+- [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md)
 
 ### 5. Recovery verification
 

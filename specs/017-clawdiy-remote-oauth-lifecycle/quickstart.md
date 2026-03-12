@@ -16,13 +16,16 @@ Expected result:
 
 ## Stage 2: Bootstrap the real runtime auth store
 
-1. Preferred first attempt: sign into `https://clawdiy.ainetic.tech`, open the live Clawdiy Settings area for provider/model auth, and start `OpenAI Codex` / `codex-oauth` login there.
-2. Only if the live UI path is unavailable or clearly fails to write into the actual runtime store, use the remote CLI paste-back flow as fallback.
-3. Confirm the runtime auth artifact lands in the intended persistent location.
-4. Preserve repeat-auth evidence.
+1. Preferred first step: open `https://clawdiy.ainetic.tech` and complete hosted browser bootstrap through `Overview -> Gateway Access -> Gateway Token -> Connect -> device pairing`.
+2. Confirm the dashboard normalizes from `Version n/a` / `Health Offline` to a usable connected state.
+3. Inspect the live UI to see whether the current build actually exposes a provider-auth path for `OpenAI Codex` / `codex-oauth`.
+4. Only if the live UI truly exposes provider auth and writes into the actual runtime store, continue there.
+5. Otherwise use the remote CLI paste-back flow as fallback.
+6. Confirm the runtime auth artifact lands in the intended persistent location.
+7. Preserve repeat-auth evidence.
 
 Expected result:
-- Runtime auth store exists in the authoritative Clawdiy path.
+- Browser bootstrap is complete and the runtime auth-store result is explicit: either it exists in the authoritative Clawdiy path or the operator has evidence that browser bootstrap alone did not create it.
 
 ## Stage 3: Activate provider explicitly
 

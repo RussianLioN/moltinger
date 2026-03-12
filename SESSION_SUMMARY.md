@@ -176,6 +176,22 @@ GitOps Compliance: Enforced ✅
 
 - `git diff --check`
 
+### 2026-03-12: Clawdiy Browser Bootstrap Docs Corrected To Match Live UI
+
+**Статус**: ✅ official-docs re-check + live UI alignment documented
+
+- Re-checked official OpenClaw browser/control/device docs and compared them against the live Clawdiy first-run experience on `https://clawdiy.ainetic.tech`.
+- Confirmed that fresh browser bootstrap is a disconnected dashboard shell plus `Overview -> Gateway Access -> token -> device pairing`, not a dedicated welcome wizard and not a guaranteed `Settings/OAuth` first screen.
+- Added durable research [docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md) and operator runbook [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md).
+- Corrected downstream docs and spec artifacts that previously overstated the Clawdiy web Settings path for first-run OAuth.
+- Captured RCA-012 in [docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md) and added the prevention rule [docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md).
+- Filed follow-up bug `molt-nm7` for the broken `rca-index.sh` automation path, which still fails on zero-padded historical RCA IDs like `008` and `009`.
+
+**Validated**
+
+- live browser inspection on `https://clawdiy.ainetic.tech`
+- `git diff --check`
+
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 
 **Статус**: ✅ RCA-010 captured and codified
