@@ -11,7 +11,7 @@ This feature inherits the Clawdiy platform baseline from [specs/001-clawdiy-agen
 
 ## Official Evidence
 
-- Official OpenClaw docs still prescribe `openclaw models auth login --provider openai-codex --set-default`.
+- Official OpenClaw docs still prescribe `openclaw models auth login --provider codex-oauth --set-default`.
 - Official remote/VPS FAQ still prescribes a manual paste-back callback flow through `http://localhost:1455/...`.
 - Official runtime docs treat auth profiles as runtime state, not only deploy metadata.
 

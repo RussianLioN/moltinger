@@ -37,16 +37,16 @@ The implementation must support the current practical-now operator path: bootstr
 ### User Story 1 - Clawdiy Uses A Real Runtime OAuth Store (Priority: P1)
 
 As an operator of live Clawdiy,  
-I want OpenClaw to read a real runtime auth store for `openai-codex`,  
+I want OpenClaw to read a real runtime auth store for `codex-oauth`,
 So that `gpt-5.4` is actually available to the live container rather than only advertised by metadata.
 
 **Why this priority**: Without a real runtime auth store, the current repo can only claim policy readiness, not actual provider readiness.
 
-**Independent Test**: On live Clawdiy, verify that the runtime auth store exists in the intended persistent path, `openai-codex` is visible in runtime model/provider status, and the provider remains quarantined when the store is absent or invalid.
+**Independent Test**: On live Clawdiy, verify that the runtime auth store exists in the intended persistent path, `codex-oauth` is visible in runtime model/provider status, and the provider remains quarantined when the store is absent or invalid.
 
 **Acceptance Scenarios**:
 
-1. **Given** Clawdiy has a valid runtime auth store in the intended persistent location, **When** the runtime is deployed, **Then** OpenClaw resolves `openai-codex` from that store without requiring manual server-side file edits after each deploy.
+1. **Given** Clawdiy has a valid runtime auth store in the intended persistent location, **When** the runtime is deployed, **Then** OpenClaw resolves `codex-oauth` from that store without requiring manual server-side file edits after each deploy.
 2. **Given** the runtime auth store is missing, malformed, or owned by the wrong path/identity, **When** Clawdiy is validated, **Then** the provider is fail-closed quarantined and baseline health remains available.
 3. **Given** metadata exists but runtime auth store does not, **When** the operator runs repeat-auth verification, **Then** the system must report “metadata present, runtime auth absent” rather than a generic pass.
 
@@ -86,7 +86,7 @@ So that upstream provider readiness is proven rather than inferred from login me
 
 - Runtime auth metadata exists, but the live auth store was never created.
 - Runtime auth store exists, but OpenClaw writes or reads from the wrong locality.
-- Provider auth store exists, but `models.providers.openai-codex` is not explicitly active.
+- Provider auth store exists, but `models.providers.codex-oauth` is not explicitly active.
 - OAuth succeeds superficially, but required scope `api.responses.write` is missing.
 - Live Clawdiy restarts after auth bootstrap and loses access to the runtime auth store because the path was not persistent.
 - The operator has evidence from repeat-auth but no real canary result.
@@ -102,7 +102,7 @@ So that upstream provider readiness is proven rather than inferred from login me
 - **FR-005**: The system MUST preserve a future path to artifactized auth-store delivery without redesigning the overall topology.
 - **FR-006**: The system MUST keep baseline Clawdiy runtime health separate from optional `codex-oauth` readiness.
 - **FR-007**: If metadata is present but runtime auth store is missing or invalid, the system MUST fail closed for `codex-oauth` and MUST NOT report provider readiness.
-- **FR-008**: The system MUST explicitly validate provider activation for `openai-codex` instead of assuming a valid auth store automatically enables the provider.
+- **FR-008**: The system MUST explicitly validate provider activation for `codex-oauth` instead of assuming a valid auth store automatically enables the provider.
 - **FR-009**: The system MUST require post-auth verification for required scope(s) and allowed model(s), including `api.responses.write` and `gpt-5.4`.
 - **FR-010**: The system MUST define a real post-auth canary that proves upstream `gpt-5.4` execution path success.
 - **FR-011**: The system MUST persist operator-visible repeat-auth and canary evidence.
@@ -115,8 +115,8 @@ So that upstream provider readiness is proven rather than inferred from login me
 ### Key Entities
 
 - **Auth Metadata Gate**: Compact policy/verification data rendered from GitHub Secrets, such as scopes and allowed models.
-- **Runtime Auth Store**: Persistent Clawdiy-local artifact store that OpenClaw actually uses for `openai-codex` authentication.
-- **Provider Activation Contract**: Explicit runtime configuration showing whether `openai-codex` is activated and bound to the intended model path.
+- **Runtime Auth Store**: Persistent Clawdiy-local artifact store that OpenClaw actually uses for `codex-oauth` authentication.
+- **Provider Activation Contract**: Explicit runtime configuration showing whether `codex-oauth` is activated and bound to the intended model path.
 - **Repeat-Auth Evidence**: Durable record of when runtime auth was bootstrapped or refreshed, by which method, and with what result.
 - **Post-Auth Canary Result**: Structured evidence proving whether real `gpt-5.4` execution succeeded after auth bootstrap.
 

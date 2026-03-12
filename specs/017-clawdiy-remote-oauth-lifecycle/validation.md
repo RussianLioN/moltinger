@@ -41,7 +41,7 @@ ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
 
 - [ ] Runtime auth store path exists
 - [ ] Runtime auth store path is writable/readable by the Clawdiy runtime user
-- [ ] `openai-codex` appears in runtime provider/model status
+- [ ] `codex-oauth` appears in runtime provider/model status
 - [ ] Metadata gate still matches expected scope/model policy
 
 Recommended evidence:

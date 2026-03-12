@@ -15,7 +15,7 @@
 
 ## Executive Summary
 
-Current Clawdiy production docs and config model `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` only as rollout metadata. That is enough to gate policy and smoke checks, but not enough to establish a real OpenClaw runtime OAuth session for `openai-codex` with `gpt-5.4`.
+Current Clawdiy production docs and config model `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` only as rollout metadata. That is enough to gate policy and smoke checks, but not enough to establish a real OpenClaw runtime OAuth session for `codex-oauth` with `gpt-5.4`.
 
 Fresh official documentation still recommends the remote SSH/VPS paste-back flow, but fresh official GitHub issues show that this path is brittle in current OpenClaw builds when the runtime lives in a remote container. The most practical near-term path is to bootstrap OAuth against the actual target runtime auth store, then keep metadata, verification, and quarantine logic under GitOps. The cleaner target-state is to treat the runtime auth artifact as a first-class deployment asset with version-matched bootstrap and explicit delivery lifecycle.
 
@@ -25,7 +25,7 @@ The repository already contains useful but incomplete Clawdiy OAuth artifacts:
 
 - [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md) describes repeat-auth at the metadata level, not the real runtime auth store.
 - [docs/SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md) reserves `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE`, but does not define how a real `auth-profiles.json` is created, delivered, rotated, or validated.
-- [config/clawdiy/openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json) does not yet carry an explicit long-lived contract for runtime auth store placement plus `models.providers.openai-codex` activation.
+- [config/clawdiy/openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json) does not yet carry an explicit long-lived contract for runtime auth store placement plus `models.providers.codex-oauth` activation.
 - [specs/001-clawdiy-agent-platform/research.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/research.md) correctly identified `codex-oauth` instability, but did not finish the production lifecycle design for remote container runtime auth.
 
 Conclusion: the repo needs a dedicated follow-on implementation track for real runtime OAuth lifecycle, not only metadata gating.
@@ -34,8 +34,8 @@ Conclusion: the repo needs a dedicated follow-on implementation track for real r
 
 | Source | Checked | Official evidence | Impact |
 |---|---|---|---|
-| https://docs.openclaw.ai/start/auth/openai-codex | 2026-03-12 | Official flow for `openai-codex` uses `openclaw models auth login --provider openai-codex --set-default`. | Runtime auth is a model/provider login flow, not merely an env flag. |
-| https://docs.openclaw.ai/help/faq#i-am-using-ssh-remote-terminal-or-vps-and-openai-codex-auth-opens-a-localhost-url-that-does-not-work-how-do-i-finish-login | 2026-03-12 | Official FAQ for remote/VPS says: open the URL locally, allow redirect to `http://localhost:1455/...`, then copy the full callback URL back to the remote terminal. | Remote container login is officially supported, but relies on a manual paste-back loop. |
+| https://docs.openclaw.ai/start/auth/codex-oauth | 2026-03-12 | Official flow for `codex-oauth` uses `openclaw models auth login --provider codex-oauth --set-default`. | Runtime auth is a model/provider login flow, not merely an env flag. |
+| https://docs.openclaw.ai/help/faq#i-am-using-ssh-remote-terminal-or-vps-and-codex-oauth-auth-opens-a-localhost-url-that-does-not-work-how-do-i-finish-login | 2026-03-12 | Official FAQ for remote/VPS says: open the URL locally, allow redirect to `http://localhost:1455/...`, then copy the full callback URL back to the remote terminal. | Remote container login is officially supported, but relies on a manual paste-back loop. |
 | https://docs.openclaw.ai/concepts/model-failover | 2026-03-12 | OpenClaw documents model/provider state and auth-profile behavior as runtime concepts. | Real runtime provider auth must be treated as persistent state, not only deployment metadata. |
 | https://github.com/openclaw/openclaw | 2026-03-12 | Official upstream repository for current OpenClaw releases; npm metadata reports version `2026.3.11`. | The implementation should stay aligned to actual upstream release behavior, not older Moltis assumptions. |
 
@@ -47,7 +47,7 @@ Community evidence below is restricted to official OpenClaw GitHub issues becaus
 |---|---|---|---|
 | https://github.com/openclaw/openclaw/issues/41885 | 2026-03-12 | Remote/VPS OAuth can hang even after pasting the callback URL back into the SSH flow. | The official remote paste-back path is currently unreliable in some builds. |
 | https://github.com/openclaw/openclaw/issues/42291 | 2026-03-12 | OAuth login on one host can write token state locally instead of syncing it to the intended runtime/gateway. | Auth locality must be explicit; writing the token into the wrong store is a real failure mode. |
-| https://github.com/openclaw/openclaw/issues/40364 | 2026-03-12 | Even with a valid OAuth profile present, `openai-codex` may not become active in `models.json` without explicit provider wiring. | Runtime activation needs an explicit `models.providers.openai-codex` contract. |
+| https://github.com/openclaw/openclaw/issues/40364 | 2026-03-12 | Even with a valid OAuth profile present, the Codex provider may not become active in `models.json` without explicit provider wiring. | Runtime activation needs an explicit `models.providers.codex-oauth` contract. |
 | https://github.com/openclaw/openclaw/issues/26538 | 2026-03-12 | Users are asking for first-class gateway RPC auth because the current CLI/TTY path is brittle. | The current UX is known upstream to be awkward and not ideal for long-lived remote runtimes. |
 | https://github.com/openclaw/openclaw/issues/39994 | 2026-03-12 | OAuth may look successful while still missing required scopes such as `api.responses.write`. | Post-auth verification must test scopes and fail closed before the provider is promoted. |
 
@@ -68,7 +68,7 @@ The following points are inference, not direct quotes:
 ### Method 1: Official remote paste-back inside the live container
 
 Description:
-- Run `openclaw models auth login --provider openai-codex --set-default` inside the live Clawdiy runtime.
+- Run `openclaw models auth login --provider codex-oauth --set-default` inside the live Clawdiy runtime.
 - User opens the issued URL locally.
 - User copies the `http://localhost:1455/...` callback URL and pastes it back into the remote terminal.
 
@@ -154,7 +154,7 @@ The next implementation track should update or extend all of the following:
 - [docs/SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md)
   - Separate metadata secrets from runtime auth artifact handling.
 - [config/clawdiy/openclaw.json](/Users/rl/coding/moltinger-openclaw-control-plane/config/clawdiy/openclaw.json)
-  - Add explicit runtime provider activation requirements for `openai-codex`.
+  - Add explicit runtime provider activation requirements for `codex-oauth`.
 - `deploy-clawdiy.yml`, `scripts/clawdiy-auth-check.sh`, `scripts/clawdiy-smoke.sh`, and regression tests
   - Upgrade from metadata-only gate validation to runtime-store presence plus post-auth canary evidence.
 - [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md)

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the authoritative runtime boundary for Clawdiy `openai-codex` auth.
+Define the authoritative runtime boundary for Clawdiy `codex-oauth` auth.
 
 ## Contract
 

@@ -32,7 +32,7 @@
 ## Phase 2: Foundational
 
 - [ ] T004 Define the authoritative runtime auth-store path and ownership contract in `config/clawdiy/openclaw.json`
-- [ ] T005 Define explicit `openai-codex` provider activation semantics in `config/clawdiy/openclaw.json`
+- [ ] T005 Define explicit `codex-oauth` provider activation semantics in `config/clawdiy/openclaw.json`
 - [ ] T006 Extend `deploy-clawdiy.yml` to render metadata flags that clearly distinguish metadata gate from runtime auth store state
 - [ ] T007 Extend `scripts/clawdiy-auth-check.sh` to report metadata-only vs runtime-ready vs canary-promoted states
 - [ ] T008 Extend `scripts/clawdiy-smoke.sh` with runtime auth-store and provider-activation stages

@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Define when `openai-codex` / `gpt-5.4` is considered ready.
+Define when `codex-oauth` / `gpt-5.4` is considered ready.
 
 ## Contract
 
-- `openai-codex` MUST be explicitly configured as a runtime provider, not only inferred from auth profile presence.
+- `codex-oauth` MUST be explicitly configured as a runtime provider, not only inferred from auth profile presence.
 - Required scopes MUST include `api.responses.write`.
 - Allowed model list MUST include `gpt-5.4` for this rollout stage.
 - Promotion requires:

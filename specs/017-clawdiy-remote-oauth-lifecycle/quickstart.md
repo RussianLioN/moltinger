@@ -26,12 +26,12 @@ Expected result:
 
 ## Stage 3: Activate provider explicitly
 
-1. Render/update runtime config so `openai-codex` is explicitly active.
+1. Render/update runtime config so `codex-oauth` is explicitly active.
 2. Redeploy or restart Clawdiy as required.
 3. Verify provider status reflects the intended activation.
 
 Expected result:
-- `openai-codex` is visible as an activated provider, not just an auth profile on disk.
+- `codex-oauth` is visible as an activated provider, not just an auth profile on disk.
 
 ## Stage 4: Verify and quarantine correctly
 

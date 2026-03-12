@@ -21,7 +21,7 @@ Notes:
 ### Runtime Auth Store
 
 Purpose:
-- Persistent Clawdiy-local storage read by OpenClaw for `openai-codex` authentication.
+- Persistent Clawdiy-local storage read by OpenClaw for `codex-oauth` authentication.
 
 Fields:
 - `store_root`
@@ -37,7 +37,7 @@ Notes:
 ### Provider Activation State
 
 Purpose:
-- Explicit runtime config state indicating whether `openai-codex` is actually selectable and bound to intended model routing.
+- Explicit runtime config state indicating whether `codex-oauth` is actually selectable and bound to intended model routing.
 
 Fields:
 - `provider_name`

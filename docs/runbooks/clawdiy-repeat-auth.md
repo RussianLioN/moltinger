@@ -92,7 +92,7 @@ This is a later rollout gate, not a first-deploy requirement.
    ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
    ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
    ```
-6. If the live UI path does not produce a real runtime auth store or does not surface `openai-codex` in runtime status, use the SSH/CLI paste-back flow only as fallback.
+6. If the live UI path does not produce a real runtime auth store or does not surface `codex-oauth` in runtime status, use the SSH/CLI paste-back flow only as fallback.
 7. Promote Codex-backed capability only if post-auth verification passes.
 8. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
 

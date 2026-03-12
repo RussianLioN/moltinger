@@ -5,14 +5,14 @@
 
 ## Summary
 
-Clawdiy is already live, so this plan does not solve “how to deploy Clawdiy.” It solves a narrower and currently missing contract: how `openai-codex` / `gpt-5.4` becomes a real runtime capability for the live OpenClaw container instead of a metadata-only promise.
+Clawdiy is already live, so this plan does not solve “how to deploy Clawdiy.” It solves a narrower and currently missing contract: how `codex-oauth` / `gpt-5.4` becomes a real runtime capability for the live OpenClaw container instead of a metadata-only promise.
 
 The recommended practical-now design is:
 
 1. keep `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` as metadata gate and policy evidence;
 2. define a real persistent runtime auth store for Clawdiy;
 3. make the first operator bootstrap attempt through the live Clawdiy web Settings UI so OAuth lands in the actual runtime locality;
-4. explicitly activate `models.providers.openai-codex`;
+4. explicitly activate `models.providers.codex-oauth`;
 5. add fail-closed validation that distinguishes metadata-only from runtime-ready;
 6. require post-auth canary evidence before promotion.
 
@@ -80,7 +80,7 @@ tests/live_external/test_clawdiy_deploy_smoke.sh
    First operator attempt should be through the live Clawdiy web Settings path, not the SSH paste-back flow.
 2. **Target-state method**: later support version-matched workstation bootstrap plus controlled auth-artifact delivery.
 3. **Metadata vs runtime**: keep both, but never confuse them.
-4. **Explicit provider activation**: required because auth-store presence alone may not activate `openai-codex`.
+4. **Explicit provider activation**: required because auth-store presence alone may not activate `codex-oauth`.
 5. **Post-auth canary**: mandatory for promotion.
 6. **Fail-closed quarantine**: provider failures must not bring Clawdiy down.
 
@@ -99,7 +99,7 @@ Phase 1 artifacts define:
 
 1. Teach the repo and runtime to recognize a real Clawdiy runtime auth store.
 2. Make the live UI Settings flow the documented first bootstrap step, with CLI paste-back only as fallback.
-3. Add explicit `openai-codex` provider activation to Clawdiy runtime config.
+3. Add explicit `codex-oauth` provider activation to Clawdiy runtime config.
 4. Update runbooks and secrets docs to explain the real lifecycle.
 5. Add post-auth canary evidence and quarantine logic.
 
