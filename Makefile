@@ -170,8 +170,10 @@ generate-key:
 # ========================================================================
 
 version-check: ## Show current Docker image versions
-	@echo "Moltis version:"
-	@grep -E 'image:.*moltis' docker-compose.yml docker-compose.prod.yml | head -2
+	@echo "Moltis tracked image:"
+	@./scripts/moltis-version.sh image
+	@echo "Moltis tracked version:"
+	@./scripts/moltis-version.sh version
 	@echo "\nWatchtower version:"
 	@grep -E 'image:.*watchtower' docker-compose.yml docker-compose.prod.yml | head -2
 
