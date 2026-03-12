@@ -13,19 +13,19 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Validate and, if needed, extend the producer-to-Moltis advisory contract in `specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json`
-- [ ] T002 [P] Create or update the migration/runbook documentation for the new ownership model in repository docs and Moltis-facing handoff notes
-- [ ] T003 [P] Add fixture samples for normalized advisory events in `tests/fixtures/`
-- [ ] T004 Create validation coverage for producer-side advisory event generation in `tests/component/`
+- [x] T001 Validate and, if needed, extend the producer-to-Moltis advisory contract in `specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json`
+- [x] T002 [P] Create or update the migration/runbook documentation for the new ownership model in repository docs and Moltis-facing handoff notes
+- [x] T003 [P] Add fixture samples for normalized advisory events in `tests/fixtures/`
+- [x] T004 Create validation coverage for producer-side advisory event generation in `tests/component/`
 
 ---
 
 ## Phase 2: Foundational
 
-- [ ] T005 Implement producer-only advisory event emission in `scripts/codex-cli-upstream-watcher.sh`
-- [ ] T006 Implement or wire the Moltis-native advisory intake surface through repository-managed config/contracts in `config/moltis.toml` and related docs
-- [ ] T007 Add deterministic machine-readable interaction/audit record expectations for Moltis-native handling
-- [ ] T008 Create baseline verification coverage for one-way degraded behavior and event-contract validity
+- [x] T005 Implement producer-only advisory event emission in `scripts/codex-cli-upstream-watcher.sh`
+- [x] T006 Implement or wire the Moltis-native advisory intake surface through repository-managed config/contracts in `config/moltis.toml` and related docs
+- [x] T007 Add deterministic machine-readable interaction/audit record expectations for Moltis-native handling
+- [x] T008 Create baseline verification coverage for one-way degraded behavior and event-contract validity
 
 ---
 
@@ -35,10 +35,10 @@
 
 **Independent Test**: Inject a normalized advisory event and confirm Moltis sends one Russian Telegram alert without asking the user to type `/codex_*`.
 
-- [ ] T010 [US1] Remove any remaining user-facing references to repo-side reply-command UX from runtime docs and prompts
-- [ ] T011 [US1] Implement Moltis-native alert rendering from the normalized advisory event
-- [ ] T012 [P] [US1] Add verification coverage for one-way and interactive-ready alert rendering
-- [ ] T013 [US1] Document the new ownership boundary for operators and future maintainers
+- [x] T010 [US1] Remove any remaining user-facing references to repo-side reply-command UX from runtime docs and prompts
+- [x] T011 [US1] Implement Moltis-native alert rendering from the normalized advisory event
+- [x] T012 [P] [US1] Add verification coverage for one-way and interactive-ready alert rendering
+- [x] T013 [US1] Document the new ownership boundary for operators and future maintainers
 
 ---
 

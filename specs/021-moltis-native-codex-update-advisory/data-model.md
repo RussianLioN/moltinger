@@ -15,10 +15,13 @@ Fields:
 - `latest_version`
 - `severity`
 - `summary_ru`
+- `why_it_matters_ru`
 - `highlights_ru[]`
 - `recommendation_status`
+- `interactive_followup_eligible`
 - `recommendation_payload`
 - `links[]`
+- `operator_notes_ru[]`
 
 ### MoltisAdvisoryAlert
 
@@ -89,6 +92,7 @@ Fields:
 - `degraded_reason`
 - `created_at`
 - `resolved_at`
+- `schema_version`
 
 ## Relationships
 
@@ -100,6 +104,7 @@ Fields:
 ## State Rules
 
 - If interactive mode is not confirmed healthy, `MoltisAdvisoryAlert.interactive_mode = one_way_only`.
+- If `CodexAdvisoryEvent.interactive_followup_eligible = false`, Moltis must not render inline follow-up actions.
 - If callback routing succeeds, the generic chat path must not also respond.
 - If the same callback is repeated, the interaction record must transition to `duplicate` instead of sending another follow-up.
 - If recommendations are missing, Moltis may still send the alert, but the interaction record must show why follow-up is unavailable.

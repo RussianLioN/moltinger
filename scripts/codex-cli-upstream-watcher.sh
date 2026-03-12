@@ -16,6 +16,7 @@ MODE="${CODEX_UPSTREAM_WATCHER_MODE:-manual}"
 STATE_FILE="${CODEX_UPSTREAM_WATCHER_STATE_FILE:-${DEFAULT_STATE_FILE}}"
 JSON_OUT=""
 SUMMARY_OUT=""
+ADVISORY_EVENT_OUT="${CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT:-}"
 STDOUT_FORMAT="summary"
 
 RELEASE_FILE="${CODEX_UPSTREAM_WATCHER_RELEASE_FILE:-}"
@@ -60,14 +61,15 @@ Usage: codex-cli-upstream-watcher.sh [options]
 
 Проверяет официальный upstream Codex CLI, присваивает уровни важности,
 умеет собирать дайджест, готовит bridge к advisor-слою проекта и при
-необходимости отправляет Telegram-уведомление с последующим вопросом
-о практических рекомендациях.
+необходимости готовит нормализованный advisory event для Moltis-native
+Telegram flow.
 
 Options:
   --mode MODE                    Режим: manual|scheduler (по умолчанию: manual)
   --state-file PATH              Файл состояния watcher-а
   --json-out PATH                Куда записать JSON-отчёт
   --summary-out PATH             Куда записать человекочитаемый summary
+  --advisory-event-out PATH      Куда записать нормализованный advisory event для Moltis
   --stdout MODE                  Вывод в stdout: summary|json|none (по умолчанию: summary)
   --release-file PATH            Читать основной changelog из локального файла
   --release-url URL              Читать основной changelog по URL
@@ -96,6 +98,7 @@ Options:
 Environment overrides:
   CODEX_UPSTREAM_WATCHER_MODE
   CODEX_UPSTREAM_WATCHER_STATE_FILE
+  CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT
   CODEX_UPSTREAM_WATCHER_RELEASE_FILE
   CODEX_UPSTREAM_WATCHER_RELEASE_URL
   CODEX_UPSTREAM_WATCHER_ISSUE_SIGNALS_FILE
@@ -490,6 +493,90 @@ render_summary() {
     ' "$REPORT_PATH"
 }
 
+build_advisory_event() {
+    jq '
+      def unique_strings:
+        reduce .[] as $item ([]; if ($item | type) == "string" and ($item | length) > 0 and (index($item) | not) then . + [$item] else . end);
+      def recommendation_status:
+        if .advisor_bridge.status == "ready" and ((.advisor_bridge.practical_recommendations // []) | length) > 0 then "ready"
+        elif .advisor_bridge.status == "ready" then "deferred"
+        else "unavailable"
+        end;
+      def impacted_surfaces:
+        [ .advisor_bridge.practical_recommendations[]?.impacted_paths[]? ] | unique_strings;
+      def links:
+        (
+          [
+            {
+              title: "Официальный changelog Codex CLI",
+              url: .snapshot.primary_source.url
+            }
+          ]
+          + [
+            .snapshot.advisory_items[]?
+            | select((.url // "") != "")
+            | {
+                title: (.title // ("Advisory issue " + (.id // "unknown"))),
+                url: .url
+              }
+          ]
+        )
+        | map(select((.url // "") != ""));
+      def recommendation_items:
+        [
+          .advisor_bridge.practical_recommendations[]?
+          | {
+              title_ru: .title,
+              priority: .priority,
+              rationale_ru: .rationale,
+              impacted_surfaces: (.impacted_paths // []),
+              next_steps_ru: (.next_steps // [])
+            }
+        ];
+      (recommendation_status) as $recommendation_status
+      | {
+          schema_version: "codex-advisory-event/v1",
+          event_id: ("codex-advisory-" + .fingerprint),
+          created_at: .checked_at,
+          source: "codex-cli-upstream-watcher",
+          upstream_fingerprint: .fingerprint,
+          latest_version: .snapshot.latest_version,
+          severity: .severity.level,
+          summary_ru: ("Обновление Codex CLI: версия " + .snapshot.latest_version),
+          why_it_matters_ru: .severity.reason,
+          highlights_ru: (
+            if (.snapshot.highlight_explanations | length) > 0
+            then .snapshot.highlight_explanations[:4]
+            else ["В официальной ленте появилось изменение; подробности сохранены в полном отчёте."]
+            end
+          ),
+          recommendation_status: $recommendation_status,
+          interactive_followup_eligible: ($recommendation_status == "ready"),
+          operator_notes_ru: (.notes // []),
+          recommendation_payload: (
+            if $recommendation_status == "unavailable" then null
+            else {
+              headline_ru: "Практические рекомендации для проекта",
+              summary_ru: .advisor_bridge.summary,
+              priority_checks: (.advisor_bridge.top_priorities // []),
+              impacted_surfaces: impacted_surfaces,
+              raw_reference_path: "scripts/codex-cli-update-advisor.sh",
+              items: recommendation_items
+            }
+            end
+          ),
+          links: links
+        }
+    ' "$REPORT_PATH"
+}
+
+attach_advisory_event_to_report() {
+    local event_file="${TEMP_DIR}/advisory-event.json"
+    build_advisory_event > "$event_file"
+    jq --slurpfile event "$event_file" '.advisory_event = $event[0]' "$REPORT_PATH" > "${REPORT_PATH}.tmp"
+    mv "${REPORT_PATH}.tmp" "$REPORT_PATH"
+}
+
 run_telegram_sender() {
     local chat_id="$1"
     local text="$2"
@@ -713,6 +800,10 @@ parse_args() {
                 ;;
             --summary-out)
                 SUMMARY_OUT="${2:?missing value for --summary-out}"
+                shift 2
+                ;;
+            --advisory-event-out)
+                ADVISORY_EVENT_OUT="${2:?missing value for --advisory-event-out}"
                 shift 2
                 ;;
             --stdout)
@@ -1998,7 +2089,7 @@ state["notes"] = compact_notes(previous_state.get("notes", []) + [run_note])
 feature_explanation = [
     "Уровень важности показывает, это обычное обновление, важное изменение рабочего процесса или потенциально рискованный релиз.",
     "Режим дайджеста собирает несколько upstream-событий в одно сообщение и уменьшает шум в Telegram.",
-    "Практические рекомендации строятся через advisor-слой проекта и отправляются только после вашего согласия.",
+    "Практические рекомендации строятся через advisor-слой проекта и передаются в Moltis-native advisory flow.",
 ]
 
 followup_digest = {
@@ -2175,6 +2266,7 @@ PY
 
     ensure_parent_dir "$STATE_FILE"
     jq '.state' "$REPORT_PATH" > "$STATE_FILE"
+    attach_advisory_event_to_report
 
     render_summary > "$SUMMARY_PATH"
 
@@ -2186,6 +2278,11 @@ PY
     if [[ -n "$SUMMARY_OUT" ]]; then
         ensure_parent_dir "$SUMMARY_OUT"
         cp "$SUMMARY_PATH" "$SUMMARY_OUT"
+    fi
+
+    if [[ -n "$ADVISORY_EVENT_OUT" ]]; then
+        ensure_parent_dir "$ADVISORY_EVENT_OUT"
+        jq '.advisory_event' "$REPORT_PATH" > "$ADVISORY_EVENT_OUT"
     fi
 
     case "$STDOUT_FORMAT" in

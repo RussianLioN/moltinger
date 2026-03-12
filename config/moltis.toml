@@ -56,6 +56,12 @@ MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
 MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
 MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
 MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
+MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
+MOLTIS_CODEX_ADVISORY_INTAKE_SCRIPT = "./scripts/moltis-codex-advisory-intake.sh"
+MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
+MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
+MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE = "one_way_only"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TLS / HTTPS
@@ -686,23 +692,25 @@ rate_limit_window_secs = 60
 # Shell commands triggered by events.
 
 [hooks]
-[[hooks.hooks]]
-name = "codex-consent-router"
-command = "./scripts/moltis-codex-consent-router.sh"
-events = ["Command"]
-timeout = 10
-[hooks.hooks.env]
-CODEX_TELEGRAM_CONSENT_STORE_SCRIPT = "./scripts/codex-telegram-consent-store.sh"
-CODEX_TELEGRAM_CONSENT_STORE_DIR = "/opt/moltinger/.tmp/current/codex-telegram-consent-store"
-CODEX_TELEGRAM_CONSENT_ROUTER_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
-CODEX_TELEGRAM_CONSENT_ROUTER_ENV_FILE = "/opt/moltinger/.env"
-CODEX_TELEGRAM_CONSENT_ROUTER_SEND_REPLY = "true"
-
-# The production-safe authoritative path in repo-managed config is the
-# structured fallback command `/codex-followup ...`. The router already
-# understands callback-style payloads too, but live callback interception must
-# wait for an ingress surface in Moltis core that can hand callback_query data
-# to repo-managed runtime code before generic handling.
+# Historical repo-side consent routing is intentionally not enabled here.
+# The old `/codex_*` and `/codex-followup ...` user-facing flow is retired.
+# Codex advisories now move through a producer contract plus a Moltis-native
+# intake surface. Safe default remains `one_way_only` until Moltis core owns
+# callback routing end-to-end.
+#
+# Future Moltis-native intake example:
+#
+# [[hooks.hooks]]
+# name = "codex-advisory-intake"
+# command = "./scripts/moltis-codex-advisory-intake.sh"
+# events = ["MessageSending"]
+# timeout = 10
+# [hooks.hooks.env]
+# MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
+# MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
+# MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+# MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
+# MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE = "one_way_only"
 
 # [hooks]
 # [[hooks.hooks]]

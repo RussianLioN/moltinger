@@ -49,6 +49,7 @@ Producer-side checks that should stay valid:
 ```bash
 make codex-upstream-watcher
 make codex-update-advisor
+make codex-advisory-intake
 ```
 
 ## Expected User Outcome

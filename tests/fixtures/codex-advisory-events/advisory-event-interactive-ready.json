@@ -1,0 +1,75 @@
+{
+  "schema_version": "codex-advisory-event/v1",
+  "event_id": "codex-advisory-f171d17b575745a0",
+  "created_at": "2026-03-12T19:53:31Z",
+  "source": "codex-cli-upstream-watcher",
+  "upstream_fingerprint": "f171d17b575745a0",
+  "latest_version": "0.114.0",
+  "severity": "important",
+  "summary_ru": "Обновление Codex CLI: версия 0.114.0",
+  "why_it_matters_ru": "Версия 0.114.0 затрагивает рабочие сценарии, которые этот проект использует регулярно.",
+  "highlights_ru": [
+    "Изменения затрагивают восстановление сессий и работу с несколькими агентами.",
+    "Изменения затрагивают работу с рабочими деревьями и отдельными ветками.",
+    "Обновились документы или примеры использования Codex CLI."
+  ],
+  "recommendation_status": "ready",
+  "interactive_followup_eligible": true,
+  "operator_notes_ru": [
+    "Production-safe режим пока остаётся деградированным до one-way alert, если callback path не подтверждён."
+  ],
+  "recommendation_payload": {
+    "headline_ru": "Практические рекомендации для проекта",
+    "summary_ru": "Можно подготовить конкретные шаги для этого проекта и связать их с затронутыми файлами.",
+    "priority_checks": [
+      "Освежить инструкции по мультиагентному режиму и resume-flow",
+      "Проверить правила работы с worktree и топологией веток"
+    ],
+    "impacted_surfaces": [
+      "AGENTS.md",
+      "docs/CODEX-OPERATING-MODEL.md",
+      "docs/GIT-TOPOLOGY-REGISTRY.md"
+    ],
+    "raw_reference_path": "scripts/codex-cli-update-advisor.sh",
+    "items": [
+      {
+        "title_ru": "Освежить инструкции по мультиагентному режиму и resume-flow",
+        "priority": "high",
+        "rationale_ru": "Проект опирается на делегирование задач агентам и продолжение сессий, поэтому этот участок особенно чувствителен к изменениям Codex.",
+        "impacted_surfaces": [
+          "AGENTS.md",
+          "docs/CODEX-OPERATING-MODEL.md",
+          ".claude/commands/"
+        ],
+        "next_steps_ru": [
+          "Проверить, как теперь ведут себя resume-сценарии и длинные сессии.",
+          "Обновить инструкции по делегированию, если они начали расходиться с реальным поведением."
+        ]
+      },
+      {
+        "title_ru": "Проверить правила работы с worktree и топологией веток",
+        "priority": "high",
+        "rationale_ru": "Новая версия Codex затрагивает сценарии с отдельными worktree, а этот проект активно их использует.",
+        "impacted_surfaces": [
+          "AGENTS.md",
+          "docs/CODEX-OPERATING-MODEL.md",
+          "docs/GIT-TOPOLOGY-REGISTRY.md"
+        ],
+        "next_steps_ru": [
+          "Сверить инструкции по worktree с текущим поведением Codex.",
+          "Проверить вспомогательные команды и примеры переключения между ветками."
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Официальный changelog Codex CLI",
+      "url": "https://developers.openai.com/codex/changelog"
+    },
+    {
+      "title": "Codex CLI issue: changelog preview missing latest release highlights",
+      "url": "https://github.com/openai/codex/issues/2001"
+    }
+  ]
+}

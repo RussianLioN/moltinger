@@ -1,0 +1,39 @@
+{
+  "schema_version": "codex-advisory-event/v1",
+  "event_id": "codex-advisory-a7a2ee108fd0be21",
+  "created_at": "2026-03-12T20:02:00Z",
+  "source": "codex-cli-upstream-watcher",
+  "upstream_fingerprint": "a7a2ee108fd0be21",
+  "latest_version": "0.114.0",
+  "severity": "important",
+  "summary_ru": "Обновление Codex CLI: версия 0.114.0",
+  "why_it_matters_ru": "Версия 0.114.0 затрагивает рабочие сценарии, которые этот проект использует регулярно.",
+  "highlights_ru": [
+    "Изменения затрагивают восстановление сессий и работу с несколькими агентами.",
+    "Изменения затрагивают работу с рабочими деревьями и отдельными ветками."
+  ],
+  "recommendation_status": "deferred",
+  "interactive_followup_eligible": false,
+  "operator_notes_ru": [
+    "Interactive callback path пока не подтверждён, поэтому в Telegram должен уходить только one-way alert."
+  ],
+  "recommendation_payload": {
+    "headline_ru": "Практические рекомендации для проекта",
+    "summary_ru": "Рекомендации подготовлены, но интерактивный follow-up пока должен оставаться выключенным.",
+    "priority_checks": [
+      "Проверить границу ответственности между watcher и Moltis"
+    ],
+    "impacted_surfaces": [
+      "docs/codex-cli-upstream-watcher.md",
+      "config/moltis.toml"
+    ],
+    "raw_reference_path": "docs/codex-cli-upstream-watcher.md",
+    "items": []
+  },
+  "links": [
+    {
+      "title": "Официальный changelog Codex CLI",
+      "url": "https://developers.openai.com/codex/changelog"
+    }
+  ]
+}

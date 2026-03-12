@@ -7,6 +7,7 @@
 - собирать события в дайджест, чтобы не шуметь
 - подготовить bridge к проектным рекомендациям через advisor-слой
 - подготовить данные для project-facing рекомендаций, но в production сейчас отправлять только one-way alert до появления Moltis-native advisory flow
+- эмитить нормализованный `CodexAdvisoryEvent` для Moltis-native advisory flow
 
 Инструмент по-прежнему разделяет две задачи:
 
@@ -21,6 +22,7 @@
 - старый repo-side интерактивный consent flow выведен из пользовательской эксплуатации;
 - любые ответы вида `/codex_*` считаются устаревшим путём и не должны предлагаться пользователю;
 - новый интерактивный advisory flow должен быть реализован в Moltis как у владельца Telegram ingress.
+- producer contract и Moltis-facing intake описаны в [docs/codex-moltis-native-advisory.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/codex-moltis-native-advisory.md).
 
 Простыми словами:
 

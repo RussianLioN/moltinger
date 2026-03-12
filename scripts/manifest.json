@@ -80,6 +80,29 @@
         "MOLTIS_ENV_FILE"
       ]
     },
+    "moltis-codex-advisory-intake.sh": {
+      "version": "1.0.0",
+      "description": "Render or deliver a Moltis-native Codex advisory alert from a normalized producer event",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "moltis-codex-advisory-intake",
+        "codex-advisory-alert-preview"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA",
+        "MOLTIS_CODEX_ADVISORY_SEND_ALERT",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_CHAT_ID",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_AUDIT_DIR",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX",
+        "MOLTIS_CODEX_ADVISORY_DEGRADED_REASON"
+      ],
+      "ci": true
+    },
     "codex-cli-update-monitor.sh": {
       "version": "1.0.0",
       "description": "Assess local Codex CLI state against upstream releases and repo workflow relevance",
@@ -113,6 +136,7 @@
       "env_vars": [
         "CODEX_UPSTREAM_WATCHER_MODE",
         "CODEX_UPSTREAM_WATCHER_STATE_FILE",
+        "CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT",
         "CODEX_UPSTREAM_WATCHER_RELEASE_FILE",
         "CODEX_UPSTREAM_WATCHER_RELEASE_URL",
         "CODEX_UPSTREAM_WATCHER_ISSUE_SIGNALS_FILE",

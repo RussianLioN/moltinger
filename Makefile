@@ -11,7 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
-.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e
+.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -94,6 +94,7 @@ help:
 	@echo "  codex-update-delivery - Run the user-facing delivery layer over the advisor"
 	@echo "  codex-upstream-watcher - Проверить upstream Codex CLI с уровнями важности и project-ready рекомендациями"
 	@echo "  codex-consent-e2e - Прогнать hermetic acceptance path alert -> consent -> recommendations"
+	@echo "  codex-advisory-intake - Сгенерировать advisory event и показать Moltis-native alert preview"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -383,6 +384,22 @@ codex-consent-e2e:
 	@bash ./scripts/codex-telegram-consent-e2e.sh \
 		--mode hermetic \
 		--output .tmp/current/codex-telegram-consent-e2e-report.json
+
+codex-advisory-intake:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-cli-upstream-watcher.sh \
+		--mode manual \
+		--include-issue-signals \
+		--advisory-event-out .tmp/current/codex-advisory-event.json \
+		--json-out .tmp/current/codex-upstream-watcher-report.json \
+		--summary-out .tmp/current/codex-upstream-watcher-summary.md \
+		--state-file .tmp/current/codex-cli-upstream-watcher-state.json \
+		--stdout none
+	@bash ./scripts/moltis-codex-advisory-intake.sh \
+		--event-file .tmp/current/codex-advisory-event.json \
+		--json-out .tmp/current/codex-advisory-intake-report.json \
+		--summary-out .tmp/current/codex-advisory-intake-summary.md \
+		--stdout summary
 
 codex-research:
 	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh research

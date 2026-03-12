@@ -20,6 +20,7 @@
 - в Codex больше не должно быть отдельного skill/command entrypoint для этого старого delivery path;
 - текущий production-safe режим для Telegram: только `one-way alert`;
 - новый интерактивный advisory flow будет открываться отдельным Speckit feature как `Moltis-native` решение.
+- producer contract и Moltis-facing runtime surface зафиксированы в [docs/codex-moltis-native-advisory.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/codex-moltis-native-advisory.md).
 
 ## Что остаётся рабочим
 
