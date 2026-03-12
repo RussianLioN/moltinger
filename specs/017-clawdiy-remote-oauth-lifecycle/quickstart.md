@@ -18,9 +18,9 @@ Expected result:
 
 1. Preferred first step: open `https://clawdiy.ainetic.tech` and complete hosted browser bootstrap through `Overview -> Gateway Access -> Gateway Token -> Connect -> device pairing`.
 2. Confirm the dashboard normalizes from `Version n/a` / `Health Offline` to a usable connected state.
-3. Inspect the live UI to see whether the current build actually exposes a provider-auth path for `OpenAI Codex` / `codex-oauth`.
-4. Only if the live UI truly exposes provider auth and writes into the actual runtime store, continue there.
-5. Otherwise use the remote CLI paste-back flow as fallback.
+3. Do not assume the browser UI can perform `OpenAI Codex` provider auth; official OpenClaw docs document `codex-oauth` through CLI/wizard flows.
+4. Run the documented provider-auth flow from the official Docker/auth docs. In this repository, normalize the provider name to `codex-oauth` even if upstream examples still show a legacy provider label.
+5. In headless Docker / VPS setups, paste the full `http://127.0.0.1:1455/...` redirect URL back into the wizard/login flow as described by the official Docker docs and FAQ.
 6. Confirm the runtime auth artifact lands in the intended persistent location.
 7. Preserve repeat-auth evidence.
 

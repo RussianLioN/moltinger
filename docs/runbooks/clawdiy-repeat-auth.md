@@ -17,6 +17,7 @@ Current limitation:
 - The production-grade runtime auth store lifecycle is tracked as a follow-on implementation in [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md).
 - Hosted browser bootstrap for Clawdiy starts from `Overview -> Gateway Access -> token -> pairing`, not from a dedicated welcome wizard or a guaranteed provider-auth settings screen.
 - Browser bootstrap and provider OAuth are separate lifecycles; do not assume that simply opening the live UI creates a runtime `auth-profiles.json`.
+- Official OpenClaw docs currently document `codex-oauth` through CLI/wizard flows, including the headless Docker paste-back callback path. This repository normalizes provider naming to `codex-oauth` even when upstream docs show a legacy provider label in command examples. Browser UI is not the canonical documented Codex OAuth path.
 
 ## Auth Surfaces
 
@@ -86,14 +87,14 @@ This is a later rollout gate, not a first-deploy requirement.
    ```
 3. Redeploy Clawdiy-only runtime so `/opt/moltinger/clawdiy/.env` is regenerated.
 4. First complete the hosted UI bootstrap from [Clawdiy Browser Bootstrap Runbook](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md).
-5. After browser bootstrap succeeds, inspect the live UI to see whether the current build actually exposes a provider-auth entrypoint for `OpenAI Codex` / `codex-oauth`.
-6. If the live UI does not expose a provider-auth entrypoint or does not write the real runtime auth store, stop calling it a UI-native OAuth path and use the documented fallback instead.
-7. Verify:
+5. Treat browser bootstrap as complete once the hosted dashboard is usable; do not treat it as Codex OAuth.
+6. Use the official documented provider-auth flow for `OpenAI Codex` / `codex-oauth` from the official Docker/auth docs.
+7. In headless Docker / VPS setups, follow the official paste-back callback flow described in the OpenClaw Docker docs and FAQ.
+8. Verify:
    ```bash
    ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
    ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
    ```
-8. If the live UI path does not produce a real runtime auth store or does not surface `codex-oauth` in runtime status, use the SSH/CLI paste-back flow only as fallback.
 9. Promote Codex-backed capability only if post-auth verification passes.
 10. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
 
