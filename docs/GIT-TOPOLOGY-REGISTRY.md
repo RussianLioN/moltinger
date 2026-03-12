@@ -131,7 +131,6 @@
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
-| `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
