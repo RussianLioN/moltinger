@@ -18,6 +18,7 @@
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-main-merge.hsq6oh` | `main` | `sibling-worktree` | Needs decision |
+| `moltinger-openclaw-control-plane` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
 | `moltinger-pr39` | `tmp-pr39-fix` | `sibling-worktree` | Needs decision |
@@ -36,7 +37,6 @@
 | `primary-feature-016` | `016-worktree-skill-bug-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-021` | `021-moltis-native-codex-update-advisory` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-021` | `021-moltis-native-codex-update-advisory-writable` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-022` | `022-clawdiy-wizard-writability-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-022` | `022-telegram-ba-intake` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `fix/beads-recovery-audit-localization` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
@@ -51,7 +51,6 @@
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
 | `021-moltis-native-codex-update-advisory` | `none` | Needs decision |
 | `021-moltis-native-codex-update-advisory-writable` | `origin/021-moltis-native-codex-update-advisory` | Needs decision |
-| `022-clawdiy-wizard-writability-fix` | `none` | Needs decision |
 | `022-telegram-ba-intake` | `origin/022-telegram-ba-intake` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
@@ -93,6 +92,7 @@
 | `019-asc-fabrique-prototype` | `none` | Needs decision |
 | `019-clawdiy-ui-onboarding-doc-correction` | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `020-agent-factory-prototype` | `origin/020-agent-factory-prototype` | Needs decision |
+| `022-clawdiy-wizard-writability-fix` | `none` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/remote-uat-hardening` | `none` | Needs decision |
