@@ -14,6 +14,7 @@
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
+| `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-main-merge.hsq6oh` | `main` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
@@ -31,9 +32,9 @@
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-016` | `016-worktree-skill-bug-fix` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-019` | `019-clawdiy-ui-onboarding-doc-correction` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-021` | `021-moltis-native-codex-update-advisory` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-021` | `021-moltis-native-codex-update-advisory-writable` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-022` | `022-clawdiy-wizard-writability-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-022` | `022-telegram-ba-intake` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `fix/beads-recovery-audit-localization` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
@@ -46,14 +47,15 @@
 | `009-codex-update-delivery-ux` | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
-| `019-clawdiy-ui-onboarding-doc-correction` | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `021-moltis-native-codex-update-advisory` | `none` | Needs decision |
 | `021-moltis-native-codex-update-advisory-writable` | `origin/021-moltis-native-codex-update-advisory` | Needs decision |
-| `022-telegram-ba-intake` | `none` | Needs decision |
+| `022-clawdiy-wizard-writability-fix` | `none` | Needs decision |
+| `022-telegram-ba-intake` | `origin/022-telegram-ba-intake` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
+| `feat/moltinger-ewde-codex-advisory-rollout` | `origin/main` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
 | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
@@ -85,6 +87,7 @@
 | `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
 | `018-clawdiy-gateway-password-ui-fix` | `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
 | `019-asc-fabrique-prototype` | `none` | Needs decision |
+| `019-clawdiy-ui-onboarding-doc-correction` | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `020-agent-factory-prototype` | `origin/020-agent-factory-prototype` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
@@ -108,13 +111,12 @@
 | `origin/008-codex-update-advisor` | Needs decision |
 | `origin/009-codex-update-delivery-ux` | Needs decision |
 | `origin/011-worktree-skill-extraction` | Needs decision |
-| `origin/012-codex-upstream-watcher` | Needs decision |
 | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `origin/020-agent-factory-prototype` | Needs decision |
-| `origin/021-moltis-native-codex-update-advisory` | Needs decision |
+| `origin/022-telegram-ba-intake` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |

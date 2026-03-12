@@ -10,9 +10,14 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 MOLTIS_ENV_FILE=/opt/moltinger/.env
+MOLTIS_CONFIG_FILE=/opt/moltinger/config/moltis.toml
 CODEX_UPSTREAM_WATCHER_STATE_FILE=/opt/moltinger/.tmp/current/codex-cli-upstream-watcher-state.json
+CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT=/opt/moltinger/.tmp/current/codex-advisory-event.json
 CODEX_UPSTREAM_WATCHER_TELEGRAM_ENABLED=true
+CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED=false
 CODEX_UPSTREAM_WATCHER_TELEGRAM_ENV_FILE=/opt/moltinger/.env
+CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT=/opt/moltinger/scripts/moltis-codex-advisory-send.sh
+MOLTIS_CODEX_ADVISORY_INTAKE_SCRIPT=/opt/moltinger/scripts/moltis-codex-advisory-intake.sh
 
 # Every 6 hours run the watcher and append to the dedicated watcher log.
 17 */6 * * * root mkdir -p /var/log/moltis /opt/moltinger/.tmp/current && /opt/moltinger/scripts/codex-cli-upstream-watcher.sh --mode scheduler --include-issue-signals --json-out /opt/moltinger/.tmp/current/codex-upstream-watcher-report.json --summary-out /opt/moltinger/.tmp/current/codex-upstream-watcher-summary.md --stdout none >> /var/log/moltis/codex-upstream-watcher.log 2>&1

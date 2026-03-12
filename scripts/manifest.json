@@ -56,9 +56,9 @@
       "source": "cron.d/moltis-codex-upstream-watcher",
       "target": "/etc/cron.d/moltis-codex-upstream-watcher",
       "schedule": "17 */6 * * *",
-      "description": "Official-source Codex upstream watcher with duplicate-safe Telegram delivery",
+      "description": "Official-source Codex upstream watcher routed into Moltis-native advisory intake and Telegram callback handling",
       "command": "/opt/moltinger/scripts/codex-cli-upstream-watcher.sh --mode scheduler --include-issue-signals --stdout none",
-      "issue": "moltinger-fj8"
+      "issue": "moltinger-ewde"
     }
   },
   "scripts": {
@@ -234,6 +234,34 @@
       ],
       "ci": true
     },
+    "moltis-codex-advisory-send.sh": {
+      "version": "1.0.0",
+      "description": "Telegram sender adapter that routes upstream watcher delivery into Moltis-native advisory intake",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-advisory-send"
+      ],
+      "env_vars": [
+        "MOLTIS_CONFIG_FILE",
+        "MOLTIS_ENV_FILE",
+        "MOLTIS_CODEX_ADVISORY_EVENT_FILE",
+        "CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT",
+        "MOLTIS_CODEX_ADVISORY_INTAKE_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE",
+        "MOLTIS_CODEX_ADVISORY_AUDIT_DIR",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS",
+        "MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX"
+      ],
+      "ci": true
+    },
     "codex-advisory-session-store.sh": {
       "version": "1.0.0",
       "description": "Persist Moltis-native Codex advisory sessions and their follow-up delivery state",
@@ -304,7 +332,7 @@
     },
     "codex-cli-upstream-watcher.sh": {
       "version": "2.1.0",
-      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and authoritative consent-based project recommendations",
+      "description": "Watch official Codex upstream sources, emit advisory events, and delegate live Telegram UX into Moltis-native delivery",
       "entrypoint": true,
       "requires": [
         "curl",

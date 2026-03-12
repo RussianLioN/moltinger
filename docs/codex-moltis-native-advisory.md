@@ -2,11 +2,12 @@
 
 ## Статус
 
-На `2026-03-12` Telegram-ownership для advisory flow считается такой:
+На `2026-03-13` rollout-модель такая:
 
 - watcher и advisor в этом репозитории только готовят нормализованный сигнал;
-- Moltis должен быть единственным владельцем Telegram alert UX;
-- production-safe default остаётся `one_way_only`, пока callback path в Moltis не подтверждён end-to-end.
+- Moltis является единственным владельцем Telegram alert UX;
+- эта rollout-ветка включает production wiring для interactive mode через `inline_callbacks`;
+- безопасный rollback по-прежнему остаётся чисто конфигурационным: вернуть `one_way_only`.
 
 ## Простыми словами
 
@@ -51,7 +52,32 @@ scripts/moltis-codex-advisory-intake.sh
 
 - этот helper не должен снова становиться “вторым владельцем Telegram”;
 - его задача здесь — зафиксировать contract, текст уведомления, audit record и repo-managed runtime surface;
-- конечный callback UX всё равно должен жить внутри Moltis core.
+- конечный callback UX живёт в Moltis router hook, а не в watcher-е.
+
+## Live wiring для rollout
+
+В production path теперь включён явный adapter:
+
+```bash
+scripts/moltis-codex-advisory-send.sh
+```
+
+Он нужен затем, чтобы не переписывать watcher как отдельный Moltis hook.
+
+Новая цепочка такая:
+
+1. cron запускает `codex-cli-upstream-watcher.sh`;
+2. watcher пишет нормализованный advisory event в JSON;
+3. watcher вызывает `moltis-codex-advisory-send.sh` как совместимый Telegram sender;
+4. sender-adapter передаёт доставку в `moltis-codex-advisory-intake.sh`;
+5. intake отправляет alert и открывает advisory session;
+6. Moltis hook `codex-advisory-router` принимает callback и сразу шлёт follow-up рекомендации.
+
+Простыми словами:
+
+- watcher больше не владеет Telegram-диалогом;
+- watcher только решает, есть ли новое событие;
+- весь пользовательский UX теперь идёт через Moltis-native intake/router слой.
 
 ## Advisory session store и router
 
@@ -118,13 +144,20 @@ Repository-managed config теперь фиксирует такие env keys:
 - `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE`
 - `MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT`
 - `MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR`
+- `MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX`
 - `MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT`
 - `MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE`
 - `MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY`
 - `MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS`
 - `MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND`
 
-Пока `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE` должен оставаться `one_way_only`, если Moltis runtime не подтвердил рабочий callback ingress.
+Для live rollout дополнительно используются:
+
+- `CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT`
+- `CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT=/opt/moltinger/scripts/moltis-codex-advisory-send.sh`
+- `CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED=false`
+
+На этой rollout-ветке `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE` уже переводится в `inline_callbacks`, потому что callback ownership теперь замыкается на Moltis.
 
 ## Минимальная локальная проверка
 
@@ -154,6 +187,14 @@ bash scripts/moltis-codex-advisory-intake.sh \
 
 ```bash
 make codex-advisory-e2e
+```
+
+Для rollout-ветки добавляется ещё один обязательный набор:
+
+```bash
+bash tests/component/test_moltis_codex_advisory_send.sh
+bash tests/component/test_moltis_codex_advisory_rollout_config.sh
+./tests/run.sh --lane component --filter 'moltis_codex_advisory_(send|rollout_config|intake|router)'
 ```
 
 4. Принудительно проверить degraded path:
@@ -202,10 +243,11 @@ make codex-advisory-e2e
 
 Если interactive advisory path временно нельзя держать включённым, безопасный rollback должен быть только конфигурационным:
 
-1. Оставить `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE=one_way_only`.
-2. Не подключать или временно отключить Moltis callback hook для `moltis-codex-advisory-router.sh`.
-3. Не удалять producer-side advisory event emission и intake surface: one-way alert должен продолжать работать.
-4. Прогнать preview/verification и убедиться, что alert не показывает inline actions и не обещает follow-up.
+1. Вернуть `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE=one_way_only`.
+2. При необходимости временно убрать `CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT=/opt/moltinger/scripts/moltis-codex-advisory-send.sh` и вернуть обычный sender.
+3. При необходимости отключить Moltis callback hook для `moltis-codex-advisory-router.sh`.
+4. Не удалять producer-side advisory event emission и intake surface: one-way alert должен продолжать работать.
+5. Прогнать preview/verification и убедиться, что alert не показывает inline actions и не обещает follow-up.
 
 Минимальная проверка после safe-disable:
 
