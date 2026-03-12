@@ -19,7 +19,7 @@
 
 - в Codex больше не должно быть отдельного skill/command entrypoint для этого старого delivery path;
 - текущий production-safe режим для Telegram: только `one-way alert`;
-- новый интерактивный advisory flow будет открываться отдельным Speckit feature как `Moltis-native` решение.
+- новый интерактивный advisory flow теперь реализуется как `Moltis-native` решение в feature `021`, но production-safe default пока остаётся `one-way alert` до live rollout.
 - producer contract и Moltis-facing runtime surface зафиксированы в [docs/codex-moltis-native-advisory.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/codex-moltis-native-advisory.md).
 
 ## Что остаётся рабочим
@@ -54,8 +54,8 @@ bash scripts/codex-cli-update-delivery.sh --surface on-demand --stdout json
 
 1. upstream watcher сообщает о новом состоянии Codex CLI;
 2. Telegram в production работает как `one-way alert`;
-3. практические рекомендации пока нужно запрашивать отдельно;
-4. новый интерактивный UX будет реализован как Moltis-native flow.
+3. hermetic Moltis-native callback/follow-up path уже есть в runtime и тестах;
+4. в production рекомендации вернутся в Telegram только после live rollout этого Moltis-native flow.
 
 ## Техническая заметка
 

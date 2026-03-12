@@ -85,7 +85,8 @@
       "description": "Render or deliver a Moltis-native Codex advisory alert from a normalized producer event",
       "entrypoint": true,
       "requires": [
-        "jq"
+        "jq",
+        "python3"
       ],
       "provides": [
         "moltis-codex-advisory-intake",
@@ -94,12 +95,55 @@
       "env_vars": [
         "MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA",
         "MOLTIS_CODEX_ADVISORY_SEND_ALERT",
+        "MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE",
         "MOLTIS_CODEX_ADVISORY_TELEGRAM_CHAT_ID",
         "MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE",
         "MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT",
         "MOLTIS_CODEX_ADVISORY_AUDIT_DIR",
         "MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX",
-        "MOLTIS_CODEX_ADVISORY_DEGRADED_REASON"
+        "MOLTIS_CODEX_ADVISORY_DEGRADED_REASON",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS",
+        "MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND"
+      ],
+      "ci": true
+    },
+    "codex-advisory-session-store.sh": {
+      "version": "1.0.0",
+      "description": "Persist Moltis-native Codex advisory sessions and their follow-up delivery state",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "codex-advisory-session-store"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR"
+      ],
+      "ci": true
+    },
+    "moltis-codex-advisory-router.sh": {
+      "version": "1.0.0",
+      "description": "Route Moltis-native Codex advisory callbacks and recovery actions into immediate Telegram follow-up delivery",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-advisory-router"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR",
+        "MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE",
+        "MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX",
+        "MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND",
+        "MOLTIS_ENV_FILE"
       ],
       "ci": true
     },

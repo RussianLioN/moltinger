@@ -99,12 +99,15 @@ run_component_moltis_codex_advisory_intake_tests() {
     render_json="$work_dir/render.json"
     bash "$INTAKE_SCRIPT" \
         --event-file "$EVENT_FIXTURE_DIR/advisory-event-interactive-ready.json" \
+        --chat-id 123456 \
+        --interactive-mode inline_callbacks \
         --json-out "$render_json" \
         --stdout none
     assert_file_exists "$render_json" "Intake should emit a machine-readable render report"
     assert_eq "inline_callbacks" "$(jq -r '.alert.interactive_mode' "$render_json")" "Interactive-ready event should render inline callback mode"
     assert_contains "$(jq -r '.alert.message_text' "$render_json")" "Если нужны практические рекомендации" "Interactive-ready alert should mention inline actions"
     assert_contains "$(jq -c '.alert.reply_markup' "$render_json")" "\"inline_keyboard\"" "Interactive-ready alert should render inline keyboard markup"
+    assert_contains "$(jq -r '.recovery.accept_command_text' "$render_json")" "/codex-advisory-followup accept" "Interactive-ready report should keep a recovery-only command outside the user-facing message"
     if grep -q "/codex_" <<<"$(jq -r '.alert.message_text' "$render_json")"; then
         test_fail "Interactive-ready alert must not mention retired repo-side command UX"
     else
@@ -133,6 +136,7 @@ run_component_moltis_codex_advisory_intake_tests() {
         --event-file "$EVENT_FIXTURE_DIR/advisory-event-interactive-ready.json" \
         --send true \
         --chat-id 123456 \
+        --interactive-mode inline_callbacks \
         --telegram-send-script "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" \
         --telegram-env-file "$FAKE_TELEGRAM_ENV_FILE" \
         --audit-dir "$work_dir/audit" \
@@ -144,6 +148,7 @@ run_component_moltis_codex_advisory_intake_tests() {
     assert_file_exists "$audit_file" "Intake should persist an audit record"
     assert_eq "inline_callbacks" "$(jq -r '.interactive_mode' "$audit_file")" "Audit record should preserve interactive mode"
     assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "--reply-markup-json" "Interactive-ready delivery should send inline markup to Telegram"
+    assert_contains "$(jq -r '.session.session_id' "$render_json")" "advsess-" "Interactive-ready delivery should create a session id preview"
     test_pass
 
     test_start "component_moltis_codex_advisory_intake_rejects_invalid_event_shape"

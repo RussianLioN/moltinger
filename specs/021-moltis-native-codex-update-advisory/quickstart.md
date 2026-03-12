@@ -12,11 +12,11 @@ Validate the future ownership model:
 
 ## Current Precondition
 
-Before this feature is implemented:
+На текущем implementation-срезе:
 
-- the old Codex bridge is retired;
-- production stays in `one-way alert`;
-- interactive Telegram follow-up is intentionally disabled.
+- старый Codex bridge уже выведен из эксплуатации;
+- repo-side producer contract и Moltis-native intake/router уже реализованы hermetic-уровнем;
+- production-safe default всё ещё остаётся `one-way alert`, пока live callback routing не подтверждён end-to-end.
 
 ## Target Healthy Path
 
@@ -50,6 +50,7 @@ Producer-side checks that should stay valid:
 make codex-upstream-watcher
 make codex-update-advisor
 make codex-advisory-intake
+bash tests/component/test_moltis_codex_advisory_router.sh
 ```
 
 ## Expected User Outcome

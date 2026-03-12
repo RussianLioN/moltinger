@@ -53,6 +53,32 @@ scripts/moltis-codex-advisory-intake.sh
 - его задача здесь — зафиксировать contract, текст уведомления, audit record и repo-managed runtime surface;
 - конечный callback UX всё равно должен жить внутри Moltis core.
 
+## Advisory session store и router
+
+Для интерактивного пути теперь есть ещё два helper-а:
+
+```bash
+scripts/codex-advisory-session-store.sh
+scripts/moltis-codex-advisory-router.sh
+```
+
+Их роли разделены так:
+
+- `codex-advisory-session-store.sh` хранит pending advisory session, message id, статус callback-а и результат follow-up delivery;
+- `moltis-codex-advisory-router.sh` принимает `callback_query` или recovery-команду, валидирует chat binding и expiry, а затем либо отправляет рекомендации, либо честно закрывает advisory как `decline`/`expired`/`duplicate`.
+
+Локальный каталог session store по умолчанию:
+
+```bash
+.tmp/current/codex-advisory-session-store
+```
+
+Важно:
+
+- recovery-команда теперь есть только как запасной путь восстановления;
+- она не должна рекламироваться как primary UX в самом Telegram alert;
+- primary UX для пользователя остаётся только через inline callback-кнопки Moltis.
+
 ## Audit record
 
 Intake helper пишет machine-readable record в:
@@ -67,9 +93,10 @@ Intake helper пишет machine-readable record в:
 .tmp/current/codex-advisory-intake-audit
 ```
 
-В record должны быть:
+В audit record должны быть:
 
 - `event_id`
+- `upstream_fingerprint`
 - `alert_id`
 - `chat_id`
 - `message_id`
@@ -89,6 +116,13 @@ Repository-managed config теперь фиксирует такие env keys:
 - `MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT`
 - `MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE`
 - `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE`
+- `MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT`
+- `MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR`
+- `MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT`
+- `MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE`
+- `MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY`
+- `MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS`
+- `MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND`
 
 Пока `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE` должен оставаться `one_way_only`, если Moltis runtime не подтвердил рабочий callback ingress.
 
@@ -111,10 +145,18 @@ bash scripts/codex-cli-upstream-watcher.sh \
 ```bash
 bash scripts/moltis-codex-advisory-intake.sh \
   --event-file .tmp/current/codex-advisory-event.json \
+  --chat-id 262872984 \
+  --interactive-mode inline_callbacks \
   --stdout summary
 ```
 
-3. Принудительно проверить degraded path:
+3. Hermetic healthy path: alert -> accept -> recommendations:
+
+```bash
+bash tests/component/test_moltis_codex_advisory_router.sh
+```
+
+4. Принудительно проверить degraded path:
 
 ```bash
 bash scripts/moltis-codex-advisory-intake.sh \

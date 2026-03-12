@@ -48,11 +48,11 @@
 
 **Independent Test**: Press the inline accept action and confirm a second message with recommendations is sent promptly.
 
-- [ ] T020 [US2] Implement Moltis-native callback ownership for Codex advisory acceptance and decline
-- [ ] T021 [US2] Implement immediate follow-up recommendation delivery from Moltis
-- [ ] T022 [US2] Add idempotency and expiry handling for duplicate or stale callback actions
-- [ ] T023 [P] [US2] Add E2E coverage for `alert -> accept -> follow-up` and `alert -> decline`
-- [ ] T024 [US2] Add deep-link or tokenized fallback only as recovery, not as the primary UX
+- [x] T020 [US2] Implement Moltis-native callback ownership for Codex advisory acceptance and decline
+- [x] T021 [US2] Implement immediate follow-up recommendation delivery from Moltis
+- [x] T022 [US2] Add idempotency and expiry handling for duplicate or stale callback actions
+- [x] T023 [P] [US2] Add E2E coverage for `alert -> accept -> follow-up` and `alert -> decline`
+- [x] T024 [US2] Add deep-link or tokenized fallback only as recovery, not as the primary UX
 
 ---
 
