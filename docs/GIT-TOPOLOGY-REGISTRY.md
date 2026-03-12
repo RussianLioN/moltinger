@@ -133,7 +133,6 @@
 | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `origin/fix/beads-root-fallback-hardening` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 

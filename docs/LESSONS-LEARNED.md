@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-12
-**Total Lessons**: 20
+**Generated**: 2026-03-13
+**Total Lessons**: 21
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (2 lessons)
+#### P1 (3 lessons)
+- [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
@@ -45,7 +46,8 @@
 ### By Category
 
 
-#### cicd (3 lessons)
+#### cicd (4 lessons)
+- [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
@@ -81,13 +83,13 @@
 - `process` (6 lessons)
 - `rca` (5 lessons)
 - `topology-registry` (4 lessons)
+- `github-actions` (4 lessons)
 - `git-worktree` (4 lessons)
 - `ux` (3 lessons)
-- `github-actions` (3 lessons)
+- `gitops` (3 lessons)
 - `drift-detection` (3 lessons)
 - `sandbox` (2 lessons)
 - `remote-service` (2 lessons)
-- `permissions` (2 lessons)
 
 
 ---
@@ -96,10 +98,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 20 |
-| Critical (P0/P1) | 3 |
+| Total Lessons | 21 |
+| Critical (P0/P1) | 4 |
 | Categories | 5 |
-| Unique Tags | 51 |
+| Unique Tags | 53 |
 
 ---
 
