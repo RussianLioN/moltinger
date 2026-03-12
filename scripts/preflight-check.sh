@@ -157,11 +157,12 @@ configure_target() {
             ;;
         clawdiy)
             REQUIRED_SECRETS=(
-                "clawdiy_password"
                 "clawdiy_service_token"
                 "clawdiy_telegram_bot_token"
             )
             OPTIONAL_SECRETS=(
+                "clawdiy_gateway_token"
+                "clawdiy_password"
                 "clawdiy_telegram_allowed_users"
                 "clawdiy_openai_codex_auth_profile"
             )
@@ -250,6 +251,17 @@ run_yaml_fallback_check() {
 # Validation functions
 check_secrets_exist() {
     local all_found=true
+
+    if [[ "$TARGET" == "clawdiy" ]]; then
+        if secret_present "clawdiy_gateway_token"; then
+            add_check "clawdiy_gateway_secret_present" "pass" "Clawdiy gateway token secret is present" "error"
+        elif secret_present "clawdiy_password"; then
+            add_check "clawdiy_gateway_secret_present" "pass" "Clawdiy legacy password secret is present for gateway-token compatibility fallback" "warning"
+        else
+            MISSING_SECRETS+=("clawdiy_gateway_token|clawdiy_password")
+            all_found=false
+        fi
+    fi
 
     for secret in "${REQUIRED_SECRETS[@]}"; do
         if ! secret_present "$secret"; then
@@ -495,10 +507,10 @@ check_clawdiy_runtime_config() {
         and .gateway.bind == "custom"
         and .gateway.customBindHost == "0.0.0.0"
         and (.gateway.port | type == "number")
-        and .gateway.auth.mode == "password"
-        and .gateway.auth.password.source == "env"
-        and .gateway.auth.password.provider == "default"
-        and .gateway.auth.password.id == "OPENCLAW_GATEWAY_PASSWORD"
+        and .gateway.auth.mode == "token"
+        and .gateway.auth.token.source == "env"
+        and .gateway.auth.token.provider == "default"
+        and .gateway.auth.token.id == "OPENCLAW_GATEWAY_TOKEN"
         and .gateway.controlUi.enabled == true
         and (.gateway.controlUi.allowedOrigins | type == "array" and length > 0)
         and (.agents.list | type == "array" and any(.id == "main" and .identity.name == "Clawdiy"))
@@ -675,7 +687,7 @@ check_clawdiy_secret_isolation() {
     fi
 
     if [[ "$CLAWDIY_POLICY_HUMAN_REF" == "github-secret:MOLTIS_PASSWORD" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy human auth secret must not reuse MOLTIS_PASSWORD" "error"
+        add_check "fleet_secret_isolation" "fail" "Clawdiy gateway auth secret must not reuse MOLTIS_PASSWORD" "error"
         return
     fi
 

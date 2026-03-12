@@ -279,7 +279,7 @@
     "moltinger_human_auth": "github-secret:MOLTIS_PASSWORD",
     "moltinger_service_auth": "github-secret:MOLTINGER_SERVICE_TOKEN",
     "moltinger_telegram_auth": "github-secret:TELEGRAM_BOT_TOKEN",
-    "clawdiy_human_auth": "github-secret:CLAWDIY_PASSWORD",
+    "clawdiy_human_auth": "github-secret:CLAWDIY_GATEWAY_TOKEN",
     "clawdiy_service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN",
     "clawdiy_telegram_auth": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
     "clawdiy_telegram_allowlist": "github-secret:CLAWDIY_TELEGRAM_ALLOWED_USERS",

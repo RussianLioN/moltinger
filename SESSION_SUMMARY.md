@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-11
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
 
 ---
 
@@ -149,6 +149,32 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-12: Clawdiy Remote OAuth Runtime Research Formalized
+
+**Статус**: ✅ durable research + Speckit planning package created
+
+- Added durable research artifact [docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md) with official evidence, official GitHub issue evidence, explicit inference, consilium scoring, and recommended practical-now vs target-state OAuth methods.
+- Updated the research index in [docs/research/README.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/README.md) and added cross-links from [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md), [docs/SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md), and [specs/001-clawdiy-agent-platform/research.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/research.md).
+- Created a new Speckit package at [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md), [specs/017-clawdiy-remote-oauth-lifecycle/plan.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/plan.md), and [specs/017-clawdiy-remote-oauth-lifecycle/tasks.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/tasks.md) to turn the research into an implementation contract.
+- Refreshed [docs/GIT-TOPOLOGY-REGISTRY.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/GIT-TOPOLOGY-REGISTRY.md) after switching the worktree to branch `017-clawdiy-remote-oauth-lifecycle`.
+
+- Validation completed:
+  - `scripts/git-topology-registry.sh refresh --write-doc`
+  - `git diff --check`
+
+### 2026-03-12: Clawdiy OAuth Planning Switched To UI-First Bootstrap
+
+**Статус**: ✅ operator path refined before runtime implementation
+
+- Updated [specs/017-clawdiy-remote-oauth-lifecycle/plan.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/plan.md) so the first practical OAuth attempt is now the live Clawdiy web Settings flow targeting the hosted runtime directly; SSH/CLI paste-back remains fallback only.
+- Updated [specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md) and created [specs/017-clawdiy-remote-oauth-lifecycle/validation.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/validation.md) so the first execution checklist now starts from the Clawdiy web UI and records runtime-store/provider evidence.
+- Updated [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md) and [docs/deployment-strategy.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/deployment-strategy.md) so operator docs match the new UI-first contract.
+- Reconciled [specs/017-clawdiy-remote-oauth-lifecycle/tasks.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/tasks.md) with the newly completed planning/doc tasks.
+
+**Validated**
+
+- `git diff --check`
 
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 
@@ -304,7 +330,12 @@ GitOps Compliance: Enforced ✅
 
 - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
 - `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
-- `env CLAWDIY_PASSWORD=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `env CLAWDIY_GATEWAY_TOKEN=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- Added hosted-Control-UI RCA and rule for Clawdiy gateway token auth:
+  `docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md`,
+  `docs/rules/clawdiy-hosted-control-ui-token-auth.md`
+- Follow-up Beads task for merge/rollout cleanup:
+  `molt-di3` — roll out canonical `CLAWDIY_GATEWAY_TOKEN` and retire legacy password fallback
 - `./scripts/clawdiy-smoke.sh --stage auth --json`
 
 **Next**
