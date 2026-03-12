@@ -124,30 +124,141 @@ disable_notification="$(jq -r '.disable_notification' <<<"$payload_json")"
 reply_to="$(jq -r '.reply_to' <<<"$payload_json")"
 reply_markup_json="$(jq -r '.reply_markup_json' <<<"$payload_json")"
 
+strip_wrapping_quotes() {
+  local value="${1:-}"
+  if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+    value="${value#\"}"
+    value="${value%\"}"
+  fi
+  if [[ "$value" == \'*\' && "$value" == *\' ]]; then
+    value="${value#\'}"
+    value="${value%\'}"
+  fi
+  printf '%s\n' "$value"
+}
+
+read_env_value() {
+  local env_file="$1"
+  local key="$2"
+  local value=""
+
+  [[ -f "$env_file" ]] || return 1
+  value="$(sed -n "s/^${key}=//p" "$env_file" | head -n 1)"
+  [[ -n "$value" ]] || return 1
+  strip_wrapping_quotes "$value"
+}
+
+resolve_telegram_token() {
+  local configured=""
+
+  if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+    printf '%s\n' "${TELEGRAM_BOT_TOKEN}"
+    return 0
+  fi
+
+  configured="$(read_env_value "$remote_env_file" "TELEGRAM_BOT_TOKEN" || true)"
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  return 1
+}
+
+send_via_remote_script() {
+  local sender="$remote_root/scripts/telegram-bot-send.sh"
+  local help_output=""
+  local cmd=()
+
+  [[ -x "$sender" ]] || return 11
+
+  if [[ -n "$reply_markup_json" ]]; then
+    help_output="$("$sender" --help 2>&1 || true)"
+    if [[ "$help_output" != *"--reply-markup-json"* ]]; then
+      return 10
+    fi
+  fi
+
+  cmd=(
+    "$sender"
+    --chat-id "$chat_id"
+    --text "$text"
+    --json
+  )
+
+  if [[ -n "$parse_mode" ]]; then
+    cmd+=(--parse-mode "$parse_mode")
+  fi
+
+  if [[ "$disable_notification" == "true" ]]; then
+    cmd+=(--disable-notification)
+  fi
+
+  if [[ -n "$reply_to" ]]; then
+    cmd+=(--reply-to "$reply_to")
+  fi
+
+  if [[ -n "$reply_markup_json" ]]; then
+    cmd+=(--reply-markup-json "$reply_markup_json")
+  fi
+
+  MOLTIS_ENV_FILE="$remote_env_file" "${cmd[@]}"
+}
+
+send_via_direct_api() {
+  local token payload
+
+  token="$(resolve_telegram_token)" || {
+    echo '{"ok":false,"error":"TELEGRAM_BOT_TOKEN is not set on remote host","script":"telegram-bot-send-remote.sh"}'
+    return 1
+  }
+
+  if [[ -n "$reply_markup_json" ]] && ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$reply_markup_json"; then
+    echo '{"ok":false,"error":"--reply-markup-json must be a JSON object","script":"telegram-bot-send-remote.sh"}'
+    return 2
+  fi
+
+  payload="$(
+    jq -cn \
+      --arg chat_id "$chat_id" \
+      --arg text "$text" \
+      --arg parse_mode "$parse_mode" \
+      --argjson disable_notification "$disable_notification" \
+      --arg reply_to_message_id "$reply_to" \
+      --arg reply_markup_json "$reply_markup_json" \
+      '{
+          chat_id: $chat_id,
+          text: $text,
+          disable_notification: $disable_notification
+      }
+      + (if ($parse_mode|length) > 0 then {parse_mode: $parse_mode} else {} end)
+      + (if ($reply_to_message_id|length) > 0 then {reply_to_message_id: ($reply_to_message_id|tonumber)} else {} end)
+      + (if ($reply_markup_json|length) > 0 then {reply_markup: ($reply_markup_json|fromjson)} else {} end)'
+  )"
+
+  curl -sS --max-time "${TELEGRAM_TIMEOUT_SECONDS:-20}" \
+    -X POST \
+    -H "content-type: application/json" \
+    -d "$payload" \
+    "https://api.telegram.org/bot${token}/sendMessage"
+}
+
 cd "$remote_root"
 
-cmd=(
-  ./scripts/telegram-bot-send.sh
-  --chat-id "$chat_id"
-  --text "$text"
-  --json
-)
+set +e
+remote_output="$(send_via_remote_script 2>&1)"
+remote_status=$?
+set -e
 
-if [[ -n "$parse_mode" ]]; then
-  cmd+=(--parse-mode "$parse_mode")
+if [[ $remote_status -eq 0 ]]; then
+  printf '%s\n' "$remote_output"
+  exit 0
 fi
 
-if [[ "$disable_notification" == "true" ]]; then
-  cmd+=(--disable-notification)
+if [[ $remote_status -ne 10 && $remote_status -ne 11 ]]; then
+  printf '%s\n' "$remote_output"
+  exit "$remote_status"
 fi
 
-if [[ -n "$reply_to" ]]; then
-  cmd+=(--reply-to "$reply_to")
-fi
-
-if [[ -n "$reply_markup_json" ]]; then
-  cmd+=(--reply-markup-json "$reply_markup_json")
-fi
-
-MOLTIS_ENV_FILE="$remote_env_file" "${cmd[@]}"
+send_via_direct_api
 EOF
