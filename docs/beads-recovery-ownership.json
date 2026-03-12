@@ -6,6 +6,12 @@
       "branch": "007-codex-update-monitor",
       "worktree_hint": "moltinger-molt-2-codex-update-monitor-new",
       "reason": "Speckit-derived numeric feature branch already owns this issue family."
+    },
+    {
+      "issue_id": "moltinger-z8m",
+      "branch": "feat/moltinger-z8m-1-moltis-backup-rollback-baseline",
+      "worktree_hint": "moltinger-z8m-1-moltis-backup-rollback-baseline",
+      "reason": "Parent epic anchors on the baseline backup-first worktree before child update/remediation lanes proceed."
     }
   ]
 }
