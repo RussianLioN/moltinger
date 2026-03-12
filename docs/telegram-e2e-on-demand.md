@@ -99,30 +99,56 @@ gh workflow run telegram-e2e-on-demand.yml \
 - `mode=real_user`: рабочая отправка через MTProto (Telethon) от тестового пользователя к боту.
 - Штатный режим прод-бота не меняется.
 
-## Ограничение для Codex consent routing
+## Codex-specific acceptance path
 
-После feature `017-codex-telegram-consent-routing` этого harness недостаточно, чтобы доказать исправление UX-багa `alert -> consent -> recommendations`.
+После feature `017-codex-telegram-consent-routing` для сценария `alert -> consent -> recommendations` появился отдельный acceptance helper:
 
-Почему:
+```bash
+./scripts/codex-telegram-consent-e2e.sh \
+  --mode hermetic \
+  --output .tmp/current/codex-telegram-consent-e2e-report.json
+```
 
-- `synthetic` режим проверяет chat API, а не реальный Telegram ingress ownership;
-- `real_user` подтверждает поведение пользователя, но не подменяет production routing contract;
-- authoritative consent path теперь опирается на токенизированные действия и shared consent store.
+Или коротко:
+
+```bash
+make codex-consent-e2e
+```
+
+Что именно он проверяет:
+
+1. watcher отправляет consent-capable alert;
+2. consent request сохраняется в shared store;
+3. authoritative router принимает tokenized action;
+4. второе сообщение с рекомендациями уходит сразу;
+5. degraded one-way alert не обещает сломанный follow-up.
 
 Простыми словами:
 
-- этот harness по-прежнему полезен;
-- но он сам по себе не доказывает, что ответ пользователя больше не уходит в generic chat flow;
-- для этого нужен отдельный Codex-specific acceptance path в следующем implementation slice.
+- общий `telegram-e2e-on-demand` harness остаётся полезным для transport/runtime smoke;
+- но именно Codex consent UX теперь принимается через отдельный helper, а не через ручную интерпретацию `/status` или случайных ответов.
 
 ## Что уже можно проверять после feature 017
 
-Сейчас через component/runtime validation уже можно проверить:
+Через component/runtime validation и новый acceptance helper уже можно проверить:
 
 - watcher создаёт authoritative consent request;
 - Telegram alert несёт tokenized fallback command;
 - router умеет разобрать command fallback и callback payload;
-- shared store фиксирует решение и expiry.
+- shared store фиксирует решение и expiry;
+- immediate follow-up уходит сразу после `accept`;
+- degraded one-way alert не задаёт сломанный вопрос.
+
+Если нужен именно live user-side smoke после деплоя, текущий harness по-прежнему годится для простых probe-сценариев:
+
+```bash
+./scripts/telegram-e2e-on-demand.sh \
+  --mode real_user \
+  --message '/status' \
+  --timeout-sec 45 \
+  --output /tmp/telegram-e2e-real-user.json \
+  --verbose
+```
 
 ## Real User Example
 

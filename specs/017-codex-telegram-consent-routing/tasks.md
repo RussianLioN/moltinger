@@ -65,21 +65,21 @@
 
 **Independent Test**: Run a live or hermetic end-to-end scenario `alert -> consent action -> recommendations` plus a degraded scenario where the router is unavailable and the alert becomes one-way only.
 
-- [ ] T030 [US3] Extend `scripts/telegram-e2e-on-demand.sh` and/or related helpers with a Codex-specific acceptance path
-- [ ] T031 [US3] Add a live-acceptance or hermetic-equivalent contract for the scenario `alert -> consent -> recommendations`
-- [ ] T032 [P] [US3] Add degraded-mode coverage proving the watcher falls back to one-way alerts without a misleading question
-- [ ] T033 [US3] Document rollout, rollback, and observability steps in `docs/codex-cli-upstream-watcher.md` and `docs/telegram-e2e-on-demand.md`
+- [x] T030 [US3] Extend `scripts/telegram-e2e-on-demand.sh` and/or related helpers with a Codex-specific acceptance path
+- [x] T031 [US3] Add a live-acceptance or hermetic-equivalent contract for the scenario `alert -> consent -> recommendations`
+- [x] T032 [P] [US3] Add degraded-mode coverage proving the watcher falls back to one-way alerts without a misleading question
+- [x] T033 [US3] Document rollout, rollback, and observability steps in `docs/codex-cli-upstream-watcher.md` and `docs/telegram-e2e-on-demand.md`
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T040 [P] Add make targets or helper entrypoints for consent-router validation
-- [ ] T041 [P] Validate Bash syntax for the new scripts and updated Telegram sender helpers
-- [ ] T042 Run targeted component validation for consent router and Codex watcher regressions
-- [ ] T043 Run the chosen E2E acceptance path and capture operator-facing evidence
-- [ ] T044 Verify docs, runtime config, and contract schema stay aligned
-- [ ] T045 Update `docs/GIT-TOPOLOGY-REGISTRY.md` if a dedicated branch/worktree is created for this feature
+- [x] T040 [P] Add make targets or helper entrypoints for consent-router validation
+- [x] T041 [P] Validate Bash syntax for the new scripts and updated Telegram sender helpers
+- [x] T042 Run targeted component validation for consent router and Codex watcher regressions
+- [x] T043 Run the chosen E2E acceptance path and capture operator-facing evidence
+- [x] T044 Verify docs, runtime config, and contract schema stay aligned
+- [x] T045 Update `docs/GIT-TOPOLOGY-REGISTRY.md` if a dedicated branch/worktree is created for this feature
 
 ## Dependencies & Execution Order
 

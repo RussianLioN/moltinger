@@ -42,35 +42,41 @@ Expected result:
 - expired requests return a contextual failure
 - generic free-text `да` is not treated as the primary production contract
 
-## 3. Validate End-to-End Through Telegram
+## 3. Validate End-to-End Through The Codex Acceptance Helper
 
-Use the existing E2E harness with a real user or synthetic path, depending on the environment.
+Use the Codex-specific helper to prove the main scenario without relying on a live operator click.
+
+```bash
+make codex-consent-e2e
+```
+
+Or call the helper directly:
+
+```bash
+./scripts/codex-telegram-consent-e2e.sh \
+  --mode hermetic \
+  --output .tmp/current/codex-telegram-consent-e2e-report.json
+```
+
+Expected result:
+
+- the watcher opens a consent-capable alert
+- the authoritative router accepts the tokenized action
+- the second recommendation message is delivered immediately
+- the degraded one-way alert does not ask a broken question
+
+If you want an additional live user probe after deployment, keep using:
 
 ```bash
 ./scripts/telegram-e2e-on-demand.sh \
   --mode real_user \
-  --message "/status" \
+  --message '/status' \
   --timeout-sec 45 \
   --output /tmp/telegram-e2e-real-user.json \
   --verbose
 ```
 
-Then run the Codex-specific acceptance path once implemented:
-
-```bash
-./scripts/telegram-e2e-on-demand.sh \
-  --mode real_user \
-  --message "/codex-followup yes <token>" \
-  --timeout-sec 45 \
-  --output /tmp/telegram-codex-consent-e2e.json \
-  --verbose
-```
-
-Expected result:
-
-- the main bot handles the consent action contextually
-- the second recommendation message is delivered
-- no generic “context is unclear” reply appears for the matched action
+That live probe is still useful for transport verification, but the hermetic Codex helper is now the authoritative acceptance contract for `alert -> consent -> recommendations`.
 
 ## 4. Validate Degraded Fallback
 
@@ -93,3 +99,18 @@ Expected result:
 - timestamps
 - delivery status
 - duplicate/expiry notes if applicable
+
+## 6. Capture Operator Evidence
+
+After the acceptance run, inspect:
+
+- `.tmp/current/codex-telegram-consent-e2e-report.json`
+- `.tmp/current/codex-upstream-watcher-report.json` when running the watcher directly
+- the consent record under `.tmp/current/codex-telegram-consent-store/` or the helper temp artifacts
+
+This gives one compact artifact showing:
+
+- alert text
+- request id and action token
+- immediate recommendation follow-up text
+- degraded one-way alert evidence

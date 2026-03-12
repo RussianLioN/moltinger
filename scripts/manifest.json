@@ -139,6 +139,22 @@
       ],
       "ci": true
     },
+    "codex-telegram-consent-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Codex Telegram acceptance path covering alert, consent, immediate recommendations, and degraded one-way fallback",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "codex-consent-e2e",
+        "codex-telegram-consent-e2e"
+      ],
+      "ci": true
+    },
     "codex-cli-update-delivery.sh": {
       "version": "1.0.0",
       "description": "Deliver Codex update awareness across on-demand, launcher, and Telegram surfaces",
