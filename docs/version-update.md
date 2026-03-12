@@ -8,6 +8,7 @@ Check the tracked version defaults:
 
 ```bash
 make version-check
+./scripts/moltis-version.sh version
 ```
 
 ## Production Rule
@@ -38,7 +39,7 @@ Forbidden:
 
 Preferred operator runbook:
 
-- [moltis-backup-safe-update.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/runbooks/moltis-backup-safe-update.md)
+- [moltis-backup-safe-update.md](runbooks/moltis-backup-safe-update.md)
 
 ## Manual Server Helper
 
@@ -55,7 +56,14 @@ BACKUP_FILE="$(cat .last-moltis-backup)"
 
 - create a fresh pre-update backup
 - validate restore readiness of that backup
+- deploy the git-tracked version only
 - block deploy if restore readiness fails
+
+`.github/workflows/uat-gate.yml` is expected to:
+
+- resolve the tracked version from git via `scripts/moltis-version.sh`
+- avoid manual version input
+- deploy only through `./scripts/deploy.sh --json moltis deploy`
 
 ## Rollback Expectations
 
@@ -74,5 +82,5 @@ Runtime audit paths:
 
 ## References
 
-- [deployment-strategy.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/deployment-strategy.md)
-- [disaster-recovery.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/disaster-recovery.md)
+- [deployment-strategy.md](deployment-strategy.md)
+- [disaster-recovery.md](disaster-recovery.md)

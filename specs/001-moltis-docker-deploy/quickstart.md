@@ -123,17 +123,24 @@ echo "0 3 * * * root /usr/local/bin/backup-moltis.sh" | sudo tee /etc/cron.d/mol
 # List backups
 ls /var/backups/moltis/
 
-# Restore
-tar -xzf /var/backups/moltis/moltis_YYYYMMDD_HHMMSS.tar.gz -C /
-docker compose restart moltis
+# Restore through the tracked rollback helper
+./scripts/deploy.sh --json moltis rollback
 ```
 
 ## Updates
 
-Watchtower automatically checks for updates daily. To force update:
+Moltis updates are git-tracked and backup-safe. Do not use Watchtower as the authority for version bumps.
 
 ```bash
-docker compose exec watchtower /watchtower --run-once
+# 1. Update the tracked image version in git
+$EDITOR docker-compose.yml
+$EDITOR docker-compose.prod.yml
+
+# 2. Validate the tracked version contract
+./scripts/moltis-version.sh assert-tracked
+
+# 3. Commit/push, then deploy through the safe helper or workflow
+./scripts/deploy.sh --json moltis deploy
 ```
 
 ## Monitoring

@@ -435,18 +435,17 @@ echo "Backup completed: moltis_$TIMESTAMP.tar.gz"
 ### Recovery
 
 ```bash
-# Restore from backup
-tar -xzf /var/backups/moltis/DATE.tar.gz -C /
-docker compose restart moltis
+# Restore through the tracked rollback helper
+./scripts/deploy.sh --json moltis rollback
 ```
 
 ---
 
-## Container Updates (Watchtower)
+## Container Updates (Git-Tracked Rollout)
 
 ### Configuration
 
-Watchtower автоматически проверяет новые версии образа и обновляет контейнер.
+Moltis version updates must come from git-tracked compose changes plus a fresh backup-safe rollout. Watchtower may exist as an auxiliary container, but it must not be the authority that advances the Moltis image version.
 
 ```yaml
 # Добавить в docker-compose.yml

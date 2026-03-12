@@ -67,6 +67,7 @@ CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
 CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
+MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
@@ -182,6 +183,58 @@ read_env_file_value() {
     printf '%s' "$value"
 }
 
+tracked_moltis_version() {
+    if [[ ! -x "$MOLTIS_VERSION_HELPER" ]]; then
+        log_error "Moltis version helper is missing or not executable: $MOLTIS_VERSION_HELPER"
+        exit 2
+    fi
+
+    "$MOLTIS_VERSION_HELPER" version
+}
+
+tracked_moltis_image_ref() {
+    if [[ ! -x "$MOLTIS_VERSION_HELPER" ]]; then
+        log_error "Moltis version helper is missing or not executable: $MOLTIS_VERSION_HELPER"
+        exit 2
+    fi
+
+    "$MOLTIS_VERSION_HELPER" image
+}
+
+assert_tracked_moltis_contract() {
+    if [[ ! -x "$MOLTIS_VERSION_HELPER" ]]; then
+        log_error "Moltis version helper is missing or not executable: $MOLTIS_VERSION_HELPER"
+        exit 2
+    fi
+
+    "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null
+}
+
+enforce_moltis_git_tracked_version() {
+    local action="$1"
+    local tracked_version env_file_version=""
+
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    assert_tracked_moltis_contract
+    tracked_version="$(tracked_moltis_version)"
+
+    if read_env_file_value "MOLTIS_VERSION" >/dev/null 2>&1; then
+        env_file_version="$(read_env_file_value "MOLTIS_VERSION")"
+        if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" != "true" && "$env_file_version" != "$tracked_version" ]]; then
+            log_error "MOLTIS_VERSION in $ENV_FILE ($env_file_version) does not match tracked git version $tracked_version"
+            exit 2
+        fi
+    fi
+
+    if [[ -n "${MOLTIS_VERSION:-}" && "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" != "true" && "$MOLTIS_VERSION" != "$tracked_version" ]]; then
+        log_error "Ad-hoc MOLTIS_VERSION override is forbidden for Moltis $action; update tracked compose files in git instead"
+        exit 2
+    fi
+}
+
 extract_moltis_version_tag() {
     local image_ref="$1"
     if [[ "$image_ref" == ghcr.io/moltis-org/moltis:* ]]; then
@@ -235,6 +288,23 @@ compose_cmd() {
 
     if [[ "$OUTPUT_JSON" == "true" ]]; then
         redirect_stdout=true
+    fi
+
+    if [[ "$TARGET" == "moltis" ]]; then
+        if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" == "true" && -n "${MOLTIS_VERSION:-}" ]]; then
+            if [[ "$redirect_stdout" == "true" ]]; then
+                MOLTIS_VERSION="$MOLTIS_VERSION" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+            else
+                MOLTIS_VERSION="$MOLTIS_VERSION" docker compose "${compose_args[@]}" "${args[@]}"
+            fi
+        else
+            if [[ "$redirect_stdout" == "true" ]]; then
+                env -u MOLTIS_VERSION docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+            else
+                env -u MOLTIS_VERSION docker compose "${compose_args[@]}" "${args[@]}"
+            fi
+        fi
+        return
     fi
 
     if [[ "$TARGET" == "clawdiy" ]]; then
@@ -411,7 +481,11 @@ latest_backup_path() {
         return 0
     fi
 
-    ls -t "$BACKUP_DIR"/daily/moltis_* "$BACKUP_DIR"/weekly/moltis_* "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1 || true
+    ls -t \
+        "$BACKUP_DIR"/pre_deploy_*.tar.gz \
+        "$BACKUP_DIR"/daily/moltis_* \
+        "$BACKUP_DIR"/weekly/moltis_* \
+        "$BACKUP_DIR"/monthly/moltis_* 2>/dev/null | head -1 || true
 }
 
 latest_restore_check_path() {
@@ -420,6 +494,7 @@ latest_restore_check_path() {
         return 0
     fi
 
+    latest_file_under "$PROJECT_ROOT/data/moltis/audit/restore-checks"
     return 0
 }
 
@@ -617,6 +692,8 @@ check_prerequisites() {
     fi
 
     if [[ "$TARGET" == "moltis" ]]; then
+        enforce_moltis_git_tracked_version "$action"
+
         if [[ "$action" == "deploy" || "$action" == "rollback" ]]; then
             ensure_moltis_audit_paths
         fi
@@ -738,6 +815,11 @@ backup_current_state() {
 
 pull_images() {
     log_info "Pulling images for target $TARGET..."
+
+    if [[ "$TARGET" == "moltis" ]]; then
+        log_info "Using tracked Moltis image from git: $(tracked_moltis_image_ref)"
+    fi
+
     compose_cmd normal pull
     log_success "Images pulled successfully for target $TARGET"
 }
@@ -768,7 +850,9 @@ rollback() {
         log_info "Rolling back target $TARGET to $last_image"
 
         if [[ "$TARGET" == "moltis" ]]; then
-            MOLTIS_VERSION="$(extract_moltis_version_tag "$last_image")" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
+            ALLOW_MOLTIS_VERSION_OVERRIDE=true \
+                MOLTIS_VERSION="$(extract_moltis_version_tag "$last_image")" \
+                compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         else
             CLAWDIY_IMAGE="$last_image" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         fi
@@ -1002,6 +1086,9 @@ cmd_status() {
         echo ""
         echo "Image:"
         echo "  Current: $(get_current_version)"
+        if [[ "$TARGET" == "moltis" ]]; then
+            echo "  Tracked: $(tracked_moltis_image_ref)"
+        fi
         if [[ -f "$TARGET_LAST_IMAGE_FILE" ]]; then
             echo "  Previous: $(cat "$TARGET_LAST_IMAGE_FILE")"
         fi

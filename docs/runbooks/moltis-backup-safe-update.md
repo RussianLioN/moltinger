@@ -52,6 +52,7 @@ Files:
 
 - `docker-compose.yml`
 - `docker-compose.prod.yml`
+- `scripts/moltis-version.sh`
 
 ### 2. Capture fresh backup
 
@@ -93,6 +94,9 @@ GitHub Actions path:
 - backup step must finish successfully
 - restore-readiness validation must finish successfully
 - only then may the new Moltis image be pulled and started
+- `.github/workflows/uat-gate.yml`
+- UAT must resolve the tracked version from git, not from manual input
+- UAT deploy must go through `./scripts/deploy.sh --json moltis deploy`
 
 ## Rollback Path
 
@@ -132,6 +136,6 @@ An update is not complete until:
 
 ## References
 
-- [version-update.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/version-update.md)
-- [deployment-strategy.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/deployment-strategy.md)
-- [disaster-recovery.md](/Users/rl/coding/moltinger-z8m-1-moltis-backup-rollback-baseline/docs/disaster-recovery.md)
+- [version-update.md](../version-update.md)
+- [deployment-strategy.md](../deployment-strategy.md)
+- [disaster-recovery.md](../disaster-recovery.md)

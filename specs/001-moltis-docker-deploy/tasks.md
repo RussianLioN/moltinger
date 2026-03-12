@@ -315,25 +315,26 @@
 
 ---
 
-## Phase 13: Watchtower Auto-Updates
+## Phase 13: Git-Tracked Container Update Controls
 
-**Goal**: Configure automatic container updates
+**Goal**: Keep any update helper sidecars non-authoritative and route Moltis version changes through git-tracked backup-safe rollout
 
 **Independent Test**:
 1. Verify Watchtower container running
-2. Verify Watchtower logs show update checks
+2. Verify Moltis version bumps still require compose changes in git plus the deploy helper/workflow
 
 ### Implementation
 
 - [X] T048 Add Watchtower service to docker-compose.yml
 - [X] T049 Configure Watchtower environment: CLEANUP, POLL_INTERVAL=86400
 - [X] T050 Add Watchtower label to Moltis service
-- [ ] T051 Test Watchtower: `docker compose exec watchtower /watchtower --run-once`
+- [ ] T051 Verify Watchtower remains non-authoritative for Moltis updates; use tracked git rollout for actual version bumps
 
-**Checkpoint**: Auto-updates configured
+**Checkpoint**: Helper sidecar present, but tracked git rollout remains the Moltis update authority
 
 **Artifacts**:
 - Updated `docker-compose.yml` with Watchtower
+- Backup-safe tracked rollout documented in `docs/runbooks/moltis-backup-safe-update.md`
 
 ---
 

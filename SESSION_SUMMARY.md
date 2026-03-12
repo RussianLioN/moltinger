@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-11
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
 
 ---
 
@@ -18,7 +18,7 @@
 | Компонент | Технология |
 |-----------|------------|
 | **Container** | Docker Compose |
-| **AI Assistant** | Moltis (ghcr.io/moltis-org/moltis:latest) |
+| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:v0.10.18) |
 | **Telegram Bot** | @moltinger_bot |
 | **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
 | **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
@@ -149,6 +149,31 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
+
+**Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session
+
+- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:v0.10.18` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
+- Hardened `scripts/deploy.sh` against ad-hoc `MOLTIS_VERSION` drift, added fallback discovery for `pre_deploy_*.tar.gz` backups and restore-check evidence, and kept rollback on the same tracked contract.
+- Removed the unsafe manual version path from `.github/workflows/uat-gate.yml`; UAT now derives the version from git and deploys Moltis only through `./scripts/deploy.sh --json moltis deploy`.
+- Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `.last-deployed-image`, `.last-moltis-backup`, and `.last-moltis-restore-check` so CI-created evidence is reusable during rollback.
+- Extended static coverage for the pinned version helper, tracked rollback pointers, and the new UAT/deploy workflow invariants; updated rollout docs and fixed rebased absolute links.
+
+**Validated**
+
+- `bash -n scripts/deploy.sh scripts/moltis-version.sh scripts/backup-moltis-enhanced.sh tests/static/test_config_validation.sh`
+- `bash ./scripts/moltis-version.sh assert-tracked`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); YAML.load_file(".github/workflows/uat-gate.yml"); puts "workflow yaml ok"'`
+- `./tests/run.sh --lane static --filter config_validation --json`
+- `./tests/run.sh --lane component --filter backup_restore_readiness --json`
+- `scripts/git-topology-registry.sh check`
+
+**Next**
+
+- Execute the tracked Moltis rollout through the backup-safe CI path when a production window is intended.
+- Continue with `moltinger-z8m.4` only after that rollout, using the new restore-check and rollback evidence for post-update triage.
+- Keep `moltinger-z8m.2` blocked until the updated Moltis baseline is confirmed stable.
 
 ### 2026-03-12: Moltis Backup-Safe Update Baseline (z8m.1)
 

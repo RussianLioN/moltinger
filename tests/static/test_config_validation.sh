@@ -12,12 +12,14 @@ COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
+UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
+MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -83,6 +85,15 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Expected environment variable substitution in config files"
+    fi
+
+    test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
+    if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
+       bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
+       ! rg -q '\$\{MOLTIS_VERSION:-latest\}|image:\s*ghcr\.io/moltis-org/moltis:latest' "$PROJECT_ROOT/docker-compose.yml" "$COMPOSE_PROD"; then
+        test_pass
+    else
+        test_fail "Moltis version helper must exist, validate compose alignment, and forbid latest as the tracked default"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"
@@ -160,10 +171,33 @@ run_static_config_validation_tests() {
     test_start "static_deploy_script_enforces_moltis_backup_safe_rollout"
     if rg -q 'restore-check "\$backup_path"' "$DEPLOY_SCRIPT" && \
        rg -q '\.last-moltis-restore-check' "$DEPLOY_SCRIPT" && \
-       rg -q 'data/moltis/audit/rollback-evidence' "$DEPLOY_SCRIPT"; then
+       rg -q 'data/moltis/audit/rollback-evidence' "$DEPLOY_SCRIPT" && \
+       rg -q 'pre_deploy_\*\.tar\.gz' "$DEPLOY_SCRIPT" && \
+       rg -q 'latest_file_under "\$PROJECT_ROOT/data/moltis/audit/restore-checks"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
         test_fail "deploy.sh must require restore-check before Moltis deploy and record rollback evidence for rollback-safe updates"
+    fi
+
+    test_start "static_deploy_workflow_tracks_git_managed_rollback_pointers"
+    if rg -q '\.last-deployed-image' "$DEPLOY_WORKFLOW" && \
+       rg -q '\.last-moltis-backup' "$DEPLOY_WORKFLOW" && \
+       rg -q '\.last-moltis-restore-check' "$DEPLOY_WORKFLOW" && \
+       rg -q 'deploy\.sh --json moltis rollback' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must refresh rollback pointers and route rollback through deploy.sh"
+    fi
+
+    test_start "static_uat_gate_uses_tracked_git_version_and_backup_safe_deploy"
+    if ! rg -q 'target_version' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'scripts/moltis-version\.sh version' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'deploy\.sh --json moltis deploy' "$UAT_GATE_WORKFLOW" && \
+       ! rg -q 'docker pull ghcr\.io/moltis-org/moltis:\$VERSION' "$UAT_GATE_WORKFLOW" && \
+       ! rg -q 'MOLTIS_VERSION="\$VERSION"' "$UAT_GATE_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "UAT gate must derive the Moltis version from git and deploy only through the backup-safe deploy.sh path"
     fi
 
     test_start "static_clawdiy_workflow_exists"

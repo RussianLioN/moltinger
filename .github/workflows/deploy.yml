@@ -25,11 +25,6 @@ on:
         options:
           - production
           - staging
-      version:
-        description: 'Moltis image version (e.g., latest, v1.0.0)'
-        required: false
-        default: 'latest'
-        type: string
       rollback:
         description: 'Rollback to previous version'
         required: false
@@ -112,22 +107,28 @@ jobs:
             PENDING_SYNC=true
           fi
 
-          # Check 2: config/moltis.toml
-          echo "=== Check 2: config/moltis.toml ==="
+          # Check 2: docker-compose.prod.yml
+          echo "=== Check 2: docker-compose.prod.yml ==="
+          if ! compare_files "docker-compose.prod.yml" "${{ env.DEPLOY_PATH }}/docker-compose.prod.yml" "docker-compose.prod.yml"; then
+            PENDING_SYNC=true
+          fi
+
+          # Check 3: config/moltis.toml
+          echo "=== Check 3: config/moltis.toml ==="
           if ! compare_files "config/moltis.toml" "${{ env.DEPLOY_PATH }}/config/moltis.toml" "moltis.toml"; then
             PENDING_SYNC=true
           fi
 
-          # Check 3: config/mcp-servers.json (if exists)
-          echo "=== Check 3: config/mcp-servers.json ==="
+          # Check 4: config/mcp-servers.json (if exists)
+          echo "=== Check 4: config/mcp-servers.json ==="
           if [ -f "config/mcp-servers.json" ]; then
             if ! compare_files "config/mcp-servers.json" "${{ env.DEPLOY_PATH }}/config/mcp-servers.json" "mcp-servers.json"; then
               PENDING_SYNC=true
             fi
           fi
 
-          # Check 4: scripts/ directory
-          echo "=== Check 4: scripts/ directory ==="
+          # Check 5: scripts/ directory
+          echo "=== Check 5: scripts/ directory ==="
           if [ -d "scripts" ] && [ "$(ls -A scripts 2>/dev/null)" ]; then
             for SCRIPT in scripts/*; do
               if [ -f "$SCRIPT" ]; then
@@ -139,8 +140,8 @@ jobs:
             done
           fi
 
-          # Check 5: systemd/ directory
-          echo "=== Check 5: systemd/ directory ==="
+          # Check 6: systemd/ directory
+          echo "=== Check 6: systemd/ directory ==="
           if [ -d "systemd" ] && [ "$(ls -A systemd 2>/dev/null)" ]; then
             for UNIT in systemd/*; do
               if [ -f "$UNIT" ]; then
@@ -152,8 +153,8 @@ jobs:
             done
           fi
 
-          # Check 6: server worktree cleanliness (hard block)
-          echo "=== Check 6: server git status --porcelain ==="
+          # Check 7: server worktree cleanliness (hard block)
+          echo "=== Check 7: server git status --porcelain ==="
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
             echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
@@ -221,16 +222,18 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-          else
-            # Use default version - must match what's on server
-            VERSION="latest"
+          VERSION="$(bash ./scripts/moltis-version.sh version)"
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/}"
+            if [ "$TAG_VERSION" != "$VERSION" ]; then
+              echo "::error::Git tag $TAG_VERSION does not match tracked Moltis version $VERSION"
+              exit 1
+            fi
           fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Deploying Moltis version: $VERSION"
+          echo "::notice::Deploying tracked Moltis version from git: $VERSION"
 
       - name: Validate deployment prerequisites
         id: validate
@@ -486,6 +489,11 @@ jobs:
             # Save image version metadata
             echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
 
+            # Refresh rollback pointers so deploy.sh rollback can recover the
+            # exact pre-update state even when CI created the backup.
+            echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/.last-deployed-image"
+            echo "$BACKUP_FILE" > "$DEPLOY_DIR/.last-moltis-backup"
+
             if [ ! -f "$BACKUP_FILE" ]; then
               echo "::error::Backup archive was not created"
               exit 1
@@ -583,6 +591,10 @@ jobs:
             echo "has_compose_prod_sidecar=$HAS_COMPOSE_PROD_SIDECAR"
             echo "has_compose_main_sidecar=$HAS_COMPOSE_MAIN_SIDECAR"
             echo "has_version=$HAS_VERSION"
+
+            if [ "$HAS_CONFIG" = "true" ] && [ "$HAS_DATA" = "true" ] && [ "$HAS_ENV" = "true" ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = "true" ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = "true" ] && [ "$HAS_VERSION" = "true" ]; then
+              echo "$RESTORE_CHECK_FILE" > "$DEPLOY_DIR/.last-moltis-restore-check"
+            fi
           EOF
           )
 
@@ -753,7 +765,6 @@ jobs:
       # ===========================================
       - name: Generate .env from Secrets
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
           echo "::group::Generating .env file from GitHub Secrets"
 
           # Create .env file content with secrets expanded
@@ -781,9 +792,6 @@ jobs:
 
           # Domain
           MOLTIS_DOMAIN=moltis.ainetic.tech
-
-          # Deployment
-          MOLTIS_VERSION=$VERSION
           EOF
 
           # Copy to server
@@ -827,6 +835,11 @@ jobs:
             set -e
             cd ${{ env.DEPLOY_PATH }}
 
+            if grep -q '^MOLTIS_VERSION=' .env 2>/dev/null; then
+              echo "::error::MOLTIS_VERSION override is forbidden in /opt/moltinger/.env; track Moltis version in git compose files instead"
+              exit 1
+            fi
+
             # Validate docker-compose.prod.yml syntax (production config)
             docker compose -f docker-compose.prod.yml config --quiet
 
@@ -853,7 +866,7 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
 
             # Pull pinned image version (use production compose file)
-            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml pull moltis
+            env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml pull moltis
 
             # Stop container gracefully
             echo "Stopping current container..."
@@ -861,7 +874,7 @@ jobs:
 
             # Start new container
             echo "Starting new container..."
-            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml up -d moltis
+            env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml up -d moltis
 
             # Verify expected image is running
             RUNNING_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo "unknown")
@@ -921,40 +934,15 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
-            BACKUP_FILE="${{ needs.backup.outputs.backup_file }}"
-            if [ -z "$BACKUP_FILE" ]; then
-              echo "::error::Auto rollback requires backup_file output"
-              exit 1
-            fi
-
             cd ${{ env.DEPLOY_PATH }}
+            OUTPUT=$(./scripts/deploy.sh --json moltis rollback)
+            echo "$OUTPUT"
 
-            # Stop failed deployment
-            docker compose -f docker-compose.prod.yml stop moltis || true
-
-            # Restore pre-deploy state
-            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
-
-            if [ -f "${BACKUP_FILE}.compose" ]; then
-              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
-            else
-              echo "::error::Rollback compose metadata missing: ${BACKUP_FILE}.compose"
+            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
+            if [ "$STATUS" != "success" ]; then
+              echo "::error::deploy.sh rollback failed"
               exit 1
             fi
-
-            if [ -f "${BACKUP_FILE}.compose-main" ]; then
-              cp "${BACKUP_FILE}.compose-main" docker-compose.yml
-            else
-              echo "::error::Rollback compose metadata missing: ${BACKUP_FILE}.compose-main"
-              exit 1
-            fi
-
-            BACKUP_VERSION=$(cat "${BACKUP_FILE}.version" 2>/dev/null || echo "unknown")
-            if [ "$BACKUP_VERSION" != "unknown" ]; then
-              docker pull "$BACKUP_VERSION" || true
-            fi
-
-            docker compose -f docker-compose.prod.yml up -d moltis
           EOF
           echo "rolled_back=true" >> $GITHUB_OUTPUT
           echo "::endgroup::"
@@ -1144,72 +1132,72 @@ jobs:
       - name: Find last backup
         id: backup
         run: |
-          echo "::group::Finding last backup"
+          echo "::group::Resolving tracked rollback evidence"
           BACKUP_INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            BACKUP_DIR="${{ env.BACKUP_PATH }}"
-            LATEST=$(ls -t $BACKUP_DIR/pre_deploy_*.tar.gz 2>/dev/null | head -1)
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
 
-            if [ -z "$LATEST" ]; then
+            BACKUP_FILE=""
+            RESTORE_CHECK_FILE=""
+            PREVIOUS_IMAGE=""
+
+            if [ -f .last-moltis-backup ] && [ -s .last-moltis-backup ]; then
+              BACKUP_FILE=$(cat .last-moltis-backup)
+            else
+              BACKUP_FILE=$(ls -t "${{ env.BACKUP_PATH }}"/pre_deploy_*.tar.gz 2>/dev/null | head -1 || true)
+            fi
+
+            if [ -f .last-moltis-restore-check ] && [ -s .last-moltis-restore-check ]; then
+              RESTORE_CHECK_FILE=$(cat .last-moltis-restore-check)
+            else
+              RESTORE_CHECK_FILE=$(find data/moltis/audit/restore-checks -type f -name 'restore-check-*.json' 2>/dev/null | sort | tail -1 || true)
+            fi
+
+            if [ -f .last-deployed-image ] && [ -s .last-deployed-image ]; then
+              PREVIOUS_IMAGE=$(cat .last-deployed-image)
+            fi
+
+            if [ -z "$BACKUP_FILE" ]; then
               echo "ERROR: No backup found"
               exit 1
             fi
 
-            VERSION=$(cat "${LATEST}.version" 2>/dev/null || echo "unknown")
-            echo "backup_file=$LATEST"
-            echo "backup_version=$VERSION"
+            echo "backup_file=$BACKUP_FILE"
+            echo "restore_check_file=$RESTORE_CHECK_FILE"
+            echo "previous_image=$PREVIOUS_IMAGE"
           EOF
           )
 
-          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep "backup_file=" | cut -d= -f2)
-          BACKUP_VERSION=$(echo "$BACKUP_INFO" | grep "backup_version=" | cut -d= -f2)
+          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep '^backup_file=' | cut -d= -f2-)
+          RESTORE_CHECK_FILE=$(echo "$BACKUP_INFO" | grep '^restore_check_file=' | cut -d= -f2-)
+          PREVIOUS_IMAGE=$(echo "$BACKUP_INFO" | grep '^previous_image=' | cut -d= -f2-)
 
           if [ -z "$BACKUP_FILE" ]; then
-            echo "::error::No backup found for rollback"
+            echo "::error::No rollback backup found"
             exit 1
           fi
 
           echo "backup_file=$BACKUP_FILE" >> $GITHUB_OUTPUT
-          echo "backup_version=$BACKUP_VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Found backup: $BACKUP_FILE (version: $BACKUP_VERSION)"
+          echo "restore_check_file=$RESTORE_CHECK_FILE" >> $GITHUB_OUTPUT
+          echo "previous_image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
+          echo "::notice::Rollback evidence resolved: $BACKUP_FILE"
           echo "::endgroup::"
 
-      - name: Restore backup
+      - name: Run tracked rollback
         run: |
-          BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
-          BACKUP_VERSION="${{ steps.backup.outputs.backup_version }}"
-
-          echo "::group::Restoring backup (GitOps)"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+          echo "::group::Running tracked rollback"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
             cd ${{ env.DEPLOY_PATH }}
+            OUTPUT=$(./scripts/deploy.sh --json moltis rollback)
+            echo "$OUTPUT"
 
-            # Stop container (use production compose file)
-            docker compose -f docker-compose.prod.yml stop moltis || true
-
-            # Restore config/data/.env to deployment directory
-            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
-
-            # Restore docker-compose.prod.yml from backup (GitOps: exact config restore)
-            if [ -f "${BACKUP_FILE}.compose" ]; then
-              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
-              echo "Restored docker-compose.prod.yml from backup"
+            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
+            if [ "$STATUS" != "success" ]; then
+              echo "::error::deploy.sh rollback failed"
+              exit 1
             fi
-
-            if [ -f "${BACKUP_FILE}.compose-main" ]; then
-              cp "${BACKUP_FILE}.compose-main" docker-compose.yml
-              echo "Restored docker-compose.yml from backup"
-            fi
-
-            # Pull the backed-up image version if known
-            if [ "$BACKUP_VERSION" != "unknown" ]; then
-              docker pull $BACKUP_VERSION
-            fi
-
-            # Start container (use production compose file)
-            docker compose -f docker-compose.prod.yml up -d moltis
-
-            echo "Rollback completed to version: $BACKUP_VERSION"
           EOF
           echo "::endgroup::"
 
@@ -1243,7 +1231,8 @@ jobs:
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Backup | \`${{ steps.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | \`${{ steps.backup.outputs.backup_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Restore Check | \`${{ steps.backup.outputs.restore_check_file }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Previous Image | \`${{ steps.backup.outputs.previous_image }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
