@@ -56,7 +56,7 @@
 | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
-| `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `none` | Needs decision |
+| `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
@@ -119,6 +119,7 @@
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
+| `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation

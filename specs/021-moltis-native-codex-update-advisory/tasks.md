@@ -62,20 +62,20 @@
 
 **Independent Test**: Disable callback routing and confirm Moltis sends a one-way alert with a recorded degraded reason.
 
-- [ ] T030 [US3] Implement degraded one-way advisory mode inside Moltis-native flow
-- [ ] T031 [US3] Implement audit records for alert, callback, and follow-up delivery
-- [ ] T032 [P] [US3] Add live or hermetic acceptance coverage for degraded mode and full audit trail
-- [ ] T033 [US3] Document rollback and safe-disable steps for the interactive advisory feature
+- [x] T030 [US3] Implement degraded one-way advisory mode inside Moltis-native flow
+- [x] T031 [US3] Implement audit records for alert, callback, and follow-up delivery
+- [x] T032 [P] [US3] Add live or hermetic acceptance coverage for degraded mode and full audit trail
+- [x] T033 [US3] Document rollback and safe-disable steps for the interactive advisory feature
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T040 [P] Sync bridge/runtime docs so Codex no longer advertises the retired repo-side skill
-- [ ] T041 [P] Validate skill sync and discovery state after retiring the old bridge and adding the new plan artifacts
-- [ ] T042 Validate contract/schema and targeted docs/config consistency
-- [ ] T043 Run targeted validation and live-proof checklist
-- [ ] T044 Update tracker status, related follow-up issues, and any topology or rollout docs if a dedicated branch/worktree is later created
+- [x] T040 [P] Sync bridge/runtime docs so Codex no longer advertises the retired repo-side skill
+- [x] T041 [P] Validate skill sync and discovery state after retiring the old bridge and adding the new plan artifacts
+- [x] T042 Validate contract/schema and targeted docs/config consistency
+- [x] T043 Run targeted validation and live-proof checklist
+- [x] T044 Update tracker status, related follow-up issues, and any topology or rollout docs if a dedicated branch/worktree is later created
 
 ## Dependencies & Execution Order
 

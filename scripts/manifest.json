@@ -147,6 +147,21 @@
       ],
       "ci": true
     },
+    "codex-advisory-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Moltis-native Codex advisory acceptance path covering healthy callback flow and degraded one-way fallback",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "codex-advisory-e2e"
+      ],
+      "ci": true
+    },
     "codex-cli-update-monitor.sh": {
       "version": "1.0.0",
       "description": "Assess local Codex CLI state against upstream releases and repo workflow relevance",

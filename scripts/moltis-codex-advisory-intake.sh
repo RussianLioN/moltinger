@@ -599,6 +599,7 @@ main() {
                     build_session_record "$session_id" "$callback_token" "$expires_at" "$message_id" > "$session_record_path"
                     "$SESSION_STORE_SCRIPT" open \
                         --store-dir "$SESSION_STORE_DIR" \
+                        --audit-dir "$AUDIT_DIR" \
                         --record-file "$session_record_path" \
                         --json >/dev/null
                 fi

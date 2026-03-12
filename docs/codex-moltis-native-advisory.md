@@ -153,7 +153,7 @@ bash scripts/moltis-codex-advisory-intake.sh \
 3. Hermetic healthy path: alert -> accept -> recommendations:
 
 ```bash
-bash tests/component/test_moltis_codex_advisory_router.sh
+make codex-advisory-e2e
 ```
 
 4. Принудительно проверить degraded path:
@@ -164,6 +164,64 @@ bash scripts/moltis-codex-advisory-intake.sh \
   --force-one-way \
   --stdout summary
 ```
+
+Артефакт hermetic proof по умолчанию:
+
+```bash
+.tmp/current/codex-advisory-e2e-report.json
+```
+
+Этот отчёт уже содержит:
+
+- текст alert для healthy path;
+- текст follow-up рекомендаций;
+- вшитый audit record для interactive path;
+- вшитый audit record для degraded path.
+
+## Live-proof checklist
+
+Перед rollout или review достаточно пройти такой минимальный набор:
+
+```bash
+./scripts/sync-claude-skills-to-codex.sh --check
+make codex-check
+bash tests/component/test_moltis_codex_advisory_intake.sh
+bash tests/component/test_moltis_codex_advisory_router.sh
+make codex-advisory-e2e
+```
+
+Простыми словами:
+
+- bridge остаётся в синхроне;
+- runtime docs/config не расходятся;
+- healthy path доказан;
+- degraded path доказан;
+- audit trail виден в одном JSON-артефакте.
+
+## Safe Disable и Rollback
+
+Если interactive advisory path временно нельзя держать включённым, безопасный rollback должен быть только конфигурационным:
+
+1. Оставить `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE=one_way_only`.
+2. Не подключать или временно отключить Moltis callback hook для `moltis-codex-advisory-router.sh`.
+3. Не удалять producer-side advisory event emission и intake surface: one-way alert должен продолжать работать.
+4. Прогнать preview/verification и убедиться, что alert не показывает inline actions и не обещает follow-up.
+
+Минимальная проверка после safe-disable:
+
+```bash
+bash scripts/moltis-codex-advisory-intake.sh \
+  --event-file tests/fixtures/codex-advisory-events/advisory-event-interactive-ready.json \
+  --interactive-mode one_way_only \
+  --stdout summary
+```
+
+Ожидаемое поведение после rollback:
+
+- alert остаётся русским и полезным;
+- пользователь получает только one-way уведомление;
+- audit record сохраняет `degraded_reason`;
+- никаких `/codex_*` и ложных интерактивных обещаний больше нет.
 
 ## Что не нужно делать
 

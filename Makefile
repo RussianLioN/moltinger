@@ -11,7 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
-.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake
+.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake codex-advisory-e2e
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -95,6 +95,7 @@ help:
 	@echo "  codex-upstream-watcher - Проверить upstream Codex CLI с уровнями важности и project-ready рекомендациями"
 	@echo "  codex-consent-e2e - Прогнать hermetic acceptance path alert -> consent -> recommendations"
 	@echo "  codex-advisory-intake - Сгенерировать advisory event и показать Moltis-native alert preview"
+	@echo "  codex-advisory-e2e - Прогнать hermetic Moltis-native advisory flow: alert -> callback -> follow-up и degraded one-way"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -400,6 +401,12 @@ codex-advisory-intake:
 		--json-out .tmp/current/codex-advisory-intake-report.json \
 		--summary-out .tmp/current/codex-advisory-intake-summary.md \
 		--stdout summary
+
+codex-advisory-e2e:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-advisory-e2e.sh \
+		--mode hermetic \
+		--output .tmp/current/codex-advisory-e2e-report.json
 
 codex-research:
 	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh research

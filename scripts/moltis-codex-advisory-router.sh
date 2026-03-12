@@ -5,9 +5,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 DEFAULT_STORE_SCRIPT="${PROJECT_ROOT}/scripts/codex-advisory-session-store.sh"
 DEFAULT_TELEGRAM_SEND_SCRIPT="${PROJECT_ROOT}/scripts/telegram-bot-send.sh"
+DEFAULT_AUDIT_DIR="${PROJECT_ROOT}/.tmp/current/codex-advisory-intake-audit"
 
 STORE_SCRIPT="${MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT:-${DEFAULT_STORE_SCRIPT}}"
 STORE_DIR="${MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR:-${PROJECT_ROOT}/.tmp/current/codex-advisory-session-store}"
+AUDIT_DIR="${MOLTIS_CODEX_ADVISORY_AUDIT_DIR:-${DEFAULT_AUDIT_DIR}}"
 TELEGRAM_SEND_SCRIPT="${MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT:-${DEFAULT_TELEGRAM_SEND_SCRIPT}}"
 TELEGRAM_ENV_FILE="${MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE:-${MOLTIS_ENV_FILE:-}}"
 SEND_REPLY="${MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY:-true}"
@@ -39,6 +41,7 @@ Options:
   --reply-to MESSAGE_ID        Reply to this Telegram message id
   --store-script PATH          Advisory session store helper path
   --store-dir PATH             Advisory session store directory
+  --audit-dir PATH             Advisory audit mirror directory
   --telegram-send-script PATH  Telegram sender script for follow-up replies
   --telegram-env-file PATH     Env file for Telegram sender token loading
   --send-reply true|false      Whether to send a contextual reply (default: true)
@@ -102,6 +105,10 @@ parse_args() {
                 ;;
             --store-dir)
                 STORE_DIR="${2:?missing value for --store-dir}"
+                shift 2
+                ;;
+            --audit-dir)
+                AUDIT_DIR="${2:?missing value for --audit-dir}"
                 shift 2
                 ;;
             --telegram-send-script)
@@ -239,6 +246,7 @@ store_mark_followup() {
         "$STORE_SCRIPT"
         mark-followup
         --store-dir "$STORE_DIR"
+        --audit-dir "$AUDIT_DIR"
         --session-id "$session_id"
         --followup-status "$followup_status"
         --json
@@ -428,10 +436,11 @@ PY
         elif [[ "$stored_token" != "$callback_token" ]]; then
             result="$(result_json true true "invalid" "$session_id" "$resolved_via" "Не удалось подтвердить токен действия. Дождитесь нового уведомления." "skipped" "")"
         elif [[ "$expiry_epoch" -gt 0 && "$now_epoch" -gt "$expiry_epoch" ]]; then
-            "$STORE_SCRIPT" resolve \
-                --store-dir "$STORE_DIR" \
-                --session-id "$session_id" \
-                --decision expired \
+                "$STORE_SCRIPT" resolve \
+                    --store-dir "$STORE_DIR" \
+                    --audit-dir "$AUDIT_DIR" \
+                    --session-id "$session_id" \
+                    --decision expired \
                 --resolved-via "$resolved_via" \
                 --telegram-actor-id "${ACTOR_ID:-$CHAT_ID}" \
                 --raw-input "$raw_input" \
@@ -439,10 +448,11 @@ PY
                 --json >/dev/null
             result="$(result_json true true "expired" "$session_id" "$resolved_via" "Окно подтверждения уже истекло. Дождитесь нового advisory-уведомления." "skipped" "")"
         elif [[ "$stored_status" != "pending" ]]; then
-            "$STORE_SCRIPT" resolve \
-                --store-dir "$STORE_DIR" \
-                --session-id "$session_id" \
-                --decision duplicate \
+                "$STORE_SCRIPT" resolve \
+                    --store-dir "$STORE_DIR" \
+                    --audit-dir "$AUDIT_DIR" \
+                    --session-id "$session_id" \
+                    --decision duplicate \
                 --resolved-via "$resolved_via" \
                 --telegram-actor-id "${ACTOR_ID:-$CHAT_ID}" \
                 --raw-input "$raw_input" \
@@ -453,6 +463,7 @@ PY
             if [[ "$action" == "accept" ]]; then
                 "$STORE_SCRIPT" resolve \
                     --store-dir "$STORE_DIR" \
+                    --audit-dir "$AUDIT_DIR" \
                     --session-id "$session_id" \
                     --decision accept \
                     --resolved-via "$resolved_via" \
@@ -467,6 +478,7 @@ PY
             else
                 "$STORE_SCRIPT" resolve \
                     --store-dir "$STORE_DIR" \
+                    --audit-dir "$AUDIT_DIR" \
                     --session-id "$session_id" \
                     --decision decline \
                     --resolved-via "$resolved_via" \
@@ -523,7 +535,13 @@ PY
         ensure_parent_dir "$JSON_OUT"
         printf '%s\n' "$result" > "$JSON_OUT"
     fi
-    [[ "$STDOUT_FORMAT" == "json" ]] && printf '%s\n' "$result"
+    case "$STDOUT_FORMAT" in
+        json)
+            printf '%s\n' "$result"
+            ;;
+        none)
+            ;;
+    esac
 }
 
 main "$@"

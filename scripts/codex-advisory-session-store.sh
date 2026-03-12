@@ -4,8 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 DEFAULT_STORE_DIR="${PROJECT_ROOT}/.tmp/current/codex-advisory-session-store"
+DEFAULT_AUDIT_DIR="${PROJECT_ROOT}/.tmp/current/codex-advisory-intake-audit"
 
 STORE_DIR="${MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR:-${DEFAULT_STORE_DIR}}"
+AUDIT_DIR="${MOLTIS_CODEX_ADVISORY_AUDIT_DIR:-${DEFAULT_AUDIT_DIR}}"
 COMMAND="${1:-}"
 SESSION_ID=""
 CALLBACK_TOKEN=""
@@ -34,6 +36,7 @@ Commands:
 
 Common options:
   --store-dir PATH            Advisory session store directory
+  --audit-dir PATH            Advisory audit mirror directory
   --session-id ID             Advisory session id
   --callback-token TOKEN      Advisory callback token
   --record-file PATH          JSON file to read for open
@@ -79,8 +82,18 @@ record_path_for() {
     printf '%s/%s.json\n' "$STORE_DIR" "$session_id"
 }
 
+audit_path_for() {
+    local session_id
+    session_id="$(sanitize_session_id "$1")"
+    printf '%s/%s.json\n' "$AUDIT_DIR" "$session_id"
+}
+
 ensure_store_dir() {
     mkdir -p "$STORE_DIR"
+}
+
+ensure_audit_dir() {
+    mkdir -p "$AUDIT_DIR"
 }
 
 render_json() {
@@ -121,6 +134,10 @@ parse_args() {
         case "$1" in
             --store-dir)
                 STORE_DIR="${2:?missing value for --store-dir}"
+                shift 2
+                ;;
+            --audit-dir)
+                AUDIT_DIR="${2:?missing value for --audit-dir}"
                 shift 2
                 ;;
             --session-id)
@@ -186,6 +203,7 @@ open_record() {
     [[ -n "$RECORD_FILE" ]] || fail "--record-file is required for open"
     [[ -f "$RECORD_FILE" ]] || fail "record file not found: $RECORD_FILE"
     ensure_store_dir
+    ensure_audit_dir
     validate_record_file "$RECORD_FILE"
 
     local session_id path tmp
@@ -197,6 +215,7 @@ open_record() {
     tmp="${path}.tmp"
     jq '.' "$RECORD_FILE" > "$tmp"
     mv "$tmp" "$path"
+    cp "$path" "$(audit_path_for "$session_id")"
     render_json "$path"
 }
 
@@ -224,6 +243,8 @@ bind_message() {
         .audit_notes = ((.audit_notes // []) + ["alert_message_id attached"])
     ' "$path" > "$tmp"
     mv "$tmp" "$path"
+    ensure_audit_dir
+    cp "$path" "$(audit_path_for "$SESSION_ID")"
     render_json "$path"
 }
 
@@ -281,8 +302,10 @@ resolve_record() {
         | .interaction_record.resolved_at = $resolved_at
         | .audit_notes = ((.audit_notes // []) + ["decision:" + $decision + " via " + $resolved_via])
         | (if $note != "" then .audit_notes = (.audit_notes + [$note]) else . end)
-        ' "$path" > "$tmp"
+    ' "$path" > "$tmp"
     mv "$tmp" "$path"
+    ensure_audit_dir
+    cp "$path" "$(audit_path_for "$SESSION_ID")"
     render_json "$path"
 }
 
@@ -341,8 +364,10 @@ mark_followup() {
           )
         | .audit_notes = ((.audit_notes // []) + ["followup:" + $followup_status])
         | (if $note != "" then .audit_notes = (.audit_notes + [$note]) else . end)
-        ' "$path" > "$tmp"
+    ' "$path" > "$tmp"
     mv "$tmp" "$path"
+    ensure_audit_dir
+    cp "$path" "$(audit_path_for "$SESSION_ID")"
     render_json "$path"
 }
 

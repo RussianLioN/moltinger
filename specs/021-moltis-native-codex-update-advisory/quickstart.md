@@ -16,6 +16,7 @@ Validate the future ownership model:
 
 - старый Codex bridge уже выведен из эксплуатации;
 - repo-side producer contract и Moltis-native intake/router уже реализованы hermetic-уровнем;
+- для `alert -> accept -> recommendations` и degraded one-way path есть отдельный hermetic proof helper;
 - production-safe default всё ещё остаётся `one-way alert`, пока live callback routing не подтверждён end-to-end.
 
 ## Target Healthy Path
@@ -50,7 +51,16 @@ Producer-side checks that should stay valid:
 make codex-upstream-watcher
 make codex-update-advisor
 make codex-advisory-intake
+bash tests/component/test_moltis_codex_advisory_intake.sh
 bash tests/component/test_moltis_codex_advisory_router.sh
+make codex-advisory-e2e
+make codex-check
+```
+
+Hermetic proof artifact:
+
+```bash
+.tmp/current/codex-advisory-e2e-report.json
 ```
 
 ## Expected User Outcome
