@@ -229,3 +229,11 @@ The next `speckit.plan` phase should treat the following as required inputs:
 - Current production compose and config patterns in [docker-compose.prod.yml](../../docker-compose.prod.yml) and [config/moltis.toml](../../config/moltis.toml).
 - Secret-source rules in [docs/SECRETS-MANAGEMENT.md](../../docs/SECRETS-MANAGEMENT.md).
 - Topology constraints in [docs/GIT-TOPOLOGY-REGISTRY.md](../../docs/GIT-TOPOLOGY-REGISTRY.md).
+
+## 9. Follow-On Research Track
+
+After the initial Clawdiy platform rollout, the repository collected a dedicated follow-on OAuth track for real remote-container runtime auth:
+
+- [docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md)
+
+That document refines the `codex-oauth` problem from “rollout-gated capability” into an explicit runtime auth lifecycle problem with three compared operator methods, consolidated consilium scoring, and a follow-on Speckit package for implementation planning.

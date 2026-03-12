@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-11
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
 
 ---
 
@@ -149,6 +149,19 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-12: Clawdiy Remote OAuth Runtime Research Formalized
+
+**Статус**: ✅ durable research + Speckit planning package created
+
+- Added durable research artifact [docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md) with official evidence, official GitHub issue evidence, explicit inference, consilium scoring, and recommended practical-now vs target-state OAuth methods.
+- Updated the research index in [docs/research/README.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/README.md) and added cross-links from [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md), [docs/SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md), and [specs/001-clawdiy-agent-platform/research.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/research.md).
+- Created a new Speckit package at [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md), [specs/017-clawdiy-remote-oauth-lifecycle/plan.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/plan.md), and [specs/017-clawdiy-remote-oauth-lifecycle/tasks.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/tasks.md) to turn the research into an implementation contract.
+- Refreshed [docs/GIT-TOPOLOGY-REGISTRY.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/GIT-TOPOLOGY-REGISTRY.md) after switching the worktree to branch `017-clawdiy-remote-oauth-lifecycle`.
+
+- Validation completed:
+  - `scripts/git-topology-registry.sh refresh --write-doc`
+  - `git diff --check`
 
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 

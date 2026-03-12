@@ -3,9 +3,16 @@
 **Status**: Draft operator runbook for feature `001-clawdiy-agent-platform`  
 **Scope**: Clawdiy-only auth rotation and repeat-auth procedures
 
+**Related research**:
+- [Clawdiy / OpenClaw Remote Runtime OAuth Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md)
+
 ## Purpose
 
 Recover or rotate Clawdiy auth material without changing Moltinger auth state.
+
+Current limitation:
+- This runbook documents the current metadata-gated `codex-oauth` flow.
+- The production-grade runtime auth store lifecycle is tracked as a follow-on implementation in [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md).
 
 ## Auth Surfaces
 

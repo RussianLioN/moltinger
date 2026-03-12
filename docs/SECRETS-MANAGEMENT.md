@@ -187,6 +187,10 @@ gh secret set OLLAMA_API_KEY --repo RussianLioN/moltinger
 
 These secrets are reserved for the separate Clawdiy runtime and must stay distinct from the current Moltinger secret set.
 
+See also:
+- [Clawdiy / OpenClaw Remote Runtime OAuth Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md)
+- [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md)
+
 | Secret | Required for first Clawdiy deploy | Purpose | Planned mapping |
 |--------|-----------------------------------|---------|-----------------|
 | `CLAWDIY_PASSWORD` | Yes | Human/web auth for Clawdiy | `CLAWDIY_PASSWORD` in Clawdiy-only env file |
@@ -199,6 +203,7 @@ Rules:
 - Do not reuse `MOLTIS_PASSWORD`, `TELEGRAM_BOT_TOKEN`, or any existing Moltinger provider auth material for Clawdiy.
 - Do not render Clawdiy secrets into the current `/opt/moltinger/.env`.
 - `deploy.yml` remains Moltinger-only; `deploy-clawdiy.yml` is the only workflow allowed to render and sync the separate Clawdiy env/runtime secret set.
+- `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` is metadata and policy evidence only; it is not the runtime OAuth credential artifact used by OpenClaw itself.
 
 Dedicated Clawdiy env rendering rules:
 - The authoritative Clawdiy runtime env file is `/opt/moltinger/clawdiy/.env`.
