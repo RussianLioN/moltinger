@@ -12,7 +12,6 @@
 |---|---|---|---|
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
-| `moltinger-019-asc-fabrique-prototype` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
@@ -32,6 +31,7 @@
 | `primary-feature-012` | `012-codex-upstream-watcher-writable` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-016` | `016-worktree-skill-bug-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-018` | `018-clawdiy-gateway-password-ui-fix` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-020` | `020-agent-factory-prototype` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `fix/beads-recovery-audit-localization` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -45,6 +45,7 @@
 | `012-codex-upstream-watcher-writable` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
 | `018-clawdiy-gateway-password-ui-fix` | `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
+| `020-agent-factory-prototype` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
@@ -77,7 +78,6 @@
 | `017-clawdiy-remote-oauth-lifecycle` | `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
 | `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
 | `019-asc-fabrique-prototype` | `none` | Needs decision |
-| `020-agent-factory-prototype` | `none` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
