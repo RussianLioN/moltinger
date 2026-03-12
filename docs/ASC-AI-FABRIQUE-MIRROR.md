@@ -59,6 +59,25 @@ Those assets remain available in the upstream repository when a later session ne
 - `specs/020-agent-factory-prototype/research.md`
 - `specs/020-agent-factory-prototype/plan.md`
 - `specs/020-agent-factory-prototype/tasks.md`
+- `specs/020-agent-factory-prototype/quickstart.md`
+
+## Session Recovery Path
+
+When a new session needs to restore context without any workstation-local hints, read in this order:
+
+1. `docs/ASC-AI-FABRIQUE-MIRROR.md`
+2. `docs/asc-roadmap/INDEX.md`
+3. `docs/concept/INDEX.md`
+4. `docs/plans/parallel-doodling-coral.md`
+5. `docs/plans/agent-factory-lifecycle.md`
+6. `specs/020-agent-factory-prototype/spec.md`
+7. `specs/020-agent-factory-prototype/tasks.md`
+8. `specs/020-agent-factory-prototype/quickstart.md`
+9. `docs/runbooks/agent-factory-prototype.md`
+10. `config/fleet/agents-registry.json`
+11. `config/fleet/policy.json`
+
+This path is intentionally repo-local only. No workstation-local absolute path should be required to find concept context, active implementation scope, or platform contracts.
 
 ## Reading Paths
 
@@ -81,6 +100,31 @@ Those assets remain available in the upstream repository when a later session ne
 1. `docs/plans/parallel-doodling-coral.md`
 2. `docs/ASC-AI-FABRIQUE-MIRROR.md`
 3. `specs/020-agent-factory-prototype/spec.md`
+4. `specs/020-agent-factory-prototype/tasks.md`
+5. `specs/020-agent-factory-prototype/quickstart.md`
+
+## Integrity Checks
+
+Use these local checks before landing changes that affect mirror navigation or planning continuity:
+
+```bash
+./tests/run.sh --lane component --filter component_agent_factory_context_mirror --json
+rg -n "coding/ASC-AI-agent-fabrique" \
+  docs/ASC-AI-FABRIQUE-MIRROR.md \
+  docs/plans/parallel-doodling-coral.md \
+  docs/research/openclaw-moltis-research.md \
+  specs/020-agent-factory-prototype/spec.md \
+  specs/020-agent-factory-prototype/plan.md \
+  specs/020-agent-factory-prototype/research.md \
+  specs/020-agent-factory-prototype/data-model.md \
+  specs/020-agent-factory-prototype/tasks.md \
+  specs/020-agent-factory-prototype/contracts
+```
+
+Expected result:
+
+- component mirror-integrity test passes
+- no active planning artifact depends on the workstation-local upstream clone
 
 ## Maintenance Rule
 

@@ -142,11 +142,11 @@
 
 ### Validation for User Story 5
 
-- [ ] T029 [P] [US5] Create mirror-integrity coverage in `tests/component/test_agent_factory_context_mirror.sh`
+- [x] T029 [P] [US5] Create mirror-integrity coverage in `tests/component/test_agent_factory_context_mirror.sh`
 
 ### Implementation for User Story 5
 
-- [ ] T030 [US5] Reconcile mirror navigation and active spec references in `docs/ASC-AI-FABRIQUE-MIRROR.md` and `specs/020-agent-factory-prototype/quickstart.md`
+- [x] T030 [US5] Reconcile mirror navigation and active spec references in `docs/ASC-AI-FABRIQUE-MIRROR.md` and `specs/020-agent-factory-prototype/quickstart.md`
 
 **Checkpoint**: The repository itself carries the planning context required for future sessions.
 

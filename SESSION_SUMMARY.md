@@ -92,6 +92,9 @@ GitOps Compliance: Enforced ✅
 - Added `tests/component/test_agent_factory_escalation.sh` to cover three US4 contracts: approved concept publishes `production` before swarm start, blocker failure creates an escalation packet plus audit trail, and happy-path swarm runs remain escalation-silent.
 - Updated `docs/runbooks/agent-factory-prototype.md`, `specs/020-agent-factory-prototype/quickstart.md`, `specs/020-agent-factory-prototype/data-model.md`, and `specs/020-agent-factory-prototype/tasks.md` so the operator docs and planning artifacts now include status publication, admin intervention flow, and the new US4 completion state.
 - Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T025` through `T028` are now marked complete; the next implementation queue starts at User Story 5 (`molt-qgg.8.*`).
+- Completed User Story 5 for `020-agent-factory-prototype`: added `tests/component/test_agent_factory_context_mirror.sh` to assert mirror provenance, repo-path-only navigation, and existence of referenced docs/spec artifacts so future sessions can recover context from repository files alone.
+- Expanded `docs/ASC-AI-FABRIQUE-MIRROR.md` with an explicit session-recovery path, integrity-check commands, and active prototype references including `quickstart.md`; updated `specs/020-agent-factory-prototype/quickstart.md` so recovery order starts from the local mirror index rather than any workstation-specific clone.
+- Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T029` through `T030` are now marked complete; the next implementation queue starts at Phase 8 Polish (`molt-qgg.9.*`).
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -118,6 +121,8 @@ GitOps Compliance: Enforced ✅
   - `bash -n tests/component/test_agent_factory_escalation.sh`
   - `./tests/run.sh --lane component --filter component_agent_factory_escalation --json`
   - `./tests/run.sh --lane component --filter component_agent_factory_ --json`
+  - `bash -n tests/component/test_agent_factory_context_mirror.sh`
+  - `./tests/run.sh --lane component --filter component_agent_factory_context_mirror --json`
 
 ### Previous Session Update (2026-03-11)
 

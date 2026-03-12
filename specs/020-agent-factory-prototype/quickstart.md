@@ -17,7 +17,7 @@ Run:
 ```bash
 git status --short docs/asc-roadmap docs/concept specs/020-agent-factory-prototype
 .specify/scripts/bash/check-prerequisites.sh --json
-rg -n "/Users/rl/coding/ASC-AI-agent-fabrique" \
+rg -n "coding/ASC-AI-agent-fabrique" \
   docs/ASC-AI-FABRIQUE-MIRROR.md \
   docs/plans/parallel-doodling-coral.md \
   docs/research/openclaw-moltis-research.md \
@@ -34,6 +34,17 @@ Expected result:
 - the Speckit package exists for `020-agent-factory-prototype`
 - the local ASC mirror is present under `docs/asc-roadmap/` and `docs/concept/`
 - no active planning artifacts still depend on a workstation-specific ASC path
+
+Recommended reading order for session recovery:
+
+1. [docs/ASC-AI-FABRIQUE-MIRROR.md](../../docs/ASC-AI-FABRIQUE-MIRROR.md)
+2. [docs/asc-roadmap/INDEX.md](../../docs/asc-roadmap/INDEX.md)
+3. [docs/concept/INDEX.md](../../docs/concept/INDEX.md)
+4. [docs/plans/parallel-doodling-coral.md](../../docs/plans/parallel-doodling-coral.md)
+5. [docs/plans/agent-factory-lifecycle.md](../../docs/plans/agent-factory-lifecycle.md)
+6. [spec.md](./spec.md)
+7. [tasks.md](./tasks.md)
+8. [docs/runbooks/agent-factory-prototype.md](../../docs/runbooks/agent-factory-prototype.md)
 
 ## 2. Validate The Concept Intake Path
 
@@ -106,9 +117,10 @@ Confirm:
 - [x] ASC mirror exists inside this repo
 - [x] spec/research/plan artifacts exist for this feature
 - [x] design contracts exist for intake, defense, swarm, and playground
+- [x] mirror navigation is recoverable from repo paths only
 - [x] implementation tasks are generated and ordered
 - [x] topology drift from branch creation is reconciled before landing
-- [x] User Stories 1-4 are implemented with local validation coverage
+- [x] User Stories 1-5 are implemented with local validation coverage
 
 ## 6. Handoff Rule
 
