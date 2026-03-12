@@ -154,11 +154,19 @@ run_static_config_validation_tests() {
 
     test_start "static_deploy_supports_gitops_checkout_repair_for_managed_drift"
     if rg -q 'repair_server_checkout:' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'gitops-drift' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -Fq 'git clean -fd -- docker-compose.yml docker-compose.prod.yml config scripts systemd' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+       rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'gitops-drift' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
         test_pass
     else
         test_fail "Deploy workflow must offer an auditable checkout repair path for deploy-managed server drift"
+    fi
+
+    test_start "static_deploy_checkout_repair_avoids_inline_ssh_heredoc_parser_hazards"
+    if rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -Fq "ssh \${{ env.SSH_USER }}@\${{ env.SSH_HOST }} <<'EOF'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must not embed the managed checkout repair as an inline SSH heredoc inside the run block"
     fi
 
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"

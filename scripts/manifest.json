@@ -542,6 +542,22 @@
         "gitops_guard_config"
       ]
     },
+    "gitops-repair-managed-checkout.sh": {
+      "version": "1.0.0",
+      "description": "Auditable GitOps repair for deploy-managed remote checkout drift before deployment",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "git",
+        "ssh",
+        "tar"
+      ],
+      "provides": [
+        "gitops-repair-managed-checkout"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "gitops-metrics.sh": {
       "version": "1.0.0",
       "description": "Collect and report GitOps compliance metrics",
