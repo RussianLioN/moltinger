@@ -122,13 +122,13 @@
 
 ### Validation for User Story 4
 
-- [ ] T025 [P] [US4] Create escalation and audit coverage in `tests/component/test_agent_factory_escalation.sh`
+- [x] T025 [P] [US4] Create escalation and audit coverage in `tests/component/test_agent_factory_escalation.sh`
 
 ### Implementation for User Story 4
 
-- [ ] T026 [P] [US4] Implement escalation packet and audit emission in `scripts/agent-factory-swarm.py`
-- [ ] T027 [US4] Extend concept-pack and swarm status publication in `scripts/agent-factory-artifacts.py`
-- [ ] T028 [US4] Document admin intervention flow and evidence expectations in `docs/runbooks/agent-factory-prototype.md`
+- [x] T026 [P] [US4] Implement escalation packet and audit emission in `scripts/agent-factory-swarm.py`
+- [x] T027 [US4] Extend concept-pack and swarm status publication in `scripts/agent-factory-artifacts.py`
+- [x] T028 [US4] Document admin intervention flow and evidence expectations in `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: Operators can understand failures without tracing raw server state.
 

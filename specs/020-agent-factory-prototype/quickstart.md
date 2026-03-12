@@ -90,11 +90,13 @@ Expected prototype behavior:
 3. Successful execution produces a runnable playground package.
 4. Playground uses only synthetic or test data.
 5. Blocker failures escalate to admin instead of silently stalling.
+6. A published status snapshot always distinguishes `production`, `playground_ready`, and `needs_admin_attention`.
 
 Validation questions:
 
 - Is every stage traceable to the approved concept version?
 - Can the user review the resulting playground without server-shell access?
+- Can the operator tell the difference between happy path and blocker failure from one status snapshot?
 - Does the process stop before production deployment?
 
 ## 5. Current Readiness Check
@@ -106,7 +108,7 @@ Confirm:
 - [x] design contracts exist for intake, defense, swarm, and playground
 - [x] implementation tasks are generated and ordered
 - [x] topology drift from branch creation is reconciled before landing
-- [x] User Stories 1-3 are implemented with local validation coverage
+- [x] User Stories 1-4 are implemented with local validation coverage
 
 ## 6. Handoff Rule
 

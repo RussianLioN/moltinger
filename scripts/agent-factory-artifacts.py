@@ -16,6 +16,7 @@ from agent_factory_common import (
     alignment_comment,
     alignment_digest,
     build_alignment_payload,
+    dedupe_preserve_order,
     load_json,
     next_artifact_revision,
     normalize_list,
@@ -49,6 +50,11 @@ def parse_args() -> argparse.Namespace:
     check = subparsers.add_parser("check-alignment", help="Validate artifact synchronization from manifest")
     check.add_argument("--manifest", required=True, help="Path to generated concept-pack manifest JSON")
     check.add_argument("--output", help="Optional JSON report output path")
+
+    publish = subparsers.add_parser("publish-status", help="Publish one user/operator-visible status snapshot")
+    publish.add_argument("--manifest", required=True, help="Path to concept-pack manifest JSON")
+    publish.add_argument("--swarm-run", help="Optional path to swarm-run JSON for production/playground state")
+    publish.add_argument("--output", help="Optional JSON report output path")
 
     return parser.parse_args()
 
@@ -262,6 +268,142 @@ def build_approval_gate(concept_record: dict[str, Any], production_approval: dic
     }
 
 
+def derive_concept_user_status(manifest: dict[str, Any]) -> str:
+    decision_state = normalize_text(manifest.get("decision_state"))
+    approval_gate = manifest.get("approval_gate", {}) if isinstance(manifest.get("approval_gate"), dict) else {}
+    approval_gate_status = normalize_text(approval_gate.get("status"))
+    if decision_state == "playground_ready":
+        return "playground_ready"
+    if decision_state in {"rework_requested", "rejected"}:
+        return "rework"
+    if decision_state in {"pending_decision", "in_defense"}:
+        return "defense"
+    if decision_state == "approved" and approval_gate_status == "unlocked":
+        return "production"
+    return "concept"
+
+
+def collect_swarm_evidence_refs(swarm_payload: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for stage in normalize_dict_list(swarm_payload.get("stage_executions")):
+        refs.extend(normalize_list(stage.get("evidence_refs")))
+    evidence_bundle = swarm_payload.get("evidence_bundle") if isinstance(swarm_payload.get("evidence_bundle"), dict) else {}
+    refs.extend(
+        [
+            normalize_text(evidence_bundle.get("manifest_ref")),
+            normalize_text(evidence_bundle.get("archive_ref")),
+        ]
+    )
+    playground_package = swarm_payload.get("playground_package") if isinstance(swarm_payload.get("playground_package"), dict) else {}
+    refs.extend(
+        [
+            normalize_text(playground_package.get("launch_instructions_ref")),
+            normalize_text(playground_package.get("bundle_archive_ref")),
+            normalize_text(playground_package.get("evidence_bundle_ref")),
+        ]
+    )
+    for escalation in normalize_dict_list(swarm_payload.get("escalation_packets")):
+        refs.extend(normalize_list(escalation.get("evidence_refs")))
+        refs.extend(
+            [
+                normalize_text(escalation.get("packet_ref")),
+                normalize_text(escalation.get("evidence_bundle_ref")),
+                normalize_text(escalation.get("evidence_manifest_ref")),
+            ]
+        )
+    return dedupe_preserve_order(refs)
+
+
+def current_stage_from_swarm(swarm_payload: dict[str, Any], latest_escalation: dict[str, Any] | None) -> str:
+    if latest_escalation:
+        stage_name = normalize_text(latest_escalation.get("stage_name"))
+        if stage_name:
+            return stage_name
+    stage_executions = normalize_dict_list(swarm_payload.get("stage_executions"))
+    for stage in stage_executions:
+        status = normalize_text(stage.get("status"))
+        if status in {"running", "failed", "blocked"}:
+            return normalize_text(stage.get("stage_name"))
+    if stage_executions:
+        return normalize_text(stage_executions[-1].get("stage_name"))
+    swarm_run = swarm_payload.get("swarm_run") if isinstance(swarm_payload.get("swarm_run"), dict) else {}
+    return normalize_text(swarm_run.get("current_stage"))
+
+
+def suggested_next_step(
+    user_visible_status: str,
+    manifest: dict[str, Any],
+    latest_escalation: dict[str, Any] | None,
+) -> str:
+    if latest_escalation:
+        recommendation = normalize_text(latest_escalation.get("recommended_action"))
+        if recommendation:
+            return recommendation
+    if user_visible_status == "playground_ready":
+        return "Передать playground bundle пользователю и собрать feedback для доработки или MVP1 handoff."
+    if user_visible_status == "production":
+        return "Запустить или продолжить production swarm для approved concept version."
+    if user_visible_status == "rework":
+        return "Обновить concept pack по feedback и повторно вынести концепцию на защиту."
+    if user_visible_status == "defense":
+        return "Зафиксировать outcome защиты и обновить concept pack без потери истории."
+    return normalize_text(manifest.get("next_action")) or DEFAULT_NEXT_STEP_SUMMARY
+
+
+def build_status_publication(manifest: dict[str, Any], swarm_payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    base_user_status = derive_concept_user_status(manifest)
+    user_visible_status = base_user_status
+    operator_status = normalize_text(manifest.get("decision_state")) or base_user_status
+    current_stage = ""
+    evidence_refs: list[str] = []
+    audit_event_count = len(normalize_dict_list(manifest.get("review_history"))) + len(normalize_dict_list(manifest.get("feedback_history")))
+    active_escalations: list[dict[str, Any]] = []
+    latest_escalation: dict[str, Any] | None = None
+
+    if isinstance(swarm_payload, dict):
+        escalation_packets = normalize_dict_list(swarm_payload.get("escalation_packets"))
+        active_escalations = [
+            packet
+            for packet in escalation_packets
+            if normalize_text(packet.get("status")) in {"open", "acknowledged"}
+        ]
+        latest_escalation = active_escalations[-1] if active_escalations else (escalation_packets[-1] if escalation_packets else None)
+        swarm_run = swarm_payload.get("swarm_run") if isinstance(swarm_payload.get("swarm_run"), dict) else {}
+        run_status = normalize_text(swarm_run.get("run_status"))
+        operator_status = run_status or operator_status
+        current_stage = current_stage_from_swarm(swarm_payload, latest_escalation)
+        evidence_refs = collect_swarm_evidence_refs(swarm_payload)
+        audit_event_count = len(normalize_dict_list(swarm_payload.get("audit_trail")))
+        if active_escalations or run_status in {"failed", "blocked", "cancelled"}:
+            user_visible_status = "needs_admin_attention"
+        elif run_status == "completed":
+            user_visible_status = "playground_ready"
+        elif run_status in {"running", "queued"}:
+            user_visible_status = "production"
+
+    approval_gate = manifest.get("approval_gate", {}) if isinstance(manifest.get("approval_gate"), dict) else {}
+    current_review = manifest.get("current_defense_review", {}) if isinstance(manifest.get("current_defense_review"), dict) else {}
+    publication = {
+        "status": "published",
+        "published_at": utc_now(),
+        "concept_id": normalize_text(manifest.get("concept_id")),
+        "concept_version": normalize_text(manifest.get("concept_version")),
+        "decision_state": normalize_text(manifest.get("decision_state")),
+        "approval_gate_status": normalize_text(approval_gate.get("status")),
+        "approval_gate_reason": normalize_text(approval_gate.get("reason")),
+        "user_visible_status": user_visible_status,
+        "operator_status": operator_status,
+        "current_stage": current_stage,
+        "next_action": suggested_next_step(user_visible_status, manifest, latest_escalation),
+        "active_escalation_count": len(active_escalations),
+        "evidence_refs": evidence_refs,
+        "audit_event_count": audit_event_count,
+        "latest_review_outcome": normalize_text(current_review.get("outcome")),
+        "latest_escalation": latest_escalation or {},
+    }
+    return publication
+
+
 def generate_pack(args: argparse.Namespace) -> int:
     source, concept_record, artifact_context = load_source_document(args.input)
     output_dir = Path(args.output_dir)
@@ -341,6 +483,8 @@ def generate_pack(args: argparse.Namespace) -> int:
             "download_name": filename,
             "generated_at": generated_at,
         }
+
+    manifest["status_publication"] = build_status_publication(manifest)
 
     (output_dir / "concept-record.json").write_text(
         __import__("json").dumps(concept_record, ensure_ascii=False, indent=2) + "\n",
@@ -429,12 +573,28 @@ def check_alignment(args: argparse.Namespace) -> int:
     return 0 if not issues else 1
 
 
+def publish_status(args: argparse.Namespace) -> int:
+    manifest = load_json(args.manifest)
+    if not isinstance(manifest, dict):
+        raise ValueError("manifest must be a JSON object")
+    swarm_payload = load_json(args.swarm_run) if args.swarm_run else None
+    if swarm_payload is not None and not isinstance(swarm_payload, dict):
+        raise ValueError("swarm-run payload must be a JSON object")
+    report = build_status_publication(manifest, swarm_payload)
+    report["artifact_manifest_ref"] = str(Path(args.manifest))
+    report["swarm_manifest_ref"] = str(Path(args.swarm_run)) if args.swarm_run else ""
+    write_json(report, args.output)
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     if args.command == "generate":
         return generate_pack(args)
     if args.command == "check-alignment":
         return check_alignment(args)
+    if args.command == "publish-status":
+        return publish_status(args)
     raise ValueError(f"unsupported command: {args.command}")
 
 

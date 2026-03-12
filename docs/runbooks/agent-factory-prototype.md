@@ -212,6 +212,66 @@ Key operator files:
 - `assembly/playground-bundle/playground-package.json` is the canonical playground manifest
 - `assembly/<concept>-bundle.tar.gz` is the downloadable demo bundle
 
+### 8. Publish current user and operator status
+
+To publish a review-safe status snapshot from the concept pack alone:
+
+```bash
+python3 scripts/agent-factory-artifacts.py publish-status \
+  --manifest /tmp/agent-factory-pack/concept-pack.json \
+  --output /tmp/agent-factory-status.json
+```
+
+Expected result for an approved pack before swarm start:
+
+- `user_visible_status = production`
+- `approval_gate_status = unlocked`
+- `active_escalation_count = 0`
+
+To publish the current status after a swarm run:
+
+```bash
+python3 scripts/agent-factory-artifacts.py publish-status \
+  --manifest /tmp/agent-factory-pack/concept-pack.json \
+  --swarm-run /tmp/agent-factory-swarm/swarm-run.json \
+  --output /tmp/agent-factory-runtime-status.json
+```
+
+Expected status mapping:
+
+- successful swarm run -> `playground_ready`
+- running swarm -> `production`
+- blocker failure with escalation -> `needs_admin_attention`
+
+### 9. Drill admin escalation for a blocker failure
+
+For local validation, the prototype swarm supports deterministic failure injection:
+
+```bash
+python3 scripts/agent-factory-swarm.py run \
+  --manifest /tmp/agent-factory-pack/concept-pack.json \
+  --output-dir /tmp/agent-factory-swarm-failure \
+  --fail-stage validation \
+  --failure-summary "Validation drift detected between approved scope and produced prototype." \
+  --failure-class scope_drift \
+  --output /tmp/agent-factory-swarm-failure.json
+```
+
+Expected result:
+
+- process exits non-zero
+- `status = needs_admin_attention`
+- `swarm_run.run_status = failed`
+- `escalation_packets[0]` points to the blocker stage
+- `audit_trail` contains `stage_failed` and `escalation_created`
+- `artifacts/evidence/bundle.zip` still exists for administrator review
+
+Operational rule:
+
+- happy-path runs must keep `escalation_packets = []`
+- blocker runs must emit a reviewable escalation packet before reaching terminal state
+- administrator intervention is required before any manual rerun decision
+
 ## Delivery Semantics
 
 For MVP0 the user-facing downloads are the files under `downloads/`.
@@ -250,6 +310,7 @@ Concept pack manifest must also carry:
 Implemented tests:
 
 - `tests/component/test_agent_factory_artifacts.sh`
+- `tests/component/test_agent_factory_escalation.sh`
 - `tests/component/test_agent_factory_playground.sh`
 - `tests/integration_local/test_agent_factory_intake.sh`
 - `tests/integration_local/test_agent_factory_review.sh`
@@ -260,6 +321,7 @@ Typical local validation:
 ```bash
 ./tests/run.sh --lane static --filter static_fleet_registry --json
 ./tests/run.sh --lane component --filter component_agent_factory_artifacts --json
+./tests/run.sh --lane component --filter component_agent_factory_escalation --json
 ./tests/run.sh --lane component --filter component_agent_factory_playground --json
 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_intake --json
 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_review --json
@@ -272,4 +334,5 @@ Typical local validation:
 - Downloadable outputs currently use Markdown copies; export to additional formats is a later enhancement.
 - Telegram publishing is represented by manifest-ready download refs, not by live bot file sending in this slice.
 - The prototype swarm is contract-driven and evidence-first; it does not yet spawn live long-running worker runtimes.
+- `--fail-stage` exists only for local validation and operator drills; it is not a production retry policy.
 - The prototype ends at a runnable playground bundle plus evidence. Production deployment remains MVP1.

@@ -194,7 +194,9 @@ Represents one autonomous production attempt created from one approved concept v
 - `completed_at`
 - `run_status`
 - `requested_roles`
+- `current_stage`
 - `terminal_summary`
+- `audit_trail`
 
 **Run status values**
 
@@ -278,6 +280,8 @@ Operator-facing incident bundle created only for blocker or integrity failures.
 - `summary`
 - `recommended_action`
 - `evidence_refs`
+- `evidence_bundle_ref`
+- `evidence_manifest_ref`
 - `assigned_to`
 - `created_at`
 - `status`
@@ -307,6 +311,32 @@ Tracks provenance and freshness of the in-repo ASC documentation mirror.
 - `fresh`
 - `stale`
 - `missing`
+
+### 13. StatusPublication
+
+Review-safe status snapshot derived from a concept pack and, when available, one swarm run.
+
+**Fields**
+
+- `concept_id`
+- `concept_version`
+- `user_visible_status`
+- `operator_status`
+- `current_stage`
+- `next_action`
+- `active_escalation_count`
+- `evidence_refs`
+- `audit_event_count`
+- `published_at`
+
+**User visible status values**
+
+- `concept`
+- `defense`
+- `rework`
+- `production`
+- `playground_ready`
+- `needs_admin_attention`
 
 ## State Transitions
 
