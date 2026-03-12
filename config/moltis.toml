@@ -56,6 +56,19 @@ MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
 MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
 MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
 MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
+MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
+MOLTIS_CODEX_ADVISORY_INTAKE_SCRIPT = "./scripts/moltis-codex-advisory-intake.sh"
+MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
+MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
+MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE = "one_way_only"
+MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT = "./scripts/codex-advisory-session-store.sh"
+MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR = "/opt/moltinger/.tmp/current/codex-advisory-session-store"
+MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
+MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
+MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS = "24"
+MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND = "/codex-advisory-followup"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TLS / HTTPS
@@ -684,6 +697,45 @@ rate_limit_window_secs = 60
 # HOOKS
 # ══════════════════════════════════════════════════════════════════════════════
 # Shell commands triggered by events.
+
+[hooks]
+# Historical repo-side consent routing is intentionally not enabled here.
+# The old `/codex_*` and `/codex-followup ...` user-facing flow is retired.
+# Codex advisories now move through a producer contract plus a Moltis-native
+# intake surface. Safe default remains `one_way_only` until Moltis core owns
+# callback routing end-to-end. The repo now contains advisory-native session
+# store and router helpers; once Moltis confirms callback ingress, the mode can
+# be switched from `one_way_only` to `inline_callbacks`.
+#
+# Future Moltis-native intake example:
+#
+# [[hooks.hooks]]
+# name = "codex-advisory-intake"
+# command = "./scripts/moltis-codex-advisory-intake.sh"
+# events = ["MessageSending"]
+# timeout = 10
+# [hooks.hooks.env]
+# MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
+# MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
+# MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+# MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
+# MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE = "one_way_only"
+#
+# Future callback-routing example after Moltis webhook/polling path confirms
+# `callback_query` delivery to hooks:
+#
+# [[hooks.hooks]]
+# name = "codex-advisory-router"
+# command = "./scripts/moltis-codex-advisory-router.sh"
+# events = ["MessageReceived"]
+# timeout = 10
+# [hooks.hooks.env]
+# MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT = "./scripts/codex-advisory-session-store.sh"
+# MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR = "/opt/moltinger/.tmp/current/codex-advisory-session-store"
+# MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+# MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
+# MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
+# MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX = "codex-advisory"
 
 # [hooks]
 # [[hooks.hooks]]

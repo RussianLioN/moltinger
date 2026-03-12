@@ -1,7 +1,7 @@
 # Codex CLI Update Monitoring Research
 
 Date: 2026-03-09
-Issue: `molt-1`
+Issue: `molt-2`
 Branch Context: `uat/006-git-topology-registry`
 
 This note captures the current Codex CLI state, recent upstream capabilities, and the recommended shape for a future repository workflow that monitors Codex CLI updates and turns them into actionable upgrade guidance.
@@ -239,6 +239,12 @@ Proceed with a future Speckit feature that targets:
 - repo-specific recommendation logic
 - optional issue creation
 - skill-first reuse, not agent-first autonomy
+
+Feature package prepared from this research:
+
+- `specs/007-codex-update-monitor/spec.md`
+- `specs/007-codex-update-monitor/plan.md`
+- `specs/007-codex-update-monitor/tasks.md`
 
 Do not start with:
 

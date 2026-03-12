@@ -1,0 +1,138 @@
+name: Монитор upstream-обновлений Codex CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Режим запуска"
+        required: true
+        default: "manual"
+        type: choice
+        options:
+          - manual
+          - scheduler
+      release_url:
+        description: "URL основного changelog-источника"
+        required: true
+        default: "https://developers.openai.com/codex/changelog"
+        type: string
+      include_issue_signals:
+        description: "Подключить advisory upstream issue signals"
+        required: true
+        default: true
+        type: boolean
+      issue_signals_url:
+        description: "URL источника advisory issue signals"
+        required: true
+        default: "https://api.github.com/repos/openai/codex/issues?state=open&per_page=20"
+        type: string
+      telegram_enabled:
+        description: "Включить Telegram-доставку"
+        required: true
+        default: false
+        type: boolean
+      delivery_mode:
+        description: "Режим доставки уведомлений"
+        required: true
+        default: "immediate"
+        type: choice
+        options:
+          - immediate
+          - digest
+      digest_window_hours:
+        description: "Через сколько часов отправлять накопленный дайджест"
+        required: true
+        default: "24"
+        type: string
+      digest_max_items:
+        description: "Сколько событий накапливать до принудительной отправки дайджеста"
+        required: true
+        default: "3"
+        type: string
+      telegram_chat_id:
+        description: "Необязательный явный Telegram chat id"
+        required: false
+        default: ""
+        type: string
+      telegram_consent_enabled:
+        description: "Спрашивать в Telegram, нужны ли практические рекомендации"
+        required: true
+        default: true
+        type: boolean
+      telegram_allow_getupdates:
+        description: "Разрешить live-чтение ответов через Bot API getUpdates (только для safe-режима)"
+        required: true
+        default: false
+        type: boolean
+      artifact_name:
+        description: "Имя набора артефактов"
+        required: true
+        default: "codex-cli-upstream-watcher"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  codex-cli-upstream-watcher:
+    name: Запустить монитор upstream-обновлений Codex CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Запустить upstream watcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/codex-cli-upstream-watcher.sh
+
+          args=(
+            --mode "${{ inputs.mode }}"
+            --release-url "${{ inputs.release_url }}"
+            --delivery-mode "${{ inputs.delivery_mode }}"
+            --digest-window-hours "${{ inputs.digest_window_hours }}"
+            --digest-max-items "${{ inputs.digest_max_items }}"
+            --json-out codex-upstream-watcher-report.json
+            --summary-out codex-upstream-watcher-summary.md
+            --stdout none
+          )
+
+          if [[ "${{ inputs.include_issue_signals }}" == "true" ]]; then
+            args+=(--include-issue-signals --issue-signals-url "${{ inputs.issue_signals_url }}")
+          fi
+
+          if [[ "${{ inputs.telegram_enabled }}" == "true" ]]; then
+            args+=(--telegram-enabled)
+          fi
+
+          if [[ "${{ inputs.telegram_consent_enabled }}" != "true" ]]; then
+            args+=(--telegram-consent-disabled)
+          fi
+
+          if [[ "${{ inputs.telegram_allow_getupdates }}" == "true" ]]; then
+            args+=(--telegram-allow-getupdates)
+          fi
+
+          if [[ -n "${{ inputs.telegram_chat_id }}" ]]; then
+            args+=(--telegram-chat-id "${{ inputs.telegram_chat_id }}")
+          fi
+
+          ./scripts/codex-cli-upstream-watcher.sh "${args[@]}"
+
+      - name: Загрузить JSON-артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-json
+          path: codex-upstream-watcher-report.json
+          if-no-files-found: error
+
+      - name: Загрузить summary-артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-summary
+          path: codex-upstream-watcher-summary.md
+          if-no-files-found: error

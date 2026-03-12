@@ -18,7 +18,7 @@
 
 | Topic | Documents | Status | Notes |
 |-------|-----------|--------|-------|
-| Codex CLI update monitoring | [Research](./codex-cli-update-monitoring-2026-03-09.md), [Speckit seed](../plans/codex-cli-update-monitoring-speckit-seed.md) | Research complete | Current local/latest CLI: `0.112.0`; recommended next step is a dedicated `codex-update-monitor` feature branch with a script-first monitor. |
+| Codex CLI update monitoring | [Research](./codex-cli-update-monitoring-2026-03-09.md), [Speckit seed](../plans/codex-cli-update-monitoring-speckit-seed.md), [Feature spec](../../specs/007-codex-update-monitor/spec.md) | Feature package ready | Current local/latest CLI: `0.112.0`; Speckit package is prepared in `specs/007-codex-update-monitor/` for script-first implementation. |
 | Clawdiy remote OAuth runtime | [Research](./clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md), [Speckit package](../../specs/017-clawdiy-remote-oauth-lifecycle/spec.md) | Research complete, planning active | Covers official/community evidence for `codex-oauth` on remote containerized OpenClaw, compares 3 operator methods, and recommends target-runtime bootstrap now with artifactized lifecycle later. |
 
 ---

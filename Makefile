@@ -11,6 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
+.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake codex-advisory-e2e
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -88,6 +89,13 @@ help:
 	@echo "  codex-bootstrap - Verify local Codex prerequisites and repo policy state"
 	@echo "  codex-check     - Run repo-specific Codex governance checks"
 	@echo "  codex-check-ci  - Run Codex governance checks in CI-safe mode"
+	@echo "  codex-update-monitor - Run the Codex update monitor"
+	@echo "  codex-update-advisor - Run the advisor layer over the Codex update monitor"
+	@echo "  codex-update-delivery - Run the user-facing delivery layer over the advisor"
+	@echo "  codex-upstream-watcher - Проверить upstream Codex CLI с уровнями важности и project-ready рекомендациями"
+	@echo "  codex-consent-e2e - Прогнать hermetic acceptance path alert -> consent -> recommendations"
+	@echo "  codex-advisory-intake - Сгенерировать advisory event и показать Moltis-native alert preview"
+	@echo "  codex-advisory-e2e - Прогнать hermetic Moltis-native advisory flow: alert -> callback -> follow-up и degraded one-way"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -337,6 +345,68 @@ codex-check:
 
 codex-check-ci:
 	@./scripts/codex-check.sh --ci
+
+codex-update-monitor:
+	@mkdir -p .tmp/current
+	@./scripts/codex-cli-update-monitor.sh \
+		--json-out .tmp/current/codex-update-report.json \
+		--summary-out .tmp/current/codex-update-summary.md \
+		--stdout summary
+
+codex-update-advisor:
+	@mkdir -p .tmp/current
+	@./scripts/codex-cli-update-advisor.sh \
+		--json-out .tmp/current/codex-update-advisor-report.json \
+		--summary-out .tmp/current/codex-update-advisor-summary.md \
+		--state-file .tmp/current/codex-cli-update-advisor-state.json \
+		--stdout summary
+
+codex-update-delivery:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-cli-update-delivery.sh \
+		--surface on-demand \
+		--json-out .tmp/current/codex-update-delivery-report.json \
+		--summary-out .tmp/current/codex-update-delivery-summary.md \
+		--state-file .tmp/current/codex-cli-update-delivery-state.json \
+		--stdout summary
+
+codex-upstream-watcher:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-cli-upstream-watcher.sh \
+		--mode manual \
+		--include-issue-signals \
+		--json-out .tmp/current/codex-upstream-watcher-report.json \
+		--summary-out .tmp/current/codex-upstream-watcher-summary.md \
+		--state-file .tmp/current/codex-cli-upstream-watcher-state.json \
+		--stdout summary
+
+codex-consent-e2e:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-telegram-consent-e2e.sh \
+		--mode hermetic \
+		--output .tmp/current/codex-telegram-consent-e2e-report.json
+
+codex-advisory-intake:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-cli-upstream-watcher.sh \
+		--mode manual \
+		--include-issue-signals \
+		--advisory-event-out .tmp/current/codex-advisory-event.json \
+		--json-out .tmp/current/codex-upstream-watcher-report.json \
+		--summary-out .tmp/current/codex-upstream-watcher-summary.md \
+		--state-file .tmp/current/codex-cli-upstream-watcher-state.json \
+		--stdout none
+	@bash ./scripts/moltis-codex-advisory-intake.sh \
+		--event-file .tmp/current/codex-advisory-event.json \
+		--json-out .tmp/current/codex-advisory-intake-report.json \
+		--summary-out .tmp/current/codex-advisory-intake-summary.md \
+		--stdout summary
+
+codex-advisory-e2e:
+	@mkdir -p .tmp/current
+	@bash ./scripts/codex-advisory-e2e.sh \
+		--mode hermetic \
+		--output .tmp/current/codex-advisory-e2e-report.json
 
 codex-research:
 	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh research

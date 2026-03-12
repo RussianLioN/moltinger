@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "update_id": 1002,
+      "message": {
+        "message_id": 2002,
+        "date": 4102444800,
+        "text": "нет, пока не надо",
+        "chat": {
+          "id": 123456
+        },
+        "reply_to_message": {
+          "message_id": 1
+        }
+      }
+    }
+  ]
+}

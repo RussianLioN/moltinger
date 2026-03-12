@@ -1,0 +1,15 @@
+{
+  "callback_query": {
+    "id": "cb-1",
+    "data": "codex-advisory:accept:advsess-abc12345:tok-xyz789",
+    "from": {
+      "id": "262872984"
+    },
+    "message": {
+      "message_id": 203,
+      "chat": {
+        "id": "262872984"
+      }
+    }
+  }
+}
