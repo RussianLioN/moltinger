@@ -30,6 +30,11 @@ on:
         required: false
         default: 'latest'
         type: string
+      repair_server_checkout:
+        description: 'Capture evidence and reconcile a dirty /opt/moltinger checkout before deploy (workflow_dispatch only)'
+        required: false
+        default: false
+        type: boolean
       rollback:
         description: 'Rollback to previous version'
         required: false
@@ -81,6 +86,19 @@ jobs:
           DRIFT_FOUND=false
           SERVER_DIRTY=false
           PENDING_SYNC=false
+          REPAIR_PERFORMED=false
+          DRIFT_SNAPSHOT=""
+          TARGET_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}"
+          REPAIR_REQUESTED=false
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.repair_server_checkout }}" = "true" ]; then
+            REPAIR_REQUESTED=true
+          fi
+
+          if [ "$REPAIR_REQUESTED" = true ] && [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::repair_server_checkout is only allowed for production deploys from main or a matching release tag."
+            exit 1
+          fi
 
           # Function to compare files
           compare_files() {
@@ -106,28 +124,60 @@ jobs:
             return 0
           }
 
+          is_managed_path() {
+            local candidate="$1"
+            case "$candidate" in
+              docker-compose.yml|docker-compose.prod.yml|config/*|scripts/*|systemd/*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          status_entry_is_repairable() {
+            local entry="$1"
+            local source_path target_path
+
+            if [[ "$entry" == *" -> "* ]]; then
+              source_path="${entry%% -> *}"
+              target_path="${entry##* -> }"
+              is_managed_path "$source_path" && is_managed_path "$target_path"
+              return
+            fi
+
+            is_managed_path "$entry"
+          }
+
           # Check 1: docker-compose.yml
           echo "=== Check 1: docker-compose.yml ==="
           if ! compare_files "docker-compose.yml" "${{ env.DEPLOY_PATH }}/docker-compose.yml" "docker-compose.yml"; then
             PENDING_SYNC=true
           fi
 
-          # Check 2: config/moltis.toml
-          echo "=== Check 2: config/moltis.toml ==="
+          # Check 2: docker-compose.prod.yml
+          echo "=== Check 2: docker-compose.prod.yml ==="
+          if ! compare_files "docker-compose.prod.yml" "${{ env.DEPLOY_PATH }}/docker-compose.prod.yml" "docker-compose.prod.yml"; then
+            PENDING_SYNC=true
+          fi
+
+          # Check 3: config/moltis.toml
+          echo "=== Check 3: config/moltis.toml ==="
           if ! compare_files "config/moltis.toml" "${{ env.DEPLOY_PATH }}/config/moltis.toml" "moltis.toml"; then
             PENDING_SYNC=true
           fi
 
-          # Check 3: config/mcp-servers.json (if exists)
-          echo "=== Check 3: config/mcp-servers.json ==="
+          # Check 4: config/mcp-servers.json (if exists)
+          echo "=== Check 4: config/mcp-servers.json ==="
           if [ -f "config/mcp-servers.json" ]; then
             if ! compare_files "config/mcp-servers.json" "${{ env.DEPLOY_PATH }}/config/mcp-servers.json" "mcp-servers.json"; then
               PENDING_SYNC=true
             fi
           fi
 
-          # Check 4: scripts/ directory
-          echo "=== Check 4: scripts/ directory ==="
+          # Check 5: scripts/ directory
+          echo "=== Check 5: scripts/ directory ==="
           if [ -d "scripts" ] && [ "$(ls -A scripts 2>/dev/null)" ]; then
             for SCRIPT in scripts/*; do
               if [ -f "$SCRIPT" ]; then
@@ -139,8 +189,8 @@ jobs:
             done
           fi
 
-          # Check 5: systemd/ directory
-          echo "=== Check 5: systemd/ directory ==="
+          # Check 6: systemd/ directory
+          echo "=== Check 6: systemd/ directory ==="
           if [ -d "systemd" ] && [ "$(ls -A systemd 2>/dev/null)" ]; then
             for UNIT in systemd/*; do
               if [ -f "$UNIT" ]; then
@@ -152,14 +202,81 @@ jobs:
             done
           fi
 
-          # Check 6: server worktree cleanliness (hard block)
-          echo "=== Check 6: server git status --porcelain ==="
+          # Check 7: server worktree cleanliness (hard block unless repairable)
+          echo "=== Check 7: server git status --porcelain ==="
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
-            echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
+            echo "::warning::Server working tree is dirty before deploy."
             echo "$SERVER_STATUS"
-            SERVER_DIRTY=true
-            DRIFT_FOUND=true
+
+            REPAIRABLE_DIRTY_STATE=true
+            while IFS= read -r STATUS_LINE; do
+              [ -z "$STATUS_LINE" ] && continue
+              STATUS_PATH="${STATUS_LINE:3}"
+              if ! status_entry_is_repairable "$STATUS_PATH"; then
+                echo "::error::Dirty path is outside deploy-managed surface: $STATUS_PATH"
+                REPAIRABLE_DIRTY_STATE=false
+              fi
+            done <<< "$SERVER_STATUS"
+
+            if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = true ]; then
+              echo "::warning::Attempting GitOps-safe repair of deploy-managed server checkout"
+              DRIFT_SNAPSHOT="$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} <<'EOF'
+                set -euo pipefail
+                cd ${{ env.DEPLOY_PATH }}
+
+                SNAPSHOT_DIR="${{ env.BACKUP_PATH }}/gitops-drift"
+                SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+                SNAPSHOT_PREFIX="run_${{ github.run_id }}_${SNAPSHOT_STAMP}"
+                META_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.meta.txt"
+                DIFF_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.diff.patch"
+                ARCHIVE_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.tar.gz"
+
+                mkdir -p "$SNAPSHOT_DIR"
+
+                {
+                  echo "captured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  echo "repository=${{ github.repository }}"
+                  echo "workflow_run=${{ github.run_id }}"
+                  echo "target_ref=${{ github.ref_name }}"
+                  echo "target_sha=${{ github.sha }}"
+                  echo "current_branch=$(git rev-parse --abbrev-ref HEAD)"
+                  echo "current_sha=$(git rev-parse HEAD)"
+                  echo "--- git status --short ---"
+                  git status --short
+                } > "$META_FILE"
+
+                git diff --binary -- docker-compose.yml docker-compose.prod.yml config scripts systemd > "$DIFF_FILE" || true
+                tar --ignore-failed-read -czf "$ARCHIVE_FILE" docker-compose.yml docker-compose.prod.yml config scripts systemd
+
+                git fetch --depth=1 origin "${{ github.ref_name }}"
+                git checkout --force "${{ github.ref_name }}"
+                git reset --hard "${{ github.sha }}"
+                git clean -fd -- docker-compose.yml docker-compose.prod.yml config scripts systemd
+
+                printf '%s\n' "$ARCHIVE_FILE"
+              EOF
+              )"
+              REPAIR_PERFORMED=true
+              echo "::notice::Server drift snapshot saved to $DRIFT_SNAPSHOT"
+
+              SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
+              if [ -n "$SERVER_STATUS" ]; then
+                echo "::error::Server working tree remains dirty after repair."
+                echo "$SERVER_STATUS"
+                SERVER_DIRTY=true
+                DRIFT_FOUND=true
+              else
+                echo "::notice::Server working tree repaired and clean ✅"
+              fi
+            else
+              echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
+              if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = false ]; then
+                echo "::error::repair_server_checkout refuses to touch files outside deploy-managed surface."
+              fi
+              SERVER_DIRTY=true
+              DRIFT_FOUND=true
+            fi
           else
             echo "::notice::Server working tree is clean ✅"
           fi
@@ -171,6 +288,8 @@ jobs:
             echo "compliant=false" >> $GITHUB_OUTPUT
             echo "server_dirty=$SERVER_DIRTY" >> $GITHUB_OUTPUT
             echo "pending_sync=$PENDING_SYNC" >> $GITHUB_OUTPUT
+            echo "repair_performed=$REPAIR_PERFORMED" >> $GITHUB_OUTPUT
+            echo "drift_snapshot=$DRIFT_SNAPSHOT" >> $GITHUB_OUTPUT
           else
             if [ "$PENDING_SYNC" = true ]; then
               echo "::notice::Server is clean; deploy-managed files differ and will be synced during this run"
@@ -181,6 +300,8 @@ jobs:
             echo "compliant=true" >> $GITHUB_OUTPUT
             echo "server_dirty=false" >> $GITHUB_OUTPUT
             echo "pending_sync=$PENDING_SYNC" >> $GITHUB_OUTPUT
+            echo "repair_performed=$REPAIR_PERFORMED" >> $GITHUB_OUTPUT
+            echo "drift_snapshot=$DRIFT_SNAPSHOT" >> $GITHUB_OUTPUT
           fi
           echo "::endgroup::"
 
@@ -199,8 +320,12 @@ jobs:
           echo "| Drift Detected | \`${{ steps.check.outputs.drift_detected }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Server Dirty | \`${{ steps.check.outputs.server_dirty }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Pending Sync | \`${{ steps.check.outputs.pending_sync }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repair Performed | \`${{ steps.check.outputs.repair_performed }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliant | \`${{ steps.check.outputs.compliant }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.check.outputs.drift_snapshot }}" ]; then
+            echo "- Drift snapshot: \`${{ steps.check.outputs.drift_snapshot }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "> Hard block applies only to dirty server worktree. Deploy-managed file deltas are treated as pending sync." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================

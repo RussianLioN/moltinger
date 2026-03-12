@@ -145,6 +145,22 @@ run_static_config_validation_tests() {
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
     fi
 
+    test_start "static_deploy_compliance_checks_prod_compose_hash"
+    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
+    fi
+
+    test_start "static_deploy_supports_gitops_checkout_repair_for_managed_drift"
+    if rg -q 'repair_server_checkout:' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'gitops-drift' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -Fq 'git clean -fd -- docker-compose.yml docker-compose.prod.yml config scripts systemd' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must offer an auditable checkout repair path for deploy-managed server drift"
+    fi
+
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \

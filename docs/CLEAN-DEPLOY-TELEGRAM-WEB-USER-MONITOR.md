@@ -27,7 +27,7 @@ git status --porcelain
 3. CI автоматически:
    - сверит `docker-compose`, `config`, `scripts`, `systemd`;
    - проверит `ssh root@ainetic.tech "cd /opt/moltinger && git status --porcelain"`;
-   - **заблокирует** деплой при drift.
+   - **заблокирует** деплой при drift, если его нельзя безопасно вылечить через workflow.
 
 4. После успешного deploy authoritative remote UAT запускается вручную:
 
@@ -52,8 +52,9 @@ gh workflow run telegram-e2e-on-demand.yml \
 
 1. Зафиксируйте серверный drift (snapshot `git status`, diff нужных файлов).
 2. Перенесите релевантные изменения в git-репозиторий.
-3. Очистите серверное состояние до управляемого (через CI sync, не ручными patch-изменениями поверх).
-4. Повторите deploy.
+3. Если drift ограничен deploy-managed surface (`docker-compose*.yml`, `config/`, `scripts/`, `systemd/`), перезапустите `Deploy Moltis` через `workflow_dispatch` с `repair_server_checkout=true`.
+4. Workflow сам снимет evidence snapshot в `${BACKUP_PATH}/gitops-drift/`, выровняет checkout до текущего `main`, а затем продолжит обычный deploy.
+5. Если dirty state затрагивает что-то вне этого allowlist, workflow останется fail-closed: разберите drift отдельно и только потом повторите deploy.
 
 ## Политика
 
