@@ -118,6 +118,63 @@
       "private_machine_handoffs_only": true
     }
   ],
+  "production_stage_policies": [
+    {
+      "stage_name": "coding",
+      "role_owner": "clawdiy",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "entry_condition": "active production approval for exact concept version",
+      "exit_condition": "coding evidence written",
+      "allow_parallel_with": [],
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "stage_name": "testing",
+      "role_owner": "tester",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "entry_condition": "coding completed",
+      "exit_condition": "testing evidence written",
+      "allow_parallel_with": [],
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "stage_name": "validation",
+      "role_owner": "validator",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "entry_condition": "testing completed",
+      "exit_condition": "validation evidence written",
+      "allow_parallel_with": [],
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "stage_name": "audit",
+      "role_owner": "auditor",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "entry_condition": "validation completed",
+      "exit_condition": "audit evidence written",
+      "allow_parallel_with": [],
+      "terminal_timeout_seconds": 900
+    },
+    {
+      "stage_name": "assembly",
+      "role_owner": "assembler",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "entry_condition": "audit completed",
+      "exit_condition": "playground package and evidence bundle published",
+      "allow_parallel_with": [],
+      "terminal_timeout_seconds": 900
+    }
+  ],
   "telegram_auth": {
     "clawdiy": {
       "mode": "polling",

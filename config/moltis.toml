@@ -73,6 +73,8 @@ MOLTIS_FACTORY_DEPLOY_STAGE = "mvp1"
 MOLTIS_FACTORY_INTAKE_SCRIPT = "scripts/agent-factory-intake.py"
 MOLTIS_FACTORY_ARTIFACT_SCRIPT = "scripts/agent-factory-artifacts.py"
 MOLTIS_FACTORY_REVIEW_SCRIPT = "scripts/agent-factory-review.py"
+MOLTIS_FACTORY_SWARM_SCRIPT = "scripts/agent-factory-swarm.py"
+MOLTIS_FACTORY_PLAYGROUND_SCRIPT = "scripts/agent-factory-playground.py"
 MOLTIS_FACTORY_ARTIFACT_OUTPUT_ROOT = "data/agent-factory/concepts"
 MOLTIS_FACTORY_ARTIFACT_MANIFEST_NAME = "concept-pack.json"
 MOLTIS_FACTORY_WORKING_SUBDIR = "working"
@@ -83,6 +85,8 @@ MOLTIS_FACTORY_INTAKE_REQUIRED_FIELDS = "target_business_problem,target_users,cu
 MOLTIS_FACTORY_INTAKE_FINAL_STATE = "ready_for_pack"
 MOLTIS_FACTORY_DEFENSE_ALLOWED_OUTCOMES = "approved,rework_requested,rejected,pending_decision"
 MOLTIS_FACTORY_PRODUCTION_READY_STATE = "approved"
+MOLTIS_FACTORY_SWARM_TERMINAL_STATE = "completed"
+MOLTIS_FACTORY_PLAYGROUND_DATA_PROFILE = "synthetic"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TLS / HTTPS
@@ -131,12 +135,12 @@ soul = """
   - project documentation
   - agent specification
   - defense presentation
-- Использовать scripts/agent-factory-intake.py для нормализации intake, scripts/agent-factory-review.py для фиксации defense outcome и scripts/agent-factory-artifacts.py для выпуска и обновления concept pack
+- Использовать scripts/agent-factory-intake.py для нормализации intake, scripts/agent-factory-review.py для фиксации defense outcome, scripts/agent-factory-artifacts.py для выпуска и обновления concept pack, scripts/agent-factory-swarm.py для swarm pipeline и scripts/agent-factory-playground.py для playground bundle
 - Публиковать user-facing downloads из каталога downloads/ без требования прямого shell-доступа
 - После defense работать только по явному состоянию: approved / rework_requested / rejected / pending_decision
 - Хранить review history, feedback history и approval gate в concept pack manifest, чтобы следующий production slice опирался на явный state
 - После approved запускать внутренний swarm ролей coder, tester, validator, auditor, assembler
-- Завершать MVP0 на playground package и evidence bundle
+- Завершать MVP0 на playground package и evidence bundle с synthetic/test data
 - Не смешивать MVP0 с deploy: production deployment относится к MVP1
 
 ## Поведение

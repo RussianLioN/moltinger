@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This runbook describes the MVP0 intake-to-concept-pack and defense-loop path for `020-agent-factory-prototype`.
+This runbook describes the MVP0 intake-to-playground path for `020-agent-factory-prototype`.
 
 Current scope:
 
@@ -11,9 +11,9 @@ Current scope:
 3. generate a synchronized concept pack
 4. record one defense outcome with structured feedback
 5. regenerate the concept pack without losing previous reviewed state
-6. expose working and downloadable artifact files
-
-Swarm production is documented in the spec but is not part of this runbook section yet.
+6. run one approved concept through the prototype swarm
+7. package one runnable playground bundle
+8. expose working, downloadable, and operator-reviewable evidence files
 
 ## Inputs
 
@@ -126,6 +126,92 @@ Expected result:
 - previous current pack is archived under `history/`
 - manifest exposes `approval_gate.status = unlocked|blocked`
 
+### 6. Run swarm for one approved concept
+
+For the happy-path prototype, use an approved review payload and regenerate the pack before running the swarm:
+
+```bash
+cat >/tmp/agent-factory-approved-review.json <<'JSON'
+{
+  "defense_review": {
+    "review_id": "defense-review-approved-demo",
+    "concept_id": "concept-invoice-approval-factory-demo",
+    "concept_version": "0.1.0",
+    "outcome": "approved",
+    "reviewers": ["factory_board"],
+    "feedback_summary": "Концепция одобрена для запуска swarm.",
+    "decision_notes": "Разрешить запуск prototype swarm.",
+    "reviewed_at": "2026-03-12T21:00:00Z"
+  },
+  "feedback_items": [],
+  "expected_next_step_summary": "Запустить production swarm для approved concept version."
+}
+JSON
+
+python3 scripts/agent-factory-review.py \
+  --manifest /tmp/agent-factory-pack/concept-pack.json \
+  --feedback /tmp/agent-factory-approved-review.json \
+  --output /tmp/agent-factory-approved-review-result.json
+
+python3 scripts/agent-factory-artifacts.py generate \
+  --input /tmp/agent-factory-approved-review-result.json \
+  --output-dir /tmp/agent-factory-pack \
+  --output /tmp/agent-factory-approved-pack.json
+
+python3 scripts/agent-factory-swarm.py run \
+  --manifest /tmp/agent-factory-pack/concept-pack.json \
+  --output-dir /tmp/agent-factory-swarm \
+  --output /tmp/agent-factory-swarm-output.json
+```
+
+Expected result:
+
+- `status = completed`
+- `swarm_run.run_status = completed`
+- five ordered stages are present:
+  - `coding`
+  - `testing`
+  - `validation`
+  - `audit`
+  - `assembly`
+- every stage publishes at least one `evidence_ref`
+- the result includes `playground_package` and `evidence_bundle`
+
+### 7. Inspect the playground output
+
+Expected output tree:
+
+```text
+/tmp/agent-factory-swarm/
+├── artifacts/
+│   ├── coding/output-summary.md
+│   ├── testing/report.json
+│   ├── validation/checklist.md
+│   ├── audit/alignment-report.md
+│   └── evidence/
+│       ├── bundle-manifest.json
+│       └── bundle.zip
+├── assembly/
+│   ├── playground-bundle/
+│   │   ├── Dockerfile
+│   │   ├── playground_server.py
+│   │   ├── playground-card.json
+│   │   ├── synthetic-dataset.json
+│   │   ├── launch-instructions.md
+│   │   ├── README.md
+│   │   └── playground-package.json
+│   └── <concept>-bundle.tar.gz
+├── swarm-playground-source.json
+└── swarm-run.json
+```
+
+Key operator files:
+
+- `swarm-run.json` is the canonical swarm manifest
+- `artifacts/evidence/bundle.zip` is the reviewable evidence bundle
+- `assembly/playground-bundle/playground-package.json` is the canonical playground manifest
+- `assembly/<concept>-bundle.tar.gz` is the downloadable demo bundle
+
 ## Delivery Semantics
 
 For MVP0 the user-facing downloads are the files under `downloads/`.
@@ -164,15 +250,20 @@ Concept pack manifest must also carry:
 Implemented tests:
 
 - `tests/component/test_agent_factory_artifacts.sh`
+- `tests/component/test_agent_factory_playground.sh`
 - `tests/integration_local/test_agent_factory_intake.sh`
 - `tests/integration_local/test_agent_factory_review.sh`
+- `tests/integration_local/test_agent_factory_swarm.sh`
 
 Typical local validation:
 
 ```bash
+./tests/run.sh --lane static --filter static_fleet_registry --json
 ./tests/run.sh --lane component --filter component_agent_factory_artifacts --json
+./tests/run.sh --lane component --filter component_agent_factory_playground --json
 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_intake --json
 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_review --json
+./tests/run.sh --lane integration_local --filter integration_local_agent_factory_swarm --json
 ```
 
 ## Known Boundaries
@@ -180,4 +271,5 @@ Typical local validation:
 - The concept pack is Markdown-first in this MVP0 slice.
 - Downloadable outputs currently use Markdown copies; export to additional formats is a later enhancement.
 - Telegram publishing is represented by manifest-ready download refs, not by live bot file sending in this slice.
-- Defense review records and approval gate are implemented; production swarm still starts only in a later slice.
+- The prototype swarm is contract-driven and evidence-first; it does not yet spawn live long-running worker runtimes.
+- The prototype ends at a runnable playground bundle plus evidence. Production deployment remains MVP1.

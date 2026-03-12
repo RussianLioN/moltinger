@@ -76,6 +76,114 @@
       "private_machine_transport_only": true
     }
   ],
+  "production_stage_contracts": [
+    {
+      "stage_name": "coding",
+      "role_owner": "clawdiy",
+      "role_type": "coder",
+      "runtime_engine": "openclaw",
+      "logical_address": "agent://clawdiy",
+      "required_capabilities": [
+        "coding.orchestration",
+        "task.execution"
+      ],
+      "depends_on": [],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true,
+      "evidence_contract": [
+        "artifacts/coding/output-summary.md"
+      ]
+    },
+    {
+      "stage_name": "testing",
+      "role_owner": "tester",
+      "role_type": "tester",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "required_capabilities": [
+        "factory.testing.execute"
+      ],
+      "depends_on": [
+        "coding"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true,
+      "evidence_contract": [
+        "artifacts/testing/report.json"
+      ]
+    },
+    {
+      "stage_name": "validation",
+      "role_owner": "validator",
+      "role_type": "validator",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "required_capabilities": [
+        "factory.validation.execute"
+      ],
+      "depends_on": [
+        "testing"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true,
+      "evidence_contract": [
+        "artifacts/validation/checklist.md"
+      ]
+    },
+    {
+      "stage_name": "audit",
+      "role_owner": "auditor",
+      "role_type": "auditor",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "required_capabilities": [
+        "factory.audit.execute"
+      ],
+      "depends_on": [
+        "validation"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true,
+      "evidence_contract": [
+        "artifacts/audit/alignment-report.md"
+      ]
+    },
+    {
+      "stage_name": "assembly",
+      "role_owner": "assembler",
+      "role_type": "assembler",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "required_capabilities": [
+        "factory.assembly.package"
+      ],
+      "depends_on": [
+        "audit"
+      ],
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true,
+      "evidence_contract": [
+        "assembly/playground-bundle/playground-package.json",
+        "assembly/playground-bundle/launch-instructions.md",
+        "artifacts/evidence/bundle.zip"
+      ]
+    }
+  ],
   "agents": [
     {
       "agent_id": "moltinger",

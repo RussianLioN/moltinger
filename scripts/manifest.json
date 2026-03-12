@@ -112,6 +112,37 @@
         "MOLTIS_FACTORY_PRODUCTION_READY_STATE"
       ]
     },
+    "agent-factory-swarm.py": {
+      "version": "1.0.0",
+      "description": "Run the approved concept through coding, testing, validation, audit, and assembly to reach a playground bundle",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-swarm-run"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_SWARM_SCRIPT",
+        "MOLTIS_FACTORY_SWARM_TERMINAL_STATE",
+        "MOLTIS_FACTORY_PRODUCTION_READY_STATE"
+      ]
+    },
+    "agent-factory-playground.py": {
+      "version": "1.0.0",
+      "description": "Package one swarm run into a runnable synthetic-data playground bundle",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-playground-package"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_PLAYGROUND_SCRIPT",
+        "MOLTIS_FACTORY_PLAYGROUND_DATA_PROFILE"
+      ]
+    },
     "agent-factory-intake.py": {
       "version": "1.0.0",
       "description": "Normalize one Telegram-style intake request into a canonical concept record for the agent factory MVP0 flow",

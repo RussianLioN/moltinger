@@ -81,6 +81,12 @@ GitOps Compliance: Enforced ✅
 - Extended `config/moltis.toml`, `tests/fixtures/config/moltis.toml`, and `scripts/manifest.json` with review-stage anchors (`MOLTIS_FACTORY_REVIEW_SCRIPT`, allowed defense outcomes, production-ready state) so the defense loop is now part of the repo-local factory runtime contract.
 - Added `tests/integration_local/test_agent_factory_review.sh` to cover all four defense outcomes, including version bump plus archived history on `rework_requested` and gate unlock only on `approved`; updated `docs/runbooks/agent-factory-prototype.md` and `specs/020-agent-factory-prototype/data-model.md` so runbook and entity model match the implemented review loop.
 - Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T015` through `T018` are now marked complete; the next implementation queue starts at User Story 3 (`molt-qgg.6.*`).
+- Completed User Story 3 for `020-agent-factory-prototype`: added `scripts/agent-factory-swarm.py` to enforce approval-gated `coding -> testing -> validation -> audit -> assembly` stage execution, publish per-stage evidence, and produce a canonical `swarm-run.json` manifest for one approved concept version.
+- Added `scripts/agent-factory-playground.py` to package the swarm output into a runnable synthetic-data playground bundle with `Dockerfile`, lightweight HTTP server, launch instructions, manifest, and downloadable `.tar.gz` archive.
+- Extended `config/fleet/agents-registry.json` and `config/fleet/policy.json` with `production_stage_contracts` and `production_stage_policies`, then wired new runtime anchors into `config/moltis.toml`, `tests/fixtures/config/moltis.toml`, and `scripts/manifest.json` so the US3 control plane is represented in repo-local config.
+- Added `tests/component/test_agent_factory_playground.sh` and `tests/integration_local/test_agent_factory_swarm.sh`, plus extra `tests/static/test_fleet_registry.sh` coverage for the new stage contracts and policies.
+- Updated `docs/runbooks/agent-factory-prototype.md` and `specs/020-agent-factory-prototype/quickstart.md` so the operator handoff now documents the approved-concept swarm path, evidence bundle layout, playground bundle contents, and current readiness state.
+- Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T019` through `T024` are now marked complete; the next implementation queue starts at User Story 4 (`molt-qgg.7.*`).
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -98,6 +104,12 @@ GitOps Compliance: Enforced ✅
   - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-intake.py scripts/agent-factory-review.py scripts/agent-factory-artifacts.py`
   - `./tests/run.sh --lane static --filter static_config_validation --json`
   - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_review --json`
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-intake.py scripts/agent-factory-review.py scripts/agent-factory-artifacts.py scripts/agent-factory-swarm.py scripts/agent-factory-playground.py`
+  - `bash -n tests/component/test_agent_factory_playground.sh`
+  - `bash -n tests/integration_local/test_agent_factory_swarm.sh`
+  - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
+  - `./tests/run.sh --lane component --filter component_agent_factory_playground --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_ --json`
 
 ### Previous Session Update (2026-03-11)
 

@@ -249,6 +249,32 @@ run_fleet_registry_tests() {
         test_fail "Fleet policy routes must stay valid across same_host and remote_node placements"
     fi
 
+    test_start "fleet_registry_production_stage_contracts_defined"
+    if jq -e '
+        [.production_stage_contracts[].stage_name] as $stages
+        | ($stages == ["coding", "testing", "validation", "audit", "assembly"])
+        and any(.production_stage_contracts[]; .stage_name == "coding" and .role_owner == "clawdiy" and (.required_capabilities | index("coding.orchestration")) != null)
+        and any(.production_stage_contracts[]; .stage_name == "assembly" and .role_owner == "assembler" and (.depends_on | index("audit")) != null)
+        and all(.production_stage_contracts[]; (.supported_topology_profiles | index("same_host")) != null and (.supported_topology_profiles | index("remote_node")) != null and .private_machine_transport_only == true)
+      ' "$REGISTRY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet registry must define private, ordered production stage contracts for coder/tester/validator/auditor/assembler"
+    fi
+
+    test_start "fleet_policy_production_stage_policies_defined"
+    if jq -e '
+        [.production_stage_policies[].stage_name] as $stages
+        | ($stages == ["coding", "testing", "validation", "audit", "assembly"])
+        and all(.production_stage_policies[]; (.required_auth | index("service-bearer")) != null and .terminal_timeout_seconds == 900 and (.allow_parallel_with | length) == 0)
+        and any(.production_stage_policies[]; .stage_name == "coding" and .entry_condition == "active production approval for exact concept version")
+        and any(.production_stage_policies[]; .stage_name == "assembly" and .exit_condition == "playground package and evidence bundle published")
+      ' "$POLICY_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Fleet policy must define fail-closed production stage policies for the full swarm chain"
+    fi
+
     generate_report
 }
 

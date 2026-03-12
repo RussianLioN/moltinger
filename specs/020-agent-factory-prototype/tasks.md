@@ -100,15 +100,15 @@
 
 ### Validation for User Story 3
 
-- [ ] T019 [P] [US3] Create swarm orchestration coverage in `tests/integration_local/test_agent_factory_swarm.sh`
-- [ ] T020 [P] [US3] Create playground packaging coverage in `tests/component/test_agent_factory_playground.sh`
+- [x] T019 [P] [US3] Create swarm orchestration coverage in `tests/integration_local/test_agent_factory_swarm.sh`
+- [x] T020 [P] [US3] Create playground packaging coverage in `tests/component/test_agent_factory_playground.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T021 [P] [US3] Implement swarm coordination and stage lifecycle in `scripts/agent-factory-swarm.py`
-- [ ] T022 [P] [US3] Implement container and playground packaging in `scripts/agent-factory-playground.py`
-- [ ] T023 [US3] Wire production-stage role contracts into `config/fleet/agents-registry.json` and `config/fleet/policy.json`
-- [ ] T024 [US3] Document swarm evidence and playground publication flow in `docs/runbooks/agent-factory-prototype.md`
+- [x] T021 [P] [US3] Implement swarm coordination and stage lifecycle in `scripts/agent-factory-swarm.py`
+- [x] T022 [P] [US3] Implement container and playground packaging in `scripts/agent-factory-playground.py`
+- [x] T023 [US3] Wire production-stage role contracts into `config/fleet/agents-registry.json` and `config/fleet/policy.json`
+- [x] T024 [US3] Document swarm evidence and playground publication flow in `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: Approved concepts can reach a runnable playground package with evidence.
 

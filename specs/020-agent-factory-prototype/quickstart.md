@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This quickstart is for planning, validation, and future implementation handoff of the MVP0 factory prototype.
+This quickstart is for validation and continued implementation handoff of the MVP0 factory prototype.
 
 It confirms three things:
 
@@ -97,20 +97,22 @@ Validation questions:
 - Can the user review the resulting playground without server-shell access?
 - Does the process stop before production deployment?
 
-## 5. Final Planning Readiness Check
+## 5. Current Readiness Check
 
 Confirm:
 
 - [x] ASC mirror exists inside this repo
 - [x] spec/research/plan artifacts exist for this feature
 - [x] design contracts exist for intake, defense, swarm, and playground
-- [ ] implementation tasks are generated and ordered
-- [ ] topology drift from branch creation is reconciled before landing
+- [x] implementation tasks are generated and ordered
+- [x] topology drift from branch creation is reconciled before landing
+- [x] User Stories 1-3 are implemented with local validation coverage
 
 ## 6. Handoff Rule
 
-This feature is ready for implementation only when:
+This feature is ready for continued implementation only when:
 
-1. `tasks.md` is generated and reconciled with completed planning work
-2. the topology registry is refreshed after this branch mutation
+1. `tasks.md` is reconciled with completed implementation work
+2. the topology registry is refreshed after branch or worktree mutations
 3. all planning artifacts reference in-repo context paths
+4. each new user story adds matching validation commands to the runbook
