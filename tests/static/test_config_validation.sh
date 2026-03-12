@@ -159,10 +159,12 @@ PY
 
     test_start "static_deploy_server_git_checkout_aligned_after_success"
     if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$DEPLOY_WORKFLOW" && \
-       rg -Fq 'git reset --hard "${{ github.sha }}"' "$DEPLOY_WORKFLOW"; then
+       rg -Fq 'git reset --hard "${{ github.sha }}"' "$DEPLOY_WORKFLOW" && \
+       rg -q 'Align server git checkout before sync' "$DEPLOY_WORKFLOW" && \
+       rg -q 'git clean -fd' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
-        test_fail "Deploy workflow should align server git checkout after successful sync"
+        test_fail "Deploy workflow should align and clean the server git checkout before sync so failed rollouts do not self-create drift"
     fi
 
     test_start "static_deploy_pending_sync_is_not_treated_as_hard_drift"
