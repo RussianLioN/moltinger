@@ -72,6 +72,11 @@ GitOps Compliance: Enforced ✅
 - Verified the imported Beads graph with `bd dep cycles` (no cycles) and `bd sync`; the next implementation queue starts from Phase 2 Foundational (`T004`-`T008`).
 - Completed Phase 2 Foundational for `020-agent-factory-prototype`: updated `config/moltis.toml` identity and factory context anchors, added source-first templates under `docs/templates/agent-factory/`, extended fleet future-role defaults for `tester`, `validator`, `auditor`, and `assembler`, created reusable fixtures in `tests/fixtures/agent-factory/`, and wired future agent-factory suites into `tests/run.sh`.
 - Closed Beads tasks `molt-qgg.3.1` through `molt-qgg.3.5` plus the phase parent `molt-qgg.3`; the next ready queue now starts at User Story 1 (`molt-qgg.4.*`).
+- Completed User Story 1 for `020-agent-factory-prototype`: added `scripts/agent-factory-intake.py` to normalize Telegram-style idea intake into a canonical concept record, `scripts/agent-factory-artifacts.py` plus `scripts/agent_factory_common.py` to generate and validate synchronized `project-doc.md`, `agent-spec.md`, and `presentation.md`, and `docs/runbooks/agent-factory-prototype.md` to document the current MVP0 intake-to-concept-pack flow.
+- Extended `config/moltis.toml` and `tests/fixtures/config/moltis.toml` with factory intake/artifact env anchors so Moltinger can reference the US1 pipeline through repo-local scripts and download semantics.
+- Added US1 validation coverage in `tests/component/test_agent_factory_artifacts.sh` and `tests/integration_local/test_agent_factory_intake.sh`, covering fresh-pack alignment, drift detection, ready-for-pack intake, concept-pack generation, and clarifying-state fallback when critical fields are missing.
+- Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T009` through `T014` are now marked complete; the next implementation queue starts at User Story 2 (`molt-qgg.5.*`).
+- Closed Beads tasks `molt-qgg.4.1` through `molt-qgg.4.6` plus the phase parent `molt-qgg.4`; User Story 2 is now the next ready implementation slice.
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -82,6 +87,10 @@ GitOps Compliance: Enforced ✅
   - `bd dep cycles`
   - `bd sync`
   - `./tests/run.sh --lane static --filter 'static_config_validation|static_fleet_registry' --json`
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-intake.py scripts/agent-factory-artifacts.py`
+  - `bash scripts/scripts-verify.sh`
+  - `./tests/run.sh --lane component --filter component_agent_factory_artifacts --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_intake --json`
 
 ### Previous Session Update (2026-03-11)
 

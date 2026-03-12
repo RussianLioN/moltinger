@@ -42,6 +42,9 @@ node_modules/
 .tmp/
 *.tmp
 scripts/.scripts-hashes
+__pycache__/
+*.pyc
+test-results/
 
 # Claude Code Local Overrides (Not Shared)
 .claude/settings.local.json

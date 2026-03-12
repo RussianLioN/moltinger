@@ -78,6 +78,39 @@
       ],
       "cron": "0 2 * * *"
     },
+    "agent-factory-artifacts.py": {
+      "version": "1.0.0",
+      "description": "Generate and validate synchronized concept-pack artifacts for the agent factory MVP0 flow",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-artifacts-generate",
+        "agent-factory-artifacts-check-alignment"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_TEMPLATE_ROOT",
+        "MOLTIS_FACTORY_ARTIFACT_OUTPUT_ROOT",
+        "MOLTIS_FACTORY_DOWNLOAD_SUBDIR",
+        "MOLTIS_FACTORY_WORKING_SUBDIR"
+      ]
+    },
+    "agent-factory-intake.py": {
+      "version": "1.0.0",
+      "description": "Normalize one Telegram-style intake request into a canonical concept record for the agent factory MVP0 flow",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-intake"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_INTAKE_REQUIRED_FIELDS",
+        "MOLTIS_FACTORY_INTAKE_FINAL_STATE"
+      ]
+    },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",

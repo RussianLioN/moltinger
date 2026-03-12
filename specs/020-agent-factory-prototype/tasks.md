@@ -58,15 +58,15 @@
 
 ### Validation for User Story 1
 
-- [ ] T009 [P] [US1] Create artifact-alignment checks in `tests/component/test_agent_factory_artifacts.sh`
-- [ ] T010 [P] [US1] Create intake-flow integration coverage in `tests/integration_local/test_agent_factory_intake.sh`
+- [x] T009 [P] [US1] Create artifact-alignment checks in `tests/component/test_agent_factory_artifacts.sh`
+- [x] T010 [P] [US1] Create intake-flow integration coverage in `tests/integration_local/test_agent_factory_intake.sh`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Implement concept intake orchestration in `scripts/agent-factory-intake.py`
-- [ ] T012 [P] [US1] Implement concept-pack generation and artifact version sync in `scripts/agent-factory-artifacts.py`
-- [ ] T013 [US1] Wire Moltinger factory routing and concept-pack behavior in `config/moltis.toml`
-- [ ] T014 [US1] Document concept-pack output and download semantics in `docs/runbooks/agent-factory-prototype.md`
+- [x] T011 [P] [US1] Implement concept intake orchestration in `scripts/agent-factory-intake.py`
+- [x] T012 [P] [US1] Implement concept-pack generation and artifact version sync in `scripts/agent-factory-artifacts.py`
+- [x] T013 [US1] Wire Moltinger factory routing and concept-pack behavior in `config/moltis.toml`
+- [x] T014 [US1] Document concept-pack output and download semantics in `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: One idea can become a synchronized three-artifact concept pack.
 
