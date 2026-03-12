@@ -1,0 +1,79 @@
+{
+  "swarm_run": {
+    "swarm_run_id": "swarm-run-demo-001",
+    "concept_id": "concept-invoice-approval-factory-demo",
+    "concept_version": "0.2.0",
+    "approval_id": "approval-demo-001",
+    "run_status": "completed",
+    "requested_roles": [
+      "coder",
+      "tester",
+      "validator",
+      "auditor",
+      "assembler"
+    ],
+    "terminal_summary": "Playground package assembled with complete evidence bundle."
+  },
+  "stage_executions": [
+    {
+      "stage_name": "coding",
+      "role_owner": "coder",
+      "status": "completed",
+      "evidence_refs": [
+        "artifacts/coding/output-summary.md"
+      ]
+    },
+    {
+      "stage_name": "testing",
+      "role_owner": "tester",
+      "depends_on": [
+        "coding"
+      ],
+      "status": "completed",
+      "evidence_refs": [
+        "artifacts/testing/report.json"
+      ]
+    },
+    {
+      "stage_name": "validation",
+      "role_owner": "validator",
+      "depends_on": [
+        "testing"
+      ],
+      "status": "completed",
+      "evidence_refs": [
+        "artifacts/validation/checklist.md"
+      ]
+    },
+    {
+      "stage_name": "audit",
+      "role_owner": "auditor",
+      "depends_on": [
+        "validation"
+      ],
+      "status": "completed",
+      "evidence_refs": [
+        "artifacts/audit/alignment-report.md"
+      ]
+    },
+    {
+      "stage_name": "assembly",
+      "role_owner": "assembler",
+      "depends_on": [
+        "audit"
+      ],
+      "status": "completed",
+      "evidence_refs": [
+        "artifacts/assembly/playground-package.json"
+      ]
+    }
+  ],
+  "playground_package": {
+    "playground_package_id": "playground-demo-001",
+    "container_ref": "ghcr.io/russianlion/invoice-approval-demo:0.2.0-playground",
+    "launch_instructions_ref": "artifacts/assembly/launch-instructions.md",
+    "data_profile": "synthetic",
+    "evidence_bundle_ref": "artifacts/evidence/bundle-001.zip",
+    "review_status": "ready_for_demo"
+  }
+}

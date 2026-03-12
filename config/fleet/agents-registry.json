@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T16:35:00Z",
+  "updated_at": "2026-03-12T19:10:48Z",
   "topology_profiles": {
     "same_host": {
       "transport": "http-json",
@@ -27,6 +27,36 @@
     },
     {
       "role": "tester",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true
+    },
+    {
+      "role": "validator",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true
+    },
+    {
+      "role": "auditor",
+      "runtime_engine": "openclaw",
+      "logical_address_template": "agent://{agent_id}",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "private_machine_transport_only": true
+    },
+    {
+      "role": "assembler",
       "runtime_engine": "openclaw",
       "logical_address_template": "agent://{agent_id}",
       "supported_topology_profiles": [

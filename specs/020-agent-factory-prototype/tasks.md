@@ -40,11 +40,11 @@
 
 **⚠️ CRITICAL**: No user story work should be treated as complete until this phase is done.
 
-- [ ] T004 Update the factory-facing identity and local ASC context references in `config/moltis.toml`
-- [ ] T005 [P] Create source-first artifact templates in `docs/templates/agent-factory/project-doc.md`, `docs/templates/agent-factory/agent-spec.md`, and `docs/templates/agent-factory/presentation.md`
-- [ ] T006 [P] Extend fleet role defaults for tester, validator, auditor, and assembler in `config/fleet/agents-registry.json` and `config/fleet/policy.json`
-- [ ] T007 [P] Create reusable fixtures for concept intake, defense feedback, and swarm evidence in `tests/fixtures/agent-factory/`
-- [ ] T008 Wire future agent-factory test files into the umbrella runner in `tests/run.sh`
+- [x] T004 Update the factory-facing identity and local ASC context references in `config/moltis.toml`
+- [x] T005 [P] Create source-first artifact templates in `docs/templates/agent-factory/project-doc.md`, `docs/templates/agent-factory/agent-spec.md`, and `docs/templates/agent-factory/presentation.md`
+- [x] T006 [P] Extend fleet role defaults for tester, validator, auditor, and assembler in `config/fleet/agents-registry.json` and `config/fleet/policy.json`
+- [x] T007 [P] Create reusable fixtures for concept intake, defense feedback, and swarm evidence in `tests/fixtures/agent-factory/`
+- [x] T008 Wire future agent-factory test files into the umbrella runner in `tests/run.sh`
 
 **Checkpoint**: Factory context, reusable templates, future-role contracts, and fixtures are ready.
 

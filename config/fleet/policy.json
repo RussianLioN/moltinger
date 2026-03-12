@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "updated_at": "2026-03-09T16:35:00Z",
+  "updated_at": "2026-03-12T19:10:48Z",
   "defaults": {
     "allow_unknown_agents": false,
     "allow_unknown_capabilities": false,
@@ -59,6 +59,42 @@
     },
     {
       "role": "tester",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "validator",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "auditor",
+      "supported_topology_profiles": [
+        "same_host",
+        "remote_node"
+      ],
+      "transport": "http-json",
+      "required_auth": [
+        "service-bearer"
+      ],
+      "private_machine_handoffs_only": true
+    },
+    {
+      "role": "assembler",
       "supported_topology_profiles": [
         "same_host",
         "remote_node"

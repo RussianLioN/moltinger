@@ -30,15 +30,29 @@ MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
 MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
 MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
 MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
+MOLTIS_FACTORY_MODE = "agent-factory-mvp0"
+MOLTIS_FACTORY_LANGUAGE = "ru"
+MOLTIS_FACTORY_ASC_MIRROR_INDEX = "docs/ASC-AI-FABRIQUE-MIRROR.md"
+MOLTIS_FACTORY_ASC_ROADMAP_ROOT = "docs/asc-roadmap"
+MOLTIS_FACTORY_ASC_CONCEPT_ROOT = "docs/concept"
+MOLTIS_FACTORY_LIFECYCLE_PLAN = "docs/plans/agent-factory-lifecycle.md"
+MOLTIS_FACTORY_PARALLEL_PLAN = "docs/plans/parallel-doodling-coral.md"
+MOLTIS_FACTORY_ACTIVE_SPEC_DIR = "specs/020-agent-factory-prototype"
+MOLTIS_FACTORY_TEMPLATE_ROOT = "docs/templates/agent-factory"
+MOLTIS_FACTORY_REQUIRED_ARTIFACTS = "project_doc,agent_spec,presentation"
+MOLTIS_FACTORY_REQUIRED_SWARM_ROLES = "coder,tester,validator,auditor,assembler"
+MOLTIS_FACTORY_DEFENSE_GATE_REQUIRED = "true"
+MOLTIS_FACTORY_TERMINAL_OUTPUT = "playground_package"
+MOLTIS_FACTORY_DEPLOY_STAGE = "mvp1"
 
 [tls]
 enabled = false
 auto_generate = false
 
 [identity]
-name = "Moltis Test"
+name = "Moltis Factory Test"
 vibe = "technical"
-soul = "Test fixture identity"
+soul = "Test fixture identity for the agent-factory MVP0 flow"
 
 [user]
 name = "Fixture"

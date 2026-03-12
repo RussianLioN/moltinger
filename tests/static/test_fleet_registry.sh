@@ -197,6 +197,9 @@ run_fleet_registry_tests() {
         [.future_role_examples[].role] as $roles
         | ($roles | index("architect")) != null
         and ($roles | index("tester")) != null
+        and ($roles | index("validator")) != null
+        and ($roles | index("auditor")) != null
+        and ($roles | index("assembler")) != null
         and ($roles | index("researcher")) != null
         and all(.future_role_examples[]; (.supported_topology_profiles | index("same_host")) != null and (.supported_topology_profiles | index("remote_node")) != null and .private_machine_transport_only == true)
       ' "$REGISTRY_FILE" >/dev/null 2>&1; then
@@ -226,6 +229,9 @@ run_fleet_registry_tests() {
         [.future_role_defaults[].role] as $roles
         | ($roles | index("architect")) != null
         and ($roles | index("tester")) != null
+        and ($roles | index("validator")) != null
+        and ($roles | index("auditor")) != null
+        and ($roles | index("assembler")) != null
         and ($roles | index("researcher")) != null
         and all(.future_role_defaults[]; .transport == "http-json" and (.required_auth | index("service-bearer")) != null and .private_machine_handoffs_only == true)
       ' "$POLICY_FILE" >/dev/null 2>&1; then

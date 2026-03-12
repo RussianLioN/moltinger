@@ -1,0 +1,60 @@
+{
+  "concept_request": {
+    "concept_request_id": "concept-request-demo-001",
+    "request_channel": "telegram",
+    "requester_identity": {
+      "telegram_user_id": "262872984",
+      "display_name": "Сергей"
+    },
+    "request_language": "ru",
+    "raw_problem_statement": "Нужен агент, который собирает заявки на автоматизацию согласования счетов и формирует основу будущего сервиса без ручной пересборки документов.",
+    "captured_answers": {
+      "target_business_problem": "Сейчас идея автоматизации обсуждается в переписке, а затем вручную переносится в документы и презентацию.",
+      "target_users": [
+        "руководитель направления",
+        "бизнес-аналитик",
+        "технический лидер"
+      ],
+      "current_workflow_summary": "Идея приходит в Telegram, затем несколько раз переписывается в текстовые документы и презентации, после чего защита проходит без единой версии источника.",
+      "constraints_or_exclusions": [
+        "не использовать production deploy в MVP0",
+        "не использовать живые бухгалтерские данные"
+      ],
+      "measurable_success_expectation": [
+        "за 1 intake-цикл получается согласованный concept pack",
+        "после approval фабрика доходит до playground package"
+      ]
+    },
+    "missing_information_topics": [
+      "какие системы будут целевыми интеграциями после MVP0"
+    ],
+    "status": "ready_for_pack"
+  },
+  "expected_concept_record": {
+    "concept_id": "concept-invoice-approval-factory-demo",
+    "current_version": "0.1.0",
+    "decision_state": "draft",
+    "title": "Invoice Approval Concept Factory Demo",
+    "problem_statement": "Нужен управляемый переход от идеи автоматизации к согласованной концепции будущего агента.",
+    "applied_factory_patterns": [
+      "telegram-intake",
+      "synchronized-concept-pack",
+      "defense-gate",
+      "swarm-to-playground"
+    ]
+  },
+  "expected_artifact_alignment": {
+    "required_artifacts": [
+      "project_doc",
+      "agent_spec",
+      "presentation"
+    ],
+    "must_agree_on": [
+      "scope",
+      "success_metrics",
+      "constraints",
+      "open_risks"
+    ]
+  }
+}
+

@@ -148,6 +148,35 @@ group_to_lanes() {
     esac
 }
 
+optional_suite_entry() {
+    local runtime="$1"
+    local suite_id="$2"
+    local suite_name="$3"
+    local suite_path="$4"
+
+    if [[ -f "$suite_path" ]]; then
+        printf '%s|%s|%s|%s\n' "$runtime" "$suite_id" "$suite_name" "$suite_path"
+    fi
+}
+
+agent_factory_suite_entries() {
+    local lane="$1"
+
+    case "$lane" in
+        component)
+            optional_suite_entry bash component_agent_factory_artifacts "Agent factory artifacts" "$SCRIPT_DIR/component/test_agent_factory_artifacts.sh"
+            optional_suite_entry bash component_agent_factory_escalation "Agent factory escalation" "$SCRIPT_DIR/component/test_agent_factory_escalation.sh"
+            optional_suite_entry bash component_agent_factory_playground "Agent factory playground" "$SCRIPT_DIR/component/test_agent_factory_playground.sh"
+            optional_suite_entry bash component_agent_factory_context_mirror "Agent factory context mirror" "$SCRIPT_DIR/component/test_agent_factory_context_mirror.sh"
+            ;;
+        integration_local)
+            optional_suite_entry bash integration_local_agent_factory_intake "Agent factory intake" "$SCRIPT_DIR/integration_local/test_agent_factory_intake.sh"
+            optional_suite_entry bash integration_local_agent_factory_review "Agent factory review" "$SCRIPT_DIR/integration_local/test_agent_factory_review.sh"
+            optional_suite_entry bash integration_local_agent_factory_swarm "Agent factory swarm" "$SCRIPT_DIR/integration_local/test_agent_factory_swarm.sh"
+            ;;
+    esac
+}
+
 suite_entries_for_lane() {
     case "$1" in
         static)
@@ -169,6 +198,7 @@ bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SC
 bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh
 bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh
 LIST
+            agent_factory_suite_entries component
             ;;
         integration_local)
             cat <<LIST
@@ -176,6 +206,7 @@ bash|integration_local_api_endpoints|Local API endpoints|$SCRIPT_DIR/integration
 bash|integration_local_clawdiy_handoff|Clawdiy handoff contract|$SCRIPT_DIR/integration_local/test_clawdiy_handoff.sh
 bash|integration_local_clawdiy_extraction_readiness|Clawdiy extraction readiness|$SCRIPT_DIR/integration_local/test_clawdiy_extraction_readiness.sh
 LIST
+            agent_factory_suite_entries integration_local
             ;;
         security_api)
             cat <<LIST

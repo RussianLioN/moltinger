@@ -48,6 +48,9 @@
 - coder: уже покрыт Clawdiy
 - architect: будущий постоянный агент
 - tester: будущий постоянный агент
+- validator: будущий постоянный агент
+- auditor: будущий постоянный агент
+- assembler: будущий постоянный агент
 - researcher: будущий постоянный агент
 
 ## Clawdiy Node Extraction Path

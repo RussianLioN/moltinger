@@ -1,0 +1,43 @@
+{
+  "defense_review": {
+    "review_id": "defense-review-demo-001",
+    "concept_id": "concept-invoice-approval-factory-demo",
+    "concept_version": "0.1.0",
+    "outcome": "rework_requested",
+    "reviewers": [
+      "head_of_operations",
+      "platform_architect"
+    ],
+    "feedback_summary": "Концепция в целом подтверждена, но нужно уточнить эффект для бизнеса и границы synthetic playground.",
+    "decision_notes": "Вернуть на доработку без запуска swarm production.",
+    "reviewed_at": "2026-03-12T18:30:00Z"
+  },
+  "feedback_items": [
+    {
+      "feedback_item_id": "feedback-demo-001",
+      "category": "business_value",
+      "severity": "high",
+      "summary": "Метрики экономии времени описаны слишком общо.",
+      "affected_artifacts": [
+        "project_doc",
+        "presentation"
+      ],
+      "required_action": "Добавить измеримые baseline и expected improvement.",
+      "resolution_state": "open"
+    },
+    {
+      "feedback_item_id": "feedback-demo-002",
+      "category": "playground_scope",
+      "severity": "medium",
+      "summary": "Неочевидно, какие synthetic данные будут показываться на демо.",
+      "affected_artifacts": [
+        "agent_spec",
+        "presentation"
+      ],
+      "required_action": "Явно описать test/synthetic dataset profile.",
+      "resolution_state": "open"
+    }
+  ],
+  "expected_next_step_summary": "Обновить concept pack до версии 0.2.0 и повторно вынести на защиту."
+}
+

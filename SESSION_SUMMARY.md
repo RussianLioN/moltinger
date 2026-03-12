@@ -70,6 +70,8 @@ GitOps Compliance: Enforced ✅
 - Imported `specs/020-agent-factory-prototype/tasks.md` into Beads under `molt-qgg` as 9 phase parents and 38 child tasks with hierarchical IDs (`molt-qgg.3.1`, `molt-qgg.4.3`, etc.), user-story labels (`us1`-`us5`), and 25 explicit blocker dependencies.
 - Marked the already completed planning/setup work as closed in Beads during import: 7 completed child tasks plus closed phase parents for Phase 0 and Phase 1.
 - Verified the imported Beads graph with `bd dep cycles` (no cycles) and `bd sync`; the next implementation queue starts from Phase 2 Foundational (`T004`-`T008`).
+- Completed Phase 2 Foundational for `020-agent-factory-prototype`: updated `config/moltis.toml` identity and factory context anchors, added source-first templates under `docs/templates/agent-factory/`, extended fleet future-role defaults for `tester`, `validator`, `auditor`, and `assembler`, created reusable fixtures in `tests/fixtures/agent-factory/`, and wired future agent-factory suites into `tests/run.sh`.
+- Closed Beads tasks `molt-qgg.3.1` through `molt-qgg.3.5` plus the phase parent `molt-qgg.3`; the next ready queue now starts at User Story 1 (`molt-qgg.4.*`).
 - `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
 - Verified in this session:
   - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
@@ -79,6 +81,7 @@ GitOps Compliance: Enforced ✅
   - `git diff --check`
   - `bd dep cycles`
   - `bd sync`
+  - `./tests/run.sh --lane static --filter 'static_config_validation|static_fleet_registry' --json`
 
 ### Previous Session Update (2026-03-11)
 
