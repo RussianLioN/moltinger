@@ -169,6 +169,15 @@ run_static_config_validation_tests() {
         test_fail "Deploy workflow must not embed the managed checkout repair as an inline SSH heredoc inside the run block"
     fi
 
+    test_start "static_deploy_checkout_repair_keeps_snapshot_stdout_clean"
+    if rg -q 'git fetch --depth=1 origin "\$TARGET_REF" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'git checkout --force "\$TARGET_REF" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'git reset --hard "\$TARGET_SHA" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
+        test_pass
+    else
+        test_fail "Managed checkout repair must redirect git progress to stderr so stdout stays reserved for the drift snapshot path"
+    fi
+
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \

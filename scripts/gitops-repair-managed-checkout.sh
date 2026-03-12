@@ -1,26 +1,116 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Repair a deploy-managed dirty checkout on the remote host and emit the drift snapshot path.
 
 set -euo pipefail
 
 usage() {
     cat >&2 <<'EOF'
-Usage: gitops-repair-managed-checkout.sh <ssh-target> <deploy-path> <backup-path> <target-ref> <target-sha> <run-id> <repository>
+Usage:
+  gitops-repair-managed-checkout.sh \
+    --ssh-user <user> \
+    --ssh-host <host> \
+    --deploy-path <path> \
+    --backup-path <path> \
+    --target-ref <ref> \
+    --target-sha <sha> \
+    --run-id <id> \
+    --repository <owner/repo>
+
+  gitops-repair-managed-checkout.sh <ssh-target> <deploy-path> <backup-path> <target-ref> <target-sha> <run-id> <repository>
 EOF
 }
 
-if [[ $# -ne 7 ]]; then
+SSH_TARGET=""
+SSH_USER=""
+SSH_HOST=""
+DEPLOY_PATH=""
+BACKUP_PATH=""
+TARGET_REF=""
+TARGET_SHA=""
+RUN_ID=""
+REPOSITORY=""
+
+if [[ $# -gt 0 && "$1" == --* ]]; then
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --ssh-user)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                SSH_USER="$2"
+                shift 2
+                ;;
+            --ssh-host)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                SSH_HOST="$2"
+                shift 2
+                ;;
+            --deploy-path)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                DEPLOY_PATH="$2"
+                shift 2
+                ;;
+            --backup-path)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                BACKUP_PATH="$2"
+                shift 2
+                ;;
+            --target-ref)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                TARGET_REF="$2"
+                shift 2
+                ;;
+            --target-sha)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                TARGET_SHA="$2"
+                shift 2
+                ;;
+            --run-id)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                RUN_ID="$2"
+                shift 2
+                ;;
+            --repository)
+                [[ $# -ge 2 ]] || { usage; exit 64; }
+                REPOSITORY="$2"
+                shift 2
+                ;;
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            *)
+                usage
+                exit 64
+                ;;
+        esac
+    done
+else
+    if [[ $# -ne 7 ]]; then
+        usage
+        exit 64
+    fi
+
+    SSH_TARGET="$1"
+    DEPLOY_PATH="$2"
+    BACKUP_PATH="$3"
+    TARGET_REF="$4"
+    TARGET_SHA="$5"
+    RUN_ID="$6"
+    REPOSITORY="$7"
+fi
+
+if [[ -n "$SSH_USER" || -n "$SSH_HOST" ]]; then
+    SSH_TARGET="${SSH_USER}@${SSH_HOST}"
+fi
+
+if [[ -z "$SSH_TARGET" || "$SSH_TARGET" == @* || "$SSH_TARGET" == *@ ]]; then
     usage
     exit 64
 fi
 
-SSH_TARGET="$1"
-DEPLOY_PATH="$2"
-BACKUP_PATH="$3"
-TARGET_REF="$4"
-TARGET_SHA="$5"
-RUN_ID="$6"
-REPOSITORY="$7"
+if [[ -z "$DEPLOY_PATH" || -z "$BACKUP_PATH" || -z "$TARGET_REF" || -z "$TARGET_SHA" || -z "$RUN_ID" || -z "$REPOSITORY" ]]; then
+    usage
+    exit 64
+fi
 
 DRIFT_SNAPSHOT="$(
 ssh "$SSH_TARGET" bash -seuo pipefail -s -- \
@@ -63,10 +153,10 @@ mkdir -p "$SNAPSHOT_DIR"
 git diff --binary -- docker-compose.yml docker-compose.prod.yml config scripts systemd > "$DIFF_FILE" || true
 tar --ignore-failed-read -czf "$ARCHIVE_FILE" docker-compose.yml docker-compose.prod.yml config scripts systemd
 
-git fetch --depth=1 origin "$TARGET_REF"
-git checkout --force "$TARGET_REF"
-git reset --hard "$TARGET_SHA"
-git clean -fd -- docker-compose.yml docker-compose.prod.yml config scripts systemd
+git fetch --depth=1 origin "$TARGET_REF" >&2
+git checkout --force "$TARGET_REF" >&2
+git reset --hard "$TARGET_SHA" >&2
+git clean -fd -- docker-compose.yml docker-compose.prod.yml config scripts systemd >&2
 
 printf '%s\n' "$ARCHIVE_FILE"
 REMOTE_EOF

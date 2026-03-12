@@ -221,7 +221,7 @@ jobs:
 
             if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = true ]; then
               echo "::warning::Attempting GitOps-safe repair of deploy-managed server checkout"
-              DRIFT_SNAPSHOT="$(./scripts/gitops-repair-managed-checkout.sh \
+              DRIFT_SNAPSHOT="$(bash scripts/gitops-repair-managed-checkout.sh \
                 --ssh-user "${{ env.SSH_USER }}" \
                 --ssh-host "${{ env.SSH_HOST }}" \
                 --deploy-path "${{ env.DEPLOY_PATH }}" \
