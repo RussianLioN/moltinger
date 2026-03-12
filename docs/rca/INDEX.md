@@ -1,22 +1,22 @@
 # RCA Index
 
-**Last Updated**: 2026-03-12
-**Version**: 1.5.0
+**Last Updated**: 2026-03-13
+**Version**: 1.6.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 12 |
+| Total RCA | 13 |
 | Avg Resolution Time | N/A |
-| This Month | 12 |
+| This Month | 13 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 33% |
-| process | 5 | 42% |
+| generic | 4 | 31% |
+| process | 6 | 46% |
 | cicd | 1 | 8% |
 | security | 1 | 8% |
 | shell | 1 | 8% |
@@ -26,7 +26,7 @@
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 1 | High - production impact |
+| P1 | 2 | High - production impact |
 | P2 | 5 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-013 | 2026-03-13 | process | P1 | mitigating | Clawdiy deploy contract mounted read-only `openclaw.json` instead of writable `~/.openclaw` required by the official OpenClaw wizard | switched to writable runtime-home mount + ownership normalization + preflight/backup/smoke guards |
 | RCA-012 | 2026-03-12 | process | P2 | resolved | Clawdiy browser bootstrap was documented as Settings/OAuth flow instead of verified dashboard token/pairing bootstrap | added browser-bootstrap runbook + rule + doc corrections |
 | RCA-011 | 2026-03-12 | process | P2 | resolved | Hosted Clawdiy UI used password auth modeled as server-side secret presence instead of browser-facing token flow | switched gateway auth to token + legacy fallback + rule |
 | RCA-010 | 2026-03-08 | cicd | P1 | resolved | Deploy workflow wrote audit markers into repo root and then detected them as drift | moved markers to `data/` + static guard |

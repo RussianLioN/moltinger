@@ -11,10 +11,10 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 
 - `docker-compose.clawdiy.yml` exists and renders with `docker compose config --quiet`
 - `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json` are present
-- `config/clawdiy/openclaw.json` is treated as the tracked runtime template, and `data/clawdiy/runtime/openclaw.json` is the rendered deployable artifact
+- `config/clawdiy/openclaw.json` is treated as the tracked runtime template, and `data/clawdiy/runtime/` is the writable OpenClaw runtime home rendered and owned during deploy
 - DNS for `clawdiy.ainetic.tech` exists
 - Clawdiy GitHub Secrets exist and are distinct from Moltinger secrets
-- `docker-compose.clawdiy.yml` keeps the runtime config and registry mounts in explicit bind long syntax; short syntax may be misrendered by server-side Docker Compose into the old directory bind contract
+- `docker-compose.clawdiy.yml` keeps the writable runtime home and read-only registry mounts in explicit bind long syntax; short syntax may be misrendered by server-side Docker Compose into the old directory bind contract
 - Shared host networks required for phase 1 are healthy:
   - `traefik-net`
   - `moltinger_monitoring`
@@ -39,7 +39,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ```bash
    ./scripts/deploy.sh clawdiy deploy
    ```
-   During deploy, `scripts/deploy.sh` must normalize `data/clawdiy/workspace`, `data/clawdiy/state`, and `data/clawdiy/audit` to the OpenClaw runtime uid/gid (`1000:1000` by default) so the `node` process can create runtime workspace, persistent `canvas`, `cron`, and audit artifacts without manual server fixes.
+   During deploy, `scripts/deploy.sh` and `scripts/render-clawdiy-runtime-config.sh` must normalize `data/clawdiy/runtime`, `data/clawdiy/workspace`, `data/clawdiy/state`, and `data/clawdiy/audit` to the OpenClaw runtime uid/gid (`1000:1000` by default) so the `node` process can create runtime config temp files, OAuth artifacts, workspace data, persistent `canvas`, `cron`, and audit artifacts without manual server fixes.
 5. Run same-host smoke verification:
    ```bash
    ./scripts/clawdiy-smoke.sh --stage same-host
@@ -61,6 +61,9 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
   - `config/fleet/policy.json`
 - Rendered runtime artifact:
   - `data/clawdiy/runtime/openclaw.json`
+- Writable OpenClaw runtime home:
+  - `data/clawdiy/runtime`
+  - this path also receives wizard/temp config writes and any runtime credentials OpenClaw stores under `~/.openclaw`
 - Distinct persistent host paths:
   - `data/clawdiy/workspace`
   - `data/clawdiy/state`

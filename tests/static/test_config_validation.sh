@@ -259,13 +259,14 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_uses_explicit_bind_syntax_for_runtime_paths"
     if rg -q 'type: bind' "$COMPOSE_CLAWDIY" && \
-       rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
-       rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./data/clawdiy/runtime' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw' "$COMPOSE_CLAWDIY" && \
        rg -q 'source: \./config/fleet' "$COMPOSE_CLAWDIY" && \
-       rg -q 'target: /home/node/\.openclaw/registry' "$COMPOSE_CLAWDIY"; then
+       rg -q 'target: /home/node/\.openclaw/registry' "$COMPOSE_CLAWDIY" && \
+       ! rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY"; then
         test_pass
     else
-        test_fail "Clawdiy compose must use explicit bind syntax for runtime config and registry so server-side docker compose does not misrender them"
+        test_fail "Clawdiy compose must use explicit bind syntax for writable runtime home and read-only registry mounts so official OpenClaw wizards can persist config and auth artifacts"
     fi
 
     test_start "static_clawdiy_deploy_script_stores_runtime_markers_under_ignored_data_dir"
@@ -280,11 +281,12 @@ run_static_config_validation_tests() {
     test_start "static_clawdiy_deploy_script_normalizes_runtime_state_ownership"
     if rg -q 'CLAWDIY_RUNTIME_UID="\$\{CLAWDIY_RUNTIME_UID:-1000\}"' "$DEPLOY_SCRIPT" && \
        rg -q 'CLAWDIY_RUNTIME_GID="\$\{CLAWDIY_RUNTIME_GID:-1000\}"' "$DEPLOY_SCRIPT" && \
-       rg -q 'Skipping Clawdiy state ownership normalization because deploy\.sh is not running as root' "$DEPLOY_SCRIPT" && \
+       rg -q 'Skipping Clawdiy runtime ownership normalization because deploy\.sh is not running as root' "$DEPLOY_SCRIPT" && \
+       rg -q '\$PROJECT_ROOT/data/clawdiy/runtime' "$DEPLOY_SCRIPT" && \
        rg -q 'chown -R "\$\{CLAWDIY_RUNTIME_UID\}:\$\{CLAWDIY_RUNTIME_GID\}" "\$path"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Clawdiy deploy script must normalize state and audit ownership for the node runtime user during server-side rollout"
+        test_fail "Clawdiy deploy script must normalize runtime, state, workspace, and audit ownership for the node runtime user during server-side rollout"
     fi
 
     test_start "static_clawdiy_smoke_avoids_reserved_jq_variable_names"
@@ -369,8 +371,8 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_security_hardening"
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
-       rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
-       rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./data/clawdiy/runtime' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw' "$COMPOSE_CLAWDIY" && \
        rg -q 'clawdiy-workspace:/home/node/\.openclaw/workspace' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
        rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
@@ -383,11 +385,30 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_deploy_normalizes_workspace_permissions"
     if rg -q '\$PROJECT_ROOT/data/clawdiy/workspace' "$DEPLOY_SCRIPT" && \
+       rg -q '\$PROJECT_ROOT/data/clawdiy/runtime' "$DEPLOY_SCRIPT" && \
        rg -q 'CLAWDIY_RUNTIME_UID' "$DEPLOY_SCRIPT" && \
        rg -q 'CLAWDIY_RUNTIME_GID' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "deploy.sh must create and normalize the dedicated Clawdiy workspace path for the runtime uid/gid"
+        test_fail "deploy.sh must create and normalize the dedicated Clawdiy runtime home and workspace paths for the runtime uid/gid"
+    fi
+
+    test_start "static_clawdiy_render_script_normalizes_runtime_home_ownership"
+    if rg -q 'CLAWDIY_RUNTIME_UID="\$\{CLAWDIY_RUNTIME_UID:-1000\}"' "$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh" && \
+       rg -q 'CLAWDIY_RUNTIME_GID="\$\{CLAWDIY_RUNTIME_GID:-1000\}"' "$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh" && \
+       rg -q 'chown -R "\$\{CLAWDIY_RUNTIME_UID\}:\$\{CLAWDIY_RUNTIME_GID\}" "\$\(dirname "\$OUTPUT_FILE"\)"' "$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"; then
+        test_pass
+    else
+        test_fail "render-clawdiy-runtime-config.sh must normalize the writable runtime home ownership after rendering openclaw.json"
+    fi
+
+    test_start "static_clawdiy_backup_inventory_includes_runtime_home"
+    if rg -q '^CLAWDIY_RUNTIME_DIR="\$\{PROJECT_ROOT\}/data/clawdiy/runtime"' "$BACKUP_CONFIG" && \
+       rg -q 'CLAWDIY_RUNTIME_DIR="\$\{CLAWDIY_RUNTIME_DIR:-\$PROJECT_ROOT/data/clawdiy/runtime\}"' "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh" && \
+       rg -q '"runtime_dir": "\$CLAWDIY_RUNTIME_DIR"' "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"; then
+        test_pass
+    else
+        test_fail "Clawdiy backup inventory must explicitly track the writable runtime home because official OpenClaw wizards can persist config and OAuth artifacts there"
     fi
 
     test_start "static_clawdiy_policy_header_binding_fail_closed"
@@ -416,6 +437,16 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Preflight must distinguish bootstrap-capable Clawdiy networks from blocking external network failures"
+    fi
+
+    test_start "static_preflight_enforces_clawdiy_runtime_home_writability_contract"
+    if rg -q 'check_clawdiy_runtime_home' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'runtime_home_present' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'runtime_home_ownership' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'official OpenClaw wizard writes' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must fail if Clawdiy runtime home is missing or owned incorrectly for official OpenClaw wizard writes"
     fi
 
     generate_report

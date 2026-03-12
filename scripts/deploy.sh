@@ -340,11 +340,12 @@ ensure_clawdiy_runtime_paths() {
     done
 
     if [[ "$EUID" -ne 0 ]]; then
-        log_warn "Skipping Clawdiy state ownership normalization because deploy.sh is not running as root"
+        log_warn "Skipping Clawdiy runtime ownership normalization because deploy.sh is not running as root"
         return 0
     fi
 
     local runtime_paths=(
+        "$PROJECT_ROOT/data/clawdiy/runtime"
         "$PROJECT_ROOT/data/clawdiy/workspace"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"

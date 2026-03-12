@@ -35,9 +35,8 @@ services:
 
     volumes:
       - type: bind
-        source: ./data/clawdiy/runtime/openclaw.json
-        target: /home/node/.openclaw/openclaw.json
-        read_only: true
+        source: ./data/clawdiy/runtime
+        target: /home/node/.openclaw
       - type: bind
         source: ./config/fleet
         target: /home/node/.openclaw/registry

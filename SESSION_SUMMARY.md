@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
 
 ---
 
@@ -28,6 +28,23 @@
 ---
 
 ## 📊 Current Status
+
+### Current Session Update (2026-03-13)
+
+- Ветка в работе: `022-clawdiy-wizard-writability-fix`
+- Live OAuth-попытка через официальный `openclaw onboard --auth-choice openai-codex` на `ainetic.tech` успешно дошла до установки `openai-codex/gpt-5.4` как модели по умолчанию, но упала на сохранении конфигурации с `EACCES` в `/home/node/.openclaw/openclaw.json.<tmp>.tmp`.
+- Корневая причина подтверждена live-проверкой: контракт разворачивания Clawdiy монтировал только read-only файл `openclaw.json` вместо записываемого домашнего каталога `/home/node/.openclaw`, который требуется официальному мастеру настройки OpenClaw.
+- До исправления снята резервная копия live-состояния:
+  - `/root/clawdiy-backups/clawdiy-pre-codex-oauth-20260313-004707.tar.gz`
+  - `sha256: 7684188246ea345ff60cbfd1cc267580b87a5e75427b81eee5614e1e425db0da`
+- Подготовленные исправления в ветке:
+  - `docker-compose.clawdiy.yml` монтирует `data/clawdiy/runtime -> /home/node/.openclaw`
+  - `scripts/deploy.sh` и `scripts/render-clawdiy-runtime-config.sh` нормализуют права `data/clawdiy/runtime`
+  - `scripts/preflight-check.sh` теперь валидирует наличие и владельца `runtime home`
+  - резервное копирование, smoke и статические тесты считают `runtime home` обязательным инвентарем
+- Новый RCA: `docs/rca/2026-03-13-clawdiy-official-wizard-runtime-home-contract-mismatch.md`
+- Новое правило: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
+- Follow-up issue: `molt-zze` — выкатить исправление и повторно пройти официальный мастер настройки OpenClaw на live Clawdiy
 
 ### Production Status
 

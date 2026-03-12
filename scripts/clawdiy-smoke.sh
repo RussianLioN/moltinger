@@ -778,20 +778,20 @@ verify_same_host_stage() {
         add_check "moltis_health_unchanged" "fail" "Moltis health endpoint did not return 200: $MOLTIS_HEALTH_URL" "error"
     fi
 
-    local config_source registry_source workspace_source state_source audit_source
-    config_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/openclaw.json")"
+    local config_root_source registry_source workspace_source state_source audit_source
+    config_root_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw")"
     registry_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/registry")"
     workspace_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/workspace")"
     state_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/state")"
     audit_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/audit")"
 
-    if [[ "$config_source" == */data/clawdiy/runtime/openclaw.json && "$registry_source" == */config/fleet && "$workspace_source" == */data/clawdiy/workspace && "$state_source" == */data/clawdiy/state && "$audit_source" == */data/clawdiy/audit ]]; then
-        add_check "clawdiy_mounts" "pass" "Clawdiy mounts are isolated for config, registry, workspace, state, and audit roots" "error"
+    if [[ "$config_root_source" == */data/clawdiy/runtime && "$registry_source" == */config/fleet && "$workspace_source" == */data/clawdiy/workspace && "$state_source" == */data/clawdiy/state && "$audit_source" == */data/clawdiy/audit ]]; then
+        add_check "clawdiy_mounts" "pass" "Clawdiy mounts are isolated for runtime home, registry, workspace, state, and audit roots" "error"
     else
         add_check "clawdiy_mounts" "fail" "Clawdiy mounts are not wired to the expected isolated roots" "error"
     fi
 
-    if [[ "$workspace_source" != "$state_source" && "$workspace_source" != "$audit_source" && "$state_source" != "$audit_source" && "$config_source" != "$registry_source" ]]; then
+    if [[ "$workspace_source" != "$state_source" && "$workspace_source" != "$audit_source" && "$state_source" != "$audit_source" && "$config_root_source" != "$registry_source" ]]; then
         add_check "clawdiy_mounts_distinct" "pass" "Clawdiy persistent and control-plane mounts remain distinct" "error"
     else
         add_check "clawdiy_mounts_distinct" "fail" "Clawdiy mounts unexpectedly collapse onto shared paths" "error"

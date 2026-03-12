@@ -18,6 +18,7 @@ Current limitation:
 - Hosted browser bootstrap for Clawdiy starts from `Overview -> Gateway Access -> token -> pairing`, not from a dedicated welcome wizard or a guaranteed provider-auth settings screen.
 - Browser bootstrap and provider OAuth are separate lifecycles; do not assume that simply opening the live UI creates a runtime `auth-profiles.json`.
 - Official OpenClaw docs currently document `codex-oauth` through CLI/wizard flows, including the headless Docker paste-back callback path. This repository normalizes provider naming to `codex-oauth` even when upstream docs show a legacy provider label in command examples. Browser UI is not the canonical documented Codex OAuth path.
+- Official CLI/wizard flows need a writable OpenClaw runtime home under `data/clawdiy/runtime` because OpenClaw may write temporary config files and OAuth-related artifacts under `~/.openclaw` during onboarding.
 
 ## Auth Surfaces
 
