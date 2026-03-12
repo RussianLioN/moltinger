@@ -16,6 +16,7 @@ BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
+MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -90,6 +91,15 @@ run_static_config_validation_tests() {
         test_pass
     fi
 
+    test_start "static_moltis_version_contract_is_pinned"
+    if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
+       "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
+        test_pass
+    else
+        test_fail "Tracked Moltis version must be pinned in git and validated by scripts/moltis-version.sh"
+    fi
+
     test_start "static_fixture_disables_openai_for_pr_gate"
     if rg -n '^\[providers\.openai\]' -A3 "$TEST_FIXTURE_CONFIG" | rg -q 'enabled = false'; then
         test_pass
@@ -133,6 +143,16 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
+    fi
+
+    test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
+    if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Production workflow_dispatch must use tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must resolve a tracked Moltis version and block feature-branch production deploys"
     fi
 
     test_start "static_clawdiy_workflow_exists"

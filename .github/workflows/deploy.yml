@@ -26,9 +26,9 @@ on:
           - production
           - staging
       version:
-        description: 'Moltis image version (e.g., latest, v1.0.0)'
+        description: 'Moltis image version (leave blank to use tracked git version, e.g. v0.10.18)'
         required: false
-        default: 'latest'
+        default: 'v0.10.18'
         type: string
       rollback:
         description: 'Rollback to previous version'
@@ -221,25 +221,50 @@ jobs:
       - name: Determine version
         id: version
         run: |
+          chmod +x scripts/moltis-version.sh
+          TRACKED_VERSION="$(scripts/moltis-version.sh version)"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
+            if [ -z "$VERSION" ]; then
+              VERSION="$TRACKED_VERSION"
+            fi
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF#refs/tags/}"
           else
-            # Use default version - must match what's on server
-            VERSION="latest"
+            VERSION="$TRACKED_VERSION"
           fi
+          echo "tracked_version=$TRACKED_VERSION" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "::notice::Tracked Moltis version in git: $TRACKED_VERSION"
           echo "::notice::Deploying Moltis version: $VERSION"
 
       - name: Validate deployment prerequisites
         id: validate
         run: |
+          TARGET_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}"
+          TRACKED_VERSION="${{ steps.version.outputs.tracked_version }}"
+
           # Check if this is a rollback
           if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
             echo "should_deploy=false" >> $GITHUB_OUTPUT
             echo "::notice::Rollback requested, skipping preflight"
             exit 0
+          fi
+
+          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
+            exit 1
+          fi
+
+          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ] && [ "${{ github.event.inputs.version }}" != "$TRACKED_VERSION" ]; then
+            echo "::error::Production workflow_dispatch must use tracked Moltis version $TRACKED_VERSION or leave version blank."
+            exit 1
+          fi
+
+          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_type }}" = "tag" ] && [ "${{ steps.version.outputs.version }}" != "$TRACKED_VERSION" ]; then
+            echo "::error::Production tag deploy version must match tracked Moltis version $TRACKED_VERSION."
+            exit 1
           fi
 
           echo "should_deploy=true" >> $GITHUB_OUTPUT

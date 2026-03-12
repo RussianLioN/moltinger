@@ -576,6 +576,21 @@
       ],
       "cron": "*/5 * * * *"
     },
+    "moltis-version.sh": {
+      "version": "1.0.0",
+      "description": "Resolve and validate the tracked Moltis image version from git-managed compose files",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "sed"
+      ],
+      "provides": [
+        "moltis-version",
+        "moltis-image",
+        "moltis-version-assert-tracked"
+      ],
+      "gitops": true
+    },
     "ollama-health.sh": {
       "version": "1.0.0",
       "description": "Health checks for Ollama sidecar and fallback generation",
