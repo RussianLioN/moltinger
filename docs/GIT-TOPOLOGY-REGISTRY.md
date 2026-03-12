@@ -30,7 +30,7 @@
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher-writable` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-016` | `016-worktree-skill-bug-fix` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-017` | `017-clawdiy-workspace-mount-fix` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-017` | `017-clawdiy-remote-oauth-lifecycle` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `fix/beads-recovery-audit-localization` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -43,7 +43,7 @@
 | `012-codex-upstream-watcher` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `012-codex-upstream-watcher-writable` | `origin/012-codex-upstream-watcher` | Needs decision |
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
-| `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
+| `017-clawdiy-remote-oauth-lifecycle` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
@@ -73,6 +73,7 @@
 | `014-clawdiy-smoke-jq-fix` | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `015-clawdiy-smoke-mount-resolution` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `016-clawdiy-restore-readiness-fix` | `origin/016-clawdiy-restore-readiness-fix` | Needs decision |
+| `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
