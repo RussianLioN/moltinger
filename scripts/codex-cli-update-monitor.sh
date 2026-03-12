@@ -776,9 +776,16 @@ def parse_release_source(raw: str, limit: int) -> list[dict]:
 
     if stripped[0] in "[{":
         data = json.loads(stripped)
-        releases = data.get("releases", data if isinstance(data, list) else [])
+        if isinstance(data, dict):
+            releases = data.get("releases", [])
+        elif isinstance(data, list):
+            releases = data
+        else:
+            releases = []
         normalized = []
         for item in releases:
+            if not isinstance(item, dict):
+                continue
             changes = item.get("changes", [])
             normalized.append(
                 {
@@ -858,9 +865,16 @@ def parse_issue_signals(raw: str) -> list[dict]:
     if not stripped:
         return []
     data = json.loads(stripped)
-    issues = data.get("issues", data if isinstance(data, list) else [])
+    if isinstance(data, dict):
+        issues = data.get("issues", [])
+    elif isinstance(data, list):
+        issues = data
+    else:
+        issues = []
     normalized = []
     for item in issues:
+        if not isinstance(item, dict):
+            continue
         if item.get("pull_request"):
             continue
         issue_id = item.get("id") or item.get("number")

@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 MONITOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-monitor.sh"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-update-monitor"
+UPSTREAM_WATCHER_FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-upstream-watcher"
 FAKE_BD_BIN_DIR=""
 FAKE_BD_STATE_DIR=""
 FAKE_BD_DB=""
@@ -163,6 +164,20 @@ run_component_codex_cli_update_monitor_tests() {
     assert_eq "ignore" "$(jq -r '.recommendation' "$report")" "Issue signals alone must not force an upgrade"
     assert_contains "$(jq -r '.evidence | join("\n")' "$report")" "advisory item" "Evidence should record advisory issue review"
     test_pass
+
+    test_start "component_codex_update_monitor_accepts_list_root_issue_signals"
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture "0.112.0" "$work_dir" \
+        --include-issue-signals \
+        --issue-signals-file "$UPSTREAM_WATCHER_FIXTURE_DIR/issue-signals.json"
+    report="$work_dir/report.json"
+    assert_eq "ignore" "$(jq -r '.recommendation' "$report")" "List-root issue signals alone must remain advisory"
+    assert_contains "$(jq -r '.evidence | join("\n")' "$report")" "Issue-signal intake reviewed 2 advisory item(s)." "Evidence should count advisory issues from list-root JSON"
+    if grep -Fq "Failed to parse issue-signal source" < <(jq -r '.evidence | join("\n")' "$report"); then
+        test_fail "List-root issue signals should not trigger a parse failure"
+    else
+        test_pass
+    fi
 
     test_start "component_codex_update_monitor_returns_investigate_when_release_source_fails"
     work_dir="$(secure_temp_dir codex-update-monitor)"
