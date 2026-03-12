@@ -1203,7 +1203,7 @@ git push
 - Discord: (если доступен)
 
 ### Related Projects:
-- ASC AI Fabrique: /Users/rl/coding/ASC-AI-agent-fabrique/
+- ASC AI Fabrique mirror: docs/ASC-AI-FABRIQUE-MIRROR.md
 - Agent Factory Lifecycle: docs/plans/agent-factory-lifecycle.md
 
 ---

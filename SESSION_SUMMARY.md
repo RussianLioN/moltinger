@@ -50,7 +50,32 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-11)
+### Current Session Update (2026-03-12)
+
+- Branch in progress: `020-agent-factory-prototype`
+- Verified that the local clone of `ASC-AI-agent-fabrique` matches upstream GitHub `HEAD`, then mirrored the current top-level ASC roadmap and concept docs into this repository under `docs/asc-roadmap/` and `docs/concept/`.
+- Added `docs/ASC-AI-FABRIQUE-MIRROR.md` as the local provenance and navigation index so future sessions can find upstream ASC context, local factory plans, and the active Speckit package without relying on `/Users/...` paths.
+- Reconciled factory-planning references in `docs/plans/parallel-doodling-coral.md` and `docs/research/openclaw-moltis-research.md` to point at the in-repo mirror rather than the workstation-local ASC repository.
+- Created the new Speckit package `specs/020-agent-factory-prototype/` with:
+  - `spec.md`
+  - `checklists/requirements.md`
+  - `research.md`
+  - `plan.md`
+  - `data-model.md`
+  - `quickstart.md`
+  - `contracts/`
+  - `tasks.md`
+- Framed the prototype around Telegram intake, synchronized concept-pack generation, defense gate, autonomous swarm-to-playground execution, operator escalation, and local ASC context continuity; deployment remains explicitly out of scope for MVP1.
+- Created follow-up Beads epic `molt-qgg` (`Prototype AI agent factory MVP0`) linked to spec id `020-agent-factory-prototype`.
+- `docs/GIT-TOPOLOGY-REGISTRY.md` was refreshed after the branch mutation so the registry matches the live topology again.
+- Verified in this session:
+  - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `rg -n "/Users/rl/coding/ASC-AI-agent-fabrique" docs/ASC-AI-FABRIQUE-MIRROR.md docs/plans/parallel-doodling-coral.md docs/research/openclaw-moltis-research.md specs/020-agent-factory-prototype/spec.md specs/020-agent-factory-prototype/plan.md specs/020-agent-factory-prototype/research.md specs/020-agent-factory-prototype/data-model.md specs/020-agent-factory-prototype/tasks.md specs/020-agent-factory-prototype/contracts`
+  - `scripts/git-topology-registry.sh refresh --write-doc`
+  - `scripts/git-topology-registry.sh check`
+  - `git diff --check`
+
+### Previous Session Update (2026-03-11)
 
 - Branch in progress: `feat/moltis-real-user-tests`
 - Restored the historical `deferred -> executable real_user` line for `specs/004-telegram-e2e-harness` so the current scope explicitly tracks that US3 used to be deferred in `moltinger-xtx`, but is now treated as active regression surface.

@@ -1,0 +1,514 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" 
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" 
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" 
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" 
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             id="Definitions_N8N_Prototype" 
+             targetNamespace="http://bpmn.io/bpmn" 
+             exporter="Manual BPMN Generator" 
+             exporterVersion="1.0">
+  
+  <process id="Process_N8N_Prototyping" name="N8N-based AI Prototyping Solution" isExecutable="false">
+    
+    <!-- Старт процесса -->
+    <startEvent id="StartEvent_1" name="Начало&#10;процесса">
+      <outgoing>Flow_01</outgoing>
+    </startEvent>
+    
+    <!-- Шаг 1: Авторизация и аутентификация -->
+    <userTask id="Task_Auth" name="Авторизация и аутентификация">
+      <incoming>Flow_01</incoming>
+      <outgoing>Flow_02</outgoing>
+    </userTask>
+    
+    <!-- Шаг 2: Настройка токенов -->
+    <task id="Task_TokenSetup" name="Настройка токенов и тузов (SecMan)">
+      <incoming>Flow_02</incoming>
+      <outgoing>Flow_03</outgoing>
+    </task>
+    
+    <!-- Шаг 3: Ввод промпта -->
+    <userTask id="Task_PromptInput" name="Ввод промпта (макс 32768 токенов)">
+      <incoming>Flow_03</incoming>
+      <outgoing>Flow_04</outgoing>
+    </userTask>
+    
+    <!-- Шаг 4: NLP анализ контекста -->
+    <task id="Task_NLP" name="Контекстный анализ (NLP модель)">
+      <incoming>Flow_04</incoming>
+      <outgoing>Flow_05</outgoing>
+    </task>
+    
+    <!-- Шаг 5: RAG поиск в Qdrant -->
+    <task id="Task_RAG" name="Поиск сущностей в Qdrant (RAG + META)">
+      <incoming>Flow_05</incoming>
+      <outgoing>Flow_06</outgoing>
+    </task>
+    
+    <!-- Шаг 6: Генерация прототипа -->
+    <task id="Task_Prototype" name="Генерация шаблонов классов">
+      <incoming>Flow_06</incoming>
+      <outgoing>Flow_07</outgoing>
+    </task>
+    
+    <!-- Шаг 7: Git commit прототипа -->
+    <task id="Task_GitCommit1" name="Git commit в ветку dev">
+      <incoming>Flow_07</incoming>
+      <outgoing>Flow_08</outgoing>
+    </task>
+    
+    <!-- Шаг 8: Реализация заглушек -->
+    <task id="Task_Stubs" name="Реализация заглушек (признак dev)">
+      <incoming>Flow_08</incoming>
+      <outgoing>Flow_09</outgoing>
+    </task>
+    
+    <!-- Шаг 9: Git commit заглушек -->
+    <task id="Task_GitCommit2" name="Git commit заглушек в dev">
+      <incoming>Flow_09</incoming>
+      <outgoing>Flow_10</outgoing>
+    </task>
+    
+    <!-- Шаг 10: GLM-4.6 обработка бизнес-логики -->
+    <task id="Task_GLM" name="GLM-4.6: разработка бизнес-логики">
+      <incoming>Flow_10</incoming>
+      <incoming>Flow_FixCode</incoming>
+      <incoming>Flow_FixUnitTests</incoming>
+      <outgoing>Flow_11</outgoing>
+    </task>
+    
+    <!-- Шаг 11: Git commit логики -->
+    <task id="Task_GitCommit3" name="Git commit бизнес-логики в dev">
+      <incoming>Flow_11</incoming>
+      <outgoing>Flow_12</outgoing>
+    </task>
+    
+    <!-- Шаг 12: Сбор метаинформации -->
+    <task id="Task_Metadata" name="Сбор метаинформации (библиотеки, методы)">
+      <incoming>Flow_12</incoming>
+      <incoming>Flow_FixLibraries</incoming>
+      <outgoing>Flow_13</outgoing>
+    </task>
+    
+    <!-- Шаг 13: Верификация библиотек на MCP -->
+    <task id="Task_LibVerification" name="Верификация библиотек на MCP-сервере">
+      <incoming>Flow_13</incoming>
+      <outgoing>Flow_14</outgoing>
+    </task>
+    
+    <!-- Шлюз 1: Проверка библиотек -->
+    <exclusiveGateway id="Gateway_LibCheck" name="Библиотеки&#10;валидны?">
+      <incoming>Flow_14</incoming>
+      <outgoing>Flow_15_Pass</outgoing>
+      <outgoing>Flow_15_Fail</outgoing>
+    </exclusiveGateway>
+    
+    <!-- Фиксация проблем с библиотеками -->
+    <task id="Task_LibFix" name="Поиск альтернативных библиотек">
+      <incoming>Flow_15_Fail</incoming>
+      <outgoing>Flow_FixLibraries</outgoing>
+    </task>
+    
+    <!-- Шаг 14: Верификация кода -->
+    <task id="Task_CodeValidation" name="Верификация кода (SonarQube, Checkmarx, SCA, SAST)">
+      <incoming>Flow_15_Pass</incoming>
+      <outgoing>Flow_16</outgoing>
+    </task>
+    
+    <!-- Шлюз 2: Проверка кода -->
+    <exclusiveGateway id="Gateway_CodeCheck" name="Код&#10;валиден?">
+      <incoming>Flow_16</incoming>
+      <outgoing>Flow_17_Pass</outgoing>
+      <outgoing>Flow_17_Fail</outgoing>
+    </exclusiveGateway>
+    
+    <!-- Фиксация проблем с кодом -->
+    <task id="Task_CodeFix" name="Исправление ошибок кода">
+      <incoming>Flow_17_Fail</incoming>
+      <outgoing>Flow_FixCode</outgoing>
+    </task>
+    
+    <!-- Шаг 15: Unit тестирование -->
+    <task id="Task_UnitTests" name="Генерация и выполнение Unit Test Case">
+      <incoming>Flow_17_Pass</incoming>
+      <outgoing>Flow_18</outgoing>
+    </task>
+    
+    <!-- Шлюз 3: Проверка unit-тестов -->
+    <exclusiveGateway id="Gateway_TestCheck" name="Тесты&#10;100% OK?">
+      <incoming>Flow_18</incoming>
+      <outgoing>Flow_19_Pass</outgoing>
+      <outgoing>Flow_19_Fail</outgoing>
+    </exclusiveGateway>
+    
+    <!-- Фиксация проблем с тестами -->
+    <task id="Task_TestFix" name="Исправление тестов">
+      <incoming>Flow_19_Fail</incoming>
+      <outgoing>Flow_FixUnitTests</outgoing>
+    </task>
+    
+    <!-- Шаг 16: Подготовка финального прототипа -->
+    <task id="Task_FinalPrep" name="Подготовка финального прототипа">
+      <incoming>Flow_19_Pass</incoming>
+      <outgoing>Flow_20</outgoing>
+    </task>
+    
+    <!-- Шаг 17: Удаление DEV-флага -->
+    <task id="Task_RemoveDev" name="Удаление признака dev">
+      <incoming>Flow_20</incoming>
+      <outgoing>Flow_21</outgoing>
+    </task>
+    
+    <!-- Шаг 18: Git commit в PSI -->
+    <task id="Task_GitCommitPSI" name="Git commit в ветку ПСИ">
+      <incoming>Flow_21</incoming>
+      <outgoing>Flow_22</outgoing>
+    </task>
+    
+    <!-- Завершение процесса -->
+    <endEvent id="EndEvent_1" name="Прототип&#10;готов">
+      <incoming>Flow_22</incoming>
+    </endEvent>
+    
+    <!-- Sequence Flows -->
+    <sequenceFlow id="Flow_01" sourceRef="StartEvent_1" targetRef="Task_Auth"/>
+    <sequenceFlow id="Flow_02" sourceRef="Task_Auth" targetRef="Task_TokenSetup"/>
+    <sequenceFlow id="Flow_03" sourceRef="Task_TokenSetup" targetRef="Task_PromptInput"/>
+    <sequenceFlow id="Flow_04" sourceRef="Task_PromptInput" targetRef="Task_NLP"/>
+    <sequenceFlow id="Flow_05" sourceRef="Task_NLP" targetRef="Task_RAG"/>
+    <sequenceFlow id="Flow_06" sourceRef="Task_RAG" targetRef="Task_Prototype"/>
+    <sequenceFlow id="Flow_07" sourceRef="Task_Prototype" targetRef="Task_GitCommit1"/>
+    <sequenceFlow id="Flow_08" sourceRef="Task_GitCommit1" targetRef="Task_Stubs"/>
+    <sequenceFlow id="Flow_09" sourceRef="Task_Stubs" targetRef="Task_GitCommit2"/>
+    <sequenceFlow id="Flow_10" sourceRef="Task_GitCommit2" targetRef="Task_GLM"/>
+    <sequenceFlow id="Flow_11" sourceRef="Task_GLM" targetRef="Task_GitCommit3"/>
+    <sequenceFlow id="Flow_12" sourceRef="Task_GitCommit3" targetRef="Task_Metadata"/>
+    <sequenceFlow id="Flow_13" sourceRef="Task_Metadata" targetRef="Task_LibVerification"/>
+    <sequenceFlow id="Flow_14" sourceRef="Task_LibVerification" targetRef="Gateway_LibCheck"/>
+    
+    <sequenceFlow id="Flow_15_Pass" name="Да" sourceRef="Gateway_LibCheck" targetRef="Task_CodeValidation"/>
+    <sequenceFlow id="Flow_15_Fail" name="Нет" sourceRef="Gateway_LibCheck" targetRef="Task_LibFix"/>
+    <sequenceFlow id="Flow_FixLibraries" sourceRef="Task_LibFix" targetRef="Task_Metadata"/>
+    
+    <sequenceFlow id="Flow_16" sourceRef="Task_CodeValidation" targetRef="Gateway_CodeCheck"/>
+    <sequenceFlow id="Flow_17_Pass" name="Да" sourceRef="Gateway_CodeCheck" targetRef="Task_UnitTests"/>
+    <sequenceFlow id="Flow_17_Fail" name="Нет" sourceRef="Gateway_CodeCheck" targetRef="Task_CodeFix"/>
+    <sequenceFlow id="Flow_FixCode" sourceRef="Task_CodeFix" targetRef="Task_GLM"/>
+    
+    <sequenceFlow id="Flow_18" sourceRef="Task_UnitTests" targetRef="Gateway_TestCheck"/>
+    <sequenceFlow id="Flow_19_Pass" name="Да" sourceRef="Gateway_TestCheck" targetRef="Task_FinalPrep"/>
+    <sequenceFlow id="Flow_19_Fail" name="Нет" sourceRef="Gateway_TestCheck" targetRef="Task_TestFix"/>
+    <sequenceFlow id="Flow_FixUnitTests" sourceRef="Task_TestFix" targetRef="Task_GLM"/>
+    
+    <sequenceFlow id="Flow_20" sourceRef="Task_FinalPrep" targetRef="Task_RemoveDev"/>
+    <sequenceFlow id="Flow_21" sourceRef="Task_RemoveDev" targetRef="Task_GitCommitPSI"/>
+    <sequenceFlow id="Flow_22" sourceRef="Task_GitCommitPSI" targetRef="EndEvent_1"/>
+    
+  </process>
+  
+  <bpmndi:BPMNDiagram id="BpmnDiagram_N8N">
+    <bpmndi:BPMNPlane id="BpmnPlane_N8N" bpmnElement="Process_N8N_Prototyping">
+      
+      <!-- Start Event -->
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <omgdc:Bounds x="152" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="144" y="205" width="52" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <!-- Tasks Row 1 -->
+      <bpmndi:BPMNShape id="Task_Auth_di" bpmnElement="Task_Auth">
+        <omgdc:Bounds x="240" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_TokenSetup_di" bpmnElement="Task_TokenSetup">
+        <omgdc:Bounds x="390" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_PromptInput_di" bpmnElement="Task_PromptInput">
+        <omgdc:Bounds x="540" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_NLP_di" bpmnElement="Task_NLP">
+        <omgdc:Bounds x="690" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_RAG_di" bpmnElement="Task_RAG">
+        <omgdc:Bounds x="840" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <!-- Tasks Row 2 -->
+      <bpmndi:BPMNShape id="Task_Prototype_di" bpmnElement="Task_Prototype">
+        <omgdc:Bounds x="240" y="280" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_GitCommit1_di" bpmnElement="Task_GitCommit1">
+        <omgdc:Bounds x="390" y="280" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_Stubs_di" bpmnElement="Task_Stubs">
+        <omgdc:Bounds x="540" y="280" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_GitCommit2_di" bpmnElement="Task_GitCommit2">
+        <omgdc:Bounds x="690" y="280" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_GLM_di" bpmnElement="Task_GLM">
+        <omgdc:Bounds x="840" y="280" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <!-- Tasks Row 3 -->
+      <bpmndi:BPMNShape id="Task_GitCommit3_di" bpmnElement="Task_GitCommit3">
+        <omgdc:Bounds x="240" y="420" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_Metadata_di" bpmnElement="Task_Metadata">
+        <omgdc:Bounds x="390" y="420" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_LibVerification_di" bpmnElement="Task_LibVerification">
+        <omgdc:Bounds x="540" y="420" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Gateway_LibCheck_di" bpmnElement="Gateway_LibCheck" isMarkerVisible="true">
+        <omgdc:Bounds x="705" y="435" width="50" height="50"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="699" y="406" width="62" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_LibFix_di" bpmnElement="Task_LibFix">
+        <omgdc:Bounds x="680" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_CodeValidation_di" bpmnElement="Task_CodeValidation">
+        <omgdc:Bounds x="820" y="420" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <!-- Tasks Row 4 -->
+      <bpmndi:BPMNShape id="Gateway_CodeCheck_di" bpmnElement="Gateway_CodeCheck" isMarkerVisible="true">
+        <omgdc:Bounds x="265" y="575" width="50" height="50"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="267" y="546" width="46" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_CodeFix_di" bpmnElement="Task_CodeFix">
+        <omgdc:Bounds x="240" y="680" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_UnitTests_di" bpmnElement="Task_UnitTests">
+        <omgdc:Bounds x="390" y="560" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Gateway_TestCheck_di" bpmnElement="Gateway_TestCheck" isMarkerVisible="true">
+        <omgdc:Bounds x="555" y="575" width="50" height="50"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="551" y="546" width="58" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_TestFix_di" bpmnElement="Task_TestFix">
+        <omgdc:Bounds x="530" y="680" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <!-- Final Tasks -->
+      <bpmndi:BPMNShape id="Task_FinalPrep_di" bpmnElement="Task_FinalPrep">
+        <omgdc:Bounds x="680" y="560" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_RemoveDev_di" bpmnElement="Task_RemoveDev">
+        <omgdc:Bounds x="830" y="560" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNShape id="Task_GitCommitPSI_di" bpmnElement="Task_GitCommitPSI">
+        <omgdc:Bounds x="980" y="560" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      
+      <!-- End Event -->
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <omgdc:Bounds x="1132" y="582" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1123" y="625" width="54" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <!-- Edges - Row 1 -->
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01">
+        <omgdi:waypoint x="188" y="180"/>
+        <omgdi:waypoint x="240" y="180"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02">
+        <omgdi:waypoint x="340" y="180"/>
+        <omgdi:waypoint x="390" y="180"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03">
+        <omgdi:waypoint x="490" y="180"/>
+        <omgdi:waypoint x="540" y="180"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04">
+        <omgdi:waypoint x="640" y="180"/>
+        <omgdi:waypoint x="690" y="180"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05">
+        <omgdi:waypoint x="790" y="180"/>
+        <omgdi:waypoint x="840" y="180"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06">
+        <omgdi:waypoint x="890" y="220"/>
+        <omgdi:waypoint x="890" y="250"/>
+        <omgdi:waypoint x="290" y="250"/>
+        <omgdi:waypoint x="290" y="280"/>
+      </bpmndi:BPMNEdge>
+      
+      <!-- Edges - Row 2 -->
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07">
+        <omgdi:waypoint x="340" y="320"/>
+        <omgdi:waypoint x="390" y="320"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08">
+        <omgdi:waypoint x="490" y="320"/>
+        <omgdi:waypoint x="540" y="320"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09">
+        <omgdi:waypoint x="640" y="320"/>
+        <omgdi:waypoint x="690" y="320"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
+        <omgdi:waypoint x="790" y="320"/>
+        <omgdi:waypoint x="840" y="320"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11">
+        <omgdi:waypoint x="890" y="360"/>
+        <omgdi:waypoint x="890" y="390"/>
+        <omgdi:waypoint x="290" y="390"/>
+        <omgdi:waypoint x="290" y="420"/>
+      </bpmndi:BPMNEdge>
+      
+      <!-- Edges - Row 3 -->
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12">
+        <omgdi:waypoint x="340" y="460"/>
+        <omgdi:waypoint x="390" y="460"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13">
+        <omgdi:waypoint x="490" y="460"/>
+        <omgdi:waypoint x="540" y="460"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14">
+        <omgdi:waypoint x="640" y="460"/>
+        <omgdi:waypoint x="705" y="460"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_15_Pass_di" bpmnElement="Flow_15_Pass">
+        <omgdi:waypoint x="755" y="460"/>
+        <omgdi:waypoint x="820" y="460"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="779" y="442" width="15" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_15_Fail_di" bpmnElement="Flow_15_Fail">
+        <omgdi:waypoint x="730" y="485"/>
+        <omgdi:waypoint x="730" y="540"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="736" y="510" width="20" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_FixLibraries_di" bpmnElement="Flow_FixLibraries">
+        <omgdi:waypoint x="680" y="580"/>
+        <omgdi:waypoint x="440" y="580"/>
+        <omgdi:waypoint x="440" y="500"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_16_di" bpmnElement="Flow_16">
+        <omgdi:waypoint x="880" y="500"/>
+        <omgdi:waypoint x="880" y="530"/>
+        <omgdi:waypoint x="290" y="530"/>
+        <omgdi:waypoint x="290" y="575"/>
+      </bpmndi:BPMNEdge>
+      
+      <!-- Edges - Row 4 -->
+      <bpmndi:BPMNEdge id="Flow_17_Pass_di" bpmnElement="Flow_17_Pass">
+        <omgdi:waypoint x="315" y="600"/>
+        <omgdi:waypoint x="390" y="600"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="343" y="582" width="15" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_17_Fail_di" bpmnElement="Flow_17_Fail">
+        <omgdi:waypoint x="290" y="625"/>
+        <omgdi:waypoint x="290" y="680"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="296" y="650" width="20" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_FixCode_di" bpmnElement="Flow_FixCode">
+        <omgdi:waypoint x="340" y="720"/>
+        <omgdi:waypoint x="890" y="720"/>
+        <omgdi:waypoint x="890" y="360"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_18_di" bpmnElement="Flow_18">
+        <omgdi:waypoint x="490" y="600"/>
+        <omgdi:waypoint x="555" y="600"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_19_Pass_di" bpmnElement="Flow_19_Pass">
+        <omgdi:waypoint x="605" y="600"/>
+        <omgdi:waypoint x="680" y="600"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="633" y="582" width="15" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_19_Fail_di" bpmnElement="Flow_19_Fail">
+        <omgdi:waypoint x="580" y="625"/>
+        <omgdi:waypoint x="580" y="680"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="586" y="650" width="20" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_FixUnitTests_di" bpmnElement="Flow_FixUnitTests">
+        <omgdi:waypoint x="630" y="720"/>
+        <omgdi:waypoint x="890" y="720"/>
+        <omgdi:waypoint x="890" y="360"/>
+      </bpmndi:BPMNEdge>
+      
+      <!-- Final Edges -->
+      <bpmndi:BPMNEdge id="Flow_20_di" bpmnElement="Flow_20">
+        <omgdi:waypoint x="780" y="600"/>
+        <omgdi:waypoint x="830" y="600"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_21_di" bpmnElement="Flow_21">
+        <omgdi:waypoint x="930" y="600"/>
+        <omgdi:waypoint x="980" y="600"/>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="Flow_22_di" bpmnElement="Flow_22">
+        <omgdi:waypoint x="1080" y="600"/>
+        <omgdi:waypoint x="1132" y="600"/>
+      </bpmndi:BPMNEdge>
+      
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  
+</definitions>

@@ -153,9 +153,11 @@ ssh root@ainetic.tech "cd /opt/moltinger && docker compose restart moltis"
 ```
 
 **Источник для копирования**:
-- `/Users/rl/coding/ASC-AI-agent-fabrique/docs/asc-roadmap/GLOSSARY.md`
-- `/Users/rl/coding/ASC-AI-agent-fabrique/docs/asc-roadmap/meta_block_registry.md`
-- `/Users/rl/coding/ASC-AI-agent-fabrique/docs/asc-roadmap/strategic_roadmap.md`
+- `docs/asc-roadmap/GLOSSARY.md`
+- `docs/asc-roadmap/meta_block_registry.md`
+- `docs/asc-roadmap/strategic_roadmap.md`
+
+**Примечание**: Локальное зеркало ASC-документации в этом репозитории теперь ведется через `docs/ASC-AI-FABRIQUE-MIRROR.md`, чтобы planning и runtime-артефакты не зависели от внешнего абсолютного пути на рабочей станции.
 
 ### Task 2.2: Настроить Memory watch_dirs
 

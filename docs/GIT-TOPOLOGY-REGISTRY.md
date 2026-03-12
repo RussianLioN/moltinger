@@ -12,6 +12,7 @@
 |---|---|---|---|
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
+| `moltinger-019-asc-fabrique-prototype` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
@@ -75,6 +76,8 @@
 | `016-clawdiy-restore-readiness-fix` | `origin/016-clawdiy-restore-readiness-fix` | Needs decision |
 | `017-clawdiy-remote-oauth-lifecycle` | `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
 | `017-clawdiy-workspace-mount-fix` | `origin/017-clawdiy-workspace-mount-fix` | Needs decision |
+| `019-asc-fabrique-prototype` | `none` | Needs decision |
+| `020-agent-factory-prototype` | `none` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
@@ -102,8 +105,6 @@
 | `origin/013-clawdiy-state-hardening` | Needs decision |
 | `origin/014-clawdiy-smoke-jq-fix` | Needs decision |
 | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
-| `origin/017-clawdiy-remote-oauth-lifecycle` | Needs decision |
-| `origin/018-clawdiy-gateway-password-ui-fix` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
