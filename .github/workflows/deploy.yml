@@ -1333,6 +1333,40 @@ jobs:
           EOF
           echo "::endgroup::"
 
+      - name: Check post-upgrade web protocol skew
+        id: protocol_skew
+        run: |
+          echo "::group::Checking for post-upgrade web protocol skew"
+          INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            RECENT_PROTOCOL_SKEW=$(docker logs --since 15m moltis 2>&1 | grep -E -c 'ws: protocol mismatch|missing field minProtocol' || true)
+
+            echo "detected=false"
+            echo "count=$RECENT_PROTOCOL_SKEW"
+
+            if [ "$RECENT_PROTOCOL_SKEW" -gt 0 ]; then
+              echo "detected=true"
+            fi
+          EOF
+          )
+
+          DETECTED="$(printf '%s\n' "$INFO" | grep '^detected=' | tail -1 | cut -d= -f2)"
+          COUNT="$(printf '%s\n' "$INFO" | grep '^count=' | tail -1 | cut -d= -f2)"
+
+          [ -z "$DETECTED" ] && DETECTED="false"
+          [ -z "$COUNT" ] && COUNT="0"
+
+          echo "detected=$DETECTED" >> $GITHUB_OUTPUT
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$DETECTED" = "true" ]; then
+            echo "::warning::Detected $COUNT recent websocket protocol skew log entries after deploy. Backend may already be healthy; stale browser tabs likely need hard refresh or a fresh session."
+          else
+            echo "::notice::No recent websocket protocol skew detected in the post-deploy window."
+          fi
+          echo "::endgroup::"
+
       # ===========================================
       # LLM Failover Validation (T024-T026)
       # ===========================================
@@ -1441,6 +1475,11 @@ jobs:
 
       - name: Verification summary
         run: |
+          PROTOCOL_SKEW="${{ steps.protocol_skew.outputs.detected }}"
+          PROTOCOL_SKEW_COUNT="${{ steps.protocol_skew.outputs.count }}"
+          [ -z "$PROTOCOL_SKEW" ] && PROTOCOL_SKEW="false"
+          [ -z "$PROTOCOL_SKEW_COUNT" ] && PROTOCOL_SKEW_COUNT="0"
+
           echo "## Verification Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "All smoke tests passed successfully!" >> $GITHUB_STEP_SUMMARY
@@ -1449,6 +1488,16 @@ jobs:
           echo "- **Image**: \`${{ steps.info.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: https://moltis.ainetic.tech" >> $GITHUB_STEP_SUMMARY
           echo "- **Health**: https://moltis.ainetic.tech/health" >> $GITHUB_STEP_SUMMARY
+          echo "- **Post-upgrade protocol skew detected**: \`$PROTOCOL_SKEW\` (recent log matches: $PROTOCOL_SKEW_COUNT)" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$PROTOCOL_SKEW" = "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Operator Note" >> $GITHUB_STEP_SUMMARY
+            echo "- Backend rollout may still be successful if health and authoritative UAT are green." >> $GITHUB_STEP_SUMMARY
+            echo "- This usually means stale browser tabs are reconnecting with an older WebSocket protocol." >> $GITHUB_STEP_SUMMARY
+            echo "- Action: close old Moltis tabs and reopen the UI, or use a new incognito/private session." >> $GITHUB_STEP_SUMMARY
+            echo "- Protocol skew by itself is not a rollback trigger." >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ===========================================
   # Notify on failure

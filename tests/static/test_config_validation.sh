@@ -188,6 +188,16 @@ run_static_config_validation_tests() {
         test_fail "Deploy workflow must resolve the tracked Moltis version, stay on the official latest channel, and block feature-branch production deploys"
     fi
 
+    test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"
+    if rg -q 'Check post-upgrade web protocol skew' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'stale browser tabs' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'not a rollback trigger' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q '## Post-upgrade stale web client' "$PROJECT_ROOT/docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md"; then
+        test_pass
+    else
+        test_fail "Deploy verification and runbook must classify post-upgrade protocol skew as an operator signal before rollback"
+    fi
+
     test_start "static_clawdiy_workflow_exists"
     if [[ -f "$CLAWDIY_WORKFLOW" ]]; then
         test_pass
