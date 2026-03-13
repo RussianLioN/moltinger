@@ -43,12 +43,13 @@ Production workflow `Deploy Moltis` падал на шаге `Check GitOps compl
 2. **Немедленное исправление:** `deploy.yml` теперь вызывает этот script entrypoint вместо inline SSH heredoc.
 3. **Предотвращение:** добавлен static guard, который запрещает возвращать такой inline heredoc-pattern в deploy workflow.
 4. **Документация:** инцидент зафиксирован отдельным RCA для lessons index.
+5. **Правило:** добавлено `docs/rules/github-actions-no-indented-heredocs.md` для high-risk workflow shell.
 
 ## Связанные обновления
 
 - [X] RCA-отчёт создан в `docs/rca/`
 - [X] Static guard добавлен в `tests/static/test_config_validation.sh`
-- [ ] Отдельный policy file не потребовался
+- [X] Отдельный policy file добавлен в `docs/rules/github-actions-no-indented-heredocs.md`
 
 ## Уроки
 
