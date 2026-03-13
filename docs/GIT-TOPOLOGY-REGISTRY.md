@@ -18,7 +18,7 @@
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
 | `moltinger-main-merge.hsq6oh` | `main` | `sibling-worktree` | Needs decision |
-| `moltinger-moltis-official-docker-update-v0-10-18` | `fix/moltis-official-docker-latest-channel` | `sibling-worktree` | Needs decision |
+| `moltinger-moltis-official-docker-update-v0-10-18` | `fix/moltis-post-deploy-protocol-guidance` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
 | `moltinger-pr39` | `tmp-pr39-fix` | `sibling-worktree` | Needs decision |
@@ -66,7 +66,7 @@
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `fix/clawdiy-handoff-fixture-alignment` | `origin/main` | Needs decision |
-| `fix/moltis-official-docker-latest-channel` | `origin/fix/moltis-official-docker-latest-channel` | Needs decision |
+| `fix/moltis-post-deploy-protocol-guidance` | `origin/main` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -102,6 +102,7 @@
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `fix/beads-root-fallback-hardening` | `origin/fix/beads-root-fallback-hardening` | Needs decision |
+| `fix/moltis-official-docker-latest-channel` | `origin/fix/moltis-gitops-repair-parse-failure` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 
@@ -134,7 +135,6 @@
 | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `origin/fix/moltis-official-docker-latest-channel` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 

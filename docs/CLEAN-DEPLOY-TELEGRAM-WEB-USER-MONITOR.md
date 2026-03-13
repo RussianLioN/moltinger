@@ -46,6 +46,24 @@ gh workflow run telegram-e2e-on-demand.yml \
    - `failure.code`
    - `recommended_action`
 
+## Post-upgrade stale web client
+
+Если после успешного deploy одновременно верны все пункты ниже:
+
+- контейнер `moltis` `healthy`
+- `https://moltis.ainetic.tech/health` отвечает `200` или `401`
+- authoritative Telegram Remote UAT дал `run.verdict=passed`
+- но в web UI видны `WebSocket disconnected`, `handshake failed` или в логах есть `protocol mismatch`
+
+сначала считайте это `post-upgrade stale-client condition`, а не failed deploy.
+
+Действия оператора:
+
+1. Закрыть старые вкладки Moltis.
+2. Открыть UI заново в новой вкладке или в `Incognito/Private`.
+3. При необходимости сделать hard refresh.
+4. Не делать rollback только по одному этому симптому.
+
 ## Drift remediation
 
 Если деплой заблокирован:
@@ -62,3 +80,4 @@ gh workflow run telegram-e2e-on-demand.yml \
 - Любая постоянная настройка должна попадать в git (scripts/config/systemd/cron).
 - Production по умолчанию не включает периодический Telegram Web scheduler.
 - Канонический post-deploy verdict path: `Telegram Web`.
+- `protocol mismatch` при зелёных health/UAT считается residual client-state и требует сначала hard refresh / новый browser session, а не rollback.
