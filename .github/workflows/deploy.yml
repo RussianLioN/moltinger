@@ -221,42 +221,15 @@ jobs:
 
             if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = true ]; then
               echo "::warning::Attempting GitOps-safe repair of deploy-managed server checkout"
-              DRIFT_SNAPSHOT="$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} <<'EOF'
-                set -euo pipefail
-                cd ${{ env.DEPLOY_PATH }}
-
-                SNAPSHOT_DIR="${{ env.BACKUP_PATH }}/gitops-drift"
-                SNAPSHOT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-                SNAPSHOT_PREFIX="run_${{ github.run_id }}_${SNAPSHOT_STAMP}"
-                META_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.meta.txt"
-                DIFF_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.diff.patch"
-                ARCHIVE_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.tar.gz"
-
-                mkdir -p "$SNAPSHOT_DIR"
-
-                {
-                  echo "captured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                  echo "repository=${{ github.repository }}"
-                  echo "workflow_run=${{ github.run_id }}"
-                  echo "target_ref=${{ github.ref_name }}"
-                  echo "target_sha=${{ github.sha }}"
-                  echo "current_branch=$(git rev-parse --abbrev-ref HEAD)"
-                  echo "current_sha=$(git rev-parse HEAD)"
-                  echo "--- git status --short ---"
-                  git status --short
-                } > "$META_FILE"
-
-                git diff --binary -- docker-compose.yml docker-compose.prod.yml config scripts systemd > "$DIFF_FILE" || true
-                tar --ignore-failed-read -czf "$ARCHIVE_FILE" docker-compose.yml docker-compose.prod.yml config scripts systemd
-
-                git fetch --depth=1 origin "${{ github.ref_name }}"
-                git checkout --force "${{ github.ref_name }}"
-                git reset --hard "${{ github.sha }}"
-                git clean -fd -- docker-compose.yml docker-compose.prod.yml config scripts systemd
-
-                printf '%s\n' "$ARCHIVE_FILE"
-              EOF
-              )"
+              DRIFT_SNAPSHOT="$(bash scripts/gitops-repair-managed-checkout.sh \
+                --ssh-user "${{ env.SSH_USER }}" \
+                --ssh-host "${{ env.SSH_HOST }}" \
+                --deploy-path "${{ env.DEPLOY_PATH }}" \
+                --backup-path "${{ env.BACKUP_PATH }}" \
+                --target-ref "${{ github.ref_name }}" \
+                --target-sha "${{ github.sha }}" \
+                --run-id "${{ github.run_id }}" \
+                --repository "${{ github.repository }}")"
               REPAIR_PERFORMED=true
               echo "::notice::Server drift snapshot saved to $DRIFT_SNAPSHOT"
 

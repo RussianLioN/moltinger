@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-13
-**Total Lessons**: 21
+**Total Lessons**: 22
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (3 lessons)
+#### P1 (4 lessons)
 - [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
+- [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
@@ -71,7 +72,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (4 lessons)
+#### shell (5 lessons)
+- [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
@@ -82,11 +84,11 @@
 
 - `process` (6 lessons)
 - `rca` (5 lessons)
+- `github-actions` (5 lessons)
 - `topology-registry` (4 lessons)
-- `github-actions` (4 lessons)
+- `gitops` (4 lessons)
 - `git-worktree` (4 lessons)
 - `ux` (3 lessons)
-- `gitops` (3 lessons)
 - `drift-detection` (3 lessons)
 - `sandbox` (2 lessons)
 - `remote-service` (2 lessons)
@@ -98,10 +100,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 21 |
-| Critical (P0/P1) | 4 |
+| Total Lessons | 22 |
+| Critical (P0/P1) | 5 |
 | Categories | 5 |
-| Unique Tags | 53 |
+| Unique Tags | 55 |
 
 ---
 
