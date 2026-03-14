@@ -96,7 +96,7 @@ If you want a tracked follow-up, opt in explicitly:
   --monitor-report .tmp/current/codex-update-report.json \
   --state-file .tmp/current/codex-cli-update-advisor-state.json \
   --issue-action upsert \
-  --beads-db /Users/rl/coding/moltinger/.beads/beads.db
+  --beads-db /absolute/path/to/the-intended-worktree/.beads/beads.db
 ```
 
 Behavior:
@@ -104,6 +104,8 @@ Behavior:
 - no `--issue-target` -> create a new Beads task
 - `--issue-target <id>` -> update an existing Beads task
 - if the result is suppressed or below threshold -> `issue_action.mode=skipped`
+- in a dedicated worktree, explicit upsert can also reuse the current worktree-local DB when ownership resolves safely
+- in the canonical root, implicit tracker mutation is blocked; pass `--beads-db` only when root-scoped admin/troubleshooting work is intentional
 
 ## Make Target
 

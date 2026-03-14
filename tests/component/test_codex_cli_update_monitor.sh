@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
+source "$SCRIPT_DIR/../lib/git_topology_fixture.sh"
 
 MONITOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-monitor.sh"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-update-monitor"
@@ -60,19 +61,69 @@ EOF
     chmod +x "$FAKE_BD_BIN_DIR/bd"
 }
 
-run_monitor_fixture() {
-    local local_version="$1"
-    local output_dir="$2"
-    shift 2
+seed_component_monitor_fixture_repo() {
+    local fixture_root="$1"
+    local repo_dir
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger-monitor-fixture")"
+
+    mkdir -p "$repo_dir/scripts"
+    cp "$MONITOR_SCRIPT" "$repo_dir/scripts/codex-cli-update-monitor.sh"
+    cp "$PROJECT_ROOT/scripts/beads-resolve-db.sh" "$repo_dir/scripts/beads-resolve-db.sh"
+    chmod +x "$repo_dir/scripts/codex-cli-update-monitor.sh" "$repo_dir/scripts/beads-resolve-db.sh"
+
+    (
+        cd "$repo_dir"
+        git add scripts/codex-cli-update-monitor.sh scripts/beads-resolve-db.sh
+        git commit -m "fixture: seed codex update monitor scripts" >/dev/null
+    )
+
+    printf '%s\n' "$repo_dir"
+}
+
+seed_component_local_beads_foundation() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads"
+    cat > "${repo_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+    cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+}
+
+canonicalize_fixture_path() {
+    local target_path="$1"
+
+    (
+        cd "$target_path"
+        pwd -P
+    )
+}
+
+run_monitor_fixture_with_script() {
+    local monitor_script="$1"
+    local local_version="$2"
+    local output_dir="$3"
+    shift 3
 
     CODEX_UPDATE_MONITOR_LOCAL_VERSION="$local_version" \
-        "$MONITOR_SCRIPT" \
+        "$monitor_script" \
         --config-file "$FIXTURE_DIR/config.toml" \
         --release-file "$FIXTURE_DIR/releases.json" \
         --json-out "$output_dir/report.json" \
         --summary-out "$output_dir/summary.md" \
         --stdout none \
         "$@"
+}
+
+run_monitor_fixture() {
+    local local_version="$1"
+    local output_dir="$2"
+    shift 2
+
+    run_monitor_fixture_with_script "$MONITOR_SCRIPT" "$local_version" "$output_dir" "$@"
 }
 
 run_component_codex_cli_update_monitor_tests() {
@@ -88,8 +139,9 @@ run_component_codex_cli_update_monitor_tests() {
         return
     fi
 
-    local work_dir report summary stdout_capture original_path
+    local work_dir report summary stdout_capture original_path fixture_root repo_dir worktree_path
     work_dir="$(secure_temp_dir codex-update-monitor)"
+    original_path="$PATH"
 
     test_start "component_codex_update_monitor_emits_schema_shape_for_current_version"
     run_monitor_fixture "0.112.0" "$work_dir"
@@ -217,10 +269,46 @@ run_component_codex_cli_update_monitor_tests() {
     assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "Re-run with --issue-action upsert" "Suggestion path should explain the opt-in sync step"
     test_pass
 
+    test_start "component_codex_update_monitor_uses_local_worktree_db_for_implicit_upsert"
+    fixture_root="$(secure_temp_dir codex-update-monitor-fixture)"
+    repo_dir="$(seed_component_monitor_fixture_repo "$fixture_root")"
+    worktree_path="${fixture_root}/moltinger-monitor-worktree"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$worktree_path" "feat/monitor-local-upsert" "main"
+    worktree_path="$(canonicalize_fixture_path "$worktree_path")"
+    seed_component_local_beads_foundation "$worktree_path"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    export FAKE_BD_CREATE_ID="moltinger-test-created"
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture_with_script "$worktree_path/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
+        --issue-action upsert
+    report="$work_dir/report.json"
+    assert_eq "created" "$(jq -r '.issue_action.mode' "$report")" "Dedicated worktree upsert should still resolve a local tracker automatically"
+    assert_contains "$(cat "$FAKE_BD_STATE_DIR/calls.log")" "--db ${worktree_path}/.beads/beads.db" "Implicit upsert should target the current worktree-local DB"
+    test_pass
+
+    test_start "component_codex_update_monitor_blocks_implicit_canonical_root_upsert"
+    fixture_root="$(secure_temp_dir codex-update-monitor-fixture)"
+    repo_dir="$(seed_component_monitor_fixture_repo "$fixture_root")"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    work_dir="$(secure_temp_dir codex-update-monitor)"
+    run_monitor_fixture_with_script "$repo_dir/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
+        --issue-action upsert
+    report="$work_dir/report.json"
+    assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Canonical-root upsert should fail closed without an explicit DB target"
+    assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "mutating canonical-root tracker commands are blocked by default" "Canonical-root block should be reported explicitly"
+    if [[ -f "$FAKE_BD_STATE_DIR/calls.log" ]]; then
+        test_fail "Canonical-root implicit upsert must not invoke bd"
+    else
+        test_pass
+    fi
+
     test_start "component_codex_update_monitor_creates_issue_when_explicit_upsert_requested"
     setup_fake_bd_fixture
-    original_path="$PATH"
-    export PATH="$FAKE_BD_BIN_DIR:$PATH"
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
     export FAKE_BD_STATE_DIR
     export FAKE_BD_CREATE_ID="moltinger-test-created"
     work_dir="$(secure_temp_dir codex-update-monitor)"
