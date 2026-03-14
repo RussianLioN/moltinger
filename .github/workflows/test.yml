@@ -44,6 +44,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   resolve-target:
@@ -217,10 +218,14 @@ jobs:
     if: always()
     steps:
       - name: Download canonical test artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.resolve-target.outputs.artifact_name }}
-          path: test-artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ needs.resolve-target.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          rm -rf test-artifacts
+          mkdir -p test-artifacts
+          gh run download "${GITHUB_RUN_ID}" -n "$ARTIFACT_NAME" -D test-artifacts
 
       - name: Evaluate summary.json
         run: |
@@ -289,10 +294,14 @@ jobs:
     if: always() && github.ref == 'refs/heads/main' && needs.gate.result == 'failure'
     steps:
       - name: Download canonical test artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.resolve-target.outputs.artifact_name }}
-          path: test-artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ needs.resolve-target.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          rm -rf test-artifacts
+          mkdir -p test-artifacts
+          gh run download "${GITHUB_RUN_ID}" -n "$ARTIFACT_NAME" -D test-artifacts
 
       - name: Send Slack notification
         env:

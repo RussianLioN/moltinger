@@ -292,6 +292,7 @@ GitOps Compliance: Enforced ✅
   - `actions/upload-artifact@v7`
   - `actions/download-artifact@v8`
 - Updated all active workflow files so the current PR path and the broader CI/deploy surface no longer rely on Node 20 action runtimes; only `.disabled` legacy workflow files still reference the old majors.
+- Follow-up log review on the fresh commit showed one remaining non-Node20 warning from `actions/download-artifact@v8` (`Buffer()` deprecation inside the action runtime), so `test.yml` now downloads artifacts via `gh run download` with explicit `actions: read` instead of depending on that action in the gate/notification jobs.
 
 **Validated**
 
@@ -303,13 +304,14 @@ GitOps Compliance: Enforced ✅
 - `gh api repos/actions/setup-node/releases/latest`
 - `gh api repos/actions/upload-artifact/releases/latest`
 - `gh api repos/actions/download-artifact/releases/latest`
+- `gh issue list --repo actions/download-artifact --search "DEP0005 OR Buffer() OR deprecation" --limit 10`
 - `ruby -e 'Dir[".github/workflows/*.{yml,yaml}"].sort.each { |f| YAML.load_file(f); puts "ok #{f}" }' -r yaml`
 - `git diff --check`
 
 **Next**
 
-- Commit and push the workflow runtime updates on `feat/moltis-pin-v0-10-18-prod`.
-- Re-run GitHub checks from the new head and verify the Node 20 deprecation warnings are gone from the fresh logs.
+- Commit and push the final `test.yml` artifact-download fix on `feat/moltis-pin-v0-10-18-prod`.
+- Re-run GitHub checks from the new head and verify the remaining `Buffer()` deprecation warning is gone from the fresh Test Suite logs.
 
 ### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
 
