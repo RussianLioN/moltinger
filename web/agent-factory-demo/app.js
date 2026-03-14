@@ -1,0 +1,843 @@
+(() => {
+  const STORAGE_KEY = "agent-factory-web-demo-shell.v1";
+  const DEFAULT_ACCESS_TOKEN = "demo-access-token";
+  const ACTION_LABELS = {
+    start_project: "Новый проект",
+    submit_turn: "Ответить",
+    request_status: "Статус",
+    request_brief_review: "Показать brief",
+    request_brief_correction: "Исправить brief",
+    confirm_brief: "Подтвердить brief",
+    reopen_brief: "Переоткрыть brief",
+    download_artifact: "Скачать артефакт",
+    submit_access_token: "Открыть demo",
+  };
+
+  const dom = {
+    root: document.querySelector('[data-role="app-root"]'),
+    connectionState: document.querySelector('[data-role="connection-state"]'),
+    sessionBadge: document.querySelector('[data-role="session-badge"]'),
+    projectTitle: document.querySelector('[data-role="project-title"]'),
+    accessBanner: document.querySelector('[data-role="access-banner"]'),
+    accessTokenInput: document.querySelector('[data-role="access-token-input"]'),
+    accessSubmit: document.querySelector('[data-role="access-submit"]'),
+    chatLog: document.querySelector('[data-role="chat-log"]'),
+    chatEmpty: document.querySelector('[data-role="chat-empty"]'),
+    quickActions: document.querySelector('[data-role="quick-actions"]'),
+    composerForm: document.querySelector('[data-role="composer-form"]'),
+    composerMode: document.querySelector('[data-role="composer-mode"]'),
+    composerInput: document.querySelector('[data-role="composer-input"]'),
+    composerSubmit: document.querySelector('[data-role="composer-submit"]'),
+    refreshSession: document.querySelector('[data-role="refresh-session"]'),
+    statusUserVisible: document.querySelector('[data-role="status-user-visible"]'),
+    statusNextAction: document.querySelector('[data-role="status-next-action"]'),
+    statusBriefVersion: document.querySelector('[data-role="status-brief-version"]'),
+    statusDownloadReadiness: document.querySelector('[data-role="status-download-readiness"]'),
+    statusProjectKey: document.querySelector('[data-role="status-project-key"]'),
+    statusSessionId: document.querySelector('[data-role="status-session-id"]'),
+    statusOperatorAttention: document.querySelector('[data-role="status-operator-attention"]'),
+    artifactList: document.querySelector('[data-role="artifact-list"]'),
+    artifactEmpty: document.querySelector('[data-role="artifact-empty"]'),
+    messageTemplate: document.querySelector('[data-role="message-template"]'),
+    artifactTemplate: document.querySelector('[data-role="artifact-template"]'),
+  };
+
+  const state = {
+    currentAction: "start_project",
+    connectionMode: "booting",
+    accessToken: "",
+    timeline: [],
+    lastResponse: null,
+    sessionId: "",
+    requestCounter: 0,
+    mockStage: "gate_pending",
+  };
+
+  function safeJsonParse(value, fallback) {
+    try {
+      return JSON.parse(value);
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  function normalizeText(value, fallback = "") {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed || fallback;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    return fallback;
+  }
+
+  function slugify(input, fallback = "value") {
+    const normalized = normalizeText(input, fallback)
+      .toLowerCase()
+      .replace(/[^a-z0-9а-яё]+/gi, "-")
+      .replace(/^-+|-+$/g, "");
+    return normalized || fallback;
+  }
+
+  function hydrate() {
+    const saved = safeJsonParse(window.localStorage.getItem(STORAGE_KEY) || "null", null);
+    if (!saved || typeof saved !== "object") {
+      state.timeline = [buildWelcomeMessage()];
+      return;
+    }
+
+    state.currentAction = normalizeText(saved.currentAction, "start_project");
+    state.connectionMode = normalizeText(saved.connectionMode, "booting");
+    state.accessToken = normalizeText(saved.accessToken);
+    state.timeline = Array.isArray(saved.timeline) && saved.timeline.length ? saved.timeline : [buildWelcomeMessage()];
+    state.lastResponse = saved.lastResponse && typeof saved.lastResponse === "object" ? saved.lastResponse : null;
+    state.sessionId = normalizeText(saved.sessionId);
+    state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
+    state.mockStage = normalizeText(saved.mockStage, "gate_pending");
+  }
+
+  function persist() {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        currentAction: state.currentAction,
+        connectionMode: state.connectionMode,
+        accessToken: state.accessToken,
+        timeline: state.timeline,
+        lastResponse: state.lastResponse,
+        sessionId: state.sessionId,
+        requestCounter: state.requestCounter,
+        mockStage: state.mockStage,
+      }),
+    );
+  }
+
+  function setBusy(isBusy) {
+    dom.root.dataset.mode = isBusy ? "busy" : "ready";
+    dom.composerSubmit.disabled = isBusy;
+    dom.refreshSession.disabled = isBusy;
+    dom.accessSubmit.disabled = isBusy;
+  }
+
+  function buildWelcomeMessage() {
+    return {
+      role: "agent",
+      kind: "initial_shell",
+      title: "Готов к первому проекту",
+      body:
+        "Опиши идею автоматизации как бизнес-пользователь. Shell отрисует ответные карточки, статус и зону артефактов даже до появления полного live backend.",
+      actions: ["start_project", "request_status"],
+    };
+  }
+
+  function buildSystemMessage(title, body, kind = "system_update") {
+    return {
+      role: "system",
+      kind,
+      title,
+      body,
+      actions: ["request_status"],
+    };
+  }
+
+  function nextRequestId(action) {
+    state.requestCounter += 1;
+    return `browser-${slugify(action, "turn")}-${String(state.requestCounter).padStart(4, "0")}`;
+  }
+
+  function selectionModeFor(action) {
+    const map = {
+      start_project: "new_project",
+      submit_turn: "continue_active",
+      request_status: "status_only",
+      request_brief_review: "review_brief",
+      request_brief_correction: "review_brief",
+      confirm_brief: "review_brief",
+      reopen_brief: "reopen_brief",
+      download_artifact: "download_ready",
+    };
+    return map[action] || "continue_active";
+  }
+
+  function setCurrentAction(action) {
+    state.currentAction = action;
+    dom.composerMode.textContent = ACTION_LABELS[action] || action;
+    [...dom.quickActions.querySelectorAll("[data-ui-action]")].forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.uiAction === action);
+    });
+    persist();
+  }
+
+  function renderConnection() {
+    const labels = {
+      booting: "Подготовка shell",
+      live: "Подключен live adapter",
+      mock: "Локальный mock fallback",
+      error: "Adapter недоступен",
+    };
+    dom.connectionState.textContent = labels[state.connectionMode] || state.connectionMode;
+  }
+
+  function renderSessionBadge() {
+    const sessionId = state.lastResponse?.web_demo_session?.web_demo_session_id || state.sessionId;
+    dom.sessionBadge.textContent = sessionId ? `Сессия ${sessionId}` : "Сессия ещё не открыта";
+  }
+
+  function renderStatus() {
+    const response = state.lastResponse || {};
+    const statusSnapshot = response.status_snapshot || {};
+    const session = response.web_demo_session || {};
+    const pointer = response.browser_project_pointer || {};
+    const accessGate = response.access_gate || {};
+
+    dom.projectTitle.textContent = pointer.project_key || "Новый проект фабрики";
+    dom.statusUserVisible.textContent = statusSnapshot.user_visible_status || response.status || "gate_pending";
+    dom.statusNextAction.textContent = statusSnapshot.next_recommended_action || response.next_action || "request_demo_access";
+    dom.statusBriefVersion.textContent = statusSnapshot.brief_version || "ещё нет";
+    dom.statusDownloadReadiness.textContent = statusSnapshot.download_readiness || "pending";
+    dom.statusProjectKey.textContent = pointer.project_key || "не выбран";
+    dom.statusSessionId.textContent = session.web_demo_session_id || state.sessionId || "не открыт";
+    dom.statusOperatorAttention.textContent = accessGate.granted
+      ? "Сессия открыта. Shell ждёт следующий turn пользователя или обновление статуса."
+      : accessGate.reason || "Нужен access token для controlled demo surface.";
+
+    const shouldShowBanner = !accessGate.granted;
+    dom.accessBanner.hidden = !shouldShowBanner;
+    renderSessionBadge();
+  }
+
+  function createMessageNode(message) {
+    const fragment = dom.messageTemplate.content.cloneNode(true);
+    const article = fragment.querySelector(".message");
+    const author = fragment.querySelector(".message__author");
+    const kind = fragment.querySelector(".message__kind");
+    const title = fragment.querySelector(".message__title");
+    const body = fragment.querySelector(".message__body");
+    const actions = fragment.querySelector(".message__actions");
+
+    const roleClass = {
+      agent: "message--agent",
+      user: "message--user",
+      system: "message--system",
+      artifact: "message--artifact",
+    }[message.role || "agent"];
+    article.classList.add(roleClass);
+    author.textContent = message.author || {
+      agent: "Фабричный агент",
+      user: "Пользователь",
+      system: "Shell",
+      artifact: "Фабрика",
+    }[message.role || "agent"];
+    kind.textContent = message.kind || "reply_card";
+    title.textContent = message.title || "Ответ";
+    body.textContent = message.body || "";
+
+    (message.actions || []).forEach((action) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.dataset.uiAction = action;
+      chip.textContent = ACTION_LABELS[action] || action;
+      chip.addEventListener("click", () => handleActionShortcut(action));
+      actions.appendChild(chip);
+    });
+    return fragment;
+  }
+
+  function renderTimeline() {
+    dom.chatLog.innerHTML = "";
+    const items = state.timeline.length ? state.timeline : [buildWelcomeMessage()];
+    items.forEach((message) => {
+      dom.chatLog.appendChild(createMessageNode(message));
+    });
+    dom.chatEmpty.hidden = true;
+    dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+  }
+
+  function artifactPlaceholders() {
+    return [
+      {
+        artifact_kind: "project_doc",
+        download_name: "project-doc.md",
+        download_status: "pending",
+        description: "Проектная рамка и бизнес-контекст для защиты концепции.",
+      },
+      {
+        artifact_kind: "agent_spec",
+        download_name: "agent-spec.md",
+        download_status: "pending",
+        description: "Спецификация будущего агента, сценарии и интерфейсы.",
+      },
+      {
+        artifact_kind: "presentation",
+        download_name: "presentation.md",
+        download_status: "pending",
+        description: "Материал для защиты идеи и последующего feedback loop.",
+      },
+    ];
+  }
+
+  function createMockDownload(artifact) {
+    const briefVersion = state.lastResponse?.status_snapshot?.brief_version || "draft";
+    const body = [
+      `# ${artifact.download_name}`,
+      "",
+      "Mock download из initial browser shell.",
+      `artifact_kind: ${artifact.artifact_kind}`,
+      `brief_version: ${briefVersion}`,
+      `project_key: ${state.lastResponse?.browser_project_pointer?.project_key || "demo-project"}`,
+      "",
+      "Этот файл нужен только как placeholder до live delivery layer.",
+      "",
+      state.lastResponse?.reply_cards?.map((card) => `- ${card.title}: ${card.body_text}`).join("\n") || "",
+    ].join("\n");
+    return URL.createObjectURL(new Blob([body], { type: "text/markdown;charset=utf-8" }));
+  }
+
+  function renderArtifacts() {
+    const responseArtifacts = Array.isArray(state.lastResponse?.download_artifacts)
+      ? state.lastResponse.download_artifacts
+      : [];
+    const artifacts = responseArtifacts.length ? responseArtifacts : artifactPlaceholders();
+    dom.artifactList.innerHTML = "";
+    dom.artifactEmpty.hidden = artifacts.length > 0;
+
+    artifacts.forEach((artifact) => {
+      const fragment = dom.artifactTemplate.content.cloneNode(true);
+      const card = fragment.querySelector(".artifact-card");
+      const kind = fragment.querySelector(".artifact-card__kind");
+      const stateLabel = fragment.querySelector(".artifact-card__state");
+      const title = fragment.querySelector(".artifact-card__title");
+      const body = fragment.querySelector(".artifact-card__body");
+      const button = fragment.querySelector(".artifact-card__button");
+      const ready = normalizeText(artifact.download_status) === "ready";
+
+      card.dataset.artifactKind = artifact.artifact_kind || "artifact";
+      kind.textContent = artifact.artifact_kind || "artifact";
+      stateLabel.textContent = artifact.download_status || "pending";
+      title.textContent = artifact.download_name || "Без имени";
+      body.textContent =
+        artifact.description ||
+        (ready
+          ? "Артефакт готов к скачиванию из той же browser session."
+          : "Появится после confirmed brief и downstream handoff.");
+      button.disabled = !ready;
+      button.textContent = ready ? "Скачать" : "Пока не готов";
+
+      button.addEventListener("click", () => {
+        if (!ready) {
+          state.timeline.push(
+            buildSystemMessage(
+              "Загрузка ещё недоступна",
+              "Сначала нужно довести проект до confirmed brief и закончить downstream handoff.",
+              "artifact_pending",
+            ),
+          );
+          renderTimeline();
+          persist();
+          return;
+        }
+        const href = artifact.download_url || createMockDownload(artifact);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = artifact.download_name || "artifact.txt";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      });
+
+      dom.artifactList.appendChild(fragment);
+    });
+  }
+
+  function updateQuickActions(actions) {
+    const unique = [...new Set((actions || []).filter(Boolean))];
+    const selected = unique.length ? unique : ["start_project", "submit_turn", "request_status"];
+    dom.quickActions.innerHTML = "";
+    selected.forEach((action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "chip";
+      button.dataset.uiAction = action;
+      button.textContent = ACTION_LABELS[action] || action;
+      button.addEventListener("click", () => handleActionShortcut(action));
+      dom.quickActions.appendChild(button);
+    });
+    setCurrentAction(selected.includes(state.currentAction) ? state.currentAction : selected[0]);
+  }
+
+  function replyCardsToMessages(cards) {
+    return (cards || []).map((card) => ({
+      role:
+        card.card_kind === "download_prompt"
+          ? "artifact"
+          : card.card_kind === "status_update"
+            ? "system"
+            : "agent",
+      kind: card.card_kind || "reply_card",
+      title: card.title || "Ответ фабрики",
+      body: card.body_text || "",
+      actions: Array.isArray(card.action_hints) ? card.action_hints : [],
+    }));
+  }
+
+  function buildTurnPayload(action, userText) {
+    const last = state.lastResponse || {};
+    return {
+      working_language: "ru",
+      project_key: last.browser_project_pointer?.project_key || "",
+      requester_identity: {
+        display_name: "Demo user",
+        browser_session_label: "agent-factory-web-shell",
+      },
+      demo_access_grant: state.accessToken
+        ? {
+            grant_type: "shared_demo_token",
+            grant_value: state.accessToken,
+            status: "active",
+          }
+        : {},
+      web_demo_session: {
+        web_demo_session_id: last.web_demo_session?.web_demo_session_id || state.sessionId || "",
+        session_cookie_id: last.web_demo_session?.session_cookie_id || "",
+        status: last.web_demo_session?.status || "gate_pending",
+      },
+      browser_project_pointer: {
+        pointer_id: last.browser_project_pointer?.pointer_id || "",
+        project_key: last.browser_project_pointer?.project_key || "",
+        linked_discovery_session_id: last.browser_project_pointer?.linked_discovery_session_id || "",
+        linked_brief_id: last.browser_project_pointer?.linked_brief_id || "",
+        linked_brief_version: last.browser_project_pointer?.linked_brief_version || "",
+        selection_mode: selectionModeFor(action),
+        pointer_status: "active",
+      },
+      web_conversation_envelope: {
+        request_id: nextRequestId(action),
+        ui_action: action,
+        user_text: normalizeText(userText),
+        transport_mode: "browser_shell",
+        linked_discovery_session_id: last.web_conversation_envelope?.linked_discovery_session_id || "",
+        linked_brief_id: last.web_conversation_envelope?.linked_brief_id || "",
+      },
+      discovery_runtime_state: last.discovery_runtime_state || {},
+    };
+  }
+
+  async function postTurn(payload) {
+    const response = await fetch("/api/turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(`adapter_http_${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function fetchSession(sessionId) {
+    const response = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`);
+    if (!response.ok) {
+      throw new Error(`session_http_${response.status}`);
+    }
+    return response.json();
+  }
+
+  function mockDiscoveryPrompt(stage) {
+    const prompts = {
+      discovery_problem: "Какую конкретную бизнес-проблему должен решить будущий агент?",
+      discovery_inputs: "Какие данные приходят на вход и в каком виде их получают сотрудники?",
+      discovery_outputs: "Какой результат должен получить пользователь на выходе?",
+      awaiting_confirmation:
+        "Я собрал черновой brief. Проверь summary, попроси правки или явно подтверди текущую версию.",
+      downloads_ready: "Brief подтверждён. Shell показывает подготовку concept pack и зону загрузок.",
+    };
+    return prompts[stage] || prompts.discovery_problem;
+  }
+
+  function mockReplyCards(stage, projectKey) {
+    if (stage === "awaiting_confirmation") {
+      return [
+        {
+          card_kind: "status_update",
+          title: "Статус проекта",
+          body_text: "Discovery завершён. Текущий режим: awaiting_confirmation.",
+          action_hints: ["request_status"],
+        },
+        {
+          card_kind: "brief_summary_section",
+          title: "Проблема",
+          body_text: "Нужно автоматически разбирать входящие обращения и выбирать следующий маршрут обработки.",
+          action_hints: ["request_brief_correction"],
+        },
+        {
+          card_kind: "brief_summary_section",
+          title: "Желаемый результат",
+          body_text: "Пользователь получает structured summary, маршрут заявки и причину выбора.",
+          action_hints: ["request_brief_correction", "confirm_brief"],
+        },
+        {
+          card_kind: "confirmation_prompt",
+          title: "Подтвердить brief",
+          body_text: mockDiscoveryPrompt(stage),
+          action_hints: ["request_brief_correction", "confirm_brief", "reopen_brief"],
+        },
+      ];
+    }
+    if (stage === "downloads_ready") {
+      return [
+        {
+          card_kind: "status_update",
+          title: "Статус проекта",
+          body_text: "Confirmed brief передан в фабрику. Concept pack готовится к выдаче пользователю.",
+          action_hints: ["request_status"],
+        },
+        {
+          card_kind: "download_prompt",
+          title: "Артефакты готовы",
+          body_text: `Проект ${projectKey} может отдать project doc, agent spec и presentation из той же сессии.`,
+          action_hints: ["download_artifact"],
+        },
+      ];
+    }
+    return [
+      {
+        card_kind: "status_update",
+        title: "Статус проекта",
+        body_text: `Сессия активна. Текущий этап: ${stage}.`,
+        action_hints: ["request_status"],
+      },
+      {
+        card_kind: "discovery_question",
+        title: "Следующий вопрос",
+        body_text: mockDiscoveryPrompt(stage),
+        action_hints: ["submit_turn"],
+      },
+    ];
+  }
+
+  function mockArtifacts(stage) {
+    if (stage !== "downloads_ready") {
+      return [];
+    }
+    return [
+      { artifact_kind: "project_doc", download_name: "project-doc.md", download_status: "ready" },
+      { artifact_kind: "agent_spec", download_name: "agent-spec.md", download_status: "ready" },
+      { artifact_kind: "presentation", download_name: "presentation.md", download_status: "ready" },
+    ];
+  }
+
+  function mockAdapterTurn(payload) {
+    const action = payload.web_conversation_envelope?.ui_action || "submit_turn";
+    const userText = normalizeText(payload.web_conversation_envelope?.user_text);
+    const accessGranted = Boolean(state.accessToken);
+    const projectKey =
+      state.lastResponse?.browser_project_pointer?.project_key ||
+      `factory-${slugify(userText || "demo-project", "project")}`;
+
+    if (!accessGranted) {
+      state.mockStage = "gate_pending";
+      return {
+        status: "gate_pending",
+        next_action: "request_demo_access",
+        next_topic: "",
+        next_question: "Укажи активный demo access token, чтобы открыть рабочую сессию фабрики.",
+        access_gate: {
+          granted: false,
+          reason: "Укажи активный demo access token, чтобы открыть рабочую сессию фабрики.",
+          demo_access_grant_id: "",
+          grant_type: "shared_demo_token",
+          grant_value_hash: "",
+          status: "missing",
+          expires_at: "",
+        },
+        web_demo_session: {
+          web_demo_session_id: state.sessionId || "web-demo-shell-session",
+          session_cookie_id: "cookie-web-demo-shell-session",
+          status: "gate_pending",
+          active_project_key: "",
+        },
+        browser_project_pointer: {
+          pointer_id: "browser-pointer-web-demo-shell",
+          project_key: "",
+          selection_mode: selectionModeFor(action),
+          pointer_status: "active",
+        },
+        status_snapshot: {
+          user_visible_status: "gate_pending",
+          next_recommended_action: "request_demo_access",
+          brief_version: "",
+          download_readiness: "pending",
+        },
+        reply_cards: [
+          {
+            card_kind: "status_update",
+            title: "Нужен код доступа",
+            body_text: "Shell ждёт access token, прежде чем открывать проект фабрики.",
+            action_hints: ["submit_access_token"],
+          },
+        ],
+      };
+    }
+
+    if (action === "confirm_brief") {
+      state.mockStage = "downloads_ready";
+    } else if (action === "request_brief_correction" || action === "reopen_brief") {
+      state.mockStage = "awaiting_confirmation";
+    } else if (action === "request_status" && state.lastResponse) {
+      state.mockStage = state.mockStage || "discovery_problem";
+    } else if (state.mockStage === "gate_pending") {
+      state.mockStage = "discovery_problem";
+    } else if (state.mockStage === "discovery_problem") {
+      state.mockStage = "discovery_inputs";
+    } else if (state.mockStage === "discovery_inputs") {
+      state.mockStage = "discovery_outputs";
+    } else if (state.mockStage === "discovery_outputs") {
+      state.mockStage = "awaiting_confirmation";
+    }
+
+    const stage = state.mockStage;
+    const brief =
+      stage === "awaiting_confirmation" || stage === "downloads_ready"
+        ? {
+            brief_id: "brief-web-demo-001",
+            version: stage === "downloads_ready" ? "v3" : "v2",
+            problem_statement: "Нужно автоматизировать triage входящих заявок и сократить ручную сортировку.",
+            desired_outcome:
+              "Будущий агент собирает краткое summary, категорию, приоритет и предлагает маршрут обработки.",
+          }
+        : {};
+
+    return {
+      status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+      next_action:
+        stage === "downloads_ready"
+          ? "publish_downloads"
+          : stage === "awaiting_confirmation"
+            ? "await_for_confirmation"
+            : "continue_discovery",
+      next_topic: stage === "discovery_problem" ? "problem" : stage === "discovery_inputs" ? "input_examples" : "output_expectations",
+      next_question: mockDiscoveryPrompt(stage),
+      access_gate: {
+        granted: true,
+        reason: "",
+        demo_access_grant_id: "access-web-demo-shell",
+        grant_type: "shared_demo_token",
+        grant_value_hash: "mock-token-hash",
+        status: "active",
+        expires_at: "",
+      },
+      web_demo_session: {
+        web_demo_session_id: state.sessionId || "web-demo-shell-session",
+        session_cookie_id: "cookie-web-demo-shell-session",
+        status: stage === "downloads_ready" ? "download_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        active_project_key: projectKey,
+      },
+      browser_project_pointer: {
+        pointer_id: "browser-pointer-web-demo-shell",
+        project_key: projectKey,
+        selection_mode: selectionModeFor(action),
+        linked_discovery_session_id: "discovery-web-demo-001",
+        linked_brief_id: brief.brief_id || "",
+        linked_brief_version: brief.version || "",
+        pointer_status: "active",
+      },
+      status_snapshot: {
+        user_visible_status:
+          stage === "downloads_ready" ? "playground_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        next_recommended_action:
+          stage === "downloads_ready"
+            ? "publish_downloads"
+            : stage === "awaiting_confirmation"
+              ? "confirm_brief"
+              : "submit_turn",
+        brief_version: brief.version || "",
+        download_readiness: stage === "downloads_ready" ? "ready" : "pending",
+      },
+      reply_cards: mockReplyCards(stage, projectKey),
+      download_artifacts: mockArtifacts(stage),
+      discovery_runtime_state: {
+        status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        next_question: mockDiscoveryPrompt(stage),
+        requirement_brief: brief,
+        discovery_session: {
+          discovery_session_id: "discovery-web-demo-001",
+          project_key: projectKey,
+        },
+      },
+    };
+  }
+
+  function applyResponse(response, connectionMode) {
+    state.connectionMode = connectionMode;
+    state.lastResponse = response;
+    state.sessionId = response.web_demo_session?.web_demo_session_id || state.sessionId;
+
+    const replyMessages = replyCardsToMessages(response.reply_cards);
+    if (replyMessages.length) {
+      state.timeline.push(...replyMessages);
+    } else if (response.next_question) {
+      state.timeline.push({
+        role: "agent",
+        kind: "next_question",
+        title: "Следующий вопрос",
+        body: response.next_question,
+        actions: ["submit_turn"],
+      });
+    }
+
+    updateQuickActions(
+      (response.reply_cards || []).flatMap((card) => (Array.isArray(card.action_hints) ? card.action_hints : [])),
+    );
+    renderConnection();
+    renderStatus();
+    renderTimeline();
+    renderArtifacts();
+    persist();
+  }
+
+  async function dispatchTurn(action, userText, options = {}) {
+    if (!options.skipUserMessage && normalizeText(userText)) {
+      state.timeline.push({
+        role: "user",
+        kind: action,
+        title: ACTION_LABELS[action] || "Сообщение",
+        body: normalizeText(userText),
+        actions: [],
+      });
+    }
+
+    const payload = buildTurnPayload(action, userText);
+    setBusy(true);
+    try {
+      const response = await postTurn(payload);
+      applyResponse(response, "live");
+    } catch (_error) {
+      applyResponse(mockAdapterTurn(payload), "mock");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshSession() {
+    if (!state.sessionId) {
+      state.timeline.push(
+        buildSystemMessage(
+          "Сессия ещё не создана",
+          "Сначала открой проект или отправь первый turn, после этого shell сможет дергать GET /api/session.",
+          "session_missing",
+        ),
+      );
+      renderTimeline();
+      persist();
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await fetchSession(state.sessionId);
+      state.connectionMode = "live";
+      state.lastResponse = response;
+      renderConnection();
+      renderStatus();
+      renderArtifacts();
+      state.timeline.push(
+        buildSystemMessage(
+          "Сессия обновлена",
+          "Shell перечитал актуальное состояние проекта через GET /api/session.",
+          "session_refresh",
+        ),
+      );
+      renderTimeline();
+      persist();
+    } catch (_error) {
+      state.connectionMode = state.lastResponse ? state.connectionMode : "mock";
+      state.timeline.push(
+        buildSystemMessage(
+          "Live session недоступна",
+          "GET /api/session пока не ответил. Shell остаётся в mock/local режиме и не теряет текущее состояние.",
+          "session_refresh_failed",
+        ),
+      );
+      renderConnection();
+      renderTimeline();
+      persist();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleActionShortcut(action) {
+    if (action === "submit_access_token") {
+      dom.accessTokenInput.focus();
+      return;
+    }
+
+    if (action === "request_status") {
+      setCurrentAction(action);
+      dispatchTurn(action, "", { skipUserMessage: true });
+      return;
+    }
+
+    setCurrentAction(action);
+    dom.composerInput.focus();
+  }
+
+  function bindEvents() {
+    dom.quickActions.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-ui-action]");
+      if (!target) {
+        return;
+      }
+      handleActionShortcut(target.dataset.uiAction);
+    });
+
+    dom.composerForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = normalizeText(dom.composerInput.value);
+      if (!text && state.currentAction !== "request_status") {
+        dom.composerInput.focus();
+        return;
+      }
+      dispatchTurn(state.currentAction, text);
+      dom.composerInput.value = "";
+      if (state.currentAction !== "submit_turn") {
+        setCurrentAction("submit_turn");
+      }
+    });
+
+    dom.accessSubmit.addEventListener("click", () => {
+      state.accessToken = normalizeText(dom.accessTokenInput.value, DEFAULT_ACCESS_TOKEN);
+      dom.accessTokenInput.value = state.accessToken;
+      state.timeline.push(
+        buildSystemMessage(
+          "Демо-доступ сохранён",
+          "Access token записан в shell. Теперь можно открыть проект и отправить первый turn в фабрику.",
+          "access_token_saved",
+        ),
+      );
+      renderTimeline();
+      renderStatus();
+      persist();
+    });
+
+    dom.refreshSession.addEventListener("click", () => {
+      refreshSession();
+    });
+  }
+
+  function init() {
+    hydrate();
+    dom.accessTokenInput.value = state.accessToken;
+    bindEvents();
+    renderConnection();
+    renderStatus();
+    renderTimeline();
+    renderArtifacts();
+    updateQuickActions(["start_project", "submit_turn", "request_status"]);
+    dom.root.dataset.mode = "ready";
+  }
+
+  init();
+})();
