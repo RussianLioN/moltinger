@@ -35,9 +35,9 @@ usage() {
     cat <<'EOF'
 Usage: scripts/codex-telegram-consent-e2e.sh [options]
 
-Run a Codex-specific hermetic E2E scenario:
-  alert -> consent action -> immediate recommendations
-plus degraded fallback validation for one-way alerts.
+Run a Codex-specific hermetic E2E scenario that validates the
+current one-way-only Telegram watcher contract plus degraded fallback
+behavior when legacy consent flags are still present.
 
 Options:
   --mode MODE                hermetic (default: hermetic)
@@ -316,8 +316,7 @@ assert_text_not_contains() {
 run_hermetic() {
     local alert_dir consent_store_dir fake_bin_dir fake_state_dir fake_env
     local watcher_report watcher_summary watcher_state
-    local request_id action_token chat_id consent_record
-    local alert_text router_event router_result consent_text
+    local request_id alert_text
     local degraded_dir degraded_fake_bin degraded_fake_state degraded_fake_env
     local degraded_report degraded_summary degraded_state degraded_text
 
@@ -344,9 +343,12 @@ run_hermetic() {
     create_fake_sender "$fake_state_dir" "$fake_bin_dir"
     create_fake_sender "$degraded_fake_state" "$degraded_fake_bin"
 
-    log "Running consent-capable watcher alert"
+    log "Running watcher alert with legacy consent flags still enabled"
     CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$fake_state_dir" \
     CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES=true \
     bash "$WATCHER_SCRIPT" \
         --mode scheduler \
         --state-file "$watcher_state" \
@@ -362,56 +364,28 @@ run_hermetic() {
         --summary-out "$watcher_summary" \
         --stdout none
 
-    assert_jq "$watcher_report" '.decision.status == "deliver"' "Watcher should deliver a fresh consent-capable alert"
-    assert_jq "$watcher_report" '.followup.consent.status == "pending"' "Watcher should open a pending consent flow"
-    assert_jq "$watcher_report" '.followup.consent.router_mode == "authoritative"' "Watcher should advertise authoritative routing"
-    assert_jq "$watcher_report" '.automation.alert.consent_requested == true' "Watcher should request consent in authoritative mode"
+    assert_jq "$watcher_report" '.decision.status == "deliver"' "Watcher should still deliver a fresh alert"
+    assert_jq "$watcher_report" '.followup.consent.status == "disabled"' "Watcher should keep the retired consent flow disabled"
+    assert_jq "$watcher_report" '.followup.consent.router_mode == "one_way_only"' "Watcher should stay in one-way mode"
+    assert_jq "$watcher_report" '.automation.alert.consent_requested == false' "Watcher should not request legacy consent"
+    assert_jq "$watcher_report" '.telegram_target.consent_router_ready == false' "Watcher should expose that the retired router path is not active"
+    assert_jq "$watcher_report" '.advisor_bridge.status == "ready"' "Watcher should still prepare advisor recommendations"
 
     request_id="$(jq -r '.followup.consent.pending_state.request_id // ""' "$watcher_report")"
-    [[ -n "$request_id" ]] || upstream_fail "Watcher report did not expose request_id for the consent flow"
-    consent_record="${consent_store_dir}/${request_id}.json"
-    [[ -f "$consent_record" ]] || upstream_fail "Watcher did not persist the shared consent record"
-    chat_id="$(jq -r '.request.chat_id // ""' "$consent_record")"
-    [[ -n "$chat_id" ]] || upstream_fail "Consent record is missing chat id"
+    [[ -z "$request_id" ]] || upstream_fail "Watcher must not expose a pending consent request in one-way mode"
+    if compgen -G "${consent_store_dir}/*.json" >/dev/null; then
+        upstream_fail "Watcher must not persist a consent record in one-way mode"
+    fi
 
     alert_text="$(jq -r '.text // ""' "${fake_state_dir}/call-1.json")"
-    assert_text_contains "$alert_text" "Хотите получить практические рекомендации" "Consent-capable alert should ask for recommendations"
-    assert_text_contains "$alert_text" "/codex_da" "Consent-capable alert should expose the short accept command"
-
-    router_event="${TMP_DIR}/accept-event.json"
-    jq -n \
-        --arg chat_id "$chat_id" \
-        '{
-            message: {
-                message_id: 501,
-                text: "/codex_da",
-                chat: {id: $chat_id},
-                from: {id: $chat_id}
-            }
-        }' > "$router_event"
-
-    router_result="${TMP_DIR}/router-result.json"
-    log "Routing consent accept event"
-    CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$fake_state_dir" \
-    bash "$ROUTER_SCRIPT" \
-        --store-script "$STORE_SCRIPT" \
-        --store-dir "$consent_store_dir" \
-        --event-file "$router_event" \
-        --telegram-send-script "${fake_bin_dir}/telegram-bot-send.sh" \
-        --telegram-env-file "$fake_env" \
-        --send-reply true \
-        --json-out "$router_result" \
-        --stdout none
-
-    assert_jq "$router_result" '.decision == "accept"' "Router should accept the structured fallback command"
-    assert_jq "$router_result" '.delivery.status == "sent"' "Router should send recommendations immediately"
-    assert_jq "$consent_record" '.request.status == "delivered"' "Shared store should persist delivered status"
-    assert_jq "$consent_record" '.delivery.status == "sent"' "Shared store should persist follow-up delivery success"
-
-    consent_text="$(jq -r '.text // ""' "${fake_state_dir}/call-2.json")"
-    assert_text_contains "$consent_text" "Практические рекомендации по обновлению Codex CLI" "Follow-up should contain the recommendations heading"
-    assert_text_contains "$consent_text" "Что можно сделать в проекте" "Follow-up should contain concrete project guidance"
-    OBSERVED_RESPONSE="$consent_text"
+    assert_text_not_contains "$alert_text" "Хотите получить практические рекомендации" "One-way alert must not ask a broken consent question"
+    assert_text_not_contains "$alert_text" "/codex_da" "One-way alert must not expose the retired fallback command"
+    assert_text_contains "$alert_text" "Что это может дать проекту" "One-way alert should still surface project relevance"
+    assert_text_contains "$(jq -r '.notes[]' "$watcher_report")" "Legacy Telegram consent UX retired" "Watcher should explain why consent is disabled"
+    if [[ -f "${fake_state_dir}/last-args.txt" ]] && grep -q -- "--reply-markup-json" "${fake_state_dir}/last-args.txt"; then
+        upstream_fail "Watcher must not attach reply markup in one-way mode"
+    fi
+    OBSERVED_RESPONSE="$alert_text"
 
     log "Running degraded one-way watcher alert"
     CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$degraded_fake_state" \
@@ -439,24 +413,18 @@ run_hermetic() {
 
     CONTEXT_JSON="$(jq -n \
         --arg alert_report "$watcher_report" \
-        --arg router_result "$router_result" \
         --arg degraded_report "$degraded_report" \
-        --arg consent_record "$consent_record" \
-        --arg request_id "$request_id" \
         --arg alert_text "$alert_text" \
-        --arg followup_text "$consent_text" \
+        --arg question "$(jq -r '.advisor_bridge.question // ""' "$watcher_report")" \
         --arg degraded_text "$degraded_text" \
         --arg temp_dir "${PERSISTED_TMP_DIR}" \
         '{
             alert: {
-                request_id: $request_id,
                 text: $alert_text,
-                report_path: $alert_report,
-                consent_record_path: $consent_record
+                report_path: $alert_report
             },
-            consent: {
-                result_path: $router_result,
-                followup_text: $followup_text
+            legacy_consent: {
+                question: $question
             },
             degraded: {
                 report_path: $degraded_report,

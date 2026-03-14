@@ -257,6 +257,28 @@ GitOps Compliance: Enforced ✅
 - Execute a backup-safe redeploy pinned to `v0.10.18` so the server is no longer tracking the floating `latest` tag.
 - Continue post-update stabilization only after the explicit-tag rollout is confirmed healthy.
 
+### 2026-03-14: PR #62 CI Recovery After Repo Visibility Change
+
+**Статус**: ✅ branch rebased to fresh `main`, stale PR blockers fixed locally, ready for GitHub rerun
+
+- Confirmed the repository is now `PUBLIC`, then re-tested GitHub Actions directly instead of relying on stale failed runs.
+- Verified the old `Billing & plans` blocker is gone: `workflow_dispatch` Test Suite run `23092906860` executed real jobs, and rerun of PR checks moved `codex-policy` and `Claude Code Review` from instant infra-failure to normal execution.
+- Rebased `feat/moltis-pin-v0-10-18-prod` onto `origin/main` because the PR had been tested against a newer merge context than the branch itself.
+- Fixed `tests/integration_local/test_clawdiy_handoff.sh` so the handoff alignment check validates only `MOLTIS_FLEET_*` contract keys instead of unrelated `MOLTIS_CODEX_UPDATE_*` env additions from newer `main`.
+- Updated `scripts/codex-telegram-consent-e2e.sh` and `tests/component/test_codex_telegram_consent_e2e.sh` to the current watcher contract: legacy Telegram consent UX is retired, the watcher stays `one_way_only`, and the suite now records helper failures as structured test failures instead of `Suite produced no JSON report`.
+
+**Validated**
+
+- `./tests/run.sh --lane component --filter component_codex_telegram_consent_e2e --json`
+- `./tests/run.sh --lane integration_local --filter integration_local_clawdiy_handoff --json`
+- `./tests/run.sh --lane pr --json --compose-project codex-pr-after-consent-fix`
+- GitHub logs for runs `23092906860`, `23092784123`, `23092784140`, `23092784126`
+
+**Next**
+
+- Commit and push the rebase + CI fixes on `feat/moltis-pin-v0-10-18-prod`.
+- Rerun GitHub PR checks from the updated head and confirm logs stay green on the fresh commit.
+
 ### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
 
 **Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session
