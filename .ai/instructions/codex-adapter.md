@@ -14,6 +14,12 @@ Repo-specific Codex profiles, worktree naming, and local instruction split are d
 docs/CODEX-OPERATING-MODEL.md
 ```
 
+For Moltis skill/agent authoring or migrations from Claude Code, Codex, or OpenCode into Moltis-native capabilities, read:
+
+```bash
+docs/moltis-skill-agent-authoring.md
+```
+
 When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, `knowledge/`, `.beads/`, or `.specify/`, follow the nearest local `AGENTS.md` in addition to the root file.
 
 ## Codex Governance Check

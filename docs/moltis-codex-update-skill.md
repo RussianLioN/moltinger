@@ -4,6 +4,8 @@
 
 Это новый канонический Moltis-native навык для отслеживания обновлений `Codex CLI`.
 
+Общий проектный паттерн для добавления Moltis skills/agents и миграции capability из Claude Code, Codex и OpenCode описан в [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md).
+
 Простыми словами:
 - Moltis сам проверяет официальный changelog;
 - Moltis сам запоминает последнее увиденное состояние;

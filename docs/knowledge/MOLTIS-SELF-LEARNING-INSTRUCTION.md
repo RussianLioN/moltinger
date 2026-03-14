@@ -4,6 +4,9 @@
 **Дата**: 2026-02-18
 **Назначение**: Исчерпывающее руководство для обучения LLM-агента работе с Moltis и его самообучению
 
+> Для проектного skill/agent authoring и миграции capability из Claude Code, Codex или OpenCode сначала смотри канонический гайд:
+> [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md)
+
 ---
 
 ## META: Как читать этот документ

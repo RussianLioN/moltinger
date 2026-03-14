@@ -7,6 +7,8 @@ This directory contains durable project documentation, plans, RCA reports, resea
 Do not bloat central files.
 If content is substantial, create a new file and link to it instead of enlarging a high-traffic file.
 
+If the work is about creating, migrating, or reviewing Moltis skills/agents, read [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md) before writing or restructuring prompts, skills, presets, scheduler paths, or migration docs.
+
 ## Structure
 
 Use the existing directory meanings:

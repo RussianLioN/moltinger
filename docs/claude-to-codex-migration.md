@@ -2,6 +2,8 @@
 
 This repository uses a shared core plus adapters to keep Claude and Codex aligned without breaking existing Claude setup.
 
+If the migration target is not just Codex, but a Moltis-native skill/agent, use [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md) as the canonical project guide.
+
 ## Layout
 
 - Shared core: `.ai/instructions/shared-core.md`
