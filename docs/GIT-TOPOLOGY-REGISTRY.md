@@ -57,6 +57,7 @@
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
+| `feat/beads-root-write-guard` | `origin/feat/beads-root-write-guard` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-ewde-codex-advisory-rollout` | `origin/feat/moltinger-ewde-codex-advisory-rollout` | Needs decision |
@@ -104,7 +105,6 @@
 | `codex/remote-uat-hardening` | `none` | Needs decision |
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
-| `feat/beads-root-write-guard` | `origin/feat/beads-root-write-guard` | Needs decision |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |

@@ -116,6 +116,20 @@
         "beads-worktree-localize"
       ]
     },
+    "beads-normalize-issues-jsonl.sh": {
+      "version": "1.0.0",
+      "description": "Normalize tracked .beads/issues.jsonl dependency ordering into one deterministic canonical form",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3",
+        "mktemp"
+      ],
+      "provides": [
+        "beads-issues-jsonl-normalize"
+      ],
+      "ci": true
+    },
     "beads-recover-issue.sh": {
       "version": "1.0.0",
       "description": "Safely recover one leaked Beads issue into the localized tracker of the owner worktree",

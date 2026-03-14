@@ -9,6 +9,7 @@ ENVRC_FILE="$PROJECT_ROOT/.envrc"
 BD_SHIM="$PROJECT_ROOT/bin/bd"
 RESOLVE_SCRIPT="$PROJECT_ROOT/scripts/beads-resolve-db.sh"
 LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
+NORMALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-normalize-issues-jsonl.sh"
 CODEX_LAUNCHER="$PROJECT_ROOT/scripts/codex-profile-launch.sh"
 WORKTREE_READY_SCRIPT="$PROJECT_ROOT/scripts/worktree-ready.sh"
 WORKTREE_PHASE_A_SCRIPT="$PROJECT_ROOT/scripts/worktree-phase-a.sh"
@@ -78,6 +79,19 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "Tracked git hooks must source the repo-local PATH bootstrap before any bd resolution"
+    fi
+
+    test_start "static_pre_commit_normalizes_branch_local_beads_issues"
+    if [[ -x "$NORMALIZE_SCRIPT" ]] && \
+       rg -q 'find_dependencies_slice' "$NORMALIZE_SCRIPT" && \
+       rg -q 'python3 - ' "$NORMALIZE_SCRIPT" && \
+       rg -q 'beads-normalize-issues-jsonl\.sh' "$HOOK_PRE_COMMIT" && \
+       rg -q 'git diff --cached --quiet -- \.beads/issues\.jsonl' "$HOOK_PRE_COMMIT" && \
+       rg -q 'partially staged \.beads/issues\.jsonl' "$HOOK_PRE_COMMIT" && \
+       rg -q 'git add -- \.beads/issues\.jsonl' "$HOOK_PRE_COMMIT"; then
+        test_pass
+    else
+        test_fail "Pre-commit must normalize tracked .beads/issues.jsonl before commit"
     fi
 
     test_start "static_worktree_helpers_bootstrap_plain_bd_and_avoid_raw_create_fallback"
