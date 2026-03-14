@@ -33,6 +33,13 @@ If the workflow touches deploy, rollback, drift detection, metrics, Telegram rol
    If a workflow changes, check the downstream script interface.
 6. Be conservative with deploy and rollback logic.
    Small-looking workflow edits can have large production impact.
+7. Inspect GitHub Actions logs for workflow, deploy, and CI work.
+   Do not treat local validation as sufficient when GitHub runs exist or can be triggered.
+   Before closing out workflow-related work:
+   - inspect relevant GitHub Actions run logs
+   - use those logs to analyze failures
+   - fix log-confirmed issues when feasible in the same session
+   - if no run exists yet, say so explicitly and create/trigger the narrowest useful run when appropriate
 
 ## Validation
 
@@ -43,6 +50,7 @@ After changing workflows, do as many of these as applicable:
 - inspect affected script syntax
 - inspect related docs
 - run targeted tests if workflow behavior implies runtime change
+- inspect relevant GitHub Actions logs for the changed workflow or explicitly note that no run/log exists yet
 
 If local execution is not possible, say so explicitly.
 
