@@ -69,14 +69,14 @@
 
 ### Validation for User Story 2
 
-- [ ] T011 [P] [US2] Create component coverage for brief drafting and confirmation state in `tests/component/test_agent_factory_brief.sh`
-- [ ] T012 [P] [US2] Create local confirmation-loop integration coverage in `tests/integration_local/test_agent_factory_confirmation.sh`
+- [x] T011 [P] [US2] Create component coverage for brief drafting and confirmation state in `tests/component/test_agent_factory_brief.sh`
+- [x] T012 [P] [US2] Create local confirmation-loop integration coverage in `tests/integration_local/test_agent_factory_confirmation.sh`
 
 ### Implementation for User Story 2
 
-- [ ] T013 [P] [US2] Implement draft brief generation and versioning in `scripts/agent-factory-discovery.py`
-- [ ] T014 [P] [US2] Implement brief rendering from `docs/templates/agent-factory/requirements-brief.md`
-- [ ] T015 [US2] Document correction, confirmation, and reopen rules in `docs/runbooks/agent-factory-discovery.md`
+- [x] T013 [P] [US2] Implement draft brief generation and versioning in `scripts/agent-factory-discovery.py`
+- [x] T014 [P] [US2] Implement brief rendering from `docs/templates/agent-factory/requirements-brief.md`
+- [x] T015 [US2] Document correction, confirmation, and reopen rules in `docs/runbooks/agent-factory-discovery.md`
 
 **Checkpoint**: One confirmed requirements brief can be produced from the discovery dialogue.
 

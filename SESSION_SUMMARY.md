@@ -50,7 +50,7 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-13)
+### Current Session Update (2026-03-14)
 
 - Branch in progress: `022-telegram-ba-intake`
 - Confirmed the next factory priority after completed MVP0 is a new upstream discovery-first slice: the first user-facing agent must behave as a Telegram business analyst that elicits and confirms requirements before the existing concept-pack flow starts.
@@ -81,6 +81,11 @@ GitOps Compliance: Enforced ✅
 - Updated `config/moltis.toml`, `tests/fixtures/config/moltis.toml`, and `scripts/manifest.json` with the concrete discovery entrypoint (`run`), ordered topic contract, next-action contract, and new script inventory entry.
 - Added `docs/runbooks/agent-factory-discovery.md` so operator handoff now documents accepted input shapes, command examples, state mapping, and the current boundary between discovery and later brief/handoff phases.
 - Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T005` through `T010` are now marked complete; the next implementation queue begins at User Story 2 (`molt-s5i.4.*`).
+- Completed User Story 2 for `022-telegram-ba-intake`: extended `scripts/agent-factory-discovery.py` so the discovery runtime now turns a ready session into a reviewable `requirement_brief`, versions meaningful revisions (`1.0`, `1.1`, ...), renders `brief_markdown` from `docs/templates/agent-factory/requirements-brief.md`, and records one explicit `confirmation_snapshot` when the user confirms the current version.
+- The discovery runtime now accepts brief-review inputs (`requirement_brief`, `brief_revisions`, `brief_feedback_text`, `brief_section_updates`, `confirmation_reply`) in addition to raw discovery sessions, which makes the same CLI contract cover `draft -> revise -> confirm` without manual file edits.
+- Added US2 validation coverage in `tests/component/test_agent_factory_brief.sh` and `tests/integration_local/test_agent_factory_confirmation.sh`, covering draft rendering, pre-confirmation version bumps, explicit confirmation snapshots, and the full local loop from ready discovery context to a confirmed brief.
+- Updated `docs/runbooks/agent-factory-discovery.md` so operator handoff now includes the review-state input shape, draft/revision/confirmation command examples, the new `awaiting_confirmation` and `confirmed` states, and the explicit boundary that canonical handoff still starts later in `US4`.
+- Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T011` through `T015` are now marked complete; the next implementation queue begins at User Story 3 (`molt-s5i.5.*`).
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
@@ -101,6 +106,10 @@ GitOps Compliance: Enforced ✅
   - `./tests/run.sh --lane component --filter component_agent_factory_discovery --json`
   - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_discovery_flow --json`
   - `bash scripts/scripts-verify.sh`
+  - `python3 -m py_compile scripts/agent-factory-discovery.py scripts/agent_factory_common.py`
+  - `bash -n tests/component/test_agent_factory_brief.sh tests/integration_local/test_agent_factory_confirmation.sh`
+  - `./tests/run.sh --lane component --filter component_agent_factory_brief --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_confirmation --json`
 
 ### Previous Session Update (2026-03-12)
 
