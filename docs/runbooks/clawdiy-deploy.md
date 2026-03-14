@@ -29,6 +29,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
    Use an explicit `clawdiy_image` override only for a dedicated upgrade rollout; the tracked default stays pinned to the last verified Clawdiy image.
+   Official OpenClaw Docker upgrades can warm up slowly when channels are enabled; Clawdiy deploy now treats a temporary `starting/unhealthy` phase as startup warmup until the overall timeout expires.
 2. Render the deployable OpenClaw runtime config from the tracked template plus the dedicated Clawdiy env file:
    ```bash
    ./scripts/render-clawdiy-runtime-config.sh --env-file /opt/moltinger/clawdiy/.env --json | jq .
@@ -47,6 +48,15 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ./scripts/clawdiy-smoke.sh --stage same-host
    ./scripts/clawdiy-smoke.sh --stage restart-isolation
    ```
+
+## Upgrade Canary Notes
+
+- Official OpenClaw Docker `latest` must be tested only as an explicit canary via workflow input `clawdiy_image`; the tracked default remains pinned until the canary is proven live.
+- During OpenClaw cold start with Telegram enabled, Docker health may briefly pass through `unhealthy` before recovering. This is startup warmup, not immediate rollback evidence.
+- Deploy success still requires:
+  - локальный `/health` на host loopback
+  - green deploy workflow
+  - post-deploy live canary from `main`
 
 ## Success Criteria
 

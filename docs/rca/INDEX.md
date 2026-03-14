@@ -1,23 +1,23 @@
 # RCA Index
 
 **Last Updated**: 2026-03-14
-**Version**: 1.9.0
+**Version**: 1.10.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 17 |
+| Total RCA | 18 |
 | Avg Resolution Time | N/A |
-| This Month | 17 |
+| This Month | 18 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 24% |
-| process | 8 | 47% |
-| cicd | 3 | 18% |
+| generic | 4 | 22% |
+| process | 8 | 44% |
+| cicd | 4 | 22% |
 | security | 1 | 6% |
 | shell | 1 | 6% |
 
@@ -26,7 +26,7 @@
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 4 | High - production impact |
+| P1 | 5 | High - production impact |
 | P2 | 7 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
 | RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
 | RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |
 | RCA-015 | 2026-03-14 | cicd | P2 | resolved | Clawdiy deploy workflow enforced a dirty-worktree gate but lacked an auditable repair path for drift limited to the Clawdiy-managed surface | added `repair_server_checkout` to `deploy-clawdiy.yml` plus static guard and runbook update |
