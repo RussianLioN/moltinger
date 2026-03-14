@@ -98,7 +98,6 @@
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `fix/moltis-official-docker-latest-channel` | `origin/fix/moltis-gitops-repair-parse-failure` | Needs decision |
-| `fix/moltis-post-deploy-protocol-guidance` | `gone` | Tracking ref is gone; needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 
