@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-11
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-14
 
 ---
 
@@ -149,6 +149,25 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-14: Moltis Version And Rollback Contract Clarification
+
+**Статус**: ✅ project docs reconciled with official Moltis version model and current local rollback implementation
+
+- Ran a consilium review against official Moltis docs, releases, and official issues to answer a narrow question: whether Moltis supports `latest`, specific release updates, and rollback to a specific version.
+- Confirmed the upstream contract is asymmetric: `latest` is an official quickstart path and release-based updates are valid, but upstream does not document a first-class rollback runbook to an arbitrary operator-chosen version.
+- Updated `docs/version-update.md` and `docs/runbooks/moltis-backup-safe-update.md` so the project now explicitly distinguishes `latest`, explicit upstream release tags, and the real rollback path.
+- Marked the stale `docs/architecture/gitops-architecture.md` sections as historical and replaced the misleading `scripts/rollback.sh` / `restore-moltis.sh` examples with the current `backup-moltis-enhanced.sh` and `deploy.sh --json moltis rollback` contract.
+
+**Validated**
+
+- `rg -n "rollback\\.sh|restore-moltis\\.sh|backup-moltis\\.sh|health-check\\.sh" docs/architecture/gitops-architecture.md docs/version-update.md docs/runbooks/moltis-backup-safe-update.md -S`
+- manual doc review of the updated policy and runbook sections
+
+**Next**
+
+- Keep production guidance honest: explicit upstream release tag preferred, `latest` allowed only intentionally, rollback described as previous deployed image or verified restore.
+- If desired later, align workflow UX further so the preferred production release-tag path is enforced rather than only documented.
 
 ### 2026-03-12: Moltis Backup-Safe Update Baseline (z8m.1)
 
