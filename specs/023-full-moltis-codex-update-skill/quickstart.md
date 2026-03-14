@@ -39,13 +39,29 @@ Expected:
 
 ```bash
 bash scripts/moltis-codex-update-profile.sh validate \
-  --file tests/fixtures/codex-update-project-profile/basic-profile.json
+  --file tests/fixtures/codex-update-skill/project-profile-basic.json
 ```
 
 Expected:
 
 - valid profile result
 - project applicability available to the skill
+
+4. Validate project-specific fallback semantics:
+
+```bash
+bash scripts/moltis-codex-update-run.sh \
+  --mode manual \
+  --release-file tests/fixtures/codex-update-skill/releases-0.114.0.html \
+  --profile-file tests/fixtures/codex-update-skill/project-profile-fallback.json \
+  --stdout json
+```
+
+Expected:
+
+- `profile.status = loaded`
+- `decision.project_specific = true`
+- recommendation comes from profile fallback even without direct keyword match
 
 ## Minimum Verification
 

@@ -15,11 +15,17 @@
         "worktree",
         "branch"
       ],
+      "title_ru": "Проверить worktree-процессы Moltinger",
       "rationale_ru": "Проект активно использует worktree и изолированные ветки, поэтому такие изменения нужно разбирать сразу.",
+      "next_steps_ru": [
+        "Проверить, нужно ли обновить правила создания и очистки worktree.",
+        "Сверить документацию по topology и ветвлению с новой версией Codex CLI."
+      ],
       "priority_paths": [
         "docs/GIT-TOPOLOGY-REGISTRY.md",
         "docs/CODEX-OPERATING-MODEL.md"
-      ]
+      ],
+      "recommendation_template_id": "doc-topology-review"
     },
     {
       "id": "multi-agent-flow",
@@ -28,17 +34,57 @@
         "resume",
         "session"
       ],
+      "title_ru": "Проверить agent/resume guidance для проекта",
       "rationale_ru": "Проект зависит от resume-flow и делегирования агентам, поэтому обновления в этой зоне напрямую влияют на практическую работу.",
+      "next_steps_ru": [
+        "Проверить, нужно ли скорректировать guidance по resume и handoff.",
+        "Сверить поведение с текущими агентными workflow в проекте."
+      ],
       "priority_paths": [
+        "AGENTS.md",
+        "docs/CODEX-OPERATING-MODEL.md"
+      ],
+      "recommendation_template_id": "agent-guidance-review"
+    }
+  ],
+  "recommendation_templates": [
+    {
+      "id": "doc-topology-review",
+      "title_ru": "Обновить topology и worktree guidance",
+      "rationale_ru": "Шаблон рекомендует проверить документы и runbook-и, которые описывают ветвление и рабочие деревья.",
+      "next_steps_ru": [
+        "Проверить docs/GIT-TOPOLOGY-REGISTRY.md и docs/CODEX-OPERATING-MODEL.md.",
+        "Если нужно, обновить формулировки про worktree и ветки."
+      ],
+      "impacted_paths": [
+        "docs/GIT-TOPOLOGY-REGISTRY.md",
+        "docs/CODEX-OPERATING-MODEL.md"
+      ]
+    },
+    {
+      "id": "agent-guidance-review",
+      "title_ru": "Обновить agent/resume guidance",
+      "rationale_ru": "Шаблон помогает быстро проверить инструкции по делегированию, resume и handoff.",
+      "next_steps_ru": [
+        "Проверить AGENTS.md и guidance по агентным сценариям.",
+        "Уточнить, не изменились ли ожидания к resume-flow."
+      ],
+      "impacted_paths": [
         "AGENTS.md",
         "docs/CODEX-OPERATING-MODEL.md"
       ]
     }
   ],
-  "recommendation_templates": [
-    {
-      "id": "default-review",
-      "title_ru": "Проверить project-specific guidance"
-    }
-  ]
+  "fallback_recommendation": {
+    "title_ru": "Сверить обновление Codex CLI с профилем проекта Moltinger",
+    "rationale_ru": "Даже если ни одно правило не сработало напрямую, проект всё равно использует worktree, навыки и агентные сценарии, поэтому обновление стоит коротко оценить в проектном контексте.",
+    "next_steps_ru": [
+      "Сверить changelog с traits и операционными правилами проекта.",
+      "Зафиксировать, нужен ли follow-up по документам или workflow."
+    ],
+    "impacted_paths": [
+      "docs/CODEX-OPERATING-MODEL.md",
+      "AGENTS.md"
+    ]
+  }
 }

@@ -159,7 +159,27 @@ EOF
     assert_eq "loaded" "$(jq -r '.profile.status' "$report")" "Profile-backed run should load the project profile"
     assert_eq "true" "$(jq -r '.decision.project_specific' "$report")" "Profile-backed decision should be marked as project-specific"
     assert_contains "$(jq -r '.recommendation_bundle.profile_source' "$report")" "profile:" "Recommendation bundle should record the profile source"
+    assert_eq "Обновить topology и worktree guidance" "$(jq -r '.recommendation_bundle.items[0].title_ru' "$report")" "Profile recommendation should be shaped by the linked template"
     assert_contains "$(jq -r '.recommendation_bundle.items[0].rationale_ru' "$report")" "Проект" "Profile recommendation should use project-specific rationale"
+    assert_eq "worktree-flow" "$(jq -r '.recommendation_bundle.items[0].source_rule_id' "$report")" "Profile recommendation should keep audit link to the matched rule"
+    test_pass
+
+    test_start "component_moltis_codex_update_run_profile_fallback_still_returns_project_specific_guidance"
+    work_dir="$(secure_temp_dir moltis-codex-update-run-profile-fallback)"
+    state_file="$work_dir/state.json"
+    bash "$RUN_SCRIPT" \
+        --mode manual \
+        --state-file "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.114.0.html" \
+        --profile-file "$FIXTURE_DIR/project-profile-fallback.json" \
+        --json-out "$work_dir/report.json" \
+        --summary-out "$work_dir/summary.md" \
+        --stdout none
+    report="$work_dir/report.json"
+    assert_eq "loaded" "$(jq -r '.profile.status' "$report")" "Fallback profile run should still load the profile"
+    assert_eq "true" "$(jq -r '.decision.project_specific' "$report")" "Fallback recommendation should still count as project-specific"
+    assert_eq "Сделать короткую project-specific оценку для Moltinger" "$(jq -r '.recommendation_bundle.items[0].title_ru' "$report")" "Fallback recommendation should come from profile fallback contract"
+    assert_eq "" "$(jq -r '.recommendation_bundle.items[0].source_rule_id' "$report")" "Fallback recommendation should not pretend a rule was matched"
     test_pass
 
     test_start "component_moltis_codex_update_run_honestly_degrades_when_official_source_is_missing"

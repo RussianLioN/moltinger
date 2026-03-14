@@ -40,8 +40,16 @@ Fields:
 - `owner`
 - `traits[]`
 - `relevance_rules[]`
-- `priority_paths[]`
+- `relevance_rules[].title_ru`
+- `relevance_rules[].next_steps_ru[]`
+- `relevance_rules[].priority_paths[]`
+- `relevance_rules[].recommendation_template_id`
 - `recommendation_templates[]`
+- `recommendation_templates[].title_ru`
+- `recommendation_templates[].rationale_ru`
+- `recommendation_templates[].next_steps_ru[]`
+- `recommendation_templates[].impacted_paths[]`
+- `fallback_recommendation`
 
 ## CodexUpdateDecision
 
@@ -67,6 +75,8 @@ Fields:
 - `items[]`
 - `impacted_paths[]`
 - `profile_source`
+- `items[].source_rule_id`
+- `items[].source_template_id`
 
 ## CodexUpdateAuditRecord
 

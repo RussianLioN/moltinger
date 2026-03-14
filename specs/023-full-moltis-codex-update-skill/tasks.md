@@ -51,11 +51,11 @@
 **Goal**: Moltis can adapt recommendations using a stable project profile instead of repo-side runtime ownership.  
 **Independent Test**: Run once with a valid profile and once without a profile; confirm both outputs are useful.
 
-- [ ] T019 Define the stable profile contract in `specs/023-full-moltis-codex-update-skill/contracts/project-profile.schema.json`
-- [ ] T020 Implement profile loading and validation in `scripts/moltis-codex-update-profile.sh`
-- [ ] T021 Implement project-specific recommendation mapping in `scripts/moltis-codex-update-run.sh`
-- [ ] T022 Add component coverage for profile validation and recommendation shaping in `tests/component/test_moltis_codex_update_profile.sh`
-- [ ] T023 Document profile usage and fallback semantics in `docs/moltis-codex-update-skill.md`
+- [x] T019 Define the stable profile contract in `specs/023-full-moltis-codex-update-skill/contracts/project-profile.schema.json`
+- [x] T020 Implement profile loading and validation in `scripts/moltis-codex-update-profile.sh`
+- [x] T021 Implement project-specific recommendation mapping in `scripts/moltis-codex-update-run.sh`
+- [x] T022 Add component coverage for profile validation and recommendation shaping in `tests/component/test_moltis_codex_update_profile.sh`
+- [x] T023 Document profile usage and fallback semantics in `docs/moltis-codex-update-skill.md`
 
 ## Phase 6 - Observability, Rollout, and Retirement
 

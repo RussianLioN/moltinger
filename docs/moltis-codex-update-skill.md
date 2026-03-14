@@ -20,7 +20,7 @@
 2. распознать свежую upstream-версию и её ключевые изменения;
 3. понять, новое это состояние или уже виденное;
 4. вернуть краткий русский summary;
-5. при наличии project profile учесть его правила.
+5. при наличии project profile учесть его правила и profile-specific fallback.
 
 На текущем срезе уже включено:
 - scheduler duplicate suppression внутри самого Moltis-native runtime;
@@ -45,6 +45,15 @@ bash scripts/moltis-codex-update-run.sh --mode manual
 bash scripts/moltis-codex-update-run.sh \
   --mode manual \
   --profile-file tests/fixtures/codex-update-skill/project-profile-basic.json
+```
+
+С profile fallback без прямого keyword match:
+
+```bash
+bash scripts/moltis-codex-update-run.sh \
+  --mode manual \
+  --release-file tests/fixtures/codex-update-skill/releases-0.114.0.html \
+  --profile-file tests/fixtures/codex-update-skill/project-profile-fallback.json
 ```
 
 С fixture-источником:
@@ -113,6 +122,32 @@ bash scripts/moltis-codex-update-profile.sh validate \
   --file tests/fixtures/codex-update-skill/project-profile-basic.json
 ```
 
+Загрузка нормализованного профиля:
+
+```bash
+bash scripts/moltis-codex-update-profile.sh load \
+  --file tests/fixtures/codex-update-skill/project-profile-basic.json
+```
+
+## Stable profile contract
+
+Теперь stable profile contract включает:
+- `relevance_rules[]` с:
+  - `id`
+  - `keywords`
+  - `title_ru`
+  - `rationale_ru`
+  - `next_steps_ru[]`
+  - optional `priority_paths[]`
+  - optional `recommendation_template_id`
+- `recommendation_templates[]` с готовыми заголовками, rationale и шагами
+- `fallback_recommendation`, которая используется, если профиль валиден, но ни одно правило не совпало
+
+Простыми словами:
+- если правило совпало, Moltis строит recommendation из rule + template;
+- если профиль есть, но прямого совпадения нет, Moltis всё равно даёт project-specific совет, а не сваливается в полностью generic ответ;
+- если профиль сломан, upstream advisory всё равно возвращается, но в notes честно появляется ошибка профиля.
+
 ## Что пользователь должен получить
 
 Если пользователь пишет:
@@ -127,6 +162,11 @@ Moltis должен ответить простым русским summary:
 - почему это важно;
 - какие следующие шаги разумны.
 
+Если profile загружен:
+- recommendation bundle должен показывать, что источник рекомендаций — профиль;
+- matched rule попадает в audit через `source_rule_id`;
+- fallback profile recommendation не притворяется match-ом и оставляет `source_rule_id` пустым.
+
 ## Деградация
 
 Если официальный источник недоступен или changelog поменял формат:
@@ -138,6 +178,11 @@ Moltis должен ответить простым русским summary:
 - `failed` означает, что sender был вызван, но Telegram вернул ошибку;
 - `suppressed` означает, что этот fingerprint уже отправлялся раньше;
 - `deferred` означает, что upstream-источник пока нельзя оценить надёжно.
+
+Если profile-path деградирует:
+- `profile.status = invalid` и ошибки пишутся в `.profile.errors`;
+- generic upstream advisory остаётся доступным;
+- false project-specific рекомендаций появляться не должно.
 
 ## Scheduler ownership и GitOps rollout
 

@@ -42,7 +42,9 @@
         "required": [
           "id",
           "keywords",
-          "rationale_ru"
+          "title_ru",
+          "rationale_ru",
+          "next_steps_ru"
         ],
         "properties": {
           "id": {
@@ -56,11 +58,69 @@
               "minLength": 1
             }
           },
+          "title_ru": {
+            "type": "string",
+            "minLength": 1
+          },
           "rationale_ru": {
             "type": "string",
             "minLength": 1
           },
+          "next_steps_ru": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "priority_paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "recommendation_template_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "recommendation_templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title_ru",
+          "rationale_ru",
+          "next_steps_ru"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title_ru": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rationale_ru": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_steps_ru": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "impacted_paths": {
             "type": "array",
             "items": {
               "type": "string",
@@ -70,10 +130,38 @@
         }
       }
     },
-    "recommendation_templates": {
-      "type": "array",
-      "items": {
-        "type": "object"
+    "fallback_recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title_ru",
+        "rationale_ru",
+        "next_steps_ru"
+      ],
+      "properties": {
+        "title_ru": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale_ru": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next_steps_ru": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "impacted_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     }
   }

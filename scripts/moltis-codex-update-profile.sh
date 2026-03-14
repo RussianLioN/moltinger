@@ -113,25 +113,89 @@ else:
     if not isinstance(traits, list) or any(not isinstance(item, str) or not item.strip() for item in traits):
         errors.append("traits must be an array of non-empty strings")
 
+    template_ids = set()
+    recommendation_templates = profile.get("recommendation_templates", [])
+    if recommendation_templates is not None:
+        if not isinstance(recommendation_templates, list):
+            errors.append("recommendation_templates must be an array when provided")
+            recommendation_templates = []
+        else:
+            for index, template in enumerate(recommendation_templates, start=1):
+                if not isinstance(template, dict):
+                    errors.append(f"recommendation_templates[{index}] must be an object")
+                    continue
+                template_id = template.get("id", "")
+                if not isinstance(template_id, str) or not template_id.strip():
+                    errors.append(f"recommendation_templates[{index}].id must be a non-empty string")
+                elif template_id.strip() in template_ids:
+                    errors.append(f"recommendation_templates[{index}].id must be unique")
+                else:
+                    template_ids.add(template_id.strip())
+                if not isinstance(template.get("title_ru"), str) or not template.get("title_ru", "").strip():
+                    errors.append(f"recommendation_templates[{index}].title_ru must be a non-empty string")
+                if not isinstance(template.get("rationale_ru"), str) or not template.get("rationale_ru", "").strip():
+                    errors.append(f"recommendation_templates[{index}].rationale_ru must be a non-empty string")
+                next_steps = template.get("next_steps_ru")
+                if not isinstance(next_steps, list) or not next_steps or any(not isinstance(item, str) or not item.strip() for item in next_steps):
+                    errors.append(f"recommendation_templates[{index}].next_steps_ru must be a non-empty array of non-empty strings")
+                if "impacted_paths" in template:
+                    impacted_paths = template.get("impacted_paths")
+                    if not isinstance(impacted_paths, list) or any(not isinstance(item, str) or not item.strip() for item in impacted_paths):
+                        errors.append(f"recommendation_templates[{index}].impacted_paths must be an array of non-empty strings")
+
     rules = profile.get("relevance_rules")
     if not isinstance(rules, list) or not rules:
         errors.append("relevance_rules must be a non-empty array")
     else:
+        rule_ids = set()
         for index, rule in enumerate(rules, start=1):
             if not isinstance(rule, dict):
                 errors.append(f"relevance_rules[{index}] must be an object")
                 continue
-            if not isinstance(rule.get("id"), str) or not rule.get("id", "").strip():
+            rule_id = rule.get("id", "")
+            if not isinstance(rule_id, str) or not rule_id.strip():
                 errors.append(f"relevance_rules[{index}].id must be a non-empty string")
+            elif rule_id.strip() in rule_ids:
+                errors.append(f"relevance_rules[{index}].id must be unique")
+            else:
+                rule_ids.add(rule_id.strip())
             keywords = rule.get("keywords")
             if not isinstance(keywords, list) or any(not isinstance(item, str) or not item.strip() for item in keywords):
                 errors.append(f"relevance_rules[{index}].keywords must be an array of non-empty strings")
+            if not isinstance(rule.get("title_ru"), str) or not rule.get("title_ru", "").strip():
+                errors.append(f"relevance_rules[{index}].title_ru must be a non-empty string")
             if not isinstance(rule.get("rationale_ru"), str) or not rule.get("rationale_ru", "").strip():
                 errors.append(f"relevance_rules[{index}].rationale_ru must be a non-empty string")
+            next_steps = rule.get("next_steps_ru")
+            if not isinstance(next_steps, list) or not next_steps or any(not isinstance(item, str) or not item.strip() for item in next_steps):
+                errors.append(f"relevance_rules[{index}].next_steps_ru must be a non-empty array of non-empty strings")
             if "priority_paths" in rule:
                 priority_paths = rule.get("priority_paths")
                 if not isinstance(priority_paths, list) or any(not isinstance(item, str) or not item.strip() for item in priority_paths):
                     errors.append(f"relevance_rules[{index}].priority_paths must be an array of non-empty strings")
+            if "recommendation_template_id" in rule:
+                template_id = rule.get("recommendation_template_id")
+                if not isinstance(template_id, str) or not template_id.strip():
+                    errors.append(f"relevance_rules[{index}].recommendation_template_id must be a non-empty string")
+                elif template_id.strip() not in template_ids:
+                    errors.append(f"relevance_rules[{index}].recommendation_template_id must reference an existing template id")
+
+    fallback = profile.get("fallback_recommendation")
+    if fallback is not None:
+        if not isinstance(fallback, dict):
+            errors.append("fallback_recommendation must be an object when provided")
+        else:
+            if not isinstance(fallback.get("title_ru"), str) or not fallback.get("title_ru", "").strip():
+                errors.append("fallback_recommendation.title_ru must be a non-empty string")
+            if not isinstance(fallback.get("rationale_ru"), str) or not fallback.get("rationale_ru", "").strip():
+                errors.append("fallback_recommendation.rationale_ru must be a non-empty string")
+            next_steps = fallback.get("next_steps_ru")
+            if not isinstance(next_steps, list) or not next_steps or any(not isinstance(item, str) or not item.strip() for item in next_steps):
+                errors.append("fallback_recommendation.next_steps_ru must be a non-empty array of non-empty strings")
+            if "impacted_paths" in fallback:
+                impacted_paths = fallback.get("impacted_paths")
+                if not isinstance(impacted_paths, list) or any(not isinstance(item, str) or not item.strip() for item in impacted_paths):
+                    errors.append("fallback_recommendation.impacted_paths must be an array of non-empty strings")
 
 result["errors"] = errors
 if errors:
@@ -145,7 +209,8 @@ normalized = {
     "owner": str(profile.get("owner", "")).strip(),
     "traits": [item.strip() for item in profile.get("traits", []) if isinstance(item, str) and item.strip()],
     "relevance_rules": [],
-    "recommendation_templates": profile.get("recommendation_templates", []),
+    "recommendation_templates": [],
+    "fallback_recommendation": None,
 }
 
 for rule in profile.get("relevance_rules", []):
@@ -153,10 +218,33 @@ for rule in profile.get("relevance_rules", []):
         {
             "id": rule["id"].strip(),
             "keywords": [item.strip() for item in rule.get("keywords", []) if isinstance(item, str) and item.strip()],
+            "title_ru": rule["title_ru"].strip(),
             "rationale_ru": rule["rationale_ru"].strip(),
+            "next_steps_ru": [item.strip() for item in rule.get("next_steps_ru", []) if isinstance(item, str) and item.strip()],
             "priority_paths": [item.strip() for item in rule.get("priority_paths", []) if isinstance(item, str) and item.strip()],
+            "recommendation_template_id": str(rule.get("recommendation_template_id", "")).strip(),
         }
     )
+
+for template in profile.get("recommendation_templates", []):
+    normalized["recommendation_templates"].append(
+        {
+            "id": template["id"].strip(),
+            "title_ru": template["title_ru"].strip(),
+            "rationale_ru": template["rationale_ru"].strip(),
+            "next_steps_ru": [item.strip() for item in template.get("next_steps_ru", []) if isinstance(item, str) and item.strip()],
+            "impacted_paths": [item.strip() for item in template.get("impacted_paths", []) if isinstance(item, str) and item.strip()],
+        }
+    )
+
+if isinstance(profile.get("fallback_recommendation"), dict):
+    fallback = profile["fallback_recommendation"]
+    normalized["fallback_recommendation"] = {
+        "title_ru": fallback["title_ru"].strip(),
+        "rationale_ru": fallback["rationale_ru"].strip(),
+        "next_steps_ru": [item.strip() for item in fallback.get("next_steps_ru", []) if isinstance(item, str) and item.strip()],
+        "impacted_paths": [item.strip() for item in fallback.get("impacted_paths", []) if isinstance(item, str) and item.strip()],
+    }
 
 result["ok"] = True
 result["profile_id"] = normalized["profile_id"]

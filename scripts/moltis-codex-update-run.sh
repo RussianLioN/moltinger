@@ -730,26 +730,56 @@ def build_generic_recommendations(latest_version: str, tags: list[str]):
 
 def build_profile_recommendations(profile: dict, highlights: list[str], advisories: list[dict]):
     haystack = " ".join(highlights + [item["title"] for item in advisories]).lower()
+    templates = {
+        template["id"]: template
+        for template in profile.get("recommendation_templates", [])
+        if isinstance(template, dict) and template.get("id")
+    }
     items = []
     impacted_paths = []
     for rule in profile.get("relevance_rules", []):
         keywords = [keyword.lower() for keyword in rule.get("keywords", [])]
         if not any(keyword in haystack for keyword in keywords):
             continue
-        impacted = unique_preserve(rule.get("priority_paths", []))
+        template = templates.get(rule.get("recommendation_template_id", ""))
+        impacted = unique_preserve(rule.get("priority_paths", []) + (template.get("impacted_paths", []) if template else []))
         impacted_paths.extend(impacted)
+        next_steps = unique_preserve(rule.get("next_steps_ru", []) + (template.get("next_steps_ru", []) if template else []))
+        rationale_parts = []
+        if template and template.get("rationale_ru"):
+            rationale_parts.append(template["rationale_ru"])
+        rationale_parts.append(rule["rationale_ru"])
         items.append(
             {
-                "title_ru": f"Проверить правило {rule['id']} для проекта {profile['project_name']}",
-                "rationale_ru": rule["rationale_ru"],
+                "title_ru": (template.get("title_ru") if template else rule.get("title_ru")) or f"Проверить правило {rule['id']} для проекта {profile['project_name']}",
+                "rationale_ru": " ".join(part.strip() for part in rationale_parts if part and part.strip()),
                 "impacted_paths": impacted,
-                "next_steps_ru": [
+                "next_steps_ru": next_steps or [
                     "Сверить новое изменение Codex CLI с этим правилом профиля.",
                     "Уточнить, нужны ли project-specific правки или документация.",
                 ],
+                "source_rule_id": rule["id"],
+                "source_template_id": template.get("id", "") if template else "",
             }
         )
-    return items, unique_preserve(impacted_paths)
+    if items:
+        return items, unique_preserve(impacted_paths)
+
+    fallback = profile.get("fallback_recommendation") or {}
+    fallback_item = {
+        "title_ru": fallback.get("title_ru") or f"Сверить обновление Codex CLI с профилем проекта {profile['project_name']}",
+        "rationale_ru": fallback.get("rationale_ru") or (
+            f"Профиль проекта {profile['project_name']} загружен, поэтому даже без прямого совпадения стоит быстро оценить changelog в контексте traits и рабочих правил."
+        ),
+        "impacted_paths": unique_preserve(fallback.get("impacted_paths", [])),
+        "next_steps_ru": fallback.get("next_steps_ru") or [
+            "Сверить changelog с traits проекта и его операционными правилами.",
+            "Зафиксировать, нужен ли follow-up по docs, skills или workflow.",
+        ],
+        "source_rule_id": "",
+        "source_template_id": "",
+    }
+    return [fallback_item], fallback_item["impacted_paths"]
 
 
 release_text = pathlib.Path(release_path).read_text(encoding="utf-8") if release_ok else ""
