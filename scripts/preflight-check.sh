@@ -540,11 +540,20 @@ check_clawdiy_runtime_home() {
     local expected_gid="${CLAWDIY_RUNTIME_GID:-1000}"
 
     if [[ ! -d "$runtime_root" ]]; then
+        if [[ "$CI_MODE" == "true" ]]; then
+            add_check "runtime_home_present" "pass" "Clawdiy runtime home is not materialized in CI checkout; deploy/render must create $runtime_root before official OpenClaw wizard writes" "error"
+            return
+        fi
         add_check "runtime_home_present" "fail" "Clawdiy runtime home is missing: $runtime_root" "error"
         return
     fi
 
     add_check "runtime_home_present" "pass" "Clawdiy runtime home exists: $runtime_root" "error"
+
+    if [[ "$CI_MODE" == "true" ]]; then
+        add_check "runtime_home_ownership" "pass" "CI checkout runtime home ownership is informational only; deploy/render must normalize it to ${expected_uid}:${expected_gid} on the target host" "error"
+        return
+    fi
 
     local owner_group
     owner_group="$(stat -c '%u:%g' "$runtime_root" 2>/dev/null || stat -f '%u:%g' "$runtime_root" 2>/dev/null || echo "unknown")"

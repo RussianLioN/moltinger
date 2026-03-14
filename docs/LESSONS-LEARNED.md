@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-14
-**Total Lessons**: 24
+**Total Lessons**: 25
 
 ---
 
@@ -21,7 +21,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (10 lessons)
+#### P2 (11 lessons)
+- [CI preflight ошибочно требовал materialized Clawdiy runtime home до deploy/render шага](../docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md)
 - [Clawdiy UI bootstrap был задокументирован как Settings/OAuth flow вместо реального browser bootstrap](../docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md)
 - [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
 - [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
@@ -62,7 +63,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (9 lessons)
+#### process (10 lessons)
+- [CI preflight ошибочно требовал materialized Clawdiy runtime home до deploy/render шага](../docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md)
 - [Официальный мастер настройки Clawdiy не мог завершить OAuth из-за неверного контракта домашнего каталога OpenClaw](../docs/rca/2026-03-13-clawdiy-official-wizard-runtime-home-contract-mismatch.md)
 - [Clawdiy UI bootstrap был задокументирован как Settings/OAuth flow вместо реального browser bootstrap](../docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md)
 - [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
@@ -86,16 +88,16 @@
 
 ### Popular Tags
 
-- `process` (8 lessons)
+- `process` (9 lessons)
 - `rca` (5 lessons)
+- `lessons` (5 lessons)
 - `github-actions` (5 lessons)
 - `topology-registry` (4 lessons)
-- `lessons` (4 lessons)
 - `gitops` (4 lessons)
 - `git-worktree` (4 lessons)
+- `deploy` (4 lessons)
+- `clawdiy` (4 lessons)
 - `ux` (3 lessons)
-- `openclaw` (3 lessons)
-- `oauth` (3 lessons)
 
 
 ---
@@ -104,10 +106,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 24 |
+| Total Lessons | 25 |
 | Critical (P0/P1) | 6 |
 | Categories | 5 |
-| Unique Tags | 61 |
+| Unique Tags | 63 |
 
 ---
 
