@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run monitor
         shell: bash
@@ -65,14 +65,14 @@ jobs:
           ./scripts/codex-cli-update-monitor.sh "${args[@]}"
 
       - name: Upload JSON artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}-json
           path: codex-update-report.json
           if-no-files-found: error
 
       - name: Upload summary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}-summary
           path: codex-update-summary.md

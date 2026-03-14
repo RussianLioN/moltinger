@@ -58,8 +58,9 @@ git add docker-compose.prod.yml
 git commit -m "fix(proxy): add browser compatibility headers"
 git push
 
-# 3. CI/CD deploys automatically, or manual:
-# ssh root@ainetic.tech "cd /opt/moltinger && git pull && docker compose -f docker-compose.prod.yml up -d"
+# 3. CI/CD deploys the tracked git version automatically,
+#    or trigger the backup-safe helper on the server:
+# ssh root@ainetic.tech "cd /opt/moltinger && ./scripts/deploy.sh --json moltis deploy"
 ```
 
 ## Verification

@@ -474,6 +474,20 @@
       ],
       "cron": "0 2 * * *"
     },
+    "moltis-version.sh": {
+      "version": "1.0.0",
+      "description": "Resolve and validate the tracked Moltis image/version from compose files",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "sed"
+      ],
+      "provides": [
+        "moltis-version",
+        "moltis-image-ref"
+      ],
+      "ci": true
+    },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",

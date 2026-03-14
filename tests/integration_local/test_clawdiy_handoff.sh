@@ -231,8 +231,11 @@ run_integration_local_clawdiy_handoff_tests() {
     assert_eq "$(jq -r '.MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .start_ack_deadline_seconds' "$POLICY_FILE")" "Start ack deadline must match"
     assert_eq "$(jq -r '.MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .progress_heartbeat_seconds' "$POLICY_FILE")" "Progress heartbeat must match"
     assert_eq "$(jq -r '.MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS' "$MAIN_ENV_FILE")" "$(jq -r '.capability_authorization[] | select(.recipient == "clawdiy" and .capability == "coding.orchestration") | .terminal_timeout_seconds' "$POLICY_FILE")" "Terminal timeout must match"
-    if ! diff -u <(jq -S . "$MAIN_ENV_FILE") <(jq -S . "$FIXTURE_ENV_FILE") >/dev/null; then
-        test_fail "Fixture moltis.toml must mirror handoff env metadata from config/moltis.toml"
+    if ! diff -u \
+        <(jq -S 'to_entries | map(select(.key | startswith("MOLTIS_FLEET_"))) | from_entries' "$MAIN_ENV_FILE") \
+        <(jq -S 'to_entries | map(select(.key | startswith("MOLTIS_FLEET_"))) | from_entries' "$FIXTURE_ENV_FILE") \
+        >/dev/null; then
+        test_fail "Fixture moltis.toml must mirror MOLTIS_FLEET_* handoff env metadata from config/moltis.toml"
     fi
     if ! jq -e --arg auth "$HANDOFF_AUTHORIZATION_HEADER" --arg agent "$HANDOFF_AGENT_HEADER" --arg corr "$HANDOFF_CORRELATION_HEADER" --arg idem "$HANDOFF_IDEMPOTENCY_HEADER" '
         .service_auth.required_headers as $headers

@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-14
 
 ---
 
@@ -18,7 +18,7 @@
 | Компонент | Технология |
 |-----------|------------|
 | **Container** | Docker Compose |
-| **AI Assistant** | Moltis (ghcr.io/moltis-org/moltis:latest) |
+| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:v0.10.18) |
 | **Telegram Bot** | @moltinger_bot |
 | **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
 | **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
@@ -236,6 +236,131 @@ GitOps Compliance: Enforced ✅
 
 - live browser inspection on `https://clawdiy.ainetic.tech`
 - `git diff --check`
+
+### 2026-03-14: Moltis v0.10.18 Production Pin Follow-Up
+
+**Статус**: ✅ tracked Moltis release pin updated to `v0.10.18` on branch `feat/moltis-pin-v0-10-18-prod`
+
+- Confirmed the live server was already running Moltis `0.10.18`, but the container still referenced the floating `latest` tag while the older `z8m.3` git branch still pinned `0.9.10`.
+- Updated both tracked compose files to `ghcr.io/moltis-org/moltis:v0.10.18` so the repository source of truth now matches the actual current production release.
+- Kept the existing helper/workflow contract intact: `scripts/moltis-version.sh` still validates the git-tracked Moltis image contract, while the release-tag-first rollout path remains backup-safe.
+
+**Validated**
+
+- `bash ./scripts/moltis-version.sh assert-tracked`
+- `bash -n scripts/moltis-version.sh tests/static/test_config_validation.sh tests/run.sh`
+- `./tests/run.sh --lane static --filter config_validation --json`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); YAML.load_file(".github/workflows/uat-gate.yml"); puts "workflow yaml ok"'`
+
+**Next**
+
+- Execute a backup-safe redeploy pinned to `v0.10.18` so the server is no longer tracking the floating `latest` tag.
+- Continue post-update stabilization only after the explicit-tag rollout is confirmed healthy.
+
+### 2026-03-14: PR #62 CI Recovery After Repo Visibility Change
+
+**Статус**: ✅ branch rebased to fresh `main`, stale PR blockers fixed locally, ready for GitHub rerun
+
+- Confirmed the repository is now `PUBLIC`, then re-tested GitHub Actions directly instead of relying on stale failed runs.
+- Verified the old `Billing & plans` blocker is gone: `workflow_dispatch` Test Suite run `23092906860` executed real jobs, and rerun of PR checks moved `codex-policy` and `Claude Code Review` from instant infra-failure to normal execution.
+- Rebased `feat/moltis-pin-v0-10-18-prod` onto `origin/main` because the PR had been tested against a newer merge context than the branch itself.
+- Fixed `tests/integration_local/test_clawdiy_handoff.sh` so the handoff alignment check validates only `MOLTIS_FLEET_*` contract keys instead of unrelated `MOLTIS_CODEX_UPDATE_*` env additions from newer `main`.
+- Updated `scripts/codex-telegram-consent-e2e.sh` and `tests/component/test_codex_telegram_consent_e2e.sh` to the current watcher contract: legacy Telegram consent UX is retired, the watcher stays `one_way_only`, and the suite now records helper failures as structured test failures instead of `Suite produced no JSON report`.
+
+**Validated**
+
+- `./tests/run.sh --lane component --filter component_codex_telegram_consent_e2e --json`
+- `./tests/run.sh --lane integration_local --filter integration_local_clawdiy_handoff --json`
+- `./tests/run.sh --lane pr --json --compose-project codex-pr-after-consent-fix`
+- GitHub logs for runs `23092906860`, `23092784123`, `23092784140`, `23092784126`
+
+**Next**
+
+- Commit and push the rebase + CI fixes on `feat/moltis-pin-v0-10-18-prod`.
+- Rerun GitHub PR checks from the updated head and confirm logs stay green on the fresh commit.
+
+### 2026-03-14: GitHub Actions Runtime Warnings Cleared After Public Repo Switch
+
+**Статус**: ✅ public visibility removed infra billing blocker; active workflow action versions aligned to current Node 24-compatible releases
+
+- Re-checked the repository directly after the visibility change and confirmed `RussianLioN/moltinger` is now `PUBLIC`, which removed the GitHub Actions `Billing & plans` blocker that had previously prevented jobs from starting.
+- Confirmed the fresh PR/push runs for `feat/moltis-pin-v0-10-18-prod` are green on head `4e36438`, then inspected GitHub logs instead of stopping at the green badge.
+- Log review showed the remaining issue was no longer failing tests, but Node 20 deprecation warnings from workflow actions: `actions/upload-artifact@v4` in `Claude Code Review` and `actions/download-artifact@v5` in `Test Suite`.
+- Checked the official latest action releases and aligned active workflows to the current majors:
+  - `actions/checkout@v6`
+  - `actions/setup-node@v6`
+  - `actions/upload-artifact@v7`
+  - `actions/download-artifact@v8`
+- Updated all active workflow files so the current PR path and the broader CI/deploy surface no longer rely on Node 20 action runtimes; only `.disabled` legacy workflow files still reference the old majors.
+- Follow-up log review on the fresh commit showed one remaining non-Node20 warning from `actions/download-artifact@v8` (`Buffer()` deprecation inside the action runtime), so `test.yml` now downloads artifacts via `gh run download` with explicit `actions: read` instead of depending on that action in the gate/notification jobs.
+- The first `gh run download` attempt failed in `gate` because that job does not checkout the repository; the final fix is to pass `-R "${GITHUB_REPOSITORY}"` explicitly so artifact download works without a local `.git` directory.
+
+**Validated**
+
+- `gh repo view --json nameWithOwner,visibility,isPrivate,defaultBranchRef,url`
+- `gh pr view 62 --json number,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,url`
+- `gh run view 23093512669 --log`
+- `gh run view 23093511591 --log`
+- `gh api repos/actions/checkout/releases/latest`
+- `gh api repos/actions/setup-node/releases/latest`
+- `gh api repos/actions/upload-artifact/releases/latest`
+- `gh api repos/actions/download-artifact/releases/latest`
+- `gh issue list --repo actions/download-artifact --search "DEP0005 OR Buffer() OR deprecation" --limit 10`
+- `ruby -e 'Dir[".github/workflows/*.{yml,yaml}"].sort.each { |f| YAML.load_file(f); puts "ok #{f}" }' -r yaml`
+- `git diff --check`
+
+**Next**
+
+- Commit and push the final `test.yml` artifact-download fix on `feat/moltis-pin-v0-10-18-prod`.
+- Re-run GitHub checks from the new head and verify the remaining `Buffer()` deprecation warning is gone from the fresh Test Suite logs.
+
+### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
+
+**Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session
+
+- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:v0.10.18` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
+- Hardened `scripts/deploy.sh` against ad-hoc `MOLTIS_VERSION` drift, added fallback discovery for `pre_deploy_*.tar.gz` backups and restore-check evidence, and kept rollback on the same tracked contract.
+- Removed the unsafe manual version path from `.github/workflows/uat-gate.yml`; UAT now derives the version from git and deploys Moltis only through `./scripts/deploy.sh --json moltis deploy`.
+- Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `data/moltis/.last-deployed-image`, `data/moltis/.last-moltis-backup`, and `data/moltis/.last-moltis-restore-check` so CI-created evidence is reusable during rollback without polluting the git-managed root.
+- Extended static coverage for the pinned version helper, tracked rollback pointers, and the new UAT/deploy workflow invariants; updated rollout docs and fixed rebased absolute links.
+
+**Validated**
+
+- `bash -n scripts/deploy.sh scripts/moltis-version.sh scripts/backup-moltis-enhanced.sh tests/static/test_config_validation.sh`
+- `bash ./scripts/moltis-version.sh assert-tracked`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); YAML.load_file(".github/workflows/uat-gate.yml"); puts "workflow yaml ok"'`
+- `./tests/run.sh --lane static --filter config_validation --json`
+- `./tests/run.sh --lane component --filter backup_restore_readiness --json`
+- `scripts/git-topology-registry.sh check`
+
+**Next**
+
+- Execute the tracked Moltis rollout through the backup-safe CI path when a production window is intended.
+- Continue with `moltinger-z8m.4` only after that rollout, using the new restore-check and rollback evidence for post-update triage.
+- Keep `moltinger-z8m.2` blocked until the updated Moltis baseline is confirmed stable.
+
+### 2026-03-12: Moltis Backup-Safe Update Baseline (z8m.1)
+
+**Статус**: ✅ Phase B baseline complete on branch `feat/moltinger-z8m-1-moltis-backup-rollback-baseline`
+
+- Audited the existing Moltis backup/restore path and closed the main rollout gap: backup archives now include runtime rollback files (`.env`, `docker-compose.yml`, `docker-compose.prod.yml`) instead of only `config/` and `data/`.
+- Added non-destructive `restore-check` support to `scripts/backup-moltis-enhanced.sh` and wired it into `scripts/deploy.sh` so Moltis deploys stop unless a fresh pre-update backup is also restore-ready.
+- Added Moltis restore-check evidence and rollback evidence paths under `data/moltis/audit/` and documented the operator flow in `docs/runbooks/moltis-backup-safe-update.md`.
+- Hardened `.github/workflows/deploy.yml` so the Git-based Moltis rollout path now backs up both compose files and blocks deploy when the fresh backup is not restore-ready.
+- Added regression coverage via `tests/component/test_backup_restore_readiness.sh` and static assertions for the new workflow/script contract.
+
+**Validated**
+
+- `bash -n scripts/backup-moltis-enhanced.sh scripts/deploy.sh tests/component/test_backup_restore_readiness.sh tests/static/test_config_validation.sh tests/run.sh`
+- `./tests/run.sh --lane component --filter backup_restore_readiness --json`
+- `./tests/run.sh --lane static --filter config_validation --json`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); puts "deploy.yml ok"'`
+
+**Next**
+
+- `moltinger-z8m.3`: bump Moltis via git and roll out only through the backup-safe path that now requires fresh backup + restore-check.
+- `moltinger-z8m.4`: fix any post-update regressions while preserving the new rollback evidence contract.
+- `moltinger-z8m.2`: add skills/subagents/abilities only after the updated Moltis baseline is confirmed stable.
 
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 
