@@ -71,7 +71,7 @@ run_static_config_validation_tests() {
     fi
 
     test_start "static_compose_clawdiy_valid"
-    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
+    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.13" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass
     else
         test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"

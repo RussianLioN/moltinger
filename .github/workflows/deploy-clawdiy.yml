@@ -17,7 +17,7 @@ on:
       clawdiy_image:
         description: OpenClaw image reference for Clawdiy
         required: true
-        default: ghcr.io/openclaw/openclaw:latest
+        default: ghcr.io/openclaw/openclaw:2026.3.13
         type: string
       rollback:
         description: Roll back Clawdiy instead of deploying a new image

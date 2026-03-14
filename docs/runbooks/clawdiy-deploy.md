@@ -25,7 +25,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 1. Validate config and secret presence:
    ```bash
    ./scripts/preflight-check.sh --target clawdiy
-   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:latest docker compose -f docker-compose.clawdiy.yml config --quiet
+   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:2026.3.13 docker compose -f docker-compose.clawdiy.yml config --quiet
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
 2. Render the deployable OpenClaw runtime config from the tracked template plus the dedicated Clawdiy env file:

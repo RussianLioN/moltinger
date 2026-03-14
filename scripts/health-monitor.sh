@@ -159,7 +159,7 @@ compose_target_up() {
             if [[ -f "$CLAWDIY_ENV_FILE" ]]; then
                 args=(--env-file "$CLAWDIY_ENV_FILE" "${args[@]}")
             fi
-            CLAWDIY_IMAGE="${CLAWDIY_IMAGE:-ghcr.io/openclaw/openclaw:latest}" docker compose "${args[@]}" up -d --force-recreate "$service"
+            CLAWDIY_IMAGE="${CLAWDIY_IMAGE:-ghcr.io/openclaw/openclaw:2026.3.13}" docker compose "${args[@]}" up -d --force-recreate "$service"
             ;;
         *)
             return 1
