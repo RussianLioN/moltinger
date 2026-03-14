@@ -71,10 +71,25 @@ run_static_config_validation_tests() {
     fi
 
     test_start "static_compose_clawdiy_valid"
-    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
+    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass
     else
         test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"
+    fi
+
+    test_start "static_clawdiy_config_pins_codex_default_model"
+    if python3 - "$PROJECT_ROOT/config/clawdiy/openclaw.json" <<'PY'
+import json, sys
+from pathlib import Path
+cfg = json.loads(Path(sys.argv[1]).read_text())
+primary = cfg.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+models = cfg.get("agents", {}).get("defaults", {}).get("models", {})
+raise SystemExit(0 if primary == "openai-codex/gpt-5.4" and "openai-codex/gpt-5.4" in models else 1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Tracked Clawdiy config must keep openai-codex/gpt-5.4 as the GitOps default model"
     fi
 
     test_start "static_config_uses_env_substitution"
