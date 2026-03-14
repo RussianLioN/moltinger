@@ -28,7 +28,9 @@ scripts/git-topology-registry.sh check
 scripts/git-topology-registry.sh refresh --write-doc
 ```
 
-Use the topology registry before cleanup worktree/branch actions and after manual git topology changes.
+Use `status`/`check` before cleanup worktree/branch actions and for ordinary topology inspection.
+Use `refresh --write-doc` only as an explicit publish step from a dedicated non-main topology-publish worktree/branch.
+Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
 ## Core Commands
 

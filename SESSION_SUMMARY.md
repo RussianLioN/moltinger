@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-14
 
 ---
 
@@ -194,6 +194,33 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-14: Topology Registry Single-Writer Publish Policy For Worktree Flows
+
+**Статус**: ✅ `command-worktree`, `command-session-summary` и связанные инструкции переведены на read-only-by-default handling для `docs/GIT-TOPOLOGY-REGISTRY.md`
+
+- Проведён отдельный consilium по конфликтам вокруг `docs/GIT-TOPOLOGY-REGISTRY.md` в параллельных worktree-сессиях.
+- Выбран и задокументирован single-writer publish path:
+  - обычные `start` / `attach` / `finish` / `cleanup` потоки используют только `status` / `check`
+  - tracked snapshot публикуется только явным шагом `refresh --write-doc`
+  - publish должен идти из dedicated non-main topology-publish worktree/branch, а не из `main` и не из обычной feature-ветки
+- Обновлены `.ai/instructions/shared-core.md`, `.claude/commands/worktree.md`, `.claude/commands/session-summary.md`, `.claude/commands/git-topology.md`, `docs/CODEX-OPERATING-MODEL.md`, `docs/QUICK-REFERENCE.md` и `docs/WORKTREE-HOTFIX-PLAYBOOK.md`.
+- Добавлено новое правило: `docs/rules/topology-registry-single-writer-publish-path.md`.
+- Пересобраны generated инструкции и bridge в Codex через `./scripts/sync-agent-instructions.sh --write` и `./scripts/sync-claude-skills-to-codex.sh --install`.
+- Создан follow-up issue `molt-ml3` для отдельного script-level enforcement в automation.
+- Во время landing подтверждён побочный риск manual worktree path: even with localized Beads ownership, `bd sync` из вручную созданной hotfix-ворктрии всё ещё экспортировал state в canonical root `.beads/issues.jsonl`. Это зафиксировано как дополнительный аргумент, почему enforcement нужен не только в docs, но и в automation.
+
+**Validated**
+
+- `./scripts/sync-agent-instructions.sh --write`
+- `./scripts/sync-claude-skills-to-codex.sh --install`
+- `./scripts/sync-claude-skills-to-codex.sh --check`
+- `./tests/unit/test_worktree_ready.sh`
+- `make instructions-check`
+- `make codex-check`
+- `git diff --check`
+- `scripts/git-topology-registry.sh check` -> `status=stale` (ожидаемо; snapshot не публиковался из ordinary fix branch)
+- `scripts/git-topology-registry.sh status`
 
 ### 2026-03-12: Clawdiy Remote OAuth Runtime Research Formalized
 
@@ -1119,12 +1146,13 @@ gh run view --workflow test.yml   # View latest test run details
 
 ## 🎯 Next Steps
 
-1. **P4 Backlog** — 4 задачи готовы к работе (см. `bd ready`)
-2. **moltinger-sjx** — HIGH: S3 Offsite Backup
-3. **moltinger-r8r** — MEDIUM: Traefik Rate Limiting
-4. **moltinger-j22** — MEDIUM: AlertManager Receivers
-5. **moltinger-eb0** — MEDIUM: Grafana Dashboard
-6. Протестировать skill telegram-learner на канале @tsingular
+1. **molt-ml3** — P2: enforced automation path для topology single-writer publish
+2. **P4 Backlog** — 4 задачи готовы к работе (см. `bd ready`)
+3. **moltinger-sjx** — HIGH: S3 Offsite Backup
+4. **moltinger-r8r** — MEDIUM: Traefik Rate Limiting
+5. **moltinger-j22** — MEDIUM: AlertManager Receivers
+6. **moltinger-eb0** — MEDIUM: Grafana Dashboard
+7. Протестировать skill telegram-learner на канале @tsingular
 
 ### P4 Priority Tasks (Recommended Order)
 
