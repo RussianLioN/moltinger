@@ -67,7 +67,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -329,7 +329,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Determine version
         id: version
@@ -463,7 +463,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install test dependencies
         run: |
@@ -778,7 +778,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
