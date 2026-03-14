@@ -91,6 +91,8 @@ bash scripts/moltis-codex-update-run.sh --mode scheduler --stdout json
 3. отправляет одно сообщение только для нового fingerprint;
 4. на повторном запуске пишет `suppressed` вместо дубля.
 
+Новый scheduler alert дополнительно отправляет `ReplyKeyboardRemove`, чтобы снять устаревшую Telegram-клавиатуру от старого `/codex_*` flow, если она ещё залипла в клиенте.
+
 Пример hermetic scheduler-run:
 
 ```bash

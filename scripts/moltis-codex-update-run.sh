@@ -157,6 +157,7 @@ resolve_telegram_chat_id() {
 run_telegram_sender() {
     local chat_id="$1"
     local text="$2"
+    local reply_markup_json="${3:-}"
     local -a cmd=(
         "$TELEGRAM_SEND_SCRIPT"
         --chat-id "$chat_id"
@@ -166,6 +167,10 @@ run_telegram_sender() {
 
     if [[ "$TELEGRAM_SILENT" == "true" ]]; then
         cmd+=(--disable-notification)
+    fi
+
+    if [[ -n "$reply_markup_json" ]]; then
+        cmd+=(--reply-markup-json "$reply_markup_json")
     fi
 
     if [[ -n "$TELEGRAM_ENV_FILE" ]]; then
@@ -993,7 +998,7 @@ PY
         else
             alert_text="$(render_telegram_alert)"
             set +e
-            send_output="$(run_telegram_sender "$resolved_chat_id" "$alert_text" 2>&1)"
+            send_output="$(run_telegram_sender "$resolved_chat_id" "$alert_text" '{"remove_keyboard":true}' 2>&1)"
             send_status=$?
             set -e
 

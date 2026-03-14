@@ -78,6 +78,8 @@ run_component_moltis_codex_update_run_tests() {
 set -euo pipefail
 log_path="${FAKE_TELEGRAM_LOG:?}"
 text_path="${FAKE_TELEGRAM_TEXT:?}"
+args_path="${FAKE_TELEGRAM_ARGS:?}"
+raw_args="$*"
 chat_id=""
 text=""
 while [[ $# -gt 0 ]]; do
@@ -100,12 +102,14 @@ while [[ $# -gt 0 ]]; do
 done
 printf 'call\n' >> "$log_path"
 printf '%s\n' "$text" > "$text_path"
+printf '%s\n' "$raw_args" > "$args_path"
 printf '{"ok":true,"result":{"message_id":701,"chat":{"id":"%s"}}}\n' "$chat_id"
 EOF
     chmod +x "$sender_script"
 
     FAKE_TELEGRAM_LOG="$work_dir/telegram.log" \
     FAKE_TELEGRAM_TEXT="$work_dir/telegram.txt" \
+    FAKE_TELEGRAM_ARGS="$work_dir/telegram-args.txt" \
     bash "$RUN_SCRIPT" \
         --mode scheduler \
         --state-file "$state_file" \
@@ -125,10 +129,12 @@ EOF
     assert_file_exists "$(jq -r '.audit.record_path' "$report")" "Scheduler run should persist an audit JSON mirror"
     assert_eq "1" "$(wc -l < "$work_dir/telegram.log" | tr -d ' ')" "Sender should be invoked exactly once for a fresh fingerprint"
     assert_contains "$(cat "$work_dir/telegram.txt")" "Обновление Codex CLI" "Telegram text should use the Russian alert headline"
+    assert_contains "$(cat "$work_dir/telegram-args.txt")" "--reply-markup-json {\"remove_keyboard\":true}" "Scheduler delivery should clear the stale legacy Telegram keyboard"
     assert_eq "$(jq -r '.snapshot.fingerprint' "$report")" "$(jq -r '.last_alert_fingerprint' "$state_file")" "State should checkpoint the delivered fingerprint"
 
     FAKE_TELEGRAM_LOG="$work_dir/telegram.log" \
     FAKE_TELEGRAM_TEXT="$work_dir/telegram.txt" \
+    FAKE_TELEGRAM_ARGS="$work_dir/telegram-args.txt" \
     bash "$RUN_SCRIPT" \
         --mode scheduler \
         --state-file "$state_file" \

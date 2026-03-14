@@ -159,13 +159,16 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_contains "$call_text" "0.114.0" "Digest should mention the second queued version"
     test_pass
 
-    test_start "component_codex_cli_upstream_watcher_scheduler_emits_authoritative_consent_request"
+    test_start "component_codex_cli_upstream_watcher_keeps_scheduler_alert_one_way_even_if_legacy_consent_flags_are_set"
     setup_fake_telegram_sender
     export FAKE_TELEGRAM_STATE_DIR
     work_dir="$(secure_temp_dir codex-upstream-watcher-telegram)"
     state_file="$work_dir/state.json"
     consent_store_dir="$work_dir/consent-store"
     CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES=true \
     run_watcher scheduler "$work_dir" "$state_file" \
         --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
         --include-issue-signals \
@@ -180,22 +183,20 @@ run_component_codex_cli_upstream_watcher_tests() {
     request_id="$(jq -r '.followup.consent.pending_state.request_id' "$report")"
     store_record="$consent_store_dir/${request_id}.json"
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Fresh scheduler run should deliver the upstream alert"
-    assert_eq "pending" "$(jq -r '.followup.consent.status' "$report")" "Scheduler alert should open a pending consent flow"
-    assert_eq "authoritative" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should advertise authoritative consent routing"
-    assert_eq "true" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Router flag should be exposed in the report"
-    assert_eq "true" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Watcher should expose that the authoritative router is ready"
-    assert_eq "command_keyboard" "$(jq -r '.followup.consent.pending_state.delivery_mode' "$report")" "Watcher should prefer command-keyboard delivery for current Moltis ingress"
-    assert_file_exists "$store_record" "Watcher should persist a shared consent record for the authoritative router"
-    assert_contains "$call_text" "Хотите получить практические рекомендации" "Alert message should ask whether recommendations are needed"
-    assert_contains "$call_text" "/codex_da" "Alert message should expose the short accept command"
-    assert_contains "$call_text" "/codex_net" "Alert message should expose the short decline command"
-    assert_contains "$call_text" "/codex-followup accept" "Alert message should still keep a technical fallback command for recovery"
-    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "--reply-markup-json" "Watcher should pass reply_markup for explicit actions"
-    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "\"keyboard\"" "Watcher should send command-keyboard reply_markup rather than callback-only markup"
-    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex_da" "Reply keyboard should send the short accept command"
-    assert_contains "$(cat "$FAKE_TELEGRAM_STATE_DIR/last-args.txt")" "/codex_net" "Reply keyboard should send the short decline command"
-    assert_eq "1" "$(jq -r '.request.question_message_id' "$store_record")" "Shared consent record should be bound to the Telegram alert message id"
-    test_pass
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Retired watcher flow should keep consent disabled"
+    assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Retired watcher flow should stay in one-way mode"
+    assert_contains "$(jq -r '.notes[]' "$report")" "Legacy Telegram consent UX retired" "Watcher should explain that the old consent flow is retired"
+    if [[ -n "$request_id" && -f "$store_record" ]]; then
+        test_fail "Retired watcher flow must not persist a consent store record"
+    elif grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+        test_fail "Retired watcher flow must not ask for practical recommendations"
+    elif grep -q "/codex_da" <<<"$call_text"; then
+        test_fail "Retired watcher flow must not expose /codex_da"
+    elif grep -q -- "--reply-markup-json" "$FAKE_TELEGRAM_STATE_DIR/last-args.txt"; then
+        test_fail "Retired watcher flow must not send reply keyboard markup"
+    else
+        test_pass
+    fi
 
     test_start "component_codex_cli_upstream_watcher_without_confirmed_command_hook_degrades_to_one_way_alert"
     setup_fake_telegram_sender
@@ -217,7 +218,6 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should disable consent until the runtime confirms command-hook support"
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that command-hook support is not confirmed"
     assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should degrade to one-way alert when command-hook support is unconfirmed"
-    assert_contains "$(jq -r '.notes[]' "$report")" "Telegram-команды доходят" "Watcher should explain why the live consent path was disabled"
     if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
         test_fail "One-way alert should not promise a consent flow when command-hook support is unconfirmed"
     else
@@ -246,7 +246,6 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Remote sender should still deliver the upstream alert"
     assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Remote sender should disable consent when store and router are on a different runtime"
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Remote sender should mark authoritative router unavailable for this local run"
-    assert_contains "$(jq -r '.notes[]' "$report")" "remote sender" "Watcher should explain why consent was disabled"
     if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
         test_fail "Remote-sender alert should not promise an unreachable follow-up path"
     else
