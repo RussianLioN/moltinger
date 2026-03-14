@@ -36,7 +36,7 @@ INTAKE_SCRIPT = SCRIPT_ROOT / "agent-factory-intake.py"
 ARTIFACT_SCRIPT = SCRIPT_ROOT / "agent-factory-artifacts.py"
 DEFAULT_STATE_ROOT = PROJECT_ROOT / "data/agent-factory/web-demo"
 DEFAULT_ASSET_ROOT = PROJECT_ROOT / "web/agent-factory-demo"
-STATE_DIRS = ("sessions", "access", "history", "downloads")
+STATE_DIRS = ("sessions", "pointers", "resume", "access", "history", "downloads")
 DISCOVERY_STATE_KEYS = (
     "project_key",
     "raw_idea",
@@ -204,6 +204,8 @@ def build_operator_status_publication(state_root: Path) -> dict[str, Any]:
         "needs_attention_session_count": session_summary["needs_attention_session_count"],
         "last_session_updated_at": session_summary["last_session_updated_at"],
         "access_grant_count": count_json_files(state_root / "access"),
+        "pointer_count": count_json_files(state_root / "pointers"),
+        "resume_context_count": count_json_files(state_root / "resume"),
         "history_entry_count": count_json_files(state_root / "history"),
         "download_session_count": count_child_dirs(state_root / "downloads"),
         "access_gate_mode": settings["access_gate_mode"],
@@ -342,6 +344,44 @@ def load_saved_session(state_root: Path, session_id: str) -> dict[str, Any]:
     if not isinstance(saved, dict):
         return {}
     return saved
+
+
+def load_saved_pointer(state_root: Path, session_id: str) -> dict[str, Any]:
+    if not session_id:
+        return {}
+    pointer_path = state_root / "pointers" / f"{session_id}.json"
+    if not pointer_path.is_file():
+        return {}
+    pointer = load_json(pointer_path)
+    if not isinstance(pointer, dict):
+        return {}
+    return pointer
+
+
+def load_saved_resume_context(state_root: Path, session_id: str) -> dict[str, Any]:
+    if not session_id:
+        return {}
+    resume_path = state_root / "resume" / f"{session_id}.json"
+    if not resume_path.is_file():
+        return {}
+    resume_context = load_json(resume_path)
+    if not isinstance(resume_context, dict):
+        return {}
+    return resume_context
+
+
+def hydrate_saved_session_response(state_root: Path, saved_session: dict[str, Any]) -> dict[str, Any]:
+    response = deepcopy(saved_session) if isinstance(saved_session, dict) else {}
+    session_id = normalize_text(response.get("web_demo_session", {}).get("web_demo_session_id"))
+    if not session_id:
+        return response
+    saved_pointer = load_saved_pointer(state_root, session_id)
+    if saved_pointer:
+        response["browser_project_pointer"] = saved_pointer
+    saved_resume = load_saved_resume_context(state_root, session_id)
+    if saved_resume:
+        response["resume_context"] = saved_resume
+    return response
 
 
 def normalize_requester_identity(payload: dict[str, Any], discovery_state: dict[str, Any]) -> dict[str, Any]:
@@ -497,6 +537,28 @@ def normalize_project_pointer(
         "pointer_status": normalize_text(pointer.get("pointer_status")) or normalize_text(saved.get("pointer_status")) or "active",
         "updated_at": now,
     }
+
+
+def normalize_history_entries(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def latest_confirmed_brief_version(runtime_state: dict[str, Any]) -> str:
+    confirmation_snapshot = (
+        runtime_state.get("confirmation_snapshot", {})
+        if isinstance(runtime_state.get("confirmation_snapshot"), dict)
+        else {}
+    )
+    version = normalize_text(confirmation_snapshot.get("brief_version"))
+    if version:
+        return version
+    for entry in reversed(normalize_history_entries(runtime_state.get("confirmation_history"))):
+        version = normalize_text(entry.get("brief_version"))
+        if version:
+            return version
+    return ""
 
 
 def normalize_access_grant(payload: dict[str, Any], web_demo_session: dict[str, Any], now: str) -> dict[str, Any]:
@@ -847,12 +909,109 @@ def preferred_ui_action(reply_cards: list[dict[str, Any]], *, fallback: str = ""
     return normalize_text(fallback) or (discovered_actions[0] if discovered_actions else "")
 
 
+def build_web_resume_context(
+    saved_session: dict[str, Any],
+    web_demo_session: dict[str, Any],
+    pointer: dict[str, Any],
+    runtime_state: dict[str, Any],
+    status_snapshot: dict[str, Any],
+    *,
+    next_question: str,
+    download_artifacts: list[dict[str, Any]] | None = None,
+    resumed_from_saved_session: bool = False,
+    now: str,
+) -> dict[str, Any]:
+    runtime_resume = runtime_state.get("resume_context", {}) if isinstance(runtime_state.get("resume_context"), dict) else {}
+    requirement_brief = runtime_state.get("requirement_brief", {}) if isinstance(runtime_state.get("requirement_brief"), dict) else {}
+    discovery_session = runtime_state.get("discovery_session", {}) if isinstance(runtime_state.get("discovery_session"), dict) else {}
+    confirmation_history = normalize_history_entries(runtime_state.get("confirmation_history"))
+    handoff_history = normalize_history_entries(runtime_state.get("handoff_history"))
+    latest_brief_version = (
+        normalize_text(runtime_resume.get("latest_brief_version"))
+        or normalize_text(requirement_brief.get("version"))
+        or normalize_text(pointer.get("linked_brief_version"))
+    )
+    confirmed_version = normalize_text(runtime_resume.get("latest_confirmed_brief_version")) or latest_confirmed_brief_version(
+        runtime_state
+    )
+    current_topic = (
+        normalize_text(runtime_resume.get("current_topic"))
+        or normalize_text(discovery_session.get("current_topic"))
+        or normalize_text(status_snapshot.get("current_topic"))
+    )
+    pending_question = normalize_text(runtime_resume.get("pending_question")) or next_question
+    user_visible_status = normalize_text(status_snapshot.get("user_visible_status"))
+    summary_text = normalize_text(runtime_resume.get("summary_text"))
+    artifacts = sanitize_download_artifacts(
+        download_artifacts or [],
+        web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
+    )
+    if not summary_text:
+        if user_visible_status == "downloads_ready" and artifacts:
+            summary_text = "Возобновляю browser-сессию: concept pack уже готов к скачиванию."
+        elif normalize_text(requirement_brief.get("status")) == "reopened" and latest_brief_version:
+            summary_text = (
+                f"Возобновляю browser-сессию: brief версии {latest_brief_version} переоткрыт и ждёт повторной проверки."
+            )
+        elif user_visible_status == "awaiting_confirmation" and latest_brief_version:
+            summary_text = f"Возобновляю browser-сессию: brief версии {latest_brief_version} ждёт подтверждения."
+        elif user_visible_status == "confirmed" and confirmed_version:
+            summary_text = f"Возобновляю browser-сессию: подтверждён brief версии {confirmed_version}."
+        elif pending_question:
+            summary_text = "Возобновляю browser-сессию: можно продолжать discovery с последнего вопроса."
+        else:
+            summary_text = "Возобновляю browser-сессию с последнего сохранённого состояния."
+
+    fingerprint_source = ":".join(
+        [
+            normalize_text(web_demo_session.get("web_demo_session_id")),
+            normalize_text(pointer.get("project_key")),
+            user_visible_status,
+            latest_brief_version,
+            confirmed_version,
+            normalize_text(web_demo_session.get("last_agent_turn_at")),
+            str(len(artifacts)),
+        ]
+    )
+    return {
+        "resume_available": bool(normalize_text(web_demo_session.get("web_demo_session_id"))),
+        "resumed_from_saved_session": resumed_from_saved_session,
+        "resumed_from_status": normalize_text(runtime_resume.get("resumed_from_status"))
+        or normalize_text(saved_session.get("web_demo_session", {}).get("status")),
+        "restored_status": normalize_text(runtime_resume.get("restored_status")) or normalize_text(runtime_state.get("status")),
+        "summary_text": summary_text,
+        "current_status": user_visible_status,
+        "current_status_label": normalize_text(status_snapshot.get("user_visible_status_label")),
+        "current_topic": current_topic,
+        "pending_question": pending_question,
+        "latest_brief_version": latest_brief_version,
+        "latest_confirmed_brief_version": confirmed_version,
+        "active_project_key": normalize_text(pointer.get("project_key")),
+        "linked_discovery_session_id": normalize_text(pointer.get("linked_discovery_session_id")),
+        "linked_brief_id": normalize_text(pointer.get("linked_brief_id")),
+        "linked_brief_version": normalize_text(pointer.get("linked_brief_version")),
+        "confirmation_history_count": len(confirmation_history),
+        "handoff_history_count": len(handoff_history),
+        "download_artifact_count": len(artifacts),
+        "last_user_turn_at": normalize_text(web_demo_session.get("last_user_turn_at")),
+        "last_agent_turn_at": normalize_text(web_demo_session.get("last_agent_turn_at")),
+        "resume_fingerprint": sha256_hex(fingerprint_source)[:16],
+        "updated_at": now,
+    }
+
+
 def persist_adapter_state(state_root: Path, response: dict[str, Any], access_gate: dict[str, Any]) -> None:
     ensure_state_layout(state_root)
     session_id = normalize_text(response.get("web_demo_session", {}).get("web_demo_session_id"))
     request_id = normalize_text(response.get("web_conversation_envelope", {}).get("request_id"))
     if session_id:
         write_json(response, state_root / "sessions" / f"{session_id}.json")
+        pointer = response.get("browser_project_pointer", {})
+        if isinstance(pointer, dict) and pointer:
+            write_json(pointer, state_root / "pointers" / f"{session_id}.json")
+        resume_context = response.get("resume_context", {})
+        if isinstance(resume_context, dict) and resume_context:
+            write_json(resume_context, state_root / "resume" / f"{session_id}.json")
         history_id = request_id or utc_now().replace(":", "-")
         write_json(response, state_root / "history" / f"{session_id}-{history_id}.json")
     grant_id = normalize_text(access_gate.get("demo_access_grant_id"))
@@ -867,6 +1026,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     hinted_session = payload.get("web_demo_session", {})
     hinted_session_id = normalize_text(hinted_session.get("web_demo_session_id")) if isinstance(hinted_session, dict) else ""
     saved_session = load_saved_session(state_root, hinted_session_id)
+    resumed_from_saved_session = bool(saved_session)
     discovery_state = payload.get("discovery_runtime_state", {})
     if not isinstance(discovery_state, dict):
         discovery_state = {}
@@ -887,6 +1047,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     runtime_state: dict[str, Any] = {}
     delivery_error = ""
     if access_granted:
+        ui_action = normalize_text(envelope.get("ui_action"))
+        reuse_saved_downloads = ui_action in {"request_status", "download_artifact"}
         discovery_request, skip_runtime = build_discovery_request(
             payload,
             discovery_state,
@@ -898,16 +1060,17 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         )
         runtime_state = discovery_state if skip_runtime and discovery_state else run_discovery_runtime(discovery_request)
         runtime_state = sanitize_discovery_runtime_state(runtime_state)
-        download_artifacts = sanitize_download_artifacts(
-            payload.get("download_artifacts"),
-            web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
-        )
-        if not download_artifacts:
+        if reuse_saved_downloads:
             download_artifacts = sanitize_download_artifacts(
-                saved_session.get("download_artifacts"),
+                payload.get("download_artifacts"),
                 web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
             )
-        if not download_artifacts and normalize_text(envelope.get("ui_action")) in {"request_status", "download_artifact"}:
+            if not download_artifacts:
+                download_artifacts = sanitize_download_artifacts(
+                    saved_session.get("download_artifacts"),
+                    web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
+                )
+        if not download_artifacts and ui_action in {"request_status", "download_artifact"}:
             try:
                 runtime_state, download_artifacts, delivery_error = generate_browser_downloads(
                     state_root,
@@ -966,6 +1129,17 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         web_demo_session["last_user_turn_at"] = now
     if next_question:
         web_demo_session["last_agent_turn_at"] = now
+    resume_context = build_web_resume_context(
+        saved_session,
+        web_demo_session,
+        pointer,
+        runtime_state,
+        status_snapshot,
+        next_question=next_question,
+        download_artifacts=download_artifacts,
+        resumed_from_saved_session=resumed_from_saved_session,
+        now=now,
+    )
 
     envelope["linked_discovery_session_id"] = normalize_text(pointer.get("linked_discovery_session_id"))
     envelope["linked_brief_id"] = normalize_text(pointer.get("linked_brief_id"))
@@ -1036,6 +1210,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         "status_snapshot": status_snapshot,
         "reply_cards": reply_cards,
         "audit_record": audit_record,
+        "resume_context": resume_context,
         "ui_projection": {
             "preferred_ui_action": preferred_ui_action(reply_cards, fallback="request_status" if access_granted else "submit_access_token"),
             "current_question": next_question,
@@ -1136,6 +1311,12 @@ def render_metrics(handler: BaseHTTPRequestHandler, state_root: Path) -> None:
             "# HELP agent_factory_web_demo_access_grants Number of persisted demo access grants.",
             "# TYPE agent_factory_web_demo_access_grants gauge",
             f"agent_factory_web_demo_access_grants {operator_status['access_grant_count']}",
+            "# HELP agent_factory_web_demo_saved_pointers Number of persisted active browser project pointers.",
+            "# TYPE agent_factory_web_demo_saved_pointers gauge",
+            f"agent_factory_web_demo_saved_pointers {operator_status['pointer_count']}",
+            "# HELP agent_factory_web_demo_resume_contexts Number of persisted browser resume context snapshots.",
+            "# TYPE agent_factory_web_demo_resume_contexts gauge",
+            f"agent_factory_web_demo_resume_contexts {operator_status['resume_context_count']}",
             "# HELP agent_factory_web_demo_download_sessions Number of download-ready browser sessions.",
             "# TYPE agent_factory_web_demo_download_sessions gauge",
             f"agent_factory_web_demo_download_sessions {operator_status['download_session_count']}",
@@ -1184,7 +1365,7 @@ def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
                 if not session:
                     render_json(self, {"status": "error", "error": "session_not_found"}, status_code=404)
                     return
-                render_json(self, session)
+                render_json(self, hydrate_saved_session_response(state_root, session))
                 return
             if parsed.path == "/api/download":
                 session_id = normalize_text(parse_qs(parsed.query).get("session_id", [""])[0])

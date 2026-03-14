@@ -174,13 +174,16 @@ Use:
 Target browser validation after implementation:
 
 ```bash
+./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_resume --json
 ./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json
 ```
 
 Expected result:
 
+- server-side `resume_context` and active `BrowserProjectPointer` are persisted under `data/agent-factory/web-demo/`
 - refresh or revisit restores the active project
 - the browser UI reconnects to the right pending question, brief state, or download status
+- reopened briefs preserve confirmation/handoff history while issuing a new reviewable version
 - the controlled demo surface remains accessible through a standard browser flow
 
 Validation questions:

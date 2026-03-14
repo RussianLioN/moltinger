@@ -79,6 +79,10 @@ GitOps Compliance: Enforced ✅
 - Extended `scripts/agent-factory-web-adapter.py` with a configurable subdomain access gate and operator-safe publication endpoints: the adapter now understands `ASC_DEMO_ACCESS_MODE=shared_token_hash`, validates configured token hashes without exposing token material, publishes `/api/health` and `/metrics`, and reports whether the demo surface is `ready` or `degraded` before users enter the working session.
 - Added US4 validation coverage in `tests/component/test_agent_factory_web_access.sh` and the new `tests/live_external/test_web_factory_demo_smoke.sh`, covering mismatched configured access grants, operator health projection, metrics publication, and remote smoke expectations for `asc.ainetic.tech` without requiring Telegram as the entry channel.
 - Updated `docker-compose.asc.yml`, `docs/runbooks/agent-factory-web-demo.md`, and `web/agent-factory-demo/index.html` so the published browser surface now documents the real access-gate env anchors, deploy commands, smoke flow, and the fact that the browser shell already supports review/confirm/download behavior instead of advertising them as future work.
+- Completed `Phase 7 / User Story 5` for `024-web-factory-demo-adapter` (`molt-vd0.8.*`): `scripts/agent-factory-web-adapter.py` now persists separate `pointers/` and `resume/` snapshots under `data/agent-factory/web-demo/`, returns browser-safe `resume_context`, and enriches `GET /api/session` so refresh/resume uses server-side state rather than relying only on localStorage.
+- Extended `scripts/agent_factory_common.py` and `web/agent-factory-demo/app.js` so the browser shell now auto-restores the active session after reload, keeps the correct action mode after resume, surfaces reopened-brief labels and resume summaries, and avoids stale `download_ready` carry-over when a confirmed brief is reopened into a new reviewable version.
+- Added US5 validation coverage in `tests/integration_local/test_agent_factory_web_resume.sh` and expanded `tests/e2e_browser/agent_factory_web_demo.mjs`, validating restored discovery sessions, preserved confirmation/handoff history after reopen, and real browser refresh continuity where the user reloads the page and keeps working in the same project.
+- Updated `docs/runbooks/agent-factory-web-demo.md` and `specs/024-web-factory-demo-adapter/tasks.md` so the operator docs and Speckit checklist now reflect the completed resume/reopen behavior rather than treating it as future polish.
 - Verified the setup slice with:
   - `./tests/run.sh --lane static --filter static_config_validation --json`
   - `bash -n tests/run.sh`
@@ -125,6 +129,13 @@ GitOps Compliance: Enforced ✅
   - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
   - `./tests/run.sh --lane web_demo_live --json` (expected `skipped` without `--live`)
   - `bash scripts/scripts-verify.sh`
+- Verified the browser resume/reopen slice with:
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py scripts/agent_factory_common.py`
+  - `node --check web/agent-factory-demo/app.js`
+  - `bash -n tests/integration_local/test_agent_factory_web_resume.sh`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery)' --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_resume --json`
+  - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:
   - `spec.md`

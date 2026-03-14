@@ -707,6 +707,17 @@ def web_user_visible_status_label(status: Any) -> str:
     return "Сбор требований продолжается"
 
 
+def web_brief_status_label(status: Any) -> str:
+    normalized = normalize_text(status)
+    if normalized == "reopened":
+        return "Brief переоткрыт"
+    if normalized == "confirmed":
+        return "Brief подтвержден"
+    if normalized == "awaiting_confirmation":
+        return "Brief ждёт подтверждения"
+    return "Brief в работе"
+
+
 def web_next_action_label(action: Any) -> str:
     normalized = normalize_text(action)
     if normalized == "request_demo_access":
@@ -806,6 +817,8 @@ def build_web_demo_status_snapshot(
         "project_key": normalize_text(project_key),
         "user_visible_status": user_visible_status,
         "user_visible_status_label": web_user_visible_status_label(user_visible_status),
+        "brief_status": normalize_text((brief or {}).get("status")),
+        "brief_status_label": web_brief_status_label((brief or {}).get("status")),
         "next_recommended_action": normalize_text(next_action),
         "next_recommended_action_label": next_action_label,
         "brief_version": normalize_text((brief or {}).get("version")),
@@ -863,6 +876,7 @@ def build_brief_preview_cards(
     brief_status = normalize_text(brief.get("status")) or normalize_text(adapter_status)
     is_confirmable = brief_status in {"awaiting_confirmation", "reopened"}
     version = normalize_text(brief.get("version")) or "без версии"
+    is_reopened = brief_status == "reopened"
     section_actions = ["request_brief_correction", "confirm_brief"] if is_confirmable else ["reopen_brief", "request_status"]
     constraints = normalize_list(brief.get("constraints"))
     success_metrics = normalize_list(brief.get("success_metrics"))
@@ -892,8 +906,15 @@ def build_brief_preview_cards(
             "brief_summary_section",
             title=f"Версия brief {version}",
             body_text=(
-                f"Сейчас на проверке версия {version}. "
-                "Проверь summary ниже, попроси правки обычным текстом или явно подтверди текущую редакцию."
+                (
+                    f"Переоткрыта версия {version}. Проверь обновлённый summary ниже, "
+                    "при необходимости ещё уточни детали и заново подтверди текущую редакцию."
+                )
+                if is_reopened
+                else (
+                    f"Сейчас на проверке версия {version}. "
+                    "Проверь summary ниже, попроси правки обычным текстом или явно подтверди текущую редакцию."
+                )
                 if is_confirmable
                 else f"Текущая подтвержденная версия brief: {version}. При необходимости можно переоткрыть её и выпустить новую редакцию."
             ),
@@ -1105,8 +1126,15 @@ def build_web_reply_cards(
                 title=f"Подтвердить brief {normalize_text(requirement_brief.get('version')) or 'без версии'}",
                 body_text=next_question
                 or (
-                    f"Проверь summary и явно подтверди версию {normalize_text(requirement_brief.get('version')) or 'без версии'}. "
-                    "Если нужны изменения, попроси правки обычным текстом или переоткрой brief."
+                    (
+                        f"Проверь переоткрытую версию {normalize_text(requirement_brief.get('version')) or 'без версии'} "
+                        "и заново подтверди её. Если нужны изменения, попроси правки обычным текстом."
+                    )
+                    if normalize_text(requirement_brief.get("status")) == "reopened"
+                    else (
+                        f"Проверь summary и явно подтверди версию {normalize_text(requirement_brief.get('version')) or 'без версии'}. "
+                        "Если нужны изменения, попроси правки обычным текстом или переоткрой brief."
+                    )
                 ),
                 web_demo_session_id=session_id,
                 action_hints=["request_brief_correction", "confirm_brief", "reopen_brief"],

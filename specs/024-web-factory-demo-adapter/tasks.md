@@ -151,14 +151,14 @@
 
 ### Validation for User Story 5
 
-- [ ] T036 [P] [US5] Create integration coverage for resume and reopen in `tests/integration_local/test_agent_factory_web_resume.sh`
-- [ ] T037 [P] [US5] Extend browser-flow coverage for refresh continuity in `tests/e2e_browser/agent_factory_web_demo.mjs`
+- [x] T036 [P] [US5] Create integration coverage for resume and reopen in `tests/integration_local/test_agent_factory_web_resume.sh`
+- [x] T037 [P] [US5] Extend browser-flow coverage for refresh continuity in `tests/e2e_browser/agent_factory_web_demo.mjs`
 
 ### Implementation for User Story 5
 
-- [ ] T038 [P] [US5] Extend `scripts/agent-factory-web-adapter.py` to persist active project pointers and resume context under `data/agent-factory/web-demo/`
-- [ ] T039 [P] [US5] Extend `web/agent-factory-demo/app.js` and `scripts/agent_factory_common.py` with resume/status and reopened-brief projections
-- [ ] T040 [US5] Document resume, status, and reopen behavior in `docs/runbooks/agent-factory-web-demo.md`
+- [x] T038 [P] [US5] Extend `scripts/agent-factory-web-adapter.py` to persist active project pointers and resume context under `data/agent-factory/web-demo/`
+- [x] T039 [P] [US5] Extend `web/agent-factory-demo/app.js` and `scripts/agent_factory_common.py` with resume/status and reopened-brief projections
+- [x] T040 [US5] Document resume, status, and reopen behavior in `docs/runbooks/agent-factory-web-demo.md`
 
 **Checkpoint**: The browser demo behaves like a real working user channel rather than a one-shot presentation.
 
@@ -168,10 +168,10 @@
 
 **Purpose**: Reconcile planning, docs, topology, and validation once the web demo is implemented.
 
-- [ ] T041 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/024-web-factory-demo-adapter/checklists/requirements.md`
-- [ ] T042 [P] Refresh topology documentation in `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T043 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
-- [ ] T044 Run target web-demo validation slices from `specs/024-web-factory-demo-adapter/quickstart.md`
+- [x] T041 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/024-web-factory-demo-adapter/checklists/requirements.md`
+- [x] T042 [P] Refresh topology documentation in `docs/GIT-TOPOLOGY-REGISTRY.md`
+- [x] T043 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
+- [x] T044 Run target web-demo validation slices from `specs/024-web-factory-demo-adapter/quickstart.md`
 
 ---
 

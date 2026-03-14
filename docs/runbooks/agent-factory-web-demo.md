@@ -9,9 +9,10 @@
 1. открыть controlled browser demo surface для фабричного агента-бизнес-аналитика на `Moltis`
 2. нормализовать browser turn в discovery runtime из `022`
 3. хранить adapter-level session/access/history отдельно от discovery-core state
-4. отрисовывать безопасные user-facing reply cards вместо raw runtime JSON
-5. автоматически запускать downstream `handoff -> intake -> concept pack`
-6. публиковать browser-safe downloads для `project doc`, `agent spec`, и `presentation`
+4. хранить отдельные pointer/resume snapshots для устойчивого browser resume
+5. отрисовывать безопасные user-facing reply cards вместо raw runtime JSON
+6. автоматически запускать downstream `handoff -> intake -> concept pack`
+7. публиковать browser-safe downloads для `project doc`, `agent spec`, и `presentation`
 
 ## Current Scope
 
@@ -30,13 +31,18 @@
 - рендерить reviewable brief по секциям, принимать correction/confirm/reopen actions и сохранять versioned confirmation history
 - после `confirm_brief` автоматически запускать downstream handoff chain через `scripts/agent-factory-intake.py` и `scripts/agent-factory-artifacts.py`
 - публиковать browser-safe `download_artifacts` и HTTP download endpoint `/api/download`
+- хранить отдельные `pointers/` и `resume/` snapshots, чтобы refresh/resume не зависели только от localStorage
+- перечитывать `GET /api/session` после refresh и показывать browser-safe `resume_context` вместо потери активного проекта
+- возвращать reopened brief в новый reviewable loop без потери `confirmation_history` и `handoff_history`
 
 На этом этапе adapter ещё не завершает:
 
 - remote smoke/deploy rollout
-- long-lived browser resume/reopen polish beyond the current saved-session path
 
-Эти части закрываются в следующих user stories `024`.
+Оставшийся follow-up scope уже вне текущего browser slice:
+
+- более сложные multi-user/session handoff сценарии
+- отдельные интерфейсные адаптеры поверх этого же runtime (`023` для Telegram и будущие UI)
 
 ## Runtime Commands
 
@@ -84,6 +90,8 @@ data/agent-factory/web-demo/
 ├── access/
 ├── downloads/
 ├── history/
+├── pointers/
+├── resume/
 └── sessions/
 ```
 
@@ -105,6 +113,14 @@ Stores one active adapter snapshot per `web_demo_session_id`, including:
 ### history/
 
 Stores per-request adapter snapshots for lightweight audit and resume traceability.
+
+### pointers/
+
+Stores one active `BrowserProjectPointer` snapshot per `web_demo_session_id`, so the adapter can restore the active project and linked brief version independently of the full session payload.
+
+### resume/
+
+Stores one browser-safe `resume_context` snapshot per `web_demo_session_id`, including the current status label, latest brief versions, pending question, and history counters used by the shell after refresh.
 
 ### downloads/
 
@@ -396,6 +412,8 @@ Published demo surface now exposes:
 
 - `agent_factory_web_demo_active_sessions`
 - `agent_factory_web_demo_access_grants`
+- `agent_factory_web_demo_saved_pointers`
+- `agent_factory_web_demo_resume_contexts`
 - `agent_factory_web_demo_download_sessions`
 - `agent_factory_web_demo_publication_ready`
 - `agent_factory_web_demo_access_gate_configured`
@@ -422,6 +440,61 @@ Expected smoke result:
 - `/api/health` reports `access_gate_mode=shared_token_hash`
 - `/api/health` reports `publication_status=ready`
 - `/metrics` returns `200`
+
+## Resume And Reopen In Browser (US5)
+
+### Browser resume behavior
+
+После US5 browser shell ведёт себя как рабочий пользовательский канал, а не как one-shot demo:
+
+1. после первого live turn adapter сохраняет полный session snapshot, active pointer и отдельный `resume_context`
+2. при `GET /api/session` shell перечитывает текущий server-side snapshot и восстанавливает активный проект без JSON/CLI шага
+3. после refresh shell не сбрасывается в `Новый проект`, а возвращается в правильный action mode (`submit_turn`, `confirm_brief`, `download_artifact`)
+4. reopened brief публикует новую version chain, но сохраняет `confirmation_history` и `handoff_history`
+
+### Browser-safe resume contract
+
+`GET /api/session` теперь должен возвращать не только последний session snapshot, но и browser-safe `resume_context`:
+
+- `resume_available`
+- `resumed_from_saved_session`
+- `summary_text`
+- `current_status`
+- `current_status_label`
+- `current_topic`
+- `pending_question`
+- `latest_brief_version`
+- `latest_confirmed_brief_version`
+- `confirmation_history_count`
+- `handoff_history_count`
+- `download_artifact_count`
+
+Shell использует эти поля, чтобы:
+
+- показать человеку короткое сообщение о восстановлении сессии
+- не терять активный проект после refresh
+- корректно объяснять, что brief был переоткрыт, а не просто “ждёт подтверждения”
+
+### Local validation examples
+
+Server-side resume and reopen:
+
+```bash
+./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_resume --json
+```
+
+Browser refresh continuity:
+
+```bash
+./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json
+```
+
+Expected result:
+
+- server-side resume restores the saved active project without a fresh access token
+- `pointers/` and `resume/` snapshots exist under `data/agent-factory/web-demo/`
+- page reload keeps the same browser session and lets the user continue discovery
+- reopening a confirmed/download-ready brief returns the UI to a new reviewable version while preserving prior confirmation and handoff provenance
 
 ## Safety Rules
 

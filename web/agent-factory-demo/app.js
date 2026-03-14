@@ -61,6 +61,7 @@
     requestCounter: 0,
     mockStage: "gate_pending",
     lastAutoFollowupSource: "",
+    lastResumeFingerprint: "",
   };
 
   function safeJsonParse(value, fallback) {
@@ -106,6 +107,7 @@
     state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
     state.mockStage = normalizeText(saved.mockStage, "gate_pending");
     state.lastAutoFollowupSource = normalizeText(saved.lastAutoFollowupSource);
+    state.lastResumeFingerprint = normalizeText(saved.lastResumeFingerprint);
   }
 
   function persist() {
@@ -121,6 +123,7 @@
         requestCounter: state.requestCounter,
         mockStage: state.mockStage,
         lastAutoFollowupSource: state.lastAutoFollowupSource,
+        lastResumeFingerprint: state.lastResumeFingerprint,
       }),
     );
   }
@@ -202,6 +205,7 @@
     const session = response.web_demo_session || {};
     const pointer = response.browser_project_pointer || {};
     const accessGate = response.access_gate || {};
+    const resumeContext = response.resume_context || {};
 
     dom.projectTitle.textContent = pointer.project_key || "Новый проект фабрики";
     dom.statusUserVisible.textContent =
@@ -216,12 +220,14 @@
       ACTION_LABELS[response.next_action] ||
       response.next_action ||
       "request_demo_access";
-    dom.statusBriefVersion.textContent = statusSnapshot.brief_version || "ещё нет";
+    dom.statusBriefVersion.textContent = statusSnapshot.brief_version
+      ? `${statusSnapshot.brief_version}${statusSnapshot.brief_status_label ? ` · ${statusSnapshot.brief_status_label}` : ""}`
+      : "ещё нет";
     dom.statusDownloadReadiness.textContent = statusSnapshot.download_readiness || "pending";
     dom.statusProjectKey.textContent = pointer.project_key || "не выбран";
     dom.statusSessionId.textContent = session.web_demo_session_id || state.sessionId || "не открыт";
     dom.statusOperatorAttention.textContent = accessGate.granted
-      ? "Сессия открыта. Shell ждёт следующий turn пользователя или обновление статуса."
+      ? (resumeContext.summary_text || "Сессия открыта. Shell ждёт следующий turn пользователя или обновление статуса.")
       : accessGate.reason || "Нужен access token для controlled demo surface.";
 
     const shouldShowBanner = !accessGate.granted;
@@ -390,6 +396,50 @@
       || ACTION_PRIORITY.find((action) => selected.includes(action))
       || selected[0];
     setCurrentAction(preferredAction);
+  }
+
+  function responseActions(response) {
+    const fromCards = Array.isArray(response?.reply_cards)
+      ? response.reply_cards.flatMap((card) => (Array.isArray(card.action_hints) ? card.action_hints : []))
+      : [];
+    const unique = [...new Set(fromCards.map((action) => normalizeText(action)).filter(Boolean))];
+    if (unique.length) {
+      return unique;
+    }
+    if (!response?.access_gate?.granted) {
+      return ["submit_access_token"];
+    }
+    return [
+      normalizeText(response?.ui_projection?.preferred_ui_action),
+      normalizeText(response?.status_snapshot?.next_recommended_action),
+      normalizeText(response?.next_action),
+      "request_status",
+    ].filter(Boolean);
+  }
+
+  function buildResumeNotice(response, reason) {
+    const resumeContext = response?.resume_context || {};
+    const summary = normalizeText(resumeContext.summary_text);
+    const currentLabel = normalizeText(resumeContext.current_status_label);
+    const briefVersion = normalizeText(resumeContext.latest_brief_version || response?.status_snapshot?.brief_version);
+    if (reason === "manual_refresh") {
+      return {
+        title: "Сессия обновлена",
+        body: summary || (currentLabel ? `Shell перечитал статус проекта: ${currentLabel}.` : "Shell перечитал актуальное состояние проекта через GET /api/session."),
+        kind: "session_refresh",
+      };
+    }
+    return {
+      title: "Сессия восстановлена",
+      body:
+        summary
+        || (
+          briefVersion
+            ? `Shell восстановил проект и версию brief ${briefVersion} из сохранённого состояния.`
+            : "Shell восстановил проект из сохранённого состояния и перечитал текущий статус."
+        ),
+      kind: "session_resume",
+    };
   }
 
   function replyCardsToMessages(cards) {
@@ -744,15 +794,17 @@
     };
   }
 
-  function applyResponse(response, connectionMode) {
+  function applyResponse(response, connectionMode, options = {}) {
+    const appendReplyMessages = options.appendReplyMessages !== false;
+    const syncReason = normalizeText(options.syncReason);
     state.connectionMode = connectionMode;
     state.lastResponse = response;
     state.sessionId = response.web_demo_session?.web_demo_session_id || state.sessionId;
 
-    const replyMessages = replyCardsToMessages(response.reply_cards);
+    const replyMessages = appendReplyMessages ? replyCardsToMessages(response.reply_cards) : [];
     if (replyMessages.length) {
       state.timeline.push(...replyMessages);
-    } else if (response.next_question) {
+    } else if (appendReplyMessages && response.next_question) {
       state.timeline.push({
         role: "agent",
         kind: "next_question",
@@ -763,12 +815,24 @@
     }
 
     const preferredAction = response.ui_projection?.preferred_ui_action;
-    updateQuickActions(
-      (response.reply_cards || []).flatMap((card) => (Array.isArray(card.action_hints) ? card.action_hints : [])),
-    );
+    updateQuickActions(responseActions(response));
     if (preferredAction) {
       setCurrentAction(preferredAction);
     }
+
+    const resumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint);
+    if (syncReason === "manual_refresh") {
+      const notice = buildResumeNotice(response, syncReason);
+      state.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
+      if (resumeFingerprint) {
+        state.lastResumeFingerprint = resumeFingerprint;
+      }
+    } else if (syncReason && resumeFingerprint && state.lastResumeFingerprint !== resumeFingerprint) {
+      const notice = buildResumeNotice(response, syncReason);
+      state.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
+      state.lastResumeFingerprint = resumeFingerprint;
+    }
+
     renderConnection();
     renderStatus();
     renderTimeline();
@@ -816,7 +880,9 @@
     }
   }
 
-  async function refreshSession() {
+  async function refreshSession(options = {}) {
+    const syncReason = normalizeText(options.syncReason, "manual_refresh");
+    const suppressFailureBanner = Boolean(options.suppressFailureBanner);
     if (!state.sessionId) {
       state.timeline.push(
         buildSystemMessage(
@@ -833,35 +899,31 @@
     setBusy(true);
     try {
       const response = await fetchSession(state.sessionId);
-      state.connectionMode = "live";
-      state.lastResponse = response;
-      renderConnection();
-      renderStatus();
-      renderArtifacts();
-      state.timeline.push(
-        buildSystemMessage(
-          "Сессия обновлена",
-          "Shell перечитал актуальное состояние проекта через GET /api/session.",
-          "session_refresh",
-        ),
-      );
-      renderTimeline();
-      persist();
+      applyResponse(response, "live", { appendReplyMessages: false, syncReason });
     } catch (_error) {
       state.connectionMode = state.lastResponse ? state.connectionMode : "mock";
-      state.timeline.push(
-        buildSystemMessage(
-          "Live session недоступна",
-          "GET /api/session пока не ответил. Shell остаётся в mock/local режиме и не теряет текущее состояние.",
-          "session_refresh_failed",
-        ),
-      );
       renderConnection();
-      renderTimeline();
-      persist();
+      if (!suppressFailureBanner) {
+        state.timeline.push(
+          buildSystemMessage(
+            "Live session недоступна",
+            "GET /api/session пока не ответил. Shell остаётся в mock/local режиме и не теряет текущее состояние.",
+            "session_refresh_failed",
+          ),
+        );
+        renderTimeline();
+        persist();
+      }
     } finally {
       setBusy(false);
     }
+  }
+
+  async function restoreSessionOnLoad() {
+    if (!state.sessionId) {
+      return;
+    }
+    await refreshSession({ syncReason: "auto_resume", suppressFailureBanner: true });
   }
 
   function handleActionShortcut(action) {
@@ -919,7 +981,7 @@
     });
 
     dom.refreshSession.addEventListener("click", () => {
-      refreshSession();
+      refreshSession({ syncReason: "manual_refresh" });
     });
   }
 
@@ -931,8 +993,17 @@
     renderStatus();
     renderTimeline();
     renderArtifacts();
-    updateQuickActions(["start_project", "submit_turn", "request_status"]);
+    if (state.lastResponse) {
+      updateQuickActions(responseActions(state.lastResponse));
+      const preferredAction = normalizeText(state.lastResponse.ui_projection?.preferred_ui_action);
+      if (preferredAction) {
+        setCurrentAction(preferredAction);
+      }
+    } else {
+      updateQuickActions(["start_project", "submit_turn", "request_status"]);
+    }
     dom.root.dataset.mode = "ready";
+    void restoreSessionOnLoad();
   }
 
   init();

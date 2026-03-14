@@ -170,6 +170,33 @@ async function run() {
         await context.close();
       }
     });
+
+    await runCase('e2e_browser_web_demo_refresh_restores_session', 'Browser reload restores the active project and continues discovery', async () => {
+      const { context, page } = await createPage(browser, { defaultTimeoutMs });
+      try {
+        await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+        await sendFirstIdea(page);
+
+        const sessionBadgeBeforeReload = ((await page.locator('[data-role="session-badge"]').textContent()) || '').trim();
+        assert(sessionBadgeBeforeReload.includes('web-demo-session-'), `Expected a persisted browser session badge before reload, got: ${sessionBadgeBeforeReload}`);
+
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.getByText('Сессия восстановлена').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('[data-role="status-operator-attention"]').filter({ hasText: 'Возобновляю browser-сессию' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+
+        const sessionBadgeAfterReload = ((await page.locator('[data-role="session-badge"]').textContent()) || '').trim();
+        const composerModeAfterReload = ((await page.locator('[data-role="composer-mode"]').textContent()) || '').trim();
+
+        assert(sessionBadgeAfterReload === sessionBadgeBeforeReload, `Expected the same browser session after reload, got: ${sessionBadgeAfterReload}`);
+        assert(/Ответить/i.test(composerModeAfterReload), `Composer should stay in reply mode after resume, got: ${composerModeAfterReload}`);
+
+        await page.locator('#chatInput').fill('Оператор первой линии и руководитель смены.');
+        await page.locator('#sendBtn').click();
+        await page.getByText('Как этот процесс работает сейчас и где основные потери?').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+      } finally {
+        await context.close();
+      }
+    });
   } finally {
     await browser.close();
     await stopServer();
