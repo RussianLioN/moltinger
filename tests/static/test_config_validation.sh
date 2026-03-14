@@ -18,6 +18,7 @@ FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
+MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -145,6 +146,35 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Deploy workflow must enforce a restore-readiness gate for the fresh Moltis pre-update backup"
+    fi
+
+    test_start "static_moltis_version_helper_manifest_and_makefile_are_aligned"
+    if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
+       rg -q '"moltis-version\.sh"' "$PROJECT_ROOT/scripts/manifest.json" && \
+       rg -q '\./scripts/moltis-version\.sh report' "$PROJECT_ROOT/Makefile"; then
+        test_pass
+    else
+        test_fail "Moltis version helper must be executable, manifested, and reused by make version-check"
+    fi
+
+    test_start "static_moltis_workflow_uses_helper_for_version_resolution"
+    if rg -q 'scripts/moltis-version\.sh version' "$DEPLOY_WORKFLOW" && \
+       rg -q 'scripts/moltis-version\.sh image' "$DEPLOY_WORKFLOW" && \
+       rg -q 'scripts/moltis-version\.sh policy' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'VERSION="latest"' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must resolve Moltis version through the helper and must not hardcode VERSION=latest"
+    fi
+
+    test_start "static_moltis_workflow_requires_explicit_production_latest_ack"
+    if rg -q 'allow_latest_production' "$DEPLOY_WORKFLOW" && \
+       rg -q 'Production deploy resolved to latest' "$DEPLOY_WORKFLOW" && \
+       rg -q 'version_source=' "$DEPLOY_WORKFLOW" && \
+       rg -q 'version_policy=' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must require explicit acknowledgement for production latest and record version source/policy"
     fi
 
     test_start "static_backup_script_captures_runtime_restore_payload"

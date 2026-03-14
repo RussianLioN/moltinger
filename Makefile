@@ -160,7 +160,7 @@ generate-key:
 
 version-check: ## Show current Docker image versions
 	@echo "Moltis version:"
-	@grep -E 'image:.*moltis' docker-compose.yml docker-compose.prod.yml | head -2
+	@./scripts/moltis-version.sh report
 	@echo "\nWatchtower version:"
 	@grep -E 'image:.*watchtower' docker-compose.yml docker-compose.prod.yml | head -2
 

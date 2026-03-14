@@ -259,6 +259,23 @@
       ],
       "cron": "*/5 * * * *"
     },
+    "moltis-version.sh": {
+      "version": "1.0.0",
+      "description": "Resolve the tracked Moltis version contract from repository compose files",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "grep",
+        "sed"
+      ],
+      "provides": [
+        "moltis-version",
+        "moltis-image",
+        "moltis-version-report",
+        "moltis-version-policy"
+      ],
+      "ci": true
+    },
     "ollama-health.sh": {
       "version": "1.0.0",
       "description": "Health checks for Ollama sidecar and fallback generation",

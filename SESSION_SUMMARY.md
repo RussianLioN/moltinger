@@ -150,6 +150,28 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
+### 2026-03-14: Moltis Release-Tag Workflow Enforcement (molt-tnf / spec-017)
+
+**Статус**: ✅ Speckit feature implemented and validated on branch `feat/moltinger-z8m-1-moltis-backup-rollback-baseline`
+
+- Created `specs/017-moltis-release-tag-policy/` and executed it through runtime changes instead of leaving the policy only in docs.
+- Added `scripts/moltis-version.sh` as the single tracked-contract helper for Moltis version/image/policy resolution from `docker-compose.yml` and `docker-compose.prod.yml`, and wired `Makefile` + `scripts/manifest.json` to the same source of truth.
+- Updated `.github/workflows/deploy.yml` so preflight version resolution now comes from the tracked compose contract or explicit operator input, records `version_source` / `version_policy`, and requires explicit acknowledgement for manual production deploys that resolve to `latest`.
+- Added guardrails in `tests/component/test_moltis_version_helper.sh`, `tests/run.sh`, and `tests/static/test_config_validation.sh` so helper behavior, workflow helper usage, and the explicit production-`latest` gate are regression-tested.
+
+**Validated**
+
+- `bash -n scripts/moltis-version.sh tests/component/test_moltis_version_helper.sh tests/static/test_config_validation.sh tests/run.sh`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); puts "deploy.yml ok"'`
+- `./tests/run.sh --lane component --filter component_moltis_version_helper --json`
+- `./tests/run.sh --lane static --filter static_config_validation --json`
+- `git diff --check`
+
+**Next**
+
+- For actual Moltis upgrade work, prefer an explicit tracked release tag in git; use `latest` only intentionally and with the new manual production acknowledgement gate.
+- Keep rollback language unchanged: previous deployed image when compatible, otherwise verified backup restore.
+
 ### 2026-03-14: Moltis Version And Rollback Contract Clarification
 
 **Статус**: ✅ project docs reconciled with official Moltis version model and current local rollback implementation

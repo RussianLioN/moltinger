@@ -26,10 +26,15 @@ on:
           - production
           - staging
       version:
-        description: 'Moltis image version (e.g., latest, v1.0.0)'
+        description: 'Optional Moltis image version override (leave blank to use tracked git default)'
         required: false
-        default: 'latest'
+        default: ''
         type: string
+      allow_latest_production:
+        description: 'Acknowledge intentional production deploy to latest'
+        required: false
+        default: false
+        type: boolean
       rollback:
         description: 'Rollback to previous version'
         required: false
@@ -211,6 +216,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      version_source: ${{ steps.version.outputs.version_source }}
+      version_policy: ${{ steps.version.outputs.version_policy }}
+      tracked_version: ${{ steps.version.outputs.tracked_version }}
+      tracked_policy: ${{ steps.version.outputs.tracked_policy }}
       should_deploy: ${{ steps.validate.outputs.should_deploy }}
       preflight_passed: ${{ steps.preflight.outputs.passed }}
 
@@ -221,16 +230,55 @@ jobs:
       - name: Determine version
         id: version
         run: |
+          chmod +x scripts/moltis-version.sh
+
+          TRACKED_VERSION="$(./scripts/moltis-version.sh version)"
+          TRACKED_IMAGE="$(./scripts/moltis-version.sh image)"
+          TRACKED_POLICY="$(./scripts/moltis-version.sh policy)"
+
+          VERSION="$TRACKED_VERSION"
+          VERSION_SOURCE="tracked-compose-default"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
+            INPUT_VERSION="${{ github.event.inputs.version }}"
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION="$INPUT_VERSION"
+              VERSION_SOURCE="workflow-input"
+            fi
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF#refs/tags/}"
-          else
-            # Use default version - must match what's on server
-            VERSION="latest"
+            VERSION_SOURCE="git-tag"
           fi
+
+          VERSION_POLICY="release-tag"
+          if [ "$VERSION" = "latest" ]; then
+            VERSION_POLICY="latest"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ github.event.inputs.environment }}" = "production" ] && \
+             [ "$VERSION" = "latest" ] && \
+             [ "${{ github.event.inputs.allow_latest_production }}" != "true" ]; then
+            echo "::error::Production deploy resolved to latest. Provide an explicit release tag or set allow_latest_production=true."
+            exit 1
+          fi
+
+          if [ "$VERSION" = "latest" ] && [ "$VERSION_SOURCE" != "workflow-input" ]; then
+            echo "::warning::Resolved version is latest from tracked git state. Prefer an explicit release tag for deterministic production rollouts."
+          else
+            echo "::notice::Resolved Moltis version: $VERSION"
+          fi
+
+          echo "::notice::Version source: $VERSION_SOURCE"
+          echo "::notice::Version policy: $VERSION_POLICY"
+          echo "::notice::Tracked compose default: $TRACKED_VERSION ($TRACKED_POLICY)"
+          echo "::notice::Tracked Moltis image: $TRACKED_IMAGE"
+
+          echo "tracked_version=$TRACKED_VERSION" >> $GITHUB_OUTPUT
+          echo "tracked_policy=$TRACKED_POLICY" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Deploying Moltis version: $VERSION"
+          echo "version_source=$VERSION_SOURCE" >> $GITHUB_OUTPUT
+          echo "version_policy=$VERSION_POLICY" >> $GITHUB_OUTPUT
 
       - name: Validate deployment prerequisites
         id: validate
@@ -1014,6 +1062,10 @@ jobs:
         if: always()
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
+          VERSION_SOURCE="${{ needs.preflight.outputs.version_source }}"
+          VERSION_POLICY="${{ needs.preflight.outputs.version_policy }}"
+          TRACKED_VERSION="${{ needs.preflight.outputs.tracked_version }}"
+          TRACKED_POLICY="${{ needs.preflight.outputs.tracked_policy }}"
           STATUS="${{ steps.health.outputs.status }}"
           ROLLED_BACK="${{ steps.rollback_auto.outputs.rolled_back }}"
           RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
@@ -1024,6 +1076,9 @@ jobs:
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version Source | \`$VERSION_SOURCE\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version Policy | \`$VERSION_POLICY\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tracked Default | \`$TRACKED_VERSION\` (\`$TRACKED_POLICY\`) |" >> $GITHUB_STEP_SUMMARY
           echo "| Backup | \`${{ needs.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Restore Check | \`${{ needs.backup.outputs.restore_check_file }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
@@ -1099,6 +1154,8 @@ jobs:
           git_sha=${{ github.sha }}
           workflow_run=${{ github.run_id }}
           version=${{ needs.preflight.outputs.version }}
+          version_source=${{ needs.preflight.outputs.version_source }}
+          version_policy=${{ needs.preflight.outputs.version_policy }}
           INFO
 
             echo "Git SHA recorded: $(cat data/.deployed-sha)"
