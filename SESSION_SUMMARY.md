@@ -46,6 +46,15 @@
 - Новое правило: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
 - Follow-up issue: `molt-zze` — выкатить исправление и повторно пройти официальный мастер настройки OpenClaw на live Clawdiy
 
+### Current Session Update (2026-03-14)
+
+- PR `#56` (`022-clawdiy-wizard-writability-fix`) был успешно смержен в `main`, но production workflow `Deploy Clawdiy` run `23083872438` упал на локальном шаге `preflight`.
+- Новый RCA-014 показал, что `scripts/preflight-check.sh --ci --target clawdiy` слишком рано требовал materialized `data/clawdiy/runtime` в checkout GitHub runner, хотя этот каталог по контракту создается позже на шагах `render` и `deploy`.
+- Под это создан follow-up branch `023-clawdiy-ci-preflight-runtime-home-fix`.
+- Исправление: `preflight` теперь различает CI checkout и реальный deploy-target для `runtime home`.
+- Новый RCA: `docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md`
+- Новое правило: `docs/rules/clawdiy-preflight-must-distinguish-ci-checkout-from-deploy-target.md`
+
 ### Production Status
 
 ```

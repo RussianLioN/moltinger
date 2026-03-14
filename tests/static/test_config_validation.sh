@@ -449,6 +449,15 @@ run_static_config_validation_tests() {
         test_fail "Preflight must fail if Clawdiy runtime home is missing or owned incorrectly for official OpenClaw wizard writes"
     fi
 
+    test_start "static_preflight_keeps_clawdiy_runtime_home_check_target_aware_in_ci"
+    if rg -q 'if \[\[ "\$CI_MODE" == "true" \]\]; then' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'runtime home is not materialized in CI checkout' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'deploy/render must create' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must treat Clawdiy runtime-home materialization as a deploy-target concern in CI mode instead of failing the local checkout"
+    fi
+
     generate_report
 }
 
