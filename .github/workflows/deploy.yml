@@ -582,7 +582,15 @@ jobs:
             fi
 
             if [ -n "$BACKUP_ITEMS" ]; then
-              tar -czf "$BACKUP_FILE" -C "$DEPLOY_DIR" $BACKUP_ITEMS
+              # data/logs.jsonl is written continuously by the live service.
+              # Treat volatile log churn as non-fatal so pre-deploy backup remains usable.
+              tar \
+                --ignore-failed-read \
+                --warning=no-file-changed \
+                --exclude='data/logs.jsonl' \
+                -czf "$BACKUP_FILE" \
+                -C "$DEPLOY_DIR" \
+                $BACKUP_ITEMS
             else
               tar -czf "$BACKUP_FILE" --files-from /dev/null
               echo "::warning::No config/data/.env found, created metadata-only backup archive"
