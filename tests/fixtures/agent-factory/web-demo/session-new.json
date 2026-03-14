@@ -1,0 +1,41 @@
+{
+  "project_key": "invoice-approval-web-demo",
+  "request_channel": "web",
+  "working_language": "ru",
+  "requester_identity": {
+    "display_name": "Ольга",
+    "browser_session_label": "browser-demo-001"
+  },
+  "demo_access_grant": {
+    "demo_access_grant_id": "access-grant-browser-demo-001",
+    "grant_type": "shared_demo_token",
+    "grant_value": "asc-demo-shared",
+    "issued_by": "demo-operator",
+    "issued_for": "Ольга",
+    "status": "active",
+    "expires_at": "2026-12-31T23:59:59Z",
+    "created_at": "2026-03-14T00:00:00Z"
+  },
+  "web_demo_session": {
+    "web_demo_session_id": "web-demo-session-invoice-approval",
+    "session_cookie_id": "cookie-invoice-approval-demo",
+    "status": "gate_pending",
+    "created_at": "2026-03-14T00:00:00Z",
+    "updated_at": "2026-03-14T00:00:00Z"
+  },
+  "browser_project_pointer": {
+    "pointer_id": "browser-pointer-invoice-approval",
+    "project_key": "invoice-approval-web-demo",
+    "selection_mode": "new_project",
+    "pointer_status": "active",
+    "updated_at": "2026-03-14T00:00:00Z"
+  },
+  "web_conversation_envelope": {
+    "web_conversation_envelope_id": "web-envelope-invoice-approval-001",
+    "request_id": "request-invoice-approval-001",
+    "transport_mode": "synthetic_fixture",
+    "ui_action": "start_project",
+    "user_text": "Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация.",
+    "received_at": "2026-03-14T00:00:00Z"
+  }
+}

@@ -57,11 +57,22 @@ GitOps Compliance: Enforced ✅
 - Added the new same-host browser demo compose surface in `docker-compose.asc.yml` using the existing Traefik/subdomain deployment pattern, with dedicated bind-backed state roots for `data/agent-factory/web-demo`, `data/agent-factory/discovery`, and `data/agent-factory/concepts`.
 - Reconciled `scripts/manifest.json` and `tests/run.sh` for the new browser adapter surface: added the `agent-factory-web-adapter.py` entrypoint, removed old Telegram-centric wording from discovery/intake script descriptions, registered future component/integration/browser/live smoke suites for the web demo, and extended `tests/static/test_config_validation.sh` so `docker-compose.asc.yml` is now part of the static config gate.
 - Created the initial fixture tree `tests/fixtures/agent-factory/web-demo/README.md` and refreshed `tests/fixtures/agent-factory/README.md` so the new browser-demo fixture ownership and traceability rules are explicit before foundational implementation starts.
+- Completed `Phase 2: Foundational` for `024-web-factory-demo-adapter` (`molt-vd0.3.*`): added the reusable browser-session fixture `tests/fixtures/agent-factory/web-demo/session-new.json`, implemented the new adapter runtime `scripts/agent-factory-web-adapter.py`, and extended `scripts/agent_factory_common.py` with browser-oriented status, reply-card, and download projection helpers so one browser turn can already be gated, normalized, routed, persisted, and rendered without touching the downstream factory flow.
+- Added foundational validation coverage for the browser adapter in `tests/component/test_agent_factory_web_access.sh` and `tests/integration_local/test_agent_factory_web_flow.sh`, covering fail-closed access gating, restored-session status requests, first-turn discovery routing, and continued discovery after a follow-up browser answer.
+- Added the initial browser shell assets under `web/agent-factory-demo/` (`index.html`, `app.css`, `app.js`) plus the operator runbook `docs/runbooks/agent-factory-web-demo.md`, so the repo now contains a concrete local web shell, adapter contract notes, storage layout, and the current lightweight HTTP surface (`/health`, `/`, `/app.css`, `/app.js`, `/api/session`, `/api/turn`).
+- Fixed a late parser drift in `scripts/agent-factory-web-adapter.py` by removing a broken nested f-string from the audit-id builder; after that fix, both host-side and compose-backed integration validation for the new browser slice pass cleanly.
 - Verified the setup slice with:
   - `./tests/run.sh --lane static --filter static_config_validation --json`
   - `bash -n tests/run.sh`
   - `python3 -m json.tool scripts/manifest.json >/dev/null`
   - `git diff --check`
+- Verified the foundational browser slice with:
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-web-adapter.py`
+  - `bash -n tests/component/test_agent_factory_web_access.sh tests/integration_local/test_agent_factory_web_flow.sh`
+  - `python3 -m json.tool tests/fixtures/agent-factory/web-demo/session-new.json >/dev/null`
+  - `./tests/run.sh --lane component --filter component_agent_factory_web_access --json`
+  - `TEST_IN_CONTAINER=1 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_flow --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_flow --json`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:
   - `spec.md`

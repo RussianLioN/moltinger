@@ -622,3 +622,364 @@ def build_discovery_topic_progress(
         "blocking_topics_remaining": blocking_topics_remaining,
         "ready_for_brief": len(remaining_topics) == 0 and len(clarifications) == 0,
     }
+
+def sha256_hex(value: Any) -> str:
+    text = normalize_text(value)
+    if not text:
+        return ""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def normalize_download_artifacts(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [dict(item) for item in value if isinstance(item, dict)]
+
+    if not isinstance(value, dict):
+        return []
+
+    manifest = value
+    source_provenance = manifest.get("source_provenance", {}) if isinstance(manifest.get("source_provenance"), dict) else {}
+    artifacts = manifest.get("artifacts", {}) if isinstance(manifest.get("artifacts"), dict) else {}
+    download_artifacts: list[dict[str, Any]] = []
+
+    for artifact_kind, artifact_entry in artifacts.items():
+        if not isinstance(artifact_entry, dict):
+            continue
+        download_artifacts.append(
+            {
+                "artifact_kind": artifact_kind,
+                "download_name": normalize_text(artifact_entry.get("download_name")) or f"{artifact_kind}.md",
+                "download_ref": normalize_text(artifact_entry.get("download_ref")),
+                "download_status": "available" if normalize_text(artifact_entry.get("download_ref")) else "pending",
+                "project_key": normalize_text(source_provenance.get("project_key")),
+                "brief_version": normalize_text(source_provenance.get("brief_version")),
+            }
+        )
+
+    return download_artifacts
+
+
+def web_user_visible_status(
+    adapter_status: Any,
+    *,
+    next_action: Any = "",
+    needs_operator_attention: bool = False,
+    download_artifacts: list[dict[str, Any]] | None = None,
+) -> str:
+    if needs_operator_attention:
+        return "needs_attention"
+
+    artifacts = normalize_download_artifacts(download_artifacts or [])
+    if artifacts and all(normalize_text(item.get("download_status")) == "available" for item in artifacts):
+        return "downloads_ready"
+
+    status = normalize_text(adapter_status)
+    action = normalize_text(next_action)
+    if status in {"gate_pending", "error", "blocked"}:
+        return "needs_attention"
+    if status == "awaiting_clarification":
+        return "awaiting_clarification"
+    if status in {"awaiting_confirmation", "reopened"}:
+        return "awaiting_confirmation"
+    if status == "confirmed":
+        return "confirmed"
+    if status == "download_ready" or action in {"generate_artifacts", "publish_downloads"}:
+        return "downloads_ready"
+    if action in {"run_factory_intake", "return_to_brief_confirmation"}:
+        return "handoff_running"
+    return "discovery_in_progress"
+
+
+def web_download_readiness(
+    *,
+    adapter_status: Any,
+    needs_operator_attention: bool = False,
+    download_artifacts: list[dict[str, Any]] | None = None,
+) -> str:
+    if needs_operator_attention:
+        return "blocked"
+    artifacts = normalize_download_artifacts(download_artifacts or [])
+    if artifacts and all(normalize_text(item.get("download_status")) == "available" for item in artifacts):
+        return "ready"
+    status = normalize_text(adapter_status)
+    if status in {"confirmed", "awaiting_confirmation", "download_ready"}:
+        return "pending"
+    return "not_ready"
+
+
+def web_session_runtime_status(
+    adapter_status: Any,
+    *,
+    next_action: Any = "",
+    needs_operator_attention: bool = False,
+    download_artifacts: list[dict[str, Any]] | None = None,
+) -> str:
+    if needs_operator_attention:
+        return "gate_pending"
+    readiness = web_download_readiness(
+        adapter_status=adapter_status,
+        needs_operator_attention=needs_operator_attention,
+        download_artifacts=download_artifacts,
+    )
+    if readiness == "ready":
+        return "download_ready"
+
+    status = normalize_text(adapter_status)
+    action = normalize_text(next_action)
+    if status in {"error", "blocked"}:
+        return "error"
+    if status in {"awaiting_confirmation", "reopened"}:
+        return "awaiting_confirmation"
+    if status in {"awaiting_user_reply", "awaiting_clarification"}:
+        return "awaiting_user_reply"
+    if action in {"run_factory_intake", "generate_artifacts", "publish_downloads"}:
+        return "handoff_running"
+    if status == "confirmed":
+        return "completed"
+    return "active"
+
+
+def build_web_demo_status_snapshot(
+    web_demo_session_id: Any,
+    project_key: Any,
+    *,
+    adapter_status: Any,
+    next_action: Any,
+    brief: dict[str, Any] | None,
+    now: str,
+    download_artifacts: list[dict[str, Any]] | None = None,
+    needs_operator_attention: bool = False,
+) -> dict[str, Any]:
+    artifacts = normalize_download_artifacts(download_artifacts or [])
+    return {
+        "web_demo_status_snapshot_id": f"status-{normalize_text(web_demo_session_id) or normalize_text(project_key) or 'web-demo'}",
+        "web_demo_session_id": normalize_text(web_demo_session_id),
+        "project_key": normalize_text(project_key),
+        "user_visible_status": web_user_visible_status(
+            adapter_status,
+            next_action=next_action,
+            needs_operator_attention=needs_operator_attention,
+            download_artifacts=artifacts,
+        ),
+        "next_recommended_action": normalize_text(next_action),
+        "brief_version": normalize_text((brief or {}).get("version")),
+        "download_readiness": web_download_readiness(
+            adapter_status=adapter_status,
+            needs_operator_attention=needs_operator_attention,
+            download_artifacts=artifacts,
+        ),
+        "needs_operator_attention": needs_operator_attention,
+        "captured_at": now,
+    }
+
+
+def build_web_reply_card(
+    card_kind: str,
+    *,
+    title: str,
+    body_text: str,
+    web_demo_session_id: Any = "",
+    section_id: str = "",
+    action_hints: list[str] | None = None,
+    linked_discovery_session_id: Any = "",
+    linked_brief_id: Any = "",
+    linked_handoff_id: Any = "",
+    now: str = "",
+) -> dict[str, Any]:
+    now_value = now or utc_now()
+    return {
+        "web_reply_card_id": f"card-{slugify(f'{card_kind}-{title}-{now_value}', 'web-card')}",
+        "web_demo_session_id": normalize_text(web_demo_session_id),
+        "card_kind": card_kind,
+        "title": normalize_text(title),
+        "body_text": normalize_text(body_text),
+        "section_id": normalize_text(section_id),
+        "action_hints": dedupe_preserve_order(action_hints or []),
+        "linked_discovery_session_id": normalize_text(linked_discovery_session_id),
+        "linked_brief_id": normalize_text(linked_brief_id),
+        "linked_handoff_id": normalize_text(linked_handoff_id),
+        "created_at": now_value,
+    }
+
+
+def build_brief_preview_cards(
+    brief: dict[str, Any],
+    *,
+    web_demo_session_id: Any = "",
+    linked_discovery_session_id: Any = "",
+    linked_handoff_id: Any = "",
+    now: str = "",
+) -> list[dict[str, Any]]:
+    if not isinstance(brief, dict) or not brief:
+        return []
+
+    constraints = normalize_list(brief.get("constraints"))
+    success_metrics = normalize_list(brief.get("success_metrics"))
+    cards = [
+        build_web_reply_card(
+            "brief_summary_section",
+            title="Проблема",
+            body_text=normalize_text(brief.get("problem_statement")) or "Проблема ещё не зафиксирована.",
+            web_demo_session_id=web_demo_session_id,
+            section_id="problem_statement",
+            action_hints=["request_brief_correction"],
+            linked_discovery_session_id=linked_discovery_session_id,
+            linked_brief_id=brief.get("brief_id"),
+            linked_handoff_id=linked_handoff_id,
+            now=now,
+        ),
+        build_web_reply_card(
+            "brief_summary_section",
+            title="Желаемый результат",
+            body_text=normalize_text(brief.get("desired_outcome")) or "Результат ещё не описан.",
+            web_demo_session_id=web_demo_session_id,
+            section_id="desired_outcome",
+            action_hints=["request_brief_correction"],
+            linked_discovery_session_id=linked_discovery_session_id,
+            linked_brief_id=brief.get("brief_id"),
+            linked_handoff_id=linked_handoff_id,
+            now=now,
+        ),
+    ]
+    summary_lines: list[str] = []
+    if constraints:
+        summary_lines.append("Ограничения:\n" + to_bullets(constraints))
+    if success_metrics:
+        summary_lines.append("Метрики успеха:\n" + to_bullets(success_metrics))
+    if summary_lines:
+        cards.append(
+            build_web_reply_card(
+                "brief_summary_section",
+                title="Ограничения и метрики",
+                body_text="\n\n".join(summary_lines),
+                web_demo_session_id=web_demo_session_id,
+                section_id="constraints_success_metrics",
+                action_hints=["request_brief_correction", "confirm_brief"],
+                linked_discovery_session_id=linked_discovery_session_id,
+                linked_brief_id=brief.get("brief_id"),
+                linked_handoff_id=linked_handoff_id,
+                now=now,
+            )
+        )
+    return cards
+
+
+def build_web_reply_cards(
+    runtime_response: dict[str, Any],
+    *,
+    web_demo_session_id: Any,
+    access_granted: bool,
+    now: str,
+    download_artifacts: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    session_id = normalize_text(web_demo_session_id)
+    discovery_session = runtime_response.get("discovery_session", {}) if isinstance(runtime_response.get("discovery_session"), dict) else {}
+    requirement_brief = runtime_response.get("requirement_brief", {}) if isinstance(runtime_response.get("requirement_brief"), dict) else {}
+    factory_handoff = runtime_response.get("factory_handoff_record", {}) if isinstance(runtime_response.get("factory_handoff_record"), dict) else {}
+    next_question = normalize_text(runtime_response.get("next_question"))
+    adapter_status = normalize_text(runtime_response.get("status"))
+    next_action = normalize_text(runtime_response.get("next_action"))
+
+    status_snapshot = build_web_demo_status_snapshot(
+        session_id,
+        normalize_text(discovery_session.get("project_key")) or normalize_text(requirement_brief.get("project_key")),
+        adapter_status=adapter_status,
+        next_action=next_action,
+        brief=requirement_brief,
+        now=now,
+        download_artifacts=download_artifacts,
+        needs_operator_attention=not access_granted,
+    )
+
+    cards = [
+        build_web_reply_card(
+            "status_update",
+            title="Статус проекта",
+            body_text=(
+                "Сессия активна. "
+                f"Текущий режим: {status_snapshot['user_visible_status']}. "
+                f"Следующее действие: {status_snapshot['next_recommended_action'] or 'ожидание следующего шага'}."
+            )
+            if access_granted
+            else "Нужно подтвердить доступ к demo surface, прежде чем открывать проект.",
+            web_demo_session_id=session_id,
+            action_hints=["request_status"],
+            linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+            linked_brief_id=requirement_brief.get("brief_id"),
+            linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+            now=now,
+        )
+    ]
+
+    if not access_granted:
+        cards.append(
+            build_web_reply_card(
+                "error_message",
+                title="Нужен код доступа",
+                body_text="Укажи валидный код доступа к демо, чтобы фабрика открыла активный проект и продолжила discovery.",
+                web_demo_session_id=session_id,
+                action_hints=["submit_access_token"],
+                now=now,
+            )
+        )
+        return cards
+
+    cards.extend(
+        build_brief_preview_cards(
+            requirement_brief,
+            web_demo_session_id=session_id,
+            linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+            linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+            now=now,
+        )
+        if status_snapshot["user_visible_status"] == "awaiting_confirmation"
+        else []
+    )
+
+    artifacts = normalize_download_artifacts(download_artifacts or [])
+    if artifacts:
+        artifact_names = ", ".join(item["download_name"] for item in artifacts if normalize_text(item.get("download_name")))
+        cards.append(
+            build_web_reply_card(
+                "download_prompt",
+                title="Артефакты готовы",
+                body_text=f"Можно скачать: {artifact_names}.",
+                web_demo_session_id=session_id,
+                action_hints=["download_artifact"],
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                now=now,
+            )
+        )
+        return cards
+
+    if status_snapshot["user_visible_status"] == "awaiting_confirmation":
+        cards.append(
+            build_web_reply_card(
+                "confirmation_prompt",
+                title="Подтвердить brief",
+                body_text=next_question or "Проверь краткое summary, попроси правки обычным текстом или явно подтверди текущую версию brief.",
+                web_demo_session_id=session_id,
+                action_hints=["request_brief_correction", "confirm_brief", "reopen_brief"],
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                now=now,
+            )
+        )
+    elif next_question:
+        cards.append(
+            build_web_reply_card(
+                "clarification_prompt" if next_action == "resolve_clarification" else "discovery_question",
+                title="Нужно уточнение" if next_action == "resolve_clarification" else "Следующий вопрос",
+                body_text=next_question,
+                web_demo_session_id=session_id,
+                action_hints=["submit_turn"],
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                now=now,
+            )
+        )
+    return cards

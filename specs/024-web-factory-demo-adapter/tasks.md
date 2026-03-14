@@ -44,13 +44,13 @@
 
 **⚠️ CRITICAL**: No browser user story should be treated as complete until this phase is done.
 
-- [ ] T006 [P] Create reusable web-demo session fixtures in `tests/fixtures/agent-factory/web-demo/session-new.json`
-- [ ] T007 [P] Create component coverage for access gate and session routing in `tests/component/test_agent_factory_web_access.sh`
-- [ ] T008 [P] Create local adapter flow coverage in `tests/integration_local/test_agent_factory_web_flow.sh`
-- [ ] T009 [P] Implement the web adapter entrypoint and normalized browser envelope handling in `scripts/agent-factory-web-adapter.py`
-- [ ] T010 [P] Extend shared browser render and status helpers in `scripts/agent_factory_common.py`
-- [ ] T011 [P] Add the initial browser shell assets in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js`
-- [ ] T012 Document operator flow and adapter storage layout in `docs/runbooks/agent-factory-web-demo.md`
+- [x] T006 [P] Create reusable web-demo session fixtures in `tests/fixtures/agent-factory/web-demo/session-new.json`
+- [x] T007 [P] Create component coverage for access gate and session routing in `tests/component/test_agent_factory_web_access.sh`
+- [x] T008 [P] Create local adapter flow coverage in `tests/integration_local/test_agent_factory_web_flow.sh`
+- [x] T009 [P] Implement the web adapter entrypoint and normalized browser envelope handling in `scripts/agent-factory-web-adapter.py`
+- [x] T010 [P] Extend shared browser render and status helpers in `scripts/agent_factory_common.py`
+- [x] T011 [P] Add the initial browser shell assets in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js`
+- [x] T012 Document operator flow and adapter storage layout in `docs/runbooks/agent-factory-web-demo.md`
 
 **Checkpoint**: One browser turn can be gated, normalized, routed, and rendered through shared web-demo plumbing.
 
