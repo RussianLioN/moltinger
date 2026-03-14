@@ -15,6 +15,22 @@
 Этот путь заменяет старую гибридную модель, где canonical runtime жил в repo-side watcher scripts.
 Старый watcher теперь нужен только как migration-only исторический материал и не должен восприниматься как основной пользовательский путь.
 
+## Live runtime contract
+
+Для live Moltis skill считается внедрённым только если контейнер реально видит репозиторий как `/server`.
+
+Канонический контракт такой:
+- `docker-compose*.yml` монтирует checkout в контейнер как `/server:ro`;
+- `working_dir` контейнера равен `/server`;
+- `skills.search_paths` указывает на `/server/skills`;
+- runtime scripts и schema paths в `config/moltis.toml` используют container-visible пути;
+- writable state и audit живут не в `/server`, а в `/home/moltis/.moltis/codex-update/`.
+
+Простыми словами:
+- skill и scripts читаются из git-управляемого checkout;
+- state и audit пишутся в runtime home Moltis;
+- live Telegram UAT должен проверять именно этот путь, а не ad-hoc shell fallback.
+
 ## Как это работает сейчас
 
 На текущем implementation slice навык уже умеет:
@@ -244,12 +260,12 @@ GitOps wiring:
 - runtime defaults живут в [config/moltis.toml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/config/moltis.toml)
 - cron job живёт в [moltis-codex-upstream-watcher](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/scripts/cron.d/moltis-codex-upstream-watcher)
 - inventory зафиксирован в [manifest.json](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/scripts/manifest.json)
+- live container visibility обеспечивается через `/server` mount в [docker-compose.yml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docker-compose.yml) и [docker-compose.prod.yml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docker-compose.prod.yml)
 
 Минимальные env для live scheduler delivery:
 
 ```text
 MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED=true
-MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE=/opt/moltinger/.env
 ```
 
 Опционально можно задать явный chat id:
@@ -259,6 +275,10 @@ MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID=<chat_id>
 ```
 
 Если `chat_id` не задан явно, runtime пытается взять его из `.env`, а затем fallback-ом использует первый идентификатор из `TELEGRAM_ALLOWED_USERS`.
+
+Для live Moltis внутри контейнера `.env` не обязателен:
+- sender может читать `TELEGRAM_BOT_TOKEN` прямо из container env;
+- fallback по `chat_id` умеет использовать `TELEGRAM_ALLOWED_USERS`, если `MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID` не задан.
 
 ## Hermetic proof
 

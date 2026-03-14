@@ -30,6 +30,7 @@ services:
     image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}
     container_name: moltis
     restart: unless-stopped
+    working_dir: /server
 
     # Security: Drop all capabilities, add only what's needed
     cap_drop:
@@ -45,6 +46,7 @@ services:
       - "${MOLTIS_REDIRECT_PORT:-13132}:13132"
 
     volumes:
+      - ./:/server:ro
       - ./config:/home/moltis/.config/moltis:ro
       - moltis-data:/home/moltis/.moltis
       - /var/run/docker.sock:/var/run/docker.sock:ro

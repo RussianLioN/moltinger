@@ -153,6 +153,47 @@ EOF
     assert_eq "suppressed" "$(jq -r '.last_delivery_status' "$state_file")" "State should retain duplicate suppression outcome"
     test_pass
 
+    test_start "component_moltis_codex_update_run_scheduler_can_resolve_chat_id_from_process_env_without_env_file"
+    work_dir="$(secure_temp_dir moltis-codex-update-run-env-chat-id)"
+    state_file="$work_dir/state.json"
+    sender_script="$work_dir/fake-telegram-send.sh"
+    cat > "$sender_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf '{"ok":true,"result":{"message_id":702,"chat":{"id":"%s"}}}\n' "$chat_id"
+EOF
+    chmod +x "$sender_script"
+
+    TELEGRAM_ALLOWED_USERS="262872984,123" \
+    bash "$RUN_SCRIPT" \
+        --mode scheduler \
+        --state-file "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.114.0.html" \
+        --include-issue-signals \
+        --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
+        --telegram-enabled \
+        --telegram-env-file "$work_dir/missing.env" \
+        --telegram-send-script "$sender_script" \
+        --json-out "$work_dir/report.json" \
+        --summary-out "$work_dir/summary.md" \
+        --stdout none
+    report="$work_dir/report.json"
+    assert_eq "sent" "$(jq -r '.delivery.status' "$report")" "Scheduler run should still send when only TELEGRAM_ALLOWED_USERS env is available"
+    assert_eq "262872984" "$(jq -r '.delivery.chat_id' "$report")" "Scheduler run should derive the first chat id from TELEGRAM_ALLOWED_USERS"
+    test_pass
+
     test_start "component_moltis_codex_update_run_uses_project_profile_for_project_specific_recommendations"
     work_dir="$(secure_temp_dir moltis-codex-update-run-profile)"
     state_file="$work_dir/state.json"

@@ -151,6 +151,17 @@ resolve_telegram_chat_id() {
         fi
     fi
 
+    configured="${TELEGRAM_ALLOWED_USERS:-}"
+    if [[ -n "$configured" ]]; then
+        configured="${configured//,/ }"
+        for first_user in $configured; do
+            if [[ -n "$first_user" ]]; then
+                printf '%s\n' "$first_user"
+                return 0
+            fi
+        done
+    fi
+
     return 1
 }
 

@@ -52,6 +52,7 @@ services:
     image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}
     container_name: moltis
     restart: unless-stopped
+    working_dir: /server
     # SECURITY: privileged mode required for Docker-in-Docker sandbox execution
     # See SECURITY NOTICE above for details
     privileged: true
@@ -63,6 +64,7 @@ services:
       - "13132:13132"  # HTTP redirect / CA download
 
     volumes:
+      - ./:/server:ro
       # Configuration files
       - ./config:/home/moltis/.config/moltis
       # Persistent data (sessions, memory, logs)

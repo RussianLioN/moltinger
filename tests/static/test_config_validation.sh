@@ -70,6 +70,16 @@ run_static_config_validation_tests() {
         test_fail "docker-compose.prod.yml does not render cleanly"
     fi
 
+    test_start "static_moltis_compose_exposes_repo_as_runtime_visible_server_workspace"
+    if rg -q '^    working_dir: /server$' "$COMPOSE_PROD" && \
+       rg -q '^\s+- \./:/server:ro$' "$COMPOSE_PROD" && \
+       rg -q '^    working_dir: /server$' "$PROJECT_ROOT/docker-compose.yml" && \
+       rg -q '^\s+- \./:/server:ro$' "$PROJECT_ROOT/docker-compose.yml"; then
+        test_pass
+    else
+        test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for live skill visibility"
+    fi
+
     test_start "static_compose_clawdiy_valid"
     if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass
@@ -127,6 +137,18 @@ PY
         test_pass
     else
         test_fail "Fixture config should target internal ollama service DNS"
+    fi
+
+    test_start "static_config_codex_update_uses_container_visible_runtime_paths"
+    if rg -Fq 'MOLTIS_CODEX_UPDATE_STATE_FILE = "/home/moltis/.moltis/codex-update/state.json"' "$TOML_CONFIG" && \
+       rg -Fq 'MOLTIS_CODEX_UPDATE_STATE_SCRIPT = "/server/scripts/moltis-codex-update-state.sh"' "$TOML_CONFIG" && \
+       rg -Fq 'MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT = "/server/scripts/moltis-codex-update-profile.sh"' "$TOML_CONFIG" && \
+       rg -Fq 'MOLTIS_CODEX_UPDATE_AUDIT_DIR = "/home/moltis/.moltis/codex-update/audit"' "$TOML_CONFIG" && \
+       rg -Fq 'MOLTIS_CODEX_UPDATE_PROFILE_SCHEMA = "/server/specs/023-full-moltis-codex-update-skill/contracts/project-profile.schema.json"' "$TOML_CONFIG" && \
+       rg -Fq 'MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT = "/server/scripts/telegram-bot-send.sh"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must use container-visible /server paths for codex-update skill code and ~/.moltis paths for writable state"
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"

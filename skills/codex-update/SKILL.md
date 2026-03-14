@@ -33,7 +33,7 @@ description: Полностью Moltis-native навык для проверки
 1. Сразу запускай канонический runtime:
 
 ```bash
-bash scripts/moltis-codex-update-run.sh --mode manual --stdout summary
+bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary
 ```
 
 2. Если нужен project profile, добавляй `--profile-file ...`.
@@ -62,13 +62,13 @@ make codex-update
 Прямой runtime entrypoint:
 
 ```bash
-bash scripts/moltis-codex-update-run.sh --mode manual
+bash /server/scripts/moltis-codex-update-run.sh --mode manual
 ```
 
 Если нужен project profile:
 
 ```bash
-bash scripts/moltis-codex-update-run.sh \
+bash /server/scripts/moltis-codex-update-run.sh \
   --mode manual \
   --profile-file path/to/project-profile.json
 ```
@@ -96,7 +96,7 @@ bash scripts/moltis-codex-update-run.sh \
 Для scheduler/daemon path используется тот же runtime:
 
 ```bash
-bash scripts/moltis-codex-update-run.sh --mode scheduler --stdout json
+bash /server/scripts/moltis-codex-update-run.sh --mode scheduler --stdout json
 ```
 
 Scheduler уже умеет:
