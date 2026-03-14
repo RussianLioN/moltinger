@@ -8,7 +8,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches:
+      - '**'
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
@@ -57,6 +58,7 @@ jobs:
       - id: resolve
         env:
           EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
           INPUT_LANE_GROUP: ${{ github.event.inputs.lane_group || '' }}
           INPUT_LIVE_MODE: ${{ github.event.inputs.live_mode || 'false' }}
         run: |
@@ -68,7 +70,12 @@ jobs:
               live_mode="false"
               ;;
             push)
-              lane_group="main"
+              # Keep branch-push CI lightweight while preserving full main validation.
+              if [[ "$REF_NAME" == "main" ]]; then
+                lane_group="main"
+              else
+                lane_group="pr"
+              fi
               live_mode="false"
               ;;
             schedule)
@@ -101,10 +108,10 @@ jobs:
     needs: resolve-target
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -196,7 +203,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ needs.resolve-target.outputs.artifact_name }}
           path: test-results/
@@ -210,7 +217,7 @@ jobs:
     if: always()
     steps:
       - name: Download canonical test artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ needs.resolve-target.outputs.artifact_name }}
           path: test-artifacts
@@ -282,7 +289,7 @@ jobs:
     if: always() && github.ref == 'refs/heads/main' && needs.gate.result == 'failure'
     steps:
       - name: Download canonical test artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ needs.resolve-target.outputs.artifact_name }}
           path: test-artifacts
