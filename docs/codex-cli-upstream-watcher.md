@@ -241,48 +241,51 @@ make codex-advisory-e2e
 Главные места для проверки:
 
 - watcher JSON report: `followup.consent.*`, `automation.alert.*`, `telegram_target.*`
-- consent store record: `request.status`, `delivery.status`, `decision.*`
-- helper artifact: `.tmp/current/codex-telegram-consent-e2e-report.json`
+- repo-side baseline helper artifact: `.tmp/current/codex-telegram-consent-e2e-report.json`
+- Moltis-native advisory artifact: `.tmp/current/codex-advisory-e2e-report.json`
+- Moltis-native advisory session/audit records: `interaction_record.*`, `followup_status`, `degraded_reason`
 - scheduler log: `/var/log/moltis/codex-upstream-watcher.log`
 
 На что смотреть в первую очередь:
 
 - `consent_router_ready`
 - `router_mode`
-- `delivery.status`
-- `request.status`
+- `interaction_record.followup_status`
+- `degraded_reason`
 - наличие/отсутствие consent question в самом alert-тексте
 
 ## Когда watcher задаёт вопрос, а когда нет
 
-Watcher теперь спрашивает о практических рекомендациях только тогда, когда authoritative consent router реально готов:
+В текущем repo-side baseline watcher больше не задаёт вопрос о практических рекомендациях вообще.
 
-- router path включён;
-- доступен shared consent store helper;
-- alert можно безопасно связать с `request_id` и `action_token`.
+Причина простая:
 
-Если router path недоступен, watcher деградирует в one-way alert:
+- старый repo-side consent UX выведен из эксплуатации;
+- authoritative follow-up path должен жить в Moltis-native runtime, а не в watcher-скрипте;
+- до подтверждённого Moltis-native interactive transport watcher обязан оставаться честным one-way notifier.
 
-- отправляет только уведомление об обновлении;
-- не обещает сломанный follow-up;
-- не просит пользователя отвечать на вопрос, который никто не обработает корректно.
+Практически это значит:
+
+- scheduler alert сообщает только о новом Codex advisory;
+- в тексте больше не должно быть вопроса `Хотите получить практические рекомендации`;
+- watcher не должен показывать legacy-команды вроде `/codex_da`;
+- `followup.consent.status` в report остаётся `disabled`, а `router_mode` остаётся `one_way_only`.
 
 ## Что изменилось в UX после feature 017
 
-Теперь watcher больше не должен обещать диалог по свободному тексту `да/нет`, если authoritative router включён.
+Feature 017 зафиксировал правильную архитектурную границу: интерактивный ответ должен обрабатываться основным Moltis ingress, а не repo-side watcher.
 
-Пользовательский сценарий теперь такой:
+На текущем срезе это означает:
 
-1. приходит alert о новой версии Codex CLI;
-2. в сообщении есть кнопки и явная fallback-команда;
-3. authoritative router получает токенизированное действие;
-4. shared store фиксирует `request_id`, `action_token`, `chat_id`, решение и срок действия окна.
+1. watcher остаётся producer/notifier;
+2. repo-side interactive follow-up больше не рекламируется пользователю;
+3. helper `codex-telegram-consent-e2e` теперь доказывает честный one-way baseline и safe degraded fallback, а не старый `alert -> consent -> recommendations` путь.
 
 Простыми словами:
 
-- раньше watcher сам пытался позже прочитать ответ пользователя;
-- теперь он только открывает корректно коррелированный запрос;
-- входящий ответ должен обрабатывать основной Telegram ingress.
+- раньше repo-side helper проверял устаревший consent flow;
+- теперь он проверяет, что watcher не врёт пользователю про несуществующий interactive path;
+- интерактивное продолжение должно вернуться только через Moltis-native runtime.
 
 ## Legacy fallback и граница текущего среза
 
@@ -306,24 +309,26 @@ Legacy path через Bot API `getUpdates` оставлен только как
 - legacy pending-состояние сохраняется в state-файле только при отключённом router path
 - если окно ожидания истекло, follow-up закрывается как `expired`
 
-## Shared consent store
+## Moltis-native advisory session store
 
-Новый source of truth для authoritative path:
+Для текущего healthy interactive path source of truth находится уже не в repo-side consent store, а в Moltis-native advisory session store:
 
-- script: `scripts/codex-telegram-consent-store.sh`
-- default dir: `.tmp/current/codex-telegram-consent-store/`
+- script: `scripts/codex-advisory-session-store.sh`
+- default dir: `.tmp/current/codex-advisory-session-store/`
 
 Один record хранит:
 
-- `request_id`
-- `action_token`
-- `chat_id`
-- `fingerprint`
-- срок действия окна
-- prepared recommendation payload
-- последнее зафиксированное решение
+- advisory session identity
+- chat binding и fingerprint
+- callback/interation status
+- follow-up delivery outcome
+- degraded reason, если interactive path был выключен
 
-Это нужно, чтобы follow-up был коррелированным и audit-friendly, а не жил только внутри watcher state.
+Важно:
+
+- `codex-telegram-consent-e2e` не должен создавать repo-side consent records;
+- repo-side helper теперь доказывает только honest one-way baseline;
+- интерактивный audit trail нужно смотреть через Moltis-native advisory artifacts.
 
 ## Advisory issue signals
 

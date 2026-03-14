@@ -100,9 +100,11 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 
 4. `branch-slug` should be the branch name with `/` replaced by `-`.
 5. If a branch has a dedicated worktree, edits belong there and not in the canonical `main` directory.
-6. Update `docs/GIT-TOPOLOGY-REGISTRY.md` when worktree topology changes.
-7. `/tmp` worktrees are acceptable for disposable or emergency lanes, but the preferred long-lived pattern is the sibling path above.
-8. If the topology registry disagrees with live `git` state, live `git` state wins.
+6. Inspect topology state with `status`/`check` during ordinary worktree flows.
+7. Publish `docs/GIT-TOPOLOGY-REGISTRY.md` only from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
+8. Do not treat canonical `main` or an ordinary feature branch as the default publish path for topology snapshots.
+9. `/tmp` worktrees are acceptable for disposable or emergency lanes, but the preferred long-lived pattern is the sibling path above.
+10. If the topology registry disagrees with live `git` state, live `git` state wins.
 
 ## Beads Ownership Policy
 
@@ -120,6 +122,7 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 ### Preferred Branch Prefixes
 
 - `NNN-<spec-slug>` for Speckit-linked implementation work
+- `chore/<topic>` for operational publish lanes and controlled maintenance paths
 - `codex/<area>-<topic>` for bounded Codex streams
 - `docs/<topic>` for docs-only work
 - `fix/<topic>` for narrow runtime fixes

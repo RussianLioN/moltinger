@@ -1,6 +1,6 @@
 # Session Summary Command
 
-Updates `SESSION_SUMMARY.md` with current session progress and reconciles the generated git-topology registry at session boundaries.
+Updates `SESSION_SUMMARY.md` with current session progress and reports git-topology registry state at session boundaries.
 
 ## Codex Note
 
@@ -16,10 +16,12 @@ Updates `SESSION_SUMMARY.md` with current session progress and reconciles the ge
 
 ## Workflow
 
-1. **Reconcile topology state first**:
+1. **Inspect topology state first**:
    - If `scripts/git-topology-registry.sh` exists, run:
-     - `scripts/git-topology-registry.sh doctor --prune --write-doc`
-   - If reconciliation changes `docs/GIT-TOPOLOGY-REGISTRY.md`, include that file in the session update.
+     - `scripts/git-topology-registry.sh status`
+     - `scripts/git-topology-registry.sh check`
+   - If topology is stale, record that status in the summary/report, but do not auto-run `doctor --prune --write-doc`.
+   - Publishing the tracked topology snapshot is a separate explicit maintenance step from a dedicated non-main topology-publish worktree/branch.
 
 2. **Analyze current session**:
    - Git commits since last update (`git log --oneline -10`)
@@ -39,7 +41,7 @@ Updates `SESSION_SUMMARY.md` with current session progress and reconciles the ge
 
 4. **Commit changes**:
    - Auto-commit `SESSION_SUMMARY.md` updates
-   - Include `docs/GIT-TOPOLOGY-REGISTRY.md` if it was regenerated during reconciliation
+   - Do not auto-include `docs/GIT-TOPOLOGY-REGISTRY.md` in the session-summary commit
 
 5. **Report**:
    - Summary of changes made
@@ -77,7 +79,8 @@ This command should be run:
 - When completing phases
 - Before creating PRs
 
-When topology changed outside `/worktree`, this command is the preferred session-boundary reconciliation point.
+When topology changed outside `/worktree`, this command is the preferred session-boundary inspection point.
+If the tracked topology snapshot must be published, do that separately via `command-git-topology refresh` or `scripts/git-topology-registry.sh refresh --write-doc` from a dedicated non-main topology-publish worktree/branch.
 
 ## Example Output
 

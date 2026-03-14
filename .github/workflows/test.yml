@@ -25,6 +25,7 @@ on:
           - all
           - static
           - component
+          - topology_registry
           - integration_local
           - security_api
           - mcp_fake

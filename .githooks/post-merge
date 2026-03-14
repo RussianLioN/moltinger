@@ -10,7 +10,7 @@ if [[ -x "$REGISTRY_SCRIPT" ]]; then
   if ! output="$("$REGISTRY_SCRIPT" check 2>&1)"; then
     printf '%s\n' "$output" >&2
     echo "[git-topology-registry] post-merge detected topology drift." >&2
-    echo "[git-topology-registry] Reconcile with /session-summary or scripts/git-topology-registry.sh doctor --prune --write-doc." >&2
+    echo "[git-topology-registry] Ordinary branches may continue; publish the tracked snapshot later from the dedicated non-main branch 'chore/topology-registry-publish' in its own publish worktree." >&2
   fi
 fi
 

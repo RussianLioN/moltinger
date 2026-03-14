@@ -129,7 +129,9 @@ Planning decisions from `scripts/worktree-ready.sh plan`:
 If `scripts/git-topology-registry.sh` exists:
 - run `scripts/git-topology-registry.sh check` as a non-blocking preflight
 - if registry is `stale`, do not block the start flow on the markdown snapshot
-- use live `git` for collision detection and refresh the registry after the mutation
+- use live `git` for collision detection
+- do not auto-run `refresh --write-doc` during ordinary `start`, `attach`, `finish`, or `cleanup`
+- publish the tracked snapshot only through an explicit topology publish flow from a dedicated non-main worktree/branch
 
 ## Scope Boundary
 
@@ -152,9 +154,10 @@ Rules:
 - Mixed requests do not expand Phase A permissions. Treat downstream work as opaque deferred payload only.
 - During Phase A, do not analyze, validate, decompose, or prepare the downstream work.
 - During Phase A, do not create or update downstream artifacts, including Beads issues, GitHub issues, Linear issues, specs, plans, checklists, or implementation notes.
-- Phase A may only: plan, sync base, create/attach the worktree, verify ancestry, refresh/land topology state, mark an already-resolved issue `in_progress`, and render or launch the handoff.
+- Phase A may only: plan, sync base, create/attach the worktree, verify ancestry, probe topology state, mark an already-resolved issue `in_progress`, and render or launch the handoff.
 - If explicit `--handoff terminal` or `--handoff codex` is requested and succeeds, stop the current session immediately after reporting the launched handoff.
-- If Phase A mutates `docs/GIT-TOPOLOGY-REGISTRY.md` in the invoking branch, land that mutation before the handoff block. Do not leave it as an unpushed local diff unless the user explicitly asked for a dirty local-only test flow.
+- Do not auto-mutate `docs/GIT-TOPOLOGY-REGISTRY.md` in the invoking branch during ordinary Phase A worktree flows.
+- If topology is stale, report it honestly and point to the dedicated publish path instead of injecting a docs-only commit into the invoking branch.
 - If a separate UAT worktree later needs reset/update and carries a newer `docs/GIT-TOPOLOGY-REGISTRY.md` snapshot, preserve/promote that snapshot into the owning branch before treating the UAT branch as disposable.
 
 ## Start Workflow
@@ -207,51 +210,37 @@ Process:
      - `scripts/worktree-phase-a.sh create-from-base --canonical-root <canonical-root> --base-ref main --branch <branch> --path <absolute-worktree-path>`
      - The managed flow must keep Beads ownership local to the target worktree; it must not leave `.beads/redirect` pointing back at the canonical root.
    - existing local branch: create the worktree for that branch instead of inventing a new branch name
-9. For new branches, ancestry verification is mandatory before any topology refresh:
+9. For new branches, ancestry verification is mandatory before any topology publication:
    - if `scripts/worktree-phase-a.sh` reports that the branch already existed on the wrong commit, stop blocked
    - if the created worktree `HEAD` does not equal the resolved `main` commit, stop blocked
    - do not repair the branch in-place during Phase A
-   - do not refresh topology, commit, or push after an ancestry mismatch
-10. If `scripts/git-topology-registry.sh` exists in the invoking worktree or another already-known authoritative topology worktree, run `scripts/git-topology-registry.sh refresh --write-doc` from that worktree before any handoff so the topology mutation is captured immediately.
-   - Do not assume `main` already contains the topology script before this feature is merged.
-   - In Codex/App sessions, if the shared repo `.git` directory is outside the current writable sandbox, request approval/escalation for this refresh step before running it.
-   - Keep the topology mutation phase separate from the base-sync phase when escalation is required: create/refresh/helper may be grouped together, but do not bundle them with the `fetch/switch/pull` step.
-   - If refresh fails on topology lock, wait briefly and retry once.
-   - If refresh reports that the shared topology state is not writable from the current session, stop and tell the user to re-run the same refresh command with approval/escalation from the authoritative topology worktree.
-   - If it still fails, stop and report the exact reconcile command instead of continuing with extra mutations.
-11. If the refresh changed committed files in the invoking branch, landing the plane is part of Phase A:
-   - `git status --short docs/GIT-TOPOLOGY-REGISTRY.md`
-   - if changed, run:
-     - `git add docs/GIT-TOPOLOGY-REGISTRY.md`
-     - `git commit -m "docs(topology): refresh registry after worktree mutation"`
-     - `git pull --rebase`
-     - `./scripts/bd-local.sh sync`
-     - `git push`
-   - If this landing sequence fails, stop and report the exact blocking command/result instead of continuing to handoff.
-   - Treat the committed registry mutation as owned by the invoking branch, not by the target worktree branch.
-   - Do not run a second refresh/commit/push cycle in the same Phase A run.
-12. If issue id exists: `./scripts/bd-local.sh update <ISSUE_ID> --status in_progress`
+   - do not publish topology, commit, or push after an ancestry mismatch
+10. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check` as a non-blocking topology probe before handoff.
+   - Do not auto-run `refresh --write-doc` from the invoking branch.
+   - If `check` reports `stale`, keep the worktree flow moving and report the exact publish path instead of reconciling the tracked markdown snapshot in Phase A.
+   - The publish path must point to an explicit dedicated non-main topology-publish worktree/branch.
+11. If issue id exists: `./scripts/bd-local.sh update <ISSUE_ID> --status in_progress`
    - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
-13. If the request contains explicit downstream work for the target worktree, extract it as `pending_summary` using the user's wording as closely as possible.
+12. If the request contains explicit downstream work for the target worktree, extract it as `pending_summary` using the user's wording as closely as possible.
     - Keep it to one sentence.
     - Treat it as deferred payload, not as a task to reason about now.
     - Do not expand it into subtasks, rationale, diagnostics, recommendations, or new deliverables.
     - Normalize only pronouns or path references when needed for clarity.
-14. If the original request contains longer structured downstream intent, preserve it separately as `phase_b_seed_payload`.
+13. If the original request contains longer structured downstream intent, preserve it separately as `phase_b_seed_payload`.
     - Use it only for deferred Phase B context.
     - Preserve concrete constraints, boundaries, exact feature descriptions, defaults, and stop conditions.
     - Do not collapse this richer payload into `pending_summary`.
     - Do not add new interpretation, decomposition, or execution notes.
-15. If the helper exists, run:
+14. If the helper exists, run:
    - `scripts/worktree-ready.sh create --branch <branch> --path <worktree-path> --issue <id> --handoff <manual|terminal|codex> [--pending-summary "<pending_summary>"] [--phase-b-seed-payload "<phase_b_seed_payload>"]`
    - omit `--issue <id>` only when no issue id was resolved confidently
-16. Return the helper stdout as the final manual-handoff reply.
-17. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order, one command per line.
+15. Return the helper stdout as the final manual-handoff reply.
+16. For manual handoff, immediately follow the status block with a fenced `bash` block that contains only the exact next-step commands in order, one command per line.
     - If the helper detected issue-linked foundation files that exist only in the invoking branch or its upstream, the fenced `bash` block must include the exact bootstrap import command before `direnv allow` or `codex`.
-18. Treat the helper human output as the canonical manual handoff payload.
+17. Treat the helper human output as the canonical manual handoff payload.
     - Do not reconstruct, paraphrase, reorder, or summarize it in the originating session.
     - The helper may render a short `Pending` line plus a separate richer deferred payload block.
-19. If and only if the original request contained explicit downstream work, append exactly one fenced `text` block using this fixed template when only a short summary exists:
+18. If and only if the original request contained explicit downstream work, append exactly one fenced `text` block using this fixed template when only a short summary exists:
    ```text
    Phase B only.
    Worktree: <path>
@@ -259,7 +248,7 @@ Process:
    Task: <pending_summary>
    Phase A is complete. Do not repeat worktree setup. Do not create or update issues, specs, or plans unless explicitly requested in the target session.
    ```
-20. If `phase_b_seed_payload` exists, the helper may instead render a dedicated richer deferred payload block after the fenced `bash` block, for example:
+19. If `phase_b_seed_payload` exists, the helper may instead render a dedicated richer deferred payload block after the fenced `bash` block, for example:
    ```text
    Phase B Seed Payload (deferred, not executed).
    Worktree: <path>
@@ -269,7 +258,7 @@ Process:
    <phase_b_seed_payload>
    Phase A is complete. Do not repeat worktree setup in the originating session.
    ```
-21. Stop. Do not continue downstream task execution in the originating session.
+20. Stop. Do not continue downstream task execution in the originating session.
 
 Handoff default:
 - Default to `manual`.
@@ -336,7 +325,7 @@ Process:
 6. `./scripts/bd-local.sh sync`
 7. `git push -u origin <current-branch>`
 8. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
-   - if stale, report: `Run command-session-summary or scripts/git-topology-registry.sh refresh --write-doc from the authoritative worktree before ending the session`
+   - if stale, report: `Publish the topology snapshot later from a dedicated non-main topology-publish worktree using command-git-topology or scripts/git-topology-registry.sh refresh --write-doc`
 9. `./scripts/bd-local.sh close <ISSUE_ID> --reason "<reason>"`
    - if direct DB access fails in the current environment, retry with `bd close --no-db <ISSUE_ID> --reason "<reason>"`
    - if no issue id can be resolved confidently, print `Issue: n/a` and skip the close step
@@ -356,7 +345,8 @@ Process:
 3. If `--delete-branch`:
    - verify branch is merged into `origin/main`
    - delete local + remote branch
-4. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh refresh --write-doc`
+4. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
+   - if stale, report the dedicated topology publish next step instead of auto-running `refresh --write-doc`
 5. Print cleanup report.
    - cleanup reports are lifecycle reports, not readiness handoffs
    - use `Status: cleanup_complete` on success
@@ -375,7 +365,7 @@ Process:
 - Never delete remote branch without merged check against `origin/main`.
 - Stop and report on failed quality gates, rebase conflicts, or push failures.
 - Prefer helper output over ad hoc prose when the helper is available.
-- If topology registry is stale, treat live `git` as authoritative for conflict detection and refresh the registry after the mutation.
+- If topology registry is stale, treat live `git` as authoritative for conflict detection and report the dedicated publish path instead of auto-refreshing the tracked snapshot.
 - Fall back to manual instructions if `terminal` or `codex` automation is unavailable.
 - Keep output short and actionable.
 - Do not append speculative troubleshooting after a successful create/attach flow. Report only confirmed facts and exact next steps.
@@ -442,7 +432,7 @@ Phase A is complete. Do not repeat worktree setup in the originating session.
 - For manual handoff, the final assistant message must end at the handoff block. Do not continue the user’s downstream task.
 - If a richer `Phase B Seed Payload` is rendered, it is deferred handoff metadata only. It must follow the fenced `bash` block and must not contain evidence that Phase B already executed.
 - For `terminal` or `codex` handoff, if launch succeeds, report the launched handoff and stop. If launch fails, degrade to manual handoff and stop.
-- If Phase A refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, explicitly state whether that managed diff was landed and pushed in the invoking branch.
+- If topology state is stale, explicitly report that the tracked snapshot was not auto-published from the invoking branch and point to the dedicated publish path.
 - Do not ask the user to manually copy prose commands when a fenced `bash` block can be provided.
 - For manual handoff, if the helper produced a human-readable handoff block, relay it verbatim. Do not restyle fields, collapse commands, convert fenced blocks back into prose, or prepend/append a second custom summary.
 - If the helper surfaced `Bootstrap Source` and `Bootstrap Files`, keep them verbatim and preserve the corresponding `git checkout <source> -- ...` command inside the fenced `bash` block.
@@ -502,4 +492,4 @@ Optional helper detail lines may also include:
 - `Handoff: <manual|terminal|codex>`
 - `Warnings:`
 
-If a managed create/cleanup flow successfully ran `scripts/git-topology-registry.sh refresh --write-doc`, explicitly say that the tracked diff in `docs/GIT-TOPOLOGY-REGISTRY.md` is expected in the invoking worktree until it is committed or discarded.
+Do not present a tracked diff in `docs/GIT-TOPOLOGY-REGISTRY.md` as an ordinary side effect of `start`, `attach`, `finish`, or `cleanup`. Publishing that snapshot belongs to the dedicated topology publish path.

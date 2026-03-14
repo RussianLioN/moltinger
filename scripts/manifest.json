@@ -428,7 +428,7 @@
     },
     "codex-telegram-consent-e2e.sh": {
       "version": "1.0.0",
-      "description": "Run a hermetic Codex Telegram acceptance path covering alert, consent, immediate recommendations, and degraded one-way fallback",
+      "description": "Run a hermetic Codex Telegram baseline check proving honest one-way alerts and degraded fallback without the retired repo-side consent UX",
       "entrypoint": true,
       "requires": [
         "bash",

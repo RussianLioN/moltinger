@@ -1675,7 +1675,7 @@ apply_topology_probe_to_report() {
   report_topology_state="${topology_registry_state}"
 
   if [[ "${topology_registry_state}" == "stale" ]]; then
-    add_warning "Git topology registry is stale; live git discovery was used for this report."
+    add_warning "Git topology registry is stale; live git discovery was used for this report. Publish the tracked snapshot later from a dedicated non-main topology-publish worktree/branch if you need the markdown snapshot updated."
   fi
 }
 
@@ -2439,7 +2439,7 @@ set_planning_decision() {
     planning_question="Existing worktree already uses the resolved branch. Reuse it instead of creating a duplicate."
     add_plan_next_step "Reuse the existing worktree at ${candidate_path}"
     if [[ "${topology_registry_state}" == "stale" ]]; then
-      add_plan_next_step "Refresh the topology registry after any further mutation"
+      add_plan_next_step "Publish the topology snapshot later from a dedicated non-main topology-publish worktree/branch if you need the tracked markdown updated"
     fi
     return 0
   fi
@@ -2449,7 +2449,7 @@ set_planning_decision() {
     planning_question="A local branch already exists for this request. Attach a worktree to it instead of creating another branch."
     add_plan_next_step "Create or attach a worktree for ${branch}"
     if [[ "${topology_registry_state}" == "stale" ]]; then
-      add_plan_next_step "Refresh the topology registry after the attach flow completes"
+      add_plan_next_step "Keep working from live git state and publish the topology snapshot later from a dedicated non-main topology-publish worktree/branch if needed"
     fi
     return 0
   fi
@@ -2471,7 +2471,7 @@ set_planning_decision() {
 
   add_plan_next_step "Create a clean worktree on ${branch}"
   if [[ "${topology_registry_state}" == "stale" ]]; then
-    add_plan_next_step "Refresh the topology registry immediately after creation"
+    add_plan_next_step "Do not auto-publish the topology snapshot from the invoking branch; use a dedicated non-main topology-publish worktree/branch later if you need the tracked markdown updated"
   fi
 }
 

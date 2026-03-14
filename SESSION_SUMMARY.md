@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-15
 
 ---
 
@@ -28,6 +28,26 @@
 ---
 
 ## 📊 Current Status
+
+### Current Session Update (2026-03-15, topology hotfix lane)
+
+- Ветка в работе: `fix/worktree-topology-registry-single-writer-publish`
+- `molt-ml3` фактически закрыт и доведён до automation-enforced состояния.
+- Что дожато после review blocker’ов:
+  - `scripts/git-topology-registry.sh` теперь принимает publish только из одной dedicated non-main ветки `chore/topology-registry-publish`; alias-ветки, `main`, ordinary feature-ветки и detached HEAD явно отклоняются.
+  - `.githooks/pre-push` больше не fail-open на internal error path: unexpected failure `scripts/git-topology-registry.sh check` теперь блокирует push, stale ordinary branch остаётся warning-only, stale dedicated publish branch остаётся hard-block.
+  - `tests/lib/git_topology_fixture.sh` переиспользует уже существующую canonical publish worktree, поэтому child-branch doctor flow не ломается на повторном занятии той же publish-ветки.
+  - `tests/integration/test_git_topology_registry.sh` получил детерминированный non-lock failure path, который одинаково работает и в локальном shell, и в containerized runner.
+  - `tests/run.sh` теперь включает `topology_registry` в canonical `pr` lane; отдельный `--lane topology_registry` агрегирует unit/integration/e2e suites для GitHub-style gating.
+- Проверки:
+  - `./tests/unit/test_git_topology_registry.sh`
+  - `./tests/integration/test_git_topology_registry.sh`
+  - `./tests/e2e/test_git_topology_registry_workflow.sh`
+  - `./tests/run.sh --lane topology_registry --json`
+  - `./tests/unit/test_worktree_ready.sh`
+  - `make codex-check`
+  - `git diff --check`
+- Следующий шаг по этой линии: привести branch diff к merge-ready виду, открыть PR, посмотреть реальные GitHub checks/logs и только после этого принимать финальное merge-решение.
 
 ### Current Session Update (2026-03-13)
 
@@ -194,6 +214,35 @@ GitOps Compliance: Enforced ✅
 ---
 
 ## 📝 Session History
+
+### 2026-03-14: Topology Registry Single-Writer Publish Policy For Worktree Flows
+
+**Статус**: ✅ `command-worktree`, `command-session-summary` и связанные инструкции переведены на read-only-by-default handling для `docs/GIT-TOPOLOGY-REGISTRY.md`
+
+- Проведён отдельный consilium по конфликтам вокруг `docs/GIT-TOPOLOGY-REGISTRY.md` в параллельных worktree-сессиях.
+- Выбран и задокументирован single-writer publish path:
+  - обычные `start` / `attach` / `finish` / `cleanup` потоки используют только `status` / `check`
+  - tracked snapshot публикуется только явным шагом `refresh --write-doc`
+  - publish должен идти из dedicated non-main topology-publish worktree/branch, а не из `main` и не из обычной feature-ветки
+- Обновлены `.ai/instructions/shared-core.md`, `.claude/commands/worktree.md`, `.claude/commands/session-summary.md`, `.claude/commands/git-topology.md`, `docs/CODEX-OPERATING-MODEL.md`, `docs/QUICK-REFERENCE.md` и `docs/WORKTREE-HOTFIX-PLAYBOOK.md`.
+- В процессе landing найден и исправлен automation mismatch: `.githooks/pre-push` раньше жёстко блокировал push при stale topology snapshot. Теперь `pre-push`, `post-checkout`, `post-merge` и `post-rewrite` переводят stale topology в warning/report path и отправляют оператора к dedicated non-main publish branch, не forcing ordinary feature branch to publish the snapshot.
+- Добавлено новое правило: `docs/rules/topology-registry-single-writer-publish-path.md`.
+- Пересобраны generated инструкции и bridge в Codex через `./scripts/sync-agent-instructions.sh --write` и `./scripts/sync-claude-skills-to-codex.sh --install`.
+- Создан follow-up issue `molt-ml3` для отдельного script-level enforcement в automation.
+- Во время landing подтверждён побочный риск manual worktree path: even with localized Beads ownership, `bd sync` из вручную созданной hotfix-ворктрии всё ещё экспортировал state в canonical root `.beads/issues.jsonl`. Это зафиксировано как дополнительный аргумент, почему enforcement нужен не только в docs, но и в automation.
+
+**Validated**
+
+- `./scripts/sync-agent-instructions.sh --write`
+- `./scripts/sync-claude-skills-to-codex.sh --install`
+- `./scripts/sync-claude-skills-to-codex.sh --check`
+- `./tests/unit/test_worktree_ready.sh`
+- `bash -n .githooks/pre-push .githooks/post-checkout .githooks/post-merge .githooks/post-rewrite`
+- `make instructions-check`
+- `make codex-check`
+- `git diff --check`
+- `scripts/git-topology-registry.sh check` -> `status=stale` (ожидаемо; snapshot не публиковался из ordinary fix branch)
+- `scripts/git-topology-registry.sh status`
 
 ### 2026-03-12: Clawdiy Remote OAuth Runtime Research Formalized
 
@@ -1125,6 +1174,7 @@ gh run view --workflow test.yml   # View latest test run details
 4. **moltinger-j22** — MEDIUM: AlertManager Receivers
 5. **moltinger-eb0** — MEDIUM: Grafana Dashboard
 6. Протестировать skill telegram-learner на канале @tsingular
+7. После merge hotfix-а проверить, что ordinary ветки больше не получают blocker из-за stale topology snapshot
 
 ### P4 Priority Tasks (Recommended Order)
 

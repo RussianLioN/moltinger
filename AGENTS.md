@@ -27,8 +27,10 @@ scripts/git-topology-registry.sh refresh --write-doc
 scripts/git-topology-registry.sh status
 ```
 
-Use `check` when branch/worktree context matters or before cleanup actions. Use `refresh --write-doc` after topology mutations.
+Use `check` when branch/worktree context matters or before cleanup actions.
+Use `refresh --write-doc` only for explicit topology snapshot publication from a dedicated non-main publish worktree/branch, not from ordinary feature branches.
 In Codex/App sessions, `refresh --write-doc` may require approval if the shared repo `.git` directory is outside the current writable boundary.
+Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
 ## Quick Reference
 

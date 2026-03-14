@@ -17,8 +17,9 @@
 - Clawdiy runtime env mirror: `/opt/moltinger/clawdiy/.env`
 - Agent registry: `config/fleet/agents-registry.json`
 - Fleet policy: `config/fleet/policy.json`
-- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Live git topology: authoritative runtime source
 - Reviewed topology intent: `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md` (published snapshot, not live source of truth)
 
 ## Git Topology
 
@@ -28,7 +29,9 @@ scripts/git-topology-registry.sh check
 scripts/git-topology-registry.sh refresh --write-doc
 ```
 
-Use the topology registry before cleanup worktree/branch actions and after manual git topology changes.
+Use `status`/`check` before cleanup worktree/branch actions and for ordinary topology inspection.
+Use `refresh --write-doc` only as an explicit publish step from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
+Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
 ## Core Commands
 

@@ -115,9 +115,11 @@ scripts/git-topology-registry.sh check
 If topology changed:
 
 ```bash
-scripts/git-topology-registry.sh refresh --write-doc
+scripts/git-topology-registry.sh check
 git status
 ```
+
+If the hotfix also requires publishing a tracked topology snapshot, do that as a separate explicit step from a dedicated non-main topology-publish worktree/branch.
 
 ## Step 7: Land the Fix
 
@@ -125,7 +127,7 @@ git status
 git add ...
 git commit -m "fix(worktree): <short description>"
 git pull --rebase
-bd sync
+./scripts/bd-local.sh sync
 git push
 git status
 ```
