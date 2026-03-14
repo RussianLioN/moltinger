@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 WATCHER_SCRIPT="${PROJECT_ROOT}/scripts/codex-cli-upstream-watcher.sh"
-ROUTER_SCRIPT="${PROJECT_ROOT}/scripts/moltis-codex-consent-router.sh"
 STORE_SCRIPT="${PROJECT_ROOT}/scripts/codex-telegram-consent-store.sh"
 DEFAULT_RELEASE_FILE="${PROJECT_ROOT}/tests/fixtures/codex-upstream-watcher/releases-0.114.0.html"
 DEFAULT_ISSUE_SIGNALS_FILE="${PROJECT_ROOT}/tests/fixtures/codex-upstream-watcher/issue-signals.json"
@@ -35,9 +34,10 @@ usage() {
     cat <<'EOF'
 Usage: scripts/codex-telegram-consent-e2e.sh [options]
 
-Run a Codex-specific hermetic E2E scenario:
-  alert -> consent action -> immediate recommendations
-plus degraded fallback validation for one-way alerts.
+Run a Codex-specific hermetic E2E scenario that proves the current safe
+repo-side baseline:
+  honest one-way alert even when legacy consent flags are forced on
+plus degraded fallback validation for router-disabled alerts.
 
 Options:
   --mode MODE                hermetic (default: hermetic)
@@ -193,7 +193,6 @@ require_dependencies() {
 
     [[ "$MODE" == "hermetic" ]] || precondition_fail "--mode currently supports only hermetic"
     [[ -x "$WATCHER_SCRIPT" ]] || precondition_fail "Watcher script is not executable: $WATCHER_SCRIPT"
-    [[ -x "$ROUTER_SCRIPT" ]] || precondition_fail "Router script is not executable: $ROUTER_SCRIPT"
     [[ -x "$STORE_SCRIPT" ]] || precondition_fail "Consent store script is not executable: $STORE_SCRIPT"
     [[ -f "$RELEASE_FILE" ]] || precondition_fail "Release fixture not found: $RELEASE_FILE"
     [[ -f "$ISSUE_SIGNALS_FILE" ]] || precondition_fail "Issue-signals fixture not found: $ISSUE_SIGNALS_FILE"
@@ -316,8 +315,7 @@ assert_text_not_contains() {
 run_hermetic() {
     local alert_dir consent_store_dir fake_bin_dir fake_state_dir fake_env
     local watcher_report watcher_summary watcher_state
-    local request_id action_token chat_id consent_record
-    local alert_text router_event router_result consent_text
+    local alert_text
     local degraded_dir degraded_fake_bin degraded_fake_state degraded_fake_env
     local degraded_report degraded_summary degraded_state degraded_text
 
@@ -344,9 +342,12 @@ run_hermetic() {
     create_fake_sender "$fake_state_dir" "$fake_bin_dir"
     create_fake_sender "$degraded_fake_state" "$degraded_fake_bin"
 
-    log "Running consent-capable watcher alert"
+    log "Running one-way baseline watcher alert with legacy consent flags forced on"
     CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$fake_state_dir" \
     CODEX_UPSTREAM_WATCHER_TELEGRAM_COMMAND_HOOK_READY=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED=true \
+    CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES=true \
     bash "$WATCHER_SCRIPT" \
         --mode scheduler \
         --state-file "$watcher_state" \
@@ -362,56 +363,21 @@ run_hermetic() {
         --summary-out "$watcher_summary" \
         --stdout none
 
-    assert_jq "$watcher_report" '.decision.status == "deliver"' "Watcher should deliver a fresh consent-capable alert"
-    assert_jq "$watcher_report" '.followup.consent.status == "pending"' "Watcher should open a pending consent flow"
-    assert_jq "$watcher_report" '.followup.consent.router_mode == "authoritative"' "Watcher should advertise authoritative routing"
-    assert_jq "$watcher_report" '.automation.alert.consent_requested == true' "Watcher should request consent in authoritative mode"
-
-    request_id="$(jq -r '.followup.consent.pending_state.request_id // ""' "$watcher_report")"
-    [[ -n "$request_id" ]] || upstream_fail "Watcher report did not expose request_id for the consent flow"
-    consent_record="${consent_store_dir}/${request_id}.json"
-    [[ -f "$consent_record" ]] || upstream_fail "Watcher did not persist the shared consent record"
-    chat_id="$(jq -r '.request.chat_id // ""' "$consent_record")"
-    [[ -n "$chat_id" ]] || upstream_fail "Consent record is missing chat id"
+    assert_jq "$watcher_report" '.decision.status == "deliver"' "Watcher should still deliver a fresh upstream alert"
+    assert_jq "$watcher_report" '.followup.consent.status == "disabled"' "Retired repo-side watcher flow must keep consent disabled"
+    assert_jq "$watcher_report" '.followup.consent.router_mode == "one_way_only"' "Retired repo-side watcher flow must stay in one-way mode"
+    assert_jq "$watcher_report" '.automation.alert.consent_requested == false' "Retired repo-side watcher flow must not advertise consent"
+    assert_jq "$watcher_report" '.telegram_target.consent_enabled == false' "Legacy consent env flags must be ignored"
+    assert_jq "$watcher_report" '.telegram_target.consent_router_enabled == false' "Legacy consent router env flags must be ignored"
+    assert_jq "$watcher_report" 'any(.notes[]; contains("Legacy Telegram consent UX retired"))' "Watcher should explain that the repo-side consent flow is retired"
+    if compgen -G "${consent_store_dir}/*.json" >/dev/null; then
+        CONTEXT_JSON="$(jq -n --arg consent_store_dir "$consent_store_dir" '{assertion_failed:{consent_store_dir:$consent_store_dir, message:"Retired watcher flow unexpectedly wrote consent store records"}}')"
+        upstream_fail "Retired watcher flow must not persist a consent store record"
+    fi
 
     alert_text="$(jq -r '.text // ""' "${fake_state_dir}/call-1.json")"
-    assert_text_contains "$alert_text" "Хотите получить практические рекомендации" "Consent-capable alert should ask for recommendations"
-    assert_text_contains "$alert_text" "/codex_da" "Consent-capable alert should expose the short accept command"
-
-    router_event="${TMP_DIR}/accept-event.json"
-    jq -n \
-        --arg chat_id "$chat_id" \
-        '{
-            message: {
-                message_id: 501,
-                text: "/codex_da",
-                chat: {id: $chat_id},
-                from: {id: $chat_id}
-            }
-        }' > "$router_event"
-
-    router_result="${TMP_DIR}/router-result.json"
-    log "Routing consent accept event"
-    CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$fake_state_dir" \
-    bash "$ROUTER_SCRIPT" \
-        --store-script "$STORE_SCRIPT" \
-        --store-dir "$consent_store_dir" \
-        --event-file "$router_event" \
-        --telegram-send-script "${fake_bin_dir}/telegram-bot-send.sh" \
-        --telegram-env-file "$fake_env" \
-        --send-reply true \
-        --json-out "$router_result" \
-        --stdout none
-
-    assert_jq "$router_result" '.decision == "accept"' "Router should accept the structured fallback command"
-    assert_jq "$router_result" '.delivery.status == "sent"' "Router should send recommendations immediately"
-    assert_jq "$consent_record" '.request.status == "delivered"' "Shared store should persist delivered status"
-    assert_jq "$consent_record" '.delivery.status == "sent"' "Shared store should persist follow-up delivery success"
-
-    consent_text="$(jq -r '.text // ""' "${fake_state_dir}/call-2.json")"
-    assert_text_contains "$consent_text" "Практические рекомендации по обновлению Codex CLI" "Follow-up should contain the recommendations heading"
-    assert_text_contains "$consent_text" "Что можно сделать в проекте" "Follow-up should contain concrete project guidance"
-    OBSERVED_RESPONSE="$consent_text"
+    assert_text_not_contains "$alert_text" "Хотите получить практические рекомендации" "Retired watcher flow must not ask the broken consent question"
+    assert_text_not_contains "$alert_text" "/codex_da" "Retired watcher flow must not expose the old accept command"
 
     log "Running degraded one-way watcher alert"
     CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR="$degraded_fake_state" \
@@ -436,31 +402,34 @@ run_hermetic() {
 
     degraded_text="$(jq -r '.text // ""' "${degraded_fake_state}/call-1.json")"
     assert_text_not_contains "$degraded_text" "Хотите получить практические рекомендации" "One-way alert must not ask a broken consent question"
+    assert_text_not_contains "$degraded_text" "/codex_da" "One-way alert must not expose the old accept command"
 
     CONTEXT_JSON="$(jq -n \
         --arg alert_report "$watcher_report" \
-        --arg router_result "$router_result" \
         --arg degraded_report "$degraded_report" \
-        --arg consent_record "$consent_record" \
-        --arg request_id "$request_id" \
         --arg alert_text "$alert_text" \
-        --arg followup_text "$consent_text" \
         --arg degraded_text "$degraded_text" \
+        --arg alert_status "$(jq -r '.followup.consent.status' "$watcher_report")" \
+        --arg alert_router_mode "$(jq -r '.followup.consent.router_mode' "$watcher_report")" \
+        --arg alert_consent_requested "$(jq -r '.automation.alert.consent_requested' "$watcher_report")" \
+        --arg degraded_status "$(jq -r '.followup.consent.status' "$degraded_report")" \
+        --arg degraded_router_mode "$(jq -r '.followup.consent.router_mode' "$degraded_report")" \
+        --arg degraded_consent_requested "$(jq -r '.automation.alert.consent_requested' "$degraded_report")" \
         --arg temp_dir "${PERSISTED_TMP_DIR}" \
         '{
             alert: {
-                request_id: $request_id,
                 text: $alert_text,
                 report_path: $alert_report,
-                consent_record_path: $consent_record
-            },
-            consent: {
-                result_path: $router_result,
-                followup_text: $followup_text
+                followup_status: $alert_status,
+                router_mode: $alert_router_mode,
+                consent_requested: ($alert_consent_requested == "true")
             },
             degraded: {
                 report_path: $degraded_report,
-                text: $degraded_text
+                text: $degraded_text,
+                followup_status: $degraded_status,
+                router_mode: $degraded_router_mode,
+                consent_requested: ($degraded_consent_requested == "true")
             },
             kept_temp_dir: (if $temp_dir == "" then null else $temp_dir end)
         }')"

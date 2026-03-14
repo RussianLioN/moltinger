@@ -122,6 +122,7 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 ### Preferred Branch Prefixes
 
 - `NNN-<spec-slug>` for Speckit-linked implementation work
+- `chore/<topic>` for operational publish lanes and controlled maintenance paths
 - `codex/<area>-<topic>` for bounded Codex streams
 - `docs/<topic>` for docs-only work
 - `fix/<topic>` for narrow runtime fixes

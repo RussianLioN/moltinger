@@ -27,7 +27,7 @@ run_component_codex_telegram_consent_e2e_tests() {
 
     local work_dir report output
 
-    test_start "component_codex_telegram_consent_e2e_completes_acceptance_and_degraded_flow"
+    test_start "component_codex_telegram_consent_e2e_completes_one_way_baseline_and_degraded_flow"
     work_dir="$(secure_temp_dir codex-consent-e2e)"
     report="$work_dir/report.json"
     output="$(
@@ -41,12 +41,18 @@ run_component_codex_telegram_consent_e2e_tests() {
     assert_file_exists "$report" "Hermetic E2E helper should write a JSON report"
     assert_json_value "$(cat "$report")" '.status' "completed" "Hermetic E2E helper should complete successfully"
     assert_json_value "$(cat "$report")" '.transport' "telegram_codex_consent_hermetic" "Hermetic E2E helper should expose its transport"
-    assert_json_value "$(cat "$report")" '.context.alert.request_id != null' "true" "Report should expose the shared consent request id"
-    assert_contains "$(jq -r '.context.alert.text' "$report")" "Хотите получить практические рекомендации" "Alert evidence should show the consent question"
-    assert_contains "$(jq -r '.observed_response' "$report")" "Практические рекомендации по обновлению Codex CLI" "Observed response should be the immediate follow-up recommendations"
-    assert_contains "$(jq -r '.context.consent.followup_text' "$report")" "Что можно сделать в проекте" "Follow-up evidence should include project guidance"
-    if grep -Fq "Хотите получить практические рекомендации" < <(jq -r '.context.degraded.text' "$report"); then
-        test_fail "Degraded one-way alert must not ask the broken consent question"
+    assert_json_value "$(cat "$report")" '.observed_response == null' "true" "Retired repo-side helper should not claim an interactive follow-up response"
+    assert_json_value "$(cat "$report")" '.context.alert.followup_status' "disabled" "Baseline alert should keep consent disabled"
+    assert_json_value "$(cat "$report")" '.context.alert.router_mode' "one_way_only" "Baseline alert should stay one-way only"
+    assert_json_value "$(cat "$report")" '.context.alert.consent_requested' "false" "Baseline alert must not request consent"
+    assert_json_value "$(cat "$report")" '.context.degraded.followup_status' "disabled" "Degraded alert should keep consent disabled"
+    assert_json_value "$(cat "$report")" '.context.degraded.router_mode' "one_way_only" "Degraded alert should stay one-way only"
+    assert_json_value "$(cat "$report")" '.context.degraded.consent_requested' "false" "Degraded alert must not request consent"
+    if grep -Fq "Хотите получить практические рекомендации" < <(jq -r '.context.alert.text' "$report") \
+        || grep -Fq "/codex_da" < <(jq -r '.context.alert.text' "$report") \
+        || grep -Fq "Хотите получить практические рекомендации" < <(jq -r '.context.degraded.text' "$report") \
+        || grep -Fq "/codex_da" < <(jq -r '.context.degraded.text' "$report"); then
+        test_fail "One-way alerts must not advertise the retired consent question or command path"
     else
         test_pass
     fi

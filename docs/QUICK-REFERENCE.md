@@ -17,8 +17,9 @@
 - Clawdiy runtime env mirror: `/opt/moltinger/clawdiy/.env`
 - Agent registry: `config/fleet/agents-registry.json`
 - Fleet policy: `config/fleet/policy.json`
-- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Live git topology: authoritative runtime source
 - Reviewed topology intent: `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md` (published snapshot, not live source of truth)
 
 ## Git Topology
 

@@ -1168,13 +1168,13 @@ gh run view --workflow test.yml   # View latest test run details
 
 ## 🎯 Next Steps
 
-1. **molt-ml3** — P2: enforced automation path для topology single-writer publish
-2. **P4 Backlog** — 4 задачи готовы к работе (см. `bd ready`)
-3. **moltinger-sjx** — HIGH: S3 Offsite Backup
-4. **moltinger-r8r** — MEDIUM: Traefik Rate Limiting
-5. **moltinger-j22** — MEDIUM: AlertManager Receivers
-6. **moltinger-eb0** — MEDIUM: Grafana Dashboard
-7. Протестировать skill telegram-learner на канале @tsingular
+1. **P4 Backlog** — 4 задачи готовы к работе (см. `bd ready`)
+2. **moltinger-sjx** — HIGH: S3 Offsite Backup
+3. **moltinger-r8r** — MEDIUM: Traefik Rate Limiting
+4. **moltinger-j22** — MEDIUM: AlertManager Receivers
+5. **moltinger-eb0** — MEDIUM: Grafana Dashboard
+6. Протестировать skill telegram-learner на канале @tsingular
+7. После merge hotfix-а проверить, что ordinary ветки больше не получают blocker из-за stale topology snapshot
 
 ### P4 Priority Tasks (Recommended Order)
 

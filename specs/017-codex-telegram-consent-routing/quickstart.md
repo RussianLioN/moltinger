@@ -60,9 +60,8 @@ Or call the helper directly:
 
 Expected result:
 
-- the watcher opens a consent-capable alert
-- the authoritative router accepts the tokenized action
-- the second recommendation message is delivered immediately
+- the watcher stays in an honest one-way mode even if legacy consent flags are forced on
+- the alert does not expose `/codex_da` or the broken consent question
 - the degraded one-way alert does not ask a broken question
 
 If you want an additional live user probe after deployment, keep using:
@@ -76,7 +75,7 @@ If you want an additional live user probe after deployment, keep using:
   --verbose
 ```
 
-That live probe is still useful for transport verification, but the hermetic Codex helper is now the authoritative acceptance contract for `alert -> consent -> recommendations`.
+That live probe is still useful for transport verification, but the hermetic Codex helper now proves the current safe repo-side baseline: no misleading interactive consent UX plus a degraded one-way fallback.
 
 ## 4. Validate Degraded Fallback
 
@@ -89,16 +88,15 @@ Expected result:
 
 ## 5. Audit One Interaction
 
-Inspect the authoritative consent record.
+Inspect the helper report and watcher report instead of expecting a repo-side consent record.
 
 Expected result:
 
-- request id
-- chat id
-- decision
-- timestamps
-- delivery status
-- duplicate/expiry notes if applicable
+- watcher report path
+- degraded report path
+- `followup.consent.status = disabled`
+- `router_mode = one_way_only`
+- no misleading consent question or `/codex_da` in the alert text
 
 ## 6. Capture Operator Evidence
 
