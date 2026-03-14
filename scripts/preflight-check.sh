@@ -30,7 +30,7 @@ SECRETS_DIR="$PROJECT_ROOT/secrets"
 TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
-DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.13"
+DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
 
 # Output format
 OUTPUT_JSON=false

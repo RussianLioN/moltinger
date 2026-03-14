@@ -63,7 +63,7 @@ All JSON responses follow a consistent structure:
   "timestamp": "2024-01-15T10:30:00Z",
   "action": "deploy",
   "details": {
-    "image": "ghcr.io/openclaw/openclaw:2026.3.13",
+    "image": "ghcr.io/openclaw/openclaw:latest",
     "duration_ms": 45000,
     "health": "healthy",
     "services": ["clawdiy"]

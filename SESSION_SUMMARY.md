@@ -59,6 +59,7 @@
 - Попытка live-update через `Deploy Clawdiy` run `23090331854` показала новый blocker: dirty server checkout в `/opt/moltinger` был ограничен `scripts/preflight-check.sh`, но сам Clawdiy workflow не имел auditable `repair_server_checkout` path, который уже был у `Deploy Moltis`.
 - Под это оформлен RCA-015: `docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md` и правило `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`.
 - Follow-up fix добавляет в `deploy-clawdiy.yml` input `repair_server_checkout`, использует `scripts/gitops-repair-managed-checkout.sh` только для Clawdiy-managed surface и дополняет статические проверки и runbook.
+- Дополнительная official-проверка по Docker registry показала, что `ghcr.io/openclaw/openclaw:2026.3.13` еще не опубликован как version-tag, хотя GitHub release `v2026.3.13` уже существует. Для Docker install method корректный runtime path пока возвращен на `ghcr.io/openclaw/openclaw:latest`, который реально присутствует в `ghcr`.
 
 ### Production Status
 
