@@ -205,6 +205,7 @@ GitOps Compliance: Enforced ✅
   - tracked snapshot публикуется только явным шагом `refresh --write-doc`
   - publish должен идти из dedicated non-main topology-publish worktree/branch, а не из `main` и не из обычной feature-ветки
 - Обновлены `.ai/instructions/shared-core.md`, `.claude/commands/worktree.md`, `.claude/commands/session-summary.md`, `.claude/commands/git-topology.md`, `docs/CODEX-OPERATING-MODEL.md`, `docs/QUICK-REFERENCE.md` и `docs/WORKTREE-HOTFIX-PLAYBOOK.md`.
+- В процессе landing найден и исправлен automation mismatch: `.githooks/pre-push` раньше жёстко блокировал push при stale topology snapshot. Теперь `pre-push`, `post-checkout`, `post-merge` и `post-rewrite` переводят stale topology в warning/report path и отправляют оператора к dedicated non-main publish branch, не forcing ordinary feature branch to publish the snapshot.
 - Добавлено новое правило: `docs/rules/topology-registry-single-writer-publish-path.md`.
 - Пересобраны generated инструкции и bridge в Codex через `./scripts/sync-agent-instructions.sh --write` и `./scripts/sync-claude-skills-to-codex.sh --install`.
 - Создан follow-up issue `molt-ml3` для отдельного script-level enforcement в automation.
@@ -216,6 +217,7 @@ GitOps Compliance: Enforced ✅
 - `./scripts/sync-claude-skills-to-codex.sh --install`
 - `./scripts/sync-claude-skills-to-codex.sh --check`
 - `./tests/unit/test_worktree_ready.sh`
+- `bash -n .githooks/pre-push .githooks/post-checkout .githooks/post-merge .githooks/post-rewrite`
 - `make instructions-check`
 - `make codex-check`
 - `git diff --check`
