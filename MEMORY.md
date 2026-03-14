@@ -73,6 +73,9 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
 - Official OpenClaw wizard and OAuth flows require a writable Clawdiy runtime home:
   `data/clawdiy/runtime -> /home/node/.openclaw`, not a read-only bind of only `openclaw.json`
   Rule: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
+- If `Deploy Clawdiy` blocks on a dirty `/opt/moltinger` checkout and drift is limited to Clawdiy-managed files,
+  re-run the workflow with `repair_server_checkout=true` instead of manual SSH checkout edits:
+  `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`
 
 ---
 

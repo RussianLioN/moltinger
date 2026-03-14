@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-14
-**Total Lessons**: 25
+**Total Lessons**: 26
 
 ---
 
@@ -21,7 +21,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (11 lessons)
+#### P2 (12 lessons)
+- [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
 - [CI preflight ошибочно требовал materialized Clawdiy runtime home до deploy/render шага](../docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md)
 - [Clawdiy UI bootstrap был задокументирован как Settings/OAuth flow вместо реального browser bootstrap](../docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md)
 - [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
@@ -50,7 +51,8 @@
 ### By Category
 
 
-#### cicd (4 lessons)
+#### cicd (5 lessons)
+- [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
 - [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
@@ -89,14 +91,14 @@
 ### Popular Tags
 
 - `process` (9 lessons)
+- `lessons` (6 lessons)
 - `rca` (5 lessons)
-- `lessons` (5 lessons)
+- `gitops` (5 lessons)
 - `github-actions` (5 lessons)
+- `deploy` (5 lessons)
+- `clawdiy` (5 lessons)
 - `topology-registry` (4 lessons)
-- `gitops` (4 lessons)
 - `git-worktree` (4 lessons)
-- `deploy` (4 lessons)
-- `clawdiy` (4 lessons)
 - `ux` (3 lessons)
 
 
@@ -106,10 +108,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 25 |
+| Total Lessons | 26 |
 | Critical (P0/P1) | 6 |
 | Categories | 5 |
-| Unique Tags | 63 |
+| Unique Tags | 66 |
 
 ---
 
