@@ -35,6 +35,7 @@
 | `primary-feature-021` | `021-moltis-native-codex-update-advisory-writable` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-022` | `022-telegram-ba-intake` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-023` | `023-clawdiy-ci-preflight-runtime-home-fix` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-023` | `023-full-moltis-codex-update-skill` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -50,6 +51,7 @@
 | `021-moltis-native-codex-update-advisory-writable` | `origin/021-moltis-native-codex-update-advisory` | Needs decision |
 | `022-telegram-ba-intake` | `origin/022-telegram-ba-intake` | Needs decision |
 | `023-clawdiy-ci-preflight-runtime-home-fix` | `none` | Needs decision |
+| `023-full-moltis-codex-update-skill` | `origin/main` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
