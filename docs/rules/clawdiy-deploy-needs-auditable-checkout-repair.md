@@ -17,6 +17,8 @@
    - `config/fleet/*`
    - `config/backup/*`
    - `scripts/*`
+   И для одного явного runtime-исключения:
+   - `config/oauth_tokens.json`, который должен быть сначала эвакуирован в `data/oauth-config/`, а не удален без следа
 3. Repair должен использовать auditable путь через `scripts/gitops-repair-managed-checkout.sh` с сохранением drift snapshot.
 4. Production repair разрешен только из `main` или соответствующего release tag.
 5. Если dirty path выходит за пределы Clawdiy-managed surface, workflow обязан fail-closed и не пытаться чинить checkout автоматически.
@@ -27,10 +29,12 @@
 
 - вручную выравнивать `/opt/moltinger` ad-hoc командами через SSH вместо auditable repair path, если drift уже попадает в управляемую поверхность workflow
 - добавлять `repair_server_checkout`, который может затронуть произвольные path без явной классификации
+- считать stray `config/oauth_tokens.json` обычным tracked config-файлом вместо runtime OAuth-артефакта
 - удалять hard gate на dirty checkout без равноценного controlled repair механизма
 
 ## Ожидаемое поведение
 
 - Обычный deploy по-прежнему блокируется на грязном checkout.
 - Operator может осознанно перезапустить workflow с `repair_server_checkout=true`, если drift ограничен Clawdiy-managed surface.
+- Если drift состоит только из `config/oauth_tokens.json`, repair path обязан сохранить snapshot и перенести файл в `data/oauth-config/` до очистки checkout.
 - Drift snapshot сохраняется до repair, а server checkout после repair и deploy снова совпадает с `main`.

@@ -76,6 +76,8 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
 - If `Deploy Clawdiy` blocks on a dirty `/opt/moltinger` checkout and drift is limited to Clawdiy-managed files,
   re-run the workflow with `repair_server_checkout=true` instead of manual SSH checkout edits:
   `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`
+- Runtime OAuth token stores must not live inside tracked `/opt/moltinger/config`; if stray `config/oauth_tokens.json` appears, repair must evacuate it into `data/oauth-config/` before cleaning the checkout:
+  `docs/rules/runtime-oauth-token-stores-must-stay-out-of-git-checkout.md`
 - Clawdiy Docker image default must stay pinned to the last live-verified image; test new OpenClaw images only via explicit `clawdiy_image` rollout, not by flipping tracked default to `latest`:
   `docs/rules/clawdiy-updates-must-stay-pinned-until-live-canary.md`
 - Official OpenClaw Docker upgrades for Clawdiy can go through a transient `starting/unhealthy` warmup before recovering; do not treat the first `unhealthy` as terminal if the container is still running and `/health` later comes up:

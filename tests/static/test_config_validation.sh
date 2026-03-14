@@ -193,6 +193,15 @@ PY
         test_fail "Managed checkout repair must redirect git progress to stderr so stdout stays reserved for the drift snapshot path"
     fi
 
+    test_start "static_deploy_checkout_repair_evacuates_stray_oauth_store_before_clean"
+    if rg -q 'STRAY_OAUTH_SOURCE="config/oauth_tokens\.json"' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'STRAY_OAUTH_DEST="\$STRAY_OAUTH_DIR/oauth_tokens\.json"' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'evacuate_stray_oauth_store' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
+        test_pass
+    else
+        test_fail "Managed checkout repair must evacuate a stray config/oauth_tokens.json runtime store before cleaning the git checkout"
+    fi
+
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
@@ -280,6 +289,15 @@ PY
         test_pass
     else
         test_fail "Clawdiy deploy workflow must offer an auditable checkout repair path limited to the Clawdiy-managed surface"
+    fi
+
+    test_start "static_clawdiy_workflow_treats_stray_oauth_store_as_known_runtime_artifact"
+    if rg -q 'is_known_runtime_artifact' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'config/oauth_tokens\.json' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'known runtime-artifact exceptions' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must treat config/oauth_tokens.json as a known repairable runtime artifact instead of blocking repair outright"
     fi
 
     test_start "static_clawdiy_workflow_syncs_backup_config_dependencies"

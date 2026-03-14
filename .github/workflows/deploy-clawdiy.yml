@@ -243,6 +243,18 @@ jobs:
             esac
           }
 
+          is_known_runtime_artifact() {
+            local candidate="$1"
+            case "$candidate" in
+              config/oauth_tokens.json)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
           status_entry_is_repairable() {
             local entry="$1"
             local source_path target_path
@@ -250,11 +262,12 @@ jobs:
             if [[ "$entry" == *" -> "* ]]; then
               source_path="${entry%% -> *}"
               target_path="${entry##* -> }"
-              is_managed_path "$source_path" && is_managed_path "$target_path"
+              { is_managed_path "$source_path" || is_known_runtime_artifact "$source_path"; } && \
+              { is_managed_path "$target_path" || is_known_runtime_artifact "$target_path"; }
               return
             fi
 
-            is_managed_path "$entry"
+            is_managed_path "$entry" || is_known_runtime_artifact "$entry"
           }
 
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
@@ -267,7 +280,7 @@ jobs:
               [ -z "$STATUS_LINE" ] && continue
               STATUS_PATH="${STATUS_LINE:3}"
               if ! status_entry_is_repairable "$STATUS_PATH"; then
-                echo "::error::Dirty path is outside Clawdiy-managed surface: $STATUS_PATH"
+                echo "::error::Dirty path is outside Clawdiy-managed surface and known runtime-artifact exceptions: $STATUS_PATH"
                 REPAIRABLE_DIRTY_STATE=false
               fi
             done <<< "$SERVER_STATUS"
@@ -297,9 +310,9 @@ jobs:
 
             echo "::error::Server working tree is dirty. Clawdiy deployment blocked by GitOps policy."
             if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = false ]; then
-              echo "::error::repair_server_checkout refuses to touch files outside Clawdiy-managed surface."
+              echo "::error::repair_server_checkout refuses to touch files outside Clawdiy-managed surface and known runtime-artifact exceptions."
             else
-              echo "::error::Re-run workflow_dispatch with repair_server_checkout=true if drift is limited to Clawdiy-managed files."
+              echo "::error::Re-run workflow_dispatch with repair_server_checkout=true if drift is limited to Clawdiy-managed files or the known config/oauth_tokens.json runtime artifact."
             fi
             exit 1
           fi

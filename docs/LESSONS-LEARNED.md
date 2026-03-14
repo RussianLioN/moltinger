@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-14
-**Total Lessons**: 29
+**Generated**: 2026-03-15
+**Total Lessons**: 30
 
 ---
 
@@ -24,7 +24,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (12 lessons)
+#### P2 (13 lessons)
+- [Stray runtime oauth_tokens.json blocked Clawdiy GitOps repair](../docs/rca/2026-03-15-stray-oauth-token-store-blocked-clawdiy-gitops-repair.md)
 - [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
 - [CI preflight ошибочно требовал materialized Clawdiy runtime home до deploy/render шага](../docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md)
 - [Clawdiy UI bootstrap был задокументирован как Settings/OAuth flow вместо реального browser bootstrap](../docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md)
@@ -54,7 +55,8 @@
 ### By Category
 
 
-#### cicd (7 lessons)
+#### cicd (8 lessons)
+- [Stray runtime oauth_tokens.json blocked Clawdiy GitOps repair](../docs/rca/2026-03-15-stray-oauth-token-store-blocked-clawdiy-gitops-repair.md)
 - [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
 - [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
@@ -96,16 +98,16 @@
 
 ### Popular Tags
 
+- `lessons` (10 lessons)
 - `process` (9 lessons)
-- `lessons` (9 lessons)
-- `clawdiy` (8 lessons)
+- `clawdiy` (9 lessons)
+- `gitops` (7 lessons)
 - `openclaw` (6 lessons)
-- `gitops` (6 lessons)
+- `deploy` (6 lessons)
 - `rca` (5 lessons)
+- `oauth` (5 lessons)
 - `github-actions` (5 lessons)
 - `docker` (5 lessons)
-- `deploy` (5 lessons)
-- `topology-registry` (4 lessons)
 
 
 ---
@@ -114,10 +116,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 29 |
+| Total Lessons | 30 |
 | Critical (P0/P1) | 9 |
 | Categories | 5 |
-| Unique Tags | 74 |
+| Unique Tags | 75 |
 
 ---
 
