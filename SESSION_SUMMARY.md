@@ -18,7 +18,7 @@
 | Компонент | Технология |
 |-----------|------------|
 | **Container** | Docker Compose |
-| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:0.9.10) |
+| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:v0.10.18) |
 | **Telegram Bot** | @moltinger_bot |
 | **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
 | **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
@@ -237,11 +237,31 @@ GitOps Compliance: Enforced ✅
 - live browser inspection on `https://clawdiy.ainetic.tech`
 - `git diff --check`
 
+### 2026-03-14: Moltis v0.10.18 Production Pin Follow-Up
+
+**Статус**: ✅ tracked Moltis release pin updated to `v0.10.18` on branch `feat/moltis-pin-v0-10-18-prod`
+
+- Confirmed the live server was already running Moltis `0.10.18`, but the container still referenced the floating `latest` tag while the older `z8m.3` git branch still pinned `0.9.10`.
+- Updated both tracked compose files to `ghcr.io/moltis-org/moltis:v0.10.18` so the repository source of truth now matches the actual current production release.
+- Kept the existing helper/workflow contract intact: `scripts/moltis-version.sh` still validates the git-tracked Moltis image contract, while the release-tag-first rollout path remains backup-safe.
+
+**Validated**
+
+- `bash ./scripts/moltis-version.sh assert-tracked`
+- `bash -n scripts/moltis-version.sh tests/static/test_config_validation.sh tests/run.sh`
+- `./tests/run.sh --lane static --filter config_validation --json`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); YAML.load_file(".github/workflows/uat-gate.yml"); puts "workflow yaml ok"'`
+
+**Next**
+
+- Execute a backup-safe redeploy pinned to `v0.10.18` so the server is no longer tracking the floating `latest` tag.
+- Continue post-update stabilization only after the explicit-tag rollout is confirmed healthy.
+
 ### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
 
 **Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session
 
-- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:0.9.10` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
+- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:v0.10.18` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
 - Hardened `scripts/deploy.sh` against ad-hoc `MOLTIS_VERSION` drift, added fallback discovery for `pre_deploy_*.tar.gz` backups and restore-check evidence, and kept rollback on the same tracked contract.
 - Removed the unsafe manual version path from `.github/workflows/uat-gate.yml`; UAT now derives the version from git and deploys Moltis only through `./scripts/deploy.sh --json moltis deploy`.
 - Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `data/moltis/.last-deployed-image`, `data/moltis/.last-moltis-backup`, and `data/moltis/.last-moltis-restore-check` so CI-created evidence is reusable during rollback without polluting the git-managed root.
