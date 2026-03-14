@@ -12,28 +12,28 @@
 
 ## Phase 1 - Setup
 
-- [ ] T001 Create `skills/codex-update/SKILL.md`
-- [ ] T002 Create operator runbook `docs/moltis-codex-update-skill.md`
-- [ ] T003 Create fixtures for upstream snapshots and optional project profiles under `tests/fixtures/`
-- [ ] T004 Create shell test skeletons for `run`, `state`, and `profile` helpers under `tests/component/`
+- [x] T001 Create `skills/codex-update/SKILL.md`
+- [x] T002 Create operator runbook `docs/moltis-codex-update-skill.md`
+- [x] T003 Create fixtures for upstream snapshots and optional project profiles under `tests/fixtures/`
+- [x] T004 Create shell test skeletons for `run`, `state`, and `profile` helpers under `tests/component/`
 
 ## Phase 2 - Foundational Runtime
 
-- [ ] T005 Implement `scripts/moltis-codex-update-run.sh` as the canonical Moltis-native runtime entrypoint
-- [ ] T006 Implement `scripts/moltis-codex-update-state.sh` for fingerprint and last-delivery state
-- [ ] T007 Implement `scripts/moltis-codex-update-profile.sh` for optional profile validation/loading
-- [ ] T008 Register new scripts in `scripts/manifest.json`
-- [ ] T009 Wire new skill/runtime defaults in `config/moltis.toml`
+- [x] T005 Implement `scripts/moltis-codex-update-run.sh` as the canonical Moltis-native runtime entrypoint
+- [x] T006 Implement `scripts/moltis-codex-update-state.sh` for fingerprint and last-delivery state
+- [x] T007 Implement `scripts/moltis-codex-update-profile.sh` for optional profile validation/loading
+- [x] T008 Register new scripts in `scripts/manifest.json`
+- [x] T009 Wire new skill/runtime defaults in `config/moltis.toml`
 
 ## Phase 3 - User Story 1: On-Demand Moltis Skill (Priority: P1)
 
 **Goal**: Moltis directly answers "Проверь обновления Codex CLI" without delegating canonical ownership to repo-side watcher scripts.  
 **Independent Test**: Ask the skill or run the on-demand helper path and confirm the response is Moltis-native and in Russian.
 
-- [ ] T010 Implement upstream fetch and normalization inside `scripts/moltis-codex-update-run.sh`
-- [ ] T011 Implement Russian verdict rendering for on-demand responses
-- [ ] T012 Add component coverage for on-demand run decisions in `tests/component/test_moltis_codex_update_run.sh`
-- [ ] T013 Document plain-language usage in `docs/moltis-codex-update-skill.md`
+- [x] T010 Implement upstream fetch and normalization inside `scripts/moltis-codex-update-run.sh`
+- [x] T011 Implement Russian verdict rendering for on-demand responses
+- [x] T012 Add component coverage for on-demand run decisions in `tests/component/test_moltis_codex_update_run.sh`
+- [x] T013 Document plain-language usage in `docs/moltis-codex-update-skill.md`
 
 ## Phase 4 - User Story 2: Moltis-Owned Scheduler and Delivery (Priority: P1)
 

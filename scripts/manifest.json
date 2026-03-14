@@ -249,6 +249,64 @@
       ],
       "ci": true
     },
+    "moltis-codex-update-state.sh": {
+      "version": "1.0.0",
+      "description": "Persist Moltis-native Codex update skill state and delivery checkpoints",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "moltis-codex-update-state"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_STATE_FILE"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-profile.sh": {
+      "version": "1.0.0",
+      "description": "Validate and normalize optional project profiles for the Moltis-native Codex update skill",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-profile"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_PROFILE_SCHEMA"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-run.sh": {
+      "version": "1.0.0",
+      "description": "Canonical Moltis-native runtime entrypoint for on-demand and scheduled Codex CLI update checks",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-run",
+        "codex-update-check"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_MODE",
+        "MOLTIS_CODEX_UPDATE_STATE_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_STATE_FILE",
+        "MOLTIS_CODEX_UPDATE_RELEASE_FILE",
+        "MOLTIS_CODEX_UPDATE_RELEASE_URL",
+        "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_FILE",
+        "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_URL",
+        "MOLTIS_CODEX_UPDATE_PROFILE_FILE",
+        "MOLTIS_CODEX_UPDATE_MAX_RELEASES"
+      ],
+      "ci": true
+    },
     "moltis-codex-advisory-router.sh": {
       "version": "1.0.0",
       "description": "Route Moltis-native Codex advisory callbacks and recovery actions into immediate Telegram follow-up delivery",

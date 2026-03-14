@@ -69,6 +69,15 @@ MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
 MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS = "24"
 MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND = "/codex-advisory-followup"
+MOLTIS_CODEX_UPDATE_STATE_FILE = "/opt/moltinger/.tmp/current/moltis-codex-update-state.json"
+MOLTIS_CODEX_UPDATE_STATE_SCRIPT = "./scripts/moltis-codex-update-state.sh"
+MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT = "./scripts/moltis-codex-update-profile.sh"
+MOLTIS_CODEX_UPDATE_RELEASE_URL = "https://developers.openai.com/codex/changelog"
+MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_URL = "https://api.github.com/repos/openai/codex/issues?state=open&per_page=20"
+MOLTIS_CODEX_UPDATE_MAX_RELEASES = "3"
+MOLTIS_CODEX_UPDATE_PROFILE_FILE = ""
+MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TLS / HTTPS
@@ -468,7 +477,7 @@ sandbox_image = "browserless/chrome"
 enabled = true                    # Enable skills system
 search_paths = ["/server/skills"] # Additional directories to search for skills
                                   # Default locations: ~/.config/moltis/skills/, ./skills/
-auto_load = ["telegram-learner"]  # Skills to always load without explicit activation
+auto_load = ["telegram-learner", "codex-update"]  # Skills to always load without explicit activation
                                   # Example: ["code-review", "commit"]
 
 # ══════════════════════════════════════════════════════════════════════════════

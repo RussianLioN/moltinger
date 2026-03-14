@@ -1,0 +1,44 @@
+{
+  "schema_version": "codex-update-project-profile/v1",
+  "profile_id": "moltinger-default",
+  "project_name": "Moltinger",
+  "owner": "Сергей",
+  "traits": [
+    "worktree-discipline",
+    "agents-surface",
+    "skills-surface"
+  ],
+  "relevance_rules": [
+    {
+      "id": "worktree-flow",
+      "keywords": [
+        "worktree",
+        "branch"
+      ],
+      "rationale_ru": "Проект активно использует worktree и изолированные ветки, поэтому такие изменения нужно разбирать сразу.",
+      "priority_paths": [
+        "docs/GIT-TOPOLOGY-REGISTRY.md",
+        "docs/CODEX-OPERATING-MODEL.md"
+      ]
+    },
+    {
+      "id": "multi-agent-flow",
+      "keywords": [
+        "multi-agent",
+        "resume",
+        "session"
+      ],
+      "rationale_ru": "Проект зависит от resume-flow и делегирования агентам, поэтому обновления в этой зоне напрямую влияют на практическую работу.",
+      "priority_paths": [
+        "AGENTS.md",
+        "docs/CODEX-OPERATING-MODEL.md"
+      ]
+    }
+  ],
+  "recommendation_templates": [
+    {
+      "id": "default-review",
+      "title_ru": "Проверить project-specific guidance"
+    }
+  ]
+}
