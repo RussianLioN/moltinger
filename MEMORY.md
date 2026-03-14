@@ -76,6 +76,10 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
 - If `Deploy Clawdiy` blocks on a dirty `/opt/moltinger` checkout and drift is limited to Clawdiy-managed files,
   re-run the workflow with `repair_server_checkout=true` instead of manual SSH checkout edits:
   `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`
+- Clawdiy Docker image default must stay pinned to the last live-verified image; test new OpenClaw images only via explicit `clawdiy_image` rollout, not by flipping tracked default to `latest`:
+  `docs/rules/clawdiy-updates-must-stay-pinned-until-live-canary.md`
+- Clawdiy `gpt-5.4` baseline must live in tracked `config/clawdiy/openclaw.json`, not only in runtime wizard state:
+  `docs/rules/clawdiy-model-default-must-live-in-tracked-config.md`
 
 ---
 

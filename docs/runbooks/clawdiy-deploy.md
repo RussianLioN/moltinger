@@ -25,9 +25,10 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 1. Validate config and secret presence:
    ```bash
    ./scripts/preflight-check.sh --target clawdiy
-   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:latest docker compose -f docker-compose.clawdiy.yml config --quiet
+   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:2026.3.11 docker compose -f docker-compose.clawdiy.yml config --quiet
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
+   Use an explicit `clawdiy_image` override only for a dedicated upgrade rollout; the tracked default stays pinned to the last verified Clawdiy image.
 2. Render the deployable OpenClaw runtime config from the tracked template plus the dedicated Clawdiy env file:
    ```bash
    ./scripts/render-clawdiy-runtime-config.sh --env-file /opt/moltinger/clawdiy/.env --json | jq .
@@ -57,7 +58,8 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 ## Ownership Boundary
 
 - Git-managed control-plane config:
-  - `config/clawdiy/openclaw.json` (tracked template)
+- `config/clawdiy/openclaw.json` (tracked template)
+  - must carry the tracked `agents.defaults.model.primary` for Clawdiy so redeploy does not erase the verified live model baseline
   - `config/fleet/agents-registry.json`
   - `config/fleet/policy.json`
 - Rendered runtime artifact:

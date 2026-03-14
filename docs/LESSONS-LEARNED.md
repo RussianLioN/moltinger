@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-14
-**Total Lessons**: 26
+**Total Lessons**: 28
 
 ---
 
@@ -14,7 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (5 lessons)
+#### P1 (7 lessons)
+- [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
+- [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
 - [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Официальный мастер настройки Clawdiy не мог завершить OAuth из-за неверного контракта домашнего каталога OpenClaw](../docs/rca/2026-03-13-clawdiy-official-wizard-runtime-home-contract-mismatch.md)
@@ -51,7 +53,8 @@
 ### By Category
 
 
-#### cicd (5 lessons)
+#### cicd (6 lessons)
+- [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
 - [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
 - [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
@@ -65,7 +68,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (10 lessons)
+#### process (11 lessons)
+- [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
 - [CI preflight ошибочно требовал materialized Clawdiy runtime home до deploy/render шага](../docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md)
 - [Официальный мастер настройки Clawdiy не мог завершить OAuth из-за неверного контракта домашнего каталога OpenClaw](../docs/rca/2026-03-13-clawdiy-official-wizard-runtime-home-contract-mismatch.md)
 - [Clawdiy UI bootstrap был задокументирован как Settings/OAuth flow вместо реального browser bootstrap](../docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md)
@@ -91,15 +95,15 @@
 ### Popular Tags
 
 - `process` (9 lessons)
-- `lessons` (6 lessons)
+- `lessons` (8 lessons)
+- `clawdiy` (7 lessons)
+- `gitops` (6 lessons)
 - `rca` (5 lessons)
-- `gitops` (5 lessons)
+- `openclaw` (5 lessons)
 - `github-actions` (5 lessons)
 - `deploy` (5 lessons)
-- `clawdiy` (5 lessons)
 - `topology-registry` (4 lessons)
-- `git-worktree` (4 lessons)
-- `ux` (3 lessons)
+- `oauth` (4 lessons)
 
 
 ---
@@ -108,10 +112,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 26 |
-| Critical (P0/P1) | 6 |
+| Total Lessons | 28 |
+| Critical (P0/P1) | 8 |
 | Categories | 5 |
-| Unique Tags | 66 |
+| Unique Tags | 72 |
 
 ---
 

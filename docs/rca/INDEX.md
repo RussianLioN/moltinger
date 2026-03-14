@@ -1,32 +1,32 @@
 # RCA Index
 
 **Last Updated**: 2026-03-14
-**Version**: 1.8.0
+**Version**: 1.9.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 15 |
+| Total RCA | 17 |
 | Avg Resolution Time | N/A |
-| This Month | 15 |
+| This Month | 17 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 27% |
-| process | 7 | 47% |
-| cicd | 2 | 13% |
-| security | 1 | 7% |
-| shell | 1 | 7% |
+| generic | 4 | 24% |
+| process | 8 | 47% |
+| cicd | 3 | 18% |
+| security | 1 | 6% |
+| shell | 1 | 6% |
 
 ## By Severity
 
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 2 | High - production impact |
+| P1 | 4 | High - production impact |
 | P2 | 7 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,8 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
+| RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |
 | RCA-015 | 2026-03-14 | cicd | P2 | resolved | Clawdiy deploy workflow enforced a dirty-worktree gate but lacked an auditable repair path for drift limited to the Clawdiy-managed surface | added `repair_server_checkout` to `deploy-clawdiy.yml` plus static guard and runbook update |
 | RCA-014 | 2026-03-14 | process | P2 | resolved | Clawdiy preflight treated deploy-target runtime-home materialization as a CI checkout prerequisite | made runtime-home preflight target-aware for CI vs deploy target |
 | RCA-013 | 2026-03-13 | process | P1 | mitigating | Clawdiy deploy contract mounted read-only `openclaw.json` instead of writable `~/.openclaw` required by the official OpenClaw wizard | switched to writable runtime-home mount + ownership normalization + preflight/backup/smoke guards |

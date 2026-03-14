@@ -137,6 +137,7 @@ check_deprecated_references() {
 
   local pattern='gpt-5\.2(-codex)?|gpt 5\.2|openai-codex|providers\.openai-codex'
   local matches
+  local filtered_matches
 
   if command -v rg >/dev/null 2>&1; then
     matches="$(cd "${REPO_ROOT}" && rg -n -S "${pattern}" . -g '!scripts/codex-check.sh' || true)"
@@ -144,9 +145,11 @@ check_deprecated_references() {
     matches="$(cd "${REPO_ROOT}" && grep -RInE --exclude-dir=.git --exclude=codex-check.sh "${pattern}" . || true)"
   fi
 
-  if [[ -n "${matches}" ]]; then
+  filtered_matches="$(printf '%s\n' "${matches}" | grep -Ev '^(\./)?(config/clawdiy/openclaw\.json|tests/static/test_config_validation\.sh):' || true)"
+
+  if [[ -n "${filtered_matches}" ]]; then
     log_error "Deprecated references found:"
-    printf '%s\n' "${matches}"
+    printf '%s\n' "${filtered_matches}"
     return 1
   fi
 

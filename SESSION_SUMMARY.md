@@ -60,6 +60,11 @@
 - Под это оформлен RCA-015: `docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md` и правило `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`.
 - Follow-up fix добавляет в `deploy-clawdiy.yml` input `repair_server_checkout`, использует `scripts/gitops-repair-managed-checkout.sh` только для Clawdiy-managed surface и дополняет статические проверки и runbook.
 - Дополнительная official-проверка по Docker registry показала, что `ghcr.io/openclaw/openclaw:2026.3.13` еще не опубликован как version-tag, хотя GitHub release `v2026.3.13` уже существует. Для Docker install method корректный runtime path пока возвращен на `ghcr.io/openclaw/openclaw:latest`, который реально присутствует в `ghcr`.
+- Попытка live-upgrade Clawdiy на `ghcr.io/openclaw/openclaw:latest` через run `23090853145` провалилась: контейнер ушел в `unhealthy`, внешний `/health` вернул `404`, и потребовался срочный rollback на `ghcr.io/openclaw/openclaw:2026.3.11`.
+- Новый RCA-016 зафиксировал, что floating `latest` не должен становиться tracked default для Clawdiy до отдельного live-canary; repo-default возвращен на `2026.3.11`, а future upgrades должны идти через явный `clawdiy_image`.
+- Официальный rollback run `23090952913` восстановил service health, но вскрыл второй системный дефект: OAuth-профиль Codex сохранился, а tracked config сбросил `main` обратно на `anthropic/claude-opus-4-6`.
+- Новый RCA-017 зафиксировал, что baseline `gpt-5.4` жил только в runtime wizard state. В tracked `config/clawdiy/openclaw.json` теперь закреплен baseline Codex OAuth / `gpt-5.4`, а live baseline восстановлен официальной командой `openclaw models --agent main set ...`.
+- Follow-up Beads issue: `molt-1mn` — исследовать, почему официальный Docker `latest` для OpenClaw не вышел в healthy на live Clawdiy, и определить следующий безопасный upgrade candidate.
 
 ### Production Status
 

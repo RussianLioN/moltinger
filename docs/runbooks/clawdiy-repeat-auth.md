@@ -96,8 +96,9 @@ This is a later rollout gate, not a first-deploy requirement.
    ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
    ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
    ```
-9. Promote Codex-backed capability only if post-auth verification passes.
-10. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
+9. If the wizard or `models set` changed the live default model, mirror that state back into tracked `config/clawdiy/openclaw.json` before the next redeploy; otherwise GitOps render will reset Clawdiy to the repo default on the next rollout.
+10. Promote Codex-backed capability only if post-auth verification passes.
+11. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
 
 ## Failure Handling
 
