@@ -10,6 +10,7 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
+| `beads-root-write-guard` | `feat/beads-root-write-guard` | `sibling-worktree` | Needs decision |
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
@@ -54,6 +55,7 @@
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
+| `feat/beads-root-write-guard` | `none` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-ewde-codex-advisory-rollout` | `origin/feat/moltinger-ewde-codex-advisory-rollout` | Needs decision |
@@ -119,6 +121,7 @@
 | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `origin/020-agent-factory-prototype` | Needs decision |
 | `origin/022-telegram-ba-intake` | Needs decision |
+| `origin/023-clawdiy-ci-preflight-runtime-home-fix` | Needs decision |
 | `origin/023-full-moltis-codex-update-skill` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
