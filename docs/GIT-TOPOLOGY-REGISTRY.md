@@ -16,7 +16,6 @@
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
-| `moltinger-moltis-official-docker-update-v0-10-18` | `fix/moltis-post-deploy-protocol-guidance` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
 | `moltinger-pr39` | `tmp-pr39-fix` | `sibling-worktree` | Needs decision |
@@ -62,7 +61,6 @@
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
-| `fix/moltis-post-deploy-protocol-guidance` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -100,6 +98,7 @@
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `fix/moltis-official-docker-latest-channel` | `origin/fix/moltis-gitops-repair-parse-failure` | Needs decision |
+| `fix/moltis-post-deploy-protocol-guidance` | `gone` | Tracking ref is gone; needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 
