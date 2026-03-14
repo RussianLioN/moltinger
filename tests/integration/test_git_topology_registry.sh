@@ -66,9 +66,9 @@ test_refresh_writes_sanitized_registry() {
     fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
     repo_dir="$(setup_demo_repo "$fixture_root")"
 
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
     (
         cd "$repo_dir"
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
         "$REGISTRY_SCRIPT" check >/dev/null
     )
 
@@ -97,10 +97,10 @@ test_refresh_is_noop_when_topology_is_unchanged() {
 
     (
         cd "$repo_dir"
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
+        git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
         git add docs/GIT-TOPOLOGY-REGISTRY.md docs/GIT-TOPOLOGY-INTENT.yaml
         git commit -m "fixture: add generated registry" >/dev/null
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
+        git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
         status_output="$(git status --short docs/GIT-TOPOLOGY-REGISTRY.md)"
         printf '%s\n' "$status_output" > "$fixture_root/status.out"
     )
@@ -119,10 +119,7 @@ test_orphan_intent_and_default_needs_decision_are_rendered() {
     fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
     repo_dir="$(setup_demo_repo "$fixture_root")"
 
-    (
-        cd "$repo_dir"
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_contains "$doc" '## Reviewed Intent Awaiting Reconciliation' "Registry should surface orphan reviewed intent"
@@ -147,10 +144,7 @@ test_check_is_observer_independent_across_sibling_worktrees() {
     repo_dir="$(setup_demo_repo "$fixture_root")"
     worktree_path="$fixture_root/repo-007-worktree"
 
-    (
-        cd "$repo_dir"
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
 
     (
         cd "$worktree_path"
@@ -172,6 +166,8 @@ test_lock_timeout_reports_owner_diagnostics() {
     local fixture_root repo_dir output rc
     fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
     repo_dir="$(setup_demo_repo "$fixture_root")"
+
+    git_topology_fixture_switch_branch "$repo_dir" "chore/topology-registry-publish-lock-timeout"
 
     mkdir -p "$repo_dir/.git/topology-registry/lock"
     cat > "$repo_dir/.git/topology-registry/lock/owner.env" <<'EOF'
@@ -214,6 +210,7 @@ test_lock_timeout_without_owner_metadata_reports_actionable_fallback() {
 
     (
         cd "$repo_dir"
+        git_topology_fixture_switch_branch "$repo_dir" "chore/topology-registry-publish-lock-timeout-no-metadata"
         mkdir -p "$expected_lock_dir"
     )
 
@@ -245,6 +242,7 @@ test_lock_permission_boundary_reports_non_lock_failure() {
 
     (
         cd "$repo_dir"
+        git_topology_fixture_switch_branch "$repo_dir" "chore/topology-registry-publish-permission-boundary"
         mkdir -p "$state_dir"
         chmod 0555 "$state_dir"
     )
@@ -266,6 +264,30 @@ test_lock_permission_boundary_reports_non_lock_failure() {
     assert_contains "$output" 'Cannot create lock directory:' "Permission-boundary failure should not masquerade as a held lock"
     assert_contains "$output" 'The shared topology state is not writable from this session.' "Permission-boundary failure should explain the actual class of problem"
     assert_contains "$output" 'outside the current sandbox or permission boundary' "Permission-boundary failure should point to sandbox-style restrictions"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_doctor_write_doc_requires_dedicated_publish_branch() {
+    test_start "git_topology_registry_doctor_write_doc_requires_dedicated_publish_branch"
+
+    local fixture_root repo_dir output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+    git_topology_fixture_add_branch "$repo_dir" "010-drift"
+
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        "$REGISTRY_SCRIPT" doctor --prune --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "1" "$rc" "Doctor publish should refuse ordinary branches"
+    assert_contains "$output" 'Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from main.' "Doctor refusal should report the current branch"
+    assert_contains "$output" 'dedicated non-main topology-publish worktree/branch' "Doctor refusal should point to the dedicated publish path"
 
     rm -rf "$fixture_root"
     test_pass
@@ -295,6 +317,7 @@ run_all_tests() {
     test_lock_timeout_reports_owner_diagnostics
     test_lock_timeout_without_owner_metadata_reports_actionable_fallback
     test_lock_permission_boundary_reports_non_lock_failure
+    test_doctor_write_doc_requires_dedicated_publish_branch
 
     generate_report
 }

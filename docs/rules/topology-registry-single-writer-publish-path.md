@@ -45,7 +45,6 @@ scripts/git-topology-registry.sh refresh --write-doc
 git add docs/GIT-TOPOLOGY-REGISTRY.md docs/GIT-TOPOLOGY-INTENT.yaml
 git commit -m "docs(topology): publish registry snapshot"
 git pull --rebase
-bd sync
 git push
 ```
 
@@ -54,6 +53,8 @@ The exact branch name may vary, but it must be:
 - dedicated to topology publication
 - outside ordinary feature work
 - not the canonical `main` worktree
+
+If this publish lane also needs Beads synchronization, use the localized repo wrapper from a managed worktree session. Do not assume a bare `bd sync` belongs in an ad-hoc manual topology-publish lane.
 
 ## Operational Meaning
 

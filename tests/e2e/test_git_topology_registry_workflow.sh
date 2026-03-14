@@ -84,11 +84,7 @@ setup_workflow_repo() {
     repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
     git_topology_fixture_seed_registry_assets "$repo_dir" "$PROJECT_ROOT"
     write_workflow_intent "$repo_dir"
-
-    (
-        cd "$repo_dir"
-        ./scripts/git-topology-registry.sh refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
     printf '%s\n' "$repo_dir"
 }
@@ -117,10 +113,7 @@ test_managed_start_and_cleanup_refresh_registry() {
     git_topology_fixture_add_branch "$repo_dir" "007-demo-feature"
     git_topology_fixture_add_worktree "$repo_dir" "$worktree_path" "007-demo-feature"
 
-    (
-        cd "$repo_dir"
-        ./scripts/git-topology-registry.sh refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_contains "$doc" '`007-demo-feature`' "Managed start should refresh branch entry"
@@ -130,10 +123,7 @@ test_managed_start_and_cleanup_refresh_registry() {
     git_topology_fixture_remove_worktree "$repo_dir" "$worktree_path"
     git_topology_fixture_delete_branch "$repo_dir" "007-demo-feature"
 
-    (
-        cd "$repo_dir"
-        ./scripts/git-topology-registry.sh refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_not_contains_literal "$doc" '`007-demo-feature`' "Cleanup should remove deleted branch from registry"
@@ -147,8 +137,9 @@ test_managed_start_and_cleanup_refresh_registry() {
 test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     test_start "git_topology_registry_hooks_and_session_boundary_reconcile_out_of_band_drift"
 
-    local fixture_root repo_dir worktree_path health_file draft_file backup_dir latest_backup
-    local status_after_hook status_after_doctor doc doc_before_doctor post_checkout_output post_checkout_rc pre_push_output pre_push_rc doctor_output doctor_rc
+    local fixture_root repo_dir worktree_path publish_worktree health_file draft_file backup_dir latest_backup
+    local status_after_hook status_after_doctor doc doc_before_doctor post_checkout_output post_checkout_rc pre_push_output pre_push_rc
+    local publish_pre_push_output publish_pre_push_rc doctor_output doctor_rc
     fixture_root="$(mktemp -d /tmp/git-topology-e2e.XXXXXX)"
     repo_dir="$(setup_workflow_repo "$fixture_root")"
     worktree_path="$fixture_root/repo-008-worktree"
@@ -185,8 +176,20 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
         printf '\n__RC__=%s\n' "$?"
     )"
     pre_push_rc="$(printf '%s\n' "$pre_push_output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
-    assert_eq "1" "$pre_push_rc" "Pre-push hook should block stale topology pushes"
-    assert_contains "$pre_push_output" 'Push blocked until docs/GIT-TOPOLOGY-REGISTRY.md matches live git state.' "Pre-push hook should print actionable guidance"
+    assert_eq "0" "$pre_push_rc" "Pre-push hook should stay non-blocking on ordinary branches"
+    assert_contains "$pre_push_output" 'Push allowed with stale topology snapshot.' "Ordinary pre-push hook should explain the warning-only path"
+
+    publish_worktree="$(git_topology_fixture_prepare_publish_worktree "$repo_dir" "chore/topology-registry-publish-e2e-stale")"
+    git_topology_fixture_copy_registry_assets_between_worktrees "$repo_dir" "$repo_dir" "$publish_worktree"
+    publish_pre_push_output="$(
+        cd "$publish_worktree" &&
+        set +e &&
+        ./.githooks/pre-push 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    publish_pre_push_rc="$(printf '%s\n' "$publish_pre_push_output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+    assert_eq "1" "$publish_pre_push_rc" "Pre-push hook should block stale topology pushes on the dedicated publish branch"
+    assert_contains "$publish_pre_push_output" 'Push blocked until docs/GIT-TOPOLOGY-REGISTRY.md matches live git state on this topology-publish branch.' "Publish-branch pre-push hook should print actionable guidance"
 
     doctor_output="$(
         cd "$repo_dir" &&
@@ -202,10 +205,7 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     assert_contains "$(cat "$draft_file")" 'Reviewed branch note retained across doctor.' "Recovery draft should preserve reviewed branch intent"
     assert_contains "$(cat "$draft_file")" 'Reviewed worktree note retained across doctor.' "Recovery draft should preserve reviewed worktree intent"
 
-    (
-        cd "$repo_dir"
-        ./scripts/git-topology-registry.sh doctor --prune --write-doc >/dev/null
-    )
+    git_topology_fixture_doctor_write_doc_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
     status_after_doctor="$(grep '^status=' "$health_file" | cut -d'=' -f2)"
     assert_eq "ok" "$status_after_doctor" "Session-boundary doctor should reconcile stale topology"
@@ -252,19 +252,16 @@ test_child_branch_doctor_preserves_authoritative_feature_identity() {
     child_worktree="$fixture_root/repo-child-worktree"
     git_topology_fixture_add_worktree "$repo_dir" "$feature_worktree" "006-demo-feature"
 
+    git_topology_fixture_refresh_registry_from_publish_branch "$feature_worktree" "./scripts/git-topology-registry.sh" "chore/topology-registry-publish-authority"
     (
         cd "$feature_worktree"
-        ./scripts/git-topology-registry.sh refresh --write-doc >/dev/null
         git add docs/GIT-TOPOLOGY-REGISTRY.md
         git commit -m "fixture: commit authoritative feature registry" >/dev/null
     )
 
     git_topology_fixture_add_worktree_branch_from "$repo_dir" "$child_worktree" "feat/demo-child" "006-demo-feature"
 
-    (
-        cd "$child_worktree"
-        ./scripts/git-topology-registry.sh doctor --prune --write-doc >/dev/null
-    )
+    git_topology_fixture_doctor_write_doc_from_publish_branch "$child_worktree" "./scripts/git-topology-registry.sh" "chore/topology-registry-publish-child"
 
     doc="$(cat "$child_worktree/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_contains "$doc" '`primary-feature-006`' "Child-branch reconcile should preserve canonical authoritative feature worktree id"

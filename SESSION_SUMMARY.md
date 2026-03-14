@@ -29,6 +29,28 @@
 
 ## 📊 Current Status
 
+### Current Session Update (2026-03-14, topology hotfix lane)
+
+- Ветка в работе: `fix/worktree-topology-registry-single-writer-publish`
+- `molt-ml3` доведён до фактического closure: single-writer policy теперь не только в docs, но и в owner automation/tests.
+- Что исправлено:
+  - `scripts/git-topology-registry.sh` теперь branch-aware: `refresh --write-doc` и `doctor --prune --write-doc` разрешены только из dedicated non-main `topology-publish` branch/worktree.
+  - Ordinary branches и `main` больше не могут silently publish `docs/GIT-TOPOLOGY-REGISTRY.md`; они получают явное guidance на dedicated publish lane.
+  - `.githooks/pre-push` стал различать обычные ветки и publish-lane:
+    - ordinary branch + stale topology => warning-only
+    - dedicated publish branch + stale topology => hard block
+  - `scripts/worktree-ready.sh` больше не советует auto-refresh tracked snapshot из invoking branch; planning/report path указывает на explicit dedicated publish lane.
+  - `docs/rules/topology-registry-single-writer-publish-path.md` и `docs/WORKTREE-HOTFIX-PLAYBOOK.md` выровнены под безопасный publish/sync path без bare `bd sync` в ad-hoc manual lane.
+  - topology fixture helpers и unit/integration/e2e tests переведены на реальную dedicated publish worktree, а не на скрытое branch-switching в том же worktree.
+- Проверки:
+  - `./tests/unit/test_git_topology_registry.sh`
+  - `./tests/integration/test_git_topology_registry.sh`
+  - `./tests/e2e/test_git_topology_registry_workflow.sh`
+  - `./tests/unit/test_worktree_ready.sh`
+  - `make codex-check`
+  - `git diff --check`
+- Следующий шаг по этой линии: review/merge ветки; новых blocker’ов после test contract reconciliation не осталось.
+
 ### Current Session Update (2026-03-13)
 
 - Ветка в работе: `022-clawdiy-wizard-writability-fix`

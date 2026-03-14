@@ -49,6 +49,32 @@ records:
 EOF
 }
 
+test_registry_refresh_requires_dedicated_publish_branch() {
+    test_start "git_topology_registry_refresh_requires_dedicated_publish_branch"
+
+    local fixture_root repo_dir output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
+    mkdir -p "$repo_dir/docs"
+    write_demo_intent "$repo_dir"
+
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        "$REGISTRY_SCRIPT" refresh --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "1" "$rc" "Refresh publish should refuse ordinary branches"
+    assert_contains "$output" 'Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from main.' "Refresh refusal should report the current branch"
+    assert_contains "$output" 'Canonical main is not an allowed topology publish lane.' "Refresh refusal should explain why main is rejected"
+    assert_contains "$output" 'dedicated non-main topology-publish worktree/branch' "Refresh refusal should point to the dedicated publish path"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_registry_refresh_is_deterministic_and_sanitized() {
     test_start "git_topology_registry_refresh_is_deterministic_and_sanitized"
 
@@ -61,17 +87,11 @@ test_registry_refresh_is_deterministic_and_sanitized() {
     worktree_path="$fixture_root/repo-007-worktree"
     git_topology_fixture_add_worktree "$repo_dir" "$worktree_path" "007-demo-feature"
 
-    (
-        cd "$repo_dir"
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
     first_hash="$(hash_file "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
 
-    (
-        cd "$repo_dir"
-        "$REGISTRY_SCRIPT" refresh --write-doc >/dev/null
-    )
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
     second_hash="$(hash_file "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
 
     assert_eq "$first_hash" "$second_hash" "Repeated refresh should render identical registry content"
@@ -106,6 +126,7 @@ run_all_tests() {
         return 1
     fi
 
+    test_registry_refresh_requires_dedicated_publish_branch
     test_registry_refresh_is_deterministic_and_sanitized
     generate_report
 }

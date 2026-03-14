@@ -78,6 +78,94 @@ git_topology_fixture_add_local_branch() {
   )
 }
 
+git_topology_fixture_switch_branch() {
+  local repo_dir="$1"
+  local branch_name="$2"
+  local start_point="${3:-}"
+
+  (
+    cd "${repo_dir}"
+    if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
+      git switch "${branch_name}" >/dev/null
+    elif [[ -n "${start_point}" ]]; then
+      git switch -c "${branch_name}" "${start_point}" >/dev/null
+    else
+      git switch -c "${branch_name}" >/dev/null
+    fi
+  )
+}
+
+git_topology_fixture_publish_worktree_path() {
+  local repo_dir="$1"
+  local publish_branch="$2"
+  local repo_parent repo_name sanitized_branch
+
+  repo_parent="$(cd "${repo_dir}/.." && pwd -P)"
+  repo_name="$(basename "${repo_dir}")"
+  sanitized_branch="$(printf '%s' "${publish_branch}" | tr '/:' '--' | tr -cd '[:alnum:]._-')"
+
+  printf '%s/%s-%s\n' "${repo_parent}" "${repo_name}" "${sanitized_branch}"
+}
+
+git_topology_fixture_prepare_publish_worktree() {
+  local repo_dir="$1"
+  local publish_branch="$2"
+  local start_point="${3:-}"
+  local publish_path=""
+  local effective_start_point=""
+
+  publish_path="$(git_topology_fixture_publish_worktree_path "${repo_dir}" "${publish_branch}")"
+
+  (
+    cd "${repo_dir}"
+    effective_start_point="${start_point}"
+    if [[ -z "${effective_start_point}" ]]; then
+      effective_start_point="$(git symbolic-ref --quiet --short HEAD || printf 'HEAD')"
+    fi
+
+    if [[ -e "${publish_path}" ]]; then
+      :
+    elif git show-ref --verify --quiet "refs/heads/${publish_branch}"; then
+      git worktree add "${publish_path}" "${publish_branch}" >/dev/null
+    else
+      git worktree add -b "${publish_branch}" "${publish_path}" "${effective_start_point}" >/dev/null
+    fi
+  )
+
+  printf '%s\n' "${publish_path}"
+}
+
+git_topology_fixture_copy_registry_assets_between_worktrees() {
+  local asset_source_repo="$1"
+  local metadata_source_repo="$2"
+  local target_repo="$3"
+
+  mkdir -p "${target_repo}/docs" "${target_repo}/scripts" "${target_repo}/.githooks"
+
+  cp "${asset_source_repo}/scripts/git-topology-registry.sh" "${target_repo}/scripts/git-topology-registry.sh"
+  cp "${asset_source_repo}/.githooks/_repo-local-path.sh" "${target_repo}/.githooks/_repo-local-path.sh"
+  cp "${asset_source_repo}/.githooks/pre-push" "${target_repo}/.githooks/pre-push"
+  cp "${asset_source_repo}/.githooks/post-checkout" "${target_repo}/.githooks/post-checkout"
+  cp "${asset_source_repo}/.githooks/post-merge" "${target_repo}/.githooks/post-merge"
+  cp "${asset_source_repo}/.githooks/post-rewrite" "${target_repo}/.githooks/post-rewrite"
+
+  if [[ -f "${metadata_source_repo}/docs/GIT-TOPOLOGY-INTENT.yaml" ]]; then
+    cp "${metadata_source_repo}/docs/GIT-TOPOLOGY-INTENT.yaml" "${target_repo}/docs/GIT-TOPOLOGY-INTENT.yaml"
+  fi
+
+  if [[ -f "${metadata_source_repo}/docs/GIT-TOPOLOGY-REGISTRY.md" ]]; then
+    cp "${metadata_source_repo}/docs/GIT-TOPOLOGY-REGISTRY.md" "${target_repo}/docs/GIT-TOPOLOGY-REGISTRY.md"
+  fi
+
+  chmod +x \
+    "${target_repo}/scripts/git-topology-registry.sh" \
+    "${target_repo}/.githooks/_repo-local-path.sh" \
+    "${target_repo}/.githooks/pre-push" \
+    "${target_repo}/.githooks/post-checkout" \
+    "${target_repo}/.githooks/post-merge" \
+    "${target_repo}/.githooks/post-rewrite"
+}
+
 git_topology_fixture_add_worktree() {
   local repo_dir="$1"
   local worktree_path="$2"
@@ -99,6 +187,54 @@ git_topology_fixture_add_worktree_branch_from() {
     cd "${repo_dir}"
     git worktree add -b "${new_branch}" "${worktree_path}" "${start_point}" >/dev/null
   )
+}
+
+git_topology_fixture_refresh_registry_from_publish_branch() {
+  local repo_dir="$1"
+  local registry_script="${2:-}"
+  local publish_branch="${3:-chore/topology-registry-publish-fixture}"
+  local start_point="${4:-}"
+  local asset_source_repo=""
+  local publish_path=""
+
+  publish_path="$(git_topology_fixture_prepare_publish_worktree "${repo_dir}" "${publish_branch}" "${start_point}")"
+  asset_source_repo="${repo_dir}"
+  if [[ ! -f "${asset_source_repo}/scripts/git-topology-registry.sh" && -n "${registry_script}" ]]; then
+    asset_source_repo="$(cd "$(dirname "${registry_script}")/.." && pwd -P)"
+  fi
+  git_topology_fixture_copy_registry_assets_between_worktrees "${asset_source_repo}" "${repo_dir}" "${publish_path}"
+
+  (
+    cd "${publish_path}"
+    ./scripts/git-topology-registry.sh refresh --write-doc >/dev/null
+  )
+
+  mkdir -p "${repo_dir}/docs"
+  cp "${publish_path}/docs/GIT-TOPOLOGY-REGISTRY.md" "${repo_dir}/docs/GIT-TOPOLOGY-REGISTRY.md"
+}
+
+git_topology_fixture_doctor_write_doc_from_publish_branch() {
+  local repo_dir="$1"
+  local registry_script="${2:-}"
+  local publish_branch="${3:-chore/topology-registry-publish-fixture}"
+  local start_point="${4:-}"
+  local asset_source_repo=""
+  local publish_path=""
+
+  publish_path="$(git_topology_fixture_prepare_publish_worktree "${repo_dir}" "${publish_branch}" "${start_point}")"
+  asset_source_repo="${repo_dir}"
+  if [[ ! -f "${asset_source_repo}/scripts/git-topology-registry.sh" && -n "${registry_script}" ]]; then
+    asset_source_repo="$(cd "$(dirname "${registry_script}")/.." && pwd -P)"
+  fi
+  git_topology_fixture_copy_registry_assets_between_worktrees "${asset_source_repo}" "${repo_dir}" "${publish_path}"
+
+  (
+    cd "${publish_path}"
+    ./scripts/git-topology-registry.sh doctor --prune --write-doc >/dev/null
+  )
+
+  mkdir -p "${repo_dir}/docs"
+  cp "${publish_path}/docs/GIT-TOPOLOGY-REGISTRY.md" "${repo_dir}/docs/GIT-TOPOLOGY-REGISTRY.md"
 }
 
 git_topology_fixture_seed_registry_assets() {

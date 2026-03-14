@@ -15,7 +15,12 @@ fi
 
 if [[ -x "$REGISTRY_SCRIPT" ]]; then
   if ! output="$("$REGISTRY_SCRIPT" check 2>&1)"; then
+    publish_allowed="$(printf '%s\n' "$output" | awk -F= '/^publish_allowed=/ {print $2}' | tail -1)"
     printf '%s\n' "$output" >&2
+    if [[ "$publish_allowed" == "true" ]]; then
+      echo "[git-topology-registry] Push blocked until docs/GIT-TOPOLOGY-REGISTRY.md matches live git state on this topology-publish branch." >&2
+      exit 1
+    fi
     echo "[git-topology-registry] Push allowed with stale topology snapshot." >&2
     echo "[git-topology-registry] Ordinary branches do not own tracked snapshot publication." >&2
     echo "[git-topology-registry] Publish later from a dedicated non-main topology-publish worktree/branch via scripts/git-topology-registry.sh refresh --write-doc." >&2
