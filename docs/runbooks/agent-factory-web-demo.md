@@ -335,6 +335,94 @@ Expected result:
 - публикует `error_message` reply card вместо raw exception payload
 - сохраняет adapter/session snapshot для operator follow-up
 
+## Controlled Subdomain Demo Access (US4)
+
+### Deploy target
+
+US4 публикует browser demo как отдельный same-host target:
+
+```bash
+./scripts/deploy.sh asc-demo deploy
+./scripts/deploy.sh --json asc-demo status
+```
+
+`deploy.sh` для `asc-demo` должен:
+
+- использовать [docker-compose.asc.yml](/Users/rl/coding/moltinger-019-asc-fabrique-prototype/docker-compose.asc.yml)
+- создать bind-backed runtime roots для `data/agent-factory/web-demo`, `data/agent-factory/discovery` и `data/agent-factory/concepts`
+- проверить `http://localhost:${ASC_DEMO_INTERNAL_PORT:-18791}/health`
+- проверить `http://localhost:${ASC_DEMO_INTERNAL_PORT:-18791}/metrics`
+
+### Access gate configuration
+
+Для controlled demo используются env anchors:
+
+- `ASC_DEMO_DOMAIN`
+- `ASC_DEMO_PUBLIC_BASE_URL`
+- `ASC_DEMO_ACCESS_MODE`
+- `ASC_DEMO_SHARED_TOKEN_HASH`
+- `ASC_DEMO_OPERATOR_LABEL`
+
+Recommended mode for the published demo:
+
+- `ASC_DEMO_ACCESS_MODE=shared_token_hash`
+- `ASC_DEMO_SHARED_TOKEN_HASH=<sha256 от выдаваемого demo token>`
+
+Current behavior:
+
+- если `ASC_DEMO_ACCESS_MODE=shared_token_hash` и hash настроен, adapter пропускает только matching token
+- если hash не настроен, `/api/health` показывает `publication_status=degraded`
+- локальные fixture-прогоны могут жить в `fixture_trust`, не ломая hermetic validation
+
+### Operator-safe health publication
+
+Published demo surface now exposes:
+
+- `GET /health`
+- `GET /api/health`
+- `GET /metrics`
+
+`/api/health` отдаёт operator-safe projection:
+
+- `service`
+- `public_base_url`
+- `access_gate_mode`
+- `access_gate_configured`
+- `operator_status.publication_status`
+- `operator_status.needs_operator_attention`
+- session/access/history/download counters
+
+`/metrics` отдаёт минимальные gauges:
+
+- `agent_factory_web_demo_active_sessions`
+- `agent_factory_web_demo_access_grants`
+- `agent_factory_web_demo_download_sessions`
+- `agent_factory_web_demo_publication_ready`
+- `agent_factory_web_demo_access_gate_configured`
+
+### Local validation examples
+
+Component access + health projection:
+
+```bash
+./tests/run.sh --lane component --filter component_agent_factory_web_access --json
+```
+
+Remote smoke for the published demo:
+
+```bash
+TEST_LIVE=1 LIVE_ASC_DEMO_URL=https://asc.ainetic.tech \
+./tests/run.sh --lane web_demo_live --json --live
+```
+
+Expected smoke result:
+
+- landing page is reachable
+- `/health` returns `200`
+- `/api/health` reports `access_gate_mode=shared_token_hash`
+- `/api/health` reports `publication_status=ready`
+- `/metrics` returns `200`
+
 ## Safety Rules
 
 - browser UI must not render repo paths, stack traces or secrets

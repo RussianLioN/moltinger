@@ -130,14 +130,14 @@
 
 ### Validation for User Story 4
 
-- [ ] T031 [P] [US4] Create component coverage for access-gate and health projection behavior in `tests/component/test_agent_factory_web_access.sh`
-- [ ] T032 [P] [US4] Create remote demo smoke coverage in `tests/live_external/test_web_factory_demo_smoke.sh`
+- [x] T031 [P] [US4] Create component coverage for access-gate and health projection behavior in `tests/component/test_agent_factory_web_access.sh`
+- [x] T032 [P] [US4] Create remote demo smoke coverage in `tests/live_external/test_web_factory_demo_smoke.sh`
 
 ### Implementation for User Story 4
 
-- [ ] T033 [P] [US4] Extend `scripts/deploy.sh` and `docker-compose.asc.yml` to support the dedicated web-demo target
-- [ ] T034 [P] [US4] Add demo-access and health/status publication behavior in `scripts/agent-factory-web-adapter.py`
-- [ ] T035 [US4] Document subdomain rollout, access gate, and smoke procedure in `docs/runbooks/agent-factory-web-demo.md`
+- [x] T033 [P] [US4] Extend `scripts/deploy.sh` and `docker-compose.asc.yml` to support the dedicated web-demo target
+- [x] T034 [P] [US4] Add demo-access and health/status publication behavior in `scripts/agent-factory-web-adapter.py`
+- [x] T035 [US4] Document subdomain rollout, access gate, and smoke procedure in `docs/runbooks/agent-factory-web-demo.md`
 
 **Checkpoint**: The web-first adapter is a publishable demo surface rather than only a local browser fixture.
 

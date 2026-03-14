@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,7 @@ INTAKE_SCRIPT = SCRIPT_ROOT / "agent-factory-intake.py"
 ARTIFACT_SCRIPT = SCRIPT_ROOT / "agent-factory-artifacts.py"
 DEFAULT_STATE_ROOT = PROJECT_ROOT / "data/agent-factory/web-demo"
 DEFAULT_ASSET_ROOT = PROJECT_ROOT / "web/agent-factory-demo"
+STATE_DIRS = ("sessions", "access", "history", "downloads")
 DISCOVERY_STATE_KEYS = (
     "project_key",
     "raw_idea",
@@ -94,8 +96,123 @@ def parse_args() -> argparse.Namespace:
 
 
 def ensure_state_layout(state_root: Path) -> None:
-    for dirname in ("sessions", "access", "history", "downloads"):
+    for dirname in STATE_DIRS:
         (state_root / dirname).mkdir(parents=True, exist_ok=True)
+
+
+def env_text(name: str, default: str = "") -> str:
+    return normalize_text(os.environ.get(name)) or default
+
+
+def access_gate_settings() -> dict[str, Any]:
+    demo_domain = env_text("ASC_DEMO_DOMAIN")
+    public_base_url = env_text("ASC_DEMO_PUBLIC_BASE_URL") or (f"https://{demo_domain}" if demo_domain else "")
+    shared_token = env_text("ASC_DEMO_SHARED_TOKEN")
+    shared_token_hash = env_text("ASC_DEMO_SHARED_TOKEN_HASH") or (sha256_hex(shared_token) if shared_token else "")
+    access_gate_mode = env_text("ASC_DEMO_ACCESS_MODE") or ("shared_token_hash" if shared_token_hash else "fixture_trust")
+    access_gate_configured = access_gate_mode != "shared_token_hash" or bool(shared_token_hash)
+    access_gate_ready = access_gate_mode != "fixture_trust" and access_gate_configured
+    return {
+        "demo_domain": demo_domain,
+        "public_base_url": public_base_url,
+        "access_gate_mode": access_gate_mode,
+        "shared_token_hash": shared_token_hash,
+        "access_gate_configured": access_gate_configured,
+        "access_gate_ready": access_gate_ready,
+        "operator_label": env_text("ASC_DEMO_OPERATOR_LABEL") or "factory-demo-operator",
+    }
+
+
+def count_json_files(root: Path) -> int:
+    if not root.is_dir():
+        return 0
+    return sum(1 for item in root.iterdir() if item.is_file() and item.suffix == ".json")
+
+
+def count_child_dirs(root: Path) -> int:
+    if not root.is_dir():
+        return 0
+    return sum(1 for item in root.iterdir() if item.is_dir())
+
+
+def summarize_session_statuses(state_root: Path) -> dict[str, Any]:
+    summary = {
+        "active_session_count": 0,
+        "awaiting_user_reply_count": 0,
+        "awaiting_confirmation_count": 0,
+        "handoff_running_count": 0,
+        "download_ready_count": 0,
+        "needs_attention_session_count": 0,
+        "last_session_updated_at": "",
+    }
+    sessions_root = state_root / "sessions"
+    if not sessions_root.is_dir():
+        return summary
+
+    last_session_update = ""
+    for session_path in sessions_root.iterdir():
+        if not session_path.is_file() or session_path.suffix != ".json":
+            continue
+        session_payload = load_json(session_path)
+        if not isinstance(session_payload, dict):
+            continue
+        summary["active_session_count"] += 1
+        web_demo_session = session_payload.get("web_demo_session", {})
+        web_demo_session = web_demo_session if isinstance(web_demo_session, dict) else {}
+        status_snapshot = session_payload.get("status_snapshot", {})
+        status_snapshot = status_snapshot if isinstance(status_snapshot, dict) else {}
+        session_status = normalize_text(web_demo_session.get("status"))
+        user_visible_status = normalize_text(status_snapshot.get("user_visible_status"))
+        if session_status == "awaiting_user_reply":
+            summary["awaiting_user_reply_count"] += 1
+        if session_status == "awaiting_confirmation" or user_visible_status == "awaiting_confirmation":
+            summary["awaiting_confirmation_count"] += 1
+        if session_status == "handoff_running" or user_visible_status == "handoff_running":
+            summary["handoff_running_count"] += 1
+        if session_status == "download_ready" or normalize_text(status_snapshot.get("download_readiness")) == "ready":
+            summary["download_ready_count"] += 1
+        if bool(status_snapshot.get("needs_operator_attention")) or user_visible_status == "needs_attention":
+            summary["needs_attention_session_count"] += 1
+        updated_at = normalize_text(web_demo_session.get("updated_at")) or normalize_text(status_snapshot.get("captured_at"))
+        if updated_at and (not last_session_update or updated_at > last_session_update):
+            last_session_update = updated_at
+
+    summary["last_session_updated_at"] = last_session_update
+    return summary
+
+
+def build_operator_status_publication(state_root: Path) -> dict[str, Any]:
+    settings = access_gate_settings()
+    ensure_state_layout(state_root)
+    state_root_ready = all((state_root / dirname).is_dir() for dirname in STATE_DIRS)
+    session_summary = summarize_session_statuses(state_root)
+    publication_status = (
+        "ready"
+        if state_root_ready and settings["access_gate_ready"]
+        else "degraded"
+    )
+    needs_operator_attention = publication_status != "ready"
+    return {
+        "publication_status": publication_status,
+        "needs_operator_attention": needs_operator_attention,
+        "state_root_ready": state_root_ready,
+        "active_session_count": session_summary["active_session_count"],
+        "awaiting_user_reply_count": session_summary["awaiting_user_reply_count"],
+        "awaiting_confirmation_count": session_summary["awaiting_confirmation_count"],
+        "handoff_running_count": session_summary["handoff_running_count"],
+        "download_ready_count": session_summary["download_ready_count"],
+        "needs_attention_session_count": session_summary["needs_attention_session_count"],
+        "last_session_updated_at": session_summary["last_session_updated_at"],
+        "access_grant_count": count_json_files(state_root / "access"),
+        "history_entry_count": count_json_files(state_root / "history"),
+        "download_session_count": count_child_dirs(state_root / "downloads"),
+        "access_gate_mode": settings["access_gate_mode"],
+        "access_gate_configured": settings["access_gate_configured"],
+        "access_gate_ready": settings["access_gate_ready"],
+        "public_base_url": settings["public_base_url"],
+        "demo_domain": settings["demo_domain"],
+        "published_at": utc_now(),
+    }
 
 
 def sanitize_download_artifacts(
@@ -404,9 +521,12 @@ def normalize_access_grant(payload: dict[str, Any], web_demo_session: dict[str, 
 
 def access_gate_result(payload: dict[str, Any], discovery_state: dict[str, Any], web_demo_session: dict[str, Any], now: str) -> tuple[bool, dict[str, Any], str]:
     grant = normalize_access_grant(payload, web_demo_session, now)
+    settings = access_gate_settings()
     resume_ready = bool(discovery_state) and normalize_text(web_demo_session.get("web_demo_session_id"))
     granted = False
     message = ""
+    provided_hash = normalize_text(grant.get("grant_value_hash"))
+    expected_hash = normalize_text(settings.get("shared_token_hash"))
 
     if resume_ready and normalize_text(web_demo_session.get("status")) not in {"gate_pending", "error"}:
         granted = True
@@ -414,14 +534,27 @@ def access_gate_result(payload: dict[str, Any], discovery_state: dict[str, Any],
             grant["grant_type"] = "allowlisted_session"
         if not normalize_text(grant.get("status")):
             grant["status"] = "active"
-    elif normalize_text(grant.get("status")) == "active" and (
-        normalize_text(grant.get("grant_value")) or normalize_text(grant.get("grant_value_hash"))
-    ):
-        granted = True
     else:
-        message = "Укажи активный demo access token, чтобы открыть рабочую сессию фабрики."
+        access_gate_mode = normalize_text(settings.get("access_gate_mode"))
+        if access_gate_mode == "shared_token_hash":
+            if not settings.get("access_gate_configured"):
+                message = "Демо-доступ ещё не подготовлен оператором. Нужен настроенный shared access token для subdomain demo."
+            elif normalize_text(grant.get("status")) == "active" and provided_hash and provided_hash == expected_hash:
+                granted = True
+            else:
+                message = "Этот demo access token не подходит. Проверь токен или запроси актуальный доступ у оператора."
+        elif normalize_text(grant.get("status")) == "active" and (
+            normalize_text(grant.get("grant_value")) or normalize_text(grant.get("grant_value_hash"))
+        ):
+            granted = True
+        else:
+            message = "Укажи активный demo access token, чтобы открыть рабочую сессию фабрики."
 
     grant["granted"] = granted
+    grant["access_gate_mode"] = normalize_text(settings.get("access_gate_mode"))
+    grant["access_gate_configured"] = bool(settings.get("access_gate_configured"))
+    grant["public_base_url"] = normalize_text(settings.get("public_base_url"))
+    grant["demo_domain"] = normalize_text(settings.get("demo_domain"))
     grant["grant_value"] = ""
     return granted, grant, message
 
@@ -892,6 +1025,10 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "grant_value_hash": normalize_text(access_gate.get("grant_value_hash")),
             "status": normalize_text(access_gate.get("status")),
             "expires_at": normalize_text(access_gate.get("expires_at")),
+            "mode": normalize_text(access_gate.get("access_gate_mode")),
+            "configured": bool(access_gate.get("access_gate_configured")),
+            "public_base_url": normalize_text(access_gate.get("public_base_url")),
+            "demo_domain": normalize_text(access_gate.get("demo_domain")),
         },
         "web_demo_session": web_demo_session,
         "browser_project_pointer": pointer,
@@ -928,6 +1065,15 @@ def render_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any], *, sta
     handler.wfile.write(body)
 
 
+def render_text(handler: BaseHTTPRequestHandler, body_text: str, *, content_type: str, status_code: int = 200) -> None:
+    body = body_text.encode("utf-8")
+    handler.send_response(status_code)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def render_file(handler: BaseHTTPRequestHandler, path: Path) -> None:
     if not path.is_file():
         render_json(handler, {"status": "error", "error": "asset_not_found"}, status_code=404)
@@ -955,6 +1101,65 @@ def render_download(handler: BaseHTTPRequestHandler, path: Path, download_name: 
     handler.wfile.write(body)
 
 
+def render_health(handler: BaseHTTPRequestHandler, state_root: Path) -> None:
+    settings = access_gate_settings()
+    operator_status = build_operator_status_publication(state_root)
+    payload = {
+        "status": "ok",
+        "service": "agent-factory-web-adapter",
+        "demo_domain": normalize_text(settings.get("demo_domain")),
+        "public_base_url": normalize_text(settings.get("public_base_url")),
+        "access_gate_mode": normalize_text(settings.get("access_gate_mode")),
+        "access_gate_configured": bool(settings.get("access_gate_configured")),
+        "access_gate_ready": bool(settings.get("access_gate_ready")),
+        "operator_status": operator_status,
+    }
+    render_json(handler, payload)
+
+
+def render_metrics(handler: BaseHTTPRequestHandler, state_root: Path) -> None:
+    operator_status = build_operator_status_publication(state_root)
+    metrics_body = "\n".join(
+        [
+            "# HELP agent_factory_web_demo_active_sessions Number of persisted active browser sessions.",
+            "# TYPE agent_factory_web_demo_active_sessions gauge",
+            f"agent_factory_web_demo_active_sessions {operator_status['active_session_count']}",
+            "# HELP agent_factory_web_demo_awaiting_user_reply_sessions Number of sessions waiting for the next business reply.",
+            "# TYPE agent_factory_web_demo_awaiting_user_reply_sessions gauge",
+            f"agent_factory_web_demo_awaiting_user_reply_sessions {operator_status['awaiting_user_reply_count']}",
+            "# HELP agent_factory_web_demo_awaiting_confirmation_sessions Number of sessions currently in brief confirmation.",
+            "# TYPE agent_factory_web_demo_awaiting_confirmation_sessions gauge",
+            f"agent_factory_web_demo_awaiting_confirmation_sessions {operator_status['awaiting_confirmation_count']}",
+            "# HELP agent_factory_web_demo_handoff_running_sessions Number of sessions currently running downstream handoff.",
+            "# TYPE agent_factory_web_demo_handoff_running_sessions gauge",
+            f"agent_factory_web_demo_handoff_running_sessions {operator_status['handoff_running_count']}",
+            "# HELP agent_factory_web_demo_access_grants Number of persisted demo access grants.",
+            "# TYPE agent_factory_web_demo_access_grants gauge",
+            f"agent_factory_web_demo_access_grants {operator_status['access_grant_count']}",
+            "# HELP agent_factory_web_demo_download_sessions Number of download-ready browser sessions.",
+            "# TYPE agent_factory_web_demo_download_sessions gauge",
+            f"agent_factory_web_demo_download_sessions {operator_status['download_session_count']}",
+            "# HELP agent_factory_web_demo_download_ready_sessions Number of sessions with ready browser downloads.",
+            "# TYPE agent_factory_web_demo_download_ready_sessions gauge",
+            f"agent_factory_web_demo_download_ready_sessions {operator_status['download_ready_count']}",
+            "# HELP agent_factory_web_demo_attention_sessions Number of sessions currently needing operator attention.",
+            "# TYPE agent_factory_web_demo_attention_sessions gauge",
+            f"agent_factory_web_demo_attention_sessions {operator_status['needs_attention_session_count']}",
+            "# HELP agent_factory_web_demo_publication_ready Whether the web demo publication state is ready.",
+            "# TYPE agent_factory_web_demo_publication_ready gauge",
+            f"agent_factory_web_demo_publication_ready {0 if operator_status['needs_operator_attention'] else 1}",
+            "# HELP agent_factory_web_demo_access_gate_configured Whether the configured access gate is ready.",
+            "# TYPE agent_factory_web_demo_access_gate_configured gauge",
+            f"agent_factory_web_demo_access_gate_configured {1 if operator_status['access_gate_configured'] else 0}",
+            "# HELP agent_factory_web_demo_access_gate_ready Whether the current access gate mode is publishable for controlled demo use.",
+            "# TYPE agent_factory_web_demo_access_gate_ready gauge",
+            f"agent_factory_web_demo_access_gate_ready {1 if operator_status['access_gate_ready'] else 0}",
+            "",
+        ]
+    )
+    render_text(handler, metrics_body, content_type="text/plain; version=0.0.4; charset=utf-8")
+
+
 def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
     ensure_state_layout(state_root)
 
@@ -965,7 +1170,10 @@ def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             if parsed.path in {"/health", "/api/health"}:
-                render_json(self, {"status": "ok", "service": "agent-factory-web-adapter"})
+                render_health(self, state_root)
+                return
+            if parsed.path == "/metrics":
+                render_metrics(self, state_root)
                 return
             if parsed.path == "/api/session":
                 session_id = normalize_text(parse_qs(parsed.query).get("session_id", [""])[0])

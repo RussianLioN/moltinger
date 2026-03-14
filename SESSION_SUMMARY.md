@@ -75,6 +75,10 @@ GitOps Compliance: Enforced ✅
 - Updated `web/agent-factory-demo/app.js` so explicit browser confirmation automatically triggers one safe follow-up `request_status`, making the user-visible flow behave as `confirm brief -> concept pack launches -> downloads appear` without manual JSON or CLI steps.
 - Added the ready-download fixture `tests/fixtures/agent-factory/web-demo/session-download-ready.json`, component coverage in `tests/component/test_agent_factory_web_delivery.sh`, and integration coverage in `tests/integration_local/test_agent_factory_web_handoff.sh`, validating sanitized delivery metadata, automatic confirmed-brief handoff, manifest provenance preservation, and live `/api/download` serving of the generated project document.
 - Updated `docs/runbooks/agent-factory-web-demo.md`, `docs/runbooks/agent-factory-prototype.md`, and `specs/024-web-factory-demo-adapter/tasks.md` so the operator docs and planning artifacts now describe the completed browser path from `confirmed brief` to concept-pack download rather than stopping at browser confirmation.
+- Completed `Phase 6 / User Story 4` for `024-web-factory-demo-adapter` (`molt-vd0.7.*`): `scripts/deploy.sh` now supports the dedicated `asc-demo` target on top of `docker-compose.asc.yml`, including same-host network checks, runtime root creation for `data/agent-factory/web-demo`, `data/agent-factory/discovery`, and `data/agent-factory/concepts`, plus health/metrics verification through the published local port before the subdomain is considered ready.
+- Extended `scripts/agent-factory-web-adapter.py` with a configurable subdomain access gate and operator-safe publication endpoints: the adapter now understands `ASC_DEMO_ACCESS_MODE=shared_token_hash`, validates configured token hashes without exposing token material, publishes `/api/health` and `/metrics`, and reports whether the demo surface is `ready` or `degraded` before users enter the working session.
+- Added US4 validation coverage in `tests/component/test_agent_factory_web_access.sh` and the new `tests/live_external/test_web_factory_demo_smoke.sh`, covering mismatched configured access grants, operator health projection, metrics publication, and remote smoke expectations for `asc.ainetic.tech` without requiring Telegram as the entry channel.
+- Updated `docker-compose.asc.yml`, `docs/runbooks/agent-factory-web-demo.md`, and `web/agent-factory-demo/index.html` so the published browser surface now documents the real access-gate env anchors, deploy commands, smoke flow, and the fact that the browser shell already supports review/confirm/download behavior instead of advertising them as future work.
 - Verified the setup slice with:
   - `./tests/run.sh --lane static --filter static_config_validation --json`
   - `bash -n tests/run.sh`
@@ -112,6 +116,15 @@ GitOps Compliance: Enforced ✅
   - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery)' --json`
   - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff)' --json`
   - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
+- Verified the controlled subdomain demo-access slice with:
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py`
+  - `bash -n scripts/deploy.sh tests/component/test_agent_factory_web_access.sh tests/live_external/test_web_factory_demo_smoke.sh`
+  - `./tests/run.sh --lane static --filter static_config_validation --json`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff)' --json`
+  - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
+  - `./tests/run.sh --lane web_demo_live --json` (expected `skipped` without `--live`)
+  - `bash scripts/scripts-verify.sh`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:
   - `spec.md`

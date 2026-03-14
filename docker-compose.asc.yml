@@ -47,6 +47,9 @@ services:
       MOLTIS_CONFIG_PATH: /workspace/config/moltis.toml
       ASC_DEMO_DOMAIN: ${ASC_DEMO_DOMAIN:-asc.ainetic.tech}
       ASC_DEMO_PUBLIC_BASE_URL: ${ASC_DEMO_PUBLIC_BASE_URL:-https://asc.ainetic.tech}
+      ASC_DEMO_ACCESS_MODE: ${ASC_DEMO_ACCESS_MODE:-shared_token_hash}
+      ASC_DEMO_SHARED_TOKEN_HASH: ${ASC_DEMO_SHARED_TOKEN_HASH:-}
+      ASC_DEMO_OPERATOR_LABEL: ${ASC_DEMO_OPERATOR_LABEL:-factory-demo-operator}
       ASC_DEMO_INTERNAL_PORT: ${ASC_DEMO_INTERNAL_PORT:-18791}
       ASC_DEMO_DATA_ROOT: /workspace/data/agent-factory/web-demo
       ASC_DISCOVERY_ROOT: /workspace/data/agent-factory/discovery

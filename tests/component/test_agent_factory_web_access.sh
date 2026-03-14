@@ -10,9 +10,9 @@ SESSION_NEW_FIXTURE="$PROJECT_ROOT/tests/fixtures/agent-factory/web-demo/session
 
 run_component_agent_factory_web_access_tests() {
     start_timer
-    require_commands_or_skip python3 jq || {
+    require_commands_or_skip python3 jq curl || {
         test_start "component_agent_factory_web_access_prereqs"
-        test_skip "python3 and jq are required"
+        test_skip "python3, jq and curl are required"
         generate_report
         return
     }
@@ -38,6 +38,19 @@ run_component_agent_factory_web_access_tests() {
         test_fail "Adapter should return a controlled blocked response without an access grant"
     fi
 
+    test_start "component_agent_factory_web_access_rejects_mismatched_configured_token"
+    if ASC_DEMO_ACCESS_MODE=shared_token_hash \
+        ASC_DEMO_SHARED_TOKEN_HASH="0000000000000000000000000000000000000000000000000000000000000000" \
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$SESSION_NEW_FIXTURE" --state-root "$tmpdir/state" --output "$tmpdir/mismatch-out.json" >/dev/null; then
+        assert_eq "gate_pending" "$(jq -r '.status' "$tmpdir/mismatch-out.json")" "Configured shared-token mode should block mismatched demo access grants"
+        assert_eq "shared_token_hash" "$(jq -r '.access_gate.mode' "$tmpdir/mismatch-out.json")" "Access gate should report the configured shared-token validation mode"
+        assert_eq "true" "$(jq -r '.access_gate.configured' "$tmpdir/mismatch-out.json")" "Configured shared-token mode should report a ready access policy"
+        assert_contains "$(jq -r '.access_gate.reason' "$tmpdir/mismatch-out.json")" "не подходит" "Blocked response should explain that the provided token is not valid for the demo"
+        test_pass
+    else
+        test_fail "Configured shared-token mode should fail closed on a mismatched grant"
+    fi
+
     test_start "component_agent_factory_web_access_restores_saved_session_for_status_request"
     if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$SESSION_NEW_FIXTURE" --state-root "$tmpdir/state" --output "$tmpdir/start-out.json" >/dev/null &&
         jq '.web_conversation_envelope = {
@@ -57,6 +70,57 @@ run_component_agent_factory_web_access_tests() {
         test_pass
     else
         test_fail "Adapter should restore the saved browser session for a follow-up status request"
+    fi
+
+    test_start "component_agent_factory_web_access_projects_operator_safe_health_status"
+    local server_pid=""
+    local health_ready="false"
+    local fixture_hash
+    fixture_hash="$(python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$(jq -r '.demo_access_grant.grant_value' "$SESSION_NEW_FIXTURE")")"
+    if ASC_DEMO_ACCESS_MODE="shared_token_hash" \
+        ASC_DEMO_SHARED_TOKEN_HASH="$fixture_hash" \
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$SESSION_NEW_FIXTURE" --state-root "$tmpdir/health-state" --output "$tmpdir/health-state-out.json" >/dev/null; then
+        ASC_DEMO_DOMAIN="asc.ainetic.tech" \
+            ASC_DEMO_PUBLIC_BASE_URL="https://asc.ainetic.tech" \
+            ASC_DEMO_ACCESS_MODE="shared_token_hash" \
+            ASC_DEMO_SHARED_TOKEN_HASH="$fixture_hash" \
+            python3 "$WEB_ADAPTER_SCRIPT" serve --host 127.0.0.1 --port 18796 --state-root "$tmpdir/health-state" --assets-root "$PROJECT_ROOT/web/agent-factory-demo" >/dev/null 2>"$tmpdir/health-server.log" &
+    else
+        test_fail "Configured shared-token mode should create one persisted browser session for operator health checks"
+    fi
+    server_pid=$!
+    if [[ -n "$server_pid" ]]; then
+        for _ in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:18796/api/health" >/dev/null 2>&1; then
+                health_ready="true"
+                break
+            fi
+            sleep 0.25
+        done
+        if [[ "$health_ready" == "true" ]] &&
+            curl -fsS "http://127.0.0.1:18796/api/health" -o "$tmpdir/health.json" &&
+            curl -fsS "http://127.0.0.1:18796/metrics" -o "$tmpdir/metrics.txt"; then
+            assert_eq "ok" "$(jq -r '.status' "$tmpdir/health.json")" "Health endpoint should stay reachable for operator checks"
+            assert_eq "agent-factory-web-adapter" "$(jq -r '.service' "$tmpdir/health.json")" "Health endpoint should identify the published adapter service"
+            assert_eq "shared_token_hash" "$(jq -r '.access_gate_mode' "$tmpdir/health.json")" "Health endpoint should expose the configured access-gate mode"
+            assert_eq "true" "$(jq -r '.access_gate_configured' "$tmpdir/health.json")" "Health endpoint should report when the shared token policy is configured"
+            assert_eq "ready" "$(jq -r '.operator_status.publication_status' "$tmpdir/health.json")" "Configured demo surface should publish a ready operator status"
+            assert_eq "https://asc.ainetic.tech" "$(jq -r '.public_base_url' "$tmpdir/health.json")" "Health endpoint should echo the public demo base URL"
+            assert_eq "1" "$(jq -r '.operator_status.active_session_count' "$tmpdir/health.json")" "Health endpoint should count persisted browser sessions"
+            assert_eq "1" "$(jq -r '.operator_status.awaiting_user_reply_count' "$tmpdir/health.json")" "Health endpoint should project the pending browser reply state"
+            assert_contains "$(cat "$tmpdir/metrics.txt")" "agent_factory_web_demo_publication_ready 1" "Metrics endpoint should expose publication readiness"
+            assert_contains "$(cat "$tmpdir/metrics.txt")" "agent_factory_web_demo_access_gate_ready 1" "Metrics endpoint should expose access-gate readiness"
+            assert_contains "$(cat "$tmpdir/metrics.txt")" "agent_factory_web_demo_awaiting_user_reply_sessions 1" "Metrics endpoint should expose session-state gauges"
+            test_pass
+        else
+            test_fail "Operator-safe health and metrics endpoints should be reachable for the web demo"
+        fi
+    else
+        test_fail "Adapter server should start with a configured health publication surface"
+    fi
+    if [[ -n "$server_pid" ]]; then
+        kill "$server_pid" >/dev/null 2>&1 || true
+        wait "$server_pid" 2>/dev/null || true
     fi
 
     generate_report

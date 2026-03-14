@@ -77,7 +77,8 @@
               <h3>Готов начать discovery</h3>
               <p>
                 Опиши, какую часть бизнес-процесса хочешь автоматизировать. Shell уже умеет
-                показывать chat, status и artifacts, а дальше будет привязан к живому adapter API.
+                вести discovery-диалог, показывать status, подтверждать brief и отдавать concept
+                pack после downstream handoff.
               </p>
             </article>
           </div>
@@ -107,8 +108,8 @@
               </label>
               <div class="composer__footer">
                 <p class="composer__hint">
-                  Shell понимает `start_project`, `submit_turn`, `request_status`, а будущий API
-                  добавит review, confirm и downloads.
+                  Shell понимает `start_project`, `submit_turn`, `request_status`,
+                  `request_brief_review`, `confirm_brief` и browser downloads.
                 </p>
                 <button class="button button--primary" id="sendBtn" type="submit" data-role="composer-submit">
                   Отправить в фабрику

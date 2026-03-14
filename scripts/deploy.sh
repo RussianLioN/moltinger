@@ -63,6 +63,7 @@ TARGET_AUXILIARY_SERVICES=()
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
 CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
 CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
+ASC_DEMO_ENV_FILE="${ASC_DEMO_ENV_FILE:-$PROJECT_ROOT/.env.asc}"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
@@ -307,6 +308,28 @@ configure_target() {
             TARGET_HEALTH_URL="http://localhost:${server_port}/health"
             TARGET_METRICS_URL="http://localhost:${server_port}/metrics"
             ;;
+        asc-demo)
+            TARGET_DISPLAY="ASC Demo"
+            COMPOSE_FILE="$PROJECT_ROOT/docker-compose.asc.yml"
+            ENV_FILE="$ASC_DEMO_ENV_FILE"
+            TARGET_CONTAINER="asc-demo"
+            TARGET_SERVICE="asc-demo"
+            TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/data/agent-factory/web-demo/.last-deployed-image"
+            TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/data/agent-factory/web-demo/.last-backup"
+            TARGET_NOTIFICATION_NAME="ASC Demo"
+            TARGET_REQUIRED_NETWORKS=(
+                "$TRAEFIK_NETWORK"
+                "$FLEET_INTERNAL_NETWORK"
+                "$MONITORING_NETWORK"
+            )
+            TARGET_AUXILIARY_SERVICES=()
+
+            local server_port
+            server_port="$(read_env_file_value "ASC_DEMO_PORT" || true)"
+            server_port="${server_port:-18791}"
+            TARGET_HEALTH_URL="http://localhost:${server_port}/health"
+            TARGET_METRICS_URL="http://localhost:${server_port}/metrics"
+            ;;
         *)
             echo "Unsupported target: $TARGET" >&2
             exit 2
@@ -352,6 +375,18 @@ ensure_clawdiy_runtime_paths() {
 
     for path in "${runtime_paths[@]}"; do
         chown -R "${CLAWDIY_RUNTIME_UID}:${CLAWDIY_RUNTIME_GID}" "$path"
+    done
+}
+
+ensure_asc_demo_runtime_paths() {
+    local required_paths=(
+        "$PROJECT_ROOT/data/agent-factory/web-demo"
+        "$PROJECT_ROOT/data/agent-factory/discovery"
+        "$PROJECT_ROOT/data/agent-factory/concepts"
+    )
+
+    for path in "${required_paths[@]}"; do
+        mkdir -p "$path"
     done
 }
 
@@ -523,6 +558,8 @@ check_prerequisites() {
         require_clawdiy_image_ref
         ensure_clawdiy_runtime_paths
         render_clawdiy_runtime_config
+    elif [[ "$TARGET" == "asc-demo" && ("$action" == "deploy" || "$action" == "rollback" || "$action" == "start" || "$action" == "restart") ]]; then
+        ensure_asc_demo_runtime_paths
     fi
 
     if ! compose_cmd allow-placeholder config --quiet >/dev/null 2>&1; then
@@ -636,6 +673,8 @@ rollback() {
 
         if [[ "$TARGET" == "moltis" ]]; then
             MOLTIS_VERSION="$(extract_moltis_version_tag "$last_image")" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
+        elif [[ "$TARGET" == "asc-demo" ]]; then
+            ASC_DEMO_IMAGE="$last_image" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         else
             CLAWDIY_IMAGE="$last_image" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         fi
@@ -924,6 +963,7 @@ show_usage() {
     echo "Targets:"
     echo "  moltis         Default target"
     echo "  clawdiy        OpenClaw sidecar stack"
+    echo "  asc-demo       Web-first factory demo subdomain stack"
     echo ""
     echo "Commands:"
     echo "  deploy [env]   Deploy the target stack (default env: production)"
@@ -937,6 +977,7 @@ show_usage() {
     echo "Examples:"
     echo "  $0 deploy"
     echo "  $0 clawdiy deploy"
+    echo "  $0 asc-demo deploy"
     echo "  $0 --json clawdiy status"
     echo ""
     echo "Exit Codes:"
@@ -953,6 +994,8 @@ show_usage() {
     echo "  ROLLBACK_ENABLED     - Enable automatic rollback (true/false)"
     echo "  CLAWDIY_IMAGE        - OpenClaw image for target=clawdiy deploys"
     echo "  CLAWDIY_ENV_FILE     - Optional env file for target=clawdiy"
+    echo "  ASC_DEMO_ENV_FILE    - Optional env file for target=asc-demo"
+    echo "  ASC_DEMO_SHARED_TOKEN_HASH - Shared demo access token hash for target=asc-demo"
     echo ""
     echo "Contract: specs/001-docker-deploy-improvements/contracts/scripts.md"
 }
@@ -979,7 +1022,7 @@ main() {
         esac
     done
 
-    if [[ "${1:-}" == "moltis" || "${1:-}" == "clawdiy" ]]; then
+    if [[ "${1:-}" == "moltis" || "${1:-}" == "clawdiy" || "${1:-}" == "asc-demo" ]]; then
         TARGET="$1"
         shift
     fi
