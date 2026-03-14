@@ -32,7 +32,7 @@
 ### Current Session Update (2026-03-13)
 
 - Ветка в работе: `022-clawdiy-wizard-writability-fix`
-- Live OAuth-попытка через официальный `openclaw onboard --auth-choice openai-codex` на `ainetic.tech` успешно дошла до установки `openai-codex/gpt-5.4` как модели по умолчанию, но упала на сохранении конфигурации с `EACCES` в `/home/node/.openclaw/openclaw.json.<tmp>.tmp`.
+- Live OAuth-попытка через официальный мастер `openclaw onboard` для `codex-oauth` на `ainetic.tech` успешно дошла до установки `codex-oauth/gpt-5.4` как модели по умолчанию, но упала на сохранении конфигурации с `EACCES` в `/home/node/.openclaw/openclaw.json.<tmp>.tmp`.
 - Корневая причина подтверждена live-проверкой: контракт разворачивания Clawdiy монтировал только read-only файл `openclaw.json` вместо записываемого домашнего каталога `/home/node/.openclaw`, который требуется официальному мастеру настройки OpenClaw.
 - До исправления снята резервная копия live-состояния:
   - `/root/clawdiy-backups/clawdiy-pre-codex-oauth-20260313-004707.tar.gz`
