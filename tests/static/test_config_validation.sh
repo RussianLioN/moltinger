@@ -119,13 +119,13 @@ PY
         test_pass
     fi
 
-    test_start "static_moltis_version_contract_matches_official_docker_channel"
+    test_start "static_moltis_version_contract_uses_explicit_release_tag"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" == "latest" ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         test_pass
     else
-        test_fail "Tracked Moltis version must match the official Docker channel in git and be validated by scripts/moltis-version.sh"
+        test_fail "Tracked Moltis version must resolve to an explicit release tag in git and be validated by scripts/moltis-version.sh"
     fi
 
     test_start "static_fixture_disables_openai_for_pr_gate"
