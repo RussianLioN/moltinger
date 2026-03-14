@@ -17,6 +17,7 @@
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-fix-beads-cleanup-finalize.shuqc7` | `fix/beads-recovery-audit-localization` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
+| `moltinger-merge-023-main.6pa2sg` | `tmp-merge-023-main-20260314195036` | `sibling-worktree` | Needs decision |
 | `moltinger-pr35` | `tmp-pr35-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr38` | `tmp-pr38-verify` | `sibling-worktree` | Needs decision |
 | `moltinger-pr39` | `tmp-pr39-fix` | `sibling-worktree` | Needs decision |
@@ -24,12 +25,12 @@
 | `moltinger-pr41` | `tmp-pr41-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr42` | `tmp-pr42-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-topology-refresh` | `chore/topology-registry-after-cleanup-20260312` | `sibling-worktree` | Needs decision |
-| `moltinger-v0-10-18-prod` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-1-moltis-backup-rollback-baseline` | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-3-moltis-git-container-update` | `feat/moltinger-z8m-3-moltis-git-container-update` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
 | `moltis-pin-v0-10-18-mainline` | `feat/moltis-pin-v0-10-18-mainline` | `sibling-worktree` | Needs decision |
+| `moltis-pin-v0-10-18-prod` | `feat/moltis-pin-v0-10-18-prod` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
@@ -37,7 +38,7 @@
 | `primary-feature-021` | `021-moltis-native-codex-update-advisory` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-023` | `023-clawdiy-ci-preflight-runtime-home-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-023` | `023-full-moltis-codex-update-skill` | `dedicated-feature-worktree` | Needs decision |
-| `primary-feature-023` | `023-telegram-factory-adapter` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-024` | `024-web-factory-demo-adapter` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -52,7 +53,7 @@
 | `021-moltis-native-codex-update-advisory` | `none` | Needs decision |
 | `023-clawdiy-ci-preflight-runtime-home-fix` | `origin/023-clawdiy-ci-preflight-runtime-home-fix` | Needs decision |
 | `023-full-moltis-codex-update-skill` | `origin/023-full-moltis-codex-update-skill` | Needs decision |
-| `023-telegram-factory-adapter` | `origin/023-telegram-factory-adapter` | Needs decision |
+| `024-web-factory-demo-adapter` | `none` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
@@ -65,7 +66,9 @@
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `feat/moltis-pin-v0-10-18-mainline` | `origin/main` | Needs decision |
+| `feat/moltis-pin-v0-10-18-prod` | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
+| `tmp-merge-023-main-20260314195036` | `origin/main` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
 | `tmp-pr39-fix` | `origin/012-codex-upstream-watcher` | Needs decision |
@@ -95,6 +98,7 @@
 | `021-moltis-native-codex-update-advisory-writable` | `origin/021-moltis-native-codex-update-advisory` | Needs decision |
 | `022-clawdiy-wizard-writability-fix` | `origin/022-clawdiy-wizard-writability-fix` | Needs decision |
 | `022-telegram-ba-intake` | `origin/022-telegram-ba-intake` | Needs decision |
+| `023-telegram-factory-adapter` | `origin/023-telegram-factory-adapter` | Needs decision |
 | `codex/004-telegram-e2e-harness` | `origin/codex/004-telegram-e2e-harness` | Unmerged source branch; treat as extraction source, not merge target. |
 | `codex/fix-bot` | `origin/codex/fix-bot` | PR #8 already merged, but branch still contains extra commits; do not merge raw. |
 | `codex/remote-uat-hardening` | `none` | Needs decision |
@@ -103,7 +107,6 @@
 | `feat/beads-root-write-guard` | `origin/feat/beads-root-write-guard` | Needs decision |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
-| `feat/moltis-pin-v0-10-18-prod` | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
@@ -125,7 +128,6 @@
 | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `origin/020-agent-factory-prototype` | Needs decision |
 | `origin/022-telegram-ba-intake` | Needs decision |
-| `origin/023-clawdiy-ci-preflight-runtime-home-fix` | Needs decision |
 | `origin/023-full-moltis-codex-update-skill` | Needs decision |
 | `origin/023-telegram-factory-adapter` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |

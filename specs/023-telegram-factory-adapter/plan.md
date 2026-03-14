@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add the first live Telegram interface adapter for the factory business-analyst agent on `Moltis`. The adapter must turn real Telegram messages into `022` discovery-runtime turns, keep one active factory project per user/chat context, let the user review and confirm the brief inside Telegram, automatically trigger `handoff -> intake -> concept pack`, and deliver the resulting artifacts back in the same Telegram conversation without exposing repo paths, raw JSON, or internal errors.
+Add the preserved follow-up Telegram interface adapter for the factory business-analyst agent on `Moltis`. After the pivot to `024-web-factory-demo-adapter` as the primary near-term demo path, this adapter remains the next transport slice: it must turn real Telegram messages into `022` discovery-runtime turns, keep one active factory project per user/chat context, let the user review and confirm the brief inside Telegram, automatically trigger `handoff -> intake -> concept pack`, and deliver the resulting artifacts back in the same Telegram conversation without exposing repo paths, raw JSON, or internal errors.
 
 ## Technical Context
 
@@ -13,10 +13,10 @@ Add the first live Telegram interface adapter for the factory business-analyst a
 **Primary Dependencies**: Moltis runtime with current Telegram channel config, existing `scripts/agent-factory-discovery.py`, `scripts/agent-factory-intake.py`, `scripts/agent-factory-artifacts.py`, shared helpers in `scripts/agent_factory_common.py`, current Bot API helper in `scripts/telegram-bot-send.sh`, official Telegram Bot API webhook/sendDocument behavior, MTProto helper scripts retained for live validation only  
 **Storage**: Git-tracked planning artifacts, repo-local JSON state under `data/agent-factory/discovery/` plus new adapter-local state under `data/agent-factory/telegram/`, downstream concept-pack outputs under the existing factory output roots  
 **Testing**: Shell-based `component`, `integration_local`, and `live_external` suites under `tests/`, fixture-driven Telegram adapter flows, existing static config validation, and downstream agent-factory compatibility tests  
-**Target Platform**: Linux Docker-hosted Moltis runtime with Telegram bot as the first live interface adapter for the factory business-analyst agent  
+**Target Platform**: Linux Docker-hosted Moltis runtime with Telegram bot as a follow-up live interface adapter for the factory business-analyst agent
 **Project Type**: Documentation-driven script/config orchestration with a thin transport adapter layer  
 **Performance Goals**: Each inbound Telegram message should produce one user-visible next-step response within the same adapter cycle; `confirmed brief` should immediately acknowledge downstream launch in-chat; concept-pack delivery should start automatically within the same orchestration chain that generated the artifacts  
-**Constraints**: Russian-first user messaging; webhook-compatible transport semantics; no duplicate business-analysis logic outside `022`; no concept-pack generation before explicit brief confirmation; no filesystem paths, stack traces, or secrets in Telegram replies; Telegram remains the first live adapter, not the agent identity; pilot traffic is allowlisted and operator-controlled  
+**Constraints**: Russian-first user messaging; webhook-compatible transport semantics; no duplicate business-analysis logic outside `022`; no concept-pack generation before explicit brief confirmation; no filesystem paths, stack traces, or secrets in Telegram replies; Telegram remains a follow-up live adapter, not the agent identity; pilot traffic is allowlisted and operator-controlled
 **Scale/Scope**: Pilot-scale usage for a small set of business users and operators; tens of active Telegram sessions are acceptable; one active project pointer per user by default; broader multi-channel abstraction stays out of this slice
 
 ## Constitution Check
@@ -196,7 +196,7 @@ Phase 0 is complete in [research.md](./research.md).
 
 ### Finalized Research Output
 
-1. The new slice should be a Telegram adapter over the existing factory business-analyst runtime, not a new agent identity.
+1. This slice should stay a Telegram adapter over the existing factory business-analyst runtime, not a new agent identity, and should now be interpreted as follow-up scope after `024`.
 2. The adapter must stay webhook-compatible and Bot API-based for production-side delivery.
 3. The adapter needs explicit session routing and active project pointers on top of the `022` discovery snapshot.
 4. The user must stay inside Telegram for both brief confirmation and concept-pack delivery.

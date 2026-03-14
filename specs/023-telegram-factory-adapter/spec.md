@@ -2,9 +2,10 @@
 
 **Feature Branch**: `023-telegram-factory-adapter`  
 **Created**: 2026-03-14  
-**Status**: Draft  
+**Status**: Draft (Follow-up Adapter)
 **Upstream Discovery Context**: [../022-telegram-ba-intake/spec.md](../022-telegram-ba-intake/spec.md)  
 **Downstream Factory Context**: [../020-agent-factory-prototype/spec.md](../020-agent-factory-prototype/spec.md)  
+**Primary Demo Context**: [../024-web-factory-demo-adapter/spec.md](../024-web-factory-demo-adapter/spec.md)
 **Operational Baseline**: [../../docs/runbooks/agent-factory-discovery.md](../../docs/runbooks/agent-factory-discovery.md)  
 **Input**: User description: "Сделать первый живой пользовательский интерфейс для фабричного агента-бизнес-аналитика на Moltis через Telegram. Пользователь должен общаться с агентом в реальном Telegram-диалоге, проходить discovery interview, подтверждать requirements brief и без ручного копипаста запускать downstream handoff в существующую фабрику. Telegram в этом slice является первым реальным интерфейсным адаптером к уже готовому discovery runtime, а не отдельной сущностью агента."
 
@@ -14,12 +15,13 @@
 
 - Q: Является ли Telegram отдельным агентом или первым интерфейсным адаптером? → A: Telegram является первым живым интерфейсным адаптером к фабричному агенту на `Moltis`, а не отдельной сущностью агента.
 - Q: Должен ли пользователь после `confirmed brief` вручную запускать downstream flow? → A: Нет. Telegram adapter должен автоматически инициировать `handoff -> intake -> concept pack` и вернуть пользователю результат в том же пользовательском канале.
+- Q: Остается ли Telegram primary demo path после web-first pivot? → A: Нет. После `024-web-factory-demo-adapter` primary near-term demo path становится web-first browser adapter, а `023` сохраняется как follow-up transport scope.
 
 ## Scope Boundary
 
 ### In Scope
 
-- Первый живой пользовательский интерфейс к уже существующему factory discovery runtime через Telegram bot.
+- Follow-up live пользовательский интерфейс к уже существующему factory discovery runtime через Telegram bot.
 - Реальный multi-turn Telegram dialogue для нетехнического бизнес-пользователя на русском языке по умолчанию.
 - Привязка Telegram chat/user context к discovery session, brief state, handoff state и active project.
 - Передача каждого пользовательского сообщения в существующий `022` discovery runtime без дублирования discovery-логики в adapter-слое.
@@ -47,7 +49,7 @@
 
 - Замена discovery runtime из `022-telegram-ba-intake`.
 - Замена downstream concept-pack pipeline, defense loop, swarm, playground или deploy из `020-agent-factory-prototype`.
-- Неграниченный multi-channel adapter layer для всех будущих UI в одном slice; в этом feature Telegram только первый живой adapter.
+- Неграниченный multi-channel adapter layer для всех будущих UI в одном slice; в этом feature Telegram остается follow-up adapter после primary web-first demo path из `024`.
 - Production deployment orchestration и масштабирование bot infrastructure.
 - Полный self-serve defense loop и playground interaction внутри Telegram в этом slice.
 - Работа с несанаизированными production business data как обязательный сценарий.
@@ -131,7 +133,7 @@
 
 #### Telegram Adapter Runtime
 
-- **FR-001**: System MUST accept Telegram user messages as the first live adapter input for the factory business-analyst agent on `Moltis`.
+- **FR-001**: System MUST accept Telegram user messages as one live follow-up adapter input for the factory business-analyst agent on `Moltis`.
 - **FR-002**: System MUST map one Telegram user/chat conversation to one active factory project context or explicit project-selection state.
 - **FR-003**: System MUST forward user messages into the existing discovery runtime from `023`'s upstream dependency `022-telegram-ba-intake` instead of reimplementing discovery logic in the adapter.
 - **FR-004**: System MUST return one user-facing next step after each Telegram turn, such as a follow-up question, clarification, brief summary, confirmation request, or downstream status.
@@ -183,7 +185,7 @@
 ## Assumptions
 
 - The current repository already contains the reusable discovery runtime in `022-telegram-ba-intake` and the downstream factory pipeline in `020-agent-factory-prototype`.
-- Telegram is the first live adapter because it is already configured in the repo and is the fastest path to real user testing.
+- Telegram remains a prepared follow-up adapter because transport groundwork already exists in the repo, even though the primary near-term demo path moved to `024-web-factory-demo-adapter`.
 - Russian remains the default user language for pilot usage.
 - User testing in this slice targets pilot-scale traffic and controlled allowlisted Telegram access, not broad public bot exposure.
 
@@ -191,5 +193,6 @@
 
 - Discovery runtime and contracts in [../022-telegram-ba-intake/spec.md](../022-telegram-ba-intake/spec.md).
 - Downstream concept-pack flow in [../020-agent-factory-prototype/spec.md](../020-agent-factory-prototype/spec.md).
+- Primary web-first demo path in [../024-web-factory-demo-adapter/spec.md](../024-web-factory-demo-adapter/spec.md).
 - Current Telegram/Moltis runtime configuration in [../../config/moltis.toml](../../config/moltis.toml).
 - Existing Telegram operability/testing patterns in [../004-telegram-e2e-harness/spec.md](../004-telegram-e2e-harness/spec.md).

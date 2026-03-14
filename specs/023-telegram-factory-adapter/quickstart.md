@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This quickstart validates the first live Telegram adapter layer on top of the factory business-analyst runtime.
+This quickstart validates the preserved follow-up Telegram adapter layer on top of the factory business-analyst runtime after the web-first pivot.
 
 It confirms six things:
 
-1. Telegram is implemented as the first live adapter, not as the agent identity
+1. Telegram remains a valid follow-up adapter, not as the agent identity
 2. real Telegram messages can be routed into the existing discovery runtime
 3. the user can review and confirm the brief inside Telegram
 4. confirmation automatically launches the downstream factory pipeline
@@ -35,6 +35,7 @@ Expected result:
 - the Speckit package exists for `023-telegram-factory-adapter`
 - planning artifacts clearly reference `022` as the upstream discovery runtime
 - the package clearly references `020` as the downstream concept-pack pipeline
+- the package can coexist with `024-web-factory-demo-adapter` as preserved follow-up scope
 
 ## 2. Validate Adapter Scope Against Existing Runtime
 
@@ -198,7 +199,7 @@ Confirm:
 
 - [x] the feature has a complete spec package
 - [x] the adapter scope is explicitly separated from `022` and `020`
-- [x] Telegram is defined as the first live adapter, not as the agent identity
+- [x] Telegram is defined as a follow-up live adapter, not as the agent identity
 - [x] automatic downstream launch and in-chat artifact delivery are part of the contract
 - [x] resume, reopen, and live pilot validation are first-class concerns
 
@@ -215,6 +216,6 @@ This feature is ready for implementation only when:
 
 For this package, interpret `023-telegram-factory-adapter` as:
 
-- first live Telegram adapter for the factory business-analyst agent on `Moltis`
+- follow-up Telegram adapter for the factory business-analyst agent on `Moltis`
 - one interface layer over the existing discovery and factory runtimes
 - a pilot-scale user-facing slice, not a new standalone bot product or a generalized multi-channel platform

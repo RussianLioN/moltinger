@@ -52,9 +52,29 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-14)
 
-- Branch in progress: `023-telegram-factory-adapter`
+- Branch in progress: `024-web-factory-demo-adapter`
+- Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
+- Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:
+  - `spec.md`
+  - `checklists/requirements.md`
+  - `research.md`
+  - `plan.md`
+  - `data-model.md`
+  - `quickstart.md`
+  - `contracts/`
+  - `tasks.md`
+- The new `024` package now formalizes:
+  - web-first browser demo access through a dedicated subdomain such as `asc.ainetic.tech`
+  - a thin browser adapter over the existing `022` discovery runtime and `020` downstream factory flow
+  - browser-based discovery, brief review, explicit confirmation, and automatic `handoff -> intake -> concept pack`
+  - downloadable concept-pack artifacts from the same UI session
+  - a lightweight demo access gate plus browser resume/reopen behavior
+- Imported `specs/024-web-factory-demo-adapter/tasks.md` into Beads under epic `molt-vd0` with 9 phase parents and 48 child tasks; `Phase 0` was immediately closed because planning is already complete.
+- Added sequential phase-gating and intra-phase dependencies during the import so the new real entry point for implementation is `molt-vd0.2.*` (`Phase 1: Setup`).
+- Applied a clarification pass to `specs/023-telegram-factory-adapter/` so Telegram is now explicitly preserved as follow-up transport scope instead of competing with the new web-first primary demo path.
+- Added blocking dependencies from `molt-ztn` / `molt-ztn.2.*` onto `molt-vd0` so the Telegram adapter backlog is formally queued behind the new web-first demo epic rather than showing up as a competing primary entry point in `bd ready`.
 - Completed the new Speckit planning package `specs/023-telegram-factory-adapter/` on top of the already finished discovery core from `022-telegram-ba-intake` and the downstream factory MVP0 from `020-agent-factory-prototype`.
-- The new slice is explicitly scoped as the first live Telegram interface adapter for the factory business-analyst agent on `Moltis`; Telegram is a transport/UI adapter, not the agent identity itself.
+- The `023` slice remains explicitly scoped as a live follow-up Telegram interface adapter for the factory business-analyst agent on `Moltis`; Telegram is a transport/UI adapter, not the agent identity itself.
 - Added the full `023` design set:
   - `spec.md`
   - `checklists/requirements.md`

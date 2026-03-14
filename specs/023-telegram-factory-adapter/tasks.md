@@ -3,7 +3,7 @@
 **Input**: Design documents from `/specs/023-telegram-factory-adapter/`  
 **Prerequisites**: `plan.md` (required), `spec.md` (required for user stories), `research.md`, `data-model.md`, `contracts/`
 
-**Tests**: Validation tasks are included because this slice introduces the first live Telegram adapter, real user-facing brief confirmation, automatic downstream handoff, in-chat artifact delivery, and Telegram session recovery.
+**Tests**: Validation tasks are included because this slice preserves the Telegram adapter backlog for real user-facing brief confirmation, automatic downstream handoff, in-chat artifact delivery, and Telegram session recovery.
 
 **Organization**: Tasks are grouped by user story so the Telegram adapter can be delivered as independent slices while preserving the existing ownership boundary: `022` remains the discovery core, `020` remains the downstream factory core, and `023` owns the live Telegram transport/routing/delivery layer only.
 

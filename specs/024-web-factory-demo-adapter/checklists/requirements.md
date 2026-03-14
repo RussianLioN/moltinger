@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Telegram Factory Adapter
+# Specification Quality Checklist: Web Factory Demo Adapter
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-03-14  
@@ -31,6 +31,7 @@
 
 ## Notes
 
-- This slice treats Telegram as a preserved follow-up live interface adapter, not as a separate agent identity.
+- This slice records the pivot to `web-first` as the primary near-term demo path.
 - The discovery runtime remains upstream in `022-telegram-ba-intake`, and the concept-pack pipeline remains downstream in `020-agent-factory-prototype`.
-- The feature is intentionally scoped around real user testing and adapter behavior, not around deploy, swarm redesign, or multi-channel abstraction.
+- `023-telegram-factory-adapter` remains preserved as follow-up transport scope rather than being discarded.
+- The feature is intentionally scoped around a practical browser demo path, not around a full portal rewrite, SSO rollout, or Telegram replacement.

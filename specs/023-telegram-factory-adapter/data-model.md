@@ -2,7 +2,7 @@
 
 ## Overview
 
-This feature adds the first live Telegram interface layer on top of the existing factory runtime:
+This feature adds the preserved follow-up Telegram interface layer on top of the existing factory runtime:
 
 `Telegram update -> Telegram adapter -> discovery session -> confirmed brief -> factory handoff -> concept pack -> Telegram delivery`
 

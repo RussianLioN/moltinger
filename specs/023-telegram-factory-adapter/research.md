@@ -3,15 +3,15 @@
 **Feature**: `023-telegram-factory-adapter`  
 **Date**: 2026-03-14  
 **Status**: Complete  
-**Purpose**: Capture the product and technical decisions needed to add the first live Telegram adapter over the already implemented factory business-analyst runtime and downstream concept-pack pipeline.
+**Purpose**: Capture the product and technical decisions needed to add the preserved follow-up Telegram adapter over the already implemented factory business-analyst runtime and downstream concept-pack pipeline.
 
 ## 1. Executive Summary
 
-The repository now has the channel-neutral discovery runtime in `022-telegram-ba-intake` and the downstream concept-pack factory in `020-agent-factory-prototype`, but it still lacks the first real user-facing adapter that lets an ordinary business user run that flow in Telegram.
+The repository now has the channel-neutral discovery runtime in `022-telegram-ba-intake`, the downstream concept-pack factory in `020-agent-factory-prototype`, and the new primary web-first demo path planning in `024-web-factory-demo-adapter`. This package remains the preserved follow-up Telegram adapter that lets an ordinary business user run the same flow in Telegram when that transport becomes the next priority.
 
 This research resolves six planning decisions:
 
-1. Telegram must be implemented as the first live interface adapter, not as a separate agent identity.
+1. Telegram remains worth implementing as a follow-up live interface adapter, not as a separate agent identity.
 2. The adapter should remain thin and reuse the existing discovery, intake, and artifact scripts.
 3. Production-side transport should remain Bot API/webhook-compatible, aligned with the current Moltis Telegram channel ownership.
 4. The adapter needs an explicit session-routing layer over discovery snapshots so a Telegram reply always maps to the correct project and brief version.
@@ -120,7 +120,7 @@ Planning impact:
 
 ### 5.1 Telegram As First Live Adapter, Not New Agent Identity
 
-**Decision**: Keep the factory business-analyst agent on `Moltis` as the main actor and implement Telegram only as the first live user interface adapter.
+**Decision**: Keep the factory business-analyst agent on `Moltis` as the main actor and implement Telegram only as a follow-up live user interface adapter after the web-first pivot.
 
 **Rationale**:
 
@@ -208,7 +208,7 @@ No blocking clarification remains before `plan.md`, `data-model.md`, `contracts/
 
 The feature can proceed with these working assumptions:
 
-- Telegram is the first live user adapter for the existing factory business-analyst agent.
+- Telegram remains a valid follow-up live user adapter for the existing factory business-analyst agent.
 - The adapter must stay transport-focused and must not reimplement discovery or concept generation.
 - Production-side delivery should stay Bot API/webhook-compatible.
 - The adapter must return the generated concept-pack artifacts back to the user in Telegram.
