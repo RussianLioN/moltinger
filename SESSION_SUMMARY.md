@@ -65,6 +65,14 @@
 - Официальный rollback run `23090952913` восстановил service health, но вскрыл второй системный дефект: OAuth-профиль Codex сохранился, а tracked config сбросил `main` обратно на `anthropic/claude-opus-4-6`.
 - Новый RCA-017 зафиксировал, что baseline `gpt-5.4` жил только в runtime wizard state. В tracked `config/clawdiy/openclaw.json` теперь закреплен baseline Codex OAuth / `gpt-5.4`, а live baseline восстановлен официальной командой `openclaw models --agent main set ...`.
 - Follow-up Beads issue: `molt-1mn` — исследовать, почему официальный Docker `latest` для OpenClaw не вышел в healthy на live Clawdiy, и определить следующий безопасный upgrade candidate.
+- Дополнительное расследование по `molt-1mn` доказало, что official Docker `latest` (`2026.3.12`) не является hard-broken образом для Clawdiy:
+  - isolated canary без Telegram начал отдавать `200` на `/health` примерно через 100 секунд;
+  - isolated canary с живым Telegram-профилем временно ушел в `unhealthy`, но затем начал отдавать `200` на `/health` и автоматически восстановился в Docker `healthy`.
+- Новый RCA-018: `docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md`
+- Под это в ветке `023-clawdiy-ci-preflight-runtime-home-fix` подготовлен fixed rollout contract:
+  - `docker-compose.clawdiy.yml` получил расширенный startup grace для OpenClaw warmup;
+  - `scripts/deploy.sh` больше не считает первый transient `unhealthy` терминальным, если контейнер жив и `/health` уже поднимается;
+  - runbook и статические проверки обновлены под новый upgrade protocol.
 
 ### Production Status
 

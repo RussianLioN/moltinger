@@ -220,6 +220,23 @@ PY
         test_fail "Missing .github/workflows/deploy-clawdiy.yml"
     fi
 
+    test_start "static_clawdiy_compose_extends_startup_health_grace_for_official_openclaw_warmup"
+    if rg -q 'start_period: 180s' "$COMPOSE_CLAWDIY" && \
+       rg -q 'retries: 5' "$COMPOSE_CLAWDIY"; then
+        test_pass
+    else
+        test_fail "Clawdiy compose healthcheck must allow enough startup grace for official OpenClaw Docker warmup"
+    fi
+
+    test_start "static_clawdiy_deploy_wait_tolerates_transient_unhealthy_during_startup"
+    if rg -q 'temporarily unhealthy during startup; continuing to wait until timeout' "$DEPLOY_SCRIPT" && \
+       rg -q 'health endpoint is already serving HTTP 200 while Docker health is still catching up' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_HEALTH_CHECK_TIMEOUT' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy logic must tolerate transient startup unhealthy states until the overall timeout expires"
+    fi
+
     test_start "static_clawdiy_workflow_uses_targeted_preflight_and_deploy"
     if rg -q 'preflight-check\.sh --ci --target clawdiy' "$CLAWDIY_WORKFLOW" && \
        rg -q 'deploy\.sh --json clawdiy deploy' "$CLAWDIY_WORKFLOW" && \
@@ -333,7 +350,7 @@ PY
 
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
-       rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker logs "\$container" --tail 80 >&2' "$DEPLOY_SCRIPT" && \
        rg -q 'if \[\[ "\$OUTPUT_JSON" != "true" \]\]; then' "$DEPLOY_SCRIPT" && \
        rg -q 'echo -n "\."' "$DEPLOY_SCRIPT"; then
         test_pass

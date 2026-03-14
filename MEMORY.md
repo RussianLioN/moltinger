@@ -78,6 +78,8 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
   `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`
 - Clawdiy Docker image default must stay pinned to the last live-verified image; test new OpenClaw images only via explicit `clawdiy_image` rollout, not by flipping tracked default to `latest`:
   `docs/rules/clawdiy-updates-must-stay-pinned-until-live-canary.md`
+- Official OpenClaw Docker upgrades for Clawdiy can go through a transient `starting/unhealthy` warmup before recovering; do not treat the first `unhealthy` as terminal if the container is still running and `/health` later comes up:
+  `docs/rules/clawdiy-upgrade-health-must-tolerate-openclaw-startup-warmup.md`
 - Clawdiy `gpt-5.4` baseline must live in tracked `config/clawdiy/openclaw.json`, not only in runtime wizard state:
   `docs/rules/clawdiy-model-default-must-live-in-tracked-config.md`
 

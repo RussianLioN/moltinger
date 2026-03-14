@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-14
-**Total Lessons**: 28
+**Total Lessons**: 29
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (7 lessons)
+#### P1 (8 lessons)
 - [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
+- [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
 - [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
@@ -53,7 +54,8 @@
 ### By Category
 
 
-#### cicd (6 lessons)
+#### cicd (7 lessons)
+- [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
 - [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
 - [Moltis deploy rollback to 0.9.10 after non-official image pin and missing GitOps checkout repair](../docs/rca/2026-03-13-moltis-official-docker-channel-and-gitops-repair.md)
@@ -95,15 +97,15 @@
 ### Popular Tags
 
 - `process` (9 lessons)
-- `lessons` (8 lessons)
-- `clawdiy` (7 lessons)
+- `lessons` (9 lessons)
+- `clawdiy` (8 lessons)
+- `openclaw` (6 lessons)
 - `gitops` (6 lessons)
 - `rca` (5 lessons)
-- `openclaw` (5 lessons)
 - `github-actions` (5 lessons)
+- `docker` (5 lessons)
 - `deploy` (5 lessons)
 - `topology-registry` (4 lessons)
-- `oauth` (4 lessons)
 
 
 ---
@@ -112,10 +114,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 28 |
-| Critical (P0/P1) | 8 |
+| Total Lessons | 29 |
+| Critical (P0/P1) | 9 |
 | Categories | 5 |
-| Unique Tags | 72 |
+| Unique Tags | 74 |
 
 ---
 
