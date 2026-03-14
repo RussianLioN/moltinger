@@ -67,6 +67,16 @@ For this project specifically:
 
 Ask the user only if required data is still missing or contradictory after these checks.
 
+## Official-Only Setup Rule (Critical)
+
+For any application, library, dependency, package, service, runtime integration, or provider setup:
+
+- Follow the **official installation and configuration instructions first** from the official website, official documentation, or official GitHub repository.
+- Treat the official source as the canonical path for install, upgrade, configuration, authentication bootstrap, migration, and runtime integration.
+- Do **not** invent steps, infer setup flows, or substitute community recipes for the primary setup path when an official instruction exists.
+- Use community posts, issues, forums, and discussions only as secondary evidence for troubleshooting gaps, known bugs, or operational caveats after the official path has been checked.
+- If the official documentation is missing, contradictory, outdated, or provably broken, explicitly say so, cite the official source that was followed, and clearly mark any deviation from the official path as a justified exception.
+
 ## Runtime Target Rule (Mandatory)
 
 Before launching local containers, local port-forwards, or a local app replica, verify whether the authoritative target for the task is a documented remote service or a local fixture stack.

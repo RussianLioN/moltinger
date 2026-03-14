@@ -534,6 +534,28 @@ check_clawdiy_runtime_config() {
     add_check "runtime_config_shape" "pass" "Clawdiy runtime config fields parsed successfully" "error"
 }
 
+check_clawdiy_runtime_home() {
+    local runtime_root="$PROJECT_ROOT/data/clawdiy/runtime"
+    local expected_uid="${CLAWDIY_RUNTIME_UID:-1000}"
+    local expected_gid="${CLAWDIY_RUNTIME_GID:-1000}"
+
+    if [[ ! -d "$runtime_root" ]]; then
+        add_check "runtime_home_present" "fail" "Clawdiy runtime home is missing: $runtime_root" "error"
+        return
+    fi
+
+    add_check "runtime_home_present" "pass" "Clawdiy runtime home exists: $runtime_root" "error"
+
+    local owner_group
+    owner_group="$(stat -c '%u:%g' "$runtime_root" 2>/dev/null || stat -f '%u:%g' "$runtime_root" 2>/dev/null || echo "unknown")"
+
+    if [[ "$owner_group" == "${expected_uid}:${expected_gid}" ]]; then
+        add_check "runtime_home_ownership" "pass" "Clawdiy runtime home ownership matches ${expected_uid}:${expected_gid}" "error"
+    else
+        add_check "runtime_home_ownership" "fail" "Clawdiy runtime home ownership must be ${expected_uid}:${expected_gid} for official OpenClaw wizard writes (got: $owner_group)" "error"
+    fi
+}
+
 check_fleet_registry_config() {
     if ! validate_json_file \
         "$REGISTRY_CONFIG_PATH" \
@@ -742,6 +764,7 @@ check_target_specific_config() {
     case "$TARGET" in
         clawdiy)
             check_clawdiy_runtime_config
+            check_clawdiy_runtime_home
             check_fleet_registry_config
             check_fleet_policy_config
             check_clawdiy_identity_alignment

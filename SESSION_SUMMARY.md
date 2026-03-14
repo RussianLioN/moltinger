@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
 
 ---
 
@@ -28,6 +28,23 @@
 ---
 
 ## 📊 Current Status
+
+### Current Session Update (2026-03-13)
+
+- Ветка в работе: `022-clawdiy-wizard-writability-fix`
+- Live OAuth-попытка через официальный мастер `openclaw onboard` для `codex-oauth` на `ainetic.tech` успешно дошла до установки `codex-oauth/gpt-5.4` как модели по умолчанию, но упала на сохранении конфигурации с `EACCES` в `/home/node/.openclaw/openclaw.json.<tmp>.tmp`.
+- Корневая причина подтверждена live-проверкой: контракт разворачивания Clawdiy монтировал только read-only файл `openclaw.json` вместо записываемого домашнего каталога `/home/node/.openclaw`, который требуется официальному мастеру настройки OpenClaw.
+- До исправления снята резервная копия live-состояния:
+  - `/root/clawdiy-backups/clawdiy-pre-codex-oauth-20260313-004707.tar.gz`
+  - `sha256: 7684188246ea345ff60cbfd1cc267580b87a5e75427b81eee5614e1e425db0da`
+- Подготовленные исправления в ветке:
+  - `docker-compose.clawdiy.yml` монтирует `data/clawdiy/runtime -> /home/node/.openclaw`
+  - `scripts/deploy.sh` и `scripts/render-clawdiy-runtime-config.sh` нормализуют права `data/clawdiy/runtime`
+  - `scripts/preflight-check.sh` теперь валидирует наличие и владельца `runtime home`
+  - резервное копирование, smoke и статические тесты считают `runtime home` обязательным инвентарем
+- Новый RCA: `docs/rca/2026-03-13-clawdiy-official-wizard-runtime-home-contract-mismatch.md`
+- Новое правило: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
+- Follow-up issue: `molt-zze` — выкатить исправление и повторно пройти официальный мастер настройки OpenClaw на live Clawdiy
 
 ### Production Status
 
@@ -174,6 +191,22 @@ GitOps Compliance: Enforced ✅
 
 **Validated**
 
+- `git diff --check`
+
+### 2026-03-12: Clawdiy Browser Bootstrap Docs Corrected To Match Live UI
+
+**Статус**: ✅ official-docs re-check + live UI alignment documented
+
+- Re-checked official OpenClaw browser/control/device docs and compared them against the live Clawdiy first-run experience on `https://clawdiy.ainetic.tech`.
+- Confirmed that fresh browser bootstrap is a disconnected dashboard shell plus `Overview -> Gateway Access -> token -> device pairing`, not a dedicated welcome wizard and not a guaranteed `Settings/OAuth` first screen.
+- Added durable research [docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md) and operator runbook [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md).
+- Corrected downstream docs and spec artifacts that previously overstated the Clawdiy web Settings path for first-run OAuth.
+- Captured RCA-012 in [docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md) and added the prevention rule [docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md).
+- Filed follow-up bug `molt-nm7` for the broken `rca-index.sh` automation path, which still fails on zero-padded historical RCA IDs like `008` and `009`.
+
+**Validated**
+
+- live browser inspection on `https://clawdiy.ainetic.tech`
 - `git diff --check`
 
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order

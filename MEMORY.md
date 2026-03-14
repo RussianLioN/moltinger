@@ -68,6 +68,11 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
 - Full rule: `docs/rules/context-discovery-before-questions.md`
 - Hosted Clawdiy/OpenClaw Control UI must use token auth, not password auth:
   `docs/rules/clawdiy-hosted-control-ui-token-auth.md`
+- Hosted Clawdiy browser bootstrap must be documented and tested separately from provider auth:
+  `docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md`
+- Official OpenClaw wizard and OAuth flows require a writable Clawdiy runtime home:
+  `data/clawdiy/runtime -> /home/node/.openclaw`, not a read-only bind of only `openclaw.json`
+  Rule: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
 
 ---
 

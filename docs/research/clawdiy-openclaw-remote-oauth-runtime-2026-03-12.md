@@ -7,6 +7,8 @@
 **Breadcrumbs**: [Docs](/Users/rl/coding/moltinger-openclaw-control-plane/docs) / [Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/README.md) / `clawdiy-openclaw-remote-oauth-runtime-2026-03-12`
 
 **Related artifacts**:
+- [docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md)
+- [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md)
 - [specs/001-clawdiy-agent-platform/research.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/research.md)
 - [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md)
 - [docs/SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md)
@@ -17,7 +19,7 @@
 
 Current Clawdiy production docs and config model `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` only as rollout metadata. That is enough to gate policy and smoke checks, but not enough to establish a real OpenClaw runtime OAuth session for `codex-oauth` with `gpt-5.4`.
 
-Fresh official documentation still recommends the remote SSH/VPS paste-back flow, but fresh official GitHub issues show that this path is brittle in current OpenClaw builds when the runtime lives in a remote container. The most practical near-term path is to bootstrap OAuth against the actual target runtime auth store, then keep metadata, verification, and quarantine logic under GitOps. The cleaner target-state is to treat the runtime auth artifact as a first-class deployment asset with version-matched bootstrap and explicit delivery lifecycle.
+Fresh official documentation still recommends the remote SSH/VPS paste-back flow, and the Docker install docs explicitly describe headless Codex OAuth as a CLI/wizard path that captures a redirect on `http://127.0.0.1:1455/...`. Separate official browser docs show that hosted dashboard bootstrap is its own layer: browser token state plus device pairing. The most practical near-term path is to bootstrap browser access first, then run the official CLI/wizard OAuth flow against the actual target runtime auth store, then keep metadata, verification, and quarantine logic under GitOps. The cleaner target-state is to treat the runtime auth artifact as a first-class deployment asset with version-matched bootstrap and explicit delivery lifecycle.
 
 ## Repo-Local Gap Audit
 
@@ -34,6 +36,10 @@ Conclusion: the repo needs a dedicated follow-on implementation track for real r
 
 | Source | Checked | Official evidence | Impact |
 |---|---|---|---|
+| https://docs.openclaw.ai/web/dashboard | 2026-03-12 | Hosted control starts from dashboard connection parameters entered client-side. | Clawdiy docs must distinguish browser bootstrap from provider OAuth. |
+| https://docs.openclaw.ai/web/control-ui | 2026-03-12 | New browser profiles behave like new devices and need browser-local state. | Fresh browser bootstrap and device pairing are normal hosted UI steps, not evidence of broken deploy. |
+| https://docs.openclaw.ai/cli/devices | 2026-03-12 | Pending browser devices must be approved through the device flow. | Hosted browser bootstrap needs pairing approval before provider auth is even relevant. |
+| https://docs.openclaw.ai/install/docker | 2026-03-12 | The Docker install page includes a headless Codex OAuth section that explicitly describes a wizard/CLI flow with callback URL paste-back. | Browser UI must not be documented as the canonical Codex OAuth path. |
 | https://docs.openclaw.ai/start/auth/codex-oauth | 2026-03-12 | Official flow for `codex-oauth` uses `openclaw models auth login --provider codex-oauth --set-default`. | Runtime auth is a model/provider login flow, not merely an env flag. |
 | https://docs.openclaw.ai/help/faq#i-am-using-ssh-remote-terminal-or-vps-and-codex-oauth-auth-opens-a-localhost-url-that-does-not-work-how-do-i-finish-login | 2026-03-12 | Official FAQ for remote/VPS says: open the URL locally, allow redirect to `http://localhost:1455/...`, then copy the full callback URL back to the remote terminal. | Remote container login is officially supported, but relies on a manual paste-back loop. |
 | https://docs.openclaw.ai/concepts/model-failover | 2026-03-12 | OpenClaw documents model/provider state and auth-profile behavior as runtime concepts. | Real runtime provider auth must be treated as persistent state, not only deployment metadata. |
@@ -59,8 +65,10 @@ The following points are inference, not direct quotes:
 - `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` should remain as metadata gate and policy evidence, but it must not be mistaken for the runtime credential artifact itself.
 - A production-grade flow needs three separate objects:
   - metadata gate in GitHub Secrets and CI rendering;
+  - browser bootstrap state for hosted dashboard access;
   - runtime auth store used by OpenClaw itself;
   - post-auth canary evidence proving `gpt-5.4` actually executes.
+- Hosted browser bootstrap must not be documented as a provider-auth wizard unless the live build actually surfaces that UI.
 - Because remote paste-back is brittle and auth locality is failure-prone, the chosen design should optimize first for writing auth into the correct runtime store, then for minimizing operator friction.
 
 ## Compared OAuth Approaches

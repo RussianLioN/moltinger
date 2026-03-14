@@ -5,6 +5,8 @@
 
 **Related research**:
 - [Clawdiy / OpenClaw Remote Runtime OAuth Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md)
+- [Clawdiy / OpenClaw Browser Bootstrap Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md)
+- [Clawdiy Browser Bootstrap Runbook](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md)
 
 ## Purpose
 
@@ -13,7 +15,10 @@ Recover or rotate Clawdiy auth material without changing Moltinger auth state.
 Current limitation:
 - This runbook documents the current metadata-gated `codex-oauth` flow.
 - The production-grade runtime auth store lifecycle is tracked as a follow-on implementation in [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md).
-- Preferred first operator attempt for OAuth bootstrap is now the live Clawdiy web Settings path; the SSH/CLI paste-back flow is fallback, not default.
+- Hosted browser bootstrap for Clawdiy starts from `Overview -> Gateway Access -> token -> pairing`, not from a dedicated welcome wizard or a guaranteed provider-auth settings screen.
+- Browser bootstrap and provider OAuth are separate lifecycles; do not assume that simply opening the live UI creates a runtime `auth-profiles.json`.
+- Official OpenClaw docs currently document `codex-oauth` through CLI/wizard flows, including the headless Docker paste-back callback path. This repository normalizes provider naming to `codex-oauth` even when upstream docs show a legacy provider label in command examples. Browser UI is not the canonical documented Codex OAuth path.
+- Official CLI/wizard flows need a writable OpenClaw runtime home under `data/clawdiy/runtime` because OpenClaw may write temporary config files and OAuth-related artifacts under `~/.openclaw` during onboarding.
 
 ## Auth Surfaces
 
@@ -82,19 +87,17 @@ This is a later rollout gate, not a first-deploy requirement.
    {"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["api.responses.write"],"allowed_models":["gpt-5.4"]}
    ```
 3. Redeploy Clawdiy-only runtime so `/opt/moltinger/clawdiy/.env` is regenerated.
-4. Preferred first bootstrap attempt:
-   - open `https://clawdiy.ainetic.tech`
-   - sign in to the live Clawdiy UI
-   - navigate to the provider/model auth settings for `OpenAI Codex`
-   - complete OAuth there so the auth lands in the live Clawdiy runtime locality
-5. Verify:
+4. First complete the hosted UI bootstrap from [Clawdiy Browser Bootstrap Runbook](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md).
+5. Treat browser bootstrap as complete once the hosted dashboard is usable; do not treat it as Codex OAuth.
+6. Use the official documented provider-auth flow for `OpenAI Codex` / `codex-oauth` from the official Docker/auth docs.
+7. In headless Docker / VPS setups, follow the official paste-back callback flow described in the OpenClaw Docker docs and FAQ.
+8. Verify:
    ```bash
    ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
    ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
    ```
-6. If the live UI path does not produce a real runtime auth store or does not surface `codex-oauth` in runtime status, use the SSH/CLI paste-back flow only as fallback.
-7. Promote Codex-backed capability only if post-auth verification passes.
-8. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
+9. Promote Codex-backed capability only if post-auth verification passes.
+10. If the check reports missing `api.responses.write`, missing `gpt-5.4` authorization, or metadata-only readiness without runtime auth, keep the capability quarantined and repeat OAuth instead of forcing enablement.
 
 ## Failure Handling
 

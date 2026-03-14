@@ -12,6 +12,8 @@ OUTPUT_FILE="${OUTPUT_FILE:-$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json}"
 ENV_FILE="${ENV_FILE:-}"
 OUTPUT_JSON=false
 NO_COLOR=false
+CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
+CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -108,6 +110,10 @@ render_config() {
 
     mv "$tmp_file" "$OUTPUT_FILE"
     chmod 0644 "$OUTPUT_FILE"
+
+    if [[ "$EUID" -eq 0 ]]; then
+        chown -R "${CLAWDIY_RUNTIME_UID}:${CLAWDIY_RUNTIME_GID}" "$(dirname "$OUTPUT_FILE")"
+    fi
 }
 
 output_result() {
