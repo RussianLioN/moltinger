@@ -82,6 +82,8 @@ If you are not sure, start with the helper and the unit tests. Most user-facing 
 If the hotfix touches Beads ownership:
 - keep plain `bd` as the only normal-path user command
 - preserve worktree-local ownership and fail closed before canonical-root fallback
+- treat canonical-root mutation as a separate explicit override path; do not allow plain mutating `bd` or helper scripts to auto-select the root tracker
+- if a helper script passes `--db` directly, route it through the ownership contract or require an explicit operator-supplied DB target
 - treat residual canonical-root cleanup as a separate issue instead of folding it into the hotfix
 
 ## Step 5: Add a Regression Test First

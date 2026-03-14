@@ -133,6 +133,70 @@ test_plain_bd_executes_against_worktree_local_db() {
     test_pass
 }
 
+test_canonical_root_plain_bd_allows_read_only_commands() {
+    test_start "canonical_root_plain_bd_allows_read_only_commands"
+
+    local fixture_root repo_dir fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_plain_bd "${repo_dir}" "${fake_bin}" info)"
+
+    assert_contains "${output}" "DB=" "Canonical-root read-only commands should still pass through to bd"
+    assert_contains "${output}" "ARGS=info" "Canonical-root read-only commands should preserve the original subcommand"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_canonical_root_plain_bd_blocks_mutation_by_default() {
+    test_start "canonical_root_plain_bd_blocks_mutation_by_default"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${repo_dir}" "${fake_bin}" update demo-1 --status in_progress 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "26" "${rc}" "Canonical-root mutating plain bd should fail closed by default"
+    assert_contains "${output}" "mutating canonical-root tracker commands are blocked by default" "Blocked root mutation should explain the new policy"
+    assert_contains "${output}" "bd --db" "Blocked root mutation should point to the explicit override path"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_canonical_root_plain_bd_allows_explicit_root_db_override() {
+    test_start "canonical_root_plain_bd_allows_explicit_root_db_override"
+
+    local fixture_root repo_dir fake_bin output explicit_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    explicit_db="${repo_dir}/.beads/beads.db"
+
+    output="$(run_plain_bd "${repo_dir}" "${fake_bin}" --db "${explicit_db}" update demo-1 --status in_progress)"
+
+    assert_contains "${output}" "DB=${explicit_db}" "Explicit canonical-root DB override should be allowed"
+    assert_contains "${output}" "ARGS=update demo-1 --status in_progress" "Explicit canonical-root DB override should preserve the mutating command"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_plain_bd_blocks_legacy_redirect() {
     test_start "plain_bd_blocks_legacy_redirect"
 
@@ -252,6 +316,9 @@ run_all_tests() {
     fi
 
     test_plain_bd_executes_against_worktree_local_db
+    test_canonical_root_plain_bd_allows_read_only_commands
+    test_canonical_root_plain_bd_blocks_mutation_by_default
+    test_canonical_root_plain_bd_allows_explicit_root_db_override
     test_plain_bd_blocks_legacy_redirect
     test_plain_bd_blocks_root_fallback_when_local_foundation_is_missing
     test_plain_bd_allows_explicit_troubleshooting_flags

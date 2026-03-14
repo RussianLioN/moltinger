@@ -43,14 +43,16 @@ run_static_beads_worktree_ownership_tests() {
         test_fail "bin/bd must source the resolver and dispatch via explicit --db"
     fi
 
-    test_start "static_resolver_blocks_legacy_redirect_and_root_fallback"
+    test_start "static_resolver_blocks_legacy_redirect_root_fallback_and_root_mutation"
     if [[ -x "$RESOLVE_SCRIPT" ]] && \
        rg -q 'block_legacy_redirect' "$RESOLVE_SCRIPT" && \
        rg -q 'block_root_fallback' "$RESOLVE_SCRIPT" && \
+       rg -q 'block_root_mutation' "$RESOLVE_SCRIPT" && \
+       rg -q 'pass_through_root_readonly' "$RESOLVE_SCRIPT" && \
        rg -q 'beads-worktree-localize\.sh' "$RESOLVE_SCRIPT"; then
         test_pass
     else
-        test_fail "The resolver must fail closed on legacy redirect and root fallback states"
+        test_fail "The resolver must fail closed on legacy redirect, root fallback, and default canonical-root mutation states"
     fi
 
     test_start "static_localize_helper_exists_for_compatibility_migration"

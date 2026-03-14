@@ -33,7 +33,7 @@ Useful options:
 - `--issue-action upsert`
 - `--issue-target moltinger-222`
 - `--issue-threshold upgrade-now`
-- `--beads-db /Users/rl/coding/moltinger/.beads/beads.db`
+- `--beads-db /absolute/path/to/the-intended-worktree/.beads/beads.db`
 
 If no issue flags are passed and the recommendation crosses the issue threshold, the report records `issue_action.mode=suggested` and explains how to rerun with explicit sync.
 
@@ -43,7 +43,7 @@ If you pass `--issue-action upsert`, the script will:
 - update the target issue when `--issue-target <id>` is supplied
 - skip mutation and say why when the recommendation is below threshold or Beads prerequisites are missing
 
-This tracker sync path is intended for local runs. In this repository, the safest explicit DB path is usually `/Users/rl/coding/moltinger/.beads/beads.db`.
+This tracker sync path is intended for local runs. In a dedicated worktree, the script now reuses the Beads ownership resolver and can auto-target the current worktree-local DB for explicit upserts. In the canonical root, implicit tracker mutation is blocked; use `--beads-db` only when a root-scoped admin/troubleshooting write is truly intended.
 
 ## Output Contract
 

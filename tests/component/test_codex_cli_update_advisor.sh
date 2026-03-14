@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
+source "$SCRIPT_DIR/../lib/git_topology_fixture.sh"
 
 ADVISOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-advisor.sh"
 MONITOR_FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-update-monitor"
@@ -60,19 +61,71 @@ BD
     chmod +x "$FAKE_BD_BIN_DIR/bd"
 }
 
-run_advisor_with_monitor_report() {
-    local monitor_report="$1"
-    local output_dir="$2"
-    local state_file="$3"
-    shift 3
+seed_component_advisor_fixture_repo() {
+    local fixture_root="$1"
+    local repo_dir
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger-advisor-fixture")"
 
-    "$ADVISOR_SCRIPT" \
+    mkdir -p "$repo_dir/scripts"
+    cp "$ADVISOR_SCRIPT" "$repo_dir/scripts/codex-cli-update-advisor.sh"
+    cp "$PROJECT_ROOT/scripts/codex-cli-update-monitor.sh" "$repo_dir/scripts/codex-cli-update-monitor.sh"
+    cp "$PROJECT_ROOT/scripts/beads-resolve-db.sh" "$repo_dir/scripts/beads-resolve-db.sh"
+    chmod +x "$repo_dir/scripts/codex-cli-update-advisor.sh" "$repo_dir/scripts/codex-cli-update-monitor.sh" "$repo_dir/scripts/beads-resolve-db.sh"
+
+    (
+        cd "$repo_dir"
+        git add scripts/codex-cli-update-advisor.sh scripts/codex-cli-update-monitor.sh scripts/beads-resolve-db.sh
+        git commit -m "fixture: seed codex update advisor scripts" >/dev/null
+    )
+
+    printf '%s\n' "$repo_dir"
+}
+
+seed_component_local_beads_foundation() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads"
+    cat > "${repo_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+    cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+}
+
+canonicalize_fixture_path() {
+    local target_path="$1"
+
+    (
+        cd "$target_path"
+        pwd -P
+    )
+}
+
+run_advisor_with_monitor_report_using_script() {
+    local advisor_script="$1"
+    local monitor_report="$2"
+    local output_dir="$3"
+    local state_file="$4"
+    shift 4
+
+    "$advisor_script" \
         --monitor-report "$monitor_report" \
         --state-file "$state_file" \
         --json-out "$output_dir/report.json" \
         --summary-out "$output_dir/summary.md" \
         --stdout none \
         "$@"
+}
+
+run_advisor_with_monitor_report() {
+    local monitor_report="$1"
+    local output_dir="$2"
+    local state_file="$3"
+    shift 3
+
+    run_advisor_with_monitor_report_using_script "$ADVISOR_SCRIPT" "$monitor_report" "$output_dir" "$state_file" "$@"
 }
 
 run_advisor_via_monitor_passthrough() {
@@ -104,9 +157,10 @@ run_component_codex_cli_update_advisor_tests() {
         return
     fi
 
-    local work_dir state_file report summary stdout_capture original_path
+    local work_dir state_file report summary stdout_capture original_path fixture_root repo_dir worktree_path
     work_dir="$(secure_temp_dir codex-update-advisor)"
     state_file="$work_dir/state.json"
+    original_path="$PATH"
 
     test_start "component_codex_cli_update_advisor_emits_schema_shape"
     run_advisor_with_monitor_report "$ADVISOR_FIXTURE_DIR/monitor-upgrade-now.json" "$work_dir" "$state_file"
@@ -190,10 +244,48 @@ run_component_codex_cli_update_advisor_tests() {
     assert_eq "false" "$(jq -r '.issue_action.requested' "$report")" "Default path should remain read-only"
     test_pass
 
+    test_start "component_codex_cli_update_advisor_uses_local_worktree_db_for_implicit_upsert"
+    fixture_root="$(secure_temp_dir codex-update-advisor-fixture)"
+    repo_dir="$(seed_component_advisor_fixture_repo "$fixture_root")"
+    worktree_path="${fixture_root}/moltinger-advisor-worktree"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$worktree_path" "feat/advisor-local-upsert" "main"
+    worktree_path="$(canonicalize_fixture_path "$worktree_path")"
+    seed_component_local_beads_foundation "$worktree_path"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    export FAKE_BD_CREATE_ID="moltinger-advisor-created"
+    work_dir="$(secure_temp_dir codex-update-advisor)"
+    state_file="$work_dir/state.json"
+    run_advisor_with_monitor_report_using_script "$worktree_path/scripts/codex-cli-update-advisor.sh" "$ADVISOR_FIXTURE_DIR/monitor-upgrade-now.json" "$work_dir" "$state_file" \
+        --issue-action upsert
+    report="$work_dir/report.json"
+    assert_eq "created" "$(jq -r '.issue_action.mode' "$report")" "Dedicated worktree advisor upsert should still resolve a local tracker automatically"
+    assert_contains "$(cat "$FAKE_BD_STATE_DIR/calls.log")" "--db ${worktree_path}/.beads/beads.db" "Advisor implicit upsert should target the current worktree-local DB"
+    test_pass
+
+    test_start "component_codex_cli_update_advisor_blocks_implicit_canonical_root_upsert"
+    fixture_root="$(secure_temp_dir codex-update-advisor-fixture)"
+    repo_dir="$(seed_component_advisor_fixture_repo "$fixture_root")"
+    setup_fake_bd_fixture
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    export FAKE_BD_STATE_DIR
+    work_dir="$(secure_temp_dir codex-update-advisor)"
+    state_file="$work_dir/state.json"
+    run_advisor_with_monitor_report_using_script "$repo_dir/scripts/codex-cli-update-advisor.sh" "$ADVISOR_FIXTURE_DIR/monitor-upgrade-now.json" "$work_dir" "$state_file" \
+        --issue-action upsert
+    report="$work_dir/report.json"
+    assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Canonical-root advisor upsert should fail closed without an explicit DB target"
+    assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "mutating canonical-root tracker commands are blocked by default" "Advisor canonical-root block should be reported explicitly"
+    if [[ -f "$FAKE_BD_STATE_DIR/calls.log" ]]; then
+        test_fail "Canonical-root advisor upsert must not invoke bd"
+    else
+        test_pass
+    fi
+
     test_start "component_codex_cli_update_advisor_creates_issue_when_explicit_upsert_requested"
     setup_fake_bd_fixture
-    original_path="$PATH"
-    export PATH="$FAKE_BD_BIN_DIR:$PATH"
+    export PATH="$FAKE_BD_BIN_DIR:$original_path"
     export FAKE_BD_STATE_DIR
     export FAKE_BD_CREATE_ID="moltinger-advisor-created"
     work_dir="$(secure_temp_dir codex-update-advisor)"

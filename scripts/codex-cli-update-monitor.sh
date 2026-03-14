@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=scripts/beads-resolve-db.sh
+source "${PROJECT_ROOT}/scripts/beads-resolve-db.sh"
 
 DEFAULT_RELEASE_URL="https://developers.openai.com/codex/changelog"
 DEFAULT_ISSUE_SIGNALS_URL="https://api.github.com/repos/openai/codex/issues?state=open&per_page=20"
@@ -22,6 +24,8 @@ ISSUE_ACTION="none"
 ISSUE_TARGET=""
 ISSUE_THRESHOLD="${CODEX_UPDATE_MONITOR_ISSUE_THRESHOLD:-upgrade-now}"
 BEADS_DB="${CODEX_UPDATE_MONITOR_BEADS_DB:-}"
+BEADS_DB_RESOLUTION_NOTE=""
+BEADS_DB_RESOLVED_PATH=""
 
 TEMP_DIR=""
 REPORT_PATH=""
@@ -128,36 +132,37 @@ recommendation_meets_threshold() {
 }
 
 resolve_beads_db() {
-    local redirect_file resolved_path
+    BEADS_DB_RESOLUTION_NOTE=""
+    BEADS_DB_RESOLVED_PATH=""
 
     if [[ -n "$BEADS_DB" ]]; then
-        [[ -f "$BEADS_DB" ]] || return 1
-        printf '%s\n' "$BEADS_DB"
-        return 0
-    fi
-
-    redirect_file="${PROJECT_ROOT}/.beads/redirect"
-    if [[ -f "$redirect_file" ]]; then
-        resolved_path="$(<"$redirect_file")"
-        if [[ -n "$resolved_path" ]]; then
-            if [[ "$resolved_path" == /* ]]; then
-                resolved_path="${resolved_path}/beads.db"
-            else
-                resolved_path="${PROJECT_ROOT}/${resolved_path}/beads.db"
-            fi
-            if [[ -f "$resolved_path" ]]; then
-                printf '%s\n' "$resolved_path"
-                return 0
-            fi
+        if [[ ! -f "$BEADS_DB" ]]; then
+            BEADS_DB_RESOLUTION_NOTE="Explicit --beads-db path does not exist: $BEADS_DB"
+            return 1
         fi
-    fi
-
-    if [[ -f "${PROJECT_ROOT}/.beads/beads.db" ]]; then
-        printf '%s\n' "${PROJECT_ROOT}/.beads/beads.db"
+        BEADS_DB_RESOLVED_PATH="$BEADS_DB"
         return 0
     fi
 
-    return 1
+    beads_resolve_dispatch "$PROJECT_ROOT" update codex-update-monitor-probe --status open
+
+    case "${BEADS_RESOLVE_DECISION}" in
+        execute_local)
+            BEADS_DB_RESOLVED_PATH="${BEADS_RESOLVE_DB_PATH}"
+            return 0
+            ;;
+        *)
+            if [[ -n "${BEADS_RESOLVE_MESSAGE:-}" ]]; then
+                BEADS_DB_RESOLUTION_NOTE="${BEADS_RESOLVE_MESSAGE}"
+                if [[ -n "${BEADS_RESOLVE_RECOVERY_HINT:-}" ]]; then
+                    BEADS_DB_RESOLUTION_NOTE="${BEADS_DB_RESOLUTION_NOTE} Recovery: ${BEADS_RESOLVE_RECOVERY_HINT}"
+                fi
+            else
+                BEADS_DB_RESOLUTION_NOTE="Could not resolve a Beads database path for this worktree."
+            fi
+            return 1
+            ;;
+    esac
 }
 
 issue_priority_for_recommendation() {
@@ -301,13 +306,14 @@ perform_issue_sync() {
         return 0
     fi
 
-    if ! beads_db_path="$(resolve_beads_db)"; then
+    if ! resolve_beads_db; then
         set_issue_action_json "skipped" "true" "${ISSUE_TARGET:-}" \
             "Explicit issue sync was requested." \
-            "Could not resolve a Beads database path for this worktree." \
+            "${BEADS_DB_RESOLUTION_NOTE:-Could not resolve a Beads database path for this worktree.}" \
             "No tracker mutation was performed."
         return 0
     fi
+    beads_db_path="${BEADS_DB_RESOLVED_PATH}"
 
     issue_title="$(build_issue_title)"
     issue_description="$(build_issue_description)"

@@ -124,6 +124,89 @@ beads_resolve_is_explicit_troubleshooting() {
   return 1
 }
 
+beads_resolve_requests_readonly_mode() {
+  local arg=""
+
+  for arg in "$@"; do
+    if [[ "${arg}" == "--readonly" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+beads_resolve_extract_command() {
+  local -a args=("$@")
+  local index=0
+  local arg=""
+
+  BEADS_RESOLVE_COMMAND=""
+  BEADS_RESOLVE_SUBCOMMAND=""
+
+  while [[ "${index}" -lt "${#args[@]}" ]]; do
+    arg="${args[$index]}"
+    case "${arg}" in
+      --)
+        ((index += 1))
+        break
+        ;;
+      --actor|--lock-timeout|--db)
+        ((index += 2))
+        continue
+        ;;
+      --actor=*|--lock-timeout=*|--db=*|--allow-stale|--json|--no-auto-flush|--no-auto-import|--no-daemon|--no-db|--profile|--readonly|--sandbox|-h|--help|-q|--quiet|-v|--verbose|-V|--version)
+        ((index += 1))
+        continue
+        ;;
+      -*)
+        ((index += 1))
+        continue
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if [[ "${index}" -lt "${#args[@]}" ]]; then
+    BEADS_RESOLVE_COMMAND="${args[$index]}"
+    if [[ $((index + 1)) -lt "${#args[@]}" ]]; then
+      BEADS_RESOLVE_SUBCOMMAND="${args[$((index + 1))]}"
+    fi
+  fi
+}
+
+beads_resolve_is_canonical_root_read_only_command() {
+  local command=""
+  local subcommand=""
+
+  beads_resolve_extract_command "$@"
+  command="${BEADS_RESOLVE_COMMAND}"
+  subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
+
+  case "${command}" in
+    ""|activity|blocked|children|completion|count|diff|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
+      return 0
+      ;;
+    branch)
+      [[ "${subcommand}" == "list" ]]
+      return
+      ;;
+    dep)
+      [[ "${subcommand}" == "cycles" ]]
+      return
+      ;;
+    worktree)
+      [[ "${subcommand}" == "list" ]]
+      return
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 beads_resolve_set_decision() {
   local decision="$1"
   local context="$2"
@@ -189,7 +272,17 @@ beads_resolve_dispatch() {
   fi
 
   if [[ "${repo_root}" == "${canonical_root}" ]]; then
-    beads_resolve_set_decision "pass_through_root" "canonical_root" 0
+    if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
+      beads_resolve_set_decision "pass_through_root_readonly" "canonical_root" 0
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_root_mutation" \
+      "canonical_root" \
+      26 \
+      "bd: mutating canonical-root tracker commands are blocked by default in ${repo_root}." \
+      "For intentional canonical-root admin/troubleshooting work only, rerun with an explicit target such as: bd --db $(printf '%q' "${repo_root}/.beads/beads.db") <command>"
     return 0
   fi
 
