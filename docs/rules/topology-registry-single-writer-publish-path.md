@@ -21,37 +21,43 @@ If ordinary feature branches, UAT branches, or the canonical `main` worktree all
 
 ## Mandatory Policy
 
-1. Default to read-only topology inspection:
+1. Default to non-publishing topology inspection and maintenance:
    - `scripts/git-topology-registry.sh status`
    - `scripts/git-topology-registry.sh check`
    - `scripts/git-topology-registry.sh doctor --prune`
+   - `doctor --prune` may rewrite shared draft/cache state, but it must not publish the tracked markdown snapshot.
 2. Do **not** auto-run `refresh --write-doc` from:
    - canonical `main`
    - the invoking ordinary feature branch
    - disposable UAT/reset/rebase branches
    - ordinary `command-worktree start|attach|cleanup` flows
-3. Publish the tracked snapshot only through an explicit topology publish step from a **dedicated non-main topology-publish worktree/branch**.
+3. Publish the tracked snapshot only through an explicit topology publish step from the dedicated non-main branch **`chore/topology-registry-publish`** in its own publish worktree.
 4. Ordinary worktree flows may report `stale`, but they must treat live `git` as authoritative for collision detection and continue without publishing the markdown snapshot.
 5. If a UAT or child worktree holds newer registry evidence, preserve/promote that evidence into the owning branch before reset/update, per `docs/rules/uat-registry-snapshot-preservation.md`.
 
 ## Expected Publish Path
 
-Use a dedicated topology publish lane, for example:
+Use the dedicated topology publish lane, for example:
 
 ```bash
-git worktree add ../moltinger-topology-publish -b chore/topology-registry-publish-<slug> main
+git worktree add ../moltinger-topology-publish -b chore/topology-registry-publish main
 cd ../moltinger-topology-publish
 scripts/git-topology-registry.sh refresh --write-doc
 git add docs/GIT-TOPOLOGY-REGISTRY.md docs/GIT-TOPOLOGY-INTENT.yaml
 git commit -m "docs(topology): publish registry snapshot"
-git pull --rebase
-git push
+git push -u origin chore/topology-registry-publish
 ```
 
-The exact branch name may vary, but it must be:
+If the branch already exists, attach it instead:
 
-- dedicated to topology publication
-- outside ordinary feature work
+```bash
+git worktree add ../moltinger-topology-publish chore/topology-registry-publish
+```
+
+The publish lane must be:
+
+- the exact branch `chore/topology-registry-publish`
+- isolated from ordinary feature work
 - not the canonical `main` worktree
 
 If this publish lane also needs Beads synchronization, use the localized repo wrapper from a managed worktree session. Do not assume a bare `bd sync` belongs in an ad-hoc manual topology-publish lane.

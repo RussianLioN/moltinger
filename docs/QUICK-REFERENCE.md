@@ -29,7 +29,7 @@ scripts/git-topology-registry.sh refresh --write-doc
 ```
 
 Use `status`/`check` before cleanup worktree/branch actions and for ordinary topology inspection.
-Use `refresh --write-doc` only as an explicit publish step from a dedicated non-main topology-publish worktree/branch.
+Use `refresh --write-doc` only as an explicit publish step from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
 Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
 ## Core Commands

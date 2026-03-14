@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-14
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-15
 
 ---
 
@@ -29,27 +29,25 @@
 
 ## 📊 Current Status
 
-### Current Session Update (2026-03-14, topology hotfix lane)
+### Current Session Update (2026-03-15, topology hotfix lane)
 
 - Ветка в работе: `fix/worktree-topology-registry-single-writer-publish`
-- `molt-ml3` доведён до фактического closure: single-writer policy теперь не только в docs, но и в owner automation/tests.
-- Что исправлено:
-  - `scripts/git-topology-registry.sh` теперь branch-aware: `refresh --write-doc` и `doctor --prune --write-doc` разрешены только из dedicated non-main `topology-publish` branch/worktree.
-  - Ordinary branches и `main` больше не могут silently publish `docs/GIT-TOPOLOGY-REGISTRY.md`; они получают явное guidance на dedicated publish lane.
-  - `.githooks/pre-push` стал различать обычные ветки и publish-lane:
-    - ordinary branch + stale topology => warning-only
-    - dedicated publish branch + stale topology => hard block
-  - `scripts/worktree-ready.sh` больше не советует auto-refresh tracked snapshot из invoking branch; planning/report path указывает на explicit dedicated publish lane.
-  - `docs/rules/topology-registry-single-writer-publish-path.md` и `docs/WORKTREE-HOTFIX-PLAYBOOK.md` выровнены под безопасный publish/sync path без bare `bd sync` в ad-hoc manual lane.
-  - topology fixture helpers и unit/integration/e2e tests переведены на реальную dedicated publish worktree, а не на скрытое branch-switching в том же worktree.
+- `molt-ml3` фактически закрыт и доведён до automation-enforced состояния.
+- Что дожато после review blocker’ов:
+  - `scripts/git-topology-registry.sh` теперь принимает publish только из одной dedicated non-main ветки `chore/topology-registry-publish`; alias-ветки, `main`, ordinary feature-ветки и detached HEAD явно отклоняются.
+  - `.githooks/pre-push` больше не fail-open на internal error path: unexpected failure `scripts/git-topology-registry.sh check` теперь блокирует push, stale ordinary branch остаётся warning-only, stale dedicated publish branch остаётся hard-block.
+  - `tests/lib/git_topology_fixture.sh` переиспользует уже существующую canonical publish worktree, поэтому child-branch doctor flow не ломается на повторном занятии той же publish-ветки.
+  - `tests/integration/test_git_topology_registry.sh` получил детерминированный non-lock failure path, который одинаково работает и в локальном shell, и в containerized runner.
+  - `tests/run.sh` теперь включает `topology_registry` в canonical `pr` lane; отдельный `--lane topology_registry` агрегирует unit/integration/e2e suites для GitHub-style gating.
 - Проверки:
   - `./tests/unit/test_git_topology_registry.sh`
   - `./tests/integration/test_git_topology_registry.sh`
   - `./tests/e2e/test_git_topology_registry_workflow.sh`
+  - `./tests/run.sh --lane topology_registry --json`
   - `./tests/unit/test_worktree_ready.sh`
   - `make codex-check`
   - `git diff --check`
-- Следующий шаг по этой линии: review/merge ветки; новых blocker’ов после test contract reconciliation не осталось.
+- Следующий шаг по этой линии: привести branch diff к merge-ready виду, открыть PR, посмотреть реальные GitHub checks/logs и только после этого принимать финальное merge-решение.
 
 ### Current Session Update (2026-03-13)
 

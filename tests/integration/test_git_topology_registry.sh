@@ -167,7 +167,7 @@ test_lock_timeout_reports_owner_diagnostics() {
     fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
     repo_dir="$(setup_demo_repo "$fixture_root")"
 
-    git_topology_fixture_switch_branch "$repo_dir" "chore/topology-registry-publish-lock-timeout"
+    git_topology_fixture_switch_branch "$repo_dir" "$(git_topology_fixture_publish_branch_name)"
 
     mkdir -p "$repo_dir/.git/topology-registry/lock"
     cat > "$repo_dir/.git/topology-registry/lock/owner.env" <<'EOF'
@@ -210,7 +210,7 @@ test_lock_timeout_without_owner_metadata_reports_actionable_fallback() {
 
     (
         cd "$repo_dir"
-        git_topology_fixture_switch_branch "$repo_dir" "chore/topology-registry-publish-lock-timeout-no-metadata"
+        git_topology_fixture_switch_branch "$repo_dir" "$(git_topology_fixture_publish_branch_name)"
         mkdir -p "$expected_lock_dir"
     )
 
@@ -234,17 +234,18 @@ test_lock_timeout_without_owner_metadata_reports_actionable_fallback() {
 test_lock_permission_boundary_reports_non_lock_failure() {
     test_start "git_topology_registry_lock_permission_boundary_reports_non_lock_failure"
 
-    local fixture_root repo_dir output rc common_dir state_dir
+    local fixture_root repo_dir output rc common_dir state_dir lock_dir
     fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
     repo_dir="$(setup_demo_repo "$fixture_root")"
     common_dir="$(cd "$repo_dir" && git rev-parse --git-common-dir)"
     state_dir="${common_dir}/topology-registry"
+    lock_dir="${state_dir}/lock"
 
     (
         cd "$repo_dir"
-        git_topology_fixture_switch_branch "$repo_dir" "chore/topology-registry-publish-permission-boundary"
+        git_topology_fixture_switch_branch "$repo_dir" "$(git_topology_fixture_publish_branch_name)"
         mkdir -p "$state_dir"
-        chmod 0555 "$state_dir"
+        : > "$lock_dir"
     )
 
     output="$(
@@ -254,11 +255,6 @@ test_lock_permission_boundary_reports_non_lock_failure() {
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
-
-    (
-        cd "$repo_dir"
-        chmod 0755 "$state_dir"
-    )
 
     assert_eq "1" "$rc" "Refresh should fail when the shared topology state is not writable"
     assert_contains "$output" 'Cannot create lock directory:' "Permission-boundary failure should not masquerade as a held lock"
@@ -287,7 +283,47 @@ test_doctor_write_doc_requires_dedicated_publish_branch() {
 
     assert_eq "1" "$rc" "Doctor publish should refuse ordinary branches"
     assert_contains "$output" 'Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from main.' "Doctor refusal should report the current branch"
-    assert_contains "$output" 'dedicated non-main topology-publish worktree/branch' "Doctor refusal should point to the dedicated publish path"
+    assert_contains "$output" "Switch to the dedicated non-main topology publish branch 'chore/topology-registry-publish'" "Doctor refusal should point to the exact dedicated branch"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_doctor_write_doc_rejects_ordinary_and_detached_lanes() {
+    test_start "git_topology_registry_doctor_write_doc_rejects_ordinary_and_detached_lanes"
+
+    local fixture_root repo_dir branch output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-integration.XXXXXX)"
+    repo_dir="$(setup_demo_repo "$fixture_root")"
+
+    for branch in "feat/demo-topology" "uat/demo-topology" "chore/topology-registry-publish-demo"; do
+        (
+            cd "$repo_dir"
+            git switch -C "$branch" main >/dev/null
+        )
+        output="$(
+            cd "$repo_dir" &&
+            set +e &&
+            "$REGISTRY_SCRIPT" doctor --prune --write-doc 2>&1
+            printf '\n__RC__=%s\n' "$?"
+        )"
+        rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+        assert_eq "1" "$rc" "Doctor publish should refuse non-canonical publish branches"
+        assert_contains "$output" "Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from ${branch}." "Doctor refusal should report the current branch"
+        assert_contains "$output" "Switch to the dedicated non-main topology publish branch 'chore/topology-registry-publish'" "Doctor refusal should point to the exact dedicated branch"
+    done
+
+    git_topology_fixture_detach_head "$repo_dir" main
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        "$REGISTRY_SCRIPT" doctor --prune --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+    assert_eq "1" "$rc" "Doctor publish should refuse detached HEAD"
+    assert_contains "$output" 'Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from detached HEAD.' "Doctor refusal should report detached HEAD explicitly"
+    assert_contains "$output" "Switch to the dedicated non-main topology publish branch 'chore/topology-registry-publish'" "Detached HEAD refusal should point to the exact dedicated branch"
 
     rm -rf "$fixture_root"
     test_pass
@@ -318,6 +354,7 @@ run_all_tests() {
     test_lock_timeout_without_owner_metadata_reports_actionable_fallback
     test_lock_permission_boundary_reports_non_lock_failure
     test_doctor_write_doc_requires_dedicated_publish_branch
+    test_doctor_write_doc_rejects_ordinary_and_detached_lanes
 
     generate_report
 }

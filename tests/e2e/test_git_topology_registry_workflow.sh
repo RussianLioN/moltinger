@@ -89,6 +89,16 @@ setup_workflow_repo() {
     printf '%s\n' "$repo_dir"
 }
 
+seed_broken_registry_check_stub() {
+    local repo_dir="$1"
+    cat > "$repo_dir/scripts/git-topology-registry.sh" <<'EOF'
+#!/bin/bash
+echo "[git-topology-registry] simulated internal error" >&2
+exit 2
+EOF
+    chmod +x "$repo_dir/scripts/git-topology-registry.sh"
+}
+
 assert_not_contains_literal() {
     local haystack="$1"
     local needle="$2"
@@ -179,7 +189,7 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     assert_eq "0" "$pre_push_rc" "Pre-push hook should stay non-blocking on ordinary branches"
     assert_contains "$pre_push_output" 'Push allowed with stale topology snapshot.' "Ordinary pre-push hook should explain the warning-only path"
 
-    publish_worktree="$(git_topology_fixture_prepare_publish_worktree "$repo_dir" "chore/topology-registry-publish-e2e-stale")"
+    publish_worktree="$(git_topology_fixture_prepare_publish_worktree "$repo_dir" "$(git_topology_fixture_publish_branch_name)")"
     git_topology_fixture_copy_registry_assets_between_worktrees "$repo_dir" "$repo_dir" "$publish_worktree"
     publish_pre_push_output="$(
         cd "$publish_worktree" &&
@@ -226,6 +236,29 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     test_pass
 }
 
+test_pre_push_fails_closed_when_registry_check_errors() {
+    test_start "git_topology_registry_pre_push_fails_closed_when_registry_check_errors"
+
+    local fixture_root repo_dir pre_push_output pre_push_rc
+    fixture_root="$(mktemp -d /tmp/git-topology-e2e.XXXXXX)"
+    repo_dir="$(setup_workflow_repo "$fixture_root")"
+    seed_broken_registry_check_stub "$repo_dir"
+
+    pre_push_output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        ./.githooks/pre-push 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    pre_push_rc="$(printf '%s\n' "$pre_push_output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+    assert_eq "1" "$pre_push_rc" "Pre-push hook should fail closed when topology check errors unexpectedly"
+    assert_contains "$pre_push_output" 'simulated internal error' "Pre-push hook should surface the underlying topology check failure"
+    assert_contains "$pre_push_output" 'Topology registry check failed unexpectedly; refusing push until scripts/git-topology-registry.sh check succeeds.' "Pre-push hook should print explicit fail-closed guidance"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_child_branch_doctor_preserves_authoritative_feature_identity() {
     test_start "git_topology_registry_child_branch_doctor_preserves_authoritative_feature_identity"
 
@@ -252,7 +285,7 @@ test_child_branch_doctor_preserves_authoritative_feature_identity() {
     child_worktree="$fixture_root/repo-child-worktree"
     git_topology_fixture_add_worktree "$repo_dir" "$feature_worktree" "006-demo-feature"
 
-    git_topology_fixture_refresh_registry_from_publish_branch "$feature_worktree" "./scripts/git-topology-registry.sh" "chore/topology-registry-publish-authority"
+    git_topology_fixture_refresh_registry_from_publish_branch "$feature_worktree" "./scripts/git-topology-registry.sh"
     (
         cd "$feature_worktree"
         git add docs/GIT-TOPOLOGY-REGISTRY.md
@@ -261,7 +294,7 @@ test_child_branch_doctor_preserves_authoritative_feature_identity() {
 
     git_topology_fixture_add_worktree_branch_from "$repo_dir" "$child_worktree" "feat/demo-child" "006-demo-feature"
 
-    git_topology_fixture_doctor_write_doc_from_publish_branch "$child_worktree" "./scripts/git-topology-registry.sh" "chore/topology-registry-publish-child"
+    git_topology_fixture_doctor_write_doc_from_publish_branch "$child_worktree" "./scripts/git-topology-registry.sh"
 
     doc="$(cat "$child_worktree/docs/GIT-TOPOLOGY-REGISTRY.md")"
     assert_contains "$doc" '`primary-feature-006`' "Child-branch reconcile should preserve canonical authoritative feature worktree id"
@@ -293,6 +326,7 @@ run_all_tests() {
 
     test_managed_start_and_cleanup_refresh_registry
     test_hooks_and_session_boundary_reconcile_out_of_band_drift
+    test_pre_push_fails_closed_when_registry_check_errors
     test_child_branch_doctor_preserves_authoritative_feature_identity
 
     generate_report

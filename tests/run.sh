@@ -30,6 +30,7 @@ Usage:
 Canonical lanes:
   static
   component
+  topology_registry
   integration_local
   security_api
   mcp_fake
@@ -45,7 +46,7 @@ Additional live-only aliases:
   provider_live
 
 Groups:
-  pr      = static + component + integration_local + security_api + mcp_fake
+  pr      = static + component + topology_registry + integration_local + security_api + mcp_fake
   main    = pr + e2e_browser
   nightly = resilience + live_external + security_runtime_smoke
   all     = main + nightly
@@ -116,13 +117,13 @@ lane_is_live_only() {
 group_to_lanes() {
     case "$1" in
         pr)
-            printf '%s\n' static component integration_local security_api mcp_fake
+            printf '%s\n' static component topology_registry integration_local security_api mcp_fake
             ;;
         unit_legacy)
-            printf '%s\n' static component
+            printf '%s\n' static component topology_registry
             ;;
         integration_legacy)
-            printf '%s\n' integration_local provider_live telegram_live mcp_real
+            printf '%s\n' topology_registry integration_local provider_live telegram_live mcp_real
             ;;
         security_legacy)
             printf '%s\n' security_api security_runtime_smoke
@@ -131,13 +132,13 @@ group_to_lanes() {
             printf '%s\n' e2e_browser resilience
             ;;
         main)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser
+            printf '%s\n' static component topology_registry integration_local security_api mcp_fake e2e_browser
             ;;
         nightly)
             printf '%s\n' resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         all)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
+            printf '%s\n' static component topology_registry integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         live_external)
             printf '%s\n' clawdiy_live_deploy telegram_live provider_live mcp_real
@@ -183,6 +184,13 @@ bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_D
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
 bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh
 bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh
+LIST
+            ;;
+        topology_registry)
+            cat <<LIST
+bash|topology_registry_unit|Git topology registry unit|$SCRIPT_DIR/unit/test_git_topology_registry.sh
+bash|topology_registry_integration|Git topology registry integration|$SCRIPT_DIR/integration/test_git_topology_registry.sh
+bash|topology_registry_e2e|Git topology registry workflow E2E|$SCRIPT_DIR/e2e/test_git_topology_registry_workflow.sh
 LIST
             ;;
         integration_local)

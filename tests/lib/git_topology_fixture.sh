@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+git_topology_fixture_publish_branch_name() {
+  printf '%s\n' "${GIT_TOPOLOGY_REGISTRY_PUBLISH_BRANCH:-chore/topology-registry-publish}"
+}
+
 git_topology_fixture_create_repo() {
   local fixture_root="$1"
   local repo_dir="${fixture_root}/repo"
@@ -95,6 +99,16 @@ git_topology_fixture_switch_branch() {
   )
 }
 
+git_topology_fixture_detach_head() {
+  local repo_dir="$1"
+  local target_ref="${2:-main}"
+
+  (
+    cd "${repo_dir}"
+    git switch --detach "${target_ref}" >/dev/null
+  )
+}
+
 git_topology_fixture_publish_worktree_path() {
   local repo_dir="$1"
   local publish_branch="$2"
@@ -113,8 +127,39 @@ git_topology_fixture_prepare_publish_worktree() {
   local start_point="${3:-}"
   local publish_path=""
   local effective_start_point=""
+  local existing_worktree_path=""
 
   publish_path="$(git_topology_fixture_publish_worktree_path "${repo_dir}" "${publish_branch}")"
+
+  existing_worktree_path="$(
+    cd "${repo_dir}" &&
+    git worktree list --porcelain |
+      awk -v target_branch="refs/heads/${publish_branch}" '
+        /^worktree / {
+          if (current_branch == target_branch && current_path != "") {
+            print current_path
+            found = 1
+            exit
+          }
+          current_path = substr($0, 10)
+          current_branch = ""
+          next
+        }
+        /^branch / {
+          current_branch = $2
+          next
+        }
+        END {
+          if (!found && current_branch == target_branch && current_path != "") {
+            print current_path
+          }
+        }
+      '
+  )"
+  if [[ -n "${existing_worktree_path}" ]]; then
+    printf '%s\n' "${existing_worktree_path}"
+    return 0
+  fi
 
   (
     cd "${repo_dir}"
@@ -192,7 +237,7 @@ git_topology_fixture_add_worktree_branch_from() {
 git_topology_fixture_refresh_registry_from_publish_branch() {
   local repo_dir="$1"
   local registry_script="${2:-}"
-  local publish_branch="${3:-chore/topology-registry-publish-fixture}"
+  local publish_branch="${3:-$(git_topology_fixture_publish_branch_name)}"
   local start_point="${4:-}"
   local asset_source_repo=""
   local publish_path=""
@@ -216,7 +261,7 @@ git_topology_fixture_refresh_registry_from_publish_branch() {
 git_topology_fixture_doctor_write_doc_from_publish_branch() {
   local repo_dir="$1"
   local registry_script="${2:-}"
-  local publish_branch="${3:-chore/topology-registry-publish-fixture}"
+  local publish_branch="${3:-$(git_topology_fixture_publish_branch_name)}"
   local start_point="${4:-}"
   local asset_source_repo=""
   local publish_path=""

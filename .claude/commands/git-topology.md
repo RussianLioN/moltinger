@@ -36,7 +36,7 @@ Thin wrapper around `scripts/git-topology-registry.sh`.
 2. Route the request directly to the owner script without hand-editing `docs/GIT-TOPOLOGY-REGISTRY.md`.
 3. Treat `status` and `check` as read-only inspection, and treat `doctor --prune` as ordinary non-publishing maintenance that may rewrite shared draft/cache state without touching the tracked markdown snapshot.
 4. Treat `refresh` or `doctor --write-doc` as explicit topology snapshot publication.
-5. For publish operations, do not use canonical `main` or an ordinary feature branch; require a dedicated non-main topology-publish worktree/branch.
+5. For publish operations, do not use canonical `main` or an ordinary feature branch; require the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
 6. Return the script output verbatim unless the user asked for explanation.
 7. If `check` or `doctor` reports stale state, recommend explicit publish from the dedicated topology-publish worktree/branch instead of implying that any current branch should land the snapshot.
 8. If `refresh` or `doctor --write-doc` changed the registry, say so explicitly in the final status and note that this was an intentional publish step.
@@ -46,4 +46,4 @@ Thin wrapper around `scripts/git-topology-registry.sh`.
 - Never hand-edit `docs/GIT-TOPOLOGY-REGISTRY.md`.
 - Prefer `doctor --prune` before cleanup work when state may be stale; it is a non-publishing maintenance path, not a tracked-doc write.
 - Use `status` or `check` for read-only inspection.
-- Use `refresh --write-doc` only for explicit topology snapshot publication from a dedicated non-main worktree/branch.
+- Use `refresh --write-doc` only for explicit topology snapshot publication from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.

@@ -49,6 +49,16 @@ records:
 EOF
 }
 
+assert_publish_refusal() {
+    local output="$1"
+    local rc="$2"
+    local branch_display="$3"
+
+    assert_eq "1" "$rc" "Publish should refuse non-canonical publish lanes"
+    assert_contains "$output" "Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from ${branch_display}." "Publish refusal should report the current branch"
+    assert_contains "$output" "Switch to the dedicated non-main topology publish branch 'chore/topology-registry-publish'" "Publish refusal should point to the exact dedicated branch"
+}
+
 test_registry_refresh_requires_dedicated_publish_branch() {
     test_start "git_topology_registry_refresh_requires_dedicated_publish_branch"
 
@@ -69,7 +79,59 @@ test_registry_refresh_requires_dedicated_publish_branch() {
     assert_eq "1" "$rc" "Refresh publish should refuse ordinary branches"
     assert_contains "$output" 'Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from main.' "Refresh refusal should report the current branch"
     assert_contains "$output" 'Canonical main is not an allowed topology publish lane.' "Refresh refusal should explain why main is rejected"
-    assert_contains "$output" 'dedicated non-main topology-publish worktree/branch' "Refresh refusal should point to the dedicated publish path"
+    assert_contains "$output" "Switch to the dedicated non-main topology publish branch 'chore/topology-registry-publish'" "Refresh refusal should point to the exact dedicated branch"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_registry_refresh_rejects_ordinary_and_alias_branches() {
+    test_start "git_topology_registry_refresh_rejects_ordinary_and_alias_branches"
+
+    local fixture_root repo_dir branch output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
+    mkdir -p "$repo_dir/docs"
+    write_demo_intent "$repo_dir"
+
+    for branch in "feat/demo-topology" "uat/demo-topology" "chore/topology-registry-publish-demo"; do
+        (
+            cd "$repo_dir"
+            git switch -C "$branch" main >/dev/null
+        )
+        output="$(
+            cd "$repo_dir" &&
+            set +e &&
+            "$REGISTRY_SCRIPT" refresh --write-doc 2>&1
+            printf '\n__RC__=%s\n' "$?"
+        )"
+        rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+        assert_publish_refusal "$output" "$rc" "$branch"
+    done
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_registry_refresh_rejects_detached_head() {
+    test_start "git_topology_registry_refresh_rejects_detached_head"
+
+    local fixture_root repo_dir output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
+    mkdir -p "$repo_dir/docs"
+    write_demo_intent "$repo_dir"
+    git_topology_fixture_detach_head "$repo_dir" main
+
+    output="$(
+        cd "$repo_dir" &&
+        set +e &&
+        "$REGISTRY_SCRIPT" refresh --write-doc 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_publish_refusal "$output" "$rc" "detached HEAD"
 
     rm -rf "$fixture_root"
     test_pass
@@ -127,6 +189,8 @@ run_all_tests() {
     fi
 
     test_registry_refresh_requires_dedicated_publish_branch
+    test_registry_refresh_rejects_ordinary_and_alias_branches
+    test_registry_refresh_rejects_detached_head
     test_registry_refresh_is_deterministic_and_sanitized
     generate_report
 }

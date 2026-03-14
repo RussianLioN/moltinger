@@ -76,7 +76,7 @@ registry_doc="${git_root}/docs/GIT-TOPOLOGY-REGISTRY.md"
 tmp_dir=""
 lock_held=false
 default_missing_intent="needs-decision"
-topology_publish_branch_pattern='(^|/)(topology-registry-publish|topology-publish)([-/].*|$)'
+topology_publish_branch="${GIT_TOPOLOGY_REGISTRY_PUBLISH_BRANCH:-chore/topology-registry-publish}"
 
 intent_records_file=""
 seen_subjects_file=""
@@ -141,7 +141,7 @@ publish_lane_state() {
     return 0
   fi
 
-  if [[ "${current_branch}" =~ ${topology_publish_branch_pattern} ]]; then
+  if [[ "${current_branch}" == "${topology_publish_branch}" ]]; then
     printf 'dedicated'
     return 0
   fi
@@ -168,7 +168,7 @@ stale_publish_guidance_line() {
   if publish_allowed_on_current_branch; then
     printf 'Run: %s' "${command}"
   else
-    printf 'Publish from a dedicated non-main topology-publish worktree/branch: %s' "${command}"
+    printf "Publish from the dedicated non-main topology publish branch '%s': %s" "${topology_publish_branch}" "${command}"
   fi
 }
 
@@ -179,7 +179,7 @@ stale_status_message() {
   if publish_allowed_on_current_branch; then
     printf 'registry document is stale; current topology-publish branch may reconcile via %s' "${command}"
   else
-    printf 'registry document is stale; live git is authoritative here; publish later from a dedicated non-main topology-publish worktree/branch'
+    printf "registry document is stale; live git is authoritative here; publish later from the dedicated non-main topology publish branch '%s'" "${topology_publish_branch}"
   fi
 }
 
@@ -206,7 +206,7 @@ require_publish_lane_for_write_doc() {
       echo "[git-topology-registry] Ordinary branches do not own tracked topology snapshot publication." >&2
       ;;
   esac
-  echo "[git-topology-registry] Switch to a dedicated non-main topology-publish worktree/branch (for example chore/topology-registry-publish-<slug>) and rerun: ${command}" >&2
+  echo "[git-topology-registry] Switch to the dedicated non-main topology publish branch '${topology_publish_branch}' and rerun: ${command}" >&2
   exit 1
 }
 
@@ -973,13 +973,13 @@ render_registry_markdown() {
   ensure_tmp_dir
 
   {
-    cat <<'EOF'
+    cat <<EOF
 # Git Topology Registry
 
 **Status**: Generated artifact from live git topology and reviewed intent sidecar
 **Scope**: Canonical maintainer workstation snapshot
 **Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
-**Publish**: From a dedicated non-main topology-publish worktree/branch run `scripts/git-topology-registry.sh refresh --write-doc`
+**Publish**: From the dedicated non-main topology publish branch \`${topology_publish_branch}\` run \`scripts/git-topology-registry.sh refresh --write-doc\`
 **Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
 
 ## Current Worktrees
