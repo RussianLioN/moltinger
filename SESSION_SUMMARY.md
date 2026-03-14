@@ -64,6 +64,10 @@ GitOps Compliance: Enforced ✅
 - Added the US1 fixture `tests/fixtures/agent-factory/web-demo/session-discovery-answer.json`, component coverage in `tests/component/test_agent_factory_web_discovery.sh`, and browser e2e coverage in `tests/e2e_browser/agent_factory_web_demo.mjs`, validating the first raw idea turn, the first follow-up question, the continued answer turn, and the user-safe rendering contract inside the web shell.
 - Updated `web/agent-factory-demo/index.html` and `web/agent-factory-demo/app.js` so the live shell now exposes stable browser selectors (`accessToken`, `messages`, `chatInput`, `sendBtn`), renders human-readable discovery status text, and keeps the composer in `submit_turn` mode after the first follow-up question instead of falling back to a status-only action.
 - Extended `docs/runbooks/agent-factory-web-demo.md` and `specs/024-web-factory-demo-adapter/tasks.md` to reflect the completed live discovery entry flow and the browser-safe response contract for US1.
+- Completed `Phase 4 / User Story 2` for `024-web-factory-demo-adapter` (`molt-vd0.5.*`): the browser adapter now supports `request_brief_review`, conversational `request_brief_correction`, explicit `confirm_brief`, and `reopen_brief` over the same saved browser session, while keeping the exact reviewed version visible through `status_snapshot.brief_version`, `browser_project_pointer.linked_brief_version`, and versioned confirmation prompts.
+- Extended `scripts/agent_factory_common.py` with chunked brief rendering for browser review (`Версия brief`, `Проблема и желаемый результат`, `Пользователи и процесс`, `User story и границы`, `Примеры входов и выходов`, `Правила, исключения и риски`, `Ограничения и метрики`), added confirmed-state projection for the web shell, and mapped `start_concept_pack_handoff` to a business-readable next step instead of a raw downstream code.
+- Updated `scripts/agent-factory-web-adapter.py` and `web/agent-factory-demo/app.js` so review/confirm actions can be triggered directly from the shell without JSON editing: `request_brief_review` and `confirm_brief` now work as empty-body explicit browser actions, preferred UI action after confirmation safely falls back to `request_status`, and reopen returns the shell to a new confirmation loop version.
+- Added the awaiting-confirmation browser fixture `tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json`, component coverage in `tests/component/test_agent_factory_web_brief.sh`, and integration coverage in `tests/integration_local/test_agent_factory_web_confirmation.sh`, validating chunked brief rendering, versioned conversational corrections, explicit confirmation, and reopen with preserved confirmation history.
 - Fixed a late parser drift in `scripts/agent-factory-web-adapter.py` by removing a broken nested f-string from the audit-id builder; after that fix, both host-side and compose-backed integration validation for the new browser slice pass cleanly.
 - Verified the setup slice with:
   - `./tests/run.sh --lane static --filter static_config_validation --json`
@@ -85,6 +89,14 @@ GitOps Compliance: Enforced ✅
   - `node --check tests/e2e_browser/agent_factory_web_demo.mjs`
   - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery)' --json`
   - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_flow --json`
+  - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
+- Verified the browser brief-review slice with:
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-web-adapter.py`
+  - `bash -n tests/component/test_agent_factory_web_brief.sh tests/integration_local/test_agent_factory_web_confirmation.sh`
+  - `python3 -m json.tool tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json >/dev/null`
+  - `node --check web/agent-factory-demo/app.js`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation)' --json`
   - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:

@@ -509,8 +509,8 @@ def preferred_ui_action(reply_cards: list[dict[str, Any]], *, fallback: str = ""
         "submit_turn",
         "confirm_brief",
         "request_brief_correction",
-        "reopen_brief",
         "request_status",
+        "reopen_brief",
         "download_artifact",
         "start_project",
     )
@@ -676,6 +676,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "current_question": next_question,
             "current_topic": envelope["normalized_payload"]["current_topic"],
             "project_title": normalize_text(pointer.get("project_key")) or "Новый проект фабрики",
+            "brief_version": normalize_text(requirement_brief.get("version")),
+            "brief_status": normalize_text(requirement_brief.get("status")) or adapter_status,
         },
     }
     if access_granted:

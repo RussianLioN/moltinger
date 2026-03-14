@@ -186,6 +186,63 @@ python3 scripts/agent-factory-web-adapter.py handle-turn \
   --output /tmp/agent-factory-web-demo/second-turn.json
 ```
 
+## Brief Review And Confirmation (US2)
+
+### Browser review behavior
+
+Когда discovery runtime уже перешёл в `awaiting_confirmation`, browser adapter теперь:
+
+- рендерит exact brief version отдельной карточкой
+- дробит summary на читаемые sections вместо одного длинного блока
+- показывает browser-safe confirmation prompt с явным `confirm_brief`, `request_brief_correction` и `reopen_brief`
+- оставляет traceable `linked_brief_version` в browser pointer и `status_snapshot.brief_version`
+
+Текущий review split:
+
+- `Версия brief <version>`
+- `Проблема и желаемый результат`
+- `Пользователи и процесс`
+- `User story и границы`
+- `Примеры входов и выходов`
+- `Правила, исключения и риски`
+- `Ограничения и метрики`
+
+### Browser actions
+
+- `request_brief_review` можно отправить без free-form текста; shell сам перечитывает текущую reviewable версию
+- `request_brief_correction` принимает обычный пользовательский текст и, при необходимости, `brief_section_updates`
+- `confirm_brief` считается explicit action даже без отдельного текста подтверждения; adapter сам подставляет безопасную default confirmation phrase
+- `reopen_brief` создаёт новую version chain и возвращает UI обратно в confirmation loop
+
+### Local validation examples
+
+Reviewable brief:
+
+```bash
+python3 scripts/agent-factory-web-adapter.py handle-turn \
+  --source tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json \
+  --state-root /tmp/agent-factory-web-demo \
+  --output /tmp/agent-factory-web-demo/brief-review.json
+```
+
+Expected result:
+
+- `status=awaiting_confirmation`
+- readable `brief_summary_section` cards
+- `confirmation_prompt` with exact brief version
+
+Conversational correction and confirmation:
+
+```bash
+./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_confirmation --json
+```
+
+Expected result:
+
+- browser correction publishes a new brief version
+- explicit confirmation fixes that exact version as confirmed
+- reopen returns the UI to a new reviewable version without losing confirmation history
+
 ## Safety Rules
 
 - browser UI must not render repo paths, stack traces or secrets

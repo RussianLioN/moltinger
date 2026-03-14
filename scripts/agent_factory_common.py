@@ -719,7 +719,7 @@ def web_next_action_label(action: Any) -> str:
         return "Проверить и подтвердить brief"
     if normalized == "request_brief_correction":
         return "Уточнить brief"
-    if normalized == "run_factory_intake":
+    if normalized in {"run_factory_intake", "start_concept_pack_handoff"}:
         return "Передать brief в фабрику"
     if normalized == "generate_artifacts":
         return "Подготовить concept pack"
@@ -851,6 +851,7 @@ def build_web_reply_card(
 def build_brief_preview_cards(
     brief: dict[str, Any],
     *,
+    adapter_status: Any = "",
     web_demo_session_id: Any = "",
     linked_discovery_session_id: Any = "",
     linked_handoff_id: Any = "",
@@ -859,16 +860,46 @@ def build_brief_preview_cards(
     if not isinstance(brief, dict) or not brief:
         return []
 
+    brief_status = normalize_text(brief.get("status")) or normalize_text(adapter_status)
+    is_confirmable = brief_status in {"awaiting_confirmation", "reopened"}
+    version = normalize_text(brief.get("version")) or "без версии"
+    section_actions = ["request_brief_correction", "confirm_brief"] if is_confirmable else ["reopen_brief", "request_status"]
     constraints = normalize_list(brief.get("constraints"))
     success_metrics = normalize_list(brief.get("success_metrics"))
+    target_users = normalize_list(brief.get("target_users"))
+    scope_boundaries = normalize_list(brief.get("scope_boundaries"))
+    input_examples = normalize_list(brief.get("input_examples"))
+    expected_outputs = normalize_list(brief.get("expected_outputs"))
+    business_rules = normalize_list(brief.get("business_rules"))
+    exceptions = normalize_list(brief.get("exceptions"))
+    open_risks = normalize_list(brief.get("open_risks"))
+
+    def multi_section_body(*sections: tuple[str, list[str] | str]) -> str:
+        rendered: list[str] = []
+        for title, value in sections:
+            if isinstance(value, str):
+                text_value = normalize_text(value)
+                if text_value:
+                    rendered.append(f"{title}:\n{text_value}")
+                continue
+            normalized_items = normalize_list(value)
+            if normalized_items:
+                rendered.append(f"{title}:\n{to_bullets(normalized_items)}")
+        return "\n\n".join(rendered)
+
     cards = [
         build_web_reply_card(
             "brief_summary_section",
-            title="Проблема",
-            body_text=normalize_text(brief.get("problem_statement")) or "Проблема ещё не зафиксирована.",
+            title=f"Версия brief {version}",
+            body_text=(
+                f"Сейчас на проверке версия {version}. "
+                "Проверь summary ниже, попроси правки обычным текстом или явно подтверди текущую редакцию."
+                if is_confirmable
+                else f"Текущая подтвержденная версия brief: {version}. При необходимости можно переоткрыть её и выпустить новую редакцию."
+            ),
             web_demo_session_id=web_demo_session_id,
-            section_id="problem_statement",
-            action_hints=["request_brief_correction"],
+            section_id="brief_version",
+            action_hints=section_actions,
             linked_discovery_session_id=linked_discovery_session_id,
             linked_brief_id=brief.get("brief_id"),
             linked_handoff_id=linked_handoff_id,
@@ -876,31 +907,97 @@ def build_brief_preview_cards(
         ),
         build_web_reply_card(
             "brief_summary_section",
-            title="Желаемый результат",
-            body_text=normalize_text(brief.get("desired_outcome")) or "Результат ещё не описан.",
+            title="Проблема и желаемый результат",
+            body_text=multi_section_body(
+                ("Проблема", normalize_text(brief.get("problem_statement")) or "Проблема ещё не зафиксирована."),
+                ("Желаемый результат", normalize_text(brief.get("desired_outcome")) or "Результат ещё не описан."),
+            ),
             web_demo_session_id=web_demo_session_id,
-            section_id="desired_outcome",
-            action_hints=["request_brief_correction"],
+            section_id="problem_outcome",
+            action_hints=section_actions,
+            linked_discovery_session_id=linked_discovery_session_id,
+            linked_brief_id=brief.get("brief_id"),
+            linked_handoff_id=linked_handoff_id,
+            now=now,
+        ),
+        build_web_reply_card(
+            "brief_summary_section",
+            title="Пользователи и процесс",
+            body_text=multi_section_body(
+                ("Кто пользуется результатом", target_users),
+                ("Текущий процесс", normalize_text(brief.get("current_process"))),
+            )
+            or "Пользователи и текущий процесс ещё не описаны.",
+            web_demo_session_id=web_demo_session_id,
+            section_id="users_process",
+            action_hints=section_actions,
+            linked_discovery_session_id=linked_discovery_session_id,
+            linked_brief_id=brief.get("brief_id"),
+            linked_handoff_id=linked_handoff_id,
+            now=now,
+        ),
+        build_web_reply_card(
+            "brief_summary_section",
+            title="User story и границы",
+            body_text=multi_section_body(
+                ("User story", normalize_text(brief.get("user_story"))),
+                ("Границы scope", scope_boundaries),
+            )
+            or "User story и границы решения ещё не заполнены.",
+            web_demo_session_id=web_demo_session_id,
+            section_id="user_story_scope",
+            action_hints=section_actions,
+            linked_discovery_session_id=linked_discovery_session_id,
+            linked_brief_id=brief.get("brief_id"),
+            linked_handoff_id=linked_handoff_id,
+            now=now,
+        ),
+        build_web_reply_card(
+            "brief_summary_section",
+            title="Примеры входов и выходов",
+            body_text=multi_section_body(
+                ("Входные примеры", input_examples),
+                ("Ожидаемые выходы", expected_outputs),
+            )
+            or "Примеры входов и выходов ещё не собраны.",
+            web_demo_session_id=web_demo_session_id,
+            section_id="examples",
+            action_hints=section_actions,
+            linked_discovery_session_id=linked_discovery_session_id,
+            linked_brief_id=brief.get("brief_id"),
+            linked_handoff_id=linked_handoff_id,
+            now=now,
+        ),
+        build_web_reply_card(
+            "brief_summary_section",
+            title="Правила, исключения и риски",
+            body_text=multi_section_body(
+                ("Бизнес-правила", business_rules),
+                ("Исключения", exceptions),
+                ("Открытые риски", open_risks),
+            )
+            or "Правила, исключения и риски ещё не зафиксированы.",
+            web_demo_session_id=web_demo_session_id,
+            section_id="rules_exceptions_risks",
+            action_hints=section_actions,
             linked_discovery_session_id=linked_discovery_session_id,
             linked_brief_id=brief.get("brief_id"),
             linked_handoff_id=linked_handoff_id,
             now=now,
         ),
     ]
-    summary_lines: list[str] = []
-    if constraints:
-        summary_lines.append("Ограничения:\n" + to_bullets(constraints))
-    if success_metrics:
-        summary_lines.append("Метрики успеха:\n" + to_bullets(success_metrics))
-    if summary_lines:
+    if constraints or success_metrics:
         cards.append(
             build_web_reply_card(
                 "brief_summary_section",
                 title="Ограничения и метрики",
-                body_text="\n\n".join(summary_lines),
+                body_text=multi_section_body(
+                    ("Ограничения", constraints),
+                    ("Метрики успеха", success_metrics),
+                ),
                 web_demo_session_id=web_demo_session_id,
                 section_id="constraints_success_metrics",
-                action_hints=["request_brief_correction", "confirm_brief"],
+                action_hints=section_actions,
                 linked_discovery_session_id=linked_discovery_session_id,
                 linked_brief_id=brief.get("brief_id"),
                 linked_handoff_id=linked_handoff_id,
@@ -973,12 +1070,13 @@ def build_web_reply_cards(
     cards.extend(
         build_brief_preview_cards(
             requirement_brief,
+            adapter_status=adapter_status,
             web_demo_session_id=session_id,
             linked_discovery_session_id=discovery_session.get("discovery_session_id"),
             linked_handoff_id=factory_handoff.get("factory_handoff_id"),
             now=now,
         )
-        if status_snapshot["user_visible_status"] == "awaiting_confirmation"
+        if status_snapshot["user_visible_status"] in {"awaiting_confirmation", "confirmed"}
         else []
     )
 
@@ -1004,10 +1102,31 @@ def build_web_reply_cards(
         cards.append(
             build_web_reply_card(
                 "confirmation_prompt",
-                title="Подтвердить brief",
-                body_text=next_question or "Проверь краткое summary, попроси правки обычным текстом или явно подтверди текущую версию brief.",
+                title=f"Подтвердить brief {normalize_text(requirement_brief.get('version')) or 'без версии'}",
+                body_text=next_question
+                or (
+                    f"Проверь summary и явно подтверди версию {normalize_text(requirement_brief.get('version')) or 'без версии'}. "
+                    "Если нужны изменения, попроси правки обычным текстом или переоткрой brief."
+                ),
                 web_demo_session_id=session_id,
                 action_hints=["request_brief_correction", "confirm_brief", "reopen_brief"],
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                now=now,
+            )
+        )
+    elif status_snapshot["user_visible_status"] == "confirmed":
+        cards.append(
+            build_web_reply_card(
+                "status_update",
+                title="Brief подтвержден",
+                body_text=(
+                    f"Зафиксирована версия {normalize_text(requirement_brief.get('version')) or 'без версии'}. "
+                    "Следующий этап фабрики может использовать только эту подтвержденную редакцию."
+                ),
+                web_demo_session_id=session_id,
+                action_hints=["request_status", "reopen_brief"],
                 linked_discovery_session_id=discovery_session.get("discovery_session_id"),
                 linked_brief_id=requirement_brief.get("brief_id"),
                 linked_handoff_id=factory_handoff.get("factory_handoff_id"),

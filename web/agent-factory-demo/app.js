@@ -16,8 +16,8 @@
     "submit_turn",
     "confirm_brief",
     "request_brief_correction",
-    "reopen_brief",
     "request_status",
+    "reopen_brief",
     "download_artifact",
     "start_project",
   ];
@@ -484,25 +484,43 @@
         {
           card_kind: "status_update",
           title: "Статус проекта",
-          body_text: "Discovery завершён. Текущий режим: awaiting_confirmation.",
+          body_text: "Discovery завершён. Brief ждёт подтверждения. Следующий шаг: проверить summary и либо подтвердить версию, либо запросить правки.",
           action_hints: ["request_status"],
         },
         {
           card_kind: "brief_summary_section",
-          title: "Проблема",
-          body_text: "Нужно автоматически разбирать входящие обращения и выбирать следующий маршрут обработки.",
-          action_hints: ["request_brief_correction"],
+          title: "Версия brief v2",
+          body_text: "Сейчас на проверке версия v2. Проверь summary ниже, попроси правки обычным текстом или явно подтверди текущую редакцию.",
+          action_hints: ["request_brief_correction", "confirm_brief"],
         },
         {
           card_kind: "brief_summary_section",
-          title: "Желаемый результат",
-          body_text: "Пользователь получает structured summary, маршрут заявки и причину выбора.",
+          title: "Проблема и желаемый результат",
+          body_text: "Проблема:\nНужно автоматически разбирать входящие обращения и выбирать следующий маршрут обработки.\n\nЖелаемый результат:\nПользователь получает structured summary, маршрут заявки и причину выбора.",
+          action_hints: ["request_brief_correction", "confirm_brief"],
+        },
+        {
+          card_kind: "brief_summary_section",
+          title: "Пользователи и процесс",
+          body_text: "Кто пользуется результатом:\n- Оператор первой линии\n- Руководитель смены\n\nТекущий процесс:\nОператор вручную читает обращение, ищет подходящий маршрут и только потом эскалирует кейс дальше.",
+          action_hints: ["request_brief_correction", "confirm_brief"],
+        },
+        {
+          card_kind: "brief_summary_section",
+          title: "Примеры входов и выходов",
+          body_text: "Входные примеры:\n- Новый запрос клиента на выплату\n- Уточнение по статусу открытого кейса\n\nОжидаемые выходы:\n- Категория обращения\n- Следующий маршрут обработки",
+          action_hints: ["request_brief_correction", "confirm_brief"],
+        },
+        {
+          card_kind: "brief_summary_section",
+          title: "Правила, исключения и риски",
+          body_text: "Бизнес-правила:\n- Подозрение на мошенничество всегда эскалируется эксперту\n\nИсключения:\n- VIP-клиенты идут по отдельному сценарию\n\nОткрытые риски:\n- Нужно отдельно описать обращения от партнёрских СТО",
           action_hints: ["request_brief_correction", "confirm_brief"],
         },
         {
           card_kind: "confirmation_prompt",
-          title: "Подтвердить brief",
-          body_text: mockDiscoveryPrompt(stage),
+          title: "Подтвердить brief v2",
+          body_text: "Проверь summary и явно подтверди версию v2. Если нужны изменения, запроси правки обычным текстом или переоткрой brief.",
           action_hints: ["request_brief_correction", "confirm_brief", "reopen_brief"],
         },
       ];
@@ -514,6 +532,12 @@
           title: "Статус проекта",
           body_text: "Confirmed brief передан в фабрику. Concept pack готовится к выдаче пользователю.",
           action_hints: ["request_status"],
+        },
+        {
+          card_kind: "brief_summary_section",
+          title: "Версия brief v3 подтверждена",
+          body_text: "Зафиксирована версия v3. Следующий этап фабрики может использовать только эту подтверждённую редакцию.",
+          action_hints: ["request_status", "reopen_brief"],
         },
         {
           card_kind: "download_prompt",
@@ -635,7 +659,7 @@
       status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
       next_action:
         stage === "downloads_ready"
-          ? "publish_downloads"
+          ? "start_concept_pack_handoff"
           : stage === "awaiting_confirmation"
             ? "await_for_confirmation"
             : "continue_discovery",
@@ -672,13 +696,13 @@
           stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
         next_recommended_action:
           stage === "downloads_ready"
-            ? "publish_downloads"
+            ? "start_concept_pack_handoff"
             : stage === "awaiting_confirmation"
               ? "confirm_brief"
               : "submit_turn",
         next_recommended_action_label:
           stage === "downloads_ready"
-            ? "Скачать артефакты"
+            ? "Передать brief в фабрику"
             : stage === "awaiting_confirmation"
               ? "Проверить и подтвердить brief"
               : "Ответить на следующий вопрос",
@@ -699,7 +723,7 @@
       ui_projection: {
         preferred_ui_action:
           stage === "downloads_ready"
-            ? "download_artifact"
+            ? "request_status"
             : stage === "awaiting_confirmation"
               ? "confirm_brief"
               : "submit_turn",
@@ -826,7 +850,7 @@
       return;
     }
 
-    if (action === "request_status") {
+    if (action === "request_status" || action === "request_brief_review" || action === "confirm_brief") {
       setCurrentAction(action);
       dispatchTurn(action, "", { skipUserMessage: true });
       return;
@@ -848,7 +872,7 @@
     dom.composerForm.addEventListener("submit", (event) => {
       event.preventDefault();
       const text = normalizeText(dom.composerInput.value);
-      if (!text && state.currentAction !== "request_status") {
+      if (!text && !["request_status", "request_brief_review", "confirm_brief"].includes(state.currentAction)) {
         dom.composerInput.focus();
         return;
       }

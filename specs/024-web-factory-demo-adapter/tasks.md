@@ -86,15 +86,15 @@
 
 ### Validation for User Story 2
 
-- [ ] T019 [P] [US2] Create component coverage for browser brief rendering and section chunking in `tests/component/test_agent_factory_web_brief.sh`
-- [ ] T020 [P] [US2] Create integration coverage for browser correction and confirmation intents in `tests/integration_local/test_agent_factory_web_confirmation.sh`
+- [x] T019 [P] [US2] Create component coverage for browser brief rendering and section chunking in `tests/component/test_agent_factory_web_brief.sh`
+- [x] T020 [P] [US2] Create integration coverage for browser correction and confirmation intents in `tests/integration_local/test_agent_factory_web_confirmation.sh`
 
 ### Implementation for User Story 2
 
-- [ ] T021 [P] [US2] Extend `scripts/agent-factory-web-adapter.py` to support brief review, correction, confirm, and reopen actions
-- [ ] T022 [P] [US2] Implement brief section rendering and confirmation prompts in `web/agent-factory-demo/app.js` and `scripts/agent_factory_common.py`
-- [ ] T023 [US2] Add awaiting-confirmation fixtures in `tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json`
-- [ ] T024 [US2] Document browser brief confirmation and reopen behavior in `docs/runbooks/agent-factory-web-demo.md`
+- [x] T021 [P] [US2] Extend `scripts/agent-factory-web-adapter.py` to support brief review, correction, confirm, and reopen actions
+- [x] T022 [P] [US2] Implement brief section rendering and confirmation prompts in `web/agent-factory-demo/app.js` and `scripts/agent_factory_common.py`
+- [x] T023 [US2] Add awaiting-confirmation fixtures in `tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json`
+- [x] T024 [US2] Document browser brief confirmation and reopen behavior in `docs/runbooks/agent-factory-web-demo.md`
 
 **Checkpoint**: The user can complete `discovery -> confirmed brief` fully inside the browser.
 

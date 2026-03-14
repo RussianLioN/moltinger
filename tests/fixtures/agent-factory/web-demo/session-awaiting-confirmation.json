@@ -1,0 +1,140 @@
+{
+  "project_key": "invoice-approval-discovery-demo",
+  "request_channel": "web",
+  "working_language": "ru",
+  "requester_identity": {
+    "display_name": "Ольга",
+    "browser_session_label": "browser-demo-brief-review"
+  },
+  "demo_access_grant": {
+    "demo_access_grant_id": "access-grant-brief-review-001",
+    "grant_type": "shared_demo_token",
+    "grant_value_hash": "9f9f2f4f90f7256bc4e2110ed843919a1c6f8f1d1dc3c8d0c89e4f72eb33d7f3",
+    "issued_by": "demo-operator",
+    "issued_for": "Ольга",
+    "status": "active",
+    "expires_at": "2026-12-31T23:59:59Z",
+    "created_at": "2026-03-15T00:00:00Z"
+  },
+  "web_demo_session": {
+    "web_demo_session_id": "web-demo-session-brief-review",
+    "session_cookie_id": "cookie-brief-review-demo",
+    "access_grant_id": "access-grant-brief-review-001",
+    "status": "awaiting_confirmation",
+    "active_project_key": "invoice-approval-discovery-demo",
+    "active_discovery_session_id": "discovery-session-invoice-approval-demo",
+    "active_brief_id": "brief-invoice-approval-demo",
+    "created_at": "2026-03-15T00:00:00Z",
+    "updated_at": "2026-03-15T00:00:00Z"
+  },
+  "browser_project_pointer": {
+    "pointer_id": "browser-pointer-brief-review",
+    "web_demo_session_id": "web-demo-session-brief-review",
+    "project_key": "invoice-approval-discovery-demo",
+    "selection_mode": "review_brief",
+    "linked_discovery_session_id": "discovery-session-invoice-approval-demo",
+    "linked_brief_id": "brief-invoice-approval-demo",
+    "linked_brief_version": "1.0",
+    "pointer_status": "active",
+    "updated_at": "2026-03-15T00:00:00Z"
+  },
+  "web_conversation_envelope": {
+    "web_conversation_envelope_id": "web-envelope-brief-review-001",
+    "request_id": "web-request-brief-review-001",
+    "transport_mode": "synthetic_fixture",
+    "ui_action": "request_brief_review",
+    "user_text": "",
+    "linked_discovery_session_id": "discovery-session-invoice-approval-demo",
+    "linked_brief_id": "brief-invoice-approval-demo",
+    "received_at": "2026-03-15T00:00:00Z"
+  },
+  "discovery_runtime_state": {
+    "project_key": "invoice-approval-discovery-demo",
+    "status": "awaiting_confirmation",
+    "next_action": "request_explicit_confirmation",
+    "next_question": "Проверь summary и явно подтверди текущую версию brief. Если нужны изменения, попроси правки обычным текстом или переоткрой brief.",
+    "discovery_session": {
+      "discovery_session_id": "discovery-session-invoice-approval-demo",
+      "project_key": "invoice-approval-discovery-demo",
+      "request_channel": "web",
+      "requester_identity": {
+        "browser_session_label": "browser-demo-brief-review",
+        "display_name": "Ольга"
+      },
+      "working_language": "ru",
+      "status": "awaiting_confirmation",
+      "current_topic": "brief_confirmation",
+      "next_recommended_action": "request_explicit_confirmation",
+      "latest_brief_version": "1.0",
+      "created_at": "2026-03-13T08:00:00Z",
+      "updated_at": "2026-03-13T08:25:00Z"
+    },
+    "requirement_brief": {
+      "brief_id": "brief-invoice-approval-demo",
+      "discovery_session_id": "discovery-session-invoice-approval-demo",
+      "project_key": "invoice-approval-discovery-demo",
+      "version": "1.0",
+      "problem_statement": "Ручная сверка заявок на оплату счетов перегружает финансовый контроль и замедляет согласование.",
+      "target_users": [
+        "Финансовый контролер",
+        "Руководитель подразделения"
+      ],
+      "current_process": "Контролер вручную сверяет лимиты, реквизиты и комплектность документов, затем эскалирует исключения руководителю.",
+      "desired_outcome": "Автоматически отфильтровывать типовые заявки и подсказывать, когда нужна эскалация или отказ.",
+      "scope_boundaries": [
+        "Только внутренняя проверка заявок на оплату счетов",
+        "Без автоматического списания денег или отправки платежа"
+      ],
+      "user_story": "Как финансовый контролер, я хочу быстро видеть, какие заявки проходят правила, а какие требуют дополнительного согласования.",
+      "input_examples": [
+        "Заявка на оплату с суммой выше лимита подразделения",
+        "Заявка без подписанного договора"
+      ],
+      "expected_outputs": [
+        "Статус проверки заявки",
+        "Причина блокировки или рекомендация по дальнейшему шагу"
+      ],
+      "business_rules": [
+        "Превышение лимита требует дополнительного согласования",
+        "Без обязательных документов заявка не должна проходить дальше"
+      ],
+      "exceptions": [
+        "Срочные платежи CFO могут идти по отдельному сценарию"
+      ],
+      "constraints": [
+        "Использовать только sanitized examples на этапе прототипа",
+        "Не требовать от пользователя технических формулировок"
+      ],
+      "success_metrics": [
+        "Сократить время первичной проверки минимум на 50 процентов",
+        "Снизить долю ручных возвратов из-за неполного комплекта документов"
+      ],
+      "open_risks": [
+        "Нужно дополнительно согласовать сценарий для срочных платежей CFO"
+      ],
+      "status": "awaiting_confirmation",
+      "created_at": "2026-03-13T08:20:00Z",
+      "updated_at": "2026-03-13T08:25:00Z"
+    },
+    "brief_revisions": [
+      {
+        "brief_revision_id": "brief-revision-001",
+        "brief_id": "brief-invoice-approval-demo",
+        "version": "1.0",
+        "change_reason": "Собран первый полный черновик brief после discovery dialogue",
+        "changed_sections": [
+          "problem_statement",
+          "target_users",
+          "current_process",
+          "user_story",
+          "input_examples",
+          "expected_outputs",
+          "constraints",
+          "success_metrics"
+        ],
+        "requested_by": "agent",
+        "created_at": "2026-03-13T08:20:00Z"
+      }
+    ]
+  }
+}
