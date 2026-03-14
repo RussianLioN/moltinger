@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -273,7 +273,7 @@ jobs:
 
       - name: Upload review artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zai-review-pr-${{ steps.pr-context.outputs.number }}
           path: ${{ steps.review.outputs.report_path }}

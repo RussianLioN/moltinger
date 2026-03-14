@@ -279,6 +279,38 @@ GitOps Compliance: Enforced ✅
 - Commit and push the rebase + CI fixes on `feat/moltis-pin-v0-10-18-prod`.
 - Rerun GitHub PR checks from the updated head and confirm logs stay green on the fresh commit.
 
+### 2026-03-14: GitHub Actions Runtime Warnings Cleared After Public Repo Switch
+
+**Статус**: ✅ public visibility removed infra billing blocker; active workflow action versions aligned to current Node 24-compatible releases
+
+- Re-checked the repository directly after the visibility change and confirmed `RussianLioN/moltinger` is now `PUBLIC`, which removed the GitHub Actions `Billing & plans` blocker that had previously prevented jobs from starting.
+- Confirmed the fresh PR/push runs for `feat/moltis-pin-v0-10-18-prod` are green on head `4e36438`, then inspected GitHub logs instead of stopping at the green badge.
+- Log review showed the remaining issue was no longer failing tests, but Node 20 deprecation warnings from workflow actions: `actions/upload-artifact@v4` in `Claude Code Review` and `actions/download-artifact@v5` in `Test Suite`.
+- Checked the official latest action releases and aligned active workflows to the current majors:
+  - `actions/checkout@v6`
+  - `actions/setup-node@v6`
+  - `actions/upload-artifact@v7`
+  - `actions/download-artifact@v8`
+- Updated all active workflow files so the current PR path and the broader CI/deploy surface no longer rely on Node 20 action runtimes; only `.disabled` legacy workflow files still reference the old majors.
+
+**Validated**
+
+- `gh repo view --json nameWithOwner,visibility,isPrivate,defaultBranchRef,url`
+- `gh pr view 62 --json number,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,url`
+- `gh run view 23093512669 --log`
+- `gh run view 23093511591 --log`
+- `gh api repos/actions/checkout/releases/latest`
+- `gh api repos/actions/setup-node/releases/latest`
+- `gh api repos/actions/upload-artifact/releases/latest`
+- `gh api repos/actions/download-artifact/releases/latest`
+- `ruby -e 'Dir[".github/workflows/*.{yml,yaml}"].sort.each { |f| YAML.load_file(f); puts "ok #{f}" }' -r yaml`
+- `git diff --check`
+
+**Next**
+
+- Commit and push the workflow runtime updates on `feat/moltis-pin-v0-10-18-prod`.
+- Re-run GitHub checks from the new head and verify the Node 20 deprecation warnings are gone from the fresh logs.
+
 ### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
 
 **Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session

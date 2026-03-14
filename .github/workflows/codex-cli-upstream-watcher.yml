@@ -82,7 +82,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Запустить upstream watcher
         shell: bash
@@ -124,14 +124,14 @@ jobs:
           ./scripts/codex-cli-upstream-watcher.sh "${args[@]}"
 
       - name: Загрузить JSON-артефакт
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}-json
           path: codex-upstream-watcher-report.json
           if-no-files-found: error
 
       - name: Загрузить summary-артефакт
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}-summary
           path: codex-upstream-watcher-summary.md
