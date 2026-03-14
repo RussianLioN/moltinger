@@ -24,12 +24,12 @@
 | `moltinger-pr41` | `tmp-pr41-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr42` | `tmp-pr42-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-topology-refresh` | `chore/topology-registry-after-cleanup-20260312` | `sibling-worktree` | Needs decision |
+| `moltinger-v0-10-18-prod` | `DETACHED` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-1-moltis-backup-rollback-baseline` | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-3-moltis-git-container-update` | `feat/moltinger-z8m-3-moltis-git-container-update` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
 | `moltis-pin-v0-10-18-mainline` | `feat/moltis-pin-v0-10-18-mainline` | `sibling-worktree` | Needs decision |
-| `moltis-pin-v0-10-18-prod` | `feat/moltis-pin-v0-10-18-prod` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
@@ -65,7 +65,6 @@
 | `feat/moltinger-z8m-3-moltis-git-container-update` | `origin/feat/moltinger-z8m-3-moltis-git-container-update` | Needs decision |
 | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `feat/moltis-pin-v0-10-18-mainline` | `origin/main` | Needs decision |
-| `feat/moltis-pin-v0-10-18-prod` | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
 | `tmp-pr38-verify` | `origin/015-clawdiy-smoke-mount-resolution` | Needs decision |
@@ -104,6 +103,7 @@
 | `feat/beads-root-write-guard` | `origin/feat/beads-root-write-guard` | Needs decision |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
+| `feat/moltis-pin-v0-10-18-prod` | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
