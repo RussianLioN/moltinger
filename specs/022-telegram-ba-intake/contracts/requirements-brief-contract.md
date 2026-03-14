@@ -32,6 +32,7 @@ Define the business-readable brief that the user reviews and confirms before the
 - one current draft or confirmed `RequirementBrief`
 - one or more `BriefRevision` records when meaningful changes occur
 - one active `ConfirmationSnapshot` only for the current confirmed version
+- optional `confirmation_history` when a previously confirmed brief is reopened or superseded
 
 ## Failure Conditions
 
@@ -39,3 +40,4 @@ Define the business-readable brief that the user reviews and confirms before the
 - the user cannot correct the brief without manual file editing
 - a confirmed version is overwritten in place
 - downstream generation is triggered from an unconfirmed draft
+- reopening the brief destroys the previous confirmation snapshot instead of archiving it

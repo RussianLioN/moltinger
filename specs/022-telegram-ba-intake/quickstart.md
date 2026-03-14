@@ -4,13 +4,14 @@
 
 This quickstart is for validation and continued implementation handoff of the conversational discovery slice.
 
-It confirms five things:
+It confirms six things:
 
 1. the new feature is clearly separated from the already completed `020` downstream factory slice
 2. discovery starts with a factory business interview, not a pre-filled JSON brief
 3. the user confirms a requirements brief before downstream artifact generation
 4. examples, contradictions, and resume behavior are treated as first-class concerns
 5. handoff into the existing concept-pack pipeline remains explicit and traceable
+6. reopening a confirmed brief preserves prior confirmation and handoff history instead of overwriting it
 
 ## 1. Verify Package Integrity
 
@@ -134,7 +135,22 @@ Expected result:
 - intake returns `ready_for_pack` from the discovery-shaped payload
 - generated concept-pack manifest includes `source_provenance` and per-artifact `generated_from`
 
-## 6. Current Readiness Check
+## 6. Validate Resume And Reopen Behavior
+
+Expected feature flow:
+
+1. An interrupted session can be resumed from an existing discovery snapshot.
+2. The runtime returns `resume_context` with the restored state and pending question.
+3. A confirmed brief can be reopened into a new version.
+4. Previous confirmation and handoff records move into history instead of being discarded.
+
+Validation questions:
+
+- Does resume preserve the exact pending question or blocking clarification?
+- Does reopening create a new brief version rather than mutate the old confirmed one?
+- Are `confirmation_history` and `handoff_history` present after reopen?
+
+## 7. Current Readiness Check
 
 Confirm:
 
@@ -144,7 +160,7 @@ Confirm:
 - [x] example-driven clarification and resume behavior are modeled as first-class concerns
 - [x] handoff into the existing `020` flow is part of the contract
 
-## 7. Handoff Rule
+## 8. Handoff Rule
 
 This feature is ready for continued implementation only when:
 
@@ -153,7 +169,7 @@ This feature is ready for continued implementation only when:
 3. topology documentation is refreshed after branch or worktree mutations
 4. the eventual implementation adds matching fixtures and tests for interview, confirmation, handoff, and resume behavior
 
-## 8. Clarification Guard
+## 9. Clarification Guard
 
 For this package, interpret the legacy id `022-telegram-ba-intake` as:
 

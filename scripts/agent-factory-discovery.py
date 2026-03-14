@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_factory_common import (
+    archive_confirmation_snapshot,
+    archive_handoff_record,
     build_discovery_topic,
     build_discovery_topic_progress,
     canonical_discovery_topic_name,
@@ -18,6 +20,7 @@ from agent_factory_common import (
     discovery_topic_names,
     discovery_topic_question,
     load_json,
+    normalize_dict_list,
     normalize_list,
     normalize_text,
     render_template,
@@ -94,7 +97,7 @@ HANDOFF_NEXT_STAGE = "concept_pack_generation"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the discovery-first Telegram business analyst flow.")
+    parser = argparse.ArgumentParser(description="Run the discovery-first factory business analyst flow.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run = subparsers.add_parser("run", help="Build or refresh one discovery session snapshot")
@@ -425,6 +428,14 @@ def normalize_factory_handoff_record(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(record, dict):
         return dict(record)
     return {}
+
+
+def normalize_confirmation_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return normalize_dict_list(payload.get("confirmation_history"))
+
+
+def normalize_handoff_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return normalize_dict_list(payload.get("handoff_history"))
 
 
 def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, Any]) -> list[dict[str, Any]]:
@@ -898,12 +909,15 @@ def build_brief_revision(
 def build_confirmation_snapshot(
     brief: dict[str, Any],
     existing_snapshot: dict[str, Any],
+    confirmation_history: list[dict[str, Any]],
     confirmation_reply: dict[str, Any],
     now: str,
 ) -> dict[str, Any]:
+    known_snapshots = list(confirmation_history)
+    if existing_snapshot:
+        known_snapshots.append(existing_snapshot)
     return {
-        "confirmation_snapshot_id": normalize_text(existing_snapshot.get("confirmation_snapshot_id"))
-        or f"confirmation-snapshot-{brief['brief_id']}",
+        "confirmation_snapshot_id": next_numbered_id(known_snapshots, "confirmation_snapshot_id", "confirmation-snapshot-"),
         "brief_id": brief["brief_id"],
         "brief_version": brief["version"],
         "confirmed_by": confirmation_reply["confirmed_by"],
@@ -1071,6 +1085,68 @@ def handoff_next_action(factory_handoff_record: dict[str, Any]) -> str:
     return "return_to_brief_confirmation"
 
 
+def build_resume_context(
+    discovery_session: dict[str, Any],
+    topic_progress: dict[str, Any],
+    clarification_items: list[dict[str, Any]],
+    conversation_turns: list[dict[str, Any]],
+    requirement_brief: dict[str, Any],
+    confirmation_snapshot: dict[str, Any],
+    confirmation_history: list[dict[str, Any]],
+    *,
+    existing_session: dict[str, Any],
+    next_question: str,
+) -> dict[str, Any]:
+    if not isinstance(existing_session, dict) or not existing_session:
+        return {}
+
+    resumed_from_status = normalize_text(existing_session.get("status"))
+    restored_status = normalize_text(discovery_session.get("status"))
+    current_topic = normalize_text(discovery_session.get("current_topic"))
+    pending_topic, pending_agent_question_text = pending_agent_question(conversation_turns)
+    active_question = next_question or pending_agent_question_text
+    latest_brief_version = (
+        normalize_text(requirement_brief.get("version"))
+        or normalize_text(discovery_session.get("latest_brief_version"))
+    )
+    latest_confirmed_brief_version = normalize_text(confirmation_snapshot.get("brief_version"))
+    if not latest_confirmed_brief_version:
+        for archived_snapshot in reversed(confirmation_history):
+            archived_version = normalize_text(archived_snapshot.get("brief_version"))
+            if archived_version:
+                latest_confirmed_brief_version = archived_version
+                break
+
+    summary_text = "Возобновляю discovery-сессию с сохраненного состояния."
+    if restored_status == "awaiting_clarification" and active_question:
+        summary_text = (
+            f"Возобновляю discovery-сессию: осталось закрыть уточнение по теме "
+            f"'{current_topic or pending_topic or 'clarification'}'."
+        )
+    elif restored_status in {"awaiting_confirmation", "reopened"} and latest_brief_version:
+        summary_text = f"Возобновляю discovery-сессию: brief версии {latest_brief_version} ожидает повторной проверки."
+    elif restored_status == "confirmed" and latest_confirmed_brief_version:
+        summary_text = f"Возобновляю discovery-сессию: подтвержден brief версии {latest_confirmed_brief_version}."
+
+    return {
+        "resumed": True,
+        "resumed_from_status": resumed_from_status,
+        "restored_status": restored_status,
+        "current_topic": current_topic or pending_topic,
+        "pending_question": active_question,
+        "resolved_topic_names": list(topic_progress.get("resolved_topic_names", [])),
+        "remaining_topics": list(topic_progress.get("remaining_topics", [])),
+        "open_clarification_ids": [
+            normalize_text(item.get("clarification_item_id"))
+            for item in clarification_items
+            if normalize_text(item.get("status")) == "open"
+        ],
+        "latest_brief_version": latest_brief_version,
+        "latest_confirmed_brief_version": latest_confirmed_brief_version,
+        "summary_text": summary_text,
+    }
+
+
 def render_requirement_brief_markdown(
     payload: dict[str, Any],
     brief: dict[str, Any],
@@ -1120,6 +1196,9 @@ def process_brief_stage(
     existing_brief = normalize_requirement_brief(payload)
     existing_revisions = normalize_brief_revisions(payload)
     existing_snapshot = normalize_confirmation_snapshot(payload)
+    existing_confirmation_history = normalize_confirmation_history(payload)
+    existing_handoff_record = normalize_factory_handoff_record(payload)
+    existing_handoff_history = normalize_handoff_history(payload)
     confirmation_reply = normalize_confirmation_reply(payload, requester_identity)
     correction_text = normalize_text(payload.get("brief_feedback_text") or payload.get("correction_request_text"))
     can_prepare_brief = bool(existing_brief) or bool(topic_progress.get("ready_for_brief"))
@@ -1140,6 +1219,10 @@ def process_brief_stage(
     )
     changed_sections = brief_changed_sections(existing_brief, candidate_brief)
     open_clarification = first_open_clarification(clarification_items)
+    existing_brief_status = normalize_text(existing_brief.get("status"))
+    reopening_from_confirmed = existing_brief_status == "confirmed" and bool(changed_sections)
+    confirmation_history = list(existing_confirmation_history)
+    handoff_history = list(existing_handoff_history)
 
     if correction_text:
         conversation_turns = append_turn_if_missing(
@@ -1156,7 +1239,39 @@ def process_brief_stage(
             canonical_discovery_topic_name(open_clarification.get("topic_name"))
         )
         current_brief = candidate_brief if changed_sections else dict(existing_brief)
-        current_brief["status"] = "awaiting_clarification"
+        revisions = list(existing_revisions)
+        if changed_sections:
+            current_brief["version"] = next_brief_version(normalize_text(existing_brief.get("version")))
+            current_brief["created_at"] = now
+            current_brief["updated_at"] = now
+            revisions.append(
+                build_brief_revision(
+                    current_brief["brief_id"],
+                    current_brief["version"],
+                    existing_revisions,
+                    correction_text or "Brief обновлен, но требует дополнительного уточнения перед подтверждением",
+                    changed_sections,
+                    "user" if correction_text else "agent",
+                    now,
+                )
+            )
+        if reopening_from_confirmed:
+            current_brief["status"] = "reopened"
+            confirmation_history = archive_confirmation_snapshot(
+                existing_snapshot,
+                confirmation_history,
+                now=now,
+                superseded_by_brief_version=normalize_text(current_brief.get("version")),
+                brief_snapshot=existing_brief,
+            )
+            handoff_history = archive_handoff_record(
+                existing_handoff_record,
+                handoff_history,
+                now=now,
+                superseded_by_brief_version=normalize_text(current_brief.get("version")),
+            )
+        else:
+            current_brief["status"] = normalize_text(current_brief.get("status")) or "draft"
         current_brief["owner"] = normalize_text(current_brief.get("owner")) or candidate_brief["owner"]
         open_questions = build_open_questions(clarification_items, next_question)
         return {
@@ -1165,8 +1280,10 @@ def process_brief_stage(
             "next_topic": canonical_discovery_topic_name(open_clarification.get("topic_name")),
             "next_question": next_question,
             "requirement_brief": current_brief,
-            "brief_revisions": existing_revisions,
+            "brief_revisions": revisions,
             "confirmation_snapshot": {},
+            "confirmation_history": confirmation_history,
+            "handoff_history": handoff_history,
             "conversation_turns": conversation_turns,
             "brief_markdown": render_requirement_brief_markdown(payload, current_brief, discovery_session, open_questions),
             "brief_template_path": str(BRIEF_TEMPLATE_PATH),
@@ -1223,7 +1340,7 @@ def process_brief_stage(
 
     if changed_sections:
         candidate_brief["version"] = next_brief_version(normalize_text(existing_brief.get("version")))
-        candidate_brief["status"] = "awaiting_confirmation"
+        candidate_brief["status"] = "reopened" if reopening_from_confirmed else "awaiting_confirmation"
         candidate_brief["created_at"] = now
         candidate_brief["updated_at"] = now
         revisions = list(existing_revisions)
@@ -1238,6 +1355,20 @@ def process_brief_stage(
                 now,
             )
         )
+        if reopening_from_confirmed:
+            confirmation_history = archive_confirmation_snapshot(
+                existing_snapshot,
+                confirmation_history,
+                now=now,
+                superseded_by_brief_version=candidate_brief["version"],
+                brief_snapshot=existing_brief,
+            )
+            handoff_history = archive_handoff_record(
+                existing_handoff_record,
+                handoff_history,
+                now=now,
+                superseded_by_brief_version=candidate_brief["version"],
+            )
         conversation_turns = append_turn_if_missing(
             conversation_turns,
             actor="agent",
@@ -1257,13 +1388,15 @@ def process_brief_stage(
         )
         open_questions = build_open_questions(clarification_items, next_question)
         return {
-            "status": "awaiting_confirmation",
+            "status": "reopened" if reopening_from_confirmed else "awaiting_confirmation",
             "next_action": "request_explicit_confirmation",
             "next_topic": "brief_confirmation",
             "next_question": next_question,
             "requirement_brief": candidate_brief,
             "brief_revisions": revisions,
             "confirmation_snapshot": {},
+            "confirmation_history": confirmation_history,
+            "handoff_history": handoff_history,
             "conversation_turns": conversation_turns,
             "brief_markdown": render_requirement_brief_markdown(payload, candidate_brief, discovery_session, open_questions),
             "brief_template_path": str(BRIEF_TEMPLATE_PATH),
@@ -1291,7 +1424,15 @@ def process_brief_stage(
             "next_question": "",
             "requirement_brief": current_brief,
             "brief_revisions": existing_revisions,
-            "confirmation_snapshot": build_confirmation_snapshot(current_brief, existing_snapshot, confirmation_reply, now),
+            "confirmation_snapshot": build_confirmation_snapshot(
+                current_brief,
+                existing_snapshot,
+                confirmation_history,
+                confirmation_reply,
+                now,
+            ),
+            "confirmation_history": confirmation_history,
+            "handoff_history": handoff_history,
             "conversation_turns": conversation_turns,
             "brief_markdown": render_requirement_brief_markdown(payload, current_brief, discovery_session, []),
             "brief_template_path": str(BRIEF_TEMPLATE_PATH),
@@ -1321,6 +1462,8 @@ def process_brief_stage(
         "requirement_brief": current_brief,
         "brief_revisions": existing_revisions,
         "confirmation_snapshot": existing_snapshot if brief_status == "confirmed" else {},
+        "confirmation_history": confirmation_history,
+        "handoff_history": handoff_history,
         "conversation_turns": conversation_turns,
         "brief_markdown": render_requirement_brief_markdown(payload, current_brief, discovery_session, open_questions),
         "brief_template_path": str(BRIEF_TEMPLATE_PATH),
@@ -1413,6 +1556,12 @@ def main() -> int:
     confirmation_snapshot = brief_state.get("confirmation_snapshot")
     if not isinstance(confirmation_snapshot, dict):
         confirmation_snapshot = {}
+    confirmation_history = brief_state.get("confirmation_history")
+    if not isinstance(confirmation_history, list):
+        confirmation_history = normalize_confirmation_history(payload)
+    handoff_history = brief_state.get("handoff_history")
+    if not isinstance(handoff_history, list):
+        handoff_history = normalize_handoff_history(payload)
     factory_handoff_record = {}
     if isinstance(requirement_brief, dict) and requirement_brief:
         factory_handoff_record = build_factory_handoff_record(
@@ -1457,12 +1606,29 @@ def main() -> int:
         response["brief_revisions"] = brief_revisions
     if isinstance(confirmation_snapshot, dict) and confirmation_snapshot:
         response["confirmation_snapshot"] = confirmation_snapshot
+    if isinstance(confirmation_history, list) and confirmation_history:
+        response["confirmation_history"] = confirmation_history
     if factory_handoff_record:
         response["factory_handoff_record"] = factory_handoff_record
+    if isinstance(handoff_history, list) and handoff_history:
+        response["handoff_history"] = handoff_history
     brief_markdown = normalize_text(brief_state.get("brief_markdown"))
     if brief_markdown:
         response["brief_markdown"] = brief_markdown
         response["brief_template_path"] = brief_state.get("brief_template_path")
+    resume_context = build_resume_context(
+        discovery_session,
+        topic_progress,
+        clarification_items,
+        conversation_turns,
+        requirement_brief if isinstance(requirement_brief, dict) else {},
+        confirmation_snapshot,
+        confirmation_history if isinstance(confirmation_history, list) else [],
+        existing_session=payload.get("discovery_session", {}) if isinstance(payload.get("discovery_session"), dict) else {},
+        next_question=next_question,
+    )
+    if resume_context:
+        response["resume_context"] = resume_context
 
     write_json(response, args.output)
     return 0

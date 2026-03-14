@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-13
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-14
 
 ---
 
@@ -97,6 +97,10 @@ GitOps Compliance: Enforced ✅
 - Reconciled `scripts/agent-factory-artifacts.py` with the new bridge by propagating discovery provenance into `concept-pack.json` (`source_provenance`) and per-artifact `generated_from` metadata, while also grounding render context in confirmed brief fields like `user_story`, `scope_boundaries`, `input_examples`, and `expected_outputs`.
 - Added US4 validation coverage in `tests/component/test_agent_factory_handoff.sh` and `tests/integration_local/test_agent_factory_handoff.sh`, covering `confirmed -> handoff -> intake -> concept-pack` plus the blocked path before a ready handoff exists.
 - Updated `docs/runbooks/agent-factory-discovery.md`, `docs/runbooks/agent-factory-prototype.md`, `specs/022-telegram-ba-intake/quickstart.md`, and `specs/022-telegram-ba-intake/tasks.md` so the operator docs and planning artifacts now describe the live discovery-to-concept handoff path rather than the earlier US2 stop boundary.
+- Completed the Speckit clarification pass for `022-telegram-ba-intake`: the package now explicitly treats the factory business-analyst agent on `Moltis` as the primary runtime identity, while `Telegram`, `Moltinger UI`, `Moltis UI`, and future UIs remain interface adapters rather than separate agent identities.
+- Completed User Story 5 for `022-telegram-ba-intake`: `scripts/agent-factory-discovery.py` now emits `resume_context`, preserves interrupted-session recovery state, archives superseded `confirmation_snapshot` records into `confirmation_history`, and archives superseded `factory_handoff_record` entries into `handoff_history` whenever a confirmed brief is reopened into a new version.
+- Added `tests/integration_local/test_agent_factory_resume.sh` to cover resume of a pending question, resume of an open clarification, reopen of a confirmed brief, and reconfirmation into a new ready handoff; updated `docs/runbooks/agent-factory-discovery.md`, `specs/022-telegram-ba-intake/contracts/*.md`, `specs/022-telegram-ba-intake/data-model.md`, `specs/022-telegram-ba-intake/quickstart.md`, and `specs/022-telegram-ba-intake/tasks.md` so the runtime, contracts, and validation guidance all reflect the implemented US5 behavior.
+- Completed Phase 7 Polish for `022-telegram-ba-intake`: reran `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`, confirmed the requirements checklist still passes after the clarification pass, reran the quickstart validation chain `confirmed brief -> handoff -> intake -> concept-pack`, refreshed `docs/GIT-TOPOLOGY-REGISTRY.md`, and confirmed that no additional blockers remain before closing the slice.
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`

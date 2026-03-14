@@ -132,13 +132,13 @@
 
 ### Validation for User Story 5
 
-- [ ] T026 [P] [US5] Create local resume/reopen coverage in `tests/integration_local/test_agent_factory_resume.sh`
+- [x] T026 [P] [US5] Create local resume/reopen coverage in `tests/integration_local/test_agent_factory_resume.sh`
 
 ### Implementation for User Story 5
 
-- [ ] T027 [P] [US5] Implement discovery session persistence and recovery in `scripts/agent-factory-discovery.py`
-- [ ] T028 [P] [US5] Extend revision and confirmation history support in `scripts/agent_factory_common.py`
-- [ ] T029 [US5] Document resume and reopen expectations in `docs/runbooks/agent-factory-discovery.md`
+- [x] T027 [P] [US5] Implement discovery session persistence and recovery in `scripts/agent-factory-discovery.py`
+- [x] T028 [P] [US5] Extend revision and confirmation history support in `scripts/agent_factory_common.py`
+- [x] T029 [US5] Document resume and reopen expectations in `docs/runbooks/agent-factory-discovery.md`
 
 **Checkpoint**: Discovery survives real business pauses and revision loops.
 
@@ -148,10 +148,10 @@
 
 **Purpose**: Reconcile spec artifacts, docs, tests, and handoff boundaries before landing.
 
-- [ ] T030 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/022-telegram-ba-intake/checklists/requirements.md`
-- [ ] T031 [P] Refresh topology documentation after feature-branch mutation in `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T032 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
-- [ ] T033 Run quickstart verification from `specs/022-telegram-ba-intake/quickstart.md` and record any remaining blockers
+- [x] T030 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/022-telegram-ba-intake/checklists/requirements.md`
+- [x] T031 [P] Refresh topology documentation after feature-branch mutation in `docs/GIT-TOPOLOGY-REGISTRY.md`
+- [x] T032 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
+- [x] T033 Run quickstart verification from `specs/022-telegram-ba-intake/quickstart.md` and record any remaining blockers
 
 ---
 

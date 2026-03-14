@@ -257,13 +257,33 @@ Canonical upstream record passed from confirmed discovery into the existing conc
 - `blocked`
 - `superseded`
 
+### 10. RecoverySnapshot
+
+Derived runtime metadata that explains how an interrupted discovery session or reopened brief was restored.
+
+**Fields**
+
+- `resumed`
+- `resumed_from_status`
+- `restored_status`
+- `current_topic`
+- `pending_question`
+- `resolved_topic_names`
+- `remaining_topics`
+- `open_clarification_ids`
+- `latest_brief_version`
+- `latest_confirmed_brief_version`
+- `summary_text`
+
 ## Relationships
 
 - One `DiscoverySession` contains many `ConversationTurn` records.
 - One `DiscoverySession` tracks many `RequirementTopic`, `ClarificationItem`, and `ExampleCase` records.
 - One `DiscoverySession` produces many `RequirementBrief` versions over time, but only one current active draft or confirmed version.
 - One confirmed `RequirementBrief` may have one active `ConfirmationSnapshot`.
+- Archived confirmation snapshots are preserved in `confirmation_history` when a confirmed brief is reopened.
 - One active `ConfirmationSnapshot` may unlock one `FactoryHandoffRecord`.
+- Archived handoff records are preserved in `handoff_history` when a previously confirmed brief is superseded by a newer version.
 - One `FactoryHandoffRecord` becomes the upstream source for downstream concept-pack generation in the existing factory flow.
 
 ## Clarification Notes
@@ -302,5 +322,7 @@ Optional branch:
 
 - No `FactoryHandoffRecord` may reach `ready` unless there is an active `ConfirmationSnapshot` for the exact brief version.
 - A reopened brief must create a new version instead of overwriting an already confirmed version.
+- Reopening a confirmed brief must archive the prior active `ConfirmationSnapshot` and current `FactoryHandoffRecord` instead of deleting them.
+- Resume responses should expose `RecoverySnapshot` metadata whenever the runtime restores prior discovery state instead of starting from a fresh raw idea.
 - `ClarificationItem` records may remain open only if they are explicitly represented in `RequirementBrief.open_risks`.
 - `ExampleCase` records marked `needs_redaction` cannot be treated as safe prototype examples until replaced or sanitized.

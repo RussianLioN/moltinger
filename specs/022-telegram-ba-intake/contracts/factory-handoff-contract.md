@@ -16,6 +16,7 @@ Define how a confirmed discovery brief becomes the upstream source for the exist
 - one canonical `FactoryHandoffRecord`
 - explicit next-step summary for concept-pack generation
 - provenance links back to discovery session and confirmed brief version
+- optional `handoff_history` when a previously ready or consumed handoff is superseded by a reopened brief
 
 ## Rules
 
@@ -30,3 +31,4 @@ Define how a confirmed discovery brief becomes the upstream source for the exist
 - the handoff record has no version linkage to the confirmed brief
 - provenance back to the discovery session is lost
 - downstream artifact generation requires manual reconstruction of the brief
+- reopening the brief silently discards the previous handoff state

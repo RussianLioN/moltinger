@@ -32,6 +32,7 @@ Define the minimum contract for turning a raw factory-interface conversation int
 - topic-level progress across required requirement areas
 - zero or more `ClarificationItem` records
 - one reviewable draft `RequirementBrief`
+- optional `resume_context` when the runtime restores an existing session snapshot
 
 ## Rules
 
@@ -46,3 +47,4 @@ Define the minimum contract for turning a raw factory-interface conversation int
 - the agent repeatedly asks already confirmed questions with no justification
 - the session appears complete but critical topics are still missing
 - free-form examples are not captured into structured discovery state
+- the resumed session hides which question or clarification was pending before interruption

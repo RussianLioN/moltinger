@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This runbook describes the current `US1` through `US4` runtime slice for `022-telegram-ba-intake`.
+This runbook describes the current `US1` through `US5` runtime slice for `022-telegram-ba-intake`.
 
 Clarification:
 
@@ -20,6 +20,7 @@ Current scope:
 6. let the user request corrections and explicitly confirm one exact brief version
 7. emit one canonical handoff record after replaying a confirmed brief
 8. bridge the ready handoff into the existing concept-pack intake without manual copy-paste
+9. resume interrupted discovery and reopen confirmed briefs without losing prior confirmation or handoff history
 
 ## Runtime Contract
 
@@ -44,10 +45,13 @@ The command currently returns:
 - optional `requirement_brief`
 - optional `brief_revisions`
 - optional `confirmation_snapshot`
+- optional `confirmation_history`
 - optional `factory_handoff_record`
+- optional `handoff_history`
 - optional `brief_markdown`
 - optional `brief_template_path`
 - optional `example_cases`
+- optional `resume_context`
 
 ## Accepted Input Shapes
 
@@ -79,6 +83,12 @@ The command also accepts an existing snapshot containing:
 - `requirement_topics`
 - `clarification_items`
 - optional `conversation_turns`
+- optional `requirement_brief`
+- optional `brief_revisions`
+- optional `confirmation_snapshot`
+- optional `confirmation_history`
+- optional `factory_handoff_record`
+- optional `handoff_history`
 
 This lets the runtime recompute progress and preserve the next question without requiring an external state service.
 
@@ -89,6 +99,9 @@ The command also accepts:
 - `requirement_brief`
 - optional `brief_revisions`
 - optional `confirmation_snapshot`
+- optional `confirmation_history`
+- optional `factory_handoff_record`
+- optional `handoff_history`
 - optional `brief_feedback_text`
 - optional `brief_section_updates`
 - optional `confirmation_reply`
@@ -352,6 +365,51 @@ Expected result:
 - `concept_record.source_request_id` equals `factory_handoff_record.factory_handoff_id`
 - no manual reconstruction of the brief is required
 
+### 9. Resume an interrupted discovery snapshot
+
+```bash
+python3 scripts/agent-factory-discovery.py run \
+  --source tests/fixtures/agent-factory/discovery/session-new.json \
+  --output /tmp/discovery-resume-out.json
+```
+
+Expected result:
+
+- `resume_context.resumed = true`
+- `resume_context.resumed_from_status` reflects the previous session state
+- `resume_context.pending_question` restores the exact pending agent question
+- `conversation_turns` do not duplicate the already asked question
+
+### 10. Reopen a confirmed brief with preserved history
+
+```bash
+tmpdir="$(mktemp -d)"
+
+jq '. + {
+  "brief_feedback_text": "Добавь, что срочные платежи CFO идут по отдельному сценарию и требуют нового согласования.",
+  "brief_section_updates": {
+    "exceptions": [
+      "Срочные платежи CFO идут по отдельному сценарию и требуют нового согласования"
+    ],
+    "open_risks": [
+      "Нужно отдельно описать сценарий срочных платежей CFO"
+    ]
+  }
+}' tests/fixtures/agent-factory/discovery/brief-confirmed-handoff.json >"$tmpdir/reopen-source.json"
+
+python3 scripts/agent-factory-discovery.py run \
+  --source "$tmpdir/reopen-source.json" \
+  --output "$tmpdir/reopened-brief.json"
+```
+
+Expected result:
+
+- `status = reopened`
+- `requirement_brief.version` moves to the next version
+- `confirmation_history[0].status = superseded`
+- `handoff_history[0].handoff_status = superseded`
+- active `factory_handoff_record` remains absent until the reopened brief is confirmed again
+
 ## Example And Clarification Policy
 
 - The runtime preserves grounded cases as `example_cases`, not only as free text in the brief.
@@ -369,6 +427,7 @@ Expected result:
 - `awaiting_clarification` — one explicit clarification item blocks the flow
 - `awaiting_confirmation` — discovery is complete enough to review the current brief version
 - `confirmed` — one exact brief version was explicitly confirmed and is ready for later handoff
+- `reopened` — a previously confirmed brief was corrected and now requires a fresh confirmation pass
 - `in_progress` — no immediate next question is required and the flow can proceed to the next slice
 
 ### `next_action`
@@ -383,10 +442,10 @@ Expected result:
 
 ## Current Boundary
 
-This runbook currently covers `US1` through `US4`.
+This runbook currently covers `US1` through `US5`.
 
-Not included yet:
+Current runtime additions from `US5`:
 
-- resume/reopen semantics beyond snapshot recomputation
-
-Those arrive in `US5` and later polish work.
+- `resume_context` for explicit recovery metadata
+- `confirmation_history` for superseded confirmation snapshots
+- `handoff_history` for superseded downstream handoff records

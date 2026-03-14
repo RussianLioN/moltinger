@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -203,6 +204,87 @@ def dedupe_preserve_order(values: list[str]) -> list[str]:
         seen.add(text)
         ordered.append(text)
     return ordered
+
+
+def normalize_dict_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def upsert_history_entry(
+    history: list[dict[str, Any]],
+    entry: dict[str, Any],
+    *,
+    id_field: str,
+) -> list[dict[str, Any]]:
+    entry_id = normalize_text(entry.get(id_field))
+    normalized_history = normalize_dict_list(history)
+    if not entry_id:
+        return normalized_history
+
+    updated_history: list[dict[str, Any]] = []
+    replaced = False
+    for existing in normalized_history:
+        if normalize_text(existing.get(id_field)) == entry_id:
+            updated_history.append(dict(entry))
+            replaced = True
+            continue
+        updated_history.append(dict(existing))
+    if not replaced:
+        updated_history.append(dict(entry))
+    return updated_history
+
+
+def archive_confirmation_snapshot(
+    snapshot: dict[str, Any],
+    history: list[dict[str, Any]],
+    *,
+    now: str,
+    superseded_by_brief_version: str = "",
+    brief_snapshot: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if not isinstance(snapshot, dict) or not snapshot:
+        return normalize_dict_list(history)
+
+    archived_snapshot = dict(snapshot)
+    if normalize_text(archived_snapshot.get("status")) == "active":
+        archived_snapshot["status"] = "superseded"
+    archived_snapshot["superseded_at"] = now
+    if superseded_by_brief_version:
+        archived_snapshot["superseded_by_brief_version"] = superseded_by_brief_version
+    if isinstance(brief_snapshot, dict) and brief_snapshot:
+        archived_snapshot["brief_snapshot"] = deepcopy(brief_snapshot)
+    return upsert_history_entry(
+        history,
+        archived_snapshot,
+        id_field="confirmation_snapshot_id",
+    )
+
+
+def archive_handoff_record(
+    record: dict[str, Any],
+    history: list[dict[str, Any]],
+    *,
+    now: str,
+    superseded_by_brief_version: str = "",
+) -> list[dict[str, Any]]:
+    if not isinstance(record, dict) or not record:
+        return normalize_dict_list(history)
+
+    archived_record = dict(record)
+    previous_status = normalize_text(archived_record.get("handoff_status"))
+    if previous_status and previous_status != "superseded":
+        archived_record["previous_handoff_status"] = previous_status
+    archived_record["handoff_status"] = "superseded"
+    archived_record["superseded_at"] = now
+    if superseded_by_brief_version:
+        archived_record["superseded_by_brief_version"] = superseded_by_brief_version
+    return upsert_history_entry(
+        history,
+        archived_record,
+        id_field="factory_handoff_id",
+    )
 
 
 def slugify(value: str, fallback_prefix: str = "concept") -> str:
