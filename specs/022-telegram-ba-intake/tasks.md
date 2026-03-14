@@ -90,13 +90,13 @@
 
 ### Validation for User Story 3
 
-- [ ] T016 [P] [US3] Create component coverage for example extraction and contradiction handling in `tests/component/test_agent_factory_examples.sh`
+- [x] T016 [P] [US3] Create component coverage for example extraction and contradiction handling in `tests/component/test_agent_factory_examples.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T017 [P] [US3] Extend `scripts/agent-factory-discovery.py` to capture example cases, business rules, and exceptions
-- [ ] T018 [US3] Implement safe-example and contradiction handling in `scripts/agent_factory_common.py`
-- [ ] T019 [US3] Document example and clarification policy in `docs/runbooks/agent-factory-discovery.md`
+- [x] T017 [P] [US3] Extend `scripts/agent-factory-discovery.py` to capture example cases, business rules, and exceptions
+- [x] T018 [US3] Implement safe-example and contradiction handling in `scripts/agent_factory_common.py`
+- [x] T019 [US3] Document example and clarification policy in `docs/runbooks/agent-factory-discovery.md`
 
 **Checkpoint**: Discovery captures grounded business cases instead of abstract prose only.
 

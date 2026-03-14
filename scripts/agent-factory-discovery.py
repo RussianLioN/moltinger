@@ -12,6 +12,8 @@ from agent_factory_common import (
     build_discovery_topic_progress,
     canonical_discovery_topic_name,
     dedupe_preserve_order,
+    discovery_example_contradictions,
+    discovery_example_data_safety_status,
     discovery_next_topic,
     discovery_topic_names,
     discovery_topic_question,
@@ -197,6 +199,25 @@ def normalized_answers_from_payload(payload: dict[str, Any], raw_idea: str) -> d
             value = existing_brief.get(brief_field)
             if value not in (None, "", []):
                 answers[topic_name] = value
+
+    example_cases = payload.get("example_cases", [])
+    if isinstance(example_cases, list) and example_cases:
+        if "input_examples" not in answers:
+            input_examples = [
+                normalize_text(case.get("input_summary"))
+                for case in example_cases
+                if isinstance(case, dict) and normalize_text(case.get("input_summary"))
+            ]
+            if input_examples:
+                answers["input_examples"] = input_examples
+        if "expected_outputs" not in answers:
+            expected_outputs = [
+                normalize_text(case.get("expected_output_summary"))
+                for case in example_cases
+                if isinstance(case, dict) and normalize_text(case.get("expected_output_summary"))
+            ]
+            if expected_outputs:
+                answers["expected_outputs"] = expected_outputs
 
     if raw_idea and "problem" not in answers:
         answers["problem"] = raw_idea
@@ -397,6 +418,223 @@ def normalize_confirmation_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, Any]) -> list[dict[str, Any]]:
+    explicit_cases = payload.get("example_cases", [])
+    business_rules = normalize_brief_section_value(
+        "business_rules",
+        brief_value_from_payload(payload, "business_rules") or existing_brief.get("business_rules"),
+    )
+    exceptions = normalize_brief_section_value(
+        "exceptions",
+        brief_value_from_payload(payload, "exceptions") or existing_brief.get("exceptions"),
+    )
+
+    normalized_cases: list[dict[str, Any]] = []
+    if isinstance(explicit_cases, list) and explicit_cases:
+        for index, raw_case in enumerate(explicit_cases, start=1):
+            if not isinstance(raw_case, dict):
+                continue
+            linked_rules = normalize_brief_section_value(
+                "business_rules",
+                raw_case.get("linked_rules") or business_rules,
+            )
+            exception_notes = normalize_text(raw_case.get("exception_notes"))
+            data_safety_status = normalize_text(raw_case.get("data_safety_status")) or discovery_example_data_safety_status(
+                raw_case.get("input_summary"),
+                raw_case.get("expected_output_summary"),
+                linked_rules,
+                exception_notes,
+            )
+            normalized_cases.append(
+                {
+                    "example_case_id": normalize_text(raw_case.get("example_case_id")) or f"example-case-{index:03d}",
+                    "case_type": normalize_text(raw_case.get("case_type")) or "representative",
+                    "input_summary": normalize_text(raw_case.get("input_summary")),
+                    "expected_output_summary": normalize_text(raw_case.get("expected_output_summary")),
+                    "linked_rules": linked_rules,
+                    "exception_notes": exception_notes,
+                    "data_safety_status": data_safety_status,
+                }
+            )
+        return normalized_cases
+
+    input_examples = normalize_brief_section_value(
+        "input_examples",
+        brief_value_from_payload(payload, "input_examples") or existing_brief.get("input_examples"),
+    )
+    expected_outputs = normalize_brief_section_value(
+        "expected_outputs",
+        brief_value_from_payload(payload, "expected_outputs") or existing_brief.get("expected_outputs"),
+    )
+
+    if not input_examples and not expected_outputs:
+        return []
+
+    total_cases = max(len(input_examples), len(expected_outputs), 1)
+    for index in range(total_cases):
+        input_summary = input_examples[index] if index < len(input_examples) else ""
+        expected_output_summary = expected_outputs[index] if index < len(expected_outputs) else ""
+        exception_notes = "; ".join(exceptions) if exceptions and index == 0 else ""
+        normalized_cases.append(
+            {
+                "example_case_id": f"example-case-{index + 1:03d}",
+                "case_type": "representative",
+                "input_summary": input_summary,
+                "expected_output_summary": expected_output_summary,
+                "linked_rules": business_rules,
+                "exception_notes": exception_notes,
+                "data_safety_status": discovery_example_data_safety_status(
+                    input_summary,
+                    expected_output_summary,
+                    business_rules,
+                    exception_notes,
+                ),
+            }
+        )
+    return normalized_cases
+
+
+def clarification_item_from_example_case(
+    *,
+    clarification_id: str,
+    topic_name: str,
+    reason: str,
+    question_text: str,
+    existing_item: dict[str, Any] | None,
+    now: str,
+) -> dict[str, Any]:
+    existing = existing_item or {}
+    return {
+        "clarification_item_id": clarification_id,
+        "topic_name": topic_name,
+        "reason": reason,
+        "status": "open",
+        "question_text": question_text,
+        "opened_at": normalize_text(existing.get("opened_at")) or now,
+        "resolved_at": "",
+    }
+
+
+def generated_example_clarifications(
+    example_cases: list[dict[str, Any]],
+    payload: dict[str, Any],
+    existing_brief: dict[str, Any],
+    existing_clarifications: list[dict[str, Any]],
+    now: str,
+) -> list[dict[str, Any]]:
+    business_rules = normalize_brief_section_value(
+        "business_rules",
+        brief_value_from_payload(payload, "business_rules") or existing_brief.get("business_rules"),
+    )
+    constraints = normalize_brief_section_value(
+        "constraints",
+        brief_value_from_payload(payload, "constraints") or existing_brief.get("constraints"),
+    )
+    existing_by_id = {
+        normalize_text(item.get("clarification_item_id")): item
+        for item in existing_clarifications
+        if normalize_text(item.get("clarification_item_id"))
+    }
+    generated: list[dict[str, Any]] = []
+    for case in example_cases:
+        case_id = normalize_text(case.get("example_case_id")) or "example-case"
+        input_summary = normalize_text(case.get("input_summary"))
+        expected_output_summary = normalize_text(case.get("expected_output_summary"))
+        linked_rules = normalize_brief_section_value("business_rules", case.get("linked_rules"))
+        exception_notes = normalize_text(case.get("exception_notes"))
+        if normalize_text(case.get("data_safety_status")) == "needs_redaction":
+            clarification_id = f"clarification-unsafe-{case_id}"
+            generated.append(
+                clarification_item_from_example_case(
+                    clarification_id=clarification_id,
+                    topic_name="input_examples",
+                    reason="unsafe_data_example",
+                    question_text=(
+                        f"Можешь прислать пример '{input_summary or case_id}' без реальных реквизитов, номеров и названий контрагентов?"
+                    ),
+                    existing_item=existing_by_id.get(clarification_id),
+                    now=now,
+                )
+            )
+        contradictions = discovery_example_contradictions(
+            input_summary=input_summary,
+            expected_output_summary=expected_output_summary,
+            linked_rules=linked_rules,
+            business_rules=business_rules,
+            constraints=constraints,
+            exception_notes=exception_notes,
+        )
+        for index, contradiction in enumerate(contradictions, start=1):
+            clarification_id = f"clarification-contradiction-{case_id}-{index:03d}"
+            generated.append(
+                clarification_item_from_example_case(
+                    clarification_id=clarification_id,
+                    topic_name="expected_outputs",
+                    reason="contradictory_examples",
+                    question_text=(
+                        f"В примере '{input_summary or case_id}' есть противоречие: {contradiction} "
+                        "Какой результат агент должен считать правильным в этом кейсе?"
+                    ),
+                    existing_item=existing_by_id.get(clarification_id),
+                    now=now,
+                )
+            )
+    return generated
+
+
+def reconcile_clarification_items(
+    existing_clarifications: list[dict[str, Any]],
+    generated_clarifications: list[dict[str, Any]],
+    now: str,
+) -> list[dict[str, Any]]:
+    generated_by_id = {
+        normalize_text(item.get("clarification_item_id")): item
+        for item in generated_clarifications
+        if normalize_text(item.get("clarification_item_id"))
+    }
+    reconciled: list[dict[str, Any]] = []
+    for item in existing_clarifications:
+        clarification_id = normalize_text(item.get("clarification_item_id"))
+        reason = normalize_text(item.get("reason"))
+        if clarification_id in generated_by_id:
+            merged = dict(item)
+            merged.update(generated_by_id[clarification_id])
+            merged["status"] = "open"
+            merged["resolved_at"] = ""
+            reconciled.append(merged)
+            generated_by_id.pop(clarification_id, None)
+            continue
+        if reason in {"unsafe_data_example", "contradictory_examples"} and normalize_text(item.get("status")) == "open":
+            resolved_item = dict(item)
+            resolved_item["status"] = "resolved"
+            resolved_item["resolved_at"] = normalize_text(item.get("resolved_at")) or now
+            reconciled.append(resolved_item)
+            continue
+        reconciled.append(dict(item))
+    reconciled.extend(generated_by_id.values())
+    return reconciled
+
+
+def example_case_brief_values(example_cases: list[dict[str, Any]], field_name: str) -> list[str]:
+    values: list[str] = []
+    for case in example_cases:
+        if field_name == "input_examples":
+            text = normalize_text(case.get("input_summary"))
+            if text:
+                values.append(text)
+        elif field_name == "expected_outputs":
+            text = normalize_text(case.get("expected_output_summary"))
+            if text:
+                values.append(text)
+        elif field_name == "business_rules":
+            values.extend(normalize_brief_section_value("business_rules", case.get("linked_rules")))
+        elif field_name == "exceptions":
+            text = normalize_text(case.get("exception_notes"))
+            if text:
+                values.append(text)
+    return dedupe_preserve_order(values)
+
+
 def normalize_brief_section_value(field_name: str, value: Any) -> Any:
     if field_name in BRIEF_LIST_FIELDS:
         if isinstance(value, list):
@@ -489,6 +727,7 @@ def build_requirement_brief_candidate(
     payload: dict[str, Any],
     requirement_topics: list[dict[str, Any]],
     clarification_items: list[dict[str, Any]],
+    example_cases: list[dict[str, Any]],
     existing_brief: dict[str, Any],
     requester_identity: dict[str, Any],
     now: str,
@@ -553,21 +792,27 @@ def build_requirement_brief_candidate(
             "input_examples",
             brief_value_from_payload(payload, "input_examples")
             or topic_summary_by_name(requirement_topics, "input_examples")
-            or existing_brief.get("input_examples"),
+            or existing_brief.get("input_examples")
+            or example_case_brief_values(example_cases, "input_examples"),
         ),
         "expected_outputs": normalize_brief_section_value(
             "expected_outputs",
             brief_value_from_payload(payload, "expected_outputs")
             or topic_summary_by_name(requirement_topics, "expected_outputs")
-            or existing_brief.get("expected_outputs"),
+            or existing_brief.get("expected_outputs")
+            or example_case_brief_values(example_cases, "expected_outputs"),
         ),
         "business_rules": normalize_brief_section_value(
             "business_rules",
-            brief_value_from_payload(payload, "business_rules") or existing_brief.get("business_rules"),
+            brief_value_from_payload(payload, "business_rules")
+            or existing_brief.get("business_rules")
+            or example_case_brief_values(example_cases, "business_rules"),
         ),
         "exceptions": normalize_brief_section_value(
             "exceptions",
-            brief_value_from_payload(payload, "exceptions") or existing_brief.get("exceptions"),
+            brief_value_from_payload(payload, "exceptions")
+            or existing_brief.get("exceptions")
+            or example_case_brief_values(example_cases, "exceptions"),
         ),
         "constraints": constraints,
         "success_metrics": normalize_brief_section_value(
@@ -765,6 +1010,7 @@ def process_brief_stage(
     payload: dict[str, Any],
     requirement_topics: list[dict[str, Any]],
     clarification_items: list[dict[str, Any]],
+    example_cases: list[dict[str, Any]],
     topic_progress: dict[str, Any],
     discovery_session: dict[str, Any],
     conversation_turns: list[dict[str, Any]],
@@ -787,11 +1033,45 @@ def process_brief_stage(
         payload,
         requirement_topics,
         clarification_items,
+        example_cases,
         existing_brief,
         requester_identity,
         now,
     )
     changed_sections = brief_changed_sections(existing_brief, candidate_brief)
+    open_clarification = first_open_clarification(clarification_items)
+
+    if correction_text:
+        conversation_turns = append_turn_if_missing(
+            conversation_turns,
+            actor="user",
+            turn_type="revision_request",
+            raw_text=correction_text,
+            extracted_topics=["brief_confirmation"],
+            now=now,
+        )
+
+    if open_clarification and existing_brief:
+        next_question = normalize_text(open_clarification.get("question_text")) or discovery_topic_question(
+            canonical_discovery_topic_name(open_clarification.get("topic_name"))
+        )
+        current_brief = candidate_brief if changed_sections else dict(existing_brief)
+        current_brief["status"] = "awaiting_clarification"
+        current_brief["owner"] = normalize_text(current_brief.get("owner")) or candidate_brief["owner"]
+        open_questions = build_open_questions(clarification_items, next_question)
+        return {
+            "status": "awaiting_clarification",
+            "next_action": "resolve_clarification",
+            "next_topic": canonical_discovery_topic_name(open_clarification.get("topic_name")),
+            "next_question": next_question,
+            "requirement_brief": current_brief,
+            "brief_revisions": existing_revisions,
+            "confirmation_snapshot": {},
+            "conversation_turns": conversation_turns,
+            "brief_markdown": render_requirement_brief_markdown(payload, current_brief, discovery_session, open_questions),
+            "brief_template_path": str(BRIEF_TEMPLATE_PATH),
+            "open_questions": open_questions,
+        }
 
     if not existing_brief:
         candidate_brief["version"] = "1.0"
@@ -840,16 +1120,6 @@ def process_brief_stage(
             "brief_template_path": str(BRIEF_TEMPLATE_PATH),
             "open_questions": open_questions,
         }
-
-    if correction_text:
-        conversation_turns = append_turn_if_missing(
-            conversation_turns,
-            actor="user",
-            turn_type="revision_request",
-            raw_text=correction_text,
-            extracted_topics=["brief_confirmation"],
-            now=now,
-        )
 
     if changed_sections:
         candidate_brief["version"] = next_brief_version(normalize_text(existing_brief.get("version")))
@@ -970,7 +1240,19 @@ def main() -> int:
 
     conversation_turns = normalize_conversation_turns(payload)
     raw_idea = extract_raw_idea(payload, conversation_turns)
-    clarification_items = normalize_clarification_items(payload)
+    existing_brief = normalize_requirement_brief(payload)
+    example_cases = normalize_example_cases(payload, existing_brief)
+    clarification_items = reconcile_clarification_items(
+        normalize_clarification_items(payload),
+        generated_example_clarifications(
+            example_cases,
+            payload,
+            existing_brief,
+            normalize_clarification_items(payload),
+            now,
+        ),
+        now,
+    )
     requirement_topics = build_requirement_topics(payload, raw_idea, now)
     apply_clarifications_to_topics(requirement_topics, clarification_items)
     status, next_action, next_topic, next_question = determine_guidance(requirement_topics, clarification_items)
@@ -1004,6 +1286,7 @@ def main() -> int:
         payload,
         requirement_topics,
         clarification_items,
+        example_cases,
         topic_progress,
         discovery_session,
         conversation_turns,
@@ -1044,6 +1327,7 @@ def main() -> int:
         "topic_progress": topic_progress,
         "requirement_topics": requirement_topics,
         "clarification_items": clarification_items,
+        "example_cases": example_cases,
         "conversation_turns": conversation_turns,
         "open_questions": brief_state.get("open_questions") or build_open_questions(clarification_items, next_question),
         "normalized_answers": normalized_answers,

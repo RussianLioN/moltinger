@@ -86,6 +86,11 @@ GitOps Compliance: Enforced ✅
 - Added US2 validation coverage in `tests/component/test_agent_factory_brief.sh` and `tests/integration_local/test_agent_factory_confirmation.sh`, covering draft rendering, pre-confirmation version bumps, explicit confirmation snapshots, and the full local loop from ready discovery context to a confirmed brief.
 - Updated `docs/runbooks/agent-factory-discovery.md` so operator handoff now includes the review-state input shape, draft/revision/confirmation command examples, the new `awaiting_confirmation` and `confirmed` states, and the explicit boundary that canonical handoff still starts later in `US4`.
 - Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T011` through `T015` are now marked complete; the next implementation queue begins at User Story 3 (`molt-s5i.5.*`).
+- Completed User Story 3 for `022-telegram-ba-intake`: extended `scripts/agent-factory-discovery.py` so discovery now emits structured `example_cases`, derives them from business-facing `input_examples`/`expected_outputs` when explicit cases are absent, and keeps examples connected to linked rules and exception context.
+- Added safe-example and contradiction logic to `scripts/agent_factory_common.py`: prototype-unsafe details now produce `needs_redaction`, while rule/constraint collisions in expected outcomes produce structured contradiction messages instead of silently passing through to confirmation.
+- Discovery now reconciles generated `ClarificationItem` records for `unsafe_data_example` and `contradictory_examples`, resolves obsolete generated clarifications when the user fixes them, and blocks confirmation while such issues remain open even if a draft brief already exists.
+- Added US3 validation coverage in `tests/component/test_agent_factory_examples.sh`, covering structured example extraction, unsafe business data detection, and contradiction detection between business rules and example outcomes.
+- Updated `docs/runbooks/agent-factory-discovery.md` with the `example_cases` input/output contract and the new example/clarification policy, then reconciled `specs/022-telegram-ba-intake/tasks.md` so `T016` through `T019` are now marked complete; the next implementation queue begins at User Story 4 (`molt-s5i.6.*`).
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
@@ -110,6 +115,9 @@ GitOps Compliance: Enforced ✅
   - `bash -n tests/component/test_agent_factory_brief.sh tests/integration_local/test_agent_factory_confirmation.sh`
   - `./tests/run.sh --lane component --filter component_agent_factory_brief --json`
   - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_confirmation --json`
+  - `bash -n tests/component/test_agent_factory_examples.sh`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_(discovery|brief|examples)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_(discovery_flow|confirmation)' --json`
 
 ### Previous Session Update (2026-03-12)
 

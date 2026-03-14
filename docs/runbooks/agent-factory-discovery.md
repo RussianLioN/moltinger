@@ -39,6 +39,7 @@ The command currently returns:
 - optional `confirmation_snapshot`
 - optional `brief_markdown`
 - optional `brief_template_path`
+- optional `example_cases`
 
 ## Accepted Input Shapes
 
@@ -89,6 +90,21 @@ This lets the runtime keep the same conversation while the user:
 - reviews the current brief
 - asks for corrections in normal language
 - explicitly confirms one exact version
+
+### 4. Example-first discovery state
+
+The command also accepts explicit `example_cases` when the caller already has normalized cases.
+
+Each case should carry:
+
+- `case_type`
+- `input_summary`
+- `expected_output_summary`
+- optional `linked_rules`
+- optional `exception_notes`
+- optional `data_safety_status`
+
+If `example_cases` are not provided, the runtime derives them from `input_examples`, `expected_outputs`, `business_rules`, and `exceptions`.
 
 ## Commands
 
@@ -287,6 +303,15 @@ Expected result:
 - `confirmation_snapshot.status = active`
 - `next_action = start_concept_pack_handoff`
 - no handoff record is created yet; that starts in `US4`
+
+## Example And Clarification Policy
+
+- The runtime preserves grounded cases as `example_cases`, not only as free text in the brief.
+- Each case is classified with one `data_safety_status`.
+- `needs_redaction` means the example appears to contain real identifiers, account data, or other production-like details and must be replaced with a sanitized or synthetic version.
+- Contradictions between example outcomes and business rules or constraints create `ClarificationItem` records with reason `contradictory_examples`.
+- Unsafe examples create `ClarificationItem` records with reason `unsafe_data_example`.
+- While such clarifications remain open, the flow must stay blocked from confirmation even if a draft brief already exists.
 
 ## State Mapping
 

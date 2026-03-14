@@ -117,6 +117,39 @@ DISCOVERY_AMBIGUOUS_MARKERS = (
 
 DISCOVERY_RESOLVED_STATUSES = {"clarified", "confirmed"}
 DISCOVERY_PENDING_STATUSES = {"unasked", "partial", "unresolved"}
+DISCOVERY_UNSAFE_EXAMPLE_PATTERNS = (
+    re.compile(r"\b\d{10,}\b"),
+    re.compile(r"\b(?:iban|swift|bik|инн|кпп|огрн|снилс|паспорт)\b", re.I),
+    re.compile(r"\b(?:р/с|расчетный счет|расч[её]тный сч[её]т|номер карты|банковск(?:ие|ий) реквизит)\b", re.I),
+)
+DISCOVERY_SYNTHETIC_EXAMPLE_MARKERS = ("synthetic", "синтетич", "тестов")
+DISCOVERY_SANITIZED_EXAMPLE_MARKERS = ("sanitized", "обезлич", "без реальных", "маскиров")
+DISCOVERY_CONTRADICTION_RULESETS = [
+    {
+        "id": "approval_vs_escalation",
+        "context_keywords": ("эскал", "дополнительного согласования", "доп. согласования", "нужна проверка руководителя"),
+        "conflict_keywords": ("автоматически одобр", "сразу одобр", "без согласования", "мгновенно пропустить"),
+        "message": "Правила требуют эскалации или дополнительного согласования, а ожидаемый результат описан как автоматическое одобрение.",
+    },
+    {
+        "id": "blocked_vs_pass_through",
+        "context_keywords": ("не должна проходить дальше", "нельзя пропускать дальше", "блокиров", "обязательных документов"),
+        "conflict_keywords": ("пропустить дальше", "автоматически принять", "одобрить заявку", "разрешить оплату"),
+        "message": "Пример ожидаемого результата противоречит правилу блокировки или обязательной проверки документов.",
+    },
+    {
+        "id": "no_auto_reply_vs_auto_reply",
+        "context_keywords": ("без автоматической отправки ответа", "не отправлять ответ клиенту", "без автоответа"),
+        "conflict_keywords": ("автоматически отправить ответ", "автоответ клиенту", "сразу ответить клиенту"),
+        "message": "Ограничения запрещают автоответ, но пример ожидает автоматическую отправку ответа клиенту.",
+    },
+    {
+        "id": "text_only_vs_document_example",
+        "context_keywords": ("только текстовые обращения", "без вложений", "без документов"),
+        "conflict_keywords": ("pdf", "скан", "фото", "изображен", "вложен"),
+        "message": "Ограничения описывают текстовый-only сценарий, а пример требует обработку документов или вложений.",
+    },
+]
 
 
 def utc_now() -> str:
@@ -325,6 +358,18 @@ def discovery_topic_is_blocking(topic_name: str) -> bool:
     return False
 
 
+def discovery_text_blob(*values: Any) -> str:
+    parts: list[str] = []
+    for value in values:
+        if isinstance(value, list):
+            parts.extend(normalize_list(value))
+            continue
+        text = normalize_text(value)
+        if text:
+            parts.append(text)
+    return " ".join(parts)
+
+
 def discovery_summary(value: Any) -> str:
     if isinstance(value, list):
         return "; ".join(dedupe_preserve_order(normalize_list(value)))
@@ -336,6 +381,42 @@ def discovery_summary(value: Any) -> str:
         if parts:
             return "; ".join(dedupe_preserve_order(parts))
     return trim_words(text, 28)
+
+
+def discovery_example_data_safety_status(*values: Any) -> str:
+    text = discovery_text_blob(*values).lower()
+    if not text:
+        return "sanitized"
+    if any(marker in text for marker in DISCOVERY_SYNTHETIC_EXAMPLE_MARKERS):
+        return "synthetic"
+    if any(marker in text for marker in DISCOVERY_SANITIZED_EXAMPLE_MARKERS):
+        return "sanitized"
+    for pattern in DISCOVERY_UNSAFE_EXAMPLE_PATTERNS:
+        if pattern.search(text):
+            return "needs_redaction"
+    return "sanitized"
+
+
+def discovery_example_contradictions(
+    *,
+    input_summary: Any,
+    expected_output_summary: Any,
+    linked_rules: Any = None,
+    business_rules: Any = None,
+    constraints: Any = None,
+    exception_notes: Any = None,
+) -> list[str]:
+    context_text = discovery_text_blob(linked_rules, business_rules, constraints, exception_notes).lower()
+    output_text = discovery_text_blob(input_summary, expected_output_summary).lower()
+    contradictions: list[str] = []
+    if not context_text or not output_text:
+        return contradictions
+    for ruleset in DISCOVERY_CONTRADICTION_RULESETS:
+        if any(keyword in context_text for keyword in ruleset["context_keywords"]) and any(
+            keyword in output_text for keyword in ruleset["conflict_keywords"]
+        ):
+            contradictions.append(ruleset["message"])
+    return dedupe_preserve_order(contradictions)
 
 
 def discovery_value_present(value: Any) -> bool:
