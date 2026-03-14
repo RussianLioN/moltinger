@@ -1,25 +1,25 @@
 # RCA Index
 
 **Last Updated**: 2026-03-14
-**Version**: 1.7.0
+**Version**: 1.8.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 14 |
+| Total RCA | 15 |
 | Avg Resolution Time | N/A |
-| This Month | 14 |
+| This Month | 15 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 31% |
-| process | 7 | 50% |
-| cicd | 1 | 8% |
-| security | 1 | 8% |
-| shell | 1 | 8% |
+| generic | 4 | 27% |
+| process | 7 | 47% |
+| cicd | 2 | 13% |
+| security | 1 | 7% |
+| shell | 1 | 7% |
 
 ## By Severity
 
@@ -27,7 +27,7 @@
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
 | P1 | 2 | High - production impact |
-| P2 | 6 | Medium - process issue |
+| P2 | 7 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
 
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-015 | 2026-03-14 | cicd | P2 | resolved | Clawdiy deploy workflow enforced a dirty-worktree gate but lacked an auditable repair path for drift limited to the Clawdiy-managed surface | added `repair_server_checkout` to `deploy-clawdiy.yml` plus static guard and runbook update |
 | RCA-014 | 2026-03-14 | process | P2 | resolved | Clawdiy preflight treated deploy-target runtime-home materialization as a CI checkout prerequisite | made runtime-home preflight target-aware for CI vs deploy target |
 | RCA-013 | 2026-03-13 | process | P1 | mitigating | Clawdiy deploy contract mounted read-only `openclaw.json` instead of writable `~/.openclaw` required by the official OpenClaw wizard | switched to writable runtime-home mount + ownership normalization + preflight/backup/smoke guards |
 | RCA-012 | 2026-03-12 | process | P2 | resolved | Clawdiy browser bootstrap was documented as Settings/OAuth flow instead of verified dashboard token/pairing bootstrap | added browser-bootstrap runbook + rule + doc corrections |

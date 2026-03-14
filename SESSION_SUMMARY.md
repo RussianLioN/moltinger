@@ -54,6 +54,11 @@
 - Исправление: `preflight` теперь различает CI checkout и реальный deploy-target для `runtime home`.
 - Новый RCA: `docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md`
 - Новое правило: `docs/rules/clawdiy-preflight-must-distinguish-ci-checkout-from-deploy-target.md`
+- После merge PR `#57` (`b8b5978`) production deploy run `23084123004` стал green, а live Clawdiy теперь реально отвечает через Codex OAuth / `gpt-5.4`.
+- Для подготовки official Docker upgrade ветка `023-clawdiy-ci-preflight-runtime-home-fix` получила follow-up PR `#58`, который закрепил Clawdiy на точном official tag `ghcr.io/openclaw/openclaw:2026.3.13` вместо плавающего `latest`; merge commit `75ede505e84eed336c83461a6c60206b774b3b2a`.
+- Попытка live-update через `Deploy Clawdiy` run `23090331854` показала новый blocker: dirty server checkout в `/opt/moltinger` был ограничен `scripts/preflight-check.sh`, но сам Clawdiy workflow не имел auditable `repair_server_checkout` path, который уже был у `Deploy Moltis`.
+- Под это оформлен RCA-015: `docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md` и правило `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`.
+- Follow-up fix добавляет в `deploy-clawdiy.yml` input `repair_server_checkout`, использует `scripts/gitops-repair-managed-checkout.sh` только для Clawdiy-managed surface и дополняет статические проверки и runbook.
 
 ### Production Status
 

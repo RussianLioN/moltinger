@@ -35,6 +35,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 3. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
    For the GitHub Actions path, the remote SSH deploy command must propagate `GITHUB_ACTIONS=true` and `GITHUB_RUN_ID` so `scripts/deploy.sh` is treated as CI, not as an ad-hoc manual SSH rollout.
    The workflow also migrates legacy root-level Clawdiy marker files into ignored `data/clawdiy/` state before enforcing the clean-worktree GitOps gate.
+   If `/opt/moltinger` is dirty only inside the Clawdiy-managed surface (`docker-compose.clawdiy.yml`, `config/clawdiy`, `config/fleet`, `config/backup`, `scripts`), re-run `deploy-clawdiy.yml` via `workflow_dispatch` with `repair_server_checkout=true` instead of repairing the checkout manually over SSH.
 4. Deploy Clawdiy:
    ```bash
    ./scripts/deploy.sh clawdiy deploy

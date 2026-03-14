@@ -241,6 +241,15 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must migrate legacy repo-root marker files before enforcing the clean-worktree GitOps gate"
     fi
 
+    test_start "static_clawdiy_workflow_supports_gitops_checkout_repair_for_clawdiy_surface"
+    if rg -q 'repair_server_checkout:' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'gitops-repair-managed-checkout\.sh' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'Dirty path is outside Clawdiy-managed surface' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must offer an auditable checkout repair path limited to the Clawdiy-managed surface"
+    fi
+
     test_start "static_clawdiy_workflow_syncs_backup_config_dependencies"
     if rg -q '\$\{\{ env\.DEPLOY_PATH \}\}/config/backup' "$CLAWDIY_WORKFLOW" && \
        rg -q 'scp -r config/backup/\*' "$CLAWDIY_WORKFLOW"; then
