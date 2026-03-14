@@ -10,7 +10,7 @@
 **Проект**: Moltinger - AI Agent Factory на базе Moltis (OpenClaw)
 **Миссия**: Создание AI агентов по методологии ASC AI Fabrique с самообучением
 **Репозиторий**: https://github.com/RussianLioN/moltinger
-**Ветка**: `main`
+**Ветка**: `024-clawdiy-oauth-store-drift-fix`
 **Issue Tracker**: Beads (prefix: `molt`)
 
 ### Технологический стек
@@ -73,6 +73,21 @@
   - `docker-compose.clawdiy.yml` получил расширенный startup grace для OpenClaw warmup;
   - `scripts/deploy.sh` больше не считает первый transient `unhealthy` терминальным, если контейнер жив и `/health` уже поднимается;
   - runbook и статические проверки обновлены под новый upgrade protocol.
+
+### Current Session Update (2026-03-15)
+
+- Закрыт `molt-1mn`: live `Clawdiy` уже успешно обновлен, а текущий runtime на `ainetic.tech` подтвержден как `OpenClaw 2026.3.13` при healthy container и рабочем `gpt-5.4`.
+- В работу взят `molt-uc1` на новой ветке `024-clawdiy-oauth-store-drift-fix`.
+- Источник historical drift `config/oauth_tokens.json` установлен сильным evidence-набором:
+  - в git истории репо такого tracked файла нет;
+  - на сервере актуальные OAuth token stores живут только под ignored `data/oauth-config/` и `data/oauth-runtime-test-config-v1/`;
+  - лог `oauth-runtime-test-data-v1` показывает, что это был отдельный временный Moltis runtime test (`moltis gateway v0.10.18`) с собственными config/data путями, а не live Clawdiy.
+- Новый RCA-019: `docs/rca/2026-03-15-stray-oauth-token-store-blocked-clawdiy-gitops-repair.md`.
+- Новый rule: `docs/rules/runtime-oauth-token-stores-must-stay-out-of-git-checkout.md`.
+- `scripts/gitops-repair-managed-checkout.sh` теперь перед `git clean` эвакуирует stray `config/oauth_tokens.json` в `data/oauth-config/oauth_tokens.json` либо в timestamped recovered-copy.
+- `deploy-clawdiy.yml` теперь считает `config/oauth_tokens.json` известным repairable runtime-артефактом и не блокирует repair path только из-за него.
+- Статические проверки и runbook обновлены под новый контракт.
+- Отдельным follow-up заведен `molt-6i9`: расследовать, почему `scripts/git-topology-registry.sh refresh --write-doc` в этой сессии ушел в spawn-storm и не завершался предсказуемо.
 
 ### Production Status
 

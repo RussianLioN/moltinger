@@ -1,23 +1,23 @@
 # RCA Index
 
-**Last Updated**: 2026-03-14
-**Version**: 1.10.0
+**Last Updated**: 2026-03-15
+**Version**: 1.11.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 18 |
+| Total RCA | 19 |
 | Avg Resolution Time | N/A |
-| This Month | 18 |
+| This Month | 19 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 22% |
-| process | 8 | 44% |
-| cicd | 4 | 22% |
+| generic | 4 | 21% |
+| process | 8 | 42% |
+| cicd | 5 | 26% |
 | security | 1 | 6% |
 | shell | 1 | 6% |
 
@@ -27,7 +27,7 @@
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
 | P1 | 5 | High - production impact |
-| P2 | 7 | Medium - process issue |
+| P2 | 8 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
 
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-019 | 2026-03-15 | cicd | P2 | resolved | Temporary Moltis OAuth runtime wrote `oauth_tokens.json` inside tracked `/opt/moltinger/config`, and Clawdiy checkout repair did not classify that file as a known runtime artifact | evacuate stray `config/oauth_tokens.json` into `data/oauth-config/` during repair + teach Clawdiy deploy to treat it as a repairable runtime exception |
 | RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
 | RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
 | RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |

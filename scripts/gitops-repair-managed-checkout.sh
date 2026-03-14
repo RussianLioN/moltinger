@@ -135,6 +135,9 @@ SNAPSHOT_PREFIX="run_${RUN_ID}_${SNAPSHOT_STAMP}"
 META_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.meta.txt"
 DIFF_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.diff.patch"
 ARCHIVE_FILE="$SNAPSHOT_DIR/${SNAPSHOT_PREFIX}.tar.gz"
+STRAY_OAUTH_SOURCE="config/oauth_tokens.json"
+STRAY_OAUTH_DIR="data/oauth-config"
+STRAY_OAUTH_DEST="$STRAY_OAUTH_DIR/oauth_tokens.json"
 
 mkdir -p "$SNAPSHOT_DIR"
 
@@ -152,6 +155,48 @@ mkdir -p "$SNAPSHOT_DIR"
 
 git diff --binary -- docker-compose.yml docker-compose.prod.yml config scripts systemd > "$DIFF_FILE" || true
 tar --ignore-failed-read -czf "$ARCHIVE_FILE" docker-compose.yml docker-compose.prod.yml config scripts systemd
+
+evacuate_stray_oauth_store() {
+    local source_owner conflict_path
+
+    if [ ! -f "$STRAY_OAUTH_SOURCE" ]; then
+        return 0
+    fi
+
+    source_owner="$(stat -c '%u:%g' "$STRAY_OAUTH_SOURCE")"
+    if [ ! -d "$STRAY_OAUTH_DIR" ]; then
+        mkdir -p "$STRAY_OAUTH_DIR"
+        chown "$source_owner" "$STRAY_OAUTH_DIR"
+        chmod 700 "$STRAY_OAUTH_DIR"
+    fi
+
+    if [ -f "$STRAY_OAUTH_DEST" ]; then
+        if cmp -s "$STRAY_OAUTH_SOURCE" "$STRAY_OAUTH_DEST"; then
+            rm -f "$STRAY_OAUTH_SOURCE"
+            printf 'note: removed duplicate stray OAuth token store %s because %s already exists\n' \
+                "$STRAY_OAUTH_SOURCE" \
+                "$STRAY_OAUTH_DEST" >&2
+            return 0
+        fi
+
+        conflict_path="$STRAY_OAUTH_DIR/oauth_tokens.recovered.${SNAPSHOT_STAMP}.json"
+        mv "$STRAY_OAUTH_SOURCE" "$conflict_path"
+        chmod 600 "$conflict_path"
+        printf 'note: moved stray OAuth token store %s to %s because %s already existed with different contents\n' \
+            "$STRAY_OAUTH_SOURCE" \
+            "$conflict_path" \
+            "$STRAY_OAUTH_DEST" >&2
+        return 0
+    fi
+
+    mv "$STRAY_OAUTH_SOURCE" "$STRAY_OAUTH_DEST"
+    chmod 600 "$STRAY_OAUTH_DEST"
+    printf 'note: moved stray OAuth token store %s to %s before checkout repair\n' \
+        "$STRAY_OAUTH_SOURCE" \
+        "$STRAY_OAUTH_DEST" >&2
+}
+
+evacuate_stray_oauth_store
 
 git fetch --depth=1 origin "$TARGET_REF" >&2
 git checkout --force "$TARGET_REF" >&2
