@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Define the minimum contract for turning a raw Telegram conversation into a structured, reviewable discovery session for a future AI-agent project.
+Define the minimum contract for turning a raw factory-interface conversation into a structured, reviewable discovery session for a future AI-agent project.
 
 ## Actors
 
 - `business_user`: non-technical инициатор автоматизации
-- `discovery_agent`: Moltinger acting as AI business analyst
+- `discovery_agent`: factory digital employee on Moltis acting as AI business analyst
 - `factory_coordinator`: downstream factory logic that waits for confirmed input
 
 ## Required Inputs

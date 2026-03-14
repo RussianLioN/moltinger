@@ -1,11 +1,11 @@
-# Tasks: Telegram Business Analyst Intake
+# Tasks: Factory Business Analyst Intake
 
 **Input**: Design documents from `/specs/022-telegram-ba-intake/`  
 **Prerequisites**: `plan.md` (required), `spec.md` (required for user stories), `research.md`, `data-model.md`, `contracts/`
 
 **Tests**: Validation tasks are included because this slice introduces conversational discovery, confirmation gating, example-driven clarification, handoff into the existing concept-pack pipeline, and interrupted-session recovery.
 
-**Organization**: Tasks are grouped by user story so the discovery layer can be delivered as independent slices without mixing it into the already completed `020-agent-factory-prototype` scope.
+**Organization**: Tasks are grouped by user story so the discovery layer can be delivered as independent slices without mixing it into the already completed `020-agent-factory-prototype` scope. `022-telegram-ba-intake` remains the legacy feature id; the actual scope is the factory business-analyst agent on `Moltis` with pluggable interface adapters.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -41,7 +41,7 @@
 
 ## Phase 2: User Story 1 - Guided Discovery Interview (Priority: P1) 🎯 MVP
 
-**Goal**: Let a non-technical business user start a Telegram conversation and be guided through the collection of structured business requirements.
+**Goal**: Let a non-technical business user start a factory conversation through a supported interface and be guided through the collection of structured business requirements.
 
 **Independent Test**: A user starts with a raw automation idea, answers adaptive questions in free-form business language, and the system tracks discovery progress without requiring an external template.
 
@@ -57,7 +57,7 @@
 - [x] T009 [US1] Wire discovery entrypoint and runtime anchors in `config/moltis.toml`
 - [x] T010 [US1] Document discovery-session behavior in `docs/runbooks/agent-factory-discovery.md`
 
-**Checkpoint**: The factory can guide a business user through a structured interview in Telegram.
+**Checkpoint**: The factory can guide a business user through a structured interview through the current interface adapter.
 
 ---
 

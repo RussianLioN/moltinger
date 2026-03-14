@@ -1,4 +1,4 @@
-# Quickstart: Telegram Business Analyst Intake
+# Quickstart: Factory Business Analyst Intake
 
 ## Purpose
 
@@ -7,7 +7,7 @@ This quickstart is for validation and continued implementation handoff of the co
 It confirms five things:
 
 1. the new feature is clearly separated from the already completed `020` downstream factory slice
-2. discovery starts with a Telegram business interview, not a pre-filled JSON brief
+2. discovery starts with a factory business interview, not a pre-filled JSON brief
 3. the user confirms a requirements brief before downstream artifact generation
 4. examples, contradictions, and resume behavior are treated as first-class concerns
 5. handoff into the existing concept-pack pipeline remains explicit and traceable
@@ -19,7 +19,7 @@ Run:
 ```bash
 git status --short specs/022-telegram-ba-intake docs/GIT-TOPOLOGY-REGISTRY.md
 .specify/scripts/bash/check-prerequisites.sh --json
-rg -n "022-telegram-ba-intake|Telegram Business Analyst Intake" \
+rg -n "022-telegram-ba-intake|Factory Business Analyst Intake" \
   specs/022-telegram-ba-intake/spec.md \
   specs/022-telegram-ba-intake/plan.md \
   specs/022-telegram-ba-intake/research.md \
@@ -43,8 +43,8 @@ Use:
 
 Expected feature flow:
 
-1. User starts a new AI-agent project in Telegram.
-2. Moltinger explains that it acts as a business-analyst guide.
+1. User starts a new AI-agent project through a supported factory interface.
+2. Moltinger explains that it acts as a factory business-analyst guide.
 3. The agent asks adaptive follow-up questions until critical topics are sufficiently covered.
 4. The session keeps track of unresolved topics instead of pretending the brief is complete.
 
@@ -152,3 +152,11 @@ This feature is ready for continued implementation only when:
 2. runtime work updates both this package and the downstream `020` package when the handoff contract changes
 3. topology documentation is refreshed after branch or worktree mutations
 4. the eventual implementation adds matching fixtures and tests for interview, confirmation, handoff, and resume behavior
+
+## 8. Clarification Guard
+
+For this package, interpret the legacy id `022-telegram-ba-intake` as:
+
+- factory business-analyst intake on `Moltis`
+- `Telegram` as the current reference/default interface
+- future `Moltinger UI`, `Moltis UI`, or other factory UI adapters as equivalent interaction surfaces for the same discovery logic

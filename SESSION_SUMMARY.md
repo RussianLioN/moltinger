@@ -53,7 +53,8 @@ GitOps Compliance: Enforced ✅
 ### Current Session Update (2026-03-14)
 
 - Branch in progress: `022-telegram-ba-intake`
-- Confirmed the next factory priority after completed MVP0 is a new upstream discovery-first slice: the first user-facing agent must behave as a Telegram business analyst that elicits and confirms requirements before the existing concept-pack flow starts.
+- Clarification pass applied: `022-telegram-ba-intake` remains the legacy feature id, but the actual scope is the factory business-analyst agent on `Moltis`; `Telegram` is only the current reference/default interface adapter.
+- Confirmed the next factory priority after completed MVP0 is a new upstream discovery-first slice: the first user-facing agent must behave as a factory business analyst that elicits and confirms requirements before the existing concept-pack flow starts.
 - Created the new Speckit package `specs/022-telegram-ba-intake/` with:
   - `spec.md`
   - `checklists/requirements.md`
@@ -63,10 +64,10 @@ GitOps Compliance: Enforced ✅
   - `quickstart.md`
   - `contracts/`
   - `tasks.md`
-- Scoped the new feature around Telegram multi-turn discovery, business-readable requirements brief generation, explicit brief confirmation, example-driven clarification, downstream handoff into `020-agent-factory-prototype`, and interrupted-session recovery.
+- Scoped the new feature around multi-turn factory discovery, business-readable requirements brief generation, explicit brief confirmation, example-driven clarification, downstream handoff into `020-agent-factory-prototype`, and interrupted-session recovery.
 - Explicitly separated the new discovery gate from the already existing downstream defense gate: confirmation of the requirements brief now sits before concept-pack generation, not inside the later approval/rework workflow.
 - Refreshed `docs/GIT-TOPOLOGY-REGISTRY.md` after switching from the completed `020-agent-factory-prototype` branch to the new `022-telegram-ba-intake` feature branch.
-- Created Beads epic `molt-s5i` (`Feature: Telegram business analyst intake`) linked to spec id `022-telegram-ba-intake`.
+- Created Beads epic `molt-s5i` linked to spec id `022-telegram-ba-intake`; its meaning is now factory business-analyst intake rather than a Telegram-specific agent.
 - Imported `specs/022-telegram-ba-intake/tasks.md` into Beads under `molt-s5i` as 8 phase parents and 29 child tasks with user-story labels (`us1`-`us5`) and sequential plus phase-gating dependencies.
 - Closed the already completed planning tasks `P001`-`P004` and phase parent `molt-s5i.1` during import so the new Beads graph matches the real Speckit state instead of showing planning as still pending.
 - Added phase-parent gating dependencies so `bd ready` now exposes the correct execution order: Phase 1 Foundational (`T001`-`T004`) is the current entry point, while later user stories remain blocked until earlier phase parents are closed.
@@ -75,7 +76,7 @@ GitOps Compliance: Enforced ✅
 - Added reusable discovery fixtures under `tests/fixtures/agent-factory/discovery/` for four baseline states: `session-new`, `session-awaiting-clarification`, `brief-awaiting-confirmation`, and `brief-confirmed-handoff`, plus updated the parent fixtures README to advertise the new discovery sub-tree.
 - Wired future discovery validation suites into `tests/run.sh` with optional registrations for `component_agent_factory_discovery`, `component_agent_factory_brief`, `component_agent_factory_examples`, `component_agent_factory_handoff`, `integration_local_agent_factory_discovery_flow`, `integration_local_agent_factory_confirmation`, `integration_local_agent_factory_handoff`, and `integration_local_agent_factory_resume`.
 - Reconciled `specs/022-telegram-ba-intake/tasks.md` so `T001` through `T004` are now marked complete; once the corresponding Beads tasks are closed, the next ready queue begins at User Story 1 (`molt-s5i.3.*`).
-- Completed User Story 1 for `022-telegram-ba-intake`: added `scripts/agent-factory-discovery.py` as the new discovery-session orchestrator that opens a Telegram-first requirements interview from a raw idea or existing session snapshot, emits structured topic progress, preserves pending agent questions, and resolves the next action as `ask_next_question`, `resolve_clarification`, or `prepare_brief`.
+- Completed User Story 1 for `022-telegram-ba-intake`: added `scripts/agent-factory-discovery.py` as the new discovery-session orchestrator that opens a factory requirements interview from a raw idea or existing session snapshot, emits structured topic progress, preserves pending agent questions, and resolves the next action as `ask_next_question`, `resolve_clarification`, or `prepare_brief`.
 - Extended `scripts/agent_factory_common.py` with reusable discovery topic catalog, alias normalization, status inference, progress summarization, next-topic selection, and helper builders so later slices can reuse one discovery state contract instead of re-encoding topic logic per phase.
 - Added US1 validation coverage in `tests/component/test_agent_factory_discovery.sh` and `tests/integration_local/test_agent_factory_discovery_flow.sh`, covering fresh-session progress, clarification prioritization, raw-idea onboarding without a template, advancement after free-form business answers, and blocking behavior when clarification items remain open.
 - Updated `config/moltis.toml`, `tests/fixtures/config/moltis.toml`, and `scripts/manifest.json` with the concrete discovery entrypoint (`run`), ordered topic contract, next-action contract, and new script inventory entry.
@@ -152,7 +153,7 @@ GitOps Compliance: Enforced ✅
 - Verified the imported Beads graph with `bd dep cycles` (no cycles) and `bd sync`; the next implementation queue starts from Phase 2 Foundational (`T004`-`T008`).
 - Completed Phase 2 Foundational for `020-agent-factory-prototype`: updated `config/moltis.toml` identity and factory context anchors, added source-first templates under `docs/templates/agent-factory/`, extended fleet future-role defaults for `tester`, `validator`, `auditor`, and `assembler`, created reusable fixtures in `tests/fixtures/agent-factory/`, and wired future agent-factory suites into `tests/run.sh`.
 - Closed Beads tasks `molt-qgg.3.1` through `molt-qgg.3.5` plus the phase parent `molt-qgg.3`; the next ready queue now starts at User Story 1 (`molt-qgg.4.*`).
-- Completed User Story 1 for `020-agent-factory-prototype`: added `scripts/agent-factory-intake.py` to normalize Telegram-style idea intake into a canonical concept record, `scripts/agent-factory-artifacts.py` plus `scripts/agent_factory_common.py` to generate and validate synchronized `project-doc.md`, `agent-spec.md`, and `presentation.md`, and `docs/runbooks/agent-factory-prototype.md` to document the current MVP0 intake-to-concept-pack flow.
+- Completed User Story 1 for `020-agent-factory-prototype`: added `scripts/agent-factory-intake.py` to normalize interface-level idea intake into a canonical concept record, `scripts/agent-factory-artifacts.py` plus `scripts/agent_factory_common.py` to generate and validate synchronized `project-doc.md`, `agent-spec.md`, and `presentation.md`, and `docs/runbooks/agent-factory-prototype.md` to document the current MVP0 intake-to-concept-pack flow.
 - Extended `config/moltis.toml` and `tests/fixtures/config/moltis.toml` with factory intake/artifact env anchors so Moltinger can reference the US1 pipeline through repo-local scripts and download semantics.
 - Added US1 validation coverage in `tests/component/test_agent_factory_artifacts.sh` and `tests/integration_local/test_agent_factory_intake.sh`, covering fresh-pack alignment, drift detection, ready-for-pack intake, concept-pack generation, and clarifying-state fallback when critical fields are missing.
 - Reconciled `specs/020-agent-factory-prototype/tasks.md` so `T009` through `T014` are now marked complete; the next implementation queue starts at User Story 2 (`molt-qgg.5.*`).

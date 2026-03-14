@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Telegram Business Analyst Intake
+# Specification Quality Checklist: Factory Business Analyst Intake
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-03-13  
@@ -31,5 +31,6 @@
 
 ## Notes
 
+- Legacy feature id `022-telegram-ba-intake` is retained for workflow continuity; the actual scope is the factory business-analyst agent on `Moltis` with pluggable interfaces.
 - The feature intentionally stops at a confirmed requirements brief and handoff into the existing concept-pack pipeline.
 - Defense, swarm, playground, and deployment remain downstream concerns and are not duplicated in this specification.

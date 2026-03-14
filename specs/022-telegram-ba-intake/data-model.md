@@ -1,10 +1,10 @@
-# Data Model: Telegram Business Analyst Intake
+# Data Model: Factory Business Analyst Intake
 
 ## Overview
 
 This feature adds a discovery-first layer ahead of the existing factory pipeline:
 
-`telegram dialogue -> discovery session -> draft brief -> confirmed brief -> factory handoff -> concept pack`
+`factory interface dialogue -> discovery session -> draft brief -> confirmed brief -> factory handoff -> concept pack`
 
 The model deliberately separates business-facing discovery from downstream concept approval, swarm execution, and playground packaging.
 
@@ -12,7 +12,7 @@ The model deliberately separates business-facing discovery from downstream conce
 
 ### 1. DiscoverySession
 
-Represents one active or historical Telegram-based requirements interview for a future AI-agent project.
+Represents one active or historical factory-owned requirements interview for a future AI-agent project.
 
 **Fields**
 
@@ -265,6 +265,11 @@ Canonical upstream record passed from confirmed discovery into the existing conc
 - One confirmed `RequirementBrief` may have one active `ConfirmationSnapshot`.
 - One active `ConfirmationSnapshot` may unlock one `FactoryHandoffRecord`.
 - One `FactoryHandoffRecord` becomes the upstream source for downstream concept-pack generation in the existing factory flow.
+
+## Clarification Notes
+
+- `request_channel` identifies the active interface adapter, not the identity of the agent itself.
+- The agent remains one factory-owned business-analyst role on `Moltis`, regardless of whether the user currently interacts through `Telegram`, `Moltinger UI`, `Moltis UI`, or a future factory UI.
 
 ## State Transitions
 

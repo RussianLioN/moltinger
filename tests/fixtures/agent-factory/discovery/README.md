@@ -1,6 +1,6 @@
 # Discovery Fixtures
 
-Эти fixtures поддерживают `022-telegram-ba-intake` и следующие срезы:
+Эти fixtures поддерживают `022-telegram-ba-intake` как legacy feature id и фактический scope factory business-analyst intake:
 
 - guided discovery interview
 - draft/confirmed requirements brief

@@ -1,26 +1,26 @@
-# Research: Telegram Business Analyst Intake
+# Research: Factory Business Analyst Intake
 
 **Feature**: `022-telegram-ba-intake`  
 **Date**: 2026-03-13  
 **Status**: Complete  
-**Purpose**: Capture the product and technical decisions needed to add a conversational Telegram business-analyst layer ahead of the existing `020-agent-factory-prototype` concept-pack flow.
+**Purpose**: Capture the product and technical decisions needed to add a conversational factory business-analyst layer ahead of the existing `020-agent-factory-prototype` concept-pack flow.
 
 ## 1. Executive Summary
 
-The repository already contains the downstream factory prototype, Telegram channel ownership, and artifact-generation logic, but it still lacks the upstream conversational discovery layer that the user actually expects.
+The repository already contains the downstream factory prototype, current interface ownership, and artifact-generation logic, but it still lacks the upstream conversational discovery layer that the user actually expects.
 
 This research resolves six planning decisions:
 
-1. The new slice must start from a real Telegram discovery session, not from a pre-filled JSON request.
+1. The new slice must start from a real factory discovery session, not from a pre-filled JSON request.
 2. The output of discovery must be a confirmed requirements brief, not immediate concept artifacts.
 3. The confirmed brief becomes the new single source of truth between user dialogue and concept-pack generation.
-4. The feature should reuse existing Moltis Telegram ownership and current agent-factory scripts instead of introducing a second bot stack.
+4. The feature should reuse existing Moltis/Moltinger interface ownership and current agent-factory scripts instead of introducing a second bot stack.
 5. The slice should be text-first, Russian-first, and safe-data-first.
 6. Resume, reopen, and versioning are mandatory because business discovery is iterative by nature.
 
 ## 2. Current Gap To Close
 
-The current `020-agent-factory-prototype` slice already states that intake should happen through a multi-turn Telegram dialogue, but the implemented runtime only normalizes a supplied payload and returns `follow_up_questions` if critical fields are missing.
+The current `020-agent-factory-prototype` slice already states that intake should happen through a multi-turn dialogue, but the implemented runtime only normalizes a supplied payload and returns `follow_up_questions` if critical fields are missing.
 
 Planning impact:
 
@@ -32,11 +32,11 @@ Planning impact:
 
 ### What already exists and can be reused
 
-#### Telegram runtime ownership
+#### Existing interface/runtime ownership
 
-- `config/moltis.toml` already contains the active Telegram channel configuration for Moltinger.
-- `scripts/telegram-bot-send.sh`, `scripts/telegram-user-send.py`, `scripts/telegram-user-probe.py`, and `scripts/telegram-real-user-e2e.py` already prove there is an established transport and UAT surface.
-- Existing Telegram monitoring scripts and tests mean this feature does not need to invent a new delivery/auth path.
+- `config/moltis.toml` already contains the active factory identity and current interface configuration for Moltinger/Moltis.
+- `scripts/telegram-bot-send.sh`, `scripts/telegram-user-send.py`, `scripts/telegram-user-probe.py`, and `scripts/telegram-real-user-e2e.py` already prove there is an established transport and UAT surface for the current reference adapter.
+- Existing interface monitoring scripts and tests mean this feature does not need to invent a new delivery/auth path before discovery logic exists.
 
 #### Existing downstream factory flow
 
@@ -63,7 +63,7 @@ The missing piece is the upstream guided discovery layer that produces a trustwo
 The repository does **not** yet contain:
 
 - a persistent discovery-session state model
-- a topic-by-topic business interview flow for Telegram
+- a topic-by-topic business interview flow for the factory agent
 - a confirmed requirements brief separate from later concept artifacts
 - a handoff contract from discovery into the existing concept-pack generator
 - recovery semantics for interrupted discovery or reopened confirmed briefs
@@ -83,7 +83,7 @@ The repository does **not** yet contain:
 **Alternatives considered**:
 
 - Extend the current intake JSON fixture only: rejected because it still depends on off-platform preparation.
-- Ask the user to fill a form first: rejected because it does not match the intended Telegram dialogue model.
+- Ask the user to fill a form first: rejected because it does not match the intended conversational discovery model.
 
 ### 4.2 Confirmed Brief As New Canonical Boundary
 
@@ -95,20 +95,20 @@ The repository does **not** yet contain:
 - A confirmed brief gives the user one understandable review surface before concept artifacts are generated.
 - Downstream concept pack, defense, and swarm stages can then remain unchanged in principle.
 
-### 4.3 Reuse Existing Telegram Ownership
+### 4.3 Reuse Existing Interface Ownership
 
-**Decision**: Reuse the existing Moltis Telegram channel instead of adopting a second bot framework or separate service.
+**Decision**: Reuse the existing Moltis/Moltinger interface ownership model instead of adopting a second bot framework or separate service tied to one channel.
 
 **Rationale**:
 
-- Telegram ownership, auth, and observability already exist in the current repo.
+- Interface ownership, auth, and observability already exist in the current repo.
 - A separate bot runtime would fragment transport semantics and operator tooling.
-- The value here is the discovery logic, not transport reinvention.
+- The value here is the factory business-analyst logic, not transport reinvention.
 
 **Alternatives considered**:
 
-- Separate Python Telegram service: rejected because it duplicates auth, monitoring, and deployment ownership.
-- Web UI first: rejected because it delays the requested Telegram-first experience.
+- Separate Python Telegram service: rejected because it duplicates auth, monitoring, and deployment ownership around one adapter instead of the factory agent.
+- Web UI first: rejected because it delays the factory-agent logic behind one future adapter.
 
 ### 4.4 Text-First, Safe-Data Discovery MVP
 
@@ -159,7 +159,7 @@ No blocking clarification is required before `plan.md` and `tasks.md`.
 
 The feature can proceed with these working assumptions:
 
-- the first user-facing value is a guided business interview in Telegram
+- the first user-facing value is a guided business interview with a factory agent over a supported interface
 - the canonical output of that interview is a confirmed requirements brief
 - the confirmed brief feeds the already existing concept-pack pipeline
 - the feature should extend the current repo’s script/config/test layout rather than create a parallel application

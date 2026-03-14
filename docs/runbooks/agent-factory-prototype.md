@@ -6,7 +6,7 @@ This runbook describes the MVP0 intake-to-playground path for `020-agent-factory
 
 Current scope:
 
-1. normalize one Telegram-style intake request
+1. normalize one interface-level intake request coming from the factory agent
 2. create one canonical concept record
 3. generate a synchronized concept pack
 4. record one defense outcome with structured feedback
@@ -89,7 +89,7 @@ Expected output tree:
 Notes:
 
 - `working/` is the editable source-first set
-- `downloads/` is the user-facing set to send through Telegram
+- `downloads/` is the user-facing set to publish through the active factory interface
 - `concept-pack.json` is the canonical manifest for alignment and delivery
 
 ### 3. Verify artifact alignment
@@ -294,7 +294,7 @@ Operational rule:
 
 - never require the user to browse server paths manually
 - always treat `concept-pack.json` as the source of truth for which files are publishable
-- use the `download_ref` values from the manifest when wiring Telegram `sendDocument` later
+- use the `download_ref` values from the manifest when wiring the active interface adapter later
 
 ## Current Artifact Contract
 
@@ -346,7 +346,7 @@ Typical local validation:
 
 - The concept pack is Markdown-first in this MVP0 slice.
 - Downloadable outputs currently use Markdown copies; export to additional formats is a later enhancement.
-- Telegram publishing is represented by manifest-ready download refs, not by live bot file sending in this slice.
+- Interface-level publishing is represented by manifest-ready download refs, not by live file sending in this slice.
 - The prototype swarm is contract-driven and evidence-first; it does not yet spawn live long-running worker runtimes.
 - `--fail-stage` exists only for local validation and operator drills; it is not a production retry policy.
 - The prototype ends at a runnable playground bundle plus evidence. Production deployment remains MVP1.

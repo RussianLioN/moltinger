@@ -4,9 +4,15 @@
 
 This runbook describes the current `US1` through `US4` runtime slice for `022-telegram-ba-intake`.
 
+Clarification:
+
+- `022-telegram-ba-intake` is the legacy feature id.
+- The runtime slice belongs to the factory business-analyst agent on `Moltis`.
+- `Telegram` is only the current reference/default interface adapter.
+
 Current scope:
 
-1. start discovery from a raw Telegram idea
+1. start discovery from a raw idea coming from a supported factory interface
 2. normalize free-form business answers into tracked requirement topics
 3. keep topic-level progress across the required discovery areas
 4. surface one next useful question or one open clarification

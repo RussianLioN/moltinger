@@ -1,22 +1,22 @@
-# Implementation Plan: Telegram Business Analyst Intake
+# Implementation Plan: Factory Business Analyst Intake
 
 **Branch**: `022-telegram-ba-intake` | **Date**: 2026-03-13 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/022-telegram-ba-intake/spec.md`
 
 ## Summary
 
-Add a new discovery-first slice to the factory so Moltinger behaves as a Telegram business analyst before the existing concept-pack flow starts. The implementation should guide a non-technical business user through a multi-turn interview, collect and structure requirements, generate a reviewable requirements brief, require explicit confirmation, and then hand off one canonical confirmed brief into the already existing `020-agent-factory-prototype` concept-pack pipeline.
+Add a new discovery-first slice to the factory so Moltinger behaves as a factory business-analyst agent before the existing concept-pack flow starts. The implementation should guide a non-technical business user through a multi-turn interview over a supported factory interface, collect and structure requirements, generate a reviewable requirements brief, require explicit confirmation, and then hand off one canonical confirmed brief into the already existing `020-agent-factory-prototype` concept-pack pipeline.
 
 ## Technical Context
 
 **Language/Version**: Bash 5.x, Python 3.11+, JSON/TOML/Markdown artifacts  
-**Primary Dependencies**: Moltis/Moltinger Telegram channel, existing `agent_factory_common.py` helpers, current `agent-factory-intake.py` and `agent-factory-artifacts.py` downstream flow, repo-local runbooks/specs/tests  
+**Primary Dependencies**: Moltis runtime, Moltinger/current interface adapters (`Telegram` as current reference adapter), existing `agent_factory_common.py` helpers, current `agent-factory-intake.py` and `agent-factory-artifacts.py` downstream flow, repo-local runbooks/specs/tests
 **Storage**: Git-tracked planning artifacts, repo-local JSON state under `data/agent-factory/`, versioned discovery/brief/handoff manifests, existing concept-pack artifact directories  
 **Testing**: Shell/component/integration tests under `tests/`, fixture-driven discovery session coverage, existing static config validation, existing agent-factory downstream tests for handoff compatibility  
-**Target Platform**: Linux Docker-hosted Moltis runtime with Telegram as the primary human-facing channel
+**Target Platform**: Linux Docker-hosted Moltis runtime with pluggable human-facing interfaces; Telegram is the current reference/default channel
 **Project Type**: Documentation-driven workflow + script/config orchestration + stateful discovery contracts  
-**Performance Goals**: A user can complete one guided discovery flow in a single Telegram conversation; the system can produce an updated draft brief in the same conversation loop after corrections; confirmed brief handoff must not require manual copy-paste between stages  
-**Constraints**: Russian-first UX; non-technical user language only; no concept-pack generation before explicit brief confirmation; no duplicate Telegram transport stack outside existing Moltis channel ownership; examples must stay sanitized/synthetic for prototype safety; downstream `020` factory flow remains the single source of truth after handoff  
+**Performance Goals**: A user can complete one guided discovery flow in a single factory conversation; the system can produce an updated draft brief in the same conversation loop after corrections; confirmed brief handoff must not require manual copy-paste between stages
+**Constraints**: Russian-first UX; non-technical user language only; no concept-pack generation before explicit brief confirmation; no UI-specific fork of discovery logic; Telegram remains only one adapter, not the agent identity; examples must stay sanitized/synthetic for prototype safety; downstream `020` factory flow remains the single source of truth after handoff
 **Scale/Scope**: Pilot-scale discovery for one organization-facing coordinator; tens of active discovery sessions are acceptable; one confirmed brief per concept version; downstream swarm/deploy concerns remain outside this feature package
 
 ## Constitution Check
@@ -25,9 +25,9 @@ Add a new discovery-first slice to the factory so Moltinger behaves as a Telegra
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| I. Context-First Development | PASS | Existing `020` spec/runbook, current Telegram config, and current agent-factory scripts were reviewed before creating the new slice. |
+| I. Context-First Development | PASS | Existing `020` spec/runbook, current Moltis interface config, and current agent-factory scripts were reviewed before creating the new slice. |
 | II. Single Source of Truth | PASS | The confirmed requirements brief is planned as the only valid upstream input for downstream concept-pack generation. |
-| III. Library-First Development | PASS | Planning reuses the existing Moltis Telegram channel and current agent-factory scripts instead of introducing a second bot runtime. |
+| III. Library-First Development | PASS | Planning reuses the existing Moltis runtime, current interface adapters, and current agent-factory scripts instead of introducing a second transport/runtime stack. |
 | IV. Code Reuse & DRY | PASS | The design extends `agent_factory_common.py`, `agent-factory-intake.py`, and existing tests rather than building a separate application tree. |
 | V. Strict Type Safety | PASS | Explicit JSON contracts and state/entity definitions are captured before runtime changes. |
 | VI. Atomic Task Execution | PASS | Work decomposes cleanly into discovery session state, brief confirmation, example handling, handoff, recovery, and validation slices. |
@@ -35,7 +35,7 @@ Add a new discovery-first slice to the factory so Moltinger behaves as a Telegra
 | VIII. Progressive Specification | PASS | The feature is moving through spec -> research -> plan -> tasks without skipping phases. |
 | IX. Error Handling | PASS | The design requires contradiction detection, unresolved-topic exposure, and explicit confirmation gating instead of silent failure. |
 | X. Observability | PASS | Discovery status, brief versions, handoff provenance, and operator-visible next actions are first-class outputs. |
-| XI. Accessibility | PASS | The slice is text-first and explicitly optimized for non-technical business users working through Telegram. |
+| XI. Accessibility | PASS | The slice is text-first and explicitly optimized for non-technical business users working through the current factory interface. |
 
 **Gate Status**: PASS
 
@@ -64,7 +64,7 @@ config/
 └── moltis.toml
 
 scripts/
-├── agent-factory-discovery.py          # new discovery/session orchestrator
+├── agent-factory-discovery.py          # factory discovery/session orchestrator
 ├── agent-factory-intake.py             # existing downstream normalization bridge
 ├── agent-factory-artifacts.py          # existing concept-pack generator
 ├── agent_factory_common.py             # shared state/normalization helpers
@@ -104,7 +104,7 @@ tests/
 
 **Rationale**:
 
-- The user’s primary expectation is a guided Telegram dialogue with an AI business analyst.
+- The user’s primary expectation is a guided dialogue with a factory AI business analyst, not with a messenger-specific bot as a separate сущность.
 - The current `020` slice already assumes follow-up questions but does not yet embody a real multi-turn session.
 - A stateful discovery layer is the missing product frontend for the factory.
 
@@ -123,20 +123,20 @@ tests/
 - Downstream concept-pack generation needs stable, versioned, user-confirmed content.
 - The confirmed brief cleanly separates “business discovery” from “factory production”.
 
-### Decision 3: Reuse Existing Telegram Ownership
+### Decision 3: Reuse Existing Interface Ownership
 
-**Chosen design**: Reuse the existing Moltis Telegram channel and operator tooling instead of introducing a second Telegram runtime or alternate bot framework.
+**Chosen design**: Reuse the existing Moltis/Moltinger interface ownership model instead of tying discovery to one dedicated messenger runtime.
 
 **Rationale**:
 
-- `config/moltis.toml` already defines the Telegram bot channel.
-- Existing scripts and UAT tooling already validate Telegram send/probe behavior.
+- `config/moltis.toml` already defines the active factory identity and current interface anchors.
+- Existing scripts and UAT tooling already validate Telegram send/probe behavior as the current reference adapter.
 - A second transport stack would create drift in auth, monitoring, and delivery semantics.
 
 **Alternatives considered**:
 
 - Separate Python bot service: rejected because it duplicates transport ownership and operational surface.
-- Separate web UI first: rejected because it delays the intended Telegram-first experience.
+- Separate web UI first: rejected because it would optimize for one future adapter instead of the factory-agent semantics.
 
 ### Decision 4: Text-First Discovery MVP
 
@@ -144,7 +144,7 @@ tests/
 
 **Rationale**:
 
-- It matches the current repo’s Telegram baseline.
+- It matches the current repo’s current text-first interface baseline.
 - It is enough to validate the business-analyst interaction pattern.
 - It keeps implementation scope focused on dialogue quality, state, and handoff.
 
@@ -176,7 +176,7 @@ Phase 0 is complete in [research.md](./research.md).
 
 1. The current `020` factory slice is a downstream consumer, not the right home for the user-facing discovery experience.
 2. A dedicated discovery session, confirmed brief, and handoff record are required as new first-class entities.
-3. Existing Moltis Telegram ownership should be reused rather than replaced.
+3. Existing Moltis/Moltinger interface ownership should be reused rather than replaced, while keeping the business-analyst logic channel-agnostic.
 4. The safest prototype posture is text-first, Russian-first, and sanitized-example-first.
 5. The existing `agent-factory-intake.py` should become a bridge from confirmed brief to concept-pack generation, not the full conversational runtime.
 

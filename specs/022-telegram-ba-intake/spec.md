@@ -1,18 +1,28 @@
-# Feature Specification: Telegram Business Analyst Intake
+# Feature Specification: Factory Business Analyst Intake
 
 **Feature Branch**: `022-telegram-ba-intake`  
 **Created**: 2026-03-13  
-**Status**: Ready for Planning  
+**Status**: In Progress
 **Upstream Factory Context**: [../020-agent-factory-prototype/spec.md](../020-agent-factory-prototype/spec.md)  
 **Operational Baseline**: [../../docs/runbooks/agent-factory-prototype.md](../../docs/runbooks/agent-factory-prototype.md)  
-**Input**: User description: "Пользователь должен в самом начале вести интерактивный Telegram-диалог с агентом-бизнес-аналитиком, который собирает требования, пользовательскую историю, примеры входных и выходных данных, ограничения, метрики успеха и формирует подтвержденное техническое задание для будущего AI агента."
+**Input**: User description: "В самом начале пользователь должен взаимодействовать с фабричным агентом, реализованным на Moltis, который в роли бизнес-аналитика собирает требования, пользовательскую историю, примеры входных и выходных данных, ограничения, метрики успеха и формирует подтвержденное техническое задание для будущего AI агента."
+
+## Clarifications
+
+### Session 2026-03-14
+
+- Q: Является ли discovery-агент Telegram-ботом как отдельной сущностью? → A: Нет, discovery-агент является фабричным цифровым сотрудником на `Moltis`, а `Telegram`, `Moltinger UI`, `Moltis UI` и будущий UI выступают только интерфейсными адаптерами.
+- `022-telegram-ba-intake` остается legacy feature id и именем ветки для continuity workflow.
+- Фактический scope пакета: фабричный агент-бизнес-аналитик на `Moltis`.
+- Текущая реализация и fixtures по-прежнему используют `telegram` как default/reference channel, но это не определяет сущность агента.
 
 ## Scope Boundary
 
 ### In Scope
 
-- Telegram-first discovery flow для нового проекта AI-агента.
+- Discovery-first flow для нового проекта AI-агента через любой поддерживаемый интерфейс фабрики, с `Telegram` как текущим reference adapter.
 - Multi-turn диалог с нетехническим бизнес-пользователем на русском языке по умолчанию.
+- Фабричный агент, реализованный на `Moltis`, действует как цифровой сотрудник фабрики в роли бизнес-аналитика.
 - Пошаговый сбор и уточнение:
   - бизнес-проблемы
   - целевых пользователей и ролей
@@ -29,6 +39,7 @@
 - Явное подтверждение brief пользователем перед handoff в существующий concept-pack pipeline фабрики.
 - Версионирование confirmed brief и сохранение истории правок до и после подтверждения.
 - Возможность прервать и затем продолжить discovery-диалог без потери подтвержденного контекста.
+- Отделение core discovery-логики от конкретного UI/мессенджер-канала, чтобы позже подключать дополнительные интерфейсы без переписывания бизнес-аналитического поведения.
 
 ### Out of Scope
 
@@ -42,7 +53,7 @@
 
 ### User Story 1 - Guided Discovery Interview (Priority: P1)
 
-Как бизнес-пользователь без технической экспертизы, я хочу рассказать агенту в Telegram о своей идее автоматизации простыми словами и получать наводящие вопросы, чтобы постепенно сформулировать полноценные требования без самостоятельного написания ТЗ.
+Как бизнес-пользователь без технической экспертизы, я хочу рассказать фабричному агенту о своей идее автоматизации простыми словами через доступный интерфейс и получать наводящие вопросы, чтобы постепенно сформулировать полноценные требования без самостоятельного написания ТЗ.
 
 **Why this priority**: Пока discovery-интервью не работает, фабрика по-прежнему зависит от заранее подготовленного брифа и не закрывает главный пользовательский сценарий входа в систему.
 
@@ -50,7 +61,7 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** пользователь начинает новый проект AI-агента в Telegram, **When** агент открывает discovery flow, **Then** он объясняет свою роль, ожидаемый результат диалога и начинает собирать бизнес-контекст пошагово.
+1. **Given** пользователь начинает новый проект AI-агента через поддерживаемый интерфейс фабрики, **When** агент открывает discovery flow, **Then** он объясняет свою роль, ожидаемый результат диалога и начинает собирать бизнес-контекст пошагово.
 2. **Given** пользователь дает неполный или расплывчатый ответ, **When** агент определяет, что критичной информации не хватает, **Then** он задает следующий уточняющий вопрос вместо преждевременного формирования brief.
 3. **Given** пользователь отвечает в свободной бизнес-лексике, **When** агент нормализует информацию, **Then** он переводит ответ в структурированные требования без требования технических терминов от пользователя.
 
@@ -92,7 +103,7 @@
 
 Как координатор фабрики, я хочу принимать confirmed brief как канонический upstream input для существующего concept-pack pipeline, чтобы discovery-слой не жил отдельно от уже реализованных стадий фабрики.
 
-**Why this priority**: Новый Telegram business-analyst слой должен усиливать текущую фабрику, а не создавать параллельный и несвязанный процесс описания требований.
+**Why this priority**: Новый фабричный business-analyst слой должен усиливать текущую фабрику, а не создавать параллельный и несвязанный процесс описания требований.
 
 **Independent Test**: Подтвержденный brief передается в существующий concept-pack pipeline без ручного копипаста, при этом сохраняется traceability между диалогом, confirmed brief и downstream concept artifacts.
 
@@ -132,8 +143,8 @@
 
 #### Discovery Dialogue
 
-- **FR-001**: System MUST open a dedicated discovery session when a user starts a new AI-agent project through Telegram.
-- **FR-002**: System MUST explain that it acts as a business-analyst guide that helps the user transform a raw automation idea into a confirmed requirements brief.
+- **FR-001**: System MUST open a dedicated discovery session when a user starts a new AI-agent project through any supported factory interface.
+- **FR-002**: System MUST explain that it acts as a factory business-analyst agent that helps the user transform a raw automation idea into a confirmed requirements brief.
 - **FR-003**: System MUST conduct a multi-turn dialogue in Russian by default to collect the business problem, target users, current workflow, pain points, desired outcome, constraints, and success metrics.
 - **FR-004**: System MUST identify which critical requirement topics are still missing before declaring the brief ready for confirmation.
 - **FR-005**: System MUST ask follow-up questions based on unresolved or ambiguous topics instead of using a fixed one-pass questionnaire.
@@ -143,6 +154,7 @@
 - **FR-009**: System MUST detect contradictions or material ambiguities across answers and examples and request clarification before confirmation.
 - **FR-010**: System MUST maintain topic-level progress that differentiates unanswered, partially answered, clarified, confirmed, and unresolved requirement areas.
 - **FR-011**: System MUST support resuming an unfinished discovery session without losing previously confirmed context.
+- **FR-011a**: System MUST preserve the same discovery semantics regardless of whether the current interaction surface is Telegram, Moltinger UI, Moltis UI, or a future factory UI adapter.
 
 #### Requirements Brief And Confirmation
 
@@ -172,7 +184,7 @@
 
 ### Key Entities *(include if feature involves data)*
 
-- **DiscoverySession**: One Telegram conversation context for a future AI-agent project, including current progress, unresolved topics, and state.
+- **DiscoverySession**: One factory-owned conversational discovery context for a future AI-agent project, including current progress, unresolved topics, state, and the active interface channel.
 - **RequirementTopic**: One required or optional subject area such as business problem, target users, input examples, exceptions, or success metrics.
 - **RequirementBrief**: The structured, business-readable summary produced from the conversation before concept-pack generation.
 - **BriefSection**: One named part of the requirement brief that can be reviewed, corrected, confirmed, or reopened independently.
@@ -185,7 +197,7 @@
 
 ### Measurable Outcomes
 
-- **SC-001**: A non-technical business user can go from a raw automation idea to a reviewable requirements brief within one guided Telegram discovery flow without using an external template.
+- **SC-001**: A non-technical business user can go from a raw automation idea to a reviewable requirements brief within one guided factory discovery flow without using an external template.
 - **SC-002**: At least 90% of pilot discovery sessions that start with a raw idea produce either a complete draft brief or an explicit list of unresolved questions, rather than failing silently.
 - **SC-003**: 100% of confirmed briefs include at least one user story, one representative input/output example pair, one constraint, and one measurable success criterion.
 - **SC-004**: 100% of downstream concept-pack handoffs are blocked until the current brief version is explicitly confirmed.
@@ -196,7 +208,7 @@
 
 ## Assumptions
 
-- Telegram text dialogue remains the primary intake channel for this slice.
+- `Telegram` remains the current default/reference interface for this slice, but the discovery agent itself belongs to the factory runtime on `Moltis`, not to one specific messenger.
 - The existing `020-agent-factory-prototype` concept-pack pipeline remains the downstream consumer of confirmed discovery output.
 - Russian is the default working language for both dialogue and generated brief content unless a future request explicitly changes it.
 - Business users can provide sanitized or surrogate examples when real production examples contain sensitive data.
