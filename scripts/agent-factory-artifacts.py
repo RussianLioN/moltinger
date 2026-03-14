@@ -69,7 +69,7 @@ def derive_artifact_context(source: dict[str, Any], concept_record: dict[str, An
     return {
         "agent_name": normalize_text(artifact_context.get("agent_name")) or concept_record["title"],
         "owner": owner,
-        "desired_outcome": desired_outcome,
+        "desired_outcome": desired_outcome or normalize_text(concept_record.get("desired_outcome")),
         "requested_decision": normalize_text(artifact_context.get("requested_decision")) or DEFAULT_REQUESTED_DECISION,
         "next_step_summary": normalize_text(artifact_context.get("next_step_summary")) or DEFAULT_NEXT_STEP_SUMMARY,
         "delivery_channel": normalize_text(artifact_context.get("delivery_channel")) or "telegram",
@@ -91,6 +91,33 @@ def load_source_document(path: str) -> tuple[dict[str, Any], dict[str, Any], dic
     return source, concept_record, artifact_context
 
 
+def derive_source_provenance(source: dict[str, Any], concept_record: dict[str, Any]) -> dict[str, Any]:
+    factory_handoff_record = source.get("factory_handoff_record", {}) if isinstance(source.get("factory_handoff_record"), dict) else {}
+    requirement_brief = source.get("requirement_brief", {}) if isinstance(source.get("requirement_brief"), dict) else {}
+    confirmation_snapshot = source.get("confirmation_snapshot", {}) if isinstance(source.get("confirmation_snapshot"), dict) else {}
+    return {
+        "source_kind": normalize_text(concept_record.get("source_kind")) or "factory_intake",
+        "source_request_id": normalize_text(concept_record.get("source_request_id")),
+        "project_key": normalize_text(concept_record.get("project_key")) or normalize_text(requirement_brief.get("project_key")),
+        "discovery_session_id": normalize_text(concept_record.get("discovery_session_id"))
+        or normalize_text(requirement_brief.get("discovery_session_id")),
+        "brief_id": normalize_text(concept_record.get("brief_id")) or normalize_text(requirement_brief.get("brief_id")),
+        "brief_version": normalize_text(concept_record.get("brief_version"))
+        or normalize_text(requirement_brief.get("version")),
+        "confirmation_snapshot_id": normalize_text(concept_record.get("confirmation_snapshot_id"))
+        or normalize_text(confirmation_snapshot.get("confirmation_snapshot_id")),
+        "confirmed_at": normalize_text(concept_record.get("confirmed_at")) or normalize_text(confirmation_snapshot.get("confirmed_at")),
+        "confirmed_by": normalize_text(concept_record.get("confirmed_by")) or normalize_text(confirmation_snapshot.get("confirmed_by")),
+        "factory_handoff_id": normalize_text(factory_handoff_record.get("factory_handoff_id")),
+        "downstream_target": normalize_text(concept_record.get("downstream_target"))
+        or normalize_text(factory_handoff_record.get("downstream_target")),
+        "handoff_created_at": normalize_text(concept_record.get("handoff_created_at"))
+        or normalize_text(factory_handoff_record.get("created_at")),
+        "handoff_consumed_at": normalize_text(concept_record.get("handoff_consumed_at"))
+        or normalize_text(factory_handoff_record.get("consumed_at")),
+    }
+
+
 def build_render_context(concept_record: dict[str, Any], artifact_context: dict[str, Any], artifact_revision: str) -> dict[str, str]:
     target_users = normalize_list(concept_record.get("target_users"))
     success_metrics = normalize_list(concept_record.get("success_metrics"))
@@ -98,6 +125,12 @@ def build_render_context(concept_record: dict[str, Any], artifact_context: dict[
     assumptions = normalize_list(concept_record.get("assumptions"))
     open_risks = normalize_list(concept_record.get("open_risks"))
     patterns = normalize_list(concept_record.get("applied_factory_patterns")) or list(DEFAULT_FACTORY_PATTERNS)
+    scope_boundaries = normalize_list(concept_record.get("scope_boundaries"))
+    input_examples = normalize_list(concept_record.get("input_examples"))
+    expected_outputs = normalize_list(concept_record.get("expected_outputs"))
+    business_rules = normalize_list(concept_record.get("business_rules"))
+    exceptions = normalize_list(concept_record.get("exceptions"))
+    user_story = normalize_text(concept_record.get("user_story"))
 
     capabilities = [
         "Собирает и структурирует идею автоматизации через Telegram intake.",
@@ -136,6 +169,10 @@ def build_render_context(concept_record: dict[str, Any], artifact_context: dict[
         "Каждая generation должна иметь manifest с concept id, version и sync hash.",
         "Downloads не должны требовать прямого доступа к server filesystem.",
     ]
+    if business_rules:
+        test_expectations.append("Business rules из confirmed brief должны сохраняться в downstream concept artifacts.")
+    if exceptions:
+        validation_expectations.append("Exception cases из confirmed brief не должны теряться между intake и concept pack.")
 
     return {
         "concept_id": concept_record["concept_id"],
@@ -158,12 +195,12 @@ def build_render_context(concept_record: dict[str, Any], artifact_context: dict[
         "requested_decision": artifact_context["requested_decision"],
         "next_step_summary": artifact_context["next_step_summary"],
         "target_runtime": "Moltinger coordinator + future factory swarm roles",
-        "primary_scenario": "Пользователь описывает идею автоматизации, получает concept pack и выносит его на защиту.",
+        "primary_scenario": user_story or "Пользователь описывает идею автоматизации, получает concept pack и выносит его на защиту.",
         "capabilities": to_bullets(capabilities),
-        "inputs": to_bullets(inputs),
-        "outputs": to_bullets(outputs),
+        "inputs": to_bullets(input_examples or inputs),
+        "outputs": to_bullets(expected_outputs or outputs),
         "integrations": to_bullets(integrations),
-        "functional_boundaries": to_bullets([
+        "functional_boundaries": to_bullets(scope_boundaries or [
             "US1 ограничивается intake и concept pack.",
             "Defense loop и swarm начинаются на следующих фазах.",
         ]),
@@ -189,7 +226,7 @@ def build_render_context(concept_record: dict[str, Any], artifact_context: dict[
             "Нет одного канонического concept record.",
         ]),
         "agent_summary": "Фабрика превращает сырую идею автоматизации в защищаемый concept pack без ручной сборки документов.",
-        "automation_scope": to_bullets([
+        "automation_scope": to_bullets(scope_boundaries or [
             "Сбор недостающего контекста через guided intake.",
             "Синхронная генерация project doc, spec и presentation.",
             "Подготовка к defense gate и следующему production path.",
@@ -434,6 +471,7 @@ def generate_pack(args: argparse.Namespace) -> int:
 
     render_context = build_render_context(concept_record, artifact_context, artifact_revision)
     alignment_payload = build_alignment_payload(concept_record, artifact_context, artifact_revision)
+    source_provenance = derive_source_provenance(source, concept_record)
     sync_hash = alignment_digest(alignment_payload)
     generated_at = utc_now()
     approval_gate = build_approval_gate(concept_record, production_approval)
@@ -451,6 +489,7 @@ def generate_pack(args: argparse.Namespace) -> int:
         "working_root": str(working_dir),
         "download_root": str(download_dir),
         "artifact_context": artifact_context,
+        "source_provenance": source_provenance,
         "alignment_snapshot": alignment_payload,
         "sync_hash": sync_hash,
         "next_action": next_action,
@@ -481,6 +520,7 @@ def generate_pack(args: argparse.Namespace) -> int:
             "working_source_ref": str(working_path),
             "download_ref": str(download_path),
             "download_name": filename,
+            "generated_from": source_provenance,
             "generated_at": generated_at,
         }
 

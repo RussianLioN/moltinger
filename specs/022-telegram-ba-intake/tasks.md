@@ -110,15 +110,15 @@
 
 ### Validation for User Story 4
 
-- [ ] T020 [P] [US4] Create handoff compatibility coverage in `tests/component/test_agent_factory_handoff.sh`
-- [ ] T021 [P] [US4] Create local discovery-to-concept integration coverage in `tests/integration_local/test_agent_factory_handoff.sh`
+- [x] T020 [P] [US4] Create handoff compatibility coverage in `tests/component/test_agent_factory_handoff.sh`
+- [x] T021 [P] [US4] Create local discovery-to-concept integration coverage in `tests/integration_local/test_agent_factory_handoff.sh`
 
 ### Implementation for User Story 4
 
-- [ ] T022 [P] [US4] Implement canonical handoff record generation in `scripts/agent-factory-discovery.py`
-- [ ] T023 [US4] Adapt `scripts/agent-factory-intake.py` to consume confirmed discovery handoff records
-- [ ] T024 [US4] Reconcile downstream concept-pack entry semantics in `scripts/agent-factory-artifacts.py`
-- [ ] T025 [US4] Document discovery-to-concept handoff in `docs/runbooks/agent-factory-discovery.md` and `docs/runbooks/agent-factory-prototype.md`
+- [x] T022 [P] [US4] Implement canonical handoff record generation in `scripts/agent-factory-discovery.py`
+- [x] T023 [US4] Adapt `scripts/agent-factory-intake.py` to consume confirmed discovery handoff records
+- [x] T024 [US4] Reconcile downstream concept-pack entry semantics in `scripts/agent-factory-artifacts.py`
+- [x] T025 [US4] Document discovery-to-concept handoff in `docs/runbooks/agent-factory-discovery.md` and `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: Confirmed discovery becomes the real upstream input for the existing factory.
 

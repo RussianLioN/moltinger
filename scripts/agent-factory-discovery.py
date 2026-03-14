@@ -89,6 +89,8 @@ BRIEF_CONFIRMATION_PROMPT = (
     "Я собрал requirements brief. Проверь summary и ответь, что нужно исправить, "
     "или явно подтверди его для перехода к следующему этапу фабрики."
 )
+HANDOFF_DOWNSTREAM_TARGET = "specs/020-agent-factory-prototype"
+HANDOFF_NEXT_STAGE = "concept_pack_generation"
 
 
 def parse_args() -> argparse.Namespace:
@@ -415,6 +417,13 @@ def normalize_confirmation_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     snapshot = payload.get("confirmation_snapshot", {})
     if isinstance(snapshot, dict):
         return dict(snapshot)
+    return {}
+
+
+def normalize_factory_handoff_record(payload: dict[str, Any]) -> dict[str, Any]:
+    record = payload.get("factory_handoff_record", {})
+    if isinstance(record, dict):
+        return dict(record)
     return {}
 
 
@@ -971,6 +980,97 @@ def brief_next_step_summary(brief_status: str) -> str:
     return "Следующий шаг: получить явное подтверждение brief или внести поправки до downstream handoff."
 
 
+def handoff_blocking_reasons(
+    brief: dict[str, Any],
+    confirmation_snapshot: dict[str, Any],
+    clarification_items: list[dict[str, Any]],
+) -> list[str]:
+    reasons: list[str] = []
+    brief_status = normalize_text(brief.get("status"))
+    brief_id = normalize_text(brief.get("brief_id"))
+    brief_version = normalize_text(brief.get("version"))
+    snapshot_status = normalize_text(confirmation_snapshot.get("status"))
+    snapshot_brief_id = normalize_text(confirmation_snapshot.get("brief_id"))
+    snapshot_brief_version = normalize_text(confirmation_snapshot.get("brief_version"))
+    open_clarification_ids = [
+        normalize_text(item.get("clarification_item_id"))
+        for item in clarification_items
+        if normalize_text(item.get("status")) == "open"
+    ]
+
+    if brief_status != "confirmed":
+        reasons.append("Requirement brief еще не подтвержден.")
+    if snapshot_status != "active":
+        reasons.append("Нет активного confirmation snapshot для текущей версии brief.")
+    if brief_id and snapshot_brief_id and brief_id != snapshot_brief_id:
+        reasons.append("Confirmation snapshot ссылается на другой brief.")
+    if brief_version and snapshot_brief_version and brief_version != snapshot_brief_version:
+        reasons.append("Confirmation snapshot относится к другой версии brief.")
+    if open_clarification_ids:
+        reasons.append("Есть незакрытые clarification items, handoff должен оставаться заблокированным.")
+    return reasons
+
+
+def build_factory_handoff_record(
+    payload: dict[str, Any],
+    discovery_session: dict[str, Any],
+    brief: dict[str, Any],
+    confirmation_snapshot: dict[str, Any],
+    clarification_items: list[dict[str, Any]],
+    now: str,
+) -> dict[str, Any]:
+    brief_status = normalize_text(brief.get("status"))
+    if brief_status != "confirmed":
+        return {}
+
+    confirmation_reply = payload.get("confirmation_reply", {})
+    if isinstance(confirmation_reply, dict) and confirmation_reply.get("confirmed") is True:
+        return {}
+
+    existing_record = normalize_factory_handoff_record(payload)
+    project_key = (
+        normalize_text(brief.get("project_key"))
+        or normalize_text(discovery_session.get("project_key"))
+        or "discovery-project"
+    )
+    brief_id = normalize_text(brief.get("brief_id"))
+    brief_version = normalize_text(brief.get("version"))
+    version_token = brief_version.replace(".", "-") if brief_version else "unknown"
+    blocking_reasons = handoff_blocking_reasons(brief, confirmation_snapshot, clarification_items)
+
+    handoff_status = "blocked" if blocking_reasons else "ready"
+    existing_status = normalize_text(existing_record.get("handoff_status"))
+    if existing_status in {"consumed", "superseded"} and not blocking_reasons:
+        handoff_status = existing_status
+
+    record = {
+        "factory_handoff_id": normalize_text(existing_record.get("factory_handoff_id"))
+        or f"factory-handoff-{project_key}-v{version_token}",
+        "discovery_session_id": normalize_text(brief.get("discovery_session_id"))
+        or normalize_text(discovery_session.get("discovery_session_id")),
+        "brief_id": brief_id,
+        "brief_version": brief_version,
+        "confirmation_snapshot_id": normalize_text(confirmation_snapshot.get("confirmation_snapshot_id")),
+        "handoff_status": handoff_status,
+        "next_stage": HANDOFF_NEXT_STAGE if handoff_status in {"ready", "consumed"} else "brief_confirmation",
+        "downstream_target": normalize_text(existing_record.get("downstream_target")) or HANDOFF_DOWNSTREAM_TARGET,
+        "created_at": normalize_text(existing_record.get("created_at")) or now,
+        "consumed_at": normalize_text(existing_record.get("consumed_at")) if handoff_status == "consumed" else "",
+    }
+    if blocking_reasons:
+        record["blocking_reasons"] = blocking_reasons
+    return record
+
+
+def handoff_next_action(factory_handoff_record: dict[str, Any]) -> str:
+    handoff_status = normalize_text(factory_handoff_record.get("handoff_status"))
+    if handoff_status == "ready":
+        return "run_factory_intake"
+    if handoff_status == "consumed":
+        return "generate_artifacts"
+    return "return_to_brief_confirmation"
+
+
 def render_requirement_brief_markdown(
     payload: dict[str, Any],
     brief: dict[str, Any],
@@ -1310,6 +1410,24 @@ def main() -> int:
     requirement_brief = brief_state.get("requirement_brief", {})
     if isinstance(requirement_brief, dict) and requirement_brief:
         discovery_session["latest_brief_version"] = normalize_text(requirement_brief.get("version"))
+    confirmation_snapshot = brief_state.get("confirmation_snapshot")
+    if not isinstance(confirmation_snapshot, dict):
+        confirmation_snapshot = {}
+    factory_handoff_record = {}
+    if isinstance(requirement_brief, dict) and requirement_brief:
+        factory_handoff_record = build_factory_handoff_record(
+            payload,
+            discovery_session,
+            requirement_brief,
+            confirmation_snapshot,
+            clarification_items,
+            now,
+        )
+    if factory_handoff_record:
+        next_action = handoff_next_action(factory_handoff_record)
+        next_topic = "handoff"
+        next_question = ""
+        discovery_session["next_recommended_action"] = next_action
 
     normalized_answers = {
         topic["topic_name"]: topic["summary"]
@@ -1337,9 +1455,10 @@ def main() -> int:
     brief_revisions = brief_state.get("brief_revisions")
     if isinstance(brief_revisions, list) and brief_revisions:
         response["brief_revisions"] = brief_revisions
-    confirmation_snapshot = brief_state.get("confirmation_snapshot")
     if isinstance(confirmation_snapshot, dict) and confirmation_snapshot:
         response["confirmation_snapshot"] = confirmation_snapshot
+    if factory_handoff_record:
+        response["factory_handoff_record"] = factory_handoff_record
     brief_markdown = normalize_text(brief_state.get("brief_markdown"))
     if brief_markdown:
         response["brief_markdown"] = brief_markdown

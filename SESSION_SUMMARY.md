@@ -91,6 +91,11 @@ GitOps Compliance: Enforced ✅
 - Discovery now reconciles generated `ClarificationItem` records for `unsafe_data_example` and `contradictory_examples`, resolves obsolete generated clarifications when the user fixes them, and blocks confirmation while such issues remain open even if a draft brief already exists.
 - Added US3 validation coverage in `tests/component/test_agent_factory_examples.sh`, covering structured example extraction, unsafe business data detection, and contradiction detection between business rules and example outcomes.
 - Updated `docs/runbooks/agent-factory-discovery.md` with the `example_cases` input/output contract and the new example/clarification policy, then reconciled `specs/022-telegram-ba-intake/tasks.md` so `T016` through `T019` are now marked complete; the next implementation queue begins at User Story 4 (`molt-s5i.6.*`).
+- Completed User Story 4 for `022-telegram-ba-intake`: `scripts/agent-factory-discovery.py` now emits one canonical `factory_handoff_record` after replaying an already confirmed brief, which binds the downstream bridge to the exact `brief_version` and `confirmation_snapshot_id`.
+- Adapted `scripts/agent-factory-intake.py` to recognize discovery-shaped payloads: ready handoffs bridge into `ready_for_pack`, while confirmed-but-not-handed-off payloads now return `status = blocked` with `return_to_discovery_handoff` instead of silently degrading into a generic clarifying intake.
+- Reconciled `scripts/agent-factory-artifacts.py` with the new bridge by propagating discovery provenance into `concept-pack.json` (`source_provenance`) and per-artifact `generated_from` metadata, while also grounding render context in confirmed brief fields like `user_story`, `scope_boundaries`, `input_examples`, and `expected_outputs`.
+- Added US4 validation coverage in `tests/component/test_agent_factory_handoff.sh` and `tests/integration_local/test_agent_factory_handoff.sh`, covering `confirmed -> handoff -> intake -> concept-pack` plus the blocked path before a ready handoff exists.
+- Updated `docs/runbooks/agent-factory-discovery.md`, `docs/runbooks/agent-factory-prototype.md`, `specs/022-telegram-ba-intake/quickstart.md`, and `specs/022-telegram-ba-intake/tasks.md` so the operator docs and planning artifacts now describe the live discovery-to-concept handoff path rather than the earlier US2 stop boundary.
 - Verified in this session:
   - `git fetch --all --prune`
   - `.specify/scripts/bash/create-new-feature.sh --json --short-name "telegram-ba-intake" "..."`
@@ -118,6 +123,12 @@ GitOps Compliance: Enforced ✅
   - `bash -n tests/component/test_agent_factory_examples.sh`
   - `./tests/run.sh --lane component --filter 'component_agent_factory_(discovery|brief|examples)' --json`
   - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_(discovery_flow|confirmation)' --json`
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-discovery.py scripts/agent-factory-intake.py scripts/agent-factory-artifacts.py`
+  - `bash -n tests/component/test_agent_factory_handoff.sh tests/integration_local/test_agent_factory_handoff.sh tests/component/test_agent_factory_brief.sh tests/integration_local/test_agent_factory_confirmation.sh`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_(brief|examples|handoff)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_(confirmation|handoff|intake)' --json`
+  - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `bash scripts/scripts-verify.sh`
 
 ### Previous Session Update (2026-03-12)
 

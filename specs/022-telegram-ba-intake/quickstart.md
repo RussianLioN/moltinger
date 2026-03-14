@@ -111,6 +111,29 @@ Validation questions:
 - Is concept-pack generation blocked for unconfirmed or superseded briefs?
 - Does the new slice strengthen the existing factory instead of branching away from it?
 
+Reference validation chain:
+
+```bash
+python3 scripts/agent-factory-discovery.py run \
+  --source tests/fixtures/agent-factory/discovery/brief-confirmed-handoff.json \
+  --output /tmp/discovery-handoff-out.json
+
+python3 scripts/agent-factory-intake.py \
+  --source /tmp/discovery-handoff-out.json \
+  --output /tmp/discovery-handoff-intake.json
+
+python3 scripts/agent-factory-artifacts.py generate \
+  --input /tmp/discovery-handoff-intake.json \
+  --output-dir /tmp/discovery-handoff-pack \
+  --output /tmp/discovery-handoff-pack.json
+```
+
+Expected result:
+
+- discovery returns or preserves one ready `factory_handoff_record`
+- intake returns `ready_for_pack` from the discovery-shaped payload
+- generated concept-pack manifest includes `source_provenance` and per-artifact `generated_from`
+
 ## 6. Current Readiness Check
 
 Confirm:

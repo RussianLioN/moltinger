@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This runbook describes the current `US1` + `US2` runtime slice for `022-telegram-ba-intake`.
+This runbook describes the current `US1` through `US4` runtime slice for `022-telegram-ba-intake`.
 
 Current scope:
 
@@ -12,7 +12,8 @@ Current scope:
 4. surface one next useful question or one open clarification
 5. build a reviewable requirements brief when discovery is sufficiently complete
 6. let the user request corrections and explicitly confirm one exact brief version
-7. stop before canonical handoff generation and downstream concept-pack execution
+7. emit one canonical handoff record after replaying a confirmed brief
+8. bridge the ready handoff into the existing concept-pack intake without manual copy-paste
 
 ## Runtime Contract
 
@@ -37,6 +38,7 @@ The command currently returns:
 - optional `requirement_brief`
 - optional `brief_revisions`
 - optional `confirmation_snapshot`
+- optional `factory_handoff_record`
 - optional `brief_markdown`
 - optional `brief_template_path`
 - optional `example_cases`
@@ -91,7 +93,17 @@ This lets the runtime keep the same conversation while the user:
 - asks for corrections in normal language
 - explicitly confirms one exact version
 
-### 4. Example-first discovery state
+### 4. Existing confirmed handoff state
+
+The command also accepts:
+
+- `requirement_brief` in confirmed state
+- active `confirmation_snapshot`
+- optional existing `factory_handoff_record`
+
+This lets the runtime replay a confirmed brief and emit or preserve the canonical handoff record for the downstream concept-pack pipeline.
+
+### 5. Example-first discovery state
 
 The command also accepts explicit `example_cases` when the caller already has normalized cases.
 
@@ -304,6 +316,36 @@ Expected result:
 - `next_action = start_concept_pack_handoff`
 - no handoff record is created yet; that starts in `US4`
 
+### 7. Replay the confirmed brief and create canonical handoff
+
+```bash
+python3 scripts/agent-factory-discovery.py run \
+  --source /tmp/discovery-confirmation-out.json \
+  --output /tmp/discovery-handoff-out.json
+```
+
+Expected result:
+
+- `status = confirmed`
+- `next_action = run_factory_intake`
+- `factory_handoff_record.handoff_status = ready`
+- `factory_handoff_record.brief_version` matches the active confirmation snapshot
+
+### 8. Bridge handoff into the existing concept-pack intake
+
+```bash
+python3 scripts/agent-factory-intake.py \
+  --source /tmp/discovery-handoff-out.json \
+  --output /tmp/discovery-handoff-intake.json
+```
+
+Expected result:
+
+- `status = ready_for_pack`
+- `concept_request.source_kind = confirmed_discovery_handoff`
+- `concept_record.source_request_id` equals `factory_handoff_record.factory_handoff_id`
+- no manual reconstruction of the brief is required
+
 ## Example And Clarification Policy
 
 - The runtime preserves grounded cases as `example_cases`, not only as free text in the brief.
@@ -330,15 +372,15 @@ Expected result:
 - `prepare_brief`
 - `request_explicit_confirmation`
 - `start_concept_pack_handoff`
+- `run_factory_intake`
+- `return_to_discovery_handoff`
 
 ## Current Boundary
 
-This runbook currently covers `US1` and `US2`.
+This runbook currently covers `US1` through `US4`.
 
 Not included yet:
 
-- canonical handoff record generation
-- downstream concept-pack execution
 - resume/reopen semantics beyond snapshot recomputation
 
-Those arrive in `US4` and `US5`.
+Those arrive in `US5` and later polish work.

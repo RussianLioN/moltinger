@@ -30,6 +30,10 @@ Recommended seed fixture:
 
 - `tests/fixtures/agent-factory/concept-intake.json`
 
+Alternative upstream source:
+
+- a ready discovery handoff payload from `scripts/agent-factory-discovery.py`, carrying `factory_handoff_record`, confirmed `requirement_brief`, and `confirmation_snapshot`
+
 ## Commands
 
 ### 1. Normalize intake into a concept record
@@ -40,12 +44,22 @@ python3 scripts/agent-factory-intake.py \
   --output /tmp/agent-factory-intake.json
 ```
 
+For the discovery-first path, pass the ready handoff payload instead:
+
+```bash
+python3 scripts/agent-factory-intake.py \
+  --source /tmp/discovery-handoff-out.json \
+  --output /tmp/agent-factory-intake-from-discovery.json
+```
+
 Expected result:
 
 - `status = ready_for_pack` for a complete request
 - `status = clarifying` plus `follow_up_questions` when critical fields are missing
+- `status = blocked` when a discovery-shaped payload has not produced a ready `factory_handoff_record` yet
 - one canonical `concept_record`
 - one `artifact_context` for concept-pack generation
+- discovery-origin payloads preserve provenance in `concept_record` and later manifest metadata
 
 ### 2. Generate the concept pack
 
