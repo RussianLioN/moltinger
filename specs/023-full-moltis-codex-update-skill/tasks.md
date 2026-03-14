@@ -59,11 +59,11 @@
 
 ## Phase 6 - Observability, Rollout, and Retirement
 
-- [ ] T024 Implement machine-readable audit records for manual and scheduler runs
-- [ ] T025 Add hermetic end-to-end proof for `on-demand -> scheduler -> delivery/profile`
-- [ ] T026 Document rollback and migration-off of the old hybrid path
-- [ ] T027 Refresh topology/docs references after branch and runtime changes
-- [ ] T028 Run `make codex-check` and the narrow component lane for the new skill
+- [x] T024 Implement machine-readable audit records for manual and scheduler runs
+- [x] T025 Add hermetic end-to-end proof for `on-demand -> scheduler -> delivery/profile`
+- [x] T026 Document rollback and migration-off of the old hybrid path
+- [x] T027 Refresh topology/docs references after branch and runtime changes
+- [x] T028 Run `make codex-check` and the narrow component lane for the new skill
 
 ## Dependencies
 

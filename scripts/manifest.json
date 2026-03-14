@@ -250,8 +250,8 @@
       "ci": true
     },
     "moltis-codex-update-state.sh": {
-      "version": "1.1.0",
-      "description": "Persist Moltis-native Codex update skill state, scheduler checkpoints, and delivery results",
+      "version": "1.2.0",
+      "description": "Persist Moltis-native Codex update skill state, scheduler checkpoints, delivery results, and audit pointers",
       "entrypoint": true,
       "requires": [
         "jq"
@@ -280,8 +280,8 @@
       "ci": true
     },
     "moltis-codex-update-run.sh": {
-      "version": "1.2.0",
-      "description": "Canonical Moltis-native runtime entrypoint for on-demand and scheduled Codex CLI update checks with scheduler-owned delivery and profile-shaped recommendations",
+      "version": "1.3.0",
+      "description": "Canonical Moltis-native runtime entrypoint for on-demand and scheduled Codex CLI update checks with audit mirrors, scheduler-owned delivery, and profile-shaped recommendations",
       "entrypoint": true,
       "requires": [
         "bash",
@@ -298,6 +298,7 @@
         "MOLTIS_CODEX_UPDATE_STATE_SCRIPT",
         "MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT",
         "MOLTIS_CODEX_UPDATE_STATE_FILE",
+        "MOLTIS_CODEX_UPDATE_AUDIT_DIR",
         "MOLTIS_CODEX_UPDATE_RELEASE_FILE",
         "MOLTIS_CODEX_UPDATE_RELEASE_URL",
         "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_FILE",
@@ -309,6 +310,21 @@
         "MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE",
         "MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT",
         "MOLTIS_CODEX_UPDATE_TELEGRAM_SILENT"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Moltis-native Codex update proof covering manual profile handling, scheduler delivery, suppression, and audit evidence",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-e2e"
       ],
       "ci": true
     },

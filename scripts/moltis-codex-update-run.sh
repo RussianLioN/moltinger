@@ -8,12 +8,14 @@ DEFAULT_ISSUE_SIGNALS_URL="https://api.github.com/repos/openai/codex/issues?stat
 DEFAULT_STATE_SCRIPT="${PROJECT_ROOT}/scripts/moltis-codex-update-state.sh"
 DEFAULT_PROFILE_SCRIPT="${PROJECT_ROOT}/scripts/moltis-codex-update-profile.sh"
 DEFAULT_STATE_FILE="${PROJECT_ROOT}/.tmp/current/moltis-codex-update-state.json"
+DEFAULT_AUDIT_DIR="${PROJECT_ROOT}/.tmp/current/moltis-codex-update-audit"
 DEFAULT_TELEGRAM_SEND_SCRIPT="${PROJECT_ROOT}/scripts/telegram-bot-send.sh"
 
 MODE="${MOLTIS_CODEX_UPDATE_MODE:-manual}"
 STATE_SCRIPT="${MOLTIS_CODEX_UPDATE_STATE_SCRIPT:-${DEFAULT_STATE_SCRIPT}}"
 PROFILE_SCRIPT="${MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT:-${DEFAULT_PROFILE_SCRIPT}}"
 STATE_FILE="${MOLTIS_CODEX_UPDATE_STATE_FILE:-${DEFAULT_STATE_FILE}}"
+AUDIT_DIR="${MOLTIS_CODEX_UPDATE_AUDIT_DIR:-${DEFAULT_AUDIT_DIR}}"
 RELEASE_FILE="${MOLTIS_CODEX_UPDATE_RELEASE_FILE:-}"
 RELEASE_URL="${MOLTIS_CODEX_UPDATE_RELEASE_URL:-${DEFAULT_RELEASE_URL}}"
 ISSUE_SIGNALS_FILE="${MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_FILE:-}"
@@ -50,6 +52,7 @@ Options:
   --state-file PATH            Skill state file
   --state-script PATH          State helper script
   --profile-script PATH        Profile helper script
+  --audit-dir PATH             Audit mirror directory for run records
   --release-file PATH          Read official changelog from local file
   --release-url URL            Read official changelog from URL
   --include-issue-signals      Enrich context with advisory issue signals
@@ -223,6 +226,10 @@ parse_args() {
                 ;;
             --profile-script)
                 PROFILE_SCRIPT="${2:?missing value for --profile-script}"
+                shift 2
+                ;;
+            --audit-dir)
+                AUDIT_DIR="${2:?missing value for --audit-dir}"
                 shift 2
                 ;;
             --release-file)
@@ -406,6 +413,45 @@ render_summary() {
     ' "$REPORT_PATH"
 }
 
+persist_audit_mirror() {
+    local run_id="$1"
+    local audit_written_at="$2"
+    local audit_record_path audit_summary_path state_final
+
+    [[ -n "$AUDIT_DIR" ]] || fail "Audit directory must not be empty"
+    ensure_parent_dir "${AUDIT_DIR}/placeholder"
+    audit_record_path="${AUDIT_DIR}/${run_id}.json"
+    audit_summary_path="${AUDIT_DIR}/${run_id}.summary.md"
+
+    "$STATE_SCRIPT" mark-audit \
+        --state-file "$STATE_FILE" \
+        --audit-record "$audit_record_path" \
+        --audit-summary "$audit_summary_path" \
+        --audit-written-at "$audit_written_at" \
+        --json >/dev/null
+
+    state_final="$("$STATE_SCRIPT" get --state-file "$STATE_FILE" --json)"
+    jq \
+        --arg audit_dir "$AUDIT_DIR" \
+        --arg audit_record "$audit_record_path" \
+        --arg audit_summary "$audit_summary_path" \
+        --arg audit_written_at "$audit_written_at" \
+        --argjson state "$state_final" \
+        '
+        .state = $state |
+        .audit = {
+          dir: $audit_dir,
+          record_path: $audit_record,
+          summary_path: $audit_summary,
+          written_at: $audit_written_at
+        }
+        ' "$REPORT_PATH" > "${REPORT_PATH}.tmp"
+    mv "${REPORT_PATH}.tmp" "$REPORT_PATH"
+
+    cp "$REPORT_PATH" "$audit_record_path"
+    cp "$SUMMARY_PATH" "$audit_summary_path"
+}
+
 main() {
     parse_args "$@"
     require_command jq
@@ -419,6 +465,7 @@ main() {
     local state_before profile_payload state_after decision fingerprint latest_version delivery_status degraded_reason
     local resolved_chat_id="" alert_text="" send_output="" delivery_error="" message_id="" delivery_target="none"
     local send_status=0 primary_status="" state_alert_fingerprint="" effective_delivery_status=""
+    local run_id="" audit_written_at=""
     release_source_path="${TEMP_DIR}/release-source.txt"
     issue_signals_path="${TEMP_DIR}/issue-signals.json"
 
@@ -911,6 +958,7 @@ pathlib.Path(report_path).write_text(json.dumps(report, ensure_ascii=False, inde
 PY
 
     fingerprint="$(jq -r '.snapshot.fingerprint' "$REPORT_PATH")"
+    run_id="$(jq -r '.run_id' "$REPORT_PATH")"
     latest_version="$(jq -r '.snapshot.latest_version' "$REPORT_PATH")"
     decision="$(jq -r '.decision.decision' "$REPORT_PATH")"
     primary_status="$(jq -r '.snapshot.primary_status' "$REPORT_PATH")"
@@ -994,6 +1042,7 @@ PY
         --fingerprint "$fingerprint" \
         --latest-version "$latest_version" \
         --decision "$decision" \
+        --run-id "$run_id" \
         --delivery-status "$delivery_status" \
         --delivery-error "$delivery_error" \
         --degraded-reason "$degraded_reason" \
@@ -1037,6 +1086,8 @@ PY
     mv "${REPORT_PATH}.tmp" "$REPORT_PATH"
 
     render_summary > "$SUMMARY_PATH"
+    audit_written_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    persist_audit_mirror "$run_id" "$audit_written_at"
 
     if [[ -n "$JSON_OUT" ]]; then
         ensure_parent_dir "$JSON_OUT"

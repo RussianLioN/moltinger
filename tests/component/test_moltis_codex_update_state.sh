@@ -34,6 +34,7 @@ run_component_moltis_codex_update_state_tests() {
     assert_file_exists "$state_file" "State helper should create a default state file"
     assert_eq "moltis-codex-update-state/v1" "$(jq -r '.schema_version' <<<"$output")" "Default state should expose the expected schema version"
     assert_eq "" "$(jq -r '.last_seen_fingerprint' <<<"$output")" "Default state should start without a fingerprint"
+    assert_eq "" "$(jq -r '.last_audit_record' <<<"$output")" "Default state should start without an audit pointer"
     test_pass
 
     test_start "component_moltis_codex_update_state_update_persists_last_seen_run_metadata"
@@ -43,12 +44,14 @@ run_component_moltis_codex_update_state_tests() {
         --fingerprint abc12345 \
         --latest-version 0.114.0 \
         --decision upgrade-now \
+        --run-id run-123 \
         --delivery-status not-attempted \
         --degraded-reason 'manual slice only' \
         --json)"
     assert_eq "abc12345" "$(jq -r '.last_seen_fingerprint' <<<"$output")" "Update should persist the latest fingerprint"
     assert_eq "0.114.0" "$(jq -r '.last_seen_version' <<<"$output")" "Update should persist the latest version"
     assert_eq "manual" "$(jq -r '.last_run_mode' <<<"$output")" "Update should persist run mode"
+    assert_eq "run-123" "$(jq -r '.last_run_id' <<<"$output")" "Update should persist the run id"
     assert_eq "upgrade-now" "$(jq -r '.last_result' <<<"$output")" "Update should persist the latest decision"
     assert_eq "not-attempted" "$(jq -r '.last_delivery_status' <<<"$output")" "Update should persist the delivery status for the last run"
     test_pass
@@ -76,6 +79,18 @@ run_component_moltis_codex_update_state_tests() {
     assert_eq "failed" "$(jq -r '.last_delivery_status' <<<"$output")" "Failed delivery should be reflected in state"
     assert_eq "telegram timeout" "$(jq -r '.last_delivery_error' <<<"$output")" "Failure reason should be persisted"
     assert_eq "abc12345" "$(jq -r '.last_alert_fingerprint' <<<"$output")" "Failure without alert fingerprint should not overwrite the previous checkpoint"
+    test_pass
+
+    test_start "component_moltis_codex_update_state_mark_audit_persists_last_audit_record_paths"
+    output="$(bash "$STATE_SCRIPT" mark-audit \
+        --state-file "$state_file" \
+        --audit-record "$work_dir/run-123.json" \
+        --audit-summary "$work_dir/run-123.summary.md" \
+        --audit-written-at 2026-03-14T09:05:00Z \
+        --json)"
+    assert_eq "$work_dir/run-123.json" "$(jq -r '.last_audit_record' <<<"$output")" "mark-audit should persist the audit JSON path"
+    assert_eq "$work_dir/run-123.summary.md" "$(jq -r '.last_audit_summary' <<<"$output")" "mark-audit should persist the audit summary path"
+    assert_eq "2026-03-14T09:05:00Z" "$(jq -r '.last_audit_written_at' <<<"$output")" "mark-audit should persist the audit timestamp"
     test_pass
 
     generate_report

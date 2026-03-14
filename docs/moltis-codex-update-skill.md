@@ -11,6 +11,7 @@
 - optional project profile помогает делать рекомендации более прикладными.
 
 Этот путь заменяет старую гибридную модель, где canonical runtime жил в repo-side watcher scripts.
+Старый watcher теперь нужен только как migration-only исторический материал и не должен восприниматься как основной пользовательский путь.
 
 ## Как это работает сейчас
 
@@ -26,10 +27,10 @@
 - scheduler duplicate suppression внутри самого Moltis-native runtime;
 - Telegram delivery для scheduler path;
 - явные delivery-статусы в state file: `not-attempted`, `deferred`, `not-configured`, `suppressed`, `sent`, `failed`.
+- machine-readable audit mirror для manual и scheduler запусков.
 
-Пока ещё не закрыто целиком:
-- live rollout/UAT production scheduler path;
-- финальный retirement старого migration fallback path.
+На текущем implementation уровне уже закрыто всё внутри feature `023`.
+Отдельно от этой ветки остаётся только production rollout/UAT, если оператор захочет включать live scheduler delivery на сервере.
 
 ## On-demand usage
 
@@ -89,9 +90,40 @@ bash scripts/moltis-codex-update-run.sh \
   --include-issue-signals \
   --issue-signals-file tests/fixtures/codex-update-skill/issue-signals.json \
   --telegram-enabled \
-  --telegram-chat-id 262872984 \
-  --stdout json
+    --telegram-chat-id 262872984 \
+    --stdout json
 ```
+
+## Audit trail
+
+Каждый запуск теперь оставляет два машиночитаемых артефакта:
+
+- JSON audit record
+- Markdown summary
+
+По умолчанию audit mirror живёт здесь:
+
+```text
+.tmp/current/moltis-codex-update-audit/
+```
+
+Внутри report теперь есть блок:
+
+- `audit.dir`
+- `audit.record_path`
+- `audit.summary_path`
+- `audit.written_at`
+
+А state file дополнительно хранит:
+
+- `last_run_id`
+- `last_audit_record`
+- `last_audit_summary`
+- `last_audit_written_at`
+
+Простыми словами:
+- оператор теперь может посмотреть не только текущее state, но и конкретный файл последнего прогона;
+- это одинаково работает и для ручного запуска, и для scheduler path.
 
 ## State helper
 
@@ -112,6 +144,8 @@ bash scripts/moltis-codex-update-state.sh get
 - время последней попытки отправки;
 - delivery error, если отправка не удалась;
 - `last_alert_message_id` для успешного Telegram alert.
+- `last_run_id` для связки state с audit record;
+- ссылки на последний audit JSON и summary.
 
 ## Profile helper
 
@@ -211,6 +245,46 @@ MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID=<chat_id>
 ```
 
 Если `chat_id` не задан явно, runtime пытается взять его из `.env`, а затем fallback-ом использует первый идентификатор из `TELEGRAM_ALLOWED_USERS`.
+
+## Hermetic proof
+
+Для полного доказательства нового пути теперь есть отдельный helper:
+
+```bash
+make codex-update-e2e
+```
+
+Он проверяет:
+
+1. manual run с project profile;
+2. scheduler run с одной реальной отправкой;
+3. повторный scheduler run с duplicate suppression;
+4. наличие audit files для обоих путей.
+
+Артефакт по умолчанию:
+
+```text
+.tmp/current/moltis-codex-update-e2e-report.json
+```
+
+Простыми словами:
+- это короткий hermetic proof, что Moltis-owned skill действительно умеет полный путь `manual -> scheduler -> delivery/suppress`;
+- он нужен как инженерное доказательство перед live rollout.
+
+## Rollback и migration-off
+
+Если новый путь нужно быстро откатить:
+
+1. оставить `MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED=false`, чтобы scheduler перестал отправлять Telegram;
+2. сохранить Moltis-native on-demand skill как источник ручной проверки;
+3. не возвращать старые `/codex_*` reply UX и старый interactive consent flow;
+4. воспринимать `docs/codex-cli-upstream-watcher.md` только как migration-only reference.
+
+Если нужно полностью заморозить этот feature в runtime:
+
+- отключается scheduler invoke;
+- state и audit artifacts сохраняются для диагностики;
+- пользовательский on-demand запрос можно временно оставить как read-only проверку без доставки.
 
 ## Migration note
 

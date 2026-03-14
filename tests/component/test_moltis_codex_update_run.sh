@@ -46,6 +46,10 @@ run_component_moltis_codex_update_run_tests() {
     assert_eq "0.114.0" "$(jq -r '.snapshot.latest_version' "$report")" "Run report should normalize the latest version"
     assert_eq "upgrade-now" "$(jq -r '.decision.decision' "$report")" "Fresh important upstream state should request immediate review"
     assert_eq "new" "$(jq -r '.snapshot.release_status' "$report")" "First run should treat the fingerprint as new"
+    assert_file_exists "$(jq -r '.audit.record_path' "$report")" "Run script should persist an audit JSON mirror for manual runs"
+    assert_file_exists "$(jq -r '.audit.summary_path' "$report")" "Run script should persist an audit summary mirror for manual runs"
+    assert_eq "$(jq -r '.run_id' "$report")" "$(jq -r '.last_run_id' "$state_file")" "State should retain the latest run id"
+    assert_eq "$(jq -r '.audit.record_path' "$report")" "$(jq -r '.last_audit_record' "$state_file")" "State should point to the latest audit JSON"
     assert_contains "$summary" "Решение: разобрать сейчас" "Summary should render the decision in Russian"
     assert_contains "$summary" "Практические рекомендации" "Summary should include the recommendation block"
     test_pass
@@ -118,6 +122,7 @@ EOF
     assert_eq "sent" "$(jq -r '.delivery.status' "$report")" "First scheduler run should send one Telegram alert"
     assert_eq "262872984" "$(jq -r '.delivery.chat_id' "$report")" "Scheduler run should record the Telegram chat id"
     assert_eq "701" "$(jq -r '.delivery.message_id' "$report")" "Successful delivery should persist the Telegram message id"
+    assert_file_exists "$(jq -r '.audit.record_path' "$report")" "Scheduler run should persist an audit JSON mirror"
     assert_eq "1" "$(wc -l < "$work_dir/telegram.log" | tr -d ' ')" "Sender should be invoked exactly once for a fresh fingerprint"
     assert_contains "$(cat "$work_dir/telegram.txt")" "Обновление Codex CLI" "Telegram text should use the Russian alert headline"
     assert_eq "$(jq -r '.snapshot.fingerprint' "$report")" "$(jq -r '.last_alert_fingerprint' "$state_file")" "State should checkpoint the delivered fingerprint"

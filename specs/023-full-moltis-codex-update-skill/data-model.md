@@ -26,7 +26,15 @@ Fields:
 - `last_alert_at`
 - `last_run_at`
 - `last_run_mode` (`manual|scheduler`)
+- `last_run_id`
 - `last_result`
+- `last_delivery_status`
+- `last_delivery_error`
+- `last_delivery_attempt_at`
+- `last_alert_message_id`
+- `last_audit_record`
+- `last_audit_summary`
+- `last_audit_written_at`
 - `degraded_reason`
 
 ## ProjectProfile
@@ -92,4 +100,8 @@ Fields:
 - `profile_status`
 - `started_at`
 - `completed_at`
+- `audit.dir`
+- `audit.record_path`
+- `audit.summary_path`
+- `audit.written_at`
 - `error`

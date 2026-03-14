@@ -66,6 +66,15 @@ bash scripts/moltis-codex-update-run.sh \
 bash scripts/moltis-codex-update-run.sh --mode scheduler --stdout json
 ```
 
-На текущем implementation slice scheduler ещё не является production-final delivery path.
-Он подготовлен как canonical Moltis-native runtime основа; duplicate suppression и delivery
-закрываются следующим implementation slice.
+Scheduler уже умеет:
+
+- проверять upstream по расписанию;
+- подавлять дубль по тому же fingerprint;
+- отправлять одно Telegram-уведомление для нового состояния;
+- писать state и audit trail.
+
+Для hermetic proof полного пути используй:
+
+```bash
+make codex-update-e2e
+```

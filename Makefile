@@ -11,7 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
-.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake codex-advisory-e2e
+.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake codex-advisory-e2e codex-update-e2e
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -96,6 +96,7 @@ help:
 	@echo "  codex-consent-e2e - Прогнать hermetic acceptance path alert -> consent -> recommendations"
 	@echo "  codex-advisory-intake - Сгенерировать advisory event и показать Moltis-native alert preview"
 	@echo "  codex-advisory-e2e - Прогнать hermetic Moltis-native advisory flow: alert -> callback -> follow-up и degraded one-way"
+	@echo "  codex-update-e2e - Прогнать hermetic Moltis-native update skill: manual profile -> scheduler send -> suppress"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -407,6 +408,12 @@ codex-advisory-e2e:
 	@bash ./scripts/codex-advisory-e2e.sh \
 		--mode hermetic \
 		--output .tmp/current/codex-advisory-e2e-report.json
+
+codex-update-e2e:
+	@mkdir -p .tmp/current
+	@bash ./scripts/moltis-codex-update-e2e.sh \
+		--mode hermetic \
+		--output .tmp/current/moltis-codex-update-e2e-report.json
 
 codex-research:
 	@CODEX_MODEL="$(CODEX_MODEL)" CODEX_BASE_BRANCH="$(CODEX_BASE_BRANCH)" ./scripts/codex-profile-launch.sh research
