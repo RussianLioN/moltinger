@@ -52,7 +52,7 @@
 | `021-moltis-native-codex-update-advisory` | `none` | Needs decision |
 | `023-clawdiy-ci-preflight-runtime-home-fix` | `origin/023-clawdiy-ci-preflight-runtime-home-fix` | Needs decision |
 | `023-full-moltis-codex-update-skill` | `origin/023-full-moltis-codex-update-skill` | Needs decision |
-| `023-telegram-factory-adapter` | `none` | Needs decision |
+| `023-telegram-factory-adapter` | `origin/023-telegram-factory-adapter` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
@@ -127,6 +127,7 @@
 | `origin/022-telegram-ba-intake` | Needs decision |
 | `origin/023-clawdiy-ci-preflight-runtime-home-fix` | Needs decision |
 | `origin/023-full-moltis-codex-update-skill` | Needs decision |
+| `origin/023-telegram-factory-adapter` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
