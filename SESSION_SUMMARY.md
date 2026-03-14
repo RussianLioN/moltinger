@@ -60,6 +60,10 @@ GitOps Compliance: Enforced ✅
 - Completed `Phase 2: Foundational` for `024-web-factory-demo-adapter` (`molt-vd0.3.*`): added the reusable browser-session fixture `tests/fixtures/agent-factory/web-demo/session-new.json`, implemented the new adapter runtime `scripts/agent-factory-web-adapter.py`, and extended `scripts/agent_factory_common.py` with browser-oriented status, reply-card, and download projection helpers so one browser turn can already be gated, normalized, routed, persisted, and rendered without touching the downstream factory flow.
 - Added foundational validation coverage for the browser adapter in `tests/component/test_agent_factory_web_access.sh` and `tests/integration_local/test_agent_factory_web_flow.sh`, covering fail-closed access gating, restored-session status requests, first-turn discovery routing, and continued discovery after a follow-up browser answer.
 - Added the initial browser shell assets under `web/agent-factory-demo/` (`index.html`, `app.css`, `app.js`) plus the operator runbook `docs/runbooks/agent-factory-web-demo.md`, so the repo now contains a concrete local web shell, adapter contract notes, storage layout, and the current lightweight HTTP surface (`/health`, `/`, `/app.css`, `/app.js`, `/api/session`, `/api/turn`).
+- Completed `Phase 3 / User Story 1` for `024-web-factory-demo-adapter` (`molt-vd0.4.*`): the browser adapter now keeps the live discovery shell on the correct next action after the first runtime response, exposes `ui_projection.preferred_ui_action`, and publishes business-readable browser labels through `status_snapshot.user_visible_status_label` and `status_snapshot.next_recommended_action_label` instead of leaking internal state codes.
+- Added the US1 fixture `tests/fixtures/agent-factory/web-demo/session-discovery-answer.json`, component coverage in `tests/component/test_agent_factory_web_discovery.sh`, and browser e2e coverage in `tests/e2e_browser/agent_factory_web_demo.mjs`, validating the first raw idea turn, the first follow-up question, the continued answer turn, and the user-safe rendering contract inside the web shell.
+- Updated `web/agent-factory-demo/index.html` and `web/agent-factory-demo/app.js` so the live shell now exposes stable browser selectors (`accessToken`, `messages`, `chatInput`, `sendBtn`), renders human-readable discovery status text, and keeps the composer in `submit_turn` mode after the first follow-up question instead of falling back to a status-only action.
+- Extended `docs/runbooks/agent-factory-web-demo.md` and `specs/024-web-factory-demo-adapter/tasks.md` to reflect the completed live discovery entry flow and the browser-safe response contract for US1.
 - Fixed a late parser drift in `scripts/agent-factory-web-adapter.py` by removing a broken nested f-string from the audit-id builder; after that fix, both host-side and compose-backed integration validation for the new browser slice pass cleanly.
 - Verified the setup slice with:
   - `./tests/run.sh --lane static --filter static_config_validation --json`
@@ -73,6 +77,15 @@ GitOps Compliance: Enforced ✅
   - `./tests/run.sh --lane component --filter component_agent_factory_web_access --json`
   - `TEST_IN_CONTAINER=1 ./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_flow --json`
   - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_flow --json`
+- Verified the live browser discovery slice with:
+  - `python3 -m py_compile scripts/agent_factory_common.py scripts/agent-factory-web-adapter.py`
+  - `bash -n tests/component/test_agent_factory_web_discovery.sh`
+  - `python3 -m json.tool tests/fixtures/agent-factory/web-demo/session-discovery-answer.json >/dev/null`
+  - `node --check web/agent-factory-demo/app.js`
+  - `node --check tests/e2e_browser/agent_factory_web_demo.mjs`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery)' --json`
+  - `./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_flow --json`
+  - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:
   - `spec.md`

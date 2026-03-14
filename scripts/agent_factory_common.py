@@ -690,6 +690,48 @@ def web_user_visible_status(
     return "discovery_in_progress"
 
 
+def web_user_visible_status_label(status: Any) -> str:
+    normalized = normalize_text(status)
+    if normalized == "needs_attention":
+        return "Нужно внимание"
+    if normalized == "awaiting_clarification":
+        return "Нужно уточнение"
+    if normalized == "awaiting_confirmation":
+        return "Brief ждёт подтверждения"
+    if normalized == "confirmed":
+        return "Brief подтвержден"
+    if normalized == "handoff_running":
+        return "Фабрика обрабатывает brief"
+    if normalized == "downloads_ready":
+        return "Артефакты готовы"
+    return "Сбор требований продолжается"
+
+
+def web_next_action_label(action: Any) -> str:
+    normalized = normalize_text(action)
+    if normalized == "request_demo_access":
+        return "Открыть demo-доступ"
+    if normalized == "ask_next_question":
+        return "Ответить на следующий вопрос"
+    if normalized == "resolve_clarification":
+        return "Уточнить недостающие детали"
+    if normalized in {"request_explicit_confirmation", "await_for_confirmation", "confirm_brief"}:
+        return "Проверить и подтвердить brief"
+    if normalized == "request_brief_correction":
+        return "Уточнить brief"
+    if normalized == "run_factory_intake":
+        return "Передать brief в фабрику"
+    if normalized == "generate_artifacts":
+        return "Подготовить concept pack"
+    if normalized in {"publish_downloads", "download_artifact"}:
+        return "Скачать артефакты"
+    if normalized == "request_status":
+        return "Обновить статус"
+    if normalized == "return_to_brief_confirmation":
+        return "Вернуться к подтверждению brief"
+    return "Ждать следующего шага"
+
+
 def web_download_readiness(
     *,
     adapter_status: Any,
@@ -751,17 +793,21 @@ def build_web_demo_status_snapshot(
     needs_operator_attention: bool = False,
 ) -> dict[str, Any]:
     artifacts = normalize_download_artifacts(download_artifacts or [])
+    user_visible_status = web_user_visible_status(
+        adapter_status,
+        next_action=next_action,
+        needs_operator_attention=needs_operator_attention,
+        download_artifacts=artifacts,
+    )
+    next_action_label = web_next_action_label(next_action)
     return {
         "web_demo_status_snapshot_id": f"status-{normalize_text(web_demo_session_id) or normalize_text(project_key) or 'web-demo'}",
         "web_demo_session_id": normalize_text(web_demo_session_id),
         "project_key": normalize_text(project_key),
-        "user_visible_status": web_user_visible_status(
-            adapter_status,
-            next_action=next_action,
-            needs_operator_attention=needs_operator_attention,
-            download_artifacts=artifacts,
-        ),
+        "user_visible_status": user_visible_status,
+        "user_visible_status_label": web_user_visible_status_label(user_visible_status),
         "next_recommended_action": normalize_text(next_action),
+        "next_recommended_action_label": next_action_label,
         "brief_version": normalize_text((brief or {}).get("version")),
         "download_readiness": web_download_readiness(
             adapter_status=adapter_status,
@@ -897,8 +943,8 @@ def build_web_reply_cards(
             title="Статус проекта",
             body_text=(
                 "Сессия активна. "
-                f"Текущий режим: {status_snapshot['user_visible_status']}. "
-                f"Следующее действие: {status_snapshot['next_recommended_action'] or 'ожидание следующего шага'}."
+                f"{status_snapshot['user_visible_status_label']}. "
+                f"Следующий шаг: {status_snapshot['next_recommended_action_label'].lower()}."
             )
             if access_granted
             else "Нужно подтвердить доступ к demo surface, прежде чем открывать проект.",

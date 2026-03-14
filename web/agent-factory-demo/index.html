@@ -57,6 +57,7 @@
               <label class="field field--compact">
                 <span>Access token</span>
                 <input
+                  id="accessToken"
                   type="password"
                   autocomplete="off"
                   placeholder="demo-access-token"
@@ -67,7 +68,7 @@
             </div>
           </div>
 
-          <div class="chat-log" data-role="chat-log" aria-live="polite">
+          <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite">
             <article class="message message--agent" data-role="chat-empty">
               <div class="message__meta">
                 <span class="message__author">Фабричный агент</span>
@@ -98,6 +99,7 @@
               <label class="field">
                 <span>Сообщение для фабричного агента</span>
                 <textarea
+                  id="chatInput"
                   rows="5"
                   placeholder="Например: хочу автоматизировать разбор входящих заявок и распределение между отделами."
                   data-role="composer-input"
@@ -108,7 +110,7 @@
                   Shell понимает `start_project`, `submit_turn`, `request_status`, а будущий API
                   добавит review, confirm и downloads.
                 </p>
-                <button class="button button--primary" type="submit" data-role="composer-submit">
+                <button class="button button--primary" id="sendBtn" type="submit" data-role="composer-submit">
                   Отправить в фабрику
                 </button>
               </div>

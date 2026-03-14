@@ -64,15 +64,15 @@
 
 ### Validation for User Story 1
 
-- [ ] T013 [P] [US1] Create component coverage for browser discovery routing and user-safe rendering in `tests/component/test_agent_factory_web_discovery.sh`
-- [ ] T014 [P] [US1] Create browser-flow coverage for `new project -> first follow-up question` in `tests/e2e_browser/agent_factory_web_demo.mjs`
+- [x] T013 [P] [US1] Create component coverage for browser discovery routing and user-safe rendering in `tests/component/test_agent_factory_web_discovery.sh`
+- [x] T014 [P] [US1] Create browser-flow coverage for `new project -> first follow-up question` in `tests/e2e_browser/agent_factory_web_demo.mjs`
 
 ### Implementation for User Story 1
 
-- [ ] T015 [P] [US1] Extend `scripts/agent-factory-web-adapter.py` to open projects and route free-form browser turns into `scripts/agent-factory-discovery.py`
-- [ ] T016 [P] [US1] Implement browser-readable discovery cards and status text in `scripts/agent_factory_common.py`
-- [ ] T017 [US1] Add discovery conversation fixtures in `tests/fixtures/agent-factory/web-demo/session-discovery-answer.json`
-- [ ] T018 [US1] Document live discovery UX and browser entry flow in `docs/runbooks/agent-factory-web-demo.md`
+- [x] T015 [P] [US1] Extend `scripts/agent-factory-web-adapter.py` to open projects and route free-form browser turns into `scripts/agent-factory-discovery.py`
+- [x] T016 [P] [US1] Implement browser-readable discovery cards and status text in `scripts/agent_factory_common.py`
+- [x] T017 [US1] Add discovery conversation fixtures in `tests/fixtures/agent-factory/web-demo/session-discovery-answer.json`
+- [x] T018 [US1] Document live discovery UX and browser entry flow in `docs/runbooks/agent-factory-web-demo.md`
 
 **Checkpoint**: The factory business-analyst agent is reachable by a real user through the browser for discovery.
 

@@ -12,6 +12,15 @@
     download_artifact: "Скачать артефакт",
     submit_access_token: "Открыть demo",
   };
+  const ACTION_PRIORITY = [
+    "submit_turn",
+    "confirm_brief",
+    "request_brief_correction",
+    "reopen_brief",
+    "request_status",
+    "download_artifact",
+    "start_project",
+  ];
 
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
@@ -192,8 +201,18 @@
     const accessGate = response.access_gate || {};
 
     dom.projectTitle.textContent = pointer.project_key || "Новый проект фабрики";
-    dom.statusUserVisible.textContent = statusSnapshot.user_visible_status || response.status || "gate_pending";
-    dom.statusNextAction.textContent = statusSnapshot.next_recommended_action || response.next_action || "request_demo_access";
+    dom.statusUserVisible.textContent =
+      statusSnapshot.user_visible_status_label ||
+      statusSnapshot.user_visible_status ||
+      response.status ||
+      "gate_pending";
+    dom.statusNextAction.textContent =
+      statusSnapshot.next_recommended_action_label ||
+      ACTION_LABELS[statusSnapshot.next_recommended_action] ||
+      statusSnapshot.next_recommended_action ||
+      ACTION_LABELS[response.next_action] ||
+      response.next_action ||
+      "request_demo_access";
     dom.statusBriefVersion.textContent = statusSnapshot.brief_version || "ещё нет";
     dom.statusDownloadReadiness.textContent = statusSnapshot.download_readiness || "pending";
     dom.statusProjectKey.textContent = pointer.project_key || "не выбран";
@@ -364,7 +383,10 @@
       button.addEventListener("click", () => handleActionShortcut(action));
       dom.quickActions.appendChild(button);
     });
-    setCurrentAction(selected.includes(state.currentAction) ? state.currentAction : selected[0]);
+    const preferredAction = selected.find((action) => action === state.currentAction)
+      || ACTION_PRIORITY.find((action) => selected.includes(action))
+      || selected[0];
+    setCurrentAction(preferredAction);
   }
 
   function replyCardsToMessages(cards) {
@@ -646,12 +668,20 @@
       status_snapshot: {
         user_visible_status:
           stage === "downloads_ready" ? "playground_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        user_visible_status_label:
+          stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
         next_recommended_action:
           stage === "downloads_ready"
             ? "publish_downloads"
             : stage === "awaiting_confirmation"
               ? "confirm_brief"
               : "submit_turn",
+        next_recommended_action_label:
+          stage === "downloads_ready"
+            ? "Скачать артефакты"
+            : stage === "awaiting_confirmation"
+              ? "Проверить и подтвердить brief"
+              : "Ответить на следующий вопрос",
         brief_version: brief.version || "",
         download_readiness: stage === "downloads_ready" ? "ready" : "pending",
       },
@@ -665,6 +695,24 @@
           discovery_session_id: "discovery-web-demo-001",
           project_key: projectKey,
         },
+      },
+      ui_projection: {
+        preferred_ui_action:
+          stage === "downloads_ready"
+            ? "download_artifact"
+            : stage === "awaiting_confirmation"
+              ? "confirm_brief"
+              : "submit_turn",
+        current_question: mockDiscoveryPrompt(stage),
+        current_topic:
+          stage === "discovery_problem"
+            ? "problem"
+            : stage === "discovery_inputs"
+              ? "input_examples"
+              : stage === "discovery_outputs"
+                ? "expected_outputs"
+                : "",
+        project_title: projectKey,
       },
     };
   }
@@ -687,9 +735,13 @@
       });
     }
 
+    const preferredAction = response.ui_projection?.preferred_ui_action;
     updateQuickActions(
       (response.reply_cards || []).flatMap((card) => (Array.isArray(card.action_hints) ? card.action_hints : [])),
     );
+    if (preferredAction) {
+      setCurrentAction(preferredAction);
+    }
     renderConnection();
     renderStatus();
     renderTimeline();

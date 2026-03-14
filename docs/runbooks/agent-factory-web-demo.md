@@ -22,6 +22,9 @@
 - маршрутизировать `start_project`, `submit_turn` и `request_status`
 - сохранять session/access/history snapshots под `data/agent-factory/web-demo/`
 - раздавать `index.html`, `app.css`, `app.js` и `/health` через lightweight Python server
+- показывать первый live discovery follow-up вопрос в том же browser shell после сырой идеи пользователя
+- возвращать browser-safe `status_update` и `discovery_question` cards без leakage внутренних runtime полей
+- подсказывать shell правильный следующий режим через `ui_projection.preferred_ui_action`
 
 На этом этапе adapter ещё не завершает:
 
@@ -129,6 +132,59 @@ Supported foundational actions:
 - `submit_turn`
 - `request_status`
 - `request_brief_review`
+
+## Live Discovery UX (US1)
+
+### Browser entry flow
+
+1. Оператор открывает web demo server или deployed subdomain.
+2. Пользователь вводит demo access token.
+3. Пользователь выбирает `Новый проект` и отправляет сырую идею свободным текстом.
+4. Adapter открывает `WebDemoSession`, запускает discovery runtime из `022`, и возвращает:
+   - человекочитаемый `status_update`
+   - `discovery_question` с первым business-analyst follow-up вопросом
+   - `ui_projection.preferred_ui_action=submit_turn`, чтобы shell сразу переводил composer в режим ответа
+5. Следующий ответ пользователя отправляется как обычный `submit_turn` без JSON/CLI-прослойки.
+
+### Browser-safe response contract
+
+Для live discovery UI должен использовать только browser-facing projection:
+
+- `status_snapshot.user_visible_status_label`
+- `status_snapshot.next_recommended_action_label`
+- `reply_cards[].kind`
+- `reply_cards[].title`
+- `reply_cards[].body`
+- `ui_projection.preferred_ui_action`
+- `ui_projection.current_question`
+- `ui_projection.current_topic`
+
+UI не должен показывать пользователю:
+
+- `discovery_runtime_state`
+- repo paths
+- внутренние status codes вроде `ask_next_question`
+- debug payloads и stack traces
+
+### Local validation examples
+
+Первый turn:
+
+```bash
+python3 scripts/agent-factory-web-adapter.py handle-turn \
+  --source tests/fixtures/agent-factory/web-demo/session-new.json \
+  --state-root /tmp/agent-factory-web-demo \
+  --output /tmp/agent-factory-web-demo/first-turn.json
+```
+
+Follow-up answer:
+
+```bash
+python3 scripts/agent-factory-web-adapter.py handle-turn \
+  --source tests/fixtures/agent-factory/web-demo/session-discovery-answer.json \
+  --state-root /tmp/agent-factory-web-demo \
+  --output /tmp/agent-factory-web-demo/second-turn.json
+```
 
 ## Safety Rules
 

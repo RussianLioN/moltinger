@@ -504,6 +504,31 @@ def build_audit_record(
     }
 
 
+def preferred_ui_action(reply_cards: list[dict[str, Any]], *, fallback: str = "") -> str:
+    priority = (
+        "submit_turn",
+        "confirm_brief",
+        "request_brief_correction",
+        "reopen_brief",
+        "request_status",
+        "download_artifact",
+        "start_project",
+    )
+    discovered_actions: list[str] = []
+    for card in reply_cards:
+        if not isinstance(card, dict):
+            continue
+        for action in card.get("action_hints", []):
+            normalized = normalize_text(action)
+            if normalized and normalized not in discovered_actions:
+                discovered_actions.append(normalized)
+
+    for action in priority:
+        if action in discovered_actions:
+            return action
+    return normalize_text(fallback) or (discovered_actions[0] if discovered_actions else "")
+
+
 def persist_adapter_state(state_root: Path, response: dict[str, Any], access_gate: dict[str, Any]) -> None:
     ensure_state_layout(state_root)
     session_id = normalize_text(response.get("web_demo_session", {}).get("web_demo_session_id"))
@@ -646,6 +671,12 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         "status_snapshot": status_snapshot,
         "reply_cards": reply_cards,
         "audit_record": audit_record,
+        "ui_projection": {
+            "preferred_ui_action": preferred_ui_action(reply_cards, fallback="request_status" if access_granted else "submit_access_token"),
+            "current_question": next_question,
+            "current_topic": envelope["normalized_payload"]["current_topic"],
+            "project_title": normalize_text(pointer.get("project_key")) or "Новый проект фабрики",
+        },
     }
     if access_granted:
         response["discovery_runtime_state"] = runtime_state

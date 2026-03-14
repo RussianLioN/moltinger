@@ -1,0 +1,185 @@
+{
+  "project_key": "invoice-approval-web-demo",
+  "request_channel": "web",
+  "working_language": "ru",
+  "requester_identity": {
+    "display_name": "Ольга",
+    "browser_session_label": "browser-demo-001"
+  },
+  "demo_access_grant": {
+    "demo_access_grant_id": "access-grant-browser-demo-001",
+    "grant_type": "shared_demo_token",
+    "grant_value": "asc-demo-shared",
+    "issued_by": "demo-operator",
+    "issued_for": "Ольга",
+    "status": "active",
+    "expires_at": "2026-12-31T23:59:59Z",
+    "created_at": "2026-03-14T00:00:00Z"
+  },
+  "web_demo_session": {
+    "web_demo_session_id": "web-demo-session-invoice-approval",
+    "session_cookie_id": "cookie-invoice-approval-demo",
+    "status": "awaiting_user_reply",
+    "access_grant_id": "access-grant-browser-demo-001",
+    "active_project_key": "invoice-approval-web-demo",
+    "active_discovery_session_id": "discovery-session-invoice-approval-web-demo",
+    "created_at": "2026-03-14T00:00:00Z",
+    "updated_at": "2026-03-14T20:49:29Z"
+  },
+  "browser_project_pointer": {
+    "pointer_id": "browser-pointer-invoice-approval",
+    "web_demo_session_id": "web-demo-session-invoice-approval",
+    "project_key": "invoice-approval-web-demo",
+    "selection_mode": "continue_active",
+    "linked_discovery_session_id": "discovery-session-invoice-approval-web-demo",
+    "linked_brief_id": "",
+    "linked_brief_version": "",
+    "pointer_status": "active",
+    "updated_at": "2026-03-14T20:49:29Z"
+  },
+  "web_conversation_envelope": {
+    "web_conversation_envelope_id": "web-envelope-invoice-approval-002",
+    "request_id": "request-invoice-approval-002",
+    "transport_mode": "synthetic_fixture",
+    "ui_action": "submit_turn",
+    "user_text": "Оператор первой линии и руководитель согласования счетов.",
+    "received_at": "2026-03-14T20:49:29Z"
+  },
+  "discovery_runtime_state": {
+    "discovery_session": {
+      "discovery_session_id": "discovery-session-invoice-approval-web-demo",
+      "project_key": "invoice-approval-web-demo",
+      "request_channel": "web",
+      "requester_identity": {
+        "display_name": "Ольга",
+        "browser_session_label": "browser-demo-001"
+      },
+      "working_language": "ru",
+      "status": "awaiting_user_reply",
+      "current_topic": "target_users",
+      "next_recommended_action": "ask_next_question",
+      "latest_brief_version": "",
+      "created_at": "2026-03-14T20:49:30Z",
+      "updated_at": "2026-03-14T20:49:30Z"
+    },
+    "requirement_topics": [
+      {
+        "topic_id": "topic-problem",
+        "topic_name": "problem",
+        "category": "problem",
+        "status": "clarified",
+        "summary": "Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация.",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-target_users",
+        "topic_name": "target_users",
+        "category": "actor",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-current_workflow",
+        "topic_name": "current_workflow",
+        "category": "workflow",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-desired_outcome",
+        "topic_name": "desired_outcome",
+        "category": "goal",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-user_story",
+        "topic_name": "user_story",
+        "category": "user_story",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-input_examples",
+        "topic_name": "input_examples",
+        "category": "input",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-expected_outputs",
+        "topic_name": "expected_outputs",
+        "category": "output",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-constraints",
+        "topic_name": "constraints",
+        "category": "constraint",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "topic_id": "topic-success_metrics",
+        "topic_name": "success_metrics",
+        "category": "success_metric",
+        "status": "unasked",
+        "summary": "",
+        "source_turn_ids": [],
+        "last_updated_at": "2026-03-14T20:49:30Z"
+      }
+    ],
+    "clarification_items": [],
+    "example_cases": [],
+    "conversation_turns": [
+      {
+        "turn_id": "turn-001",
+        "actor": "user",
+        "turn_type": "idea_statement",
+        "raw_text": "Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация.",
+        "extracted_topics": [
+          "problem"
+        ],
+        "linked_clarification_ids": [],
+        "recorded_at": "2026-03-14T20:49:30Z"
+      },
+      {
+        "turn_id": "turn-002",
+        "actor": "agent",
+        "turn_type": "clarifying_question",
+        "raw_text": "Кто будет основным пользователем или выгодоприобретателем результата?",
+        "extracted_topics": [
+          "target_users"
+        ],
+        "linked_clarification_ids": [],
+        "recorded_at": "2026-03-14T20:49:30Z"
+      }
+    ],
+    "open_questions": [
+      "Кто будет основным пользователем или выгодоприобретателем результата?"
+    ],
+    "normalized_answers": {
+      "problem": "Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация."
+    },
+    "status": "awaiting_user_reply",
+    "next_action": "ask_next_question",
+    "next_topic": "target_users",
+    "next_question": "Кто будет основным пользователем или выгодоприобретателем результата?"
+  }
+}
