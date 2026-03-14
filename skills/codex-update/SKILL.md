@@ -28,7 +28,13 @@ description: Полностью Moltis-native навык для проверки
 
 ## Основной runtime
 
-Канонический entrypoint:
+Канонический операторский entrypoint:
+
+```bash
+make codex-update
+```
+
+Прямой runtime entrypoint:
 
 ```bash
 bash scripts/moltis-codex-update-run.sh --mode manual
@@ -48,6 +54,7 @@ bash scripts/moltis-codex-update-run.sh \
 - Не отправляй пользователя к старым `repo-side` `/codex_*` flow.
 - Если upstream недоступен, говори честно `нужно проверить`, а не угадывай.
 - Если профиль проекта отсутствует, всё равно дай полезный общий advisory.
+- Не отправляй пользователя к legacy migration-only target-ам, если достаточно `make codex-update`.
 
 ## Что показывать пользователю
 

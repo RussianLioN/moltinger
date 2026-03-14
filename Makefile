@@ -11,7 +11,7 @@
 .PHONY: test-unit test-integration test-e2e test-security
 .PHONY: instructions-sync instructions-check skills-sync skills-check
 .PHONY: codex-bootstrap codex-check codex-check-ci
-.PHONY: codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake codex-advisory-e2e codex-update-e2e
+.PHONY: codex-update codex-update-monitor codex-update-advisor codex-update-delivery codex-upstream-watcher codex-consent-e2e codex-advisory-intake codex-advisory-e2e codex-update-e2e
 .PHONY: codex-research codex-docs codex-runtime codex-assets codex-review codex-hotfix
 
 TEST_FLAGS ?=
@@ -89,14 +89,16 @@ help:
 	@echo "  codex-bootstrap - Verify local Codex prerequisites and repo policy state"
 	@echo "  codex-check     - Run repo-specific Codex governance checks"
 	@echo "  codex-check-ci  - Run Codex governance checks in CI-safe mode"
-	@echo "  codex-update-monitor - Run the Codex update monitor"
-	@echo "  codex-update-advisor - Run the advisor layer over the Codex update monitor"
-	@echo "  codex-update-delivery - Run the user-facing delivery layer over the advisor"
-	@echo "  codex-upstream-watcher - Проверить upstream Codex CLI с уровнями важности и project-ready рекомендациями"
-	@echo "  codex-consent-e2e - Прогнать hermetic acceptance path alert -> consent -> recommendations"
-	@echo "  codex-advisory-intake - Сгенерировать advisory event и показать Moltis-native alert preview"
-	@echo "  codex-advisory-e2e - Прогнать hermetic Moltis-native advisory flow: alert -> callback -> follow-up и degraded one-way"
+	@echo "  codex-update    - Каноническая Moltis-native ручная проверка обновлений Codex CLI"
 	@echo "  codex-update-e2e - Прогнать hermetic Moltis-native update skill: manual profile -> scheduler send -> suppress"
+	@echo "  Legacy migration-only Codex flows:"
+	@echo "  codex-update-monitor - Старый monitor entrypoint, оставлен только как migration reference"
+	@echo "  codex-update-advisor - Старый advisor entrypoint, оставлен только как migration reference"
+	@echo "  codex-update-delivery - Старый delivery entrypoint, оставлен только как migration reference"
+	@echo "  codex-upstream-watcher - Старый upstream watcher entrypoint, оставлен только как migration reference"
+	@echo "  codex-consent-e2e - Hermetic proof старого consent/advisory migration path"
+	@echo "  codex-advisory-intake - Legacy advisory-intake preview для переходного слоя"
+	@echo "  codex-advisory-e2e - Hermetic proof старого advisory migration path"
 	@echo "  codex-research  - Launch Codex in read-only research mode"
 	@echo "  codex-docs      - Launch Codex for docs/knowledge work"
 	@echo "  codex-runtime   - Launch Codex for runtime/config/workflow changes"
@@ -347,6 +349,16 @@ codex-check:
 codex-check-ci:
 	@./scripts/codex-check.sh --ci
 
+codex-update:
+	@mkdir -p .tmp/current
+	@bash ./scripts/moltis-codex-update-run.sh \
+		--mode manual \
+		--include-issue-signals \
+		--json-out .tmp/current/moltis-codex-update-report.json \
+		--summary-out .tmp/current/moltis-codex-update-summary.md \
+		--stdout summary
+
+# Legacy migration-only Codex update entrypoints.
 codex-update-monitor:
 	@mkdir -p .tmp/current
 	@./scripts/codex-cli-update-monitor.sh \

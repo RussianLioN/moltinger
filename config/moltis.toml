@@ -56,6 +56,8 @@ MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
 MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
 MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
 MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
+# Legacy migration-only Codex advisory surfaces.
+# Keep these for transition/reference paths; they are no longer canonical.
 MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
 MOLTIS_CODEX_ADVISORY_INTAKE_SCRIPT = "./scripts/moltis-codex-advisory-intake.sh"
 MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
@@ -69,6 +71,7 @@ MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
 MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS = "24"
 MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND = "/codex-advisory-followup"
+# Canonical Moltis-native Codex update skill runtime.
 MOLTIS_CODEX_UPDATE_STATE_FILE = "/opt/moltinger/.tmp/current/moltis-codex-update-state.json"
 MOLTIS_CODEX_UPDATE_STATE_SCRIPT = "./scripts/moltis-codex-update-state.sh"
 MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT = "./scripts/moltis-codex-update-profile.sh"

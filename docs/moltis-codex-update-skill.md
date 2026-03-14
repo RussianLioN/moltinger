@@ -34,6 +34,16 @@
 
 ## On-demand usage
 
+Канонический операторский entrypoint:
+
+```bash
+make codex-update
+```
+
+Он запускает Moltis-native runtime в manual-режиме, включает issue signals и пишет артефакты в `.tmp/current/`.
+
+Если нужен прямой runtime без Make target:
+
 Прямой runtime:
 
 ```bash
@@ -290,3 +300,4 @@ make codex-update-e2e
 
 Старый гибридный advisory path остаётся только как временный migration fallback.
 Новый canonical target для этой функции — `023-full-moltis-codex-update-skill`.
+Канонический локальный entrypoint для оператора теперь: `make codex-update`.
