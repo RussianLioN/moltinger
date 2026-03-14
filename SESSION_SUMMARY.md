@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-14
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-15
 
 ---
 
@@ -50,7 +50,7 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-14)
+### Current Session Update (2026-03-15)
 
 - Branch in progress: `024-web-factory-demo-adapter`
 - Completed `Phase 1: Setup` for `024-web-factory-demo-adapter` (`molt-vd0.2.*`): switched the active factory adapter anchors in `config/moltis.toml` and `tests/fixtures/config/moltis.toml` to the web-first demo slice, preserved `022` as the discovery-core spec reference, preserved `023` as the follow-up adapter spec reference, and changed the primary delivery channel from `telegram` to `web`.
@@ -69,6 +69,12 @@ GitOps Compliance: Enforced ✅
 - Updated `scripts/agent-factory-web-adapter.py` and `web/agent-factory-demo/app.js` so review/confirm actions can be triggered directly from the shell without JSON editing: `request_brief_review` and `confirm_brief` now work as empty-body explicit browser actions, preferred UI action after confirmation safely falls back to `request_status`, and reopen returns the shell to a new confirmation loop version.
 - Added the awaiting-confirmation browser fixture `tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json`, component coverage in `tests/component/test_agent_factory_web_brief.sh`, and integration coverage in `tests/integration_local/test_agent_factory_web_confirmation.sh`, validating chunked brief rendering, versioned conversational corrections, explicit confirmation, and reopen with preserved confirmation history.
 - Fixed a late parser drift in `scripts/agent-factory-web-adapter.py` by removing a broken nested f-string from the audit-id builder; after that fix, both host-side and compose-backed integration validation for the new browser slice pass cleanly.
+- Completed `Phase 5 / User Story 3` for `024-web-factory-demo-adapter` (`molt-vd0.6.*`): the browser adapter now turns a confirmed browser brief into a live downstream chain by replaying or reusing the ready `factory_handoff_record`, invoking `scripts/agent-factory-intake.py`, invoking `scripts/agent-factory-artifacts.py generate`, and persisting the generated concept pack plus a private browser delivery index under `data/agent-factory/web-demo/downloads/<web_demo_session_id>/`.
+- Added browser-safe delivery projection to `scripts/agent-factory-web-adapter.py` and `scripts/agent_factory_common.py`: the user now receives sanitized `download_artifacts` metadata, `status=download_ready`, `next_action=download_artifact`, and tokenized `/api/download?session_id=...&token=...` URLs instead of raw `download_ref` or filesystem paths.
+- Reconciled `scripts/agent-factory-intake.py` so discovery-origin handoffs preserve `delivery_channel=web`, which keeps the generated `concept-pack.json` provenance aligned with the active browser adapter instead of defaulting back to `telegram`.
+- Updated `web/agent-factory-demo/app.js` so explicit browser confirmation automatically triggers one safe follow-up `request_status`, making the user-visible flow behave as `confirm brief -> concept pack launches -> downloads appear` without manual JSON or CLI steps.
+- Added the ready-download fixture `tests/fixtures/agent-factory/web-demo/session-download-ready.json`, component coverage in `tests/component/test_agent_factory_web_delivery.sh`, and integration coverage in `tests/integration_local/test_agent_factory_web_handoff.sh`, validating sanitized delivery metadata, automatic confirmed-brief handoff, manifest provenance preservation, and live `/api/download` serving of the generated project document.
+- Updated `docs/runbooks/agent-factory-web-demo.md`, `docs/runbooks/agent-factory-prototype.md`, and `specs/024-web-factory-demo-adapter/tasks.md` so the operator docs and planning artifacts now describe the completed browser path from `confirmed brief` to concept-pack download rather than stopping at browser confirmation.
 - Verified the setup slice with:
   - `./tests/run.sh --lane static --filter static_config_validation --json`
   - `bash -n tests/run.sh`
@@ -97,6 +103,14 @@ GitOps Compliance: Enforced ✅
   - `node --check web/agent-factory-demo/app.js`
   - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief)' --json`
   - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation)' --json`
+  - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
+- Verified the browser handoff-and-download slice with:
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py scripts/agent-factory-intake.py scripts/agent_factory_common.py`
+  - `bash -n tests/component/test_agent_factory_web_delivery.sh tests/integration_local/test_agent_factory_web_handoff.sh`
+  - `python3 -m json.tool tests/fixtures/agent-factory/web-demo/session-download-ready.json >/dev/null`
+  - `node --check web/agent-factory-demo/app.js`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff)' --json`
   - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:

@@ -670,7 +670,7 @@ def web_user_visible_status(
         return "needs_attention"
 
     artifacts = normalize_download_artifacts(download_artifacts or [])
-    if artifacts and all(normalize_text(item.get("download_status")) == "available" for item in artifacts):
+    if artifacts and all(normalize_text(item.get("download_status")) in {"available", "ready"} for item in artifacts):
         return "downloads_ready"
 
     status = normalize_text(adapter_status)
@@ -741,7 +741,7 @@ def web_download_readiness(
     if needs_operator_attention:
         return "blocked"
     artifacts = normalize_download_artifacts(download_artifacts or [])
-    if artifacts and all(normalize_text(item.get("download_status")) == "available" for item in artifacts):
+    if artifacts and all(normalize_text(item.get("download_status")) in {"available", "ready"} for item in artifacts):
         return "ready"
     status = normalize_text(adapter_status)
     if status in {"confirmed", "awaiting_confirmation", "download_ready"}:

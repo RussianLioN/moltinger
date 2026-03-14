@@ -286,7 +286,7 @@ def main() -> int:
         "desired_outcome": desired_outcome,
         "requested_decision": DEFAULT_REQUESTED_DECISION,
         "next_step_summary": DISCOVERY_HANDOFF_NEXT_STEP_SUMMARY if is_discovery_handoff_request else DEFAULT_NEXT_STEP_SUMMARY,
-        "delivery_channel": "telegram",
+        "delivery_channel": normalize_text(normalized_request.get("request_channel")) or "telegram",
         "working_language": request_language,
     }
 

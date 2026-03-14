@@ -108,15 +108,15 @@
 
 ### Validation for User Story 3
 
-- [ ] T025 [P] [US3] Create component coverage for downstream orchestration and download sanitization in `tests/component/test_agent_factory_web_delivery.sh`
-- [ ] T026 [P] [US3] Create integration coverage for `confirmed brief -> downloadable artifacts` in `tests/integration_local/test_agent_factory_web_handoff.sh`
+- [x] T025 [P] [US3] Create component coverage for downstream orchestration and download sanitization in `tests/component/test_agent_factory_web_delivery.sh`
+- [x] T026 [P] [US3] Create integration coverage for `confirmed brief -> downloadable artifacts` in `tests/integration_local/test_agent_factory_web_handoff.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T027 [P] [US3] Extend `scripts/agent-factory-web-adapter.py` to invoke `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py` automatically after confirmation
-- [ ] T028 [P] [US3] Add browser download endpoints and safe delivery metadata in `scripts/agent-factory-web-adapter.py` and `web/agent-factory-demo/app.js`
-- [ ] T029 [US3] Reconcile delivery and provenance fields in `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py`
-- [ ] T030 [US3] Document concept-pack browser delivery and failure messaging in `docs/runbooks/agent-factory-web-demo.md` and `docs/runbooks/agent-factory-prototype.md`
+- [x] T027 [P] [US3] Extend `scripts/agent-factory-web-adapter.py` to invoke `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py` automatically after confirmation
+- [x] T028 [P] [US3] Add browser download endpoints and safe delivery metadata in `scripts/agent-factory-web-adapter.py` and `web/agent-factory-demo/app.js`
+- [x] T029 [US3] Reconcile delivery and provenance fields in `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py`
+- [x] T030 [US3] Document concept-pack browser delivery and failure messaging in `docs/runbooks/agent-factory-web-demo.md` and `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: The browser demo becomes the full user-facing path from confirmation to concept-pack download.
 

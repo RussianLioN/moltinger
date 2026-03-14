@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Этот runbook описывает текущий foundational slice `024-web-factory-demo-adapter`.
+Этот runbook описывает текущий рабочий slice `024-web-factory-demo-adapter`.
 
 Текущая цель слоя:
 
@@ -10,6 +10,8 @@
 2. нормализовать browser turn в discovery runtime из `022`
 3. хранить adapter-level session/access/history отдельно от discovery-core state
 4. отрисовывать безопасные user-facing reply cards вместо raw runtime JSON
+5. автоматически запускать downstream `handoff -> intake -> concept pack`
+6. публиковать browser-safe downloads для `project doc`, `agent spec`, и `presentation`
 
 ## Current Scope
 
@@ -25,13 +27,14 @@
 - показывать первый live discovery follow-up вопрос в том же browser shell после сырой идеи пользователя
 - возвращать browser-safe `status_update` и `discovery_question` cards без leakage внутренних runtime полей
 - подсказывать shell правильный следующий режим через `ui_projection.preferred_ui_action`
+- рендерить reviewable brief по секциям, принимать correction/confirm/reopen actions и сохранять versioned confirmation history
+- после `confirm_brief` автоматически запускать downstream handoff chain через `scripts/agent-factory-intake.py` и `scripts/agent-factory-artifacts.py`
+- публиковать browser-safe `download_artifacts` и HTTP download endpoint `/api/download`
 
 На этом этапе adapter ещё не завершает:
 
-- full brief correction/confirmation UX
-- downstream `handoff -> intake -> artifacts`
-- browser downloads
 - remote smoke/deploy rollout
+- long-lived browser resume/reopen polish beyond the current saved-session path
 
 Эти части закрываются в следующих user stories `024`.
 
@@ -69,6 +72,7 @@ Available routes:
 - `GET /app.css`
 - `GET /app.js`
 - `GET /api/session?session_id=<web_demo_session_id>`
+- `GET /api/download?session_id=<web_demo_session_id>&token=<download_token>`
 - `POST /api/turn`
 
 ## Storage Layout
@@ -78,6 +82,7 @@ Adapter-local state lives under:
 ```text
 data/agent-factory/web-demo/
 ├── access/
+├── downloads/
 ├── history/
 └── sessions/
 ```
@@ -100,6 +105,16 @@ Stores one active adapter snapshot per `web_demo_session_id`, including:
 ### history/
 
 Stores per-request adapter snapshots for lightweight audit and resume traceability.
+
+### downloads/
+
+Stores per-session browser delivery state:
+
+- `concept-pack.json`
+- `downloads/project-doc.md`
+- `downloads/agent-spec.md`
+- `downloads/presentation.md`
+- `delivery-index.json` with private `download_ref -> token` resolution
 
 ## Browser Envelope Contract
 
@@ -132,6 +147,10 @@ Supported foundational actions:
 - `submit_turn`
 - `request_status`
 - `request_brief_review`
+- `request_brief_correction`
+- `confirm_brief`
+- `reopen_brief`
+- `download_artifact`
 
 ## Live Discovery UX (US1)
 
@@ -242,6 +261,79 @@ Expected result:
 - browser correction publishes a new brief version
 - explicit confirmation fixes that exact version as confirmed
 - reopen returns the UI to a new reviewable version without losing confirmation history
+
+## Automatic Handoff And Browser Downloads (US3)
+
+### Browser delivery behavior
+
+После explicit browser confirmation shell не требует ручного JSON шага:
+
+1. `confirm_brief` фиксирует exact reviewed brief version.
+2. Shell делает безопасный follow-up `request_status`.
+3. Adapter при необходимости перевыпускает `factory_handoff_record` из confirmed discovery state.
+4. Adapter запускает downstream chain:
+   - `scripts/agent-factory-intake.py`
+   - `scripts/agent-factory-artifacts.py generate`
+5. Browser response переходит в `status=download_ready`.
+6. Пользователь получает 3 артефакта через `download_artifacts[]` с browser-safe `/api/download` URL.
+
+### Delivery contract
+
+Browser response должен содержать только sanitized delivery metadata:
+
+- `artifact_kind`
+- `download_name`
+- `download_status`
+- `project_key`
+- `brief_version`
+- `download_token`
+- `download_url`
+
+Browser response не должен содержать:
+
+- `download_ref`
+- локальные filesystem paths
+- `working_root`
+- `download_root`
+
+### Local validation examples
+
+Ready download fixture:
+
+```bash
+python3 scripts/agent-factory-web-adapter.py handle-turn \
+  --source tests/fixtures/agent-factory/web-demo/session-download-ready.json \
+  --state-root /tmp/agent-factory-web-demo \
+  --output /tmp/agent-factory-web-demo/downloads.json
+```
+
+Expected result:
+
+- `status=download_ready`
+- `next_action=download_artifact`
+- 3 browser downloads are exposed
+- `status_snapshot.download_readiness=ready`
+
+Full browser handoff chain:
+
+```bash
+./tests/run.sh --lane integration_local --filter integration_local_agent_factory_web_handoff --json
+```
+
+Expected result:
+
+- confirmed browser brief triggers downstream concept-pack generation
+- manifest keeps discovery provenance and `delivery_channel=web`
+- `/api/download` serves the generated `project-doc.md`, `agent-spec.md`, and `presentation.md`
+
+### Failure messaging
+
+Если downstream handoff или artifact generation ломается, adapter:
+
+- не публикует partially-ready downloads
+- оставляет user-facing state в safe status response
+- публикует `error_message` reply card вместо raw exception payload
+- сохраняет adapter/session snapshot для operator follow-up
 
 ## Safety Rules
 

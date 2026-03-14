@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from agent_factory_common import (
+    build_web_reply_card,
     build_web_demo_status_snapshot,
     build_web_reply_cards,
     load_json,
@@ -30,6 +31,8 @@ from agent_factory_common import (
 SCRIPT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_ROOT.parent
 DISCOVERY_SCRIPT = SCRIPT_ROOT / "agent-factory-discovery.py"
+INTAKE_SCRIPT = SCRIPT_ROOT / "agent-factory-intake.py"
+ARTIFACT_SCRIPT = SCRIPT_ROOT / "agent-factory-artifacts.py"
 DEFAULT_STATE_ROOT = PROJECT_ROOT / "data/agent-factory/web-demo"
 DEFAULT_ASSET_ROOT = PROJECT_ROOT / "web/agent-factory-demo"
 DISCOVERY_STATE_KEYS = (
@@ -91,27 +94,110 @@ def parse_args() -> argparse.Namespace:
 
 
 def ensure_state_layout(state_root: Path) -> None:
-    for dirname in ("sessions", "access", "history"):
+    for dirname in ("sessions", "access", "history", "downloads"):
         (state_root / dirname).mkdir(parents=True, exist_ok=True)
 
 
-def sanitize_download_artifacts(download_artifacts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def sanitize_download_artifacts(
+    download_artifacts: list[dict[str, Any]] | None,
+    *,
+    web_demo_session_id: str = "",
+) -> list[dict[str, Any]]:
     sanitized: list[dict[str, Any]] = []
     for item in normalize_download_artifacts(download_artifacts or []):
+        artifact_kind = normalize_text(item.get("artifact_kind"))
+        download_name = normalize_text(item.get("download_name"))
+        project_key = normalize_text(item.get("project_key"))
+        brief_version = normalize_text(item.get("brief_version"))
+        download_token = normalize_text(item.get("download_token")) or sha256_hex(
+            f"{web_demo_session_id}:{artifact_kind}:{download_name}:{brief_version}"
+        )[:16]
+        raw_status = normalize_text(item.get("download_status")) or "pending"
+        public_status = "ready" if raw_status in {"available", "ready"} else "pending"
         sanitized.append(
             {
-                "artifact_kind": normalize_text(item.get("artifact_kind")),
-                "download_name": normalize_text(item.get("download_name")),
-                "download_status": normalize_text(item.get("download_status")) or "pending",
-                "project_key": normalize_text(item.get("project_key")),
-                "brief_version": normalize_text(item.get("brief_version")),
-                "download_token": normalize_text(item.get("download_token")) or slugify(
-                    f"{item.get('artifact_kind')}-{item.get('download_name')}",
-                    "download",
-                ),
+                "artifact_kind": artifact_kind,
+                "download_name": download_name,
+                "download_status": public_status,
+                "project_key": project_key,
+                "brief_version": brief_version,
+                "download_token": download_token,
+                "download_url": f"/api/download?session_id={web_demo_session_id}&token={download_token}"
+                if web_demo_session_id and download_token and public_status == "ready"
+                else "",
             }
         )
     return sanitized
+
+
+def delivery_root(state_root: Path, web_demo_session_id: str) -> Path:
+    return state_root / "downloads" / (web_demo_session_id or "anonymous-session")
+
+
+def delivery_index_path(state_root: Path, web_demo_session_id: str) -> Path:
+    return delivery_root(state_root, web_demo_session_id) / "delivery-index.json"
+
+
+def write_delivery_index(state_root: Path, web_demo_session_id: str, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    root = delivery_root(state_root, web_demo_session_id)
+    root.mkdir(parents=True, exist_ok=True)
+    normalized = normalize_download_artifacts(manifest)
+    private_items: list[dict[str, Any]] = []
+    public_items: list[dict[str, Any]] = []
+    for item in normalized:
+        artifact_kind = normalize_text(item.get("artifact_kind"))
+        download_name = normalize_text(item.get("download_name"))
+        project_key = normalize_text(item.get("project_key"))
+        brief_version = normalize_text(item.get("brief_version"))
+        download_ref = normalize_text(item.get("download_ref"))
+        download_token = sha256_hex(f"{web_demo_session_id}:{artifact_kind}:{download_name}:{brief_version}")[:16]
+        private_items.append(
+            {
+                "download_token": download_token,
+                "artifact_kind": artifact_kind,
+                "download_name": download_name,
+                "download_ref": download_ref,
+                "project_key": project_key,
+                "brief_version": brief_version,
+            }
+        )
+        public_items.append(
+            {
+                "artifact_kind": artifact_kind,
+                "download_name": download_name,
+                "download_status": "ready" if download_ref else "pending",
+                "project_key": project_key,
+                "brief_version": brief_version,
+                "download_token": download_token,
+            }
+        )
+    write_json(
+        {
+            "web_demo_session_id": web_demo_session_id,
+            "generated_at": utc_now(),
+            "items": private_items,
+        },
+        delivery_index_path(state_root, web_demo_session_id),
+    )
+    return sanitize_download_artifacts(public_items, web_demo_session_id=web_demo_session_id)
+
+
+def load_delivery_entry(state_root: Path, web_demo_session_id: str, download_token: str) -> dict[str, Any]:
+    index_path = delivery_index_path(state_root, web_demo_session_id)
+    if not index_path.is_file():
+        return {}
+    index = load_json(index_path)
+    if not isinstance(index, dict):
+        return {}
+    items = index.get("items", [])
+    if not isinstance(items, list):
+        return {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if normalize_text(item.get("download_token")) == download_token:
+            return item
+    return {}
 
 
 def load_payload(path: str) -> dict[str, Any]:
@@ -454,10 +540,109 @@ def run_discovery_runtime(discovery_request: dict[str, Any]) -> dict[str, Any]:
         return response
 
 
+def run_intake_runtime(source_payload: dict[str, Any]) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_path = Path(tmpdir) / "intake-request.json"
+        output_path = Path(tmpdir) / "intake-response.json"
+        source_path.write_text(json.dumps(source_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(INTAKE_SCRIPT), "--source", str(source_path), "--output", str(output_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=PROJECT_ROOT,
+        )
+        if proc.returncode != 0:
+            detail = normalize_text(proc.stderr) or normalize_text(proc.stdout) or "intake runtime failed"
+            raise RuntimeError(detail)
+        response = load_json(output_path)
+        if not isinstance(response, dict):
+            raise RuntimeError("intake runtime returned a non-object response")
+        return response
+
+
+def run_artifact_runtime(source_payload: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_path = Path(tmpdir) / "artifact-request.json"
+        output_path = Path(tmpdir) / "artifact-response.json"
+        source_path.write_text(json.dumps(source_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ARTIFACT_SCRIPT),
+                "generate",
+                "--input",
+                str(source_path),
+                "--output-dir",
+                str(output_dir),
+                "--output",
+                str(output_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=PROJECT_ROOT,
+        )
+        if proc.returncode != 0:
+            detail = normalize_text(proc.stderr) or normalize_text(proc.stdout) or "artifact generation failed"
+            raise RuntimeError(detail)
+        response = load_json(output_path)
+        if not isinstance(response, dict):
+            raise RuntimeError("artifact generation returned a non-object response")
+        return response
+
+
 def sanitize_discovery_runtime_state(runtime_response: dict[str, Any]) -> dict[str, Any]:
     sanitized = copy_discovery_state(runtime_response)
     sanitized.pop("brief_template_path", None)
     return sanitized
+
+
+def prepare_delivery_runtime_state(runtime_state: dict[str, Any], requester_identity: dict[str, Any]) -> dict[str, Any]:
+    delivery_state = copy_discovery_state(runtime_state)
+    delivery_state["request_channel"] = normalize_text(delivery_state.get("request_channel")) or "web"
+    delivery_state["requester_identity"] = requester_identity
+    delivery_state["working_language"] = normalize_text(delivery_state.get("working_language")) or "ru"
+    return delivery_state
+
+
+def ensure_ready_handoff(runtime_state: dict[str, Any], requester_identity: dict[str, Any]) -> dict[str, Any]:
+    handoff = runtime_state.get("factory_handoff_record", {}) if isinstance(runtime_state.get("factory_handoff_record"), dict) else {}
+    if normalize_text(handoff.get("handoff_status")) == "ready":
+        return runtime_state
+
+    status = normalize_text(runtime_state.get("status"))
+    next_action = normalize_text(runtime_state.get("next_action"))
+    if status != "confirmed" and next_action not in {"start_concept_pack_handoff", "run_factory_intake"}:
+        return runtime_state
+
+    handoff_request = prepare_delivery_runtime_state(runtime_state, requester_identity)
+    replayed_state = run_discovery_runtime(handoff_request)
+    return sanitize_discovery_runtime_state(replayed_state)
+
+
+def generate_browser_downloads(
+    state_root: Path,
+    web_demo_session_id: str,
+    runtime_state: dict[str, Any],
+    requester_identity: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+    ready_state = ensure_ready_handoff(runtime_state, requester_identity)
+    handoff = ready_state.get("factory_handoff_record", {}) if isinstance(ready_state.get("factory_handoff_record"), dict) else {}
+    if normalize_text(handoff.get("handoff_status")) != "ready":
+        return ready_state, [], ""
+
+    intake_response = run_intake_runtime(ready_state)
+    if normalize_text(intake_response.get("status")) != "ready_for_pack":
+        return ready_state, [], normalize_text(intake_response.get("block_reason")) or "Factory intake did not reach ready_for_pack."
+
+    artifact_output_dir = delivery_root(state_root, web_demo_session_id)
+    artifact_manifest = run_artifact_runtime(intake_response, output_dir=artifact_output_dir)
+    if normalize_text(artifact_manifest.get("status")) != "generated":
+        return ready_state, [], "Concept pack generation did not complete successfully."
+
+    return ready_state, write_delivery_index(state_root, web_demo_session_id, artifact_manifest), ""
 
 
 def build_audit_record(
@@ -567,6 +752,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
 
     download_artifacts: list[dict[str, Any]] = []
     runtime_state: dict[str, Any] = {}
+    delivery_error = ""
     if access_granted:
         discovery_request, skip_runtime = build_discovery_request(
             payload,
@@ -579,7 +765,25 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         )
         runtime_state = discovery_state if skip_runtime and discovery_state else run_discovery_runtime(discovery_request)
         runtime_state = sanitize_discovery_runtime_state(runtime_state)
-        download_artifacts = sanitize_download_artifacts(payload.get("download_artifacts"))
+        download_artifacts = sanitize_download_artifacts(
+            payload.get("download_artifacts"),
+            web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
+        )
+        if not download_artifacts:
+            download_artifacts = sanitize_download_artifacts(
+                saved_session.get("download_artifacts"),
+                web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
+            )
+        if not download_artifacts and normalize_text(envelope.get("ui_action")) in {"request_status", "download_artifact"}:
+            try:
+                runtime_state, download_artifacts, delivery_error = generate_browser_downloads(
+                    state_root,
+                    normalize_text(web_demo_session.get("web_demo_session_id")),
+                    runtime_state,
+                    requester_identity,
+                )
+            except Exception as exc:  # noqa: BLE001
+                delivery_error = normalize_text(exc) or "Concept pack generation failed."
     else:
         runtime_state = {
             "status": "gate_pending",
@@ -597,10 +801,14 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     pointer["linked_brief_version"] = normalize_text(requirement_brief.get("version"))
     pointer["updated_at"] = now
 
-    adapter_status = normalize_text(runtime_state.get("status")) or "active"
-    next_action = normalize_text(runtime_state.get("next_action"))
+    adapter_status = "download_ready" if download_artifacts else (normalize_text(runtime_state.get("status")) or "active")
+    next_action = "download_artifact" if download_artifacts else normalize_text(runtime_state.get("next_action"))
     next_topic = normalize_text(runtime_state.get("next_topic"))
-    next_question = normalize_text(runtime_state.get("next_question"))
+    next_question = (
+        "Concept pack готов. Можно скачать project doc, agent spec и presentation из этой browser session."
+        if download_artifacts
+        else normalize_text(runtime_state.get("next_question"))
+    )
     status_snapshot = build_web_demo_status_snapshot(
         web_demo_session.get("web_demo_session_id"),
         pointer.get("project_key"),
@@ -635,13 +843,33 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         "request_channel": "web",
     }
 
+    card_runtime_state = deepcopy(runtime_state)
+    card_runtime_state["status"] = adapter_status
+    card_runtime_state["next_action"] = next_action
+    card_runtime_state["next_question"] = next_question
     reply_cards = build_web_reply_cards(
-        runtime_state,
+        card_runtime_state,
         web_demo_session_id=web_demo_session.get("web_demo_session_id"),
         access_granted=access_granted,
         now=now,
         download_artifacts=download_artifacts,
     )
+    if delivery_error:
+        reply_cards.append(
+            build_web_reply_card(
+                "error_message",
+                title="Concept pack пока не готов",
+                body_text=delivery_error,
+                web_demo_session_id=web_demo_session.get("web_demo_session_id"),
+                action_hints=["request_status"],
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=runtime_state.get("factory_handoff_record", {}).get("factory_handoff_id")
+                if isinstance(runtime_state.get("factory_handoff_record"), dict)
+                else "",
+                now=now,
+            )
+        )
     audit_record = build_audit_record(
         web_demo_session,
         pointer,
@@ -684,6 +912,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         response["discovery_runtime_state"] = runtime_state
     if download_artifacts:
         response["download_artifacts"] = download_artifacts
+    if delivery_error:
+        response["delivery_error"] = delivery_error
 
     persist_adapter_state(state_root, response, access_gate)
     return response
@@ -711,6 +941,20 @@ def render_file(handler: BaseHTTPRequestHandler, path: Path) -> None:
     handler.wfile.write(body)
 
 
+def render_download(handler: BaseHTTPRequestHandler, path: Path, download_name: str) -> None:
+    if not path.is_file():
+        render_json(handler, {"status": "error", "error": "download_not_found"}, status_code=404)
+        return
+    body = path.read_bytes()
+    content_type, _encoding = mimetypes.guess_type(str(path))
+    handler.send_response(200)
+    handler.send_header("Content-Type", content_type or "application/octet-stream")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Content-Disposition", f'attachment; filename="{download_name or path.name}"')
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
     ensure_state_layout(state_root)
 
@@ -733,6 +977,19 @@ def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
                     render_json(self, {"status": "error", "error": "session_not_found"}, status_code=404)
                     return
                 render_json(self, session)
+                return
+            if parsed.path == "/api/download":
+                session_id = normalize_text(parse_qs(parsed.query).get("session_id", [""])[0])
+                download_token = normalize_text(parse_qs(parsed.query).get("token", [""])[0])
+                if not session_id or not download_token:
+                    render_json(self, {"status": "error", "error": "missing_download_locator"}, status_code=400)
+                    return
+                entry = load_delivery_entry(state_root, session_id, download_token)
+                download_ref = Path(normalize_text(entry.get("download_ref")))
+                if not entry or not download_ref.is_file():
+                    render_json(self, {"status": "error", "error": "download_not_found"}, status_code=404)
+                    return
+                render_download(self, download_ref, normalize_text(entry.get("download_name")) or download_ref.name)
                 return
             if parsed.path in {"/", "/index.html"}:
                 render_file(self, assets_root / "index.html")

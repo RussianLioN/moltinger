@@ -60,6 +60,7 @@
     sessionId: "",
     requestCounter: 0,
     mockStage: "gate_pending",
+    lastAutoFollowupSource: "",
   };
 
   function safeJsonParse(value, fallback) {
@@ -104,6 +105,7 @@
     state.sessionId = normalizeText(saved.sessionId);
     state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
     state.mockStage = normalizeText(saved.mockStage, "gate_pending");
+    state.lastAutoFollowupSource = normalizeText(saved.lastAutoFollowupSource);
   }
 
   function persist() {
@@ -118,6 +120,7 @@
         sessionId: state.sessionId,
         requestCounter: state.requestCounter,
         mockStage: state.mockStage,
+        lastAutoFollowupSource: state.lastAutoFollowupSource,
       }),
     );
   }
@@ -330,7 +333,7 @@
       const title = fragment.querySelector(".artifact-card__title");
       const body = fragment.querySelector(".artifact-card__body");
       const button = fragment.querySelector(".artifact-card__button");
-      const ready = normalizeText(artifact.download_status) === "ready";
+      const ready = ["ready", "available"].includes(normalizeText(artifact.download_status));
 
       card.dataset.artifactKind = artifact.artifact_kind || "artifact";
       kind.textContent = artifact.artifact_kind || "artifact";
@@ -771,6 +774,23 @@
     renderTimeline();
     renderArtifacts();
     persist();
+
+    const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
+    const sourceRequestId = normalizeText(response.web_conversation_envelope?.request_id);
+    if (
+      connectionMode === "live"
+      && sourceAction === "confirm_brief"
+      && response.next_action === "start_concept_pack_handoff"
+      && !Array.isArray(response.download_artifacts)
+      && sourceRequestId
+      && state.lastAutoFollowupSource !== sourceRequestId
+    ) {
+      state.lastAutoFollowupSource = sourceRequestId;
+      persist();
+      window.setTimeout(() => {
+        dispatchTurn("request_status", "", { skipUserMessage: true });
+      }, 120);
+    }
   }
 
   async function dispatchTurn(action, userText, options = {}) {

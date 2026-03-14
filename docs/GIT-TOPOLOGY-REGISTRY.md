@@ -54,7 +54,7 @@
 | `016-worktree-skill-bug-fix` | `none` | Needs decision |
 | `021-moltis-native-codex-update-advisory` | `none` | Needs decision |
 | `023-full-moltis-codex-update-skill` | `origin/023-full-moltis-codex-update-skill` | Needs decision |
-| `024-clawdiy-oauth-store-drift-fix` | `origin/main` | Needs decision |
+| `024-clawdiy-oauth-store-drift-fix` | `origin/024-clawdiy-oauth-store-drift-fix` | Needs decision |
 | `024-web-factory-demo-adapter` | `origin/024-web-factory-demo-adapter` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
@@ -134,6 +134,7 @@
 | `origin/022-telegram-ba-intake` | Needs decision |
 | `origin/023-full-moltis-codex-update-skill` | Needs decision |
 | `origin/023-telegram-factory-adapter` | Needs decision |
+| `origin/024-clawdiy-oauth-store-drift-fix` | Needs decision |
 | `origin/024-web-factory-demo-adapter` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |

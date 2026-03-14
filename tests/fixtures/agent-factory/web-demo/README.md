@@ -7,7 +7,7 @@
 - `session-new.json` — новый browser session envelope для старта discovery из web UI
 - `session-discovery-answer.json` — browser turn с очередным бизнес-ответом пользователя
 - `session-awaiting-confirmation.json` — browser session в состоянии review/confirmation brief
-- `session-download-ready.json` — browser session после downstream handoff с готовыми concept-pack downloads
+- `session-download-ready.json` — browser session после downstream handoff с готовыми concept-pack downloads и browser delivery metadata для `/api/download`
 
 ## Правила
 

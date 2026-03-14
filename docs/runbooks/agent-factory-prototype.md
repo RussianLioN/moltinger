@@ -294,7 +294,8 @@ Operational rule:
 
 - never require the user to browse server paths manually
 - always treat `concept-pack.json` as the source of truth for which files are publishable
-- use the `download_ref` values from the manifest when wiring the active interface adapter later
+- interface adapters may transform internal `download_ref` values into user-safe delivery URLs
+- the active web-first adapter from `024-web-factory-demo-adapter` already republishes these artifacts through `/api/download` without exposing internal paths
 
 ## Current Artifact Contract
 
@@ -346,7 +347,7 @@ Typical local validation:
 
 - The concept pack is Markdown-first in this MVP0 slice.
 - Downloadable outputs currently use Markdown copies; export to additional formats is a later enhancement.
-- Interface-level publishing is represented by manifest-ready download refs, not by live file sending in this slice.
+- Interface-level publishing is adapter-specific: the browser adapter already serves live downloads, while other adapters may still consume manifest-ready refs only.
 - The prototype swarm is contract-driven and evidence-first; it does not yet spawn live long-running worker runtimes.
 - `--fail-stage` exists only for local validation and operator drills; it is not a production retry policy.
 - The prototype ends at a runnable playground bundle plus evidence. Production deployment remains MVP1.
