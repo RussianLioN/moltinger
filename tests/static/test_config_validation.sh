@@ -10,6 +10,7 @@ TEST_FIXTURE_CONFIG="$PROJECT_ROOT/tests/fixtures/config/moltis.toml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
+COMPOSE_ASC="$PROJECT_ROOT/docker-compose.asc.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
@@ -74,6 +75,13 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"
+    fi
+
+    test_start "static_compose_asc_valid"
+    if docker compose -f "$COMPOSE_ASC" config --quiet >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "docker-compose.asc.yml does not render cleanly"
     fi
 
     test_start "static_config_uses_env_substitution"

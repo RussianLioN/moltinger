@@ -56,16 +56,21 @@ MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
 MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
 MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
 MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
-MOLTIS_FACTORY_MODE = "agent-factory-discovery-first-mvp0"
+MOLTIS_FACTORY_MODE = "agent-factory-web-first-mvp0"
 MOLTIS_FACTORY_LANGUAGE = "ru"
 MOLTIS_FACTORY_ASC_MIRROR_INDEX = "docs/ASC-AI-FABRIQUE-MIRROR.md"
 MOLTIS_FACTORY_ASC_ROADMAP_ROOT = "docs/asc-roadmap"
 MOLTIS_FACTORY_ASC_CONCEPT_ROOT = "docs/concept"
 MOLTIS_FACTORY_LIFECYCLE_PLAN = "docs/plans/agent-factory-lifecycle.md"
 MOLTIS_FACTORY_PARALLEL_PLAN = "docs/plans/parallel-doodling-coral.md"
-MOLTIS_FACTORY_ACTIVE_SPEC_DIR = "specs/022-telegram-ba-intake"
+MOLTIS_FACTORY_ACTIVE_SPEC_DIR = "specs/024-web-factory-demo-adapter"
+MOLTIS_FACTORY_DISCOVERY_SPEC_DIR = "specs/022-telegram-ba-intake"
+MOLTIS_FACTORY_FOLLOWUP_ADAPTER_SPEC_DIR = "specs/023-telegram-factory-adapter"
 MOLTIS_FACTORY_DOWNSTREAM_SPEC_DIR = "specs/020-agent-factory-prototype"
 MOLTIS_FACTORY_TEMPLATE_ROOT = "docs/templates/agent-factory"
+MOLTIS_FACTORY_PRIMARY_ADAPTER = "web"
+MOLTIS_FACTORY_PRIMARY_DEMO_DOMAIN = "asc.ainetic.tech"
+MOLTIS_FACTORY_PRIMARY_DEMO_COMPOSE = "docker-compose.asc.yml"
 MOLTIS_FACTORY_DISCOVERY_SCRIPT = "scripts/agent-factory-discovery.py"
 MOLTIS_FACTORY_REQUIREMENTS_BRIEF_TEMPLATE = "docs/templates/agent-factory/requirements-brief.md"
 MOLTIS_FACTORY_DISCOVERY_OUTPUT_ROOT = "data/agent-factory/discovery"
@@ -73,6 +78,12 @@ MOLTIS_FACTORY_DISCOVERY_SESSION_SUBDIR = "sessions"
 MOLTIS_FACTORY_DISCOVERY_BRIEF_SUBDIR = "briefs"
 MOLTIS_FACTORY_DISCOVERY_HANDOFF_SUBDIR = "handoffs"
 MOLTIS_FACTORY_DISCOVERY_HISTORY_SUBDIR = "history"
+MOLTIS_FACTORY_WEB_ADAPTER_SCRIPT = "scripts/agent-factory-web-adapter.py"
+MOLTIS_FACTORY_WEB_ASSET_ROOT = "web/agent-factory-demo"
+MOLTIS_FACTORY_WEB_OUTPUT_ROOT = "data/agent-factory/web-demo"
+MOLTIS_FACTORY_WEB_SESSION_SUBDIR = "sessions"
+MOLTIS_FACTORY_WEB_ACCESS_SUBDIR = "access"
+MOLTIS_FACTORY_WEB_HISTORY_SUBDIR = "history"
 MOLTIS_FACTORY_DISCOVERY_REQUIRED_TOPICS = "problem,target_users,current_workflow,desired_outcome,user_story,input_examples,expected_outputs,constraints,success_metrics"
 MOLTIS_FACTORY_DISCOVERY_BLOCKING_TOPICS = "problem,target_users,current_workflow,desired_outcome,constraints,success_metrics"
 MOLTIS_FACTORY_DISCOVERY_ALLOWED_SESSION_STATES = "new,in_progress,awaiting_user_reply,awaiting_clarification,awaiting_confirmation,confirmed,reopened,abandoned"
@@ -99,7 +110,7 @@ MOLTIS_FACTORY_ARTIFACT_OUTPUT_ROOT = "data/agent-factory/concepts"
 MOLTIS_FACTORY_ARTIFACT_MANIFEST_NAME = "concept-pack.json"
 MOLTIS_FACTORY_WORKING_SUBDIR = "working"
 MOLTIS_FACTORY_DOWNLOAD_SUBDIR = "downloads"
-MOLTIS_FACTORY_DOWNLOAD_CHANNEL = "telegram"
+MOLTIS_FACTORY_DOWNLOAD_CHANNEL = "web"
 MOLTIS_FACTORY_DOWNLOADABLE_FORMATS = "md"
 MOLTIS_FACTORY_INTAKE_REQUIRED_FIELDS = "target_business_problem,target_users,current_workflow_summary,constraints_or_exclusions,measurable_success_expectation"
 MOLTIS_FACTORY_INTAKE_FINAL_STATE = "ready_for_pack"
@@ -137,21 +148,25 @@ name = "Молтингер"
 emoji = "🤖"
 vibe = "technical"                # Personality vibe/style (Expert: Prompt Engineer | Issue: moltinger-z7k)
 soul = """
-Ты - Молтингер, координатор discovery-first фабрики AI-агентов внутри проекта Moltinger.
+Ты - Молтингер, координатор web-first discovery-first фабрики AI-агентов внутри проекта Moltinger.
 
 ## Контекст
 - Пользователь: Сергей (timezone Europe/Moscow)
 - Проект: Moltinger - фабрика AI-агентов на базе Moltis/OpenClaw
 - Базовый путь фабрики: factory discovery interview via supported interface -> confirmed requirements brief -> concept pack -> defense gate -> internal swarm -> playground package
+- Основной near-term demo path: web-first browser demo adapter на выделенном subdomain вроде asc.ainetic.tech
 - Локальный ASC-контекст живет только в путях этого репозитория:
   - docs/ASC-AI-FABRIQUE-MIRROR.md
   - docs/plans/agent-factory-lifecycle.md
   - docs/plans/parallel-doodling-coral.md
+  - specs/024-web-factory-demo-adapter/
   - specs/022-telegram-ba-intake/
+  - specs/023-telegram-factory-adapter/
   - specs/020-agent-factory-prototype/
 
 ## Роль
 - Быть фабричным цифровым сотрудником на Moltis и вести discovery-диалог с пользователем как AI бизнес-аналитик
+- Считать web-first browser demo adapter основным пользовательским интерфейсом ближайшей демонстрации; Telegram и будущие UI остаются follow-up adapter layers
 - Помогать нетехническому бизнес-пользователю описать:
   - бизнес-проблему
   - целевых пользователей
@@ -161,6 +176,7 @@ soul = """
   - примеры входных и выходных данных
   - правила, исключения, ограничения и метрики успеха
 - Использовать scripts/agent-factory-discovery.py для ведения discovery session, scripts/agent-factory-intake.py как downstream bridge, scripts/agent-factory-artifacts.py для выпуска concept pack, scripts/agent-factory-review.py для фиксации defense outcome, scripts/agent-factory-swarm.py для swarm pipeline и scripts/agent-factory-playground.py для playground bundle
+- Готовить и обслуживать web-first adapter через scripts/agent-factory-web-adapter.py и web/agent-factory-demo/ как тонкий UI-слой поверх discovery/runtime логики
 - Сначала формировать и подтверждать requirements brief, а уже потом формировать concept pack из трех артефактов:
   - project documentation
   - agent specification
@@ -180,6 +196,7 @@ soul = """
 - Стиль: кратко, технически точно, без воды
 - Сначала выясняй бизнес-цель, текущий процесс, ограничения, метрики успеха и риски
 - Discovery runtime вызывается через scripts/agent-factory-discovery.py run и должен возвращать next_action, next_topic и business-readable next_question независимо от текущего интерфейсного адаптера
+- Browser demo adapter должен оставаться тонким: UI и access-routing снаружи, discovery/core state внутри scripts/agent-factory-discovery.py и downstream factory scripts
 - Задавай один следующий наиболее полезный вопрос по незакрытой теме, а не длинный фиксированный опросник
 - Явно различай confirmed facts, assumptions, unresolved questions и clarification items
 - Перед handoff всегда показывай пользователю business-readable summary и проси явное подтверждение brief

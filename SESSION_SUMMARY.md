@@ -53,6 +53,15 @@ GitOps Compliance: Enforced ✅
 ### Current Session Update (2026-03-14)
 
 - Branch in progress: `024-web-factory-demo-adapter`
+- Completed `Phase 1: Setup` for `024-web-factory-demo-adapter` (`molt-vd0.2.*`): switched the active factory adapter anchors in `config/moltis.toml` and `tests/fixtures/config/moltis.toml` to the web-first demo slice, preserved `022` as the discovery-core spec reference, preserved `023` as the follow-up adapter spec reference, and changed the primary delivery channel from `telegram` to `web`.
+- Added the new same-host browser demo compose surface in `docker-compose.asc.yml` using the existing Traefik/subdomain deployment pattern, with dedicated bind-backed state roots for `data/agent-factory/web-demo`, `data/agent-factory/discovery`, and `data/agent-factory/concepts`.
+- Reconciled `scripts/manifest.json` and `tests/run.sh` for the new browser adapter surface: added the `agent-factory-web-adapter.py` entrypoint, removed old Telegram-centric wording from discovery/intake script descriptions, registered future component/integration/browser/live smoke suites for the web demo, and extended `tests/static/test_config_validation.sh` so `docker-compose.asc.yml` is now part of the static config gate.
+- Created the initial fixture tree `tests/fixtures/agent-factory/web-demo/README.md` and refreshed `tests/fixtures/agent-factory/README.md` so the new browser-demo fixture ownership and traceability rules are explicit before foundational implementation starts.
+- Verified the setup slice with:
+  - `./tests/run.sh --lane static --filter static_config_validation --json`
+  - `bash -n tests/run.sh`
+  - `python3 -m json.tool scripts/manifest.json >/dev/null`
+  - `git diff --check`
 - Applied a clarification-driven pivot from `023-telegram-factory-adapter` to `024-web-factory-demo-adapter` as the primary near-term demo path because a browser-accessible subdomain is more reliable than Telegram in the target corporate contour.
 - Created the full new Speckit package `specs/024-web-factory-demo-adapter/` with:
   - `spec.md`

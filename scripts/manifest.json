@@ -98,7 +98,7 @@
     },
     "agent-factory-discovery.py": {
       "version": "1.0.0",
-      "description": "Run the discovery-first Telegram business analyst flow and emit one structured discovery session snapshot",
+      "description": "Run the factory business-analyst discovery core and emit one structured discovery session snapshot",
       "entrypoint": true,
       "requires": [
         "python3"
@@ -111,6 +111,24 @@
         "MOLTIS_FACTORY_DISCOVERY_ENTRYPOINT",
         "MOLTIS_FACTORY_DISCOVERY_TOPIC_ORDER",
         "MOLTIS_FACTORY_DISCOVERY_NEXT_ACTIONS"
+      ]
+    },
+    "agent-factory-web-adapter.py": {
+      "version": "1.0.0",
+      "description": "Serve the web-first browser demo adapter for the factory business-analyst agent and handle browser turns safely",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-web-adapter-serve",
+        "agent-factory-web-adapter-handle-turn"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_WEB_ADAPTER_SCRIPT",
+        "MOLTIS_FACTORY_WEB_ASSET_ROOT",
+        "MOLTIS_FACTORY_WEB_OUTPUT_ROOT",
+        "MOLTIS_FACTORY_PRIMARY_DEMO_DOMAIN"
       ]
     },
     "agent-factory-review.py": {
@@ -162,7 +180,7 @@
     },
     "agent-factory-intake.py": {
       "version": "1.0.0",
-      "description": "Normalize one Telegram-style intake request into a canonical concept record for the agent factory MVP0 flow",
+      "description": "Normalize one confirmed factory handoff or interface-level intake request into a canonical concept record for the agent factory MVP0 flow",
       "entrypoint": true,
       "requires": [
         "python3"

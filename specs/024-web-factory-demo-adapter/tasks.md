@@ -28,11 +28,11 @@
 
 **Purpose**: Establish web-demo-specific config, deployment, fixtures, and test wiring before foundational implementation starts.
 
-- [ ] T001 Update active web-demo adapter anchors and storage paths in `config/moltis.toml`
-- [ ] T002 [P] Create the same-host demo compose surface in `docker-compose.asc.yml`
-- [ ] T003 [P] Reconcile script descriptions and new browser-adapter entrypoints in `scripts/manifest.json`
-- [ ] T004 [P] Create the web-demo fixture tree in `tests/fixtures/agent-factory/web-demo/README.md`
-- [ ] T005 [P] Register web-demo suites in `tests/run.sh`
+- [x] T001 Update active web-demo adapter anchors and storage paths in `config/moltis.toml`
+- [x] T002 [P] Create the same-host demo compose surface in `docker-compose.asc.yml`
+- [x] T003 [P] Reconcile script descriptions and new browser-adapter entrypoints in `scripts/manifest.json`
+- [x] T004 [P] Create the web-demo fixture tree in `tests/fixtures/agent-factory/web-demo/README.md`
+- [x] T005 [P] Register web-demo suites in `tests/run.sh`
 
 **Checkpoint**: The repo knows where the browser adapter lives, how it is deployed, where its fixtures go, and how its tests will run.
 

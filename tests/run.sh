@@ -40,6 +40,7 @@ Canonical lanes:
 Additional live-only aliases:
   security_runtime_smoke
   clawdiy_live_deploy
+  web_demo_live
   mcp_real
   telegram_live
   provider_live
@@ -108,7 +109,7 @@ lane_needs_stack() {
 
 lane_is_live_only() {
     case "$1" in
-        resilience|live_external|security_runtime_smoke|clawdiy_live_deploy|mcp_real|telegram_live|provider_live) return 0 ;;
+        resilience|live_external|security_runtime_smoke|clawdiy_live_deploy|web_demo_live|mcp_real|telegram_live|provider_live) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -134,13 +135,13 @@ group_to_lanes() {
             printf '%s\n' static component integration_local security_api mcp_fake e2e_browser
             ;;
         nightly)
-            printf '%s\n' resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
+            printf '%s\n' resilience security_runtime_smoke clawdiy_live_deploy web_demo_live telegram_live provider_live mcp_real
             ;;
         all)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
+            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy web_demo_live telegram_live provider_live mcp_real
             ;;
         live_external)
-            printf '%s\n' clawdiy_live_deploy telegram_live provider_live mcp_real
+            printf '%s\n' clawdiy_live_deploy web_demo_live telegram_live provider_live mcp_real
             ;;
         *)
             printf '%s\n' "$1"
@@ -172,6 +173,10 @@ agent_factory_suite_entries() {
             optional_suite_entry bash component_agent_factory_handoff "Agent factory handoff" "$SCRIPT_DIR/component/test_agent_factory_handoff.sh"
             optional_suite_entry bash component_agent_factory_playground "Agent factory playground" "$SCRIPT_DIR/component/test_agent_factory_playground.sh"
             optional_suite_entry bash component_agent_factory_context_mirror "Agent factory context mirror" "$SCRIPT_DIR/component/test_agent_factory_context_mirror.sh"
+            optional_suite_entry bash component_agent_factory_web_access "Agent factory web access" "$SCRIPT_DIR/component/test_agent_factory_web_access.sh"
+            optional_suite_entry bash component_agent_factory_web_discovery "Agent factory web discovery" "$SCRIPT_DIR/component/test_agent_factory_web_discovery.sh"
+            optional_suite_entry bash component_agent_factory_web_brief "Agent factory web brief" "$SCRIPT_DIR/component/test_agent_factory_web_brief.sh"
+            optional_suite_entry bash component_agent_factory_web_delivery "Agent factory web delivery" "$SCRIPT_DIR/component/test_agent_factory_web_delivery.sh"
             ;;
         integration_local)
             optional_suite_entry bash integration_local_agent_factory_discovery_flow "Agent factory discovery flow" "$SCRIPT_DIR/integration_local/test_agent_factory_discovery_flow.sh"
@@ -181,6 +186,10 @@ agent_factory_suite_entries() {
             optional_suite_entry bash integration_local_agent_factory_resume "Agent factory resume" "$SCRIPT_DIR/integration_local/test_agent_factory_resume.sh"
             optional_suite_entry bash integration_local_agent_factory_review "Agent factory review" "$SCRIPT_DIR/integration_local/test_agent_factory_review.sh"
             optional_suite_entry bash integration_local_agent_factory_swarm "Agent factory swarm" "$SCRIPT_DIR/integration_local/test_agent_factory_swarm.sh"
+            optional_suite_entry bash integration_local_agent_factory_web_flow "Agent factory web flow" "$SCRIPT_DIR/integration_local/test_agent_factory_web_flow.sh"
+            optional_suite_entry bash integration_local_agent_factory_web_confirmation "Agent factory web confirmation" "$SCRIPT_DIR/integration_local/test_agent_factory_web_confirmation.sh"
+            optional_suite_entry bash integration_local_agent_factory_web_handoff "Agent factory web handoff" "$SCRIPT_DIR/integration_local/test_agent_factory_web_handoff.sh"
+            optional_suite_entry bash integration_local_agent_factory_web_resume "Agent factory web resume" "$SCRIPT_DIR/integration_local/test_agent_factory_web_resume.sh"
             ;;
     esac
 }
@@ -233,6 +242,7 @@ LIST
             cat <<LIST
 node|e2e_browser_chat_flow|Browser chat flow|$SCRIPT_DIR/e2e_browser/chat_flow.mjs
 LIST
+            optional_suite_entry node e2e_browser_agent_factory_web_demo "Agent factory web demo" "$SCRIPT_DIR/e2e_browser/agent_factory_web_demo.mjs"
             ;;
         resilience)
             cat <<LIST
@@ -251,6 +261,9 @@ LIST
             cat <<LIST
 bash|live_clawdiy_deploy_smoke|Clawdiy deploy smoke|$SCRIPT_DIR/live_external/test_clawdiy_deploy_smoke.sh
 LIST
+            ;;
+        web_demo_live)
+            optional_suite_entry bash live_web_demo_smoke "Web demo smoke" "$SCRIPT_DIR/live_external/test_web_factory_demo_smoke.sh"
             ;;
         mcp_real)
             cat <<LIST

@@ -1,0 +1,127 @@
+name: asc-demo
+
+x-asc-demo-logging: &asc-demo-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+    labels: "service,environment,agent"
+
+x-asc-demo-healthcheck: &asc-demo-healthcheck
+  test:
+    [
+      "CMD-SHELL",
+      "python3 -c \"import sys, urllib.request; paths = ('/health', '/'); ok = False; [urllib.request.urlopen(f'http://127.0.0.1:${ASC_DEMO_INTERNAL_PORT:-18791}{path}', timeout=5) and (globals().__setitem__('ok', True) or True) for path in paths if not ok]; sys.exit(0 if ok else 1)\""
+    ]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 20s
+
+services:
+  asc-demo:
+    image: ${ASC_DEMO_IMAGE:-python:3.12-slim}
+    container_name: asc-demo
+    init: true
+    restart: unless-stopped
+    read_only: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "127.0.0.1:${ASC_DEMO_PORT:-18791}:${ASC_DEMO_INTERNAL_PORT:-18791}"
+
+    working_dir: /workspace
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        python3 scripts/agent-factory-web-adapter.py serve
+        --host 0.0.0.0
+        --port ${ASC_DEMO_INTERNAL_PORT:-18791}
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOLTIS_CONFIG_PATH: /workspace/config/moltis.toml
+      ASC_DEMO_DOMAIN: ${ASC_DEMO_DOMAIN:-asc.ainetic.tech}
+      ASC_DEMO_PUBLIC_BASE_URL: ${ASC_DEMO_PUBLIC_BASE_URL:-https://asc.ainetic.tech}
+      ASC_DEMO_INTERNAL_PORT: ${ASC_DEMO_INTERNAL_PORT:-18791}
+      ASC_DEMO_DATA_ROOT: /workspace/data/agent-factory/web-demo
+      ASC_DISCOVERY_ROOT: /workspace/data/agent-factory/discovery
+      ASC_CONCEPT_ROOT: /workspace/data/agent-factory/concepts
+
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        read_only: true
+      - asc-demo-web-state:/workspace/data/agent-factory/web-demo
+      - asc-demo-discovery-state:/workspace/data/agent-factory/discovery
+      - asc-demo-concepts-state:/workspace/data/agent-factory/concepts
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+
+    healthcheck:
+      <<: *asc-demo-healthcheck
+
+    logging:
+      <<: *asc-demo-logging
+      options:
+        labels: "service=asc-demo,environment=production,agent=moltinger"
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+      - "traefik.http.routers.asc-demo.rule=Host(`${ASC_DEMO_DOMAIN:-asc.ainetic.tech}`)"
+      - "traefik.http.routers.asc-demo.entrypoints=websecure"
+      - "traefik.http.routers.asc-demo.tls=true"
+      - "traefik.http.routers.asc-demo.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.asc-demo.service=asc-demo"
+      - "traefik.http.routers.asc-demo.middlewares=asc-demo-proxy-headers@docker"
+      - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Host=${ASC_DEMO_DOMAIN:-asc.ainetic.tech}"
+      - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Port=443"
+      - "traefik.http.services.asc-demo.loadbalancer.server.port=${ASC_DEMO_INTERNAL_PORT:-18791}"
+      - "traefik.http.services.asc-demo.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.asc-demo.loadbalancer.healthcheck.interval=30s"
+      - "com.centurylinklabs.watchtower.enable=false"
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=${ASC_DEMO_INTERNAL_PORT:-18791}"
+      - "prometheus.io/path=/metrics"
+
+    networks:
+      - traefik-net
+      - fleet-internal
+      - monitoring
+
+volumes:
+  asc-demo-web-state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/agent-factory/web-demo
+  asc-demo-discovery-state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/agent-factory/discovery
+  asc-demo-concepts-state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/agent-factory/concepts
+
+networks:
+  traefik-net:
+    external: true
+  fleet-internal:
+    name: ${FLEET_INTERNAL_NETWORK:-fleet-internal}
+    external: true
+  monitoring:
+    name: ${MONITORING_NETWORK:-moltinger_monitoring}
+    external: true
