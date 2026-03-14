@@ -52,7 +52,42 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-14)
 
-- Branch in progress: `022-telegram-ba-intake`
+- Branch in progress: `023-telegram-factory-adapter`
+- Completed the new Speckit planning package `specs/023-telegram-factory-adapter/` on top of the already finished discovery core from `022-telegram-ba-intake` and the downstream factory MVP0 from `020-agent-factory-prototype`.
+- The new slice is explicitly scoped as the first live Telegram interface adapter for the factory business-analyst agent on `Moltis`; Telegram is a transport/UI adapter, not the agent identity itself.
+- Added the full `023` design set:
+  - `spec.md`
+  - `checklists/requirements.md`
+  - `research.md`
+  - `plan.md`
+  - `data-model.md`
+  - `quickstart.md`
+  - `contracts/`
+  - `tasks.md`
+- The `023` package now formalizes:
+  - real Telegram message routing into the existing discovery runtime
+  - brief review and confirmation inside Telegram
+  - automatic `handoff -> intake -> concept pack` after confirmation
+  - in-chat delivery of the 3 concept-pack artifacts
+  - Telegram resume/reopen/status behavior plus live pilot boundaries
+- Research for `023` explicitly locked these design decisions:
+  - keep the adapter thin over `scripts/agent-factory-discovery.py`, `scripts/agent-factory-intake.py`, and `scripts/agent-factory-artifacts.py`
+  - keep production-side transport aligned with the current Bot API/webhook direction in `config/moltis.toml`
+  - use Telegram document delivery for the concept-pack artifacts instead of repo-path handoff to the user
+  - keep Telethon/MTProto limited to live validation rather than normal runtime delivery
+- Imported `specs/023-telegram-factory-adapter/tasks.md` into Beads under epic `molt-ztn` with 8 phase parents and 37 child tasks; `Phase 0` was immediately closed because planning is already complete.
+- Added sequential phase-gating and intra-phase dependencies during the import so `bd ready` now exposes `molt-ztn.2.*` (`Phase 1: Setup`) as the real entry point for implementation.
+- Refreshed `docs/GIT-TOPOLOGY-REGISTRY.md` after switching from the completed `022-telegram-ba-intake` branch to the new `023-telegram-factory-adapter` feature branch.
+- Verified in this session for the new slice:
+  - `.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
+  - `git diff --check`
+  - `scripts/git-topology-registry.sh refresh --write-doc`
+  - `bd version`
+  - `bd info`
+  - `bd dep cycles`
+  - `bd show molt-ztn`
+  - `bd ready`
 - Clarification pass applied: `022-telegram-ba-intake` remains the legacy feature id, but the actual scope is the factory business-analyst agent on `Moltis`; `Telegram` is only the current reference/default interface adapter.
 - Confirmed the next factory priority after completed MVP0 is a new upstream discovery-first slice: the first user-facing agent must behave as a factory business analyst that elicits and confirms requirements before the existing concept-pack flow starts.
 - Created the new Speckit package `specs/022-telegram-ba-intake/` with:
