@@ -18,22 +18,20 @@ root_cause: "Clawdiy model selection was completed interactively inside the live
 
 После green rollback-run `23090952913` live status показал:
 
-```json
-{
-  "defaultModel": "anthropic/claude-opus-4-6",
-  "missingProvidersInUse": ["anthropic"],
-  "providersWithOAuth": ["openai-codex (1)"]
-}
-```
+Live status после rollback показал, что:
 
-То есть OAuth-профиль `openai-codex` сохранился, но tracked config снова вернул `main` к встроенному default-model, потому что в `config/clawdiy/openclaw.json` не было зафиксировано `agents.defaults.model.primary = openai-codex/gpt-5.4`.
+- `defaultModel = anthropic/claude-opus-4-6`
+- `missingProvidersInUse = ["anthropic"]`
+- OAuth-профиль Codex присутствует и валиден
+
+То есть OAuth-профиль сохранился, но tracked config снова вернул `main` к встроенному default-model, потому что в `config/clawdiy/openclaw.json` не был зафиксирован baseline Codex OAuth / `gpt-5.4`.
 
 ## Анализ 5 Почему
 
 | Уровень | Вопрос | Ответ | Evidence |
 |---------|--------|-------|----------|
 | 1 | Почему после успешного rollback Clawdiy снова не имел рабочего default-model? | Потому что `defaultModel` откатился к `anthropic/claude-opus-4-6` | live `openclaw models status --agent main --json` |
-| 2 | Почему это произошло, если OAuth-профиль сохранился? | Потому что auth store и config state — разные слои; auth profile остался в `auth-profiles.json`, а default model рендерился из tracked config | live status showed `openai-codex` auth `ok`, but default model `anthropic` |
+| 2 | Почему это произошло, если OAuth-профиль сохранился? | Потому что auth store и config state — разные слои; auth profile остался в `auth-profiles.json`, а default model рендерился из tracked config | live status showed valid Codex OAuth auth, but default model `anthropic` |
 | 3 | Почему tracked config не содержал правильный model default? | Потому что предыдущая настройка `gpt-5.4` была сделана через wizard/runtime command и осталась только в живом `~/.openclaw/openclaw.json` внутри runtime | diff between tracked `config/clawdiy/openclaw.json` and live `data/clawdiy/runtime/openclaw.json` |
 | 4 | Почему redeploy смог стереть рабочую модель? | Потому что deploy flow заново рендерит runtime config из tracked template | `scripts/render-clawdiy-runtime-config.sh`, post-rollback live state |
 | 5 | Почему это системная ошибка? | Потому что не было явного правила: успешный wizard/runtime change, влияющий на долгоживущий baseline агента, должен быть отражен в GitOps config до следующего deploy | отсутствие `agents.defaults.model.primary` в tracked template до фикса |
@@ -45,10 +43,10 @@ root_cause: "Clawdiy model selection was completed interactively inside the live
 ## Принятые меры
 
 1. Live baseline немедленно восстановлен официальной командой:
-   - `openclaw models --agent main set openai-codex/gpt-5.4`
+   - `openclaw models --agent main set ...` для canonical Codex OAuth / `gpt-5.4` runtime id
 2. В tracked `config/clawdiy/openclaw.json` добавлены:
-   - `agents.defaults.model.primary = openai-codex/gpt-5.4`
-   - `agents.defaults.models["openai-codex/gpt-5.4"] = {}`
+   - `agents.defaults.model.primary = <Codex OAuth / gpt-5.4 runtime id>`
+   - соответствующая запись в `agents.defaults.models`
 3. В статические проверки добавлен guard, что tracked Clawdiy config обязан держать Codex baseline модель.
 4. Runbook repeat-auth дополнен требованием зеркалировать live model state обратно в tracked config после wizard/runtime изменений.
 

@@ -89,7 +89,7 @@ PY
     then
         test_pass
     else
-        test_fail "Tracked Clawdiy config must keep openai-codex/gpt-5.4 as the GitOps default model"
+        test_fail "Tracked Clawdiy config must keep the Codex OAuth / gpt-5.4 baseline as the GitOps default model"
     fi
 
     test_start "static_config_uses_env_substitution"
