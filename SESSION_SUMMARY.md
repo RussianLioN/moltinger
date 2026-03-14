@@ -293,6 +293,7 @@ GitOps Compliance: Enforced ✅
   - `actions/download-artifact@v8`
 - Updated all active workflow files so the current PR path and the broader CI/deploy surface no longer rely on Node 20 action runtimes; only `.disabled` legacy workflow files still reference the old majors.
 - Follow-up log review on the fresh commit showed one remaining non-Node20 warning from `actions/download-artifact@v8` (`Buffer()` deprecation inside the action runtime), so `test.yml` now downloads artifacts via `gh run download` with explicit `actions: read` instead of depending on that action in the gate/notification jobs.
+- The first `gh run download` attempt failed in `gate` because that job does not checkout the repository; the final fix is to pass `-R "${GITHUB_REPOSITORY}"` explicitly so artifact download works without a local `.git` directory.
 
 **Validated**
 

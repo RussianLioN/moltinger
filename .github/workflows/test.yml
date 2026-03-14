@@ -225,7 +225,7 @@ jobs:
           set -euo pipefail
           rm -rf test-artifacts
           mkdir -p test-artifacts
-          gh run download "${GITHUB_RUN_ID}" -n "$ARTIFACT_NAME" -D test-artifacts
+          gh run download "${GITHUB_RUN_ID}" -R "${GITHUB_REPOSITORY}" -n "$ARTIFACT_NAME" -D test-artifacts
 
       - name: Evaluate summary.json
         run: |
@@ -301,7 +301,7 @@ jobs:
           set -euo pipefail
           rm -rf test-artifacts
           mkdir -p test-artifacts
-          gh run download "${GITHUB_RUN_ID}" -n "$ARTIFACT_NAME" -D test-artifacts
+          gh run download "${GITHUB_RUN_ID}" -R "${GITHUB_REPOSITORY}" -n "$ARTIFACT_NAME" -D test-artifacts
 
       - name: Send Slack notification
         env:
