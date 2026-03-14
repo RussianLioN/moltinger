@@ -22,10 +22,14 @@
 4. вернуть краткий русский summary;
 5. при наличии project profile учесть его правила.
 
-Пока ещё не включено в production-final виде:
-- scheduler duplicate suppression как окончательный live path;
-- production delivery orchestration;
-- полный rollout старого fallback path.
+На текущем срезе уже включено:
+- scheduler duplicate suppression внутри самого Moltis-native runtime;
+- Telegram delivery для scheduler path;
+- явные delivery-статусы в state file: `not-attempted`, `deferred`, `not-configured`, `suppressed`, `sent`, `failed`.
+
+Пока ещё не закрыто целиком:
+- live rollout/UAT production scheduler path;
+- финальный retirement старого migration fallback path.
 
 ## On-demand usage
 
@@ -61,8 +65,24 @@ Scheduler использует тот же runtime:
 bash scripts/moltis-codex-update-run.sh --mode scheduler --stdout json
 ```
 
-На этом slice scheduler уже является частью нового Moltis-native skill path, но его delivery semantics
-ещё intentionally отмечены как `deferred` до следующего implementation этапа.
+Если scheduler запущен на свежем upstream fingerprint и Telegram включён, Moltis:
+1. вычисляет fingerprint;
+2. сравнивает его с `last_alert_fingerprint`;
+3. отправляет одно сообщение только для нового fingerprint;
+4. на повторном запуске пишет `suppressed` вместо дубля.
+
+Пример hermetic scheduler-run:
+
+```bash
+bash scripts/moltis-codex-update-run.sh \
+  --mode scheduler \
+  --release-file tests/fixtures/codex-update-skill/releases-0.114.0.html \
+  --include-issue-signals \
+  --issue-signals-file tests/fixtures/codex-update-skill/issue-signals.json \
+  --telegram-enabled \
+  --telegram-chat-id 262872984 \
+  --stdout json
+```
 
 ## State helper
 
@@ -77,6 +97,12 @@ bash scripts/moltis-codex-update-state.sh get
 ```text
 .tmp/current/moltis-codex-update-state.json
 ```
+
+Теперь state также хранит:
+- последний delivery status;
+- время последней попытки отправки;
+- delivery error, если отправка не удалась;
+- `last_alert_message_id` для успешного Telegram alert.
 
 ## Profile helper
 
@@ -106,6 +132,40 @@ Moltis должен ответить простым русским summary:
 Если официальный источник недоступен или changelog поменял формат:
 - навык должен честно вернуть `нужно проверить`;
 - он не должен угадывать или выдавать ложный `upgrade-now`.
+
+Если scheduler не может отправить alert:
+- `not-configured` означает, что Telegram delivery не включён или не найден `chat_id`;
+- `failed` означает, что sender был вызван, но Telegram вернул ошибку;
+- `suppressed` означает, что этот fingerprint уже отправлялся раньше;
+- `deferred` означает, что upstream-источник пока нельзя оценить надёжно.
+
+## Scheduler ownership и GitOps rollout
+
+Канонический scheduler path теперь принадлежит Moltis-native skill:
+
+```text
+scripts/moltis-codex-update-run.sh --mode scheduler
+```
+
+GitOps wiring:
+- runtime defaults живут в [config/moltis.toml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/config/moltis.toml)
+- cron job живёт в [moltis-codex-upstream-watcher](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/scripts/cron.d/moltis-codex-upstream-watcher)
+- inventory зафиксирован в [manifest.json](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/scripts/manifest.json)
+
+Минимальные env для live scheduler delivery:
+
+```text
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED=true
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE=/opt/moltinger/.env
+```
+
+Опционально можно задать явный chat id:
+
+```text
+MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID=<chat_id>
+```
+
+Если `chat_id` не задан явно, runtime пытается взять его из `.env`, а затем fallback-ом использует первый идентификатор из `TELEGRAM_ALLOWED_USERS`.
 
 ## Migration note
 

@@ -26,7 +26,7 @@ run_component_moltis_codex_update_run_tests() {
         return
     fi
 
-    local work_dir state_file report summary
+    local work_dir state_file report summary sender_script
 
     test_start "component_moltis_codex_update_run_manual_emits_russian_summary_for_new_upstream_state"
     work_dir="$(secure_temp_dir moltis-codex-update-run-manual)"
@@ -63,6 +63,83 @@ run_component_moltis_codex_update_run_tests() {
     report="$work_dir/report-repeat.json"
     assert_eq "known" "$(jq -r '.snapshot.release_status' "$report")" "Second run should recognize the already seen fingerprint"
     assert_eq "ignore" "$(jq -r '.decision.decision' "$report")" "Known upstream state should not produce a false new action"
+    test_pass
+
+    test_start "component_moltis_codex_update_run_scheduler_sends_once_and_suppresses_duplicate_fingerprint"
+    work_dir="$(secure_temp_dir moltis-codex-update-run-scheduler)"
+    state_file="$work_dir/state.json"
+    sender_script="$work_dir/fake-telegram-send.sh"
+    cat > "$sender_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log_path="${FAKE_TELEGRAM_LOG:?}"
+text_path="${FAKE_TELEGRAM_TEXT:?}"
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        --json|--disable-notification)
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'call\n' >> "$log_path"
+printf '%s\n' "$text" > "$text_path"
+printf '{"ok":true,"result":{"message_id":701,"chat":{"id":"%s"}}}\n' "$chat_id"
+EOF
+    chmod +x "$sender_script"
+
+    FAKE_TELEGRAM_LOG="$work_dir/telegram.log" \
+    FAKE_TELEGRAM_TEXT="$work_dir/telegram.txt" \
+    bash "$RUN_SCRIPT" \
+        --mode scheduler \
+        --state-file "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.114.0.html" \
+        --include-issue-signals \
+        --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
+        --telegram-enabled \
+        --telegram-chat-id 262872984 \
+        --telegram-send-script "$sender_script" \
+        --json-out "$work_dir/report.json" \
+        --summary-out "$work_dir/summary.md" \
+        --stdout none
+    report="$work_dir/report.json"
+    assert_eq "sent" "$(jq -r '.delivery.status' "$report")" "First scheduler run should send one Telegram alert"
+    assert_eq "262872984" "$(jq -r '.delivery.chat_id' "$report")" "Scheduler run should record the Telegram chat id"
+    assert_eq "701" "$(jq -r '.delivery.message_id' "$report")" "Successful delivery should persist the Telegram message id"
+    assert_eq "1" "$(wc -l < "$work_dir/telegram.log" | tr -d ' ')" "Sender should be invoked exactly once for a fresh fingerprint"
+    assert_contains "$(cat "$work_dir/telegram.txt")" "Обновление Codex CLI" "Telegram text should use the Russian alert headline"
+    assert_eq "$(jq -r '.snapshot.fingerprint' "$report")" "$(jq -r '.last_alert_fingerprint' "$state_file")" "State should checkpoint the delivered fingerprint"
+
+    FAKE_TELEGRAM_LOG="$work_dir/telegram.log" \
+    FAKE_TELEGRAM_TEXT="$work_dir/telegram.txt" \
+    bash "$RUN_SCRIPT" \
+        --mode scheduler \
+        --state-file "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.114.0.html" \
+        --include-issue-signals \
+        --issue-signals-file "$FIXTURE_DIR/issue-signals.json" \
+        --telegram-enabled \
+        --telegram-chat-id 262872984 \
+        --telegram-send-script "$sender_script" \
+        --json-out "$work_dir/report-repeat.json" \
+        --summary-out "$work_dir/summary-repeat.md" \
+        --stdout none
+    report="$work_dir/report-repeat.json"
+    assert_eq "suppressed" "$(jq -r '.delivery.status' "$report")" "Second scheduler run should suppress duplicate delivery"
+    assert_eq "1" "$(wc -l < "$work_dir/telegram.log" | tr -d ' ')" "Suppressed duplicate should not invoke the sender again"
+    assert_eq "suppressed" "$(jq -r '.last_delivery_status' "$state_file")" "State should retain duplicate suppression outcome"
     test_pass
 
     test_start "component_moltis_codex_update_run_uses_project_profile_for_project_specific_recommendations"

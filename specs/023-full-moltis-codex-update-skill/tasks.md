@@ -40,11 +40,11 @@
 **Goal**: Moltis owns scheduled polling, duplicate suppression, and alert decisions.  
 **Independent Test**: Run scheduler mode twice on the same fingerprint and confirm duplicate suppression.
 
-- [ ] T014 Implement scheduler mode and fingerprint suppression in `scripts/moltis-codex-update-run.sh`
-- [ ] T015 Implement persistent state transitions in `scripts/moltis-codex-update-state.sh`
-- [ ] T016 Integrate Telegram delivery from the Moltis-native skill path
-- [ ] T017 Add component coverage for scheduler delivery/state behavior in `tests/component/test_moltis_codex_update_state.sh`
-- [ ] T018 Document scheduler ownership and GitOps rollout path in `docs/moltis-codex-update-skill.md`
+- [x] T014 Implement scheduler mode and fingerprint suppression in `scripts/moltis-codex-update-run.sh`
+- [x] T015 Implement persistent state transitions in `scripts/moltis-codex-update-state.sh`
+- [x] T016 Integrate Telegram delivery from the Moltis-native skill path
+- [x] T017 Add component coverage for scheduler delivery/state behavior in `tests/component/test_moltis_codex_update_state.sh`
+- [x] T018 Document scheduler ownership and GitOps rollout path in `docs/moltis-codex-update-skill.md`
 
 ## Phase 5 - User Story 3: Optional Project Profiles (Priority: P2)
 

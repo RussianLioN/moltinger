@@ -15,6 +15,8 @@ DELIVERY_STATUS=""
 DEGRADED_REASON=""
 ALERT_FINGERPRINT=""
 ALERT_AT=""
+DELIVERY_ERROR=""
+MESSAGE_ID=""
 JSON_OUTPUT=true
 
 usage() {
@@ -25,7 +27,8 @@ Usage:
 Commands:
   get             Print the current Moltis-native Codex update state
   update          Update last seen/run fields after a skill run
-  mark-delivered  Persist the last alert fingerprint and delivery time
+  mark-delivery   Persist scheduler delivery status and alert checkpoint
+  mark-delivered  Backward-compatible alias for mark-delivery
 
 Options:
   --state-file PATH        Path to the state file
@@ -33,10 +36,12 @@ Options:
   --fingerprint VALUE      Latest upstream fingerprint
   --latest-version VALUE   Latest upstream version
   --decision VALUE         ignore|upgrade-later|upgrade-now|investigate
-  --delivery-status VALUE  not-attempted|suppressed|sent|failed
+  --delivery-status VALUE  not-attempted|deferred|not-configured|suppressed|sent|failed
   --degraded-reason TEXT   Optional degraded-mode explanation
   --alert-fingerprint VAL  Fingerprint that was delivered
   --alert-at ISO8601       Delivery timestamp override
+  --delivery-error TEXT    Optional delivery error details
+  --message-id N           Optional Telegram message id for sent delivery
   --json                   Print JSON output (default)
   -h, --help               Show help
 EOF
@@ -95,6 +100,15 @@ parse_args() {
                 ALERT_AT="${2:?missing value for --alert-at}"
                 shift 2
                 ;;
+            --delivery-error)
+                [[ $# -ge 2 ]] || fail "missing value for --delivery-error"
+                DELIVERY_ERROR="${2-}"
+                shift 2
+                ;;
+            --message-id)
+                MESSAGE_ID="${2:?missing value for --message-id}"
+                shift 2
+                ;;
             --json)
                 JSON_OUTPUT=true
                 shift
@@ -122,6 +136,9 @@ default_state_json() {
   "last_run_mode": "",
   "last_result": "",
   "last_delivery_status": "",
+  "last_delivery_error": "",
+  "last_delivery_attempt_at": "",
+  "last_alert_message_id": 0,
   "degraded_reason": ""
 }
 EOF
@@ -174,6 +191,11 @@ command_update() {
         *) fail "Invalid --decision: $DECISION" ;;
     esac
 
+    case "${DELIVERY_STATUS:-}" in
+        ""|not-attempted|deferred|not-configured|suppressed|sent|failed) ;;
+        *) fail "Invalid --delivery-status: $DELIVERY_STATUS" ;;
+    esac
+
     local ts current_json next_json
     ts="$(current_timestamp)"
     current_json="$(read_state_json "$STATE_FILE")"
@@ -185,6 +207,7 @@ command_update() {
             --arg latest_version "$LATEST_VERSION" \
             --arg decision "$DECISION" \
             --arg delivery_status "$DELIVERY_STATUS" \
+            --arg delivery_error "$DELIVERY_ERROR" \
             --arg degraded_reason "$DEGRADED_REASON" \
             '
             .schema_version = "moltis-codex-update-state/v1" |
@@ -194,6 +217,8 @@ command_update() {
             .last_run_mode = $run_mode |
             .last_result = $decision |
             .last_delivery_status = $delivery_status |
+            .last_delivery_error = $delivery_error |
+            .last_delivery_attempt_at = (if $delivery_status == "" then .last_delivery_attempt_at else $ts end) |
             .degraded_reason = $degraded_reason
             ' <<<"$current_json"
     )"
@@ -201,8 +226,16 @@ command_update() {
     print_result
 }
 
-command_mark_delivered() {
-    [[ -n "$ALERT_FINGERPRINT" ]] || fail "--alert-fingerprint is required for mark-delivered"
+command_mark_delivery() {
+    [[ -n "$DELIVERY_STATUS" ]] || fail "--delivery-status is required for mark-delivery"
+    case "$DELIVERY_STATUS" in
+        deferred|not-configured|suppressed|sent|failed|not-attempted) ;;
+        *) fail "Invalid --delivery-status: $DELIVERY_STATUS" ;;
+    esac
+    if [[ -n "$MESSAGE_ID" && ! "$MESSAGE_ID" =~ ^[0-9]+$ ]]; then
+        fail "--message-id must be numeric"
+    fi
+
     local ts current_json next_json
     ts="${ALERT_AT:-$(current_timestamp)}"
     current_json="$(read_state_json "$STATE_FILE")"
@@ -210,10 +243,17 @@ command_mark_delivered() {
         jq \
             --arg ts "$ts" \
             --arg alert_fingerprint "$ALERT_FINGERPRINT" \
+            --arg delivery_status "$DELIVERY_STATUS" \
+            --arg delivery_error "$DELIVERY_ERROR" \
+            --argjson message_id "${MESSAGE_ID:-0}" \
             '
             .schema_version = "moltis-codex-update-state/v1" |
-            .last_alert_fingerprint = $alert_fingerprint |
-            .last_alert_at = $ts
+            .last_delivery_status = $delivery_status |
+            .last_delivery_error = $delivery_error |
+            .last_delivery_attempt_at = $ts |
+            .last_alert_message_id = (if $message_id > 0 then $message_id else .last_alert_message_id end) |
+            .last_alert_fingerprint = (if $alert_fingerprint == "" then .last_alert_fingerprint else $alert_fingerprint end) |
+            .last_alert_at = (if $alert_fingerprint == "" then .last_alert_at else $ts end)
             ' <<<"$current_json"
     )"
     write_state_json "$next_json"
@@ -230,8 +270,11 @@ main() {
         update)
             command_update
             ;;
+        mark-delivery)
+            command_mark_delivery
+            ;;
         mark-delivered)
-            command_mark_delivered
+            command_mark_delivery
             ;;
         ""|-h|--help)
             usage

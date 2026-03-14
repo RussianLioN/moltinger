@@ -43,23 +43,39 @@ run_component_moltis_codex_update_state_tests() {
         --fingerprint abc12345 \
         --latest-version 0.114.0 \
         --decision upgrade-now \
-        --delivery-status not_attempted \
+        --delivery-status not-attempted \
         --degraded-reason 'manual slice only' \
         --json)"
     assert_eq "abc12345" "$(jq -r '.last_seen_fingerprint' <<<"$output")" "Update should persist the latest fingerprint"
     assert_eq "0.114.0" "$(jq -r '.last_seen_version' <<<"$output")" "Update should persist the latest version"
     assert_eq "manual" "$(jq -r '.last_run_mode' <<<"$output")" "Update should persist run mode"
     assert_eq "upgrade-now" "$(jq -r '.last_result' <<<"$output")" "Update should persist the latest decision"
+    assert_eq "not-attempted" "$(jq -r '.last_delivery_status' <<<"$output")" "Update should persist the delivery status for the last run"
     test_pass
 
-    test_start "component_moltis_codex_update_state_mark_delivered_persists_alert_checkpoint"
-    output="$(bash "$STATE_SCRIPT" mark-delivered \
+    test_start "component_moltis_codex_update_state_mark_delivery_persists_alert_checkpoint_and_message_id"
+    output="$(bash "$STATE_SCRIPT" mark-delivery \
         --state-file "$state_file" \
+        --delivery-status sent \
         --alert-fingerprint abc12345 \
         --alert-at 2026-03-14T09:00:00Z \
+        --message-id 701 \
         --json)"
-    assert_eq "abc12345" "$(jq -r '.last_alert_fingerprint' <<<"$output")" "mark-delivered should persist the last alert fingerprint"
-    assert_eq "2026-03-14T09:00:00Z" "$(jq -r '.last_alert_at' <<<"$output")" "mark-delivered should persist the alert timestamp"
+    assert_eq "abc12345" "$(jq -r '.last_alert_fingerprint' <<<"$output")" "mark-delivery should persist the last alert fingerprint"
+    assert_eq "2026-03-14T09:00:00Z" "$(jq -r '.last_alert_at' <<<"$output")" "mark-delivery should persist the alert timestamp"
+    assert_eq "701" "$(jq -r '.last_alert_message_id' <<<"$output")" "mark-delivery should persist the Telegram message id"
+    assert_eq "sent" "$(jq -r '.last_delivery_status' <<<"$output")" "mark-delivery should record the delivery status"
+    test_pass
+
+    test_start "component_moltis_codex_update_state_mark_delivery_persists_failure_without_overwriting_checkpoint"
+    output="$(bash "$STATE_SCRIPT" mark-delivery \
+        --state-file "$state_file" \
+        --delivery-status failed \
+        --delivery-error 'telegram timeout' \
+        --json)"
+    assert_eq "failed" "$(jq -r '.last_delivery_status' <<<"$output")" "Failed delivery should be reflected in state"
+    assert_eq "telegram timeout" "$(jq -r '.last_delivery_error' <<<"$output")" "Failure reason should be persisted"
+    assert_eq "abc12345" "$(jq -r '.last_alert_fingerprint' <<<"$output")" "Failure without alert fingerprint should not overwrite the previous checkpoint"
     test_pass
 
     generate_report

@@ -8,6 +8,7 @@ DEFAULT_ISSUE_SIGNALS_URL="https://api.github.com/repos/openai/codex/issues?stat
 DEFAULT_STATE_SCRIPT="${PROJECT_ROOT}/scripts/moltis-codex-update-state.sh"
 DEFAULT_PROFILE_SCRIPT="${PROJECT_ROOT}/scripts/moltis-codex-update-profile.sh"
 DEFAULT_STATE_FILE="${PROJECT_ROOT}/.tmp/current/moltis-codex-update-state.json"
+DEFAULT_TELEGRAM_SEND_SCRIPT="${PROJECT_ROOT}/scripts/telegram-bot-send.sh"
 
 MODE="${MOLTIS_CODEX_UPDATE_MODE:-manual}"
 STATE_SCRIPT="${MOLTIS_CODEX_UPDATE_STATE_SCRIPT:-${DEFAULT_STATE_SCRIPT}}"
@@ -20,6 +21,11 @@ ISSUE_SIGNALS_URL="${MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_URL:-${DEFAULT_ISSUE_SIGN
 INCLUDE_ISSUE_SIGNALS=false
 PROFILE_FILE="${MOLTIS_CODEX_UPDATE_PROFILE_FILE:-}"
 MAX_RELEASES="${MOLTIS_CODEX_UPDATE_MAX_RELEASES:-3}"
+TELEGRAM_ENABLED="${MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED:-false}"
+TELEGRAM_CHAT_ID="${MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID:-}"
+TELEGRAM_ENV_FILE="${MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE:-${MOLTIS_ENV_FILE:-}}"
+TELEGRAM_SEND_SCRIPT="${MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT:-${DEFAULT_TELEGRAM_SEND_SCRIPT}}"
+TELEGRAM_SILENT="${MOLTIS_CODEX_UPDATE_TELEGRAM_SILENT:-false}"
 JSON_OUT=""
 SUMMARY_OUT=""
 STDOUT_FORMAT="summary"
@@ -51,6 +57,11 @@ Options:
   --issue-signals-url URL      Read issue signals from URL
   --profile-file PATH          Optional project profile JSON
   --max-releases N             Number of recent releases to normalize
+  --telegram-enabled           Enable Telegram delivery for scheduler mode
+  --telegram-chat-id CHAT_ID   Override Telegram chat id
+  --telegram-env-file PATH     Env file used by telegram sender
+  --telegram-send-script PATH  Telegram sender helper
+  --telegram-silent            Send scheduler alerts silently
   --json-out PATH              Write JSON report to PATH
   --summary-out PATH           Write human-readable summary to PATH
   --stdout MODE                summary|json|none (default: summary)
@@ -80,6 +91,85 @@ require_command() {
 
 ensure_parent_dir() {
     mkdir -p "$(dirname "$1")"
+}
+
+strip_wrapping_quotes() {
+    local value="$1"
+    if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
+        value="${value:1:${#value}-2}"
+    fi
+    printf '%s\n' "$value"
+}
+
+read_env_value() {
+    local env_file="$1"
+    local key="$2"
+    local value=""
+
+    [[ -f "$env_file" ]] || return 1
+    value="$(sed -n "s/^${key}=//p" "$env_file" | head -n 1)"
+    [[ -n "$value" ]] || return 1
+    strip_wrapping_quotes "$value"
+}
+
+normalize_bool() {
+    case "${1:-false}" in
+        1|true|TRUE|yes|YES|on|ON) printf 'true\n' ;;
+        0|false|FALSE|no|NO|off|OFF|'') printf 'false\n' ;;
+        *) fail "Invalid boolean value: $1" ;;
+    esac
+}
+
+resolve_telegram_chat_id() {
+    local env_file="$1"
+    local configured="" first_user=""
+
+    if [[ -n "$TELEGRAM_CHAT_ID" ]]; then
+        printf '%s\n' "$TELEGRAM_CHAT_ID"
+        return 0
+    fi
+
+    if [[ -n "$env_file" && -f "$env_file" ]]; then
+        configured="$(read_env_value "$env_file" "MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID" || true)"
+        if [[ -n "$configured" ]]; then
+            printf '%s\n' "$configured"
+            return 0
+        fi
+
+        configured="$(read_env_value "$env_file" "TELEGRAM_ALLOWED_USERS" || true)"
+        if [[ -n "$configured" ]]; then
+            configured="${configured//,/ }"
+            for first_user in $configured; do
+                if [[ -n "$first_user" ]]; then
+                    printf '%s\n' "$first_user"
+                    return 0
+                fi
+            done
+        fi
+    fi
+
+    return 1
+}
+
+run_telegram_sender() {
+    local chat_id="$1"
+    local text="$2"
+    local -a cmd=(
+        "$TELEGRAM_SEND_SCRIPT"
+        --chat-id "$chat_id"
+        --text "$text"
+        --json
+    )
+
+    if [[ "$TELEGRAM_SILENT" == "true" ]]; then
+        cmd+=(--disable-notification)
+    fi
+
+    if [[ -n "$TELEGRAM_ENV_FILE" ]]; then
+        MOLTIS_ENV_FILE="$TELEGRAM_ENV_FILE" "${cmd[@]}"
+    else
+        "${cmd[@]}"
+    fi
 }
 
 fetch_source() {
@@ -163,6 +253,26 @@ parse_args() {
                 MAX_RELEASES="${2:?missing value for --max-releases}"
                 shift 2
                 ;;
+            --telegram-enabled)
+                TELEGRAM_ENABLED=true
+                shift
+                ;;
+            --telegram-chat-id)
+                TELEGRAM_CHAT_ID="${2:?missing value for --telegram-chat-id}"
+                shift 2
+                ;;
+            --telegram-env-file)
+                TELEGRAM_ENV_FILE="${2:?missing value for --telegram-env-file}"
+                shift 2
+                ;;
+            --telegram-send-script)
+                TELEGRAM_SEND_SCRIPT="${2:?missing value for --telegram-send-script}"
+                shift 2
+                ;;
+            --telegram-silent)
+                TELEGRAM_SILENT=true
+                shift
+                ;;
             --json-out)
                 JSON_OUT="${2:?missing value for --json-out}"
                 shift 2
@@ -196,6 +306,8 @@ parse_args() {
     esac
 
     [[ "$MAX_RELEASES" =~ ^[1-9][0-9]*$ ]] || fail "--max-releases must be a positive integer"
+    TELEGRAM_ENABLED="$(normalize_bool "$TELEGRAM_ENABLED")"
+    TELEGRAM_SILENT="$(normalize_bool "$TELEGRAM_SILENT")"
     [[ -x "$STATE_SCRIPT" ]] || fail "State helper not found or not executable: $STATE_SCRIPT"
     [[ -x "$PROFILE_SCRIPT" ]] || fail "Profile helper not found or not executable: $PROFILE_SCRIPT"
 }
@@ -234,6 +346,31 @@ load_profile_json() {
     fi
 }
 
+render_telegram_alert() {
+    jq -r '
+      def fmt_list(items):
+        if (items | length) == 0 then "- нет"
+        else items[] | "- \(.)"
+        end;
+      def fmt_recs(items):
+        if (items | length) == 0 then "- нет"
+        else items[] | "- \(.title_ru): \(.rationale_ru)"
+        end;
+      [
+        "Обновление Codex CLI",
+        "Последняя upstream-версия: \(.snapshot.latest_version)",
+        "Важность: \(.decision.severity_ru)",
+        "Почему это важно: \(.decision.why_it_matters_ru)",
+        "",
+        "Простыми словами:",
+        (fmt_list(.snapshot.highlights_ru)),
+        "",
+        "Что стоит сделать:",
+        (fmt_recs(.recommendation_bundle.items[:2]))
+      ] | flatten | join("\n")
+    ' "$REPORT_PATH"
+}
+
 render_summary() {
     jq -r '
       def fmt_list(items):
@@ -254,6 +391,8 @@ render_summary() {
         "- Решение: \(.decision.decision_ru)",
         "- Почему: \(.decision.why_it_matters_ru)",
         "- Профиль проекта: \(.profile.status_ru)",
+        "- Доставка: \(.delivery.status)",
+        "- Пояснение доставки: \(.delivery.reason)",
         "",
         "## Что изменилось",
         (fmt_list(.snapshot.highlights_ru)),
@@ -278,6 +417,8 @@ main() {
 
     local release_source_path issue_signals_path release_ok=false issue_ok=false
     local state_before profile_payload state_after decision fingerprint latest_version delivery_status degraded_reason
+    local resolved_chat_id="" alert_text="" send_output="" delivery_error="" message_id="" delivery_target="none"
+    local send_status=0 primary_status="" state_alert_fingerprint="" effective_delivery_status=""
     release_source_path="${TEMP_DIR}/release-source.txt"
     issue_signals_path="${TEMP_DIR}/issue-signals.json"
 
@@ -742,8 +883,80 @@ PY
     fingerprint="$(jq -r '.snapshot.fingerprint' "$REPORT_PATH")"
     latest_version="$(jq -r '.snapshot.latest_version' "$REPORT_PATH")"
     decision="$(jq -r '.decision.decision' "$REPORT_PATH")"
-    delivery_status="$(jq -r '.delivery.status' "$REPORT_PATH")"
-    degraded_reason="$(jq -r '.delivery.reason' "$REPORT_PATH")"
+    primary_status="$(jq -r '.snapshot.primary_status' "$REPORT_PATH")"
+    state_alert_fingerprint="$(jq -r '.last_alert_fingerprint // ""' <<<"$state_before")"
+    delivery_status="not-attempted"
+    degraded_reason="Ручной запуск не отправляет Telegram-уведомление автоматически."
+    delivery_error=""
+    message_id=""
+
+    if [[ "$TELEGRAM_ENABLED" == "true" ]]; then
+        resolved_chat_id="$(resolve_telegram_chat_id "$TELEGRAM_ENV_FILE" || true)"
+    fi
+
+    if [[ "$MODE" == "scheduler" ]]; then
+        delivery_target="telegram"
+        if [[ "$primary_status" != "ok" ]]; then
+            delivery_status="deferred"
+            degraded_reason="Официальный источник не дал надёжного результата; автоматическая отправка отложена."
+        elif [[ "$state_alert_fingerprint" == "$fingerprint" ]]; then
+            delivery_status="suppressed"
+            degraded_reason="Этот upstream fingerprint уже был отправлен ранее; повторный alert подавлен."
+        elif [[ "$TELEGRAM_ENABLED" != "true" ]]; then
+            delivery_status="not-configured"
+            degraded_reason="Telegram delivery отключён для Moltis-native scheduler path."
+        elif [[ -z "$resolved_chat_id" ]]; then
+            delivery_status="not-configured"
+            degraded_reason="Не удалось определить chat_id для Telegram delivery."
+        elif [[ ! -x "$TELEGRAM_SEND_SCRIPT" ]]; then
+            delivery_status="failed"
+            delivery_error="Не найден или не исполняется telegram sender script."
+            degraded_reason="Автоматическая отправка не выполнена: недоступен telegram sender."
+        else
+            alert_text="$(render_telegram_alert)"
+            set +e
+            send_output="$(run_telegram_sender "$resolved_chat_id" "$alert_text" 2>&1)"
+            send_status=$?
+            set -e
+
+            if [[ $send_status -eq 0 ]] && jq -e '.ok == true' >/dev/null 2>&1 <<<"$send_output"; then
+                delivery_status="sent"
+                degraded_reason="Moltis отправил одно уведомление для нового upstream fingerprint."
+                message_id="$(jq -r '.result.message_id // ""' <<<"$send_output")"
+                if [[ "$message_id" == "null" ]]; then
+                    message_id=""
+                fi
+            else
+                delivery_status="failed"
+                degraded_reason="Автоматическая отправка в Telegram завершилась ошибкой."
+                if jq -e 'type == "object"' >/dev/null 2>&1 <<<"$send_output"; then
+                    delivery_error="$(jq -r '.description // .error // empty' <<<"$send_output")"
+                fi
+                if [[ -z "$delivery_error" ]]; then
+                    delivery_error="$(printf '%s' "$send_output" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+                fi
+            fi
+        fi
+    fi
+
+    jq \
+        --arg status "$delivery_status" \
+        --arg reason "$degraded_reason" \
+        --arg target "$delivery_target" \
+        --arg chat_id "$resolved_chat_id" \
+        --arg delivery_error "$delivery_error" \
+        --argjson message_id "${message_id:-0}" \
+        '
+        .delivery = {
+          status: $status,
+          reason: $reason,
+          target: $target,
+          chat_id: $chat_id,
+          message_id: (if $message_id > 0 then $message_id else 0 end),
+          error: $delivery_error
+        }
+        ' "$REPORT_PATH" > "${REPORT_PATH}.tmp"
+    mv "${REPORT_PATH}.tmp" "$REPORT_PATH"
 
     "$STATE_SCRIPT" update \
         --state-file "$STATE_FILE" \
@@ -752,8 +965,40 @@ PY
         --latest-version "$latest_version" \
         --decision "$decision" \
         --delivery-status "$delivery_status" \
+        --delivery-error "$delivery_error" \
         --degraded-reason "$degraded_reason" \
         --json >/dev/null
+
+    if [[ "$MODE" == "scheduler" ]]; then
+        effective_delivery_status="$delivery_status"
+        case "$effective_delivery_status" in
+            sent|suppressed)
+                if [[ -n "$message_id" ]]; then
+                    "$STATE_SCRIPT" mark-delivery \
+                        --state-file "$STATE_FILE" \
+                        --delivery-status "$effective_delivery_status" \
+                        --alert-fingerprint "$fingerprint" \
+                        --delivery-error "$delivery_error" \
+                        --message-id "$message_id" \
+                        --json >/dev/null
+                else
+                    "$STATE_SCRIPT" mark-delivery \
+                        --state-file "$STATE_FILE" \
+                        --delivery-status "$effective_delivery_status" \
+                        --alert-fingerprint "$fingerprint" \
+                        --delivery-error "$delivery_error" \
+                        --json >/dev/null
+                fi
+                ;;
+            failed|deferred|not-configured|not-attempted)
+                "$STATE_SCRIPT" mark-delivery \
+                    --state-file "$STATE_FILE" \
+                    --delivery-status "$effective_delivery_status" \
+                    --delivery-error "$delivery_error" \
+                    --json >/dev/null
+                ;;
+        esac
+    fi
 
     state_after="$("$STATE_SCRIPT" get --state-file "$STATE_FILE" --json)"
     jq --argjson state "$state_after" --argjson notes "$(printf '%s\n' "${WARNINGS[@]:-}" | jq -R . | jq -s '. | map(select(length > 0))')" \
