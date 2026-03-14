@@ -113,7 +113,7 @@ jobs:
       - name: Install OS dependencies
         run: |
           sudo apt-get update -yqq
-          sudo apt-get install -y -qq jq
+          sudo apt-get install -y -qq jq ripgrep
 
       - name: Install npm dependencies
         run: npm install --no-fund --no-audit
