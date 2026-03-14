@@ -1,0 +1,36 @@
+{
+  "schema_version": "codex-update-project-profile/v1",
+  "profile_id": "moltinger-fallback",
+  "project_name": "Moltinger",
+  "owner": "Сергей",
+  "traits": [
+    "docs-surface",
+    "agent-orchestration"
+  ],
+  "relevance_rules": [
+    {
+      "id": "rare-signal",
+      "keywords": [
+        "nonexistent-keyword"
+      ],
+      "title_ru": "Проверить редкий профильный сигнал",
+      "rationale_ru": "Это правило почти никогда не срабатывает и нужно только для проверки fallback-поведения.",
+      "next_steps_ru": [
+        "Если правило сработало, проверить необычный edge-case."
+      ]
+    }
+  ],
+  "recommendation_templates": [],
+  "fallback_recommendation": {
+    "title_ru": "Сделать короткую project-specific оценку для Moltinger",
+    "rationale_ru": "Даже без прямого совпадения по правилам стоит сверить traits проекта с upstream-изменением и понять, нужен ли follow-up.",
+    "next_steps_ru": [
+      "Проверить, затрагивает ли обновление docs, навыки или agent orchestration.",
+      "Зафиксировать, нужен ли follow-up task или обновление guidance."
+    ],
+    "impacted_paths": [
+      "docs/",
+      "skills/"
+    ]
+  }
+}

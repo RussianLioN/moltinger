@@ -175,6 +175,10 @@ bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$
 bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh
 bash|component_moltis_codex_advisory_intake|Moltis Codex advisory intake component|$SCRIPT_DIR/component/test_moltis_codex_advisory_intake.sh
 bash|component_moltis_codex_advisory_router|Moltis Codex advisory router component|$SCRIPT_DIR/component/test_moltis_codex_advisory_router.sh
+bash|component_moltis_codex_update_run|Moltis Codex update run component|$SCRIPT_DIR/component/test_moltis_codex_update_run.sh
+bash|component_moltis_codex_update_state|Moltis Codex update state component|$SCRIPT_DIR/component/test_moltis_codex_update_state.sh
+bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh
+bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh
 bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
 bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh

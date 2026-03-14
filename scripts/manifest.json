@@ -56,9 +56,9 @@
       "source": "cron.d/moltis-codex-upstream-watcher",
       "target": "/etc/cron.d/moltis-codex-upstream-watcher",
       "schedule": "17 */6 * * *",
-      "description": "Official-source Codex upstream watcher with duplicate-safe Telegram delivery",
-      "command": "/opt/moltinger/scripts/codex-cli-upstream-watcher.sh --mode scheduler --include-issue-signals --stdout none",
-      "issue": "moltinger-fj8"
+      "description": "Moltis-native Codex update scheduler with duplicate-safe Telegram delivery",
+      "command": "/opt/moltinger/scripts/moltis-codex-update-run.sh --mode scheduler --include-issue-signals --stdout none",
+      "issue": "moltinger-eajx"
     }
   },
   "scripts": {
@@ -246,6 +246,85 @@
       ],
       "env_vars": [
         "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-state.sh": {
+      "version": "1.2.0",
+      "description": "Persist Moltis-native Codex update skill state, scheduler checkpoints, delivery results, and audit pointers",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "moltis-codex-update-state"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_STATE_FILE"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-profile.sh": {
+      "version": "1.1.0",
+      "description": "Validate and normalize stable optional project profiles for the Moltis-native Codex update skill",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-profile"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_PROFILE_SCHEMA"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-run.sh": {
+      "version": "1.3.0",
+      "description": "Canonical Moltis-native runtime entrypoint for on-demand and scheduled Codex CLI update checks with audit mirrors, scheduler-owned delivery, and profile-shaped recommendations",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-run",
+        "codex-update-check"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_MODE",
+        "MOLTIS_CODEX_UPDATE_STATE_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_STATE_FILE",
+        "MOLTIS_CODEX_UPDATE_AUDIT_DIR",
+        "MOLTIS_CODEX_UPDATE_RELEASE_FILE",
+        "MOLTIS_CODEX_UPDATE_RELEASE_URL",
+        "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_FILE",
+        "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_URL",
+        "MOLTIS_CODEX_UPDATE_PROFILE_FILE",
+        "MOLTIS_CODEX_UPDATE_MAX_RELEASES",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_SILENT"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Moltis-native Codex update proof covering manual profile handling, scheduler delivery, suppression, and audit evidence",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-e2e"
       ],
       "ci": true
     },

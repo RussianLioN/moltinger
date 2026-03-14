@@ -1,5 +1,10 @@
 # Монитор обновлений Codex CLI
 
+> Статус: migration-only reference.
+> Канонический путь для этой функции теперь описан в [docs/moltis-codex-update-skill.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-codex-update-skill.md).
+> Для ручной канонической проверки используй `make codex-update`, а не старые watcher/advisor/delivery entrypoint-ы.
+> Legacy consent-флаги watcher-а теперь no-op: старый `/codex_*` interactive UX принудительно выведен из эксплуатации.
+
 `codex-cli-upstream-watcher.sh` следит за официальным changelog Codex CLI, не требует установленного `codex` на хосте Moltinger и умеет:
 
 - понять, появилось ли новое upstream-состояние

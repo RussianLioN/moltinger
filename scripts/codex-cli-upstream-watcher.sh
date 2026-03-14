@@ -39,9 +39,9 @@ TELEGRAM_CHAT_ID="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CHAT_ID:-}"
 TELEGRAM_ENV_FILE="${CODEX_UPSTREAM_WATCHER_TELEGRAM_ENV_FILE:-${MOLTIS_ENV_FILE:-}}"
 TELEGRAM_SILENT=false
 TELEGRAM_SEND_SCRIPT="${CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT:-${DEFAULT_TELEGRAM_SEND_SCRIPT}}"
-TELEGRAM_CONSENT_ENABLED="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED:-true}"
+TELEGRAM_CONSENT_ENABLED="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED:-false}"
 TELEGRAM_CONSENT_WINDOW_HOURS="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_WINDOW_HOURS:-72}"
-TELEGRAM_CONSENT_ROUTER_ENABLED="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED:-true}"
+TELEGRAM_CONSENT_ROUTER_ENABLED="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED:-false}"
 TELEGRAM_CONSENT_STORE_SCRIPT="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_SCRIPT:-${DEFAULT_CONSENT_STORE_SCRIPT}}"
 TELEGRAM_CONSENT_STORE_DIR="${CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR:-${DEFAULT_CONSENT_STORE_DIR}}"
 TELEGRAM_UPDATES_FILE="${CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE:-}"
@@ -86,13 +86,13 @@ Options:
   --telegram-env-file PATH       Env-файл для Telegram sender-а и чтения ответов
   --telegram-silent              Отправлять Telegram тихо, без звука
   --telegram-send-script PATH    Путь к telegram sender script
-  --telegram-consent-disabled    Не спрашивать о практических рекомендациях в Telegram
-  --telegram-consent-window-hours N Сколько часов ждать ответ пользователя в Telegram
-  --telegram-consent-router-disabled Выключить authoritative consent router и отправлять только one-way alert
-  --telegram-consent-store-script PATH Путь к consent store helper
-  --telegram-consent-store-dir PATH Директория shared consent store
-  --telegram-updates-file PATH   Читать ответы Telegram из локального JSON-файла
-  --telegram-allow-getupdates    Разрешить live-чтение ответов через Bot API getUpdates
+  --telegram-consent-disabled    Legacy compatibility no-op; старый consent UX уже выведен из эксплуатации
+  --telegram-consent-window-hours N Legacy compatibility no-op
+  --telegram-consent-router-disabled Legacy compatibility no-op
+  --telegram-consent-store-script PATH Legacy compatibility no-op
+  --telegram-consent-store-dir PATH Legacy compatibility no-op
+  --telegram-updates-file PATH   Legacy compatibility no-op
+  --telegram-allow-getupdates    Legacy compatibility no-op; old Bot API polling path retired
   -h, --help                     Показать эту справку
 
 Environment overrides:
@@ -996,6 +996,13 @@ main() {
             add_warning "Telegram включён, но chat id определить не удалось."
         fi
     fi
+
+    if [[ "$TELEGRAM_CONSENT_ENABLED" == "true" || "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" || "$TELEGRAM_ALLOW_GETUPDATES" == "true" ]]; then
+        add_warning "Legacy Telegram consent UX retired: watcher больше не открывает /codex_* или interactive follow-up и отправляет только one-way alert."
+    fi
+    TELEGRAM_CONSENT_ENABLED="false"
+    TELEGRAM_CONSENT_ROUTER_ENABLED="false"
+    TELEGRAM_ALLOW_GETUPDATES="false"
 
     if [[ "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" && -x "$TELEGRAM_CONSENT_STORE_SCRIPT" ]]; then
         if [[ "$(basename "$TELEGRAM_SEND_SCRIPT")" == "telegram-bot-send-remote.sh" ]]; then
