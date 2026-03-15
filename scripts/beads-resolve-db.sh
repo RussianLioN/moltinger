@@ -75,16 +75,31 @@ beads_resolve_normalize_path() {
   )
 }
 
+beads_resolve_git() {
+  env \
+    -u GIT_DIR \
+    -u GIT_WORK_TREE \
+    -u GIT_COMMON_DIR \
+    -u GIT_NAMESPACE \
+    -u GIT_INDEX_FILE \
+    -u GIT_OBJECT_DIRECTORY \
+    -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_PREFIX \
+    -u GIT_CEILING_DIRECTORIES \
+    -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+    git "$@"
+}
+
 beads_resolve_repo_root() {
   local probe_path="${1:-$PWD}"
-  git -C "${probe_path}" rev-parse --show-toplevel 2>/dev/null || true
+  beads_resolve_git -C "${probe_path}" rev-parse --show-toplevel 2>/dev/null || true
 }
 
 beads_resolve_canonical_root() {
   local repo_root="$1"
   local common_dir=""
 
-  common_dir="$(git -C "${repo_root}" rev-parse --git-common-dir 2>/dev/null || true)"
+  common_dir="$(beads_resolve_git -C "${repo_root}" rev-parse --git-common-dir 2>/dev/null || true)"
   if [[ -z "${common_dir}" ]]; then
     return 1
   fi
