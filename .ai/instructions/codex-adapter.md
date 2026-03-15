@@ -14,6 +14,19 @@ Repo-specific Codex profiles, worktree naming, and local instruction split are d
 docs/CODEX-OPERATING-MODEL.md
 ```
 
+## Playwright MCP Index
+
+When the task involves browser automation, UI inspection, screenshots, or the user explicitly mentions Playwright/MCP browser tools:
+
+1. first read:
+
+```bash
+docs/rules/playwright-mcp-usage.md
+```
+
+2. then use the `playwright` skill as the workflow reference
+3. do not repeatedly retry `mcp__playwright__browser_navigate` after persistent-context or stale-session launch failures; follow the rule above and stop after one cleanup attempt
+
 When working inside scoped directories such as `config/`, `.github/`, `scripts/`, `specs/`, `tests/`, `docs/`, `.ai/`, `.claude/`, `knowledge/`, `.beads/`, or `.specify/`, follow the nearest local `AGENTS.md` in addition to the root file.
 
 ## Codex Governance Check

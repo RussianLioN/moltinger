@@ -52,6 +52,8 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-15)
 
+- Added a repo-level Playwright MCP usage rule in `docs/rules/playwright-mcp-usage.md` and indexed it from `.ai/instructions/codex-adapter.md`, generated `AGENTS.md`, and `docs/CODEX-OPERATING-MODEL.md`: future Codex sessions must now read the rule before using MCP browser tools and must stop retrying stale `browser_navigate` launches after one cleanup attempt.
+- Opened follow-up Beads task `molt-j51` (`Fix stale MCP Playwright browser session recovery`) because the underlying persistent-context failure is still a real technical issue; the new instruction change prevents repeated misuse, but it is not the final runtime fix.
 - Applied a second browser UX pass on `024-web-factory-demo-adapter` after direct comparison against Perplexity-style chat-first references: `web/agent-factory-demo/index.html` is now centered around a single dominant composer, the first screen hides the conversation transcript until the project is actually started, and the old dashboard-like status clutter moved into the collapsed `Контекст проекта` section.
 - Rebuilt `web/agent-factory-demo/app.css` for the new composition and added explicit `landing/active` shell state handling in `web/agent-factory-demo/app.js`, so the live shell now behaves like a clean conversational entry surface instead of an operator dashboard from the very first screen.
 - Re-verified the redesigned shell with:

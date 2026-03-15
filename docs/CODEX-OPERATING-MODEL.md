@@ -153,6 +153,14 @@ Use the nearest local `AGENTS.md` for directory-specific rules.
 - `docs/`
 - `knowledge/`
 
+## Browser Automation Rule
+
+If the task involves Playwright, MCP browser tools, screenshots, or live UI inspection:
+
+1. first read `docs/rules/playwright-mcp-usage.md`
+2. then use the `playwright` skill as the execution workflow
+3. stop retrying stale MCP browser launches after one cleanup attempt; repeated `browser_navigate` retries are not an acceptable workflow
+
 ## When To Use What
 
 ### Config Or Runtime Change
