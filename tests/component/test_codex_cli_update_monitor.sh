@@ -102,80 +102,6 @@ canonicalize_fixture_path() {
     )
 }
 
-emit_monitor_resolver_debug() {
-    local label="$1"
-    local repo_root="$2"
-    local report_path="$3"
-    local fake_bd_state_dir="${4:-}"
-
-    {
-        echo "=== ${label} ==="
-        printf 'repo_root=%s\n' "$repo_root"
-        printf 'report_path=%s\n' "$report_path"
-        printf 'pwd=%s\n' "$PWD"
-        printf 'GIT_DIR=%s\n' "${GIT_DIR:-}"
-        printf 'GIT_WORK_TREE=%s\n' "${GIT_WORK_TREE:-}"
-        printf 'PATH=%s\n' "$PATH"
-
-        echo "--- report.json ---"
-        if [[ -f "$report_path" ]]; then
-            jq . "$report_path" 2>/dev/null || cat "$report_path"
-        else
-            echo "missing report"
-        fi
-
-        echo "--- git marker ---"
-        if [[ -d "${repo_root}/.git" ]]; then
-            echo ".git type=directory"
-            ls -ld "${repo_root}/.git"
-        elif [[ -f "${repo_root}/.git" ]]; then
-            echo ".git type=file"
-            ls -l "${repo_root}/.git"
-            cat "${repo_root}/.git"
-        else
-            echo ".git type=missing"
-        fi
-
-        echo "--- command resolution ---"
-        command -v bd || true
-        command -v git || true
-
-        echo "--- raw git probe ---"
-        git -C "$repo_root" rev-parse --show-toplevel 2>&1 || true
-        git -C "$repo_root" rev-parse --git-common-dir 2>&1 || true
-
-        echo "--- beads resolve ---"
-        if ! REPO_ROOT="$repo_root" bash -lc '
-            set -euo pipefail
-            repo_root="${REPO_ROOT:?}"
-            source "${repo_root}/scripts/beads-resolve-db.sh"
-            beads_resolve_dispatch "$repo_root" update codex-update-monitor-probe --status open
-            printf "decision=%s\n" "${BEADS_RESOLVE_DECISION:-}"
-            printf "context=%s\n" "${BEADS_RESOLVE_CONTEXT:-}"
-            printf "exit_code=%s\n" "${BEADS_RESOLVE_EXIT_CODE:-}"
-            printf "message=%s\n" "${BEADS_RESOLVE_MESSAGE:-}"
-            printf "recovery_hint=%s\n" "${BEADS_RESOLVE_RECOVERY_HINT:-}"
-            printf "root_cleanup_notice=%s\n" "${BEADS_RESOLVE_ROOT_CLEANUP_NOTICE:-}"
-            printf "repo_root=%s\n" "${BEADS_RESOLVE_REPO_ROOT:-}"
-            printf "canonical_root=%s\n" "${BEADS_RESOLVE_CANONICAL_ROOT:-}"
-            printf "db_path=%s\n" "${BEADS_RESOLVE_DB_PATH:-}"
-        ' 2>&1; then
-            echo "beads_resolve_dispatch_debug=failed"
-        fi
-
-        if [[ -n "$fake_bd_state_dir" ]]; then
-            echo "--- fake bd state ---"
-            printf 'fake_bd_state_dir=%s\n' "$fake_bd_state_dir"
-            if [[ -f "${fake_bd_state_dir}/calls.log" ]]; then
-                cat "${fake_bd_state_dir}/calls.log"
-            else
-                echo "calls.log missing"
-            fi
-        fi
-        echo "=== end ${label} ==="
-    } >&2
-}
-
 run_monitor_fixture_with_script() {
     local monitor_script="$1"
     local local_version="$2"
@@ -357,35 +283,12 @@ run_component_codex_cli_update_monitor_tests() {
     work_dir="$(secure_temp_dir codex-update-monitor)"
     GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
         run_monitor_fixture_with_script "$worktree_path/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
-        --issue-action upsert
+        --issue-action upsert \
+        --issue-threshold upgrade-later
     report="$work_dir/report.json"
-    if [[ "$(jq -r '.issue_action.mode' "$report")" != "created" ]]; then
-        GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
-            emit_monitor_resolver_debug \
-            "component_codex_update_monitor_uses_local_worktree_db_for_implicit_upsert" \
-            "$worktree_path" \
-            "$report" \
-            "$FAKE_BD_STATE_DIR"
-        test_fail "Dedicated worktree upsert should still resolve a local tracker automatically (expected: 'created', got: '$(jq -r '.issue_action.mode' "$report")')"
-    elif [[ ! -f "$FAKE_BD_STATE_DIR/calls.log" ]]; then
-        GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
-            emit_monitor_resolver_debug \
-            "component_codex_update_monitor_uses_local_worktree_db_for_implicit_upsert" \
-            "$worktree_path" \
-            "$report" \
-            "$FAKE_BD_STATE_DIR"
-        test_fail "Implicit upsert should target the current worktree-local DB (calls.log missing)"
-    elif ! grep -F -- "--db ${worktree_path}/.beads/beads.db" "$FAKE_BD_STATE_DIR/calls.log" >/dev/null 2>&1; then
-        GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
-            emit_monitor_resolver_debug \
-            "component_codex_update_monitor_uses_local_worktree_db_for_implicit_upsert" \
-            "$worktree_path" \
-            "$report" \
-            "$FAKE_BD_STATE_DIR"
-        test_fail "Implicit upsert should target the current worktree-local DB"
-    else
-        test_pass
-    fi
+    assert_eq "created" "$(jq -r '.issue_action.mode' "$report")" "Dedicated worktree upsert should still resolve a local tracker automatically"
+    assert_contains "$(cat "$FAKE_BD_STATE_DIR/calls.log")" "--db ${worktree_path}/.beads/beads.db" "Implicit upsert should target the current worktree-local DB"
+    test_pass
 
     test_start "component_codex_update_monitor_blocks_implicit_canonical_root_upsert"
     fixture_root="$(secure_temp_dir codex-update-monitor-fixture)"
@@ -396,31 +299,12 @@ run_component_codex_cli_update_monitor_tests() {
     work_dir="$(secure_temp_dir codex-update-monitor)"
     GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
         run_monitor_fixture_with_script "$repo_dir/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
-        --issue-action upsert
+        --issue-action upsert \
+        --issue-threshold upgrade-later
     report="$work_dir/report.json"
-    if [[ "$(jq -r '.issue_action.mode' "$report")" != "skipped" ]]; then
-        GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
-            emit_monitor_resolver_debug \
-            "component_codex_update_monitor_blocks_implicit_canonical_root_upsert" \
-            "$repo_dir" \
-            "$report" \
-            "$FAKE_BD_STATE_DIR"
-        test_fail "Canonical-root upsert should fail closed without an explicit DB target (expected: 'skipped', got: '$(jq -r '.issue_action.mode' "$report")')"
-    elif ! jq -r '.issue_action.notes | join("\n")' "$report" | grep -F -- "mutating canonical-root tracker commands are blocked by default" >/dev/null 2>&1; then
-        GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
-            emit_monitor_resolver_debug \
-            "component_codex_update_monitor_blocks_implicit_canonical_root_upsert" \
-            "$repo_dir" \
-            "$report" \
-            "$FAKE_BD_STATE_DIR"
-        test_fail "Canonical-root block should be reported explicitly (needle: 'mutating canonical-root tracker commands are blocked by default')"
-    elif [[ -f "$FAKE_BD_STATE_DIR/calls.log" ]]; then
-        GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
-            emit_monitor_resolver_debug \
-            "component_codex_update_monitor_blocks_implicit_canonical_root_upsert" \
-            "$repo_dir" \
-            "$report" \
-            "$FAKE_BD_STATE_DIR"
+    assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Canonical-root upsert should fail closed without an explicit DB target"
+    assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "mutating canonical-root tracker commands are blocked by default" "Canonical-root block should be reported explicitly"
+    if [[ -f "$FAKE_BD_STATE_DIR/calls.log" ]]; then
         test_fail "Canonical-root implicit upsert must not invoke bd"
     else
         test_pass
