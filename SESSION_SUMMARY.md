@@ -52,6 +52,15 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-15)
 
+- Завершён ещё один полный UX-pass для `asc.ainetic.tech` уже не как “облегчённый dashboard”, а как явный `Codex-first workspace`: `web/agent-factory-demo/index.html` теперь разделяет `Access gate -> Empty home -> Project workspace -> Review/downloads side panel`, без service-noise в primary viewport.
+- `web/agent-factory-demo/app.css` и `web/agent-factory-demo/app.js` переписаны под новый interaction model: sidebar показывает только названия проектов, первый экран сразу задаёт рабочий вопрос с примерами ответов, текущий discovery-вопрос поднимается в composer, а review/downloads живут в правой side panel, которая открывается только по событию или явному действию пользователя.
+- `scripts/agent-factory-web-adapter.py` теперь дополнительно публикует browser-safe projection для нового UX (`display_project_title`, `project_stage_label`, `side_panel_mode`, `composer_helper_example`), чтобы frontend не гадал по внутренним runtime-полям.
+- Новый пользовательский поток подтверждён зелёными проверками:
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff|resume)' --json`
+  - `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json`
+- Следующий операционный шаг после текущего коммита: перевыкатить `024-web-factory-demo-adapter` на `https://asc.ainetic.tech` и повторно проверить live UX уже в браузере пользователя.
+
 - Собрал UX-consilium по роли дизайна/interaction и зафиксировал согласованную модель для `asc.ainetic.tech`: не incremental dashboard patch, а явное разделение на `Access gate -> Empty home -> Project workspace`, Perplexity-like chat-first композицию, левый список проектов и контекстный composer с вопросно-зависимым placeholder.
 - Переписал browser shell под эту модель в `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, и `web/agent-factory-demo/app.js`: token теперь живёт на отдельном gate-экране, рабочее пространство открывается только после входа, у пользователя есть sidebar со списком проектов, новый проект можно запускать параллельно существующим, а рабочее название проекта теперь автоматически генерируется после первого содержательного user turn и может переименовываться через меню `⋯`.
 - Добавил клиентское multi-project состояние поверх существующего adapter/runtime слоя без переписывания backend handoff path: проекты хранятся локально как отдельные browser workspaces с собственными `sessionId`, timeline, draft и lastResponse; refresh/resume продолжают использовать уже существующий `GET /api/session`, поэтому новый UX не ломает discovery/intake/artifact pipeline.

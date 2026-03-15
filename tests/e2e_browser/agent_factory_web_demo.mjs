@@ -139,7 +139,6 @@ async function sendFirstIdea(page) {
   await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
   await page.locator('#chatInput').fill('Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация.');
   await page.locator('#sendBtn').click();
-  await page.locator('[data-role="connection-state"]').filter({ hasText: 'Подключен live adapter' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
   await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем или выгодоприобретателем результата?' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
 }
 
@@ -160,7 +159,9 @@ async function run() {
         await page.locator('[data-role="access-submit"]').click();
         await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         await page.locator('[data-role="project-list"]').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-        await page.getByText('Опиши идею автоматизации').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('[data-role="home-panel"] h2').filter({ hasText: 'Что нужно автоматизировать?' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        assert(await page.locator('[data-role="home-panel"]').isVisible(), 'Home screen should stay visible right after access is granted');
+        assert(!(await page.getByText('Подключен live adapter').isVisible().catch(() => false)), 'Primary workspace should not expose live adapter noise');
       } finally {
         await context.close();
       }
@@ -172,16 +173,16 @@ async function run() {
         await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
         await sendFirstIdea(page);
 
-        const visibleStatus = (await page.locator('[data-role="status-user-visible"]').textContent()) || '';
-        const nextAction = (await page.locator('[data-role="status-next-action"]').textContent()) || '';
         const composerMode = (await page.locator('[data-role="composer-mode"]').textContent()) || '';
+        const helperExample = (await page.locator('[data-role="composer-helper-example"]').textContent()) || '';
         const projectTitle = ((await page.locator('[data-role="project-title"]').textContent()) || '').trim();
 
-        assert(/Сбор требований продолжается/i.test(visibleStatus), `Expected browser-readable discovery status, got: ${visibleStatus}`);
-        assert(/Ответить на следующий вопрос/i.test(nextAction), `Expected browser-readable next action, got: ${nextAction}`);
         assert(/Кто будет основным пользователем/i.test(composerMode), `Composer should surface the current discovery question, got: ${composerMode}`);
+        assert(/Например|пользователи/i.test(helperExample), `Composer helper should suggest a business-readable answer example, got: ${helperExample}`);
         assert(projectTitle !== 'Новый проект', `Project title should be auto-generated after the first turn, got: ${projectTitle}`);
         assert(await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().isVisible(), 'Chat transcript should render the first discovery follow-up question');
+        assert(!(await page.locator('[data-role="home-panel"]').isVisible().catch(() => false)), 'Landing home screen should collapse after the first user turn');
+        assert(!(await page.getByText('Подключен live adapter').isVisible().catch(() => false)), 'Live adapter details should stay outside the primary viewport');
       } finally {
         await context.close();
       }
@@ -198,7 +199,7 @@ async function run() {
         await page.getByText('input-example-browser.txt').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         await page.locator('#chatInput').fill('Примеры приложил файлом.');
         await page.locator('#sendBtn').click();
-        await page.locator('[data-role="connection-state"]').filter({ hasText: 'Подключен live adapter' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
 
         const uploadCount = ((await page.locator('[data-role="status-upload-count"]').textContent()) || '').trim();
         assert(uploadCount === '1', `Expected one uploaded file in browser status, got: ${uploadCount}`);
@@ -217,22 +218,22 @@ async function run() {
         await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
         await sendFirstIdea(page);
 
-        const sessionBadgeBeforeReload = ((await page.locator('[data-role="session-badge"]').textContent()) || '').trim();
-        assert(sessionBadgeBeforeReload.includes('web-demo-session-'), `Expected a persisted browser session badge before reload, got: ${sessionBadgeBeforeReload}`);
+        const projectTitleBeforeReload = ((await page.locator('[data-role="project-title"]').textContent()) || '').trim();
+        assert(projectTitleBeforeReload && projectTitleBeforeReload !== 'Новый проект', `Expected a generated project title before reload, got: ${projectTitleBeforeReload}`);
 
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.getByText('Сессия восстановлена').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-        await page.locator('[data-role="status-operator-attention"]').filter({ hasText: 'Возобновляю browser-сессию' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#messages .message__title').filter({ hasText: 'Сессия восстановлена' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
 
-        const sessionBadgeAfterReload = ((await page.locator('[data-role="session-badge"]').textContent()) || '').trim();
+        const projectTitleAfterReload = ((await page.locator('[data-role="project-title"]').textContent()) || '').trim();
         const composerModeAfterReload = ((await page.locator('[data-role="composer-mode"]').textContent()) || '').trim();
 
-        assert(sessionBadgeAfterReload === sessionBadgeBeforeReload, `Expected the same browser session after reload, got: ${sessionBadgeAfterReload}`);
+        assert(projectTitleAfterReload === projectTitleBeforeReload, `Expected the same project title after reload, got: ${projectTitleAfterReload}`);
         assert(/Кто будет основным пользователем/i.test(composerModeAfterReload), `Composer should keep the active discovery question after resume, got: ${composerModeAfterReload}`);
 
         await page.locator('#chatInput').fill('Оператор первой линии и руководитель смены.');
         await page.locator('#sendBtn').click();
-        await page.getByText('Как этот процесс работает сейчас и где основные потери?').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#messages .message__body').filter({ hasText: 'Как этот процесс работает сейчас и где основные потери?' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
       } finally {
         await context.close();
       }

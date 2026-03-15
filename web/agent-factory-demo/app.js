@@ -8,12 +8,12 @@
   const ACTION_LABELS = {
     start_project: "Новый проект",
     submit_turn: "Ответить",
-    request_status: "Статус",
-    request_brief_review: "Показать brief",
+    request_status: "Обновить проект",
+    request_brief_review: "Открыть brief",
     request_brief_correction: "Внести правки",
     confirm_brief: "Подтвердить brief",
     reopen_brief: "Переоткрыть brief",
-    download_artifact: "Скачать артефакты",
+    download_artifact: "Открыть файлы",
     submit_access_token: "Открыть demo",
   };
   const ACTION_PRIORITY = [
@@ -34,9 +34,21 @@
     playground_ready: "Готово",
     reopened: "Нужно внимание",
   };
+  const MESSAGE_KIND_LABELS = {
+    initial_shell: "Начало работы",
+    discovery_question: "Следующий вопрос",
+    clarification_prompt: "Нужно уточнение",
+    confirmation_prompt: "Проверка brief",
+    session_resume: "Сессия восстановлена",
+    session_refresh: "Сессия обновлена",
+    upload_warning: "Файлы",
+    artifact_pending: "Артефакты",
+    error_message: "Нужен доступ",
+  };
 
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
+    workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
     accessTokenInput: document.querySelector('[data-role="access-token-input"]'),
     accessSubmit: document.querySelector('[data-role="access-submit"]'),
@@ -45,6 +57,17 @@
     projectTitle: document.querySelector('[data-role="project-title"]'),
     projectSubtitle: document.querySelector('[data-role="project-subtitle"]'),
     projectMenu: document.querySelector('[data-role="project-menu"]'),
+    homePanel: document.querySelector('[data-role="home-panel"]'),
+    homeExamples: document.querySelector('[data-role="home-examples"]'),
+    sidePanel: document.querySelector('[data-role="side-panel"]'),
+    sidePanelToggle: document.querySelector('[data-role="side-panel-toggle"]'),
+    sidePanelClose: document.querySelector('[data-role="side-panel-close"]'),
+    sidePanelEyebrow: document.querySelector('[data-role="side-panel-eyebrow"]'),
+    sidePanelTitle: document.querySelector('[data-role="side-panel-title"]'),
+    sidePanelSummary: document.querySelector('[data-role="side-panel-summary"]'),
+    panelCardList: document.querySelector('[data-role="panel-card-list"]'),
+    artifactSection: document.querySelector('[data-role="artifact-section"]'),
+    composerHelperExample: document.querySelector('[data-role="composer-helper-example"]'),
     connectionState: document.querySelector('[data-role="connection-state"]'),
     sessionBadge: document.querySelector('[data-role="session-badge"]'),
     refreshSession: document.querySelector('[data-role="refresh-session"]'),
@@ -70,6 +93,7 @@
     artifactEmpty: document.querySelector('[data-role="artifact-empty"]'),
     messageTemplate: document.querySelector('[data-role="message-template"]'),
     artifactTemplate: document.querySelector('[data-role="artifact-template"]'),
+    panelCardTemplate: document.querySelector('[data-role="panel-card-template"]'),
   };
 
   const state = {
@@ -122,7 +146,7 @@
       kind: "initial_shell",
       title: "Начни с описания задачи",
       body: "Опиши процесс, который хочешь автоматизировать. Если примеры лежат в файлах, прикрепи их прямо в поле ниже.",
-      actions: ["start_project"],
+      actions: [],
     };
   }
 
@@ -132,7 +156,7 @@
       kind,
       title,
       body,
-      actions: ["request_status"],
+      actions: [],
     };
   }
 
@@ -251,6 +275,8 @@
       id: project.id,
       title: project.title,
       titleEdited: Boolean(project.titleEdited),
+      sidePanelOpen: Boolean(project.sidePanelOpen),
+      lastPanelMode: normalizeText(project.lastPanelMode),
       sessionId: project.sessionId,
       timeline: Array.isArray(project.timeline) ? project.timeline : [buildWelcomeMessage()],
       lastResponse: project.lastResponse && typeof project.lastResponse === "object" ? project.lastResponse : null,
@@ -272,6 +298,8 @@
       id,
       title: normalizeText(record.title, DEFAULT_PROJECT_TITLE),
       titleEdited: Boolean(record.titleEdited),
+      sidePanelOpen: Boolean(record.sidePanelOpen),
+      lastPanelMode: normalizeText(record.lastPanelMode),
       sessionId: normalizeText(record.sessionId, defaultSessionId(id)),
       timeline: Array.isArray(record.timeline) && record.timeline.length ? record.timeline : [buildWelcomeMessage()],
       lastResponse: record.lastResponse && typeof record.lastResponse === "object" ? record.lastResponse : null,
@@ -300,6 +328,8 @@
       updatedAt: nowIso(),
       currentAction: "start_project",
       mockStage: "gate_pending",
+      sidePanelOpen: false,
+      lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
     });
@@ -419,18 +449,24 @@
     }
     const question = currentQuestion(project);
     const action = project?.currentAction || "start_project";
+    if (!hasConversationActivity(project)) {
+      return "Первый вопрос";
+    }
     if (question && ["submit_turn", "request_brief_correction", "reopen_brief"].includes(action)) {
       return "Текущий вопрос";
     }
     if (question && action === "confirm_brief") {
       return "Что проверить";
     }
-    return "Следующее действие";
+    return "Следующий шаг";
   }
 
   function modeTextFor(project) {
     if (!state.accessToken) {
       return "Открыть demo";
+    }
+    if (!hasConversationActivity(project)) {
+      return "Что нужно автоматизировать?";
     }
     const question = currentQuestion(project);
     const action = project?.currentAction || "start_project";
@@ -478,16 +514,62 @@
     return "Опиши, какой процесс нужно автоматизировать.";
   }
 
+  function helperExampleFor(project) {
+    if (!state.accessToken) {
+      return "Введи access token, и после этого откроется рабочее пространство проекта.";
+    }
+    const action = project?.currentAction || "start_project";
+    const question = currentQuestion(project);
+    const topic = currentTopic(project);
+    const status = currentStatus(project);
+
+    if (!hasConversationActivity(project)) {
+      return "Например: автоматизировать подготовку one-page summary по клиенту для кредитного комитета.";
+    }
+    if (action === "confirm_brief") {
+      return "Например: подтверждаю brief. Или: добавь отдельные правила для срочных заявок.";
+    }
+    if (action === "request_brief_correction") {
+      return "Например: добавь ограничения по роли пользователя и уточни метрики успеха.";
+    }
+    if (action === "reopen_brief") {
+      return "Например: нужно доуточнить входные данные и сценарии исключений.";
+    }
+    if (status === "playground_ready") {
+      return "Например: нужно доработать brief перед повторной генерацией материалов.";
+    }
+    if (topic === "target_users" || /пользовател/i.test(question)) {
+      return "Например: пользователи — члены кредитного комитета и клиентская служба.";
+    }
+    if (topic === "current_workflow" || /как этот процесс/i.test(question)) {
+      return "Например: сотрудник вручную собирает данные из трёх систем и сравнивает их в Excel.";
+    }
+    if (topic === "input_examples" || /пример|входн/i.test(question)) {
+      return "Например: можно приложить файл с образцом заявки, отчёта или one-page summary.";
+    }
+    if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
+      return "Например: на выходе нужна аналитическая карточка, рекомендация и краткое заключение.";
+    }
+    if (topic === "problem" || /бизнес-проблем/i.test(question)) {
+      return "Например: нужно сократить время согласования и повысить число рассмотренных кейсов.";
+    }
+    const projected = normalizeText(project?.lastResponse?.ui_projection?.composer_helper_example);
+    if (projected) {
+      return projected;
+    }
+    return "Отвечай простыми рабочими формулировками. Если есть примеры в файлах, прикрепи их прямо сюда.";
+  }
+
   function submitLabelFor(project) {
     const action = project?.currentAction || "start_project";
     if (action === "confirm_brief") {
       return "Подтвердить";
     }
     if (action === "request_brief_review") {
-      return "Показать brief";
+      return "Открыть brief";
     }
     if (action === "request_status") {
-      return "Обновить статус";
+      return "Обновить проект";
     }
     if (action === "reopen_brief") {
       return "Переоткрыть";
@@ -511,16 +593,16 @@
     const status = currentStatus(project);
     const question = currentQuestion(project);
     if (!hasConversationActivity(project)) {
-      return "Черновик проекта. Начни с описания задачи.";
+      return "Опиши задачу простыми словами. После первого ответа проект получит рабочее название автоматически.";
     }
     if (status === "awaiting_confirmation") {
-      return "Brief собран. Проверь summary, внеси правки или подтверди текущую версию.";
+      return "Brief собран. Открой боковую панель, чтобы проверить summary, внести правки или подтвердить версию.";
     }
     if (status === "playground_ready" || status === "confirmed") {
-      return "Артефакты готовы. Можно скачать материалы или запросить доработку.";
+      return "Материалы готовы. Открой боковую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
     if (question) {
-      return shorten(`Сейчас агент уточняет контекст: ${question}`, 140);
+      return shorten(`Сейчас агент уточняет контекст: ${question}`, 136);
     }
     return "Сессия активна. Можно продолжать диалог или запросить статус.";
   }
@@ -597,25 +679,10 @@
     main.type = "button";
     main.className = "project-card__main";
 
-    const titleRow = document.createElement("div");
-    titleRow.className = "project-card__title-row";
     const title = document.createElement("span");
     title.className = "project-card__title";
     title.textContent = project.title;
-    const pill = document.createElement("span");
-    pill.className = `project-card__pill project-card__pill--${statusTone(currentStatus(project))}`;
-    pill.textContent = statusLabel(project);
-    titleRow.append(title, pill);
-
-    const preview = document.createElement("p");
-    preview.className = "project-card__preview";
-    preview.textContent = projectPreview(project);
-
-    const meta = document.createElement("p");
-    meta.className = "project-card__meta";
-    meta.textContent = formatRelativeTime(project.updatedAt);
-
-    main.append(titleRow, preview, meta);
+    main.append(title);
     main.addEventListener("click", () => {
       switchProject(project.id);
     });
@@ -645,6 +712,7 @@
   function renderTopbar(project) {
     dom.projectTitle.textContent = project?.title || DEFAULT_PROJECT_TITLE;
     dom.projectSubtitle.textContent = projectSubtitle(project);
+    renderSidePanelToggle(project);
   }
 
   function activeSessionUploads(project) {
@@ -709,10 +777,11 @@
     author.textContent = message.author || {
       agent: "Фабричный агент",
       user: "Пользователь",
-      system: "Shell",
+      system: "Система",
       artifact: "Фабрика",
     }[message.role || "agent"];
-    kind.textContent = message.kind || "reply_card";
+    kind.textContent = MESSAGE_KIND_LABELS[message.kind] || "";
+    kind.hidden = !kind.textContent;
     title.textContent = message.title || "Ответ";
     body.textContent = message.body || "";
     attachments.innerHTML = "";
@@ -742,6 +811,20 @@
     return fragment;
   }
 
+  function timelineMessagesFromResponse(response) {
+    return (response?.reply_cards || [])
+      .filter((card) => !["brief_summary_section", "download_prompt", "status_update"].includes(card.card_kind))
+      .map((card) => ({
+        role: card.card_kind === "error_message" ? "system" : "agent",
+        kind: card.card_kind || "reply_card",
+        title: card.title || "Ответ фабрики",
+        body: card.body_text || "",
+        actions: Array.isArray(card.action_hints)
+          ? card.action_hints.filter((action) => ["submit_turn", "request_brief_correction", "confirm_brief", "reopen_brief"].includes(action))
+          : [],
+      }));
+  }
+
   function renderTimeline(project) {
     dom.chatLog.innerHTML = "";
     const items = project?.timeline?.length ? project.timeline : [buildWelcomeMessage()];
@@ -750,6 +833,54 @@
     });
     dom.chatEmpty.hidden = items.length > 0;
     dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+  }
+
+  function sidePanelMode(project) {
+    const response = currentResponse(project) || {};
+    const explicit = normalizeText(response.ui_projection?.side_panel_mode);
+    if (explicit) {
+      return explicit;
+    }
+    if (Array.isArray(response.download_artifacts) && response.download_artifacts.length) {
+      return "downloads";
+    }
+    if (Array.isArray(response.reply_cards) && response.reply_cards.some((card) => card.card_kind === "brief_summary_section")) {
+      return "brief_review";
+    }
+    return "hidden";
+  }
+
+  function hasPanelContent(project) {
+    return sidePanelMode(project) !== "hidden";
+  }
+
+  function detailCards(project) {
+    return (currentResponse(project)?.reply_cards || []).filter((card) => card.card_kind === "brief_summary_section");
+  }
+
+  function panelPromptCard(project) {
+    const response = currentResponse(project) || {};
+    const cards = Array.isArray(response.reply_cards) ? response.reply_cards : [];
+    if (sidePanelMode(project) === "downloads") {
+      return cards.find((card) => card.card_kind === "download_prompt") || null;
+    }
+    return cards.find((card) => card.card_kind === "confirmation_prompt") || null;
+  }
+
+  function renderHome(project) {
+    dom.homePanel.hidden = !state.accessToken || hasConversationActivity(project);
+  }
+
+  function renderSidePanelToggle(project) {
+    const mode = sidePanelMode(project);
+    dom.sidePanelToggle.hidden = mode === "hidden";
+    if (mode === "brief_review") {
+      dom.sidePanelToggle.textContent = "Проверить brief";
+    } else if (mode === "downloads") {
+      dom.sidePanelToggle.textContent = "Файлы проекта";
+    } else {
+      dom.sidePanelToggle.textContent = "Brief и файлы";
+    }
   }
 
   function artifactPlaceholders() {
@@ -844,6 +975,68 @@
     });
   }
 
+  function createPanelCard(card) {
+    const fragment = dom.panelCardTemplate.content.cloneNode(true);
+    const kind = fragment.querySelector(".panel-card__kind");
+    const title = fragment.querySelector(".panel-card__title");
+    const body = fragment.querySelector(".panel-card__body");
+    const actions = fragment.querySelector(".panel-card__actions");
+
+    kind.textContent = "Раздел brief";
+    title.textContent = card.title || "Раздел brief";
+    body.textContent = card.body_text || "";
+    actions.innerHTML = "";
+    (card.action_hints || [])
+      .filter((action) => ["request_brief_correction", "confirm_brief", "reopen_brief"].includes(action))
+      .forEach((action) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chip";
+        button.dataset.uiAction = action;
+        button.textContent = ACTION_LABELS[action] || action;
+        button.addEventListener("click", () => handleActionShortcut(action));
+        actions.appendChild(button);
+      });
+    actions.hidden = actions.children.length === 0;
+    return fragment;
+  }
+
+  function renderSidePanel(project) {
+    const mode = sidePanelMode(project);
+    const open = Boolean(project?.sidePanelOpen) && mode !== "hidden";
+    dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
+    dom.sidePanel.hidden = !open;
+    dom.sidePanel.dataset.mode = mode;
+    if (!open) {
+      return;
+    }
+
+    const promptCard = panelPromptCard(project);
+    if (mode === "brief_review") {
+      dom.sidePanelEyebrow.textContent = "Brief на проверке";
+      dom.sidePanelTitle.textContent = "Проверь summary";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь разделы brief, внеси правки или подтверди текущую версию.";
+    } else if (mode === "downloads") {
+      dom.sidePanelEyebrow.textContent = "Материалы проекта";
+      dom.sidePanelTitle.textContent = "Артефакты готовы";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Скачай project doc, agent spec и presentation из этой сессии.";
+    } else {
+      dom.sidePanelEyebrow.textContent = "Детали проекта";
+      dom.sidePanelTitle.textContent = "Brief и файлы";
+      dom.sidePanelSummary.textContent = "Здесь появятся brief на review и пользовательские артефакты.";
+    }
+
+    dom.panelCardList.innerHTML = "";
+    if (mode === "brief_review") {
+      detailCards(project).forEach((card) => {
+        dom.panelCardList.appendChild(createPanelCard(card));
+      });
+    }
+
+    dom.artifactSection.hidden = mode !== "downloads";
+    renderArtifacts(project);
+  }
+
   function renderStatus(project) {
     const response = currentResponse(project) || {};
     const statusSnapshot = response.status_snapshot || {};
@@ -889,10 +1082,10 @@
   function renderComposer(project) {
     dom.composerLeadLabel.textContent = leadLabelFor(project);
     dom.composerMode.textContent = modeTextFor(project);
+    dom.composerHelperExample.textContent = helperExampleFor(project);
     dom.composerInput.placeholder = placeholderFor(project);
     dom.composerSubmit.textContent = submitLabelFor(project);
     dom.composerInput.value = normalizeText(project?.draftText);
-    renderQuickActions(project);
   }
 
   function renderAll() {
@@ -903,11 +1096,12 @@
     renderShellStage(project);
     renderProjectList();
     renderTopbar(project);
+    renderHome(project);
     renderStatus(project);
     renderTimeline(project);
-    renderArtifacts(project);
     renderAttachmentList(project);
     renderComposer(project);
+    renderSidePanel(project);
   }
 
   function setProjectAction(project, action) {
@@ -917,8 +1111,7 @@
     project.currentAction = action;
     project.updatedAt = nowIso();
     persist();
-    renderComposer(project);
-    renderStatus(project);
+    renderAll();
   }
 
   function looksLikeSlug(value) {
@@ -948,7 +1141,7 @@
     if (!project || project.titleEdited) {
       return;
     }
-    const uiTitle = normalizeText(response?.ui_projection?.project_title);
+    const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
     const candidate = !looksLikeSlug(uiTitle) ? prettifyTitle(uiTitle) : prettifyTitle(userText);
     if (!candidate) {
       return;
@@ -1029,21 +1222,6 @@
     window.setTimeout(() => {
       dom.accessTokenInput.focus();
     }, 0);
-  }
-
-  function replyCardsToMessages(cards) {
-    return (cards || []).map((card) => ({
-      role:
-        card.card_kind === "download_prompt"
-          ? "artifact"
-          : card.card_kind === "status_update"
-            ? "system"
-            : "agent",
-      kind: card.card_kind || "reply_card",
-      title: card.title || "Ответ фабрики",
-      body: card.body_text || "",
-      actions: Array.isArray(card.action_hints) ? card.action_hints : [],
-    }));
   }
 
   function serializeUploadsForTransport(uploads) {
@@ -1330,6 +1508,10 @@
         preferred_ui_action: stage === "downloads_ready" ? "request_status" : stage === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
         current_question: mockDiscoveryPrompt(stage),
         current_topic: stage === "discovery_problem" ? "problem" : stage === "discovery_inputs" ? "input_examples" : stage === "discovery_outputs" ? "expected_outputs" : "",
+        side_panel_mode: stage === "downloads_ready" ? "downloads" : stage === "awaiting_confirmation" ? "brief_review" : "hidden",
+        composer_helper_example: helperExampleFor(project),
+        project_stage_label: stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief на проверке" : "Сбор требований",
+        display_project_title: project.title,
         project_title: project.title,
         uploaded_file_count: uploadedFiles.length,
       },
@@ -1344,13 +1526,13 @@
     if (reason === "manual_refresh") {
       return {
         title: "Сессия обновлена",
-        body: summary || (currentLabel ? `Shell перечитал статус проекта: ${currentLabel}.` : "Shell перечитал актуальное состояние проекта через GET /api/session."),
+        body: summary || (currentLabel ? `Проект обновлён. Текущий этап: ${currentLabel}.` : "Проект обновлён из сохранённого состояния."),
         kind: "session_refresh",
       };
     }
     return {
       title: "Сессия восстановлена",
-      body: summary || (briefVersion ? `Shell восстановил проект и версию brief ${briefVersion} из сохранённого состояния.` : "Shell восстановил проект из сохранённого состояния и перечитал текущий статус."),
+      body: summary || (briefVersion ? `Проект восстановлен вместе с версией brief ${briefVersion}.` : "Проект восстановлен из сохранённого состояния."),
       kind: "session_resume",
     };
   }
@@ -1372,7 +1554,7 @@
     project.sessionId = normalizeText(response.web_demo_session?.web_demo_session_id, project.sessionId);
     project.updatedAt = nowIso();
 
-    const replyMessages = appendReplyMessages ? replyCardsToMessages(response.reply_cards) : [];
+    const replyMessages = appendReplyMessages ? timelineMessagesFromResponse(response) : [];
     if (replyMessages.length) {
       project.timeline.push(...replyMessages);
     } else if (appendReplyMessages && response.next_question) {
@@ -1389,6 +1571,13 @@
 
     const preferredAction = normalizeText(response.ui_projection?.preferred_ui_action);
     project.currentAction = preferredAction || ACTION_PRIORITY.find((action) => availableActions(project).includes(action)) || "submit_turn";
+    const panelMode = sidePanelMode(project);
+    if (panelMode === "hidden") {
+      project.sidePanelOpen = false;
+    } else if (panelMode !== normalizeText(project.lastPanelMode)) {
+      project.sidePanelOpen = true;
+    }
+    project.lastPanelMode = panelMode;
 
     const resumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint);
     if (syncReason === "manual_refresh") {
@@ -1543,11 +1732,28 @@
     }
 
     if (action === "download_artifact") {
-      document.querySelector(".meta-panel")?.setAttribute("open", "open");
+      if (project) {
+        project.sidePanelOpen = true;
+        persist();
+        renderAll();
+      }
       return;
     }
 
-    if (["request_status", "request_brief_review", "confirm_brief"].includes(action)) {
+    if (action === "request_brief_review") {
+      if (project && hasPanelContent(project)) {
+        project.sidePanelOpen = true;
+        project.currentAction = action;
+        persist();
+        renderAll();
+        return;
+      }
+      setProjectAction(project, action);
+      dispatchTurn(action, "", { skipUserMessage: true });
+      return;
+    }
+
+    if (["request_status", "confirm_brief"].includes(action)) {
       setProjectAction(project, action);
       dispatchTurn(action, "", { skipUserMessage: true });
       return;
@@ -1572,12 +1778,38 @@
       }
     });
 
-    dom.quickActions.addEventListener("click", (event) => {
-      const target = event.target.closest("[data-ui-action]");
+    dom.sidePanelToggle.addEventListener("click", () => {
+      const project = getActiveProject();
+      if (!project || !hasPanelContent(project)) {
+        return;
+      }
+      project.sidePanelOpen = !project.sidePanelOpen;
+      persist();
+      renderAll();
+    });
+
+    dom.sidePanelClose.addEventListener("click", () => {
+      const project = getActiveProject();
+      if (!project) {
+        return;
+      }
+      project.sidePanelOpen = false;
+      persist();
+      renderAll();
+    });
+
+    dom.homeExamples.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-example-prompt]");
       if (!target) {
         return;
       }
-      handleActionShortcut(target.dataset.uiAction);
+      dom.composerInput.value = normalizeText(target.dataset.examplePrompt);
+      const project = getActiveProject();
+      if (project) {
+        project.draftText = dom.composerInput.value;
+        persist();
+      }
+      dom.composerInput.focus();
     });
 
     dom.composerInput.addEventListener("input", () => {

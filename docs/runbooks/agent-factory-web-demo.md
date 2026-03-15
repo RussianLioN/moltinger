@@ -28,10 +28,13 @@
 - показывать отдельный `access gate`, а после успешного входа переводить пользователя в отдельное рабочее пространство
 - держать `composer` главным фокусом первого рабочего экрана и прятать служебный контекст в secondary disclosure
 - поддерживать левый sidebar со списком проектов и быстрым возвратом к ним
+- держать в sidebar только названия проектов без preview/status clutter
 - автоматически давать проекту рабочее имя после первого содержательного user turn и позволять переименовывать проект через меню `⋯`
 - показывать первый live discovery follow-up вопрос в том же browser shell после сырой идеи пользователя
 - возвращать browser-safe `status_update` и `discovery_question` cards без leakage внутренних runtime полей
 - подсказывать shell правильный следующий режим через `ui_projection.preferred_ui_action`
+- убирать `live adapter`, `session id`, `shell/status_update` и прочий service noise из primary viewport
+- открывать review brief и downloads только в правой side panel по событию или явному действию пользователя
 - рендерить reviewable brief по секциям, принимать correction/confirm/reopen actions и сохранять versioned confirmation history
 - принимать файлы прямо из browser composer и безопасно извлекать excerpt для `txt/csv/json/md/docx`
 - после `confirm_brief` автоматически запускать downstream handoff chain через `scripts/agent-factory-intake.py` и `scripts/agent-factory-artifacts.py`
@@ -202,7 +205,7 @@ Current UX contract:
 - текст печатается локально сразу и не зависит от round-trip на сервер
 - отправка в фабрику происходит только по кнопке `Отправить`
 - прикреплённые файлы видны в composer до отправки
-- после ответа сервера attachment count и session attachment list отражаются в status strip
+- после ответа сервера attachment count и session attachment list отражаются в browser-safe project state и side panel
 
 ## Live Discovery UX (US1)
 
@@ -239,19 +242,24 @@ UI не должен показывать пользователю:
 
 ### Current browser composition
 
-Browser shell intentionally split into 3 user-facing states:
+Browser shell intentionally split into 4 user-facing states:
 
 1. `Access gate`
    - сначала пользователь видит только экран доступа
    - token не висит рядом с рабочим composer и не конкурирует с основным сценарием
 2. `Empty home`
    - после успешного входа открывается чистый рабочий экран
-   - слева виден список проектов и кнопка `Новый проект`
-   - в центре главный фокус у `composer`, а не у status/dashboard элементов
+   - слева виден только список проектов и кнопка `Новый проект`
+   - в центре главный фокус у первого рабочего вопроса и `composer`
+   - на экране есть примеры хорошего первого ответа
 3. `Project workspace`
    - после первого реального turn раскрывается thread проекта
    - текущий вопрос агента поднимается в `composer`
-   - `Контекст проекта` остаётся в `<details>` и не конкурирует с диалогом
+   - служебные статусы и runtime metadata не попадают в primary viewport
+4. `Review / downloads side panel`
+   - правая panel по умолчанию скрыта
+   - она открывается только когда ready brief нужно проверить или когда готовы downloads
+   - chat workspace при этом остаётся главным рабочим экраном
 
 ### Local validation examples
 

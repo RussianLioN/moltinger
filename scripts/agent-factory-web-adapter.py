@@ -1111,6 +1111,51 @@ def preferred_ui_action(reply_cards: list[dict[str, Any]], *, fallback: str = ""
     return normalize_text(fallback) or (discovered_actions[0] if discovered_actions else "")
 
 
+def compact_display_title(*candidates: Any) -> str:
+    for candidate in candidates:
+        text = normalize_text(candidate)
+        if not text:
+            continue
+        first_sentence = re.split(r"[.!?\n]", text, maxsplit=1)[0].strip()
+        cleaned = re.sub(r"^(нужен агент[,]?\s*|который\s+|хочу автоматизировать\s*|нужно автоматизировать\s*|нужна автоматизация\s*)", "", first_sentence, flags=re.IGNORECASE)
+        normalized = re.sub(r"\s+", " ", cleaned).strip(" -")
+        if normalized:
+            return normalized[:72].rstrip()
+    return "Новый проект"
+
+
+def side_panel_mode(reply_cards: list[dict[str, Any]], download_artifacts: list[dict[str, Any]] | None) -> str:
+    artifacts = normalize_download_artifacts(download_artifacts or [])
+    if artifacts:
+        return "downloads"
+    for card in reply_cards:
+        if isinstance(card, dict) and normalize_text(card.get("card_kind")) == "brief_summary_section":
+            return "brief_review"
+    return "hidden"
+
+
+def composer_helper_example(*, next_question: str, current_topic: str, adapter_status: str) -> str:
+    question = normalize_text(next_question)
+    topic = normalize_text(current_topic)
+    status = normalize_text(adapter_status)
+
+    if status in {"awaiting_confirmation", "reopened"}:
+        return "Например: подтверждаю brief. Или: добавь отдельные правила для срочных заявок."
+    if status in {"confirmed", "download_ready"}:
+        return "Например: материалы готовы, но нужно уточнить ограничения и вернуть brief на доработку."
+    if topic == "target_users" or "пользоват" in question.lower():
+        return "Например: пользователи — члены кредитного комитета и клиентская служба."
+    if topic == "current_workflow" or "как этот процесс" in question.lower():
+        return "Например: сотрудник вручную собирает данные из нескольких систем и сверяет их в Excel."
+    if topic == "input_examples" or "пример" in question.lower() or "входн" in question.lower():
+        return "Например: можно приложить файл с образцом заявки, отчёта или one-page summary."
+    if topic == "expected_outputs" or "результат" in question.lower() or "выход" in question.lower():
+        return "Например: на выходе нужны аналитическая карточка, рекомендация и краткое заключение."
+    if topic == "problem" or "бизнес-проблем" in question.lower():
+        return "Например: нужно сократить время согласования и увеличить число рассмотренных кейсов."
+    return "Отвечай простыми рабочими формулировками. Если есть примеры в файлах, прикрепи их прямо сюда."
+
+
 def build_web_resume_context(
     saved_session: dict[str, Any],
     web_demo_session: dict[str, Any],
@@ -1435,6 +1480,19 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "current_question": next_question,
             "current_topic": envelope["normalized_payload"]["current_topic"],
             "project_title": normalize_text(pointer.get("project_key")) or "Новый проект фабрики",
+            "display_project_title": compact_display_title(
+                requirement_brief.get("problem_statement"),
+                runtime_state.get("raw_idea"),
+                envelope["normalized_payload"].get("user_text"),
+                normalize_text(pointer.get("project_key")).replace("-", " "),
+            ),
+            "project_stage_label": normalize_text(status_snapshot.get("user_visible_status_label")),
+            "side_panel_mode": side_panel_mode(reply_cards, download_artifacts),
+            "composer_helper_example": composer_helper_example(
+                next_question=next_question,
+                current_topic=envelope["normalized_payload"]["current_topic"],
+                adapter_status=adapter_status,
+            ),
             "brief_version": normalize_text(requirement_brief.get("version")),
             "brief_status": normalize_text(requirement_brief.get("status")) or adapter_status,
             "uploaded_file_count": len(uploaded_files),

@@ -18,7 +18,8 @@
           <p class="gate-screen__eyebrow">ASC AI Fabrique Demo</p>
           <h1>Открой доступ к фабрике</h1>
           <p class="gate-screen__summary">
-            После входа откроется рабочее пространство с проектами, диалогом и артефактами.
+            После входа откроется рабочее пространство проектов. Сразу начнём собирать требования
+            и готовить brief.
           </p>
         </div>
 
@@ -55,184 +56,184 @@
           <div class="project-list" data-role="project-list"></div>
         </aside>
 
-        <main class="workspace">
-          <header class="workspace-topbar">
-            <div class="workspace-topbar__main">
-              <p class="workspace-topbar__eyebrow">Фабричный агент-бизнес-аналитик</p>
-              <div class="workspace-topbar__title-row">
-                <h1 data-role="project-title">Новый проект</h1>
+        <div class="workspace-shell" data-role="workspace-shell" data-panel-open="false">
+          <main class="workspace">
+            <header class="workspace-topbar">
+              <div class="workspace-topbar__main">
+                <p class="workspace-topbar__eyebrow">Фабричный агент-бизнес-аналитик</p>
+                <div class="workspace-topbar__title-row">
+                  <h1 data-role="project-title">Новый проект</h1>
+                  <button
+                    class="button button--ghost button--compact"
+                    type="button"
+                    data-role="project-menu"
+                    aria-label="Действия с проектом"
+                  >
+                    ⋯
+                  </button>
+                </div>
+                <p class="workspace-topbar__subtitle" data-role="project-subtitle">
+                  Начни с короткого описания задачи. Название проекта появится автоматически после
+                  первого осмысленного ответа.
+                </p>
+              </div>
+
+              <div class="workspace-topbar__actions">
                 <button
                   class="button button--ghost button--compact"
                   type="button"
-                  data-role="project-menu"
-                  aria-label="Действия с проектом"
+                  data-role="side-panel-toggle"
+                  hidden
                 >
-                  ⋯
+                  Brief и файлы
                 </button>
               </div>
-              <p class="workspace-topbar__subtitle" data-role="project-subtitle">
-                Черновик проекта. Начни с описания задачи.
-              </p>
-            </div>
+            </header>
 
-            <div class="topbar__controls">
-              <span class="status-pill" data-role="connection-state">Подготовка shell</span>
-              <span class="status-pill status-pill--muted" data-role="session-badge">Сессия ещё не открыта</span>
+            <section class="landing-panel" data-role="home-panel">
+              <div class="landing-panel__copy">
+                <p class="landing-panel__eyebrow">С чего начнём</p>
+                <h2>Что нужно автоматизировать?</h2>
+                <p class="landing-panel__summary">
+                  Опиши задачу простыми словами. Я сам задам уточняющие вопросы, соберу brief и
+                  передам проект в фабрику без ручного копипаста.
+                </p>
+              </div>
+
+              <div class="home-examples" data-role="home-examples">
+                <button class="chip chip--example" type="button" data-example-prompt="Автоматизировать подготовку one-page summary по клиенту для кредитного комитета.">
+                  Пример: one-page summary по клиенту
+                </button>
+                <button class="chip chip--example" type="button" data-example-prompt="Собирать данные по заявке из нескольких систем и подготавливать аналитическую карточку для согласования.">
+                  Пример: сбор данных по заявке
+                </button>
+                <button class="chip chip--example" type="button" data-example-prompt="Разбирать входящие счета, определять маршрут согласования и готовить проект решения для сотрудника.">
+                  Пример: маршрутизация согласования
+                </button>
+              </div>
+            </section>
+
+            <section class="thread-panel" aria-labelledby="chat-panel-title">
+              <div class="thread-panel__header">
+                <div class="thread-panel__header-copy">
+                  <p class="thread-panel__eyebrow">Диалог</p>
+                  <h2 id="chat-panel-title">Рабочая сессия по проекту</h2>
+                </div>
+              </div>
+
+              <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite">
+                <article class="message message--agent" data-role="chat-empty">
+                  <div class="message__meta">
+                    <span class="message__author">Фабричный агент</span>
+                    <span class="message__kind">Начало работы</span>
+                  </div>
+                  <h3>Начни с описания задачи</h3>
+                  <p>
+                    Напиши, какую часть бизнес-процесса хочешь автоматизировать. Если примеры лежат
+                    в файлах, прикрепи их прямо в поле ниже.
+                  </p>
+                </article>
+              </div>
+            </section>
+
+            <section class="composer-dock">
+              <form class="composer" data-role="composer-form">
+                <div class="composer__lead">
+                  <span class="composer__lead-label" data-role="composer-lead-label">Первый вопрос</span>
+                  <strong class="composer__question" data-role="composer-mode">Что нужно автоматизировать?</strong>
+                </div>
+                <p class="composer__example" data-role="composer-helper-example">
+                  Например: автоматизировать подготовку one-page summary по клиенту для кредитного
+                  комитета.
+                </p>
+
+                <textarea
+                  id="chatInput"
+                  rows="4"
+                  placeholder="Опиши, какой процесс нужно автоматизировать."
+                  data-role="composer-input"
+                ></textarea>
+
+                <div class="attachment-list" data-role="attachment-list" hidden></div>
+
+                <div class="composer__footer">
+                  <div class="composer__tools">
+                    <label class="attach-button" for="fileInput">
+                      <input
+                        id="fileInput"
+                        type="file"
+                        multiple
+                        hidden
+                        data-role="attachment-input"
+                      >
+                      Прикрепить файлы
+                    </label>
+                    <p class="composer__tool-hint">
+                      Поддерживаются <code>txt</code>, <code>csv</code>, <code>json</code>,
+                      <code>md</code>, <code>docx</code>.
+                    </p>
+                  </div>
+                  <button class="button button--primary" id="sendBtn" type="submit" data-role="composer-submit">
+                    Отправить
+                  </button>
+                </div>
+
+                <p class="composer__hint">
+                  Текст отображается локально сразу. В фабрику сообщение уходит только после
+                  отправки.
+                </p>
+              </form>
+            </section>
+          </main>
+
+          <aside class="side-panel" data-role="side-panel" data-mode="hidden" hidden>
+            <div class="side-panel__header">
+              <div>
+                <p class="side-panel__eyebrow" data-role="side-panel-eyebrow">Детали проекта</p>
+                <h2 data-role="side-panel-title">Brief и файлы</h2>
+              </div>
               <button
                 class="button button--ghost button--compact"
                 type="button"
-                data-role="refresh-session"
+                data-role="side-panel-close"
+                aria-label="Закрыть панель"
               >
-                Обновить
+                Закрыть
               </button>
             </div>
-          </header>
+            <p class="side-panel__summary" data-role="side-panel-summary">
+              Здесь появятся brief на review и пользовательские артефакты, когда они будут готовы.
+            </p>
 
-          <section class="landing-panel">
-            <div class="landing-panel__copy">
-              <p class="landing-panel__eyebrow">Фабричный агент-бизнес-аналитик</p>
-              <h2>Опиши идею автоматизации</h2>
-              <p class="landing-panel__summary">
-                Я помогу собрать требования, задам уточняющие вопросы, сформирую brief и передам
-                проект в фабрику без ручного копипаста.
-              </p>
-            </div>
-          </section>
+            <div class="panel-card-list" data-role="panel-card-list"></div>
 
-          <section class="thread-panel" aria-labelledby="chat-panel-title">
-            <div class="thread-panel__header">
-              <div>
-                <p class="thread-panel__eyebrow">Диалог</p>
-                <h2 id="chat-panel-title">Рабочая сессия по проекту</h2>
+            <section class="side-panel__section" data-role="artifact-section" hidden>
+              <div class="side-panel__section-head">
+                <p class="side-panel__section-eyebrow">Артефакты</p>
+                <h3>Материалы проекта</h3>
               </div>
-            </div>
-
-            <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite">
-              <article class="message message--agent" data-role="chat-empty">
-                <div class="message__meta">
-                  <span class="message__author">Фабричный агент</span>
-                  <span class="message__kind">initial_shell</span>
-                </div>
-                <h3>Готов начать discovery</h3>
-                <p>
-                  Опиши, какую часть бизнес-процесса хочешь автоматизировать. Если примеры лежат в
-                  файлах, прикрепи их прямо в поле ниже.
-                </p>
-              </article>
-            </div>
-          </section>
-
-          <section class="composer-dock">
-            <form class="composer" data-role="composer-form">
-              <div class="composer__lead">
-                <span class="composer__lead-label" data-role="composer-lead-label">Следующее действие</span>
-                <strong data-role="composer-mode">Новый проект</strong>
+              <div class="artifact-empty" data-role="artifact-empty">
+                Артефакты появятся после confirmed brief и downstream handoff.
               </div>
+              <div class="artifact-list" data-role="artifact-list"></div>
+            </section>
+          </aside>
+        </div>
 
-              <textarea
-                id="chatInput"
-                rows="4"
-                placeholder="Опиши, какой процесс нужно автоматизировать."
-                data-role="composer-input"
-              ></textarea>
-
-              <div class="attachment-list" data-role="attachment-list" hidden></div>
-
-              <div class="composer__footer">
-                <div class="composer__tools">
-                  <label class="attach-button" for="fileInput">
-                    <input
-                      id="fileInput"
-                      type="file"
-                      multiple
-                      hidden
-                      data-role="attachment-input"
-                    >
-                    Прикрепить файлы
-                  </label>
-                  <p class="composer__tool-hint">
-                    Поддерживаются <code>txt</code>, <code>csv</code>, <code>json</code>,
-                    <code>md</code>, <code>docx</code>.
-                  </p>
-                </div>
-                <button class="button button--primary" id="sendBtn" type="submit" data-role="composer-submit">
-                  Отправить
-                </button>
-              </div>
-
-              <p class="composer__hint">
-                Текст отображается локально сразу. В фабрику сообщение уходит только после отправки.
-              </p>
-            </form>
-
-            <div class="quick-actions-shell">
-              <p class="quick-actions-shell__label">Быстрые действия</p>
-              <div class="quick-actions" data-role="quick-actions">
-                <button class="chip" type="button" data-ui-action="start_project">Новый проект</button>
-                <button class="chip" type="button" data-ui-action="submit_turn">Ответить</button>
-                <button class="chip" type="button" data-ui-action="request_status">Статус</button>
-              </div>
-            </div>
-          </section>
-
-          <details class="meta-panel">
-            <summary>
-              <span>Контекст проекта</span>
-              <span class="meta-panel__summary-note">Статус, brief, файлы и загрузки</span>
-            </summary>
-            <div class="meta-panel__content">
-              <section class="status-strip" aria-label="Текущее состояние проекта">
-                <article class="status-card">
-                  <span class="status-card__label">Статус</span>
-                  <strong data-role="status-user-visible">gate_pending</strong>
-                </article>
-                <article class="status-card">
-                  <span class="status-card__label">Следующий шаг</span>
-                  <strong data-role="status-next-action">request_demo_access</strong>
-                </article>
-                <article class="status-card">
-                  <span class="status-card__label">Версия brief</span>
-                  <strong data-role="status-brief-version">ещё нет</strong>
-                </article>
-                <article class="status-card">
-                  <span class="status-card__label">Файлы</span>
-                  <strong data-role="status-upload-count">0</strong>
-                </article>
-                <article class="status-card">
-                  <span class="status-card__label">Downloads</span>
-                  <strong data-role="status-download-readiness">pending</strong>
-                </article>
-              </section>
-
-              <div class="meta-grid">
-                <section class="details-card">
-                  <h2>Состояние проекта</h2>
-                  <p class="status-note" data-role="status-operator-attention">
-                    Пока shell ждёт код доступа и первый turn пользователя.
-                  </p>
-                  <dl class="fact-grid">
-                    <div class="fact">
-                      <dt>Project key</dt>
-                      <dd data-role="status-project-key">не выбран</dd>
-                    </div>
-                    <div class="fact">
-                      <dt>Session ID</dt>
-                      <dd data-role="status-session-id">не открыт</dd>
-                    </div>
-                  </dl>
-                </section>
-
-                <section class="details-card">
-                  <h2>Артефакты</h2>
-                  <div class="artifact-empty" data-role="artifact-empty">
-                    Три пользовательских артефакта появятся здесь после confirmed brief и downstream handoff.
-                  </div>
-                  <div class="artifact-list" data-role="artifact-list"></div>
-                </section>
-              </div>
-            </div>
-          </details>
-        </main>
+        <div class="debug-surface" hidden aria-hidden="true">
+          <span data-role="connection-state">Подготовка shell</span>
+          <span data-role="session-badge">Сессия ещё не открыта</span>
+          <button type="button" data-role="refresh-session">Обновить</button>
+          <div data-role="quick-actions"></div>
+          <strong data-role="status-user-visible">gate_pending</strong>
+          <strong data-role="status-next-action">request_demo_access</strong>
+          <strong data-role="status-brief-version">ещё нет</strong>
+          <strong data-role="status-upload-count">0</strong>
+          <strong data-role="status-download-readiness">pending</strong>
+          <span data-role="status-project-key">не выбран</span>
+          <span data-role="status-session-id">не открыт</span>
+          <p data-role="status-operator-attention">Нужен access token.</p>
+        </div>
       </div>
     </div>
 
@@ -258,6 +259,17 @@
         <h3 class="artifact-card__title"></h3>
         <p class="artifact-card__body"></p>
         <button class="button button--ghost artifact-card__button" type="button">Скачать</button>
+      </article>
+    </template>
+
+    <template data-role="panel-card-template">
+      <article class="panel-card">
+        <div class="panel-card__meta">
+          <span class="panel-card__kind"></span>
+        </div>
+        <h3 class="panel-card__title"></h3>
+        <p class="panel-card__body"></p>
+        <div class="panel-card__actions"></div>
       </article>
     </template>
   </body>
