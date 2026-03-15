@@ -294,7 +294,8 @@ run_component_codex_cli_update_monitor_tests() {
     work_dir="$(secure_temp_dir codex-update-monitor)"
     PATH="$FAKE_BD_BIN_DIR:$BROKEN_GIT_BIN_DIR:$original_path" \
         run_monitor_fixture_with_script "$worktree_path/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
-        --issue-action upsert
+        --issue-action upsert \
+        --issue-threshold upgrade-later
     report="$work_dir/report.json"
     assert_eq "created" "$(jq -r '.issue_action.mode' "$report")" "Dedicated worktree upsert should still resolve a local tracker automatically"
     assert_contains "$(cat "$FAKE_BD_STATE_DIR/calls.log")" "--db ${worktree_path}/.beads/beads.db" "Implicit upsert should target the current worktree-local DB"
@@ -309,7 +310,8 @@ run_component_codex_cli_update_monitor_tests() {
     work_dir="$(secure_temp_dir codex-update-monitor)"
     PATH="$FAKE_BD_BIN_DIR:$BROKEN_GIT_BIN_DIR:$original_path" \
         run_monitor_fixture_with_script "$repo_dir/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
-        --issue-action upsert
+        --issue-action upsert \
+        --issue-threshold upgrade-later
     report="$work_dir/report.json"
     assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Canonical-root upsert should fail closed without an explicit DB target"
     assert_contains "$(jq -r '.issue_action.notes | join("\n")' "$report")" "mutating canonical-root tracker commands are blocked by default" "Canonical-root block should be reported explicitly"
