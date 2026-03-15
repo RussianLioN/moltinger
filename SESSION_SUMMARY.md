@@ -56,6 +56,13 @@ GitOps Compliance: Enforced ✅
 - Added direct browser attachment support for discovery in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.js`, `scripts/agent-factory-web-adapter.py`, and `scripts/agent_factory_common.py`: the composer now accepts up to 4 files per turn, safely truncates file reads to `512 KB`, extracts browser-safe excerpts for `txt/csv/json/md/docx`, stores raw bytes only under adapter-owned `data/agent-factory/web-demo/uploads/`, and injects the sanitized file context into the current discovery answer instead of forcing the user to retype examples manually.
 - Added regression coverage for the new attachment path in `tests/component/test_agent_factory_web_uploads.sh`, registered it in `tests/run.sh`, and extended `tests/e2e_browser/agent_factory_web_demo.mjs` toward browser-level attachment validation. The local automation environment still lacks a working Playwright runtime for that node-based harness, so a dedicated follow-up Beads task `molt-x3o` was created to restore browser-e2e coverage.
 - Updated `docs/runbooks/agent-factory-web-demo.md` to document the simplified shell, browser attachment behavior, the new `uploads/` state root, and the current safe-ingestion limits so the operator and next session can reproduce the same flow without guessing.
+- Redeployed the pilot surface on `https://asc.ainetic.tech` from `/opt/moltinger-asc-demo`: first manual redeploy pulled the new branch and published the updated HTML (`Прикрепить файлы` now present in the root page), then a second deploy restored the shared demo access gate after discovering that `ASC_DEMO_SHARED_TOKEN_HASH` had been recreated as an empty value in the container environment.
+- Verified the live pilot after redeploy:
+  - remote `./scripts/deploy.sh --json asc-demo deploy` returned `status=success` twice (second run with restored hash env)
+  - remote `./scripts/deploy.sh --json asc-demo status` returned `healthy`
+  - public `https://asc.ainetic.tech/` now contains the new file-upload affordance text `Прикрепить файлы`
+  - public `https://asc.ainetic.tech/health` now reports `access_gate_configured=true`, `access_gate_ready=true`, and `operator_status.publication_status=ready`
+- Added a second follow-up Beads task `molt-7x7` to stabilize the `asc-demo` shared-token secret source so future manual redeploys preserve `ASC_DEMO_SHARED_TOKEN_HASH` without an inline env override.
 - Verified the UX hotfix with:
   - `python3 -m py_compile scripts/agent-factory-web-adapter.py scripts/agent_factory_common.py`
   - `node --check web/agent-factory-demo/app.js`
