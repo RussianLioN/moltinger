@@ -281,7 +281,8 @@ run_component_codex_cli_update_monitor_tests() {
     export FAKE_BD_STATE_DIR
     export FAKE_BD_CREATE_ID="moltinger-test-created"
     work_dir="$(secure_temp_dir codex-update-monitor)"
-    run_monitor_fixture_with_script "$worktree_path/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
+    GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
+        run_monitor_fixture_with_script "$worktree_path/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
         --issue-action upsert
     report="$work_dir/report.json"
     assert_eq "created" "$(jq -r '.issue_action.mode' "$report")" "Dedicated worktree upsert should still resolve a local tracker automatically"
@@ -295,7 +296,8 @@ run_component_codex_cli_update_monitor_tests() {
     export PATH="$FAKE_BD_BIN_DIR:$original_path"
     export FAKE_BD_STATE_DIR
     work_dir="$(secure_temp_dir codex-update-monitor)"
-    run_monitor_fixture_with_script "$repo_dir/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
+    GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
+        run_monitor_fixture_with_script "$repo_dir/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
         --issue-action upsert
     report="$work_dir/report.json"
     assert_eq "skipped" "$(jq -r '.issue_action.mode' "$report")" "Canonical-root upsert should fail closed without an explicit DB target"
