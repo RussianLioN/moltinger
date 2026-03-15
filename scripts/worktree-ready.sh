@@ -11,7 +11,8 @@ Modes:
   create    Prepare a new worktree flow for a new or derived branch
   attach    Prepare a worktree flow for an existing branch
   doctor    Diagnose readiness for an existing worktree
-handoff   Render or execute a handoff profile for a prepared worktree
+  finish    Prepare the safe ordinary finish contract for a target worktree
+  handoff   Render or execute a handoff profile for a prepared worktree
 
 Common Options:
   --branch <name>            Target git branch
@@ -34,6 +35,7 @@ Examples:
   scripts/worktree-ready.sh create --branch 005-worktree-ready-flow
   scripts/worktree-ready.sh attach --branch codex/gitops-metrics-fix
   scripts/worktree-ready.sh doctor --path ../moltinger-0308-005-worktree-ready-flow
+  scripts/worktree-ready.sh finish --branch feat/remote-uat-hardening
   scripts/worktree-ready.sh handoff --handoff codex --path ../moltinger-0308-005-worktree-ready-flow
 EOF
 }
@@ -103,6 +105,8 @@ report_phase_b_seed_payload=""
 report_worktree_action="unchanged"
 report_issue_title=""
 report_bootstrap_source_ref=""
+report_close_action="skip"
+report_close_command=""
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
@@ -149,7 +153,7 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      plan|create|attach|doctor|handoff)
+      plan|create|attach|doctor|finish|handoff)
         if [[ -n "${mode}" ]]; then
           die "Mode already set to '${mode}', got extra mode '${1}'."
         fi
@@ -343,8 +347,9 @@ infer_issue_id_from_branch_name() {
   local issues_file=""
   local candidate_issue=""
   local normalized_issue=""
-  local best_issue=""
-  local best_normalized=""
+  local matched_issue=""
+  local matched_issue_count=0
+  local seen_matches=":"
 
   if [[ -z "${branch_name}" ]]; then
     printf '\n'
@@ -370,14 +375,24 @@ infer_issue_id_from_branch_name() {
     fi
 
     if [[ "${stripped_branch}" == "${normalized_issue}" || "${stripped_branch}" == "${normalized_issue}"-* ]]; then
-      if [[ -z "${best_normalized}" || "${#normalized_issue}" -gt "${#best_normalized}" ]]; then
-        best_issue="${candidate_issue}"
-        best_normalized="${normalized_issue}"
-      fi
+      case "${seen_matches}" in
+        *:"${candidate_issue}":*)
+          continue
+          ;;
+      esac
+
+      seen_matches="${seen_matches}${candidate_issue}:"
+      matched_issue_count=$((matched_issue_count + 1))
+      matched_issue="${candidate_issue}"
     fi
   done < <(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "${issues_file}")
 
-  printf '%s\n' "${best_issue}"
+  if [[ "${matched_issue_count}" -eq 1 ]]; then
+    printf '%s\n' "${matched_issue}"
+    return 0
+  fi
+
+  printf '\n'
 }
 
 resolve_report_issue_id() {
@@ -578,6 +593,38 @@ build_plain_bd_bootstrap_command_for_path() {
   fi
 
   printf 'export PATH=%s:$PATH\n' "$(shell_quote "${worktree_path}/bin")"
+}
+
+build_finish_commit_message() {
+  local finish_branch="${report_branch_name:-${branch:-worktree}}"
+
+  if [[ -n "${report_issue_id:-}" && "${report_issue_id}" != "n/a" ]]; then
+    printf '%s: finish %s\n' "${report_issue_id}" "${finish_branch}"
+    return 0
+  fi
+
+  printf 'finish %s\n' "${finish_branch}"
+}
+
+build_finish_commit_command() {
+  local commit_message=""
+
+  commit_message="$(build_finish_commit_message)"
+  printf 'if [ -n "$(git status --short)" ]; then git add -A && git commit -m %s; fi\n' "$(shell_quote "${commit_message}")"
+}
+
+build_finish_close_command() {
+  local resolved_issue="${report_issue_id:-}"
+  local quoted_issue=""
+  local quoted_reason=""
+
+  if [[ -z "${resolved_issue}" || "${resolved_issue}" == "n/a" ]]; then
+    return 1
+  fi
+
+  quoted_issue="$(shell_quote "${resolved_issue}")"
+  quoted_reason="$(shell_quote "Done")"
+  printf 'bd close %s --reason %s || bd close --no-db %s --reason %s\n' "${quoted_issue}" "${quoted_reason}" "${quoted_issue}" "${quoted_reason}"
 }
 
 discover_issue_context() {
@@ -1578,6 +1625,8 @@ reset_report() {
   report_worktree_action="unchanged"
   report_issue_title=""
   report_bootstrap_source_ref=""
+  report_close_action="skip"
+  report_close_command=""
   report_next_steps=()
   report_warnings=()
   report_issue_artifacts=()
@@ -1776,6 +1825,43 @@ set_doctor_status() {
   esac
 }
 
+set_finish_status() {
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if [[ -z "${report_branch_name}" || "${report_branch_name}" == "n/a" ]]; then
+    report_status="action_required"
+    add_warning "The target branch could not be resolved for finish."
+    return 0
+  fi
+
+  if ! report_worktree_path_exists; then
+    report_status="action_required"
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "drift" ]]; then
+    report_status="drift_detected"
+    return 0
+  fi
+
+  if [[ "${report_beads_state}" == "redirected" ]]; then
+    report_status="action_required"
+    add_warning "The target worktree still points at a redirected Beads tracker."
+    return 0
+  fi
+
+  if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" && "${report_worktree_path}" != "${resolved_repo_root}" ]]; then
+    report_status="action_required"
+    add_warning "The target worktree exists, but worktree-local Beads ownership could not be confirmed."
+    return 0
+  fi
+
+  report_status="finish_ready"
+}
+
 set_handoff_contract() {
   local mode_name="$1"
 
@@ -1863,7 +1949,7 @@ set_handoff_contract() {
 
 set_command_exit_code_from_readiness() {
   case "${report_final_state}" in
-    handoff_ready|handoff_needs_env_approval|handoff_needs_manual_readiness|handoff_launched)
+    handoff_ready|handoff_needs_env_approval|handoff_needs_manual_readiness|handoff_launched|finish_ready)
       command_exit_code=0
       ;;
     blocked_guard_drift)
@@ -2070,6 +2156,112 @@ add_next_step() {
   if [[ -n "${step_text}" ]]; then
     report_next_steps+=("${step_text}")
   fi
+}
+
+set_finish_contract() {
+  report_phase="finish"
+  report_boundary="stop_before_finish"
+  report_worktree_action="finish_prepared"
+  report_repair_command=""
+  report_pending_work=""
+  report_close_action="skip"
+  report_close_command=""
+
+  case "${report_status}" in
+    finish_ready)
+      report_final_state="finish_ready"
+      ;;
+    drift_detected)
+      report_final_state="blocked_guard_drift"
+      report_repair_command="./scripts/git-session-guard.sh --refresh"
+      ;;
+    action_required)
+      if [[ "${branch_resolution_state}" == "missing" ]]; then
+        report_final_state="blocked_missing_branch"
+        report_repair_command="Create or fetch the branch '${branch}' before retrying finish"
+      else
+        report_final_state="blocked_action_required"
+      fi
+      ;;
+    *)
+      report_final_state="blocked_action_required"
+      ;;
+  esac
+
+  if [[ "${report_status}" == "finish_ready" ]]; then
+    if report_close_command="$(build_finish_close_command)"; then
+      report_close_action="close"
+    else
+      report_close_action="skip"
+      add_warning "Issue: n/a; skip bd close for ordinary finish."
+    fi
+  elif [[ "${report_final_state}" == blocked_* ]]; then
+    report_close_action="blocked"
+  fi
+}
+
+set_finish_next_steps() {
+  local worktree_target="${report_worktree_path}"
+  local plain_bd_bootstrap=""
+  local close_command=""
+  local refspec=""
+
+  if [[ "${branch_resolution_state}" == "missing" ]]; then
+    refspec="${branch}:${branch}"
+    add_next_step "git fetch origin $(shell_quote "${refspec}")"
+    return 0
+  fi
+
+  if [[ -z "${report_branch_name}" || "${report_branch_name}" == "n/a" ]]; then
+    if [[ "${worktree_target}" != "n/a" ]]; then
+      add_next_step "cd $(shell_quote "${worktree_target}")"
+    fi
+    add_next_step "Inspect the target branch context and retry finish once the branch is known"
+    return 0
+  fi
+
+  if ! report_worktree_path_exists; then
+    if [[ -n "${branch}" ]]; then
+      add_next_step "Use command-worktree attach $(shell_quote "${branch}") from the invoking worktree"
+    elif [[ -n "${target_path}" ]]; then
+      add_next_step "Inspect the current repository context and rerun finish from the target worktree path"
+    else
+      add_next_step "Inspect the current repository context and retry finish with --branch or --path"
+    fi
+    return 0
+  fi
+
+  if [[ "${report_guard_state}" == "drift" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
+    return 0
+  fi
+
+  if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" && "${worktree_target}" != "${resolved_repo_root}" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
+    return 0
+  fi
+
+  if [[ "${report_beads_state}" == "redirected" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
+    return 0
+  fi
+
+  add_next_step "cd $(shell_quote "${worktree_target}")"
+  if plain_bd_bootstrap="$(build_plain_bd_bootstrap_command_for_path "${worktree_target}")"; then
+    add_next_step "${plain_bd_bootstrap}"
+  fi
+  add_next_step "bd preflight --check"
+  add_next_step "bd sync"
+  add_next_step "$(build_finish_commit_command)"
+  add_next_step "git pull --rebase"
+  add_next_step "bd sync"
+  add_next_step "git push -u origin $(shell_quote "${report_branch_name}")"
+
+  if close_command="$(build_finish_close_command)"; then
+    add_next_step "${close_command}"
+  fi
+
+  add_warning "If bd preflight --check is unavailable, run the project default fast checks before closing."
 }
 
 add_warning() {
@@ -2342,6 +2534,60 @@ render_readiness_report() {
     render_phase_b_seed_prompt
     render_phase_b_seed_payload
   fi
+}
+
+render_finish_report() {
+  if [[ "${output_format}" == "env" ]]; then
+    render_env_kv "schema" "worktree-finish/v1"
+    render_env_kv "phase" "${report_phase}"
+    render_env_kv "boundary" "${report_boundary}"
+    render_env_kv "final_state" "${report_final_state}"
+    render_env_kv "worktree_action" "${report_worktree_action}"
+    render_env_kv "worktree" "${report_worktree_path:-n/a}"
+    render_env_kv "preview" "${report_path_preview:-n/a}"
+    render_env_kv "branch" "${report_branch_name:-n/a}"
+    render_env_kv "issue" "${report_issue_id:-n/a}"
+    if [[ -n "${report_issue_title}" ]]; then
+      render_env_kv "issue_title" "${report_issue_title}"
+    fi
+    render_env_kv "status" "${report_status}"
+    render_env_kv "topology_state" "${report_topology_state}"
+    render_env_kv "guard_state" "${report_guard_state}"
+    render_env_kv "beads_state" "${report_beads_state}"
+    render_env_kv "close_action" "${report_close_action}"
+    if [[ -n "${report_close_command}" ]]; then
+      render_env_kv "close_command" "${report_close_command}"
+    fi
+    if [[ -n "${report_repair_command}" ]]; then
+      render_env_kv "repair_command" "${report_repair_command}"
+    fi
+    render_env_array "next" "${report_next_steps[@]}"
+    render_env_array "warning" "${report_warnings[@]}"
+    return 0
+  fi
+
+  printf 'Worktree: %s\n' "${report_worktree_path:-n/a}"
+  printf 'Preview: %s\n' "${report_path_preview:-n/a}"
+  printf 'Branch: %s\n' "${report_branch_name:-n/a}"
+  printf 'Issue: %s\n' "${report_issue_id:-n/a}"
+  if [[ -n "${report_issue_title}" ]]; then
+    printf 'Issue Title: %s\n' "${report_issue_title}"
+  fi
+  printf 'Status: %s\n' "${report_status}"
+  printf 'Phase: %s\n' "${report_phase}"
+  printf 'Boundary: %s\n' "${report_boundary}"
+  printf 'Final State: %s\n' "${report_final_state}"
+  printf 'Topology: %s\n' "${report_topology_state}"
+  printf 'Guard: %s\n' "${report_guard_state}"
+  printf 'Beads: %s\n' "${report_beads_state}"
+  printf 'Close: %s\n' "${report_close_command:-${report_close_action}}"
+  if [[ -n "${report_repair_command}" ]]; then
+    printf 'Repair Command: %s\n' "${report_repair_command}"
+  fi
+  printf 'Next:\n'
+  render_numbered_list "${report_next_steps[@]}"
+  render_warning_list "${report_warnings[@]}"
+  render_fenced_bash_block "${report_next_steps[@]}"
 }
 
 normalize_mode_inputs() {
@@ -2662,6 +2908,15 @@ render_doctor_report() {
   set_command_exit_code_from_readiness
 }
 
+render_finish_contract_report() {
+  prepare_report_target
+  set_finish_status
+  set_finish_next_steps
+  set_finish_contract
+  render_finish_report
+  set_command_exit_code_from_readiness
+}
+
 prepare_create_context() {
   require_git_repo
   branch_resolution_state="not_required"
@@ -2713,6 +2968,33 @@ prepare_attach_context() {
 }
 
 prepare_doctor_context() {
+  require_git_repo
+  branch_resolution_state="not_required"
+
+  if [[ -z "${branch}" && -z "${target_path}" ]]; then
+    branch="$(resolve_current_branch)"
+  fi
+
+  if [[ -n "${branch}" ]]; then
+    resolve_existing_branch_state || true
+  fi
+
+  if [[ -n "${target_path}" ]]; then
+    resolve_explicit_path "${target_path}"
+  elif [[ -n "${branch}" ]]; then
+    derive_sibling_worktree_path "${branch}"
+  else
+    target_path="${resolved_repo_root}"
+    path_preview="${resolved_repo_root}"
+  fi
+
+  discover_topology_registry_state
+  discover_target_state
+  discover_guard_state
+  discover_environment_state
+}
+
+prepare_finish_context() {
   require_git_repo
   branch_resolution_state="not_required"
 
@@ -2821,6 +3103,11 @@ handle_doctor() {
   render_doctor_report
 }
 
+handle_finish() {
+  prepare_finish_context
+  render_finish_contract_report
+}
+
 handle_handoff() {
   prepare_handoff_context
   render_mode_placeholder "handoff"
@@ -2849,6 +3136,9 @@ main() {
       ;;
     doctor)
       handle_doctor
+      ;;
+    finish)
+      handle_finish
       ;;
     handoff)
       handle_handoff

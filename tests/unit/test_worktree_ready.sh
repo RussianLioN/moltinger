@@ -64,6 +64,14 @@ run_worktree_doctor() {
     PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" doctor --repo "$repo_dir" "$@"
 }
 
+run_worktree_finish() {
+    local repo_dir="$1"
+    local fake_bin="$2"
+    shift 2
+
+    PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" finish --repo "$repo_dir" "$@"
+}
+
 create_fake_direnv_permission_denied_bin() {
     local fixture_root="$1"
     local fake_bin="${fixture_root}/direnv-bin"
@@ -212,6 +220,40 @@ seed_fake_issue_artifacts() {
     printf '# seed\n' > "${repo_dir}/docs/plans/codex-cli-update-monitoring-speckit-seed.md"
     printf '# research\n' > "${repo_dir}/docs/research/codex-cli-update-monitoring-2026-03-09.md"
     printf '# research index\n' > "${repo_dir}/docs/research/README.md"
+}
+
+seed_fake_ambiguous_beads_issues() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads"
+cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"molt","title":"Broad umbrella epic"}
+{"id":"molt-2","title":"Implement Codex CLI update monitor from Speckit seed"}
+EOF
+}
+
+seed_fake_topology_registry_script() {
+    local repo_dir="$1"
+    local raw_status="${2:-stale}"
+
+    mkdir -p "${repo_dir}/scripts"
+    cat > "${repo_dir}/scripts/git-topology-registry.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "\${1:-}" == "check" ]]; then
+  printf 'status=%s\n' "${raw_status}"
+  if [[ "${raw_status}" == "stale" ]]; then
+    printf "Publish from the dedicated non-main topology publish branch 'chore/topology-registry-publish': scripts/git-topology-registry.sh refresh --write-doc\n"
+    exit 1
+  fi
+  exit 0
+fi
+
+printf 'unsupported fake topology invocation\n' >&2
+exit 1
+EOF
+    chmod +x "${repo_dir}/scripts/git-topology-registry.sh"
 }
 
 test_plan_creates_clean_slug_without_issue() {
@@ -565,6 +607,37 @@ test_create_infers_issue_from_issue_aware_branch_name() {
     test_pass
 }
 
+test_create_returns_issue_na_when_branch_mapping_is_ambiguous() {
+    test_start "worktree_ready_create_returns_issue_na_when_branch_mapping_is_ambiguous"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-molt-2-codex-update-monitor-new"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+    seed_fake_ambiguous_beads_issues "${repo_dir}"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/molt-2-codex-update-monitor-new --path "$probe_dir"
+    )"
+
+    assert_contains "$output" 'Issue: n/a' "Ambiguous branch-to-issue mappings should fall back to Issue: n/a in human output"
+
+    output="$(
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/molt-2-codex-update-monitor-new --path "$probe_dir" --format env
+    )"
+
+    assert_contains "$output" 'issue=n/a' "Ambiguous branch-to-issue mappings should fall back to n/a in env output"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them() {
     test_start "worktree_ready_create_surfaces_source_only_issue_artifacts_when_target_lacks_them"
 
@@ -662,6 +735,9 @@ test_doctor_accepts_local_beads_state() {
     assert_contains "$output" "Worktree: ${existing_path}" "Doctor should report the discovered attached worktree path"
     assert_contains "$output" 'Status: ready_for_codex' "Local Beads ownership plus an OK guard should be considered ready"
     assert_contains "$output" 'Beads: local' "Doctor should surface local Beads ownership explicitly"
+    if [[ "$output" == *"./scripts/beads-worktree-localize.sh --path ."* ]]; then
+        test_fail "Doctor should not route already-local Beads ownership through the localization helper"
+    fi
 
     rm -rf "$fixture_root"
     test_pass
@@ -780,6 +856,120 @@ test_doctor_missing_beads_state_routes_to_localize_helper() {
     assert_contains "$output" "./scripts/beads-worktree-localize.sh --path ." "Doctor should route dedicated-worktree Beads recovery through the managed localization helper"
     if [[ "$output" == *"bd worktree create"* ]]; then
         test_fail "Doctor should not suggest raw bd worktree create for Beads ownership recovery"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_doctor_stale_topology_remains_warning_not_blocker() {
+    test_start "worktree_ready_doctor_stale_topology_remains_warning_not_blocker"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    seed_fake_topology_registry_script "${repo_dir}" "stale"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_doctor "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Stale topology should remain non-blocking for ordinary doctor"
+    assert_contains "$output" 'Status: ready_for_codex' "Ordinary doctor should remain ready when stale topology is the only issue"
+    assert_contains "$output" 'Topology: stale' "Ordinary doctor should surface stale topology explicitly"
+    assert_contains "$output" 'Publish the tracked snapshot later from a dedicated non-main topology-publish worktree/branch' "Ordinary doctor should defer topology publication to the dedicated publish path"
+    if [[ "$output" == *'refresh --write-doc'* ]]; then
+        test_fail "Ordinary doctor should not suggest auto-publishing topology from the current branch"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_finish_returns_issue_na_when_branch_mapping_is_ambiguous() {
+    test_start "worktree_ready_finish_returns_issue_na_when_branch_mapping_is_ambiguous"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-molt-2-codex-update-monitor-new"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/molt-2-codex-update-monitor-new" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    seed_fake_ambiguous_beads_issues "${repo_dir}"
+    bd_json="$(printf '[{"name":"molt-2-codex-update-monitor-new","path":"%s","branch":"feat/molt-2-codex-update-monitor-new","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_finish "$repo_dir" "$fake_bin" --branch feat/molt-2-codex-update-monitor-new 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Ambiguous issue mapping should not block ordinary finish"
+    assert_contains "$output" 'Issue: n/a' "Ambiguous finish mappings should fall back to Issue: n/a"
+    assert_contains "$output" 'Status: finish_ready' "Ordinary finish should remain ready when ambiguity only affects close resolution"
+    assert_contains "$output" 'Phase: finish' "Finish helper should report the finish phase explicitly"
+    assert_contains "$output" 'Boundary: stop_before_finish' "Finish helper should stop before executing finish mutations"
+    assert_contains "$output" 'Close: skip' "Issue: n/a should skip bd close in ordinary finish output"
+    assert_contains "$output" 'bd preflight --check' "Finish helper should render the ordinary finish preflight command"
+    if [[ "$output" == *'Close: bd close '* ]]; then
+        test_fail "Ambiguous ordinary finish should not render a bd close command"
+    fi
+    if [[ "$output" == *"./scripts/beads-worktree-localize.sh --path ."* ]]; then
+        test_fail "Ordinary finish should not route already-local Beads ownership through the localization helper"
+    fi
+
+    output="$(
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_finish "$repo_dir" "$fake_bin" --branch feat/molt-2-codex-update-monitor-new --format env
+    )"
+
+    assert_contains "$output" 'issue=n/a' "Finish env output should expose Issue: n/a when branch mapping is ambiguous"
+    assert_contains "$output" 'close_action=skip' "Finish env output should expose skip-close behavior for Issue: n/a"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_finish_stale_topology_remains_warning_not_blocker() {
+    test_start "worktree_ready_finish_stale_topology_remains_warning_not_blocker"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    seed_fake_topology_registry_script "${repo_dir}" "stale"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_finish "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Stale topology should remain non-blocking for ordinary finish"
+    assert_contains "$output" 'Status: finish_ready' "Ordinary finish should stay ready when stale topology is the only issue"
+    assert_contains "$output" 'Phase: finish' "Ordinary finish should render the finish phase"
+    assert_contains "$output" 'Final State: finish_ready' "Ordinary finish should keep a ready final state when topology is merely stale"
+    assert_contains "$output" 'Topology: stale' "Ordinary finish should surface stale topology explicitly"
+    assert_contains "$output" 'Publish the tracked snapshot later from a dedicated non-main topology-publish worktree/branch' "Ordinary finish should defer topology publication to the dedicated publish path"
+    if [[ "$output" == *'refresh --write-doc'* ]]; then
+        test_fail "Ordinary finish should not suggest auto-publishing topology from the current branch"
     fi
 
     rm -rf "$fixture_root"
@@ -977,6 +1167,7 @@ run_all_tests() {
     test_create_uses_explicit_pending_summary
     test_create_preserves_separate_phase_b_seed_payload
     test_create_infers_issue_from_issue_aware_branch_name
+    test_create_returns_issue_na_when_branch_mapping_is_ambiguous
     test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them
     test_doctor_branch_only_suppresses_already_attached_warning
     test_doctor_accepts_local_beads_state
@@ -984,6 +1175,9 @@ run_all_tests() {
     test_doctor_missing_guard_script_does_not_suggest_refresh
     test_doctor_missing_worktree_routes_back_to_managed_attach
     test_doctor_missing_beads_state_routes_to_localize_helper
+    test_doctor_stale_topology_remains_warning_not_blocker
+    test_finish_returns_issue_na_when_branch_mapping_is_ambiguous
+    test_finish_stale_topology_remains_warning_not_blocker
     test_plan_needs_clarification_returns_exit_code_10
     test_attach_missing_branch_returns_blocked_missing_branch
     test_attach_preserves_separate_phase_b_seed_payload

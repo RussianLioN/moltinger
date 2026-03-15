@@ -23,6 +23,7 @@ QUICKSTART_EN="$PROJECT_ROOT/.claude/docs/beads-quickstart.en.md"
 BEADS_SKILL="$PROJECT_ROOT/.claude/skills/beads/SKILL.md"
 BEADS_COMMAND_QUICKREF="$PROJECT_ROOT/.claude/skills/beads/resources/COMMANDS_QUICKREF.md"
 BEADS_WORKFLOWS="$PROJECT_ROOT/.claude/skills/beads/resources/WORKFLOWS.md"
+WORKTREE_COMMAND="$PROJECT_ROOT/.claude/commands/worktree.md"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -112,6 +113,36 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "High-traffic Beads docs must use the plain bd contract without wrapper-choice drift"
+    fi
+
+    test_start "static_worktree_finish_contract_uses_plain_bd_and_skips_ambiguous_close"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'plain `bd`' "$WORKTREE_COMMAND" && \
+       rg -q 'Issue: n/a' "$WORKTREE_COMMAND" && \
+       ! rg -q 'bd-local\.sh' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Ordinary worktree/finish contract must use plain bd and skip close when issue resolution is ambiguous"
+    fi
+
+    test_start "static_worktree_finish_contract_defers_topology_publication"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'dedicated non-main topology-publish worktree/branch' "$WORKTREE_COMMAND" && \
+       rg -q 'do not auto-run `refresh --write-doc` during ordinary `start`, `attach`, `finish`, or `cleanup`' "$WORKTREE_COMMAND" && \
+       rg -q 'Stale topology is informational only for ordinary doctor/finish; do not auto-publish from the invoking branch.' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Ordinary finish contract must defer topology publication to the dedicated publish path instead of promising auto publication"
+    fi
+
+    test_start "static_worktree_helper_integration_includes_finish_mode"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'scripts/worktree-ready\.sh finish --branch <branch-or-path>' "$WORKTREE_COMMAND" && \
+       rg -q 'Canonical finish vocabulary:' "$WORKTREE_COMMAND" && \
+       rg -q 'Close: <exact bd close command or skip>' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Worktree helper integration must advertise the finish helper contract explicitly"
     fi
 
     generate_report
