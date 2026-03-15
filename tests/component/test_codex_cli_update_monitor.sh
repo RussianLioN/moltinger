@@ -12,6 +12,7 @@ UPSTREAM_WATCHER_FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-upstream-watche
 FAKE_BD_BIN_DIR=""
 FAKE_BD_STATE_DIR=""
 FAKE_BD_DB=""
+BROKEN_GIT_BIN_DIR=""
 
 setup_component_codex_update_monitor() {
     require_commands_or_skip jq python3 || return 2
@@ -59,6 +60,16 @@ case "$cmd" in
 esac
 EOF
     chmod +x "$FAKE_BD_BIN_DIR/bd"
+}
+
+setup_broken_git_fixture() {
+    BROKEN_GIT_BIN_DIR="$(secure_temp_dir broken-git-bin)"
+
+    cat > "$BROKEN_GIT_BIN_DIR/git" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "$BROKEN_GIT_BIN_DIR/git"
 }
 
 seed_component_monitor_fixture_repo() {
@@ -277,11 +288,11 @@ run_component_codex_cli_update_monitor_tests() {
     worktree_path="$(canonicalize_fixture_path "$worktree_path")"
     seed_component_local_beads_foundation "$worktree_path"
     setup_fake_bd_fixture
-    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    setup_broken_git_fixture
     export FAKE_BD_STATE_DIR
     export FAKE_BD_CREATE_ID="moltinger-test-created"
     work_dir="$(secure_temp_dir codex-update-monitor)"
-    GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
+    PATH="$FAKE_BD_BIN_DIR:$BROKEN_GIT_BIN_DIR:$original_path" \
         run_monitor_fixture_with_script "$worktree_path/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
         --issue-action upsert
     report="$work_dir/report.json"
@@ -293,10 +304,10 @@ run_component_codex_cli_update_monitor_tests() {
     fixture_root="$(secure_temp_dir codex-update-monitor-fixture)"
     repo_dir="$(seed_component_monitor_fixture_repo "$fixture_root")"
     setup_fake_bd_fixture
-    export PATH="$FAKE_BD_BIN_DIR:$original_path"
+    setup_broken_git_fixture
     export FAKE_BD_STATE_DIR
     work_dir="$(secure_temp_dir codex-update-monitor)"
-    GIT_DIR="/no/such/git-dir" GIT_WORK_TREE="/no/such/git-work-tree" \
+    PATH="$FAKE_BD_BIN_DIR:$BROKEN_GIT_BIN_DIR:$original_path" \
         run_monitor_fixture_with_script "$repo_dir/scripts/codex-cli-update-monitor.sh" "0.110.0" "$work_dir" \
         --issue-action upsert
     report="$work_dir/report.json"
