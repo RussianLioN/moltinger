@@ -52,6 +52,20 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-15)
 
+- Собрал UX-consilium по роли дизайна/interaction и зафиксировал согласованную модель для `asc.ainetic.tech`: не incremental dashboard patch, а явное разделение на `Access gate -> Empty home -> Project workspace`, Perplexity-like chat-first композицию, левый список проектов и контекстный composer с вопросно-зависимым placeholder.
+- Переписал browser shell под эту модель в `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, и `web/agent-factory-demo/app.js`: token теперь живёт на отдельном gate-экране, рабочее пространство открывается только после входа, у пользователя есть sidebar со списком проектов, новый проект можно запускать параллельно существующим, а рабочее название проекта теперь автоматически генерируется после первого содержательного user turn и может переименовываться через меню `⋯`.
+- Добавил клиентское multi-project состояние поверх существующего adapter/runtime слоя без переписывания backend handoff path: проекты хранятся локально как отдельные browser workspaces с собственными `sessionId`, timeline, draft и lastResponse; refresh/resume продолжают использовать уже существующий `GET /api/session`, поэтому новый UX не ломает discovery/intake/artifact pipeline.
+- Сделал composer контекстным: `data-role="composer-mode"` теперь поднимает текущий вопрос агента, placeholder меняется по `current_question/current_topic/current_action`, а universal generic copy больше не конкурирует с реальным discovery-вопросом.
+- Обновил `tests/e2e_browser/agent_factory_web_demo.mjs` под новый gate/home/workspace flow и `docs/runbooks/agent-factory-web-demo.md` под новый UX-контур, чтобы автоматизация и операторская документация больше не описывали устаревший single-column shell.
+- Перепроверил новый UX-pass через:
+  - `node --check web/agent-factory-demo/app.js`
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py scripts/agent_factory_common.py`
+  - `bash tests/integration_local/test_agent_factory_web_flow.sh`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery|uploads)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff|resume)' --json`
+  - `bash scripts/scripts-verify.sh`
+  - `git diff --check`
+- Direct local `node tests/e2e_browser/agent_factory_web_demo.mjs` is still not a product regression signal in this Codex sandbox: it currently fails on `PermissionError: [Errno 1] Operation not permitted` while binding the ephemeral localhost test server port. The browser-flow assertions therefore remain covered by the green component/integration slices above; the environment-side browser-runtime follow-up remains tracked separately from this UX change.
 - Added a repo-level Playwright MCP usage rule in `docs/rules/playwright-mcp-usage.md` and indexed it from `.ai/instructions/codex-adapter.md`, generated `AGENTS.md`, and `docs/CODEX-OPERATING-MODEL.md`: future Codex sessions must now read the rule before using MCP browser tools and must stop retrying stale `browser_navigate` launches after one cleanup attempt.
 - Opened follow-up Beads task `molt-j51` (`Fix stale MCP Playwright browser session recovery`) because the underlying persistent-context failure is still a real technical issue; the new instruction change prevents repeated misuse, but it is not the final runtime fix.
 - Applied a second browser UX pass on `024-web-factory-demo-adapter` after direct comparison against Perplexity-style chat-first references: `web/agent-factory-demo/index.html` is now centered around a single dominant composer, the first screen hides the conversation transcript until the project is actually started, and the old dashboard-like status clutter moved into the collapsed `Контекст проекта` section.

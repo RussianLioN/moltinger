@@ -135,10 +135,12 @@ async function stopServer() {
 async function sendFirstIdea(page) {
   await page.locator('#accessToken').fill('asc-demo-shared');
   await page.locator('[data-role="access-submit"]').click();
+  await page.locator('[data-role="project-list"]').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+  await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
   await page.locator('#chatInput').fill('Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация.');
   await page.locator('#sendBtn').click();
   await page.locator('[data-role="connection-state"]').filter({ hasText: 'Подключен live adapter' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-  await page.getByText('Кто будет основным пользователем или выгодоприобретателем результата?').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+  await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем или выгодоприобретателем результата?' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
 }
 
 async function run() {
@@ -151,8 +153,14 @@ async function run() {
       try {
         await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
         await page.locator('#accessToken').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.getByText('Открой доступ к фабрике').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        assert(!(await page.locator('#chatInput').isVisible().catch(() => false)), 'Chat input should stay hidden before access is granted');
+
+        await page.locator('#accessToken').fill('asc-demo-shared');
+        await page.locator('[data-role="access-submit"]').click();
         await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-        await page.getByText('Фабричный агент-бизнес-аналитик').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('[data-role="project-list"]').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.getByText('Опиши идею автоматизации').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
       } finally {
         await context.close();
       }
@@ -167,10 +175,12 @@ async function run() {
         const visibleStatus = (await page.locator('[data-role="status-user-visible"]').textContent()) || '';
         const nextAction = (await page.locator('[data-role="status-next-action"]').textContent()) || '';
         const composerMode = (await page.locator('[data-role="composer-mode"]').textContent()) || '';
+        const projectTitle = ((await page.locator('[data-role="project-title"]').textContent()) || '').trim();
 
         assert(/Сбор требований продолжается/i.test(visibleStatus), `Expected browser-readable discovery status, got: ${visibleStatus}`);
         assert(/Ответить на следующий вопрос/i.test(nextAction), `Expected browser-readable next action, got: ${nextAction}`);
-        assert(/Ответить/i.test(composerMode), `Composer should default to reply mode after the first follow-up, got: ${composerMode}`);
+        assert(/Кто будет основным пользователем/i.test(composerMode), `Composer should surface the current discovery question, got: ${composerMode}`);
+        assert(projectTitle !== 'Новый проект', `Project title should be auto-generated after the first turn, got: ${projectTitle}`);
         assert(await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().isVisible(), 'Chat transcript should render the first discovery follow-up question');
       } finally {
         await context.close();
@@ -183,6 +193,7 @@ async function run() {
         await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
         await page.locator('#accessToken').fill('asc-demo-shared');
         await page.locator('[data-role="access-submit"]').click();
+        await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         await page.locator('#fileInput').setInputFiles(uploadFixturePath);
         await page.getByText('input-example-browser.txt').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         await page.locator('#chatInput').fill('Примеры приложил файлом.');
@@ -217,7 +228,7 @@ async function run() {
         const composerModeAfterReload = ((await page.locator('[data-role="composer-mode"]').textContent()) || '').trim();
 
         assert(sessionBadgeAfterReload === sessionBadgeBeforeReload, `Expected the same browser session after reload, got: ${sessionBadgeAfterReload}`);
-        assert(/Ответить/i.test(composerModeAfterReload), `Composer should stay in reply mode after resume, got: ${composerModeAfterReload}`);
+        assert(/Кто будет основным пользователем/i.test(composerModeAfterReload), `Composer should keep the active discovery question after resume, got: ${composerModeAfterReload}`);
 
         await page.locator('#chatInput').fill('Оператор первой линии и руководитель смены.');
         await page.locator('#sendBtn').click();

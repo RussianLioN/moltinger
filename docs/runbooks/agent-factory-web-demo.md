@@ -25,8 +25,10 @@
 - маршрутизировать `start_project`, `submit_turn` и `request_status`
 - сохранять session/access/history snapshots под `data/agent-factory/web-demo/`
 - раздавать `index.html`, `app.css`, `app.js` и `/health` через lightweight Python server
-- показывать минималистичный single-column chat-first shell без правой clutter-панели
-- держать `composer` главным фокусом первого экрана, а служебный контекст прятать в secondary disclosure
+- показывать отдельный `access gate`, а после успешного входа переводить пользователя в отдельное рабочее пространство
+- держать `composer` главным фокусом первого рабочего экрана и прятать служебный контекст в secondary disclosure
+- поддерживать левый sidebar со списком проектов и быстрым возвратом к ним
+- автоматически давать проекту рабочее имя после первого содержательного user turn и позволять переименовывать проект через меню `⋯`
 - показывать первый live discovery follow-up вопрос в том же browser shell после сырой идеи пользователя
 - возвращать browser-safe `status_update` и `discovery_question` cards без leakage внутренних runtime полей
 - подсказывать shell правильный следующий режим через `ui_projection.preferred_ui_action`
@@ -235,13 +237,21 @@ UI не должен показывать пользователю:
 - внутренние status codes вроде `ask_next_question`
 - debug payloads и stack traces
 
-### Current landing composition
+### Current browser composition
 
-Browser shell intentionally starts in a `composer-first` layout:
+Browser shell intentionally split into 3 user-facing states:
 
-- сначала пользователь видит только краткий заголовок, поле ввода и attach flow
-- `thread-panel` раскрывается только после первого реального turn или resume
-- `Контекст проекта` остаётся в `<details>` и не конкурирует с началом диалога
+1. `Access gate`
+   - сначала пользователь видит только экран доступа
+   - token не висит рядом с рабочим composer и не конкурирует с основным сценарием
+2. `Empty home`
+   - после успешного входа открывается чистый рабочий экран
+   - слева виден список проектов и кнопка `Новый проект`
+   - в центре главный фокус у `composer`, а не у status/dashboard элементов
+3. `Project workspace`
+   - после первого реального turn раскрывается thread проекта
+   - текущий вопрос агента поднимается в `composer`
+   - `Контекст проекта` остаётся в `<details>` и не конкурирует с диалогом
 
 ### Local validation examples
 

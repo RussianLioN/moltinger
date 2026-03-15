@@ -12,64 +12,127 @@
     <script defer src="/app.js"></script>
   </head>
   <body>
-    <div class="shell" data-role="app-root" data-mode="booting" data-stage="landing">
-      <header class="topbar">
-        <div class="topbar__brand">
-          <span class="topbar__eyebrow">ASC AI Fabrique Demo</span>
-          <p class="topbar__project" data-role="project-title">Новый проект фабрики</p>
+    <div class="shell" data-role="app-root" data-mode="booting" data-stage="gated" data-access="gated">
+      <section class="gate-screen" data-role="gate-screen" aria-label="Доступ к демо">
+        <div class="gate-screen__copy">
+          <p class="gate-screen__eyebrow">ASC AI Fabrique Demo</p>
+          <h1>Открой доступ к фабрике</h1>
+          <p class="gate-screen__summary">
+            После входа откроется рабочее пространство с проектами, диалогом и артефактами.
+          </p>
         </div>
-        <div class="topbar__controls">
-          <span class="status-pill" data-role="connection-state">Подготовка shell</span>
-          <span class="status-pill status-pill--muted" data-role="session-badge">Сессия ещё не открыта</span>
-          <button
-            class="button button--ghost button--compact"
-            type="button"
-            data-role="refresh-session"
-          >
-            Обновить
-          </button>
-        </div>
-      </header>
 
-      <main class="experience">
-        <section class="hero">
-          <div class="hero__copy">
-            <p class="hero__eyebrow">Фабричный агент-бизнес-аналитик</p>
-            <h1>Опиши, что нужно автоматизировать</h1>
-            <p class="hero__summary">
-              Я помогу собрать требования, задам уточняющие вопросы, сформирую brief и передам
-              проект в фабрику без ручного копипаста.
-            </p>
+        <section class="access-banner" data-role="access-banner">
+          <div class="access-banner__copy">
+            <strong>Демо-доступ</strong>
+            <p>Укажи access token и перейди в рабочее пространство фабрики.</p>
+          </div>
+          <div class="access-banner__controls">
+            <input
+              id="accessToken"
+              type="password"
+              autocomplete="off"
+              placeholder="demo-access-token"
+              data-role="access-token-input"
+            >
+            <button class="button button--primary" type="button" data-role="access-submit">Открыть demo</button>
+          </div>
+          <p class="access-banner__note" data-role="gate-note">Токен запрашивается только один раз для этой браузерной сессии.</p>
+        </section>
+      </section>
+
+      <div class="app-frame">
+        <aside class="sidebar" aria-label="Проекты">
+          <div class="sidebar__brand">
+            <p class="sidebar__eyebrow">ASC AI Fabrique</p>
+            <h2>Проекты</h2>
           </div>
 
-          <section class="composer-card" aria-label="Старт нового проекта">
-            <section class="access-banner" data-role="access-banner">
-              <div class="access-banner__copy">
-                <strong>Демо-доступ</strong>
-                <p>Укажи access token один раз, после этого можно сразу начинать диалог.</p>
-              </div>
-              <div class="access-banner__controls">
-                <input
-                  id="accessToken"
-                  type="password"
-                  autocomplete="off"
-                  placeholder="demo-access-token"
-                  data-role="access-token-input"
-                >
-                <button class="button button--primary" type="button" data-role="access-submit">Открыть demo</button>
-              </div>
-            </section>
+          <button class="sidebar__new button button--ghost" type="button" data-role="new-project">
+            Новый проект
+          </button>
 
+          <div class="project-list" data-role="project-list"></div>
+        </aside>
+
+        <main class="workspace">
+          <header class="workspace-topbar">
+            <div class="workspace-topbar__main">
+              <p class="workspace-topbar__eyebrow">Фабричный агент-бизнес-аналитик</p>
+              <div class="workspace-topbar__title-row">
+                <h1 data-role="project-title">Новый проект</h1>
+                <button
+                  class="button button--ghost button--compact"
+                  type="button"
+                  data-role="project-menu"
+                  aria-label="Действия с проектом"
+                >
+                  ⋯
+                </button>
+              </div>
+              <p class="workspace-topbar__subtitle" data-role="project-subtitle">
+                Черновик проекта. Начни с описания задачи.
+              </p>
+            </div>
+
+            <div class="topbar__controls">
+              <span class="status-pill" data-role="connection-state">Подготовка shell</span>
+              <span class="status-pill status-pill--muted" data-role="session-badge">Сессия ещё не открыта</span>
+              <button
+                class="button button--ghost button--compact"
+                type="button"
+                data-role="refresh-session"
+              >
+                Обновить
+              </button>
+            </div>
+          </header>
+
+          <section class="landing-panel">
+            <div class="landing-panel__copy">
+              <p class="landing-panel__eyebrow">Фабричный агент-бизнес-аналитик</p>
+              <h2>Опиши идею автоматизации</h2>
+              <p class="landing-panel__summary">
+                Я помогу собрать требования, задам уточняющие вопросы, сформирую brief и передам
+                проект в фабрику без ручного копипаста.
+              </p>
+            </div>
+          </section>
+
+          <section class="thread-panel" aria-labelledby="chat-panel-title">
+            <div class="thread-panel__header">
+              <div>
+                <p class="thread-panel__eyebrow">Диалог</p>
+                <h2 id="chat-panel-title">Рабочая сессия по проекту</h2>
+              </div>
+            </div>
+
+            <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite">
+              <article class="message message--agent" data-role="chat-empty">
+                <div class="message__meta">
+                  <span class="message__author">Фабричный агент</span>
+                  <span class="message__kind">initial_shell</span>
+                </div>
+                <h3>Готов начать discovery</h3>
+                <p>
+                  Опиши, какую часть бизнес-процесса хочешь автоматизировать. Если примеры лежат в
+                  файлах, прикрепи их прямо в поле ниже.
+                </p>
+              </article>
+            </div>
+          </section>
+
+          <section class="composer-dock">
             <form class="composer" data-role="composer-form">
               <div class="composer__lead">
-                <span class="composer__lead-label">Следующее действие</span>
+                <span class="composer__lead-label" data-role="composer-lead-label">Следующее действие</span>
                 <strong data-role="composer-mode">Новый проект</strong>
               </div>
 
               <textarea
                 id="chatInput"
-                rows="5"
-                placeholder="Опиши процесс, который хочешь автоматизировать, или прикрепи пример файла."
+                rows="4"
+                placeholder="Опиши, какой процесс нужно автоматизировать."
                 data-role="composer-input"
               ></textarea>
 
@@ -98,7 +161,7 @@
               </div>
 
               <p class="composer__hint">
-                Текст появляется локально сразу, а в фабрику уходит только после отправки.
+                Текст отображается локально сразу. В фабрику сообщение уходит только после отправки.
               </p>
             </form>
 
@@ -111,89 +174,66 @@
               </div>
             </div>
           </section>
-        </section>
 
-        <section class="thread-panel" aria-labelledby="chat-panel-title">
-          <div class="thread-panel__header">
-            <div>
-              <p class="thread-panel__eyebrow">Диалог</p>
-              <h2 id="chat-panel-title">Рабочая сессия по проекту</h2>
-            </div>
-          </div>
+          <details class="meta-panel">
+            <summary>
+              <span>Контекст проекта</span>
+              <span class="meta-panel__summary-note">Статус, brief, файлы и загрузки</span>
+            </summary>
+            <div class="meta-panel__content">
+              <section class="status-strip" aria-label="Текущее состояние проекта">
+                <article class="status-card">
+                  <span class="status-card__label">Статус</span>
+                  <strong data-role="status-user-visible">gate_pending</strong>
+                </article>
+                <article class="status-card">
+                  <span class="status-card__label">Следующий шаг</span>
+                  <strong data-role="status-next-action">request_demo_access</strong>
+                </article>
+                <article class="status-card">
+                  <span class="status-card__label">Версия brief</span>
+                  <strong data-role="status-brief-version">ещё нет</strong>
+                </article>
+                <article class="status-card">
+                  <span class="status-card__label">Файлы</span>
+                  <strong data-role="status-upload-count">0</strong>
+                </article>
+                <article class="status-card">
+                  <span class="status-card__label">Downloads</span>
+                  <strong data-role="status-download-readiness">pending</strong>
+                </article>
+              </section>
 
-          <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite">
-            <article class="message message--agent" data-role="chat-empty">
-              <div class="message__meta">
-                <span class="message__author">Фабричный агент</span>
-                <span class="message__kind">initial_shell</span>
+              <div class="meta-grid">
+                <section class="details-card">
+                  <h2>Состояние проекта</h2>
+                  <p class="status-note" data-role="status-operator-attention">
+                    Пока shell ждёт код доступа и первый turn пользователя.
+                  </p>
+                  <dl class="fact-grid">
+                    <div class="fact">
+                      <dt>Project key</dt>
+                      <dd data-role="status-project-key">не выбран</dd>
+                    </div>
+                    <div class="fact">
+                      <dt>Session ID</dt>
+                      <dd data-role="status-session-id">не открыт</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section class="details-card">
+                  <h2>Артефакты</h2>
+                  <div class="artifact-empty" data-role="artifact-empty">
+                    Три пользовательских артефакта появятся здесь после confirmed brief и downstream handoff.
+                  </div>
+                  <div class="artifact-list" data-role="artifact-list"></div>
+                </section>
               </div>
-              <h3>Готов начать discovery</h3>
-              <p>
-                Опиши, какую часть бизнес-процесса хочешь автоматизировать. Если примеры лежат в
-                файлах, прикрепи их прямо в поле выше.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <details class="meta-panel">
-          <summary>
-            <span>Контекст проекта</span>
-            <span class="meta-panel__summary-note">Статус, brief, файлы и загрузки</span>
-          </summary>
-          <div class="meta-panel__content">
-            <section class="status-strip" aria-label="Текущее состояние проекта">
-              <article class="status-card">
-                <span class="status-card__label">Статус</span>
-                <strong data-role="status-user-visible">gate_pending</strong>
-              </article>
-              <article class="status-card">
-                <span class="status-card__label">Следующий шаг</span>
-                <strong data-role="status-next-action">request_demo_access</strong>
-              </article>
-              <article class="status-card">
-                <span class="status-card__label">Версия brief</span>
-                <strong data-role="status-brief-version">ещё нет</strong>
-              </article>
-              <article class="status-card">
-                <span class="status-card__label">Файлы</span>
-                <strong data-role="status-upload-count">0</strong>
-              </article>
-              <article class="status-card">
-                <span class="status-card__label">Downloads</span>
-                <strong data-role="status-download-readiness">pending</strong>
-              </article>
-            </section>
-
-            <div class="meta-grid">
-              <section class="details-card">
-                <h2>Состояние проекта</h2>
-                <p class="status-note" data-role="status-operator-attention">
-                  Пока shell ждёт код доступа и первый turn пользователя.
-                </p>
-                <dl class="fact-grid">
-                  <div class="fact">
-                    <dt>Project key</dt>
-                    <dd data-role="status-project-key">не выбран</dd>
-                  </div>
-                  <div class="fact">
-                    <dt>Session ID</dt>
-                    <dd data-role="status-session-id">не открыт</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section class="details-card">
-                <h2>Артефакты</h2>
-                <div class="artifact-empty" data-role="artifact-empty">
-                  Три пользовательских артефакта появятся здесь после confirmed brief и downstream handoff.
-                </div>
-                <div class="artifact-list" data-role="artifact-list"></div>
-              </section>
             </div>
-          </div>
-        </details>
-      </main>
+          </details>
+        </main>
+      </div>
     </div>
 
     <template data-role="message-template">

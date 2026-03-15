@@ -1,47 +1,63 @@
 (() => {
-  const STORAGE_KEY = "agent-factory-web-demo-shell.v2";
+  const STORAGE_KEY = "agent-factory-web-demo-shell.v3";
+  const ACCESS_TOKEN_KEY = "agent-factory-web-demo-access-token.v1";
   const DEFAULT_ACCESS_TOKEN = "demo-access-token";
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
+  const DEFAULT_PROJECT_TITLE = "Новый проект";
   const ACTION_LABELS = {
     start_project: "Новый проект",
     submit_turn: "Ответить",
     request_status: "Статус",
     request_brief_review: "Показать brief",
-    request_brief_correction: "Исправить brief",
+    request_brief_correction: "Внести правки",
     confirm_brief: "Подтвердить brief",
     reopen_brief: "Переоткрыть brief",
-    download_artifact: "Скачать артефакт",
+    download_artifact: "Скачать артефакты",
     submit_access_token: "Открыть demo",
   };
   const ACTION_PRIORITY = [
     "submit_turn",
-    "confirm_brief",
     "request_brief_correction",
-    "request_status",
+    "confirm_brief",
     "reopen_brief",
-    "download_artifact",
+    "request_brief_review",
+    "request_status",
     "start_project",
   ];
+  const STATUS_LABELS = {
+    gate_pending: "Нужен доступ",
+    discovery_in_progress: "В работе",
+    awaiting_user_reply: "В работе",
+    awaiting_confirmation: "Нужно внимание",
+    confirmed: "Готово",
+    playground_ready: "Готово",
+    reopened: "Нужно внимание",
+  };
 
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
-    connectionState: document.querySelector('[data-role="connection-state"]'),
-    sessionBadge: document.querySelector('[data-role="session-badge"]'),
-    projectTitle: document.querySelector('[data-role="project-title"]'),
-    accessBanner: document.querySelector('[data-role="access-banner"]'),
+    gateNote: document.querySelector('[data-role="gate-note"]'),
     accessTokenInput: document.querySelector('[data-role="access-token-input"]'),
     accessSubmit: document.querySelector('[data-role="access-submit"]'),
+    projectList: document.querySelector('[data-role="project-list"]'),
+    newProject: document.querySelector('[data-role="new-project"]'),
+    projectTitle: document.querySelector('[data-role="project-title"]'),
+    projectSubtitle: document.querySelector('[data-role="project-subtitle"]'),
+    projectMenu: document.querySelector('[data-role="project-menu"]'),
+    connectionState: document.querySelector('[data-role="connection-state"]'),
+    sessionBadge: document.querySelector('[data-role="session-badge"]'),
+    refreshSession: document.querySelector('[data-role="refresh-session"]'),
     chatLog: document.querySelector('[data-role="chat-log"]'),
     chatEmpty: document.querySelector('[data-role="chat-empty"]'),
-    quickActions: document.querySelector('[data-role="quick-actions"]'),
     composerForm: document.querySelector('[data-role="composer-form"]'),
+    composerLeadLabel: document.querySelector('[data-role="composer-lead-label"]'),
     composerMode: document.querySelector('[data-role="composer-mode"]'),
     composerInput: document.querySelector('[data-role="composer-input"]'),
     composerSubmit: document.querySelector('[data-role="composer-submit"]'),
     attachmentInput: document.querySelector('[data-role="attachment-input"]'),
     attachmentList: document.querySelector('[data-role="attachment-list"]'),
-    refreshSession: document.querySelector('[data-role="refresh-session"]'),
+    quickActions: document.querySelector('[data-role="quick-actions"]'),
     statusUserVisible: document.querySelector('[data-role="status-user-visible"]'),
     statusNextAction: document.querySelector('[data-role="status-next-action"]'),
     statusBriefVersion: document.querySelector('[data-role="status-brief-version"]'),
@@ -57,17 +73,12 @@
   };
 
   const state = {
-    currentAction: "start_project",
-    connectionMode: "booting",
     accessToken: "",
-    timeline: [],
-    lastResponse: null,
-    sessionId: "",
+    connectionMode: "booting",
     requestCounter: 0,
-    mockStage: "gate_pending",
-    lastAutoFollowupSource: "",
-    lastResumeFingerprint: "",
-    pendingUploads: [],
+    activeProjectId: "",
+    projects: [],
+    gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
   };
 
   function safeJsonParse(value, fallback) {
@@ -97,8 +108,32 @@
     return normalized || fallback;
   }
 
-  function activeSessionUploads() {
-    return Array.isArray(state.lastResponse?.uploaded_files) ? state.lastResponse.uploaded_files : [];
+  function nowIso() {
+    return new Date().toISOString();
+  }
+
+  function defaultSessionId(projectId) {
+    return `web-demo-session-${slugify(projectId, "project")}`;
+  }
+
+  function buildWelcomeMessage() {
+    return {
+      role: "agent",
+      kind: "initial_shell",
+      title: "Начни с описания задачи",
+      body: "Опиши процесс, который хочешь автоматизировать. Если примеры лежат в файлах, прикрепи их прямо в поле ниже.",
+      actions: ["start_project"],
+    };
+  }
+
+  function buildSystemMessage(title, body, kind = "system_update") {
+    return {
+      role: "system",
+      kind,
+      title,
+      body,
+      actions: ["request_status"],
+    };
   }
 
   function formatBytes(value) {
@@ -163,74 +198,33 @@
     };
   }
 
-  function hydrate() {
-    const saved = safeJsonParse(window.localStorage.getItem(STORAGE_KEY) || "null", null);
-    if (!saved || typeof saved !== "object") {
-      state.timeline = [buildWelcomeMessage()];
-      return;
+  function shorten(value, limit = 96) {
+    const text = normalizeText(value);
+    if (!text) {
+      return "";
     }
-
-    state.currentAction = normalizeText(saved.currentAction, "start_project");
-    state.connectionMode = normalizeText(saved.connectionMode, "booting");
-    state.accessToken = normalizeText(saved.accessToken);
-    state.timeline = Array.isArray(saved.timeline) && saved.timeline.length ? saved.timeline : [buildWelcomeMessage()];
-    state.lastResponse = saved.lastResponse && typeof saved.lastResponse === "object" ? saved.lastResponse : null;
-    state.sessionId = normalizeText(saved.sessionId);
-    state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
-    state.mockStage = normalizeText(saved.mockStage, "gate_pending");
-    state.lastAutoFollowupSource = normalizeText(saved.lastAutoFollowupSource);
-    state.lastResumeFingerprint = normalizeText(saved.lastResumeFingerprint);
+    return text.length > limit ? `${text.slice(0, limit - 1).trim()}…` : text;
   }
 
-  function persist() {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        currentAction: state.currentAction,
-        connectionMode: state.connectionMode,
-        accessToken: state.accessToken,
-        timeline: state.timeline,
-        lastResponse: state.lastResponse,
-        sessionId: state.sessionId,
-        requestCounter: state.requestCounter,
-        mockStage: state.mockStage,
-        lastAutoFollowupSource: state.lastAutoFollowupSource,
-        lastResumeFingerprint: state.lastResumeFingerprint,
-      }),
-    );
-  }
-
-  function setBusy(isBusy) {
-    dom.root.dataset.mode = isBusy ? "busy" : "ready";
-    dom.composerSubmit.disabled = isBusy;
-    dom.refreshSession.disabled = isBusy;
-    dom.accessSubmit.disabled = isBusy;
-  }
-
-  function buildWelcomeMessage() {
-    return {
-      role: "agent",
-      kind: "initial_shell",
-      title: "Начни с описания задачи",
-      body:
-        "Напиши, что нужно автоматизировать и для кого. Если примеры лежат в файлах, прикрепи их прямо в поле выше.",
-      actions: ["start_project"],
-    };
-  }
-
-  function buildSystemMessage(title, body, kind = "system_update") {
-    return {
-      role: "system",
-      kind,
-      title,
-      body,
-      actions: ["request_status"],
-    };
-  }
-
-  function nextRequestId(action) {
-    state.requestCounter += 1;
-    return `browser-${slugify(action, "turn")}-${String(state.requestCounter).padStart(4, "0")}`;
+  function formatRelativeTime(isoValue) {
+    const timestamp = Date.parse(isoValue || "");
+    if (!timestamp) {
+      return "только что";
+    }
+    const deltaMs = Date.now() - timestamp;
+    const minutes = Math.round(deltaMs / 60000);
+    if (minutes <= 1) {
+      return "только что";
+    }
+    if (minutes < 60) {
+      return `${minutes} мин назад`;
+    }
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) {
+      return `${hours} ч назад`;
+    }
+    const days = Math.round(hours / 24);
+    return `${days} д назад`;
   }
 
   function selectionModeFor(action) {
@@ -247,13 +241,325 @@
     return map[action] || "continue_active";
   }
 
-  function setCurrentAction(action) {
-    state.currentAction = action;
-    dom.composerMode.textContent = ACTION_LABELS[action] || action;
-    [...dom.quickActions.querySelectorAll("[data-ui-action]")].forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.uiAction === action);
+  function nextRequestId(project, action) {
+    state.requestCounter += 1;
+    return `browser-${slugify(project.id, "project")}-${slugify(action, "turn")}-${String(state.requestCounter).padStart(4, "0")}`;
+  }
+
+  function projectSnapshot(project) {
+    return {
+      id: project.id,
+      title: project.title,
+      titleEdited: Boolean(project.titleEdited),
+      sessionId: project.sessionId,
+      timeline: Array.isArray(project.timeline) ? project.timeline : [buildWelcomeMessage()],
+      lastResponse: project.lastResponse && typeof project.lastResponse === "object" ? project.lastResponse : null,
+      draftText: normalizeText(project.draftText),
+      createdAt: normalizeText(project.createdAt, nowIso()),
+      updatedAt: normalizeText(project.updatedAt, nowIso()),
+      currentAction: normalizeText(project.currentAction, "start_project"),
+      mockStage: normalizeText(project.mockStage, "gate_pending"),
+      lastAutoFollowupSource: normalizeText(project.lastAutoFollowupSource),
+      lastResumeFingerprint: normalizeText(project.lastResumeFingerprint),
+    };
+  }
+
+  function normalizeProjectRecord(value) {
+    const record = value && typeof value === "object" ? value : {};
+    const id = normalizeText(record.id, `project-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`);
+    const updatedAt = normalizeText(record.updatedAt, nowIso());
+    return {
+      id,
+      title: normalizeText(record.title, DEFAULT_PROJECT_TITLE),
+      titleEdited: Boolean(record.titleEdited),
+      sessionId: normalizeText(record.sessionId, defaultSessionId(id)),
+      timeline: Array.isArray(record.timeline) && record.timeline.length ? record.timeline : [buildWelcomeMessage()],
+      lastResponse: record.lastResponse && typeof record.lastResponse === "object" ? record.lastResponse : null,
+      draftText: normalizeText(record.draftText),
+      createdAt: normalizeText(record.createdAt, updatedAt),
+      updatedAt,
+      currentAction: normalizeText(record.currentAction, "start_project"),
+      mockStage: normalizeText(record.mockStage, "gate_pending"),
+      lastAutoFollowupSource: normalizeText(record.lastAutoFollowupSource),
+      lastResumeFingerprint: normalizeText(record.lastResumeFingerprint),
+      pendingUploads: [],
+    };
+  }
+
+  function createProject(seed = {}) {
+    const id = normalizeText(seed.id, `project-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`);
+    return normalizeProjectRecord({
+      id,
+      title: normalizeText(seed.title, DEFAULT_PROJECT_TITLE),
+      titleEdited: Boolean(seed.titleEdited),
+      sessionId: normalizeText(seed.sessionId, defaultSessionId(id)),
+      timeline: [buildWelcomeMessage()],
+      lastResponse: null,
+      draftText: "",
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      currentAction: "start_project",
+      mockStage: "gate_pending",
+      lastAutoFollowupSource: "",
+      lastResumeFingerprint: "",
     });
-    persist();
+  }
+
+  function getActiveProject() {
+    return state.projects.find((project) => project.id === state.activeProjectId) || state.projects[0] || null;
+  }
+
+  function persist() {
+    const payload = {
+      connectionMode: state.connectionMode,
+      requestCounter: state.requestCounter,
+      activeProjectId: state.activeProjectId,
+      projects: state.projects.map((project) => projectSnapshot(project)),
+    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    if (state.accessToken) {
+      window.sessionStorage.setItem(ACCESS_TOKEN_KEY, state.accessToken);
+    } else {
+      window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    }
+  }
+
+  function hydrate() {
+    const saved = safeJsonParse(window.localStorage.getItem(STORAGE_KEY) || "null", null);
+    state.accessToken = normalizeText(window.sessionStorage.getItem(ACCESS_TOKEN_KEY), "");
+    if (saved && typeof saved === "object") {
+      state.connectionMode = normalizeText(saved.connectionMode, "booting");
+      state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
+      state.projects = Array.isArray(saved.projects) && saved.projects.length
+        ? saved.projects.map((project) => normalizeProjectRecord(project))
+        : [];
+      state.activeProjectId = normalizeText(saved.activeProjectId);
+    }
+    if (!state.projects.length) {
+      state.projects = [createProject()];
+    }
+    if (!state.activeProjectId || !state.projects.some((project) => project.id === state.activeProjectId)) {
+      state.activeProjectId = state.projects[0].id;
+    }
+  }
+
+  function saveComposerDraft() {
+    const project = getActiveProject();
+    if (!project || !dom.composerInput) {
+      return;
+    }
+    project.draftText = dom.composerInput.value;
+  }
+
+  function setBusy(isBusy) {
+    dom.root.dataset.mode = isBusy ? "busy" : "ready";
+    dom.composerSubmit.disabled = isBusy;
+    dom.refreshSession.disabled = isBusy;
+    dom.accessSubmit.disabled = isBusy;
+    dom.projectMenu.disabled = isBusy;
+    dom.newProject.disabled = isBusy;
+  }
+
+  function hasConversationActivity(project) {
+    if (!project) {
+      return false;
+    }
+    const response = project.lastResponse || {};
+    const visibleStatus = normalizeText(response.status_snapshot?.user_visible_status || response.status);
+    const transcriptSize = Array.isArray(project.timeline) ? project.timeline.length : 0;
+    return Boolean(project.sessionId && response.web_demo_session?.status) || transcriptSize > 1 || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "reopened"].includes(visibleStatus);
+  }
+
+  function currentResponse(project) {
+    return project?.lastResponse || null;
+  }
+
+  function currentQuestion(project) {
+    const response = currentResponse(project) || {};
+    const explicit = normalizeText(response.ui_projection?.current_question || response.next_question);
+    if (explicit) {
+      return explicit;
+    }
+    const card = Array.isArray(response.reply_cards)
+      ? response.reply_cards.find((item) => ["discovery_question", "confirmation_prompt"].includes(item.card_kind))
+      : null;
+    return normalizeText(card?.body_text);
+  }
+
+  function currentTopic(project) {
+    const response = currentResponse(project) || {};
+    return normalizeText(response.ui_projection?.current_topic || response.next_topic);
+  }
+
+  function currentStatus(project) {
+    const response = currentResponse(project) || {};
+    return normalizeText(response.status_snapshot?.user_visible_status || response.status || "gate_pending");
+  }
+
+  function statusLabel(project) {
+    const response = currentResponse(project) || {};
+    return normalizeText(response.status_snapshot?.user_visible_status_label || STATUS_LABELS[currentStatus(project)] || "Черновик");
+  }
+
+  function nextAction(project) {
+    const response = currentResponse(project) || {};
+    return normalizeText(
+      response.ui_projection?.preferred_ui_action
+      || response.status_snapshot?.next_recommended_action
+      || response.next_action
+      || project?.currentAction
+      || "start_project",
+      "start_project",
+    );
+  }
+
+  function leadLabelFor(project) {
+    if (!state.accessToken) {
+      return "Демо-доступ";
+    }
+    const question = currentQuestion(project);
+    const action = project?.currentAction || "start_project";
+    if (question && ["submit_turn", "request_brief_correction", "reopen_brief"].includes(action)) {
+      return "Текущий вопрос";
+    }
+    if (question && action === "confirm_brief") {
+      return "Что проверить";
+    }
+    return "Следующее действие";
+  }
+
+  function modeTextFor(project) {
+    if (!state.accessToken) {
+      return "Открыть demo";
+    }
+    const question = currentQuestion(project);
+    const action = project?.currentAction || "start_project";
+    if (question && ["submit_turn", "request_brief_correction", "reopen_brief", "confirm_brief"].includes(action)) {
+      return question;
+    }
+    return ACTION_LABELS[action] || action;
+  }
+
+  function placeholderFor(project) {
+    if (!state.accessToken) {
+      return "Введи access token";
+    }
+    const action = project?.currentAction || "start_project";
+    const question = currentQuestion(project);
+    const topic = currentTopic(project);
+    const status = currentStatus(project);
+    if (!hasConversationActivity(project)) {
+      return "Коротко опиши процесс, который хочешь автоматизировать.";
+    }
+    if (action === "confirm_brief") {
+      return "Подтверди brief кнопкой или коротко опиши, что нужно исправить.";
+    }
+    if (action === "request_brief_correction") {
+      return "Опиши, что поправить в brief.";
+    }
+    if (action === "reopen_brief") {
+      return "Опиши, что нужно доуточнить, чтобы переоткрыть brief.";
+    }
+    if (status === "playground_ready") {
+      return "Если нужны правки, опиши их, и я переоткрою brief.";
+    }
+    if (topic === "input_examples" || /пример|входн/i.test(question)) {
+      return "Приведи 1-2 примера или прикрепи файл с примерами.";
+    }
+    if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
+      return "Опиши ожидаемый результат на выходе.";
+    }
+    if (topic === "current_workflow" || /как этот процесс/i.test(question)) {
+      return "Опиши, как процесс работает сейчас и где теряется время.";
+    }
+    if (question) {
+      return shorten(`Ответь на вопрос: ${question}`, 110);
+    }
+    return "Опиши, какой процесс нужно автоматизировать.";
+  }
+
+  function submitLabelFor(project) {
+    const action = project?.currentAction || "start_project";
+    if (action === "confirm_brief") {
+      return "Подтвердить";
+    }
+    if (action === "request_brief_review") {
+      return "Показать brief";
+    }
+    if (action === "request_status") {
+      return "Обновить статус";
+    }
+    if (action === "reopen_brief") {
+      return "Переоткрыть";
+    }
+    return "Отправить";
+  }
+
+  function projectPreview(project) {
+    const question = currentQuestion(project);
+    if (question) {
+      return shorten(question, 84);
+    }
+    const lastUserMessage = [...(project?.timeline || [])].reverse().find((message) => message.role === "user");
+    if (lastUserMessage?.body) {
+      return shorten(lastUserMessage.body, 84);
+    }
+    return "Начни с описания задачи";
+  }
+
+  function projectSubtitle(project) {
+    const status = currentStatus(project);
+    const question = currentQuestion(project);
+    if (!hasConversationActivity(project)) {
+      return "Черновик проекта. Начни с описания задачи.";
+    }
+    if (status === "awaiting_confirmation") {
+      return "Brief собран. Проверь summary, внеси правки или подтверди текущую версию.";
+    }
+    if (status === "playground_ready" || status === "confirmed") {
+      return "Артефакты готовы. Можно скачать материалы или запросить доработку.";
+    }
+    if (question) {
+      return shorten(`Сейчас агент уточняет контекст: ${question}`, 140);
+    }
+    return "Сессия активна. Можно продолжать диалог или запросить статус.";
+  }
+
+  function responseActions(response) {
+    const fromCards = Array.isArray(response?.reply_cards)
+      ? response.reply_cards.flatMap((card) => (Array.isArray(card.action_hints) ? card.action_hints : []))
+      : [];
+    const unique = [...new Set(fromCards.map((action) => normalizeText(action)).filter(Boolean))];
+    if (unique.length) {
+      return unique;
+    }
+    if (!response?.access_gate?.granted) {
+      return ["submit_access_token"];
+    }
+    return [
+      normalizeText(response?.ui_projection?.preferred_ui_action),
+      normalizeText(response?.status_snapshot?.next_recommended_action),
+      normalizeText(response?.next_action),
+      "request_status",
+    ].filter(Boolean);
+  }
+
+  function availableActions(project) {
+    const response = currentResponse(project);
+    if (!response) {
+      return hasConversationActivity(project) ? ["submit_turn", "request_status"] : ["start_project"];
+    }
+    return responseActions(response);
+  }
+
+  function statusTone(status) {
+    if (["awaiting_confirmation", "reopened"].includes(status)) {
+      return "attention";
+    }
+    if (["playground_ready", "confirmed"].includes(status)) {
+      return "success";
+    }
+    return "neutral";
   }
 
   function renderConnection() {
@@ -266,71 +572,88 @@
     dom.connectionState.textContent = labels[state.connectionMode] || state.connectionMode;
   }
 
-  function renderSessionBadge() {
-    const sessionId = state.lastResponse?.web_demo_session?.web_demo_session_id || state.sessionId;
+  function renderSessionBadge(project) {
+    const sessionId = normalizeText(project?.lastResponse?.web_demo_session?.web_demo_session_id || project?.sessionId);
     dom.sessionBadge.textContent = sessionId ? `Сессия ${sessionId}` : "Сессия ещё не открыта";
   }
 
-  function hasConversationActivity() {
-    const response = state.lastResponse || {};
-    const sessionId = normalizeText(response.web_demo_session?.web_demo_session_id || state.sessionId);
-    const projectKey = normalizeText(response.browser_project_pointer?.project_key);
-    const visibleStatus = normalizeText(response.status || response.status_snapshot?.user_visible_status);
-    if (sessionId || projectKey) {
-      return true;
-    }
-    return ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "reopened", "playground_ready"].includes(visibleStatus);
+  function renderGateNote() {
+    dom.gateNote.textContent = state.gateNote;
   }
 
-  function renderShellStage() {
-    const accessGranted = Boolean(state.lastResponse?.access_gate?.granted);
-    dom.root.dataset.stage = hasConversationActivity() ? "active" : "landing";
-    dom.root.dataset.access = accessGranted ? "granted" : (state.accessToken ? "token_staged" : "gated");
+  function renderShellStage(project) {
+    dom.root.dataset.access = state.accessToken ? "granted" : "gated";
+    dom.root.dataset.stage = state.accessToken
+      ? (hasConversationActivity(project) ? "active" : "empty")
+      : "gated";
   }
 
-  function renderStatus() {
-    const response = state.lastResponse || {};
-    const statusSnapshot = response.status_snapshot || {};
-    const session = response.web_demo_session || {};
-    const pointer = response.browser_project_pointer || {};
-    const accessGate = response.access_gate || {};
-    const resumeContext = response.resume_context || {};
+  function createProjectCard(project) {
+    const article = document.createElement("article");
+    article.className = `project-card${project.id === state.activeProjectId ? " is-active" : ""}`;
+    article.dataset.projectId = project.id;
 
-    dom.projectTitle.textContent = pointer.project_key || "Новый проект фабрики";
-    dom.statusUserVisible.textContent =
-      statusSnapshot.user_visible_status_label ||
-      statusSnapshot.user_visible_status ||
-      response.status ||
-      "gate_pending";
-    dom.statusNextAction.textContent =
-      statusSnapshot.next_recommended_action_label ||
-      ACTION_LABELS[statusSnapshot.next_recommended_action] ||
-      statusSnapshot.next_recommended_action ||
-      ACTION_LABELS[response.next_action] ||
-      response.next_action ||
-      "request_demo_access";
-    dom.statusBriefVersion.textContent = statusSnapshot.brief_version
-      ? `${statusSnapshot.brief_version}${statusSnapshot.brief_status_label ? ` · ${statusSnapshot.brief_status_label}` : ""}`
-      : "ещё нет";
-    dom.statusUploadCount.textContent = String(
-      uniqueUploads([...activeSessionUploads(), ...state.pendingUploads]).length,
-    );
-    dom.statusDownloadReadiness.textContent = statusSnapshot.download_readiness || "pending";
-    dom.statusProjectKey.textContent = pointer.project_key || "не выбран";
-    dom.statusSessionId.textContent = session.web_demo_session_id || state.sessionId || "не открыт";
-    dom.statusOperatorAttention.textContent = accessGate.granted
-      ? (resumeContext.summary_text || "Сессия открыта. Shell ждёт следующий turn пользователя или обновление статуса.")
-      : accessGate.reason || "Нужен access token для controlled demo surface.";
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "project-card__main";
 
-    const shouldShowBanner = !accessGate.granted;
-    dom.accessBanner.hidden = !shouldShowBanner;
-    renderSessionBadge();
-    renderShellStage();
+    const titleRow = document.createElement("div");
+    titleRow.className = "project-card__title-row";
+    const title = document.createElement("span");
+    title.className = "project-card__title";
+    title.textContent = project.title;
+    const pill = document.createElement("span");
+    pill.className = `project-card__pill project-card__pill--${statusTone(currentStatus(project))}`;
+    pill.textContent = statusLabel(project);
+    titleRow.append(title, pill);
+
+    const preview = document.createElement("p");
+    preview.className = "project-card__preview";
+    preview.textContent = projectPreview(project);
+
+    const meta = document.createElement("p");
+    meta.className = "project-card__meta";
+    meta.textContent = formatRelativeTime(project.updatedAt);
+
+    main.append(titleRow, preview, meta);
+    main.addEventListener("click", () => {
+      switchProject(project.id);
+    });
+
+    const menu = document.createElement("button");
+    menu.type = "button";
+    menu.className = "project-card__menu";
+    menu.textContent = "⋯";
+    menu.setAttribute("aria-label", `Переименовать проект ${project.title}`);
+    menu.addEventListener("click", (event) => {
+      event.stopPropagation();
+      promptRenameProject(project.id);
+    });
+
+    article.append(main, menu);
+    return article;
   }
 
-  function renderAttachmentList() {
-    const pending = uniqueUploads(state.pendingUploads);
-    const sessionUploads = uniqueUploads(activeSessionUploads());
+  function renderProjectList() {
+    dom.projectList.innerHTML = "";
+    const ordered = [...state.projects].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || ""));
+    ordered.forEach((project) => {
+      dom.projectList.appendChild(createProjectCard(project));
+    });
+  }
+
+  function renderTopbar(project) {
+    dom.projectTitle.textContent = project?.title || DEFAULT_PROJECT_TITLE;
+    dom.projectSubtitle.textContent = projectSubtitle(project);
+  }
+
+  function activeSessionUploads(project) {
+    return Array.isArray(project?.lastResponse?.uploaded_files) ? project.lastResponse.uploaded_files : [];
+  }
+
+  function renderAttachmentList(project) {
+    const pending = uniqueUploads(project?.pendingUploads || []);
+    const sessionUploads = uniqueUploads(activeSessionUploads(project));
     const items = [
       ...pending.map((item) => ({ ...item, scope: "pending" })),
       ...sessionUploads
@@ -356,10 +679,9 @@
         remove.textContent = "×";
         remove.setAttribute("aria-label", `Убрать файл ${upload.name || ""}`.trim());
         remove.addEventListener("click", () => {
-          state.pendingUploads = state.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
-          renderAttachmentList();
-          renderStatus();
-          persist();
+          project.pendingUploads = project.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
+          renderAttachmentList(project);
+          renderStatus(project);
         });
         pill.appendChild(remove);
       }
@@ -420,13 +742,13 @@
     return fragment;
   }
 
-  function renderTimeline() {
+  function renderTimeline(project) {
     dom.chatLog.innerHTML = "";
-    const items = state.timeline.length ? state.timeline : [buildWelcomeMessage()];
+    const items = project?.timeline?.length ? project.timeline : [buildWelcomeMessage()];
     items.forEach((message) => {
       dom.chatLog.appendChild(createMessageNode(message));
     });
-    dom.chatEmpty.hidden = true;
+    dom.chatEmpty.hidden = items.length > 0;
     dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
   }
 
@@ -453,26 +775,24 @@
     ];
   }
 
-  function createMockDownload(artifact) {
-    const briefVersion = state.lastResponse?.status_snapshot?.brief_version || "draft";
+  function createMockDownload(project, artifact) {
+    const briefVersion = project?.lastResponse?.status_snapshot?.brief_version || "draft";
     const body = [
       `# ${artifact.download_name}`,
       "",
-      "Mock download из initial browser shell.",
+      "Mock download из browser shell.",
       `artifact_kind: ${artifact.artifact_kind}`,
       `brief_version: ${briefVersion}`,
-      `project_key: ${state.lastResponse?.browser_project_pointer?.project_key || "demo-project"}`,
+      `project_key: ${project?.lastResponse?.browser_project_pointer?.project_key || "demo-project"}`,
       "",
       "Этот файл нужен только как placeholder до live delivery layer.",
-      "",
-      state.lastResponse?.reply_cards?.map((card) => `- ${card.title}: ${card.body_text}`).join("\n") || "",
     ].join("\n");
     return URL.createObjectURL(new Blob([body], { type: "text/markdown;charset=utf-8" }));
   }
 
-  function renderArtifacts() {
-    const responseArtifacts = Array.isArray(state.lastResponse?.download_artifacts)
-      ? state.lastResponse.download_artifacts
+  function renderArtifacts(project) {
+    const responseArtifacts = Array.isArray(project?.lastResponse?.download_artifacts)
+      ? project.lastResponse.download_artifacts
       : [];
     const artifacts = responseArtifacts.length ? responseArtifacts : artifactPlaceholders();
     dom.artifactList.innerHTML = "";
@@ -492,28 +812,26 @@
       kind.textContent = artifact.artifact_kind || "artifact";
       stateLabel.textContent = artifact.download_status || "pending";
       title.textContent = artifact.download_name || "Без имени";
-      body.textContent =
-        artifact.description ||
-        (ready
-          ? "Артефакт готов к скачиванию из той же browser session."
-          : "Появится после confirmed brief и downstream handoff.");
+      body.textContent = artifact.description
+        || (ready ? "Артефакт готов к скачиванию из этой browser session." : "Появится после confirmed brief и downstream handoff.");
       button.disabled = !ready;
       button.textContent = ready ? "Скачать" : "Пока не готов";
 
       button.addEventListener("click", () => {
         if (!ready) {
-          state.timeline.push(
+          project.timeline.push(
             buildSystemMessage(
               "Загрузка ещё недоступна",
               "Сначала нужно довести проект до confirmed brief и закончить downstream handoff.",
               "artifact_pending",
             ),
           );
-          renderTimeline();
+          project.updatedAt = nowIso();
+          renderTimeline(project);
           persist();
           return;
         }
-        const href = artifact.download_url || createMockDownload(artifact);
+        const href = artifact.download_url || createMockDownload(project, artifact);
         const link = document.createElement("a");
         link.href = href;
         link.download = artifact.download_name || "artifact.txt";
@@ -526,9 +844,35 @@
     });
   }
 
-  function updateQuickActions(actions) {
-    const unique = [...new Set((actions || []).filter(Boolean))];
-    const selected = unique.length ? unique : ["start_project", "submit_turn", "request_status"];
+  function renderStatus(project) {
+    const response = currentResponse(project) || {};
+    const statusSnapshot = response.status_snapshot || {};
+    const session = response.web_demo_session || {};
+    const pointer = response.browser_project_pointer || {};
+    const accessGate = response.access_gate || {};
+    const resumeContext = response.resume_context || {};
+
+    dom.statusUserVisible.textContent = statusSnapshot.user_visible_status_label || statusLabel(project) || "gate_pending";
+    dom.statusNextAction.textContent =
+      statusSnapshot.next_recommended_action_label
+      || ACTION_LABELS[statusSnapshot.next_recommended_action]
+      || ACTION_LABELS[project?.currentAction]
+      || "request_demo_access";
+    dom.statusBriefVersion.textContent = statusSnapshot.brief_version
+      ? `${statusSnapshot.brief_version}${statusSnapshot.brief_status_label ? ` · ${statusSnapshot.brief_status_label}` : ""}`
+      : "ещё нет";
+    dom.statusUploadCount.textContent = String(uniqueUploads([...(project?.pendingUploads || []), ...activeSessionUploads(project)]).length);
+    dom.statusDownloadReadiness.textContent = statusSnapshot.download_readiness || "pending";
+    dom.statusProjectKey.textContent = pointer.project_key || "не выбран";
+    dom.statusSessionId.textContent = session.web_demo_session_id || project?.sessionId || "не открыт";
+    dom.statusOperatorAttention.textContent = accessGate.granted
+      ? (resumeContext.summary_text || projectSubtitle(project))
+      : (accessGate.reason || "Нужен access token для controlled demo surface.");
+  }
+
+  function renderQuickActions(project) {
+    const actions = [...new Set(availableActions(project).filter(Boolean))];
+    const selected = actions.length ? actions : ["start_project"];
     dom.quickActions.innerHTML = "";
     selected.forEach((action) => {
       const button = document.createElement("button");
@@ -536,57 +880,155 @@
       button.className = "chip";
       button.dataset.uiAction = action;
       button.textContent = ACTION_LABELS[action] || action;
+      button.classList.toggle("is-active", action === (project?.currentAction || "start_project"));
       button.addEventListener("click", () => handleActionShortcut(action));
       dom.quickActions.appendChild(button);
     });
-    const preferredAction = selected.find((action) => action === state.currentAction)
-      || ACTION_PRIORITY.find((action) => selected.includes(action))
-      || selected[0];
-    setCurrentAction(preferredAction);
   }
 
-  function responseActions(response) {
-    const fromCards = Array.isArray(response?.reply_cards)
-      ? response.reply_cards.flatMap((card) => (Array.isArray(card.action_hints) ? card.action_hints : []))
-      : [];
-    const unique = [...new Set(fromCards.map((action) => normalizeText(action)).filter(Boolean))];
-    if (unique.length) {
-      return unique;
-    }
-    if (!response?.access_gate?.granted) {
-      return ["submit_access_token"];
-    }
-    return [
-      normalizeText(response?.ui_projection?.preferred_ui_action),
-      normalizeText(response?.status_snapshot?.next_recommended_action),
-      normalizeText(response?.next_action),
-      "request_status",
-    ].filter(Boolean);
+  function renderComposer(project) {
+    dom.composerLeadLabel.textContent = leadLabelFor(project);
+    dom.composerMode.textContent = modeTextFor(project);
+    dom.composerInput.placeholder = placeholderFor(project);
+    dom.composerSubmit.textContent = submitLabelFor(project);
+    dom.composerInput.value = normalizeText(project?.draftText);
+    renderQuickActions(project);
   }
 
-  function buildResumeNotice(response, reason) {
-    const resumeContext = response?.resume_context || {};
-    const summary = normalizeText(resumeContext.summary_text);
-    const currentLabel = normalizeText(resumeContext.current_status_label);
-    const briefVersion = normalizeText(resumeContext.latest_brief_version || response?.status_snapshot?.brief_version);
-    if (reason === "manual_refresh") {
-      return {
-        title: "Сессия обновлена",
-        body: summary || (currentLabel ? `Shell перечитал статус проекта: ${currentLabel}.` : "Shell перечитал актуальное состояние проекта через GET /api/session."),
-        kind: "session_refresh",
-      };
+  function renderAll() {
+    const project = getActiveProject();
+    renderGateNote();
+    renderConnection();
+    renderSessionBadge(project);
+    renderShellStage(project);
+    renderProjectList();
+    renderTopbar(project);
+    renderStatus(project);
+    renderTimeline(project);
+    renderArtifacts(project);
+    renderAttachmentList(project);
+    renderComposer(project);
+  }
+
+  function setProjectAction(project, action) {
+    if (!project) {
+      return;
     }
-    return {
-      title: "Сессия восстановлена",
-      body:
-        summary
-        || (
-          briefVersion
-            ? `Shell восстановил проект и версию brief ${briefVersion} из сохранённого состояния.`
-            : "Shell восстановил проект из сохранённого состояния и перечитал текущий статус."
-        ),
-      kind: "session_resume",
-    };
+    project.currentAction = action;
+    project.updatedAt = nowIso();
+    persist();
+    renderComposer(project);
+    renderStatus(project);
+  }
+
+  function looksLikeSlug(value) {
+    const text = normalizeText(value);
+    return Boolean(text && !/\s/.test(text) && /-/.test(text));
+  }
+
+  function prettifyTitle(text) {
+    const normalized = normalizeText(text)
+      .replace(/\s+/g, " ")
+      .replace(/^[\-\s]+|[\-\s]+$/g, "");
+    if (!normalized) {
+      return "";
+    }
+    const firstSentence = normalized.split(/[.!?\n]/)[0].trim();
+    const cleaned = firstSentence
+      .replace(/^нужен агент[,]?\s*/i, "")
+      .replace(/^который\s+/i, "")
+      .replace(/^хочу автоматизировать\s*/i, "")
+      .replace(/^нужно автоматизировать\s*/i, "")
+      .replace(/^нужна автоматизация\s*/i, "");
+    const compact = shorten(cleaned || firstSentence, 58);
+    return compact.charAt(0).toUpperCase() + compact.slice(1);
+  }
+
+  function maybeAutonameProject(project, userText, response) {
+    if (!project || project.titleEdited) {
+      return;
+    }
+    const uiTitle = normalizeText(response?.ui_projection?.project_title);
+    const candidate = !looksLikeSlug(uiTitle) ? prettifyTitle(uiTitle) : prettifyTitle(userText);
+    if (!candidate) {
+      return;
+    }
+    if (project.title === DEFAULT_PROJECT_TITLE || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} •`)) {
+      project.title = candidate;
+    }
+  }
+
+  function promptRenameProject(projectId) {
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) {
+      return;
+    }
+    const nextTitle = window.prompt("Новое название проекта", project.title);
+    const normalized = normalizeText(nextTitle);
+    if (!normalized) {
+      return;
+    }
+    project.title = normalized;
+    project.titleEdited = true;
+    project.updatedAt = nowIso();
+    persist();
+    renderAll();
+  }
+
+  function createNewProject(options = {}) {
+    saveComposerDraft();
+    const project = createProject();
+    state.projects.unshift(project);
+    state.activeProjectId = project.id;
+    if (options.activate !== false) {
+      renderAll();
+    }
+    persist();
+    return project;
+  }
+
+  function switchProject(projectId) {
+    saveComposerDraft();
+    if (!state.projects.some((project) => project.id === projectId)) {
+      return;
+    }
+    state.activeProjectId = projectId;
+    persist();
+    renderAll();
+    const active = getActiveProject();
+    if (state.accessToken && active?.sessionId && active?.lastResponse) {
+      void refreshActiveProject({ syncReason: "switch_project", suppressFailureBanner: true });
+    }
+    window.setTimeout(() => {
+      dom.composerInput.focus();
+    }, 0);
+  }
+
+  function unlockAccess() {
+    const provided = normalizeText(dom.accessTokenInput.value, DEFAULT_ACCESS_TOKEN);
+    state.accessToken = provided;
+    state.gateNote = "Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.";
+    if (!state.projects.length) {
+      state.projects = [createProject()];
+    }
+    if (!state.activeProjectId) {
+      state.activeProjectId = state.projects[0].id;
+    }
+    persist();
+    renderAll();
+    window.setTimeout(() => {
+      dom.composerInput.focus();
+    }, 0);
+  }
+
+  function relockAccess(reason) {
+    state.accessToken = "";
+    state.gateNote = normalizeText(reason, "Нужен access token для controlled demo surface.");
+    persist();
+    renderAll();
+    window.setTimeout(() => {
+      dom.accessTokenInput.focus();
+    }, 0);
   }
 
   function replyCardsToMessages(cards) {
@@ -616,9 +1058,9 @@
     }));
   }
 
-  function buildTurnPayload(action, userText, queuedUploads = []) {
-    const last = state.lastResponse || {};
-    const payload = {
+  function buildTurnPayload(project, action, userText, queuedUploads = []) {
+    const last = currentResponse(project) || {};
+    return {
       working_language: "ru",
       project_key: last.browser_project_pointer?.project_key || "",
       requester_identity: {
@@ -633,7 +1075,7 @@
           }
         : {},
       web_demo_session: {
-        web_demo_session_id: last.web_demo_session?.web_demo_session_id || state.sessionId || "",
+        web_demo_session_id: last.web_demo_session?.web_demo_session_id || project.sessionId,
         session_cookie_id: last.web_demo_session?.session_cookie_id || "",
         status: last.web_demo_session?.status || "gate_pending",
       },
@@ -647,7 +1089,7 @@
         pointer_status: "active",
       },
       web_conversation_envelope: {
-        request_id: nextRequestId(action),
+        request_id: nextRequestId(project, action),
         ui_action: action,
         user_text: normalizeText(userText),
         transport_mode: "browser_shell",
@@ -655,11 +1097,8 @@
         linked_brief_id: last.web_conversation_envelope?.linked_brief_id || "",
       },
       discovery_runtime_state: last.discovery_runtime_state || {},
+      uploaded_files: queuedUploads.length ? serializeUploadsForTransport(queuedUploads) : undefined,
     };
-    if (queuedUploads.length) {
-      payload.uploaded_files = serializeUploadsForTransport(queuedUploads);
-    }
-    return payload;
   }
 
   async function postTurn(payload) {
@@ -687,8 +1126,7 @@
       discovery_problem: "Какую конкретную бизнес-проблему должен решить будущий агент?",
       discovery_inputs: "Какие данные приходят на вход и в каком виде их получают сотрудники?",
       discovery_outputs: "Какой результат должен получить пользователь на выходе?",
-      awaiting_confirmation:
-        "Я собрал черновой brief. Проверь summary, попроси правки или явно подтверди текущую версию.",
+      awaiting_confirmation: "Я собрал черновой brief. Проверь summary, попроси правки или явно подтверди текущую версию.",
       downloads_ready: "Brief подтверждён. Shell показывает подготовку concept pack и зону загрузок.",
     };
     return prompts[stage] || prompts.discovery_problem;
@@ -710,30 +1148,6 @@
           action_hints: ["request_brief_correction", "confirm_brief"],
         },
         {
-          card_kind: "brief_summary_section",
-          title: "Проблема и желаемый результат",
-          body_text: "Проблема:\nНужно автоматически разбирать входящие обращения и выбирать следующий маршрут обработки.\n\nЖелаемый результат:\nПользователь получает structured summary, маршрут заявки и причину выбора.",
-          action_hints: ["request_brief_correction", "confirm_brief"],
-        },
-        {
-          card_kind: "brief_summary_section",
-          title: "Пользователи и процесс",
-          body_text: "Кто пользуется результатом:\n- Оператор первой линии\n- Руководитель смены\n\nТекущий процесс:\nОператор вручную читает обращение, ищет подходящий маршрут и только потом эскалирует кейс дальше.",
-          action_hints: ["request_brief_correction", "confirm_brief"],
-        },
-        {
-          card_kind: "brief_summary_section",
-          title: "Примеры входов и выходов",
-          body_text: "Входные примеры:\n- Новый запрос клиента на выплату\n- Уточнение по статусу открытого кейса\n\nОжидаемые выходы:\n- Категория обращения\n- Следующий маршрут обработки",
-          action_hints: ["request_brief_correction", "confirm_brief"],
-        },
-        {
-          card_kind: "brief_summary_section",
-          title: "Правила, исключения и риски",
-          body_text: "Бизнес-правила:\n- Подозрение на мошенничество всегда эскалируется эксперту\n\nИсключения:\n- VIP-клиенты идут по отдельному сценарию\n\nОткрытые риски:\n- Нужно отдельно описать обращения от партнёрских СТО",
-          action_hints: ["request_brief_correction", "confirm_brief"],
-        },
-        {
           card_kind: "confirmation_prompt",
           title: "Подтвердить brief v2",
           body_text: "Проверь summary и явно подтверди версию v2. Если нужны изменения, запроси правки обычным текстом или переоткрой brief.",
@@ -748,12 +1162,6 @@
           title: "Статус проекта",
           body_text: "Confirmed brief передан в фабрику. Concept pack готовится к выдаче пользователю.",
           action_hints: ["request_status"],
-        },
-        {
-          card_kind: "brief_summary_section",
-          title: "Версия brief v3 подтверждена",
-          body_text: "Зафиксирована версия v3. Следующий этап фабрики может использовать только эту подтверждённую редакцию.",
-          action_hints: ["request_status", "reopen_brief"],
         },
         {
           card_kind: "download_prompt",
@@ -800,21 +1208,21 @@
       truncated: Boolean(upload.truncated),
       ingest_status: upload.content_base64 ? "excerpt_ready" : "metadata_only",
       excerpt: "",
-      uploaded_at: new Date().toISOString(),
+      uploaded_at: nowIso(),
     }));
   }
 
-  function mockAdapterTurn(payload) {
+  function mockAdapterTurn(project, payload) {
     const action = payload.web_conversation_envelope?.ui_action || "submit_turn";
     const userText = normalizeText(payload.web_conversation_envelope?.user_text);
     const uploadedFiles = sanitizeMockUploads(payload.uploaded_files || []);
     const accessGranted = Boolean(state.accessToken);
     const projectKey =
-      state.lastResponse?.browser_project_pointer?.project_key ||
-      `factory-${slugify(userText || "demo-project", "project")}`;
+      project.lastResponse?.browser_project_pointer?.project_key ||
+      `factory-${slugify(userText || project.title || "demo-project", "project")}`;
 
     if (!accessGranted) {
-      state.mockStage = "gate_pending";
+      project.mockStage = "gate_pending";
       return {
         status: "gate_pending",
         next_action: "request_demo_access",
@@ -823,20 +1231,15 @@
         access_gate: {
           granted: false,
           reason: "Укажи активный demo access token, чтобы открыть рабочую сессию фабрики.",
-          demo_access_grant_id: "",
-          grant_type: "shared_demo_token",
-          grant_value_hash: "",
-          status: "missing",
-          expires_at: "",
         },
         web_demo_session: {
-          web_demo_session_id: state.sessionId || "web-demo-shell-session",
-          session_cookie_id: "cookie-web-demo-shell-session",
+          web_demo_session_id: project.sessionId,
+          session_cookie_id: `cookie-${project.sessionId}`,
           status: "gate_pending",
           active_project_key: "",
         },
         browser_project_pointer: {
-          pointer_id: "browser-pointer-web-demo-shell",
+          pointer_id: `browser-pointer-${project.sessionId}`,
           project_key: "",
           selection_mode: selectionModeFor(action),
           pointer_status: "active",
@@ -844,9 +1247,8 @@
         status_snapshot: {
           user_visible_status: "gate_pending",
           next_recommended_action: "request_demo_access",
-          brief_version: "",
-          download_readiness: "pending",
           uploaded_file_count: uploadedFiles.length,
+          download_readiness: "pending",
         },
         reply_cards: [
           {
@@ -861,60 +1263,46 @@
     }
 
     if (action === "confirm_brief") {
-      state.mockStage = "downloads_ready";
+      project.mockStage = "downloads_ready";
     } else if (action === "request_brief_correction" || action === "reopen_brief") {
-      state.mockStage = "awaiting_confirmation";
-    } else if (action === "request_status" && state.lastResponse) {
-      state.mockStage = state.mockStage || "discovery_problem";
-    } else if (state.mockStage === "gate_pending") {
-      state.mockStage = "discovery_problem";
-    } else if (state.mockStage === "discovery_problem") {
-      state.mockStage = "discovery_inputs";
-    } else if (state.mockStage === "discovery_inputs") {
-      state.mockStage = "discovery_outputs";
-    } else if (state.mockStage === "discovery_outputs") {
-      state.mockStage = "awaiting_confirmation";
+      project.mockStage = "awaiting_confirmation";
+    } else if (action === "request_status" && project.lastResponse) {
+      project.mockStage = project.mockStage || "discovery_problem";
+    } else if (project.mockStage === "gate_pending") {
+      project.mockStage = "discovery_problem";
+    } else if (project.mockStage === "discovery_problem") {
+      project.mockStage = "discovery_inputs";
+    } else if (project.mockStage === "discovery_inputs") {
+      project.mockStage = "discovery_outputs";
+    } else if (project.mockStage === "discovery_outputs") {
+      project.mockStage = "awaiting_confirmation";
     }
 
-    const stage = state.mockStage;
-    const brief =
-      stage === "awaiting_confirmation" || stage === "downloads_ready"
-        ? {
-            brief_id: "brief-web-demo-001",
-            version: stage === "downloads_ready" ? "v3" : "v2",
-            problem_statement: "Нужно автоматизировать triage входящих заявок и сократить ручную сортировку.",
-            desired_outcome:
-              "Будущий агент собирает краткое summary, категорию, приоритет и предлагает маршрут обработки.",
-          }
-        : {};
+    const stage = project.mockStage;
+    const brief = stage === "awaiting_confirmation" || stage === "downloads_ready"
+      ? {
+          brief_id: "brief-web-demo-001",
+          version: stage === "downloads_ready" ? "v3" : "v2",
+        }
+      : {};
 
     return {
       status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
-      next_action:
-        stage === "downloads_ready"
-          ? "start_concept_pack_handoff"
-          : stage === "awaiting_confirmation"
-            ? "await_for_confirmation"
-            : "continue_discovery",
+      next_action: stage === "downloads_ready" ? "start_concept_pack_handoff" : stage === "awaiting_confirmation" ? "await_for_confirmation" : "continue_discovery",
       next_topic: stage === "discovery_problem" ? "problem" : stage === "discovery_inputs" ? "input_examples" : "output_expectations",
       next_question: mockDiscoveryPrompt(stage),
       access_gate: {
         granted: true,
         reason: "",
-        demo_access_grant_id: "access-web-demo-shell",
-        grant_type: "shared_demo_token",
-        grant_value_hash: "mock-token-hash",
-        status: "active",
-        expires_at: "",
       },
       web_demo_session: {
-        web_demo_session_id: state.sessionId || "web-demo-shell-session",
-        session_cookie_id: "cookie-web-demo-shell-session",
+        web_demo_session_id: project.sessionId,
+        session_cookie_id: `cookie-${project.sessionId}`,
         status: stage === "downloads_ready" ? "download_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
         active_project_key: projectKey,
       },
       browser_project_pointer: {
-        pointer_id: "browser-pointer-web-demo-shell",
+        pointer_id: `browser-pointer-${project.sessionId}`,
         project_key: projectKey,
         selection_mode: selectionModeFor(action),
         linked_discovery_session_id: "discovery-web-demo-001",
@@ -923,22 +1311,10 @@
         pointer_status: "active",
       },
       status_snapshot: {
-        user_visible_status:
-          stage === "downloads_ready" ? "playground_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
-        user_visible_status_label:
-          stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
-        next_recommended_action:
-          stage === "downloads_ready"
-            ? "start_concept_pack_handoff"
-            : stage === "awaiting_confirmation"
-              ? "confirm_brief"
-              : "submit_turn",
-        next_recommended_action_label:
-          stage === "downloads_ready"
-            ? "Передать brief в фабрику"
-            : stage === "awaiting_confirmation"
-              ? "Проверить и подтвердить brief"
-              : "Ответить на следующий вопрос",
+        user_visible_status: stage === "downloads_ready" ? "playground_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        user_visible_status_label: stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
+        next_recommended_action: stage === "downloads_ready" ? "start_concept_pack_handoff" : stage === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
+        next_recommended_action_label: stage === "downloads_ready" ? "Передать brief в фабрику" : stage === "awaiting_confirmation" ? "Проверить и подтвердить brief" : "Ответить на следующий вопрос",
         brief_version: brief.version || "",
         download_readiness: stage === "downloads_ready" ? "ready" : "pending",
         uploaded_file_count: uploadedFiles.length,
@@ -949,46 +1325,58 @@
       discovery_runtime_state: {
         status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
         next_question: mockDiscoveryPrompt(stage),
-        requirement_brief: brief,
-        discovery_session: {
-          discovery_session_id: "discovery-web-demo-001",
-          project_key: projectKey,
-        },
       },
       ui_projection: {
-        preferred_ui_action:
-          stage === "downloads_ready"
-            ? "request_status"
-            : stage === "awaiting_confirmation"
-              ? "confirm_brief"
-              : "submit_turn",
+        preferred_ui_action: stage === "downloads_ready" ? "request_status" : stage === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
         current_question: mockDiscoveryPrompt(stage),
-        current_topic:
-          stage === "discovery_problem"
-            ? "problem"
-            : stage === "discovery_inputs"
-              ? "input_examples"
-              : stage === "discovery_outputs"
-                ? "expected_outputs"
-                : "",
-        project_title: projectKey,
+        current_topic: stage === "discovery_problem" ? "problem" : stage === "discovery_inputs" ? "input_examples" : stage === "discovery_outputs" ? "expected_outputs" : "",
+        project_title: project.title,
         uploaded_file_count: uploadedFiles.length,
       },
     };
   }
 
-  function applyResponse(response, connectionMode, options = {}) {
+  function buildResumeNotice(response, reason) {
+    const resumeContext = response?.resume_context || {};
+    const summary = normalizeText(resumeContext.summary_text);
+    const currentLabel = normalizeText(resumeContext.current_status_label);
+    const briefVersion = normalizeText(resumeContext.latest_brief_version || response?.status_snapshot?.brief_version);
+    if (reason === "manual_refresh") {
+      return {
+        title: "Сессия обновлена",
+        body: summary || (currentLabel ? `Shell перечитал статус проекта: ${currentLabel}.` : "Shell перечитал актуальное состояние проекта через GET /api/session."),
+        kind: "session_refresh",
+      };
+    }
+    return {
+      title: "Сессия восстановлена",
+      body: summary || (briefVersion ? `Shell восстановил проект и версию brief ${briefVersion} из сохранённого состояния.` : "Shell восстановил проект из сохранённого состояния и перечитал текущий статус."),
+      kind: "session_resume",
+    };
+  }
+
+  function applyResponse(project, response, connectionMode, options = {}) {
     const appendReplyMessages = options.appendReplyMessages !== false;
     const syncReason = normalizeText(options.syncReason);
+
+    if (response?.access_gate && response.access_gate.granted === false) {
+      project.lastResponse = response;
+      project.updatedAt = nowIso();
+      persist();
+      relockAccess(response.access_gate.reason);
+      return;
+    }
+
     state.connectionMode = connectionMode;
-    state.lastResponse = response;
-    state.sessionId = response.web_demo_session?.web_demo_session_id || state.sessionId;
+    project.lastResponse = response;
+    project.sessionId = normalizeText(response.web_demo_session?.web_demo_session_id, project.sessionId);
+    project.updatedAt = nowIso();
 
     const replyMessages = appendReplyMessages ? replyCardsToMessages(response.reply_cards) : [];
     if (replyMessages.length) {
-      state.timeline.push(...replyMessages);
+      project.timeline.push(...replyMessages);
     } else if (appendReplyMessages && response.next_question) {
-      state.timeline.push({
+      project.timeline.push({
         role: "agent",
         kind: "next_question",
         title: "Следующий вопрос",
@@ -997,31 +1385,26 @@
       });
     }
 
-    const preferredAction = response.ui_projection?.preferred_ui_action;
-    updateQuickActions(responseActions(response));
-    if (preferredAction) {
-      setCurrentAction(preferredAction);
-    }
+    maybeAutonameProject(project, project.timeline.find((message) => message.role === "user")?.body || "", response);
+
+    const preferredAction = normalizeText(response.ui_projection?.preferred_ui_action);
+    project.currentAction = preferredAction || ACTION_PRIORITY.find((action) => availableActions(project).includes(action)) || "submit_turn";
 
     const resumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint);
     if (syncReason === "manual_refresh") {
       const notice = buildResumeNotice(response, syncReason);
-      state.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
+      project.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
       if (resumeFingerprint) {
-        state.lastResumeFingerprint = resumeFingerprint;
+        project.lastResumeFingerprint = resumeFingerprint;
       }
-    } else if (syncReason && resumeFingerprint && state.lastResumeFingerprint !== resumeFingerprint) {
+    } else if (syncReason && resumeFingerprint && project.lastResumeFingerprint !== resumeFingerprint) {
       const notice = buildResumeNotice(response, syncReason);
-      state.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
-      state.lastResumeFingerprint = resumeFingerprint;
+      project.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
+      project.lastResumeFingerprint = resumeFingerprint;
     }
 
-    renderConnection();
-    renderStatus();
-    renderTimeline();
-    renderArtifacts();
-    renderAttachmentList();
     persist();
+    renderAll();
 
     const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
     const sourceRequestId = normalizeText(response.web_conversation_envelope?.request_id);
@@ -1031,9 +1414,9 @@
       && response.next_action === "start_concept_pack_handoff"
       && !Array.isArray(response.download_artifacts)
       && sourceRequestId
-      && state.lastAutoFollowupSource !== sourceRequestId
+      && project.lastAutoFollowupSource !== sourceRequestId
     ) {
-      state.lastAutoFollowupSource = sourceRequestId;
+      project.lastAutoFollowupSource = sourceRequestId;
       persist();
       window.setTimeout(() => {
         dispatchTurn("request_status", "", { skipUserMessage: true });
@@ -1042,10 +1425,14 @@
   }
 
   async function dispatchTurn(action, userText, options = {}) {
+    const project = getActiveProject();
+    if (!project) {
+      return;
+    }
     const queuedUploads = uniqueUploads(options.queuedUploads || []);
     const normalizedUserText = normalizeText(userText);
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
-      state.timeline.push({
+      project.timeline.push({
         role: "user",
         kind: action,
         title: ACTION_LABELS[action] || "Сообщение",
@@ -1060,60 +1447,67 @@
         })),
         actions: [],
       });
-      renderTimeline();
+      project.updatedAt = nowIso();
+      renderTimeline(project);
     }
 
-    const payload = buildTurnPayload(action, userText, queuedUploads);
+    const payload = buildTurnPayload(project, action, userText, queuedUploads);
     setBusy(true);
     try {
       const response = await postTurn(payload);
-      applyResponse(response, "live");
+      applyResponse(project, response, "live");
     } catch (_error) {
-      applyResponse(mockAdapterTurn(payload), "mock");
+      applyResponse(project, mockAdapterTurn(project, payload), "mock");
     } finally {
       if (queuedUploads.length) {
-        state.pendingUploads = state.pendingUploads.filter(
+        project.pendingUploads = project.pendingUploads.filter(
           (item) => !queuedUploads.some((queued) => queued.upload_id === item.upload_id),
         );
-        renderAttachmentList();
-        renderStatus();
       }
+      project.draftText = "";
+      renderAll();
       setBusy(false);
     }
   }
 
-  async function refreshSession(options = {}) {
+  async function refreshActiveProject(options = {}) {
+    const project = getActiveProject();
+    if (!project) {
+      return;
+    }
     const syncReason = normalizeText(options.syncReason, "manual_refresh");
     const suppressFailureBanner = Boolean(options.suppressFailureBanner);
-    if (!state.sessionId) {
-      state.timeline.push(
+    if (!project.sessionId) {
+      project.timeline.push(
         buildSystemMessage(
           "Сессия ещё не создана",
-          "Сначала открой проект или отправь первый turn, после этого shell сможет дергать GET /api/session.",
+          "Сначала отправь первый turn, после этого shell сможет дергать GET /api/session.",
           "session_missing",
         ),
       );
-      renderTimeline();
+      project.updatedAt = nowIso();
+      renderTimeline(project);
       persist();
       return;
     }
 
     setBusy(true);
     try {
-      const response = await fetchSession(state.sessionId);
-      applyResponse(response, "live", { appendReplyMessages: false, syncReason });
+      const response = await fetchSession(project.sessionId);
+      applyResponse(project, response, "live", { appendReplyMessages: false, syncReason });
     } catch (_error) {
-      state.connectionMode = state.lastResponse ? state.connectionMode : "mock";
+      state.connectionMode = project.lastResponse ? state.connectionMode : "mock";
       renderConnection();
       if (!suppressFailureBanner) {
-        state.timeline.push(
+        project.timeline.push(
           buildSystemMessage(
             "Live session недоступна",
             "GET /api/session пока не ответил. Shell остаётся в mock/local режиме и не теряет текущее состояние.",
             "session_refresh_failed",
           ),
         );
-        renderTimeline();
+        project.updatedAt = nowIso();
+        renderTimeline(project);
         persist();
       }
     } finally {
@@ -1122,29 +1516,62 @@
   }
 
   async function restoreSessionOnLoad() {
-    if (!state.sessionId) {
+    const project = getActiveProject();
+    if (!state.accessToken || !project?.sessionId) {
       return;
     }
-    await refreshSession({ syncReason: "auto_resume", suppressFailureBanner: true });
+    await refreshActiveProject({ syncReason: "auto_resume", suppressFailureBanner: true });
   }
 
   function handleActionShortcut(action) {
-    if (action === "submit_access_token") {
+    const project = getActiveProject();
+    if (!state.accessToken || action === "submit_access_token") {
       dom.accessTokenInput.focus();
       return;
     }
 
-    if (action === "request_status" || action === "request_brief_review" || action === "confirm_brief") {
-      setCurrentAction(action);
+    if (action === "start_project") {
+      if (!project || hasConversationActivity(project)) {
+        createNewProject({ activate: true });
+        persist();
+        renderAll();
+      }
+      const active = getActiveProject();
+      setProjectAction(active, "start_project");
+      dom.composerInput.focus();
+      return;
+    }
+
+    if (action === "download_artifact") {
+      document.querySelector(".meta-panel")?.setAttribute("open", "open");
+      return;
+    }
+
+    if (["request_status", "request_brief_review", "confirm_brief"].includes(action)) {
+      setProjectAction(project, action);
       dispatchTurn(action, "", { skipUserMessage: true });
       return;
     }
 
-    setCurrentAction(action);
+    setProjectAction(project, action);
     dom.composerInput.focus();
   }
 
   function bindEvents() {
+    dom.newProject.addEventListener("click", () => {
+      createNewProject({ activate: true });
+      persist();
+      renderAll();
+      dom.composerInput.focus();
+    });
+
+    dom.projectMenu.addEventListener("click", () => {
+      const project = getActiveProject();
+      if (project) {
+        promptRenameProject(project.id);
+      }
+    });
+
     dom.quickActions.addEventListener("click", (event) => {
       const target = event.target.closest("[data-ui-action]");
       if (!target) {
@@ -1153,29 +1580,46 @@
       handleActionShortcut(target.dataset.uiAction);
     });
 
+    dom.composerInput.addEventListener("input", () => {
+      const project = getActiveProject();
+      if (!project) {
+        return;
+      }
+      project.draftText = dom.composerInput.value;
+      persist();
+    });
+
     dom.composerForm.addEventListener("submit", (event) => {
       event.preventDefault();
+      const project = getActiveProject();
+      if (!project || !state.accessToken) {
+        dom.accessTokenInput.focus();
+        return;
+      }
       const text = normalizeText(dom.composerInput.value);
-      const queuedUploads = uniqueUploads(state.pendingUploads);
-      if (!text && !queuedUploads.length && !["request_status", "request_brief_review", "confirm_brief"].includes(state.currentAction)) {
+      const queuedUploads = uniqueUploads(project.pendingUploads);
+      const allowWithoutText = ["request_status", "request_brief_review", "confirm_brief"].includes(project.currentAction);
+      if (!text && !queuedUploads.length && !allowWithoutText) {
         dom.composerInput.focus();
         return;
       }
-      dispatchTurn(state.currentAction, text, { queuedUploads });
+      project.draftText = "";
+      dispatchTurn(project.currentAction, text, { queuedUploads });
       dom.composerInput.value = "";
-      if (state.currentAction !== "submit_turn") {
-        setCurrentAction("submit_turn");
+      if (project.currentAction !== "submit_turn") {
+        setProjectAction(project, "submit_turn");
       }
     });
 
     dom.attachmentInput.addEventListener("change", async () => {
+      const project = getActiveProject();
       const selectedFiles = Array.from(dom.attachmentInput.files || []);
       dom.attachmentInput.value = "";
-      if (!selectedFiles.length) {
+      if (!project || !selectedFiles.length) {
         return;
       }
 
-      const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - state.pendingUploads.length);
+      const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - project.pendingUploads.length);
       const acceptedFiles = selectedFiles.slice(0, remainingSlots);
       const skippedCount = Math.max(0, selectedFiles.length - acceptedFiles.length);
       const loadedUploads = [];
@@ -1190,9 +1634,10 @@
       }
 
       if (loadedUploads.length) {
-        state.pendingUploads = uniqueUploads([...state.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
-        renderAttachmentList();
-        renderStatus();
+        project.pendingUploads = uniqueUploads([...project.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
+        project.updatedAt = nowIso();
+        renderAttachmentList(project);
+        renderStatus(project);
         persist();
         dom.composerInput.focus();
       }
@@ -1205,56 +1650,40 @@
         if (failedUploads.length) {
           details.push(`Не удалось прочитать: ${failedUploads.join(", ")}.`);
         }
-        state.timeline.push(
+        project.timeline.push(
           buildSystemMessage(
             "Не все файлы добавлены",
             details.join(" "),
             "upload_warning",
           ),
         );
-        renderTimeline();
+        project.updatedAt = nowIso();
+        renderTimeline(project);
         persist();
       }
     });
 
     dom.accessSubmit.addEventListener("click", () => {
-      state.accessToken = normalizeText(dom.accessTokenInput.value, DEFAULT_ACCESS_TOKEN);
-      dom.accessTokenInput.value = state.accessToken;
-      state.timeline.push(
-        buildSystemMessage(
-          "Демо-доступ сохранён",
-          "Access token записан в shell. Теперь можно открыть проект и отправить первый turn в фабрику.",
-          "access_token_saved",
-        ),
-      );
-      renderTimeline();
-      renderStatus();
-      persist();
+      unlockAccess();
+    });
+
+    dom.accessTokenInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        unlockAccess();
+      }
     });
 
     dom.refreshSession.addEventListener("click", () => {
-      refreshSession({ syncReason: "manual_refresh" });
+      refreshActiveProject({ syncReason: "manual_refresh" });
     });
   }
 
   function init() {
     hydrate();
-    dom.accessTokenInput.value = state.accessToken;
     bindEvents();
-    renderConnection();
-    renderStatus();
-    renderTimeline();
-    renderArtifacts();
-    renderAttachmentList();
-    if (state.lastResponse) {
-      updateQuickActions(responseActions(state.lastResponse));
-      const preferredAction = normalizeText(state.lastResponse.ui_projection?.preferred_ui_action);
-      if (preferredAction) {
-        setCurrentAction(preferredAction);
-      }
-    } else {
-      updateQuickActions(["start_project"]);
-    }
+    dom.accessTokenInput.value = state.accessToken;
+    renderAll();
     dom.root.dataset.mode = "ready";
     void restoreSessionOnLoad();
   }
