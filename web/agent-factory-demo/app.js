@@ -211,10 +211,10 @@
     return {
       role: "agent",
       kind: "initial_shell",
-      title: "Готов к первому проекту",
+      title: "Начни с описания задачи",
       body:
-        "Опиши идею автоматизации как бизнес-пользователь. Shell отрисует ответные карточки, статус и зону артефактов даже до появления полного live backend.",
-      actions: ["start_project", "request_status"],
+        "Напиши, что нужно автоматизировать и для кого. Если примеры лежат в файлах, прикрепи их прямо в поле выше.",
+      actions: ["start_project"],
     };
   }
 
@@ -271,6 +271,23 @@
     dom.sessionBadge.textContent = sessionId ? `Сессия ${sessionId}` : "Сессия ещё не открыта";
   }
 
+  function hasConversationActivity() {
+    const response = state.lastResponse || {};
+    const sessionId = normalizeText(response.web_demo_session?.web_demo_session_id || state.sessionId);
+    const projectKey = normalizeText(response.browser_project_pointer?.project_key);
+    const visibleStatus = normalizeText(response.status || response.status_snapshot?.user_visible_status);
+    if (sessionId || projectKey) {
+      return true;
+    }
+    return ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "reopened", "playground_ready"].includes(visibleStatus);
+  }
+
+  function renderShellStage() {
+    const accessGranted = Boolean(state.lastResponse?.access_gate?.granted);
+    dom.root.dataset.stage = hasConversationActivity() ? "active" : "landing";
+    dom.root.dataset.access = accessGranted ? "granted" : (state.accessToken ? "token_staged" : "gated");
+  }
+
   function renderStatus() {
     const response = state.lastResponse || {};
     const statusSnapshot = response.status_snapshot || {};
@@ -308,6 +325,7 @@
     const shouldShowBanner = !accessGate.granted;
     dom.accessBanner.hidden = !shouldShowBanner;
     renderSessionBadge();
+    renderShellStage();
   }
 
   function renderAttachmentList() {
@@ -1235,7 +1253,7 @@
         setCurrentAction(preferredAction);
       }
     } else {
-      updateQuickActions(["start_project", "submit_turn", "request_status"]);
+      updateQuickActions(["start_project"]);
     }
     dom.root.dataset.mode = "ready";
     void restoreSessionOnLoad();

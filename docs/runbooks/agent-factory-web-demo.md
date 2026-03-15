@@ -26,6 +26,7 @@
 - сохранять session/access/history snapshots под `data/agent-factory/web-demo/`
 - раздавать `index.html`, `app.css`, `app.js` и `/health` через lightweight Python server
 - показывать минималистичный single-column chat-first shell без правой clutter-панели
+- держать `composer` главным фокусом первого экрана, а служебный контекст прятать в secondary disclosure
 - показывать первый live discovery follow-up вопрос в том же browser shell после сырой идеи пользователя
 - возвращать browser-safe `status_update` и `discovery_question` cards без leakage внутренних runtime полей
 - подсказывать shell правильный следующий режим через `ui_projection.preferred_ui_action`
@@ -233,6 +234,14 @@ UI не должен показывать пользователю:
 - repo paths
 - внутренние status codes вроде `ask_next_question`
 - debug payloads и stack traces
+
+### Current landing composition
+
+Browser shell intentionally starts in a `composer-first` layout:
+
+- сначала пользователь видит только краткий заголовок, поле ввода и attach flow
+- `thread-panel` раскрывается только после первого реального turn или resume
+- `Контекст проекта` остаётся в `<details>` и не конкурирует с началом диалога
 
 ### Local validation examples
 

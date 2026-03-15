@@ -13,7 +13,6 @@
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `codex-gpt54-agents-split` | `codex/gpt54-agents-split` | `sibling-worktree` | Needs decision |
 | `moltinger-248-telegram-e2e-default-branch` | `feat/moltinger-248-telegram-e2e-default-branch` | `sibling-worktree` | Needs decision |
-| `moltinger-beads-root-write-guard` | `fix/codex-monitor-ci-diagnostics` | `sibling-worktree` | Needs decision |
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-fix-beads-cleanup-finalize.shuqc7` | `fix/beads-recovery-audit-localization` | `sibling-worktree` | Needs decision |
@@ -70,7 +69,6 @@
 | `feat/moltis-pin-v0-10-18-mainline` | `origin/main` | Needs decision |
 | `feat/moltis-pin-v0-10-18-prod` | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `fix/codex-monitor-ci-diagnostics` | `origin/fix/codex-monitor-ci-diagnostics` | Needs decision |
 | `fix/worktree-topology-registry-single-writer-publish` | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
 | `tmp-merge-023-main-20260314195036` | `origin/main` | Needs decision |
 | `tmp-pr35-fix` | `gone` | Tracking ref is gone; needs decision |
@@ -109,12 +107,9 @@
 | `codex/remote-uat-hardening` | `none` | Needs decision |
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
-| `feat/beads-root-write-guard` | `origin/feat/beads-root-write-guard` | Needs decision |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
-| `fix/beads-resolve-filesystem-fallback` | `origin/fix/beads-resolve-filesystem-fallback` | Needs decision |
-| `fix/beads-resolve-sanitize-git-env` | `origin/fix/beads-resolve-sanitize-git-env` | Needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 
@@ -151,7 +146,6 @@
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `origin/fix/codex-monitor-ci-diagnostics` | Needs decision |
 | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation

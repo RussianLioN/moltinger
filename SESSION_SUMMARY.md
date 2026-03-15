@@ -52,6 +52,14 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-15)
 
+- Applied a second browser UX pass on `024-web-factory-demo-adapter` after direct comparison against Perplexity-style chat-first references: `web/agent-factory-demo/index.html` is now centered around a single dominant composer, the first screen hides the conversation transcript until the project is actually started, and the old dashboard-like status clutter moved into the collapsed `Контекст проекта` section.
+- Rebuilt `web/agent-factory-demo/app.css` for the new composition and added explicit `landing/active` shell state handling in `web/agent-factory-demo/app.js`, so the live shell now behaves like a clean conversational entry surface instead of an operator dashboard from the very first screen.
+- Re-verified the redesigned shell with:
+  - `node --check web/agent-factory-demo/app.js`
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py scripts/agent_factory_common.py`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery|uploads)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff|resume)' --json`
+- Local sandbox still blocks ad-hoc port binding for an extra manual browser preview, and the containerized `e2e_browser` lane can hang in this environment; the product-flow assertions remain covered by the green component/integration slices above.
 - Applied a post-pilot UX hotfix on top of `024-web-factory-demo-adapter` after live user feedback from `https://asc.ainetic.tech`: the browser shell was simplified into a lighter single-column chat-first layout, the distracting right-side surface was removed, and `web/agent-factory-demo/app.css` now uses a much cheaper visual style so typing renders locally without the previous “echo from server” feel.
 - Added direct browser attachment support for discovery in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.js`, `scripts/agent-factory-web-adapter.py`, and `scripts/agent_factory_common.py`: the composer now accepts up to 4 files per turn, safely truncates file reads to `512 KB`, extracts browser-safe excerpts for `txt/csv/json/md/docx`, stores raw bytes only under adapter-owned `data/agent-factory/web-demo/uploads/`, and injects the sanitized file context into the current discovery answer instead of forcing the user to retype examples manually.
 - Added regression coverage for the new attachment path in `tests/component/test_agent_factory_web_uploads.sh`, registered it in `tests/run.sh`, and extended `tests/e2e_browser/agent_factory_web_demo.mjs` toward browser-level attachment validation. The local automation environment still lacks a working Playwright runtime for that node-based harness, so a dedicated follow-up Beads task `molt-x3o` was created to restore browser-e2e coverage.
