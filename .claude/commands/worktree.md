@@ -43,7 +43,7 @@ Treat these as `finish`:
 
 If command is empty (`/worktree`):
 1. Try to detect issue id from recent context or current branch.
-2. If missing, run `./scripts/bd-local.sh ready` and pick the top ready issue.
+2. If missing, run plain `bd ready` and pick the top ready issue.
 3. If multiple equal candidates exist, ask one short clarification.
 4. If one strong candidate exists, continue with `start` automatically.
 
@@ -69,7 +69,7 @@ When the user gives an issue id and slug:
 1. Use the issue-aware template:
    - branch: `feat/<issue-lower>-<slug>`
    - worktree dir: `../<repo>-<issue-short>-<slug>`
-2. If the issue title lookup is needed and `./scripts/bd-local.sh show <ISSUE_ID>` fails because SQLite is readonly/locked/unavailable, retry with `bd show --no-db <ISSUE_ID>` from the canonical root worktree.
+2. If the issue title lookup is needed and `bd show <ISSUE_ID>` fails because SQLite is readonly/locked/unavailable, retry with `bd show --no-db <ISSUE_ID>` from the canonical root worktree.
 
 When the request is clearly Speckit-oriented:
 1. Treat create/start as Speckit-aware if either is true:
@@ -204,7 +204,7 @@ Process:
    - `git -C <canonical-root> pull --rebase`
    - Do not run `git pull --rebase origin main` for this workflow; rely on the configured upstream of `main`.
    - In Codex/App, keep this as its own approval step when escalation is required. Do not bundle it with create/refresh/handoff commands.
-7. If issue id exists and the slug was omitted, derive the slug from the issue title using `./scripts/bd-local.sh show`, with `--no-db` fallback if needed.
+7. If issue id exists and the slug was omitted, derive the slug from the issue title using plain `bd show`, with `bd show --no-db` fallback if needed.
 8. Create or attach the worktree with beads integration:
    - new branch: use the deterministic executor instead of raw `bd worktree create`
      - `scripts/worktree-phase-a.sh create-from-base --canonical-root <canonical-root> --base-ref main --branch <branch> --path <absolute-worktree-path>`
@@ -219,7 +219,7 @@ Process:
    - Do not auto-run `refresh --write-doc` from the invoking branch.
    - If `check` reports `stale`, keep the worktree flow moving and report the exact publish path instead of reconciling the tracked markdown snapshot in Phase A.
    - The publish path must point to an explicit dedicated non-main topology-publish worktree/branch.
-11. If issue id exists: `./scripts/bd-local.sh update <ISSUE_ID> --status in_progress`
+11. If issue id exists: `bd update <ISSUE_ID> --status in_progress`
    - if direct DB access fails in the current environment, retry with `bd update --no-db <ISSUE_ID> --status in_progress`
 12. If the request contains explicit downstream work for the target worktree, extract it as `pending_summary` using the user's wording as closely as possible.
     - Keep it to one sentence.
@@ -308,6 +308,8 @@ Related diagnostics rules:
 
 ## Finish Workflow
 
+Use plain `bd` for ordinary finish flows. The repo-local `bin/bd` shim is the supported contract; do not reintroduce a wrapper-specific finish path.
+
 Inputs:
 - `ISSUE_ID` optional (infer from branch if possible)
 - optional close reason (default: `Done`)
@@ -315,18 +317,19 @@ Inputs:
 Process:
 1. Resolve issue id.
 2. Run quality gate:
-   - `./scripts/bd-local.sh preflight --check`
+   - `bd preflight --check`
    - if unavailable, fallback to project default fast checks.
-3. `./scripts/bd-local.sh sync`
+3. `bd sync`
 4. If working tree has changes:
    - create commit message (short, include issue id)
    - `git add -A && git commit -m "..."`
 5. `git pull --rebase`
-6. `./scripts/bd-local.sh sync`
+6. `bd sync`
 7. `git push -u origin <current-branch>`
 8. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
-   - if stale, report: `Publish the topology snapshot later from a dedicated non-main topology-publish worktree using command-git-topology or scripts/git-topology-registry.sh refresh --write-doc`
-9. `./scripts/bd-local.sh close <ISSUE_ID> --reason "<reason>"`
+   - if stale, report: `Publish the topology snapshot later from a dedicated non-main topology-publish worktree/branch using command-git-topology or scripts/git-topology-registry.sh refresh --write-doc`
+   - Stale topology is informational only for ordinary doctor/finish; do not auto-publish from the invoking branch.
+9. `bd close <ISSUE_ID> --reason "<reason>"`
    - if direct DB access fails in the current environment, retry with `bd close --no-db <ISSUE_ID> --reason "<reason>"`
    - if no issue id can be resolved confidently, print `Issue: n/a` and skip the close step
    - do not invent a follow-up issue or infer an unrelated issue from prose context

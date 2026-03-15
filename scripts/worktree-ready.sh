@@ -343,8 +343,9 @@ infer_issue_id_from_branch_name() {
   local issues_file=""
   local candidate_issue=""
   local normalized_issue=""
-  local best_issue=""
-  local best_normalized=""
+  local matched_issue=""
+  local matched_issue_count=0
+  local seen_matches=":"
 
   if [[ -z "${branch_name}" ]]; then
     printf '\n'
@@ -370,14 +371,24 @@ infer_issue_id_from_branch_name() {
     fi
 
     if [[ "${stripped_branch}" == "${normalized_issue}" || "${stripped_branch}" == "${normalized_issue}"-* ]]; then
-      if [[ -z "${best_normalized}" || "${#normalized_issue}" -gt "${#best_normalized}" ]]; then
-        best_issue="${candidate_issue}"
-        best_normalized="${normalized_issue}"
-      fi
+      case "${seen_matches}" in
+        *:"${candidate_issue}":*)
+          continue
+          ;;
+      esac
+
+      seen_matches="${seen_matches}${candidate_issue}:"
+      matched_issue_count=$((matched_issue_count + 1))
+      matched_issue="${candidate_issue}"
     fi
   done < <(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "${issues_file}")
 
-  printf '%s\n' "${best_issue}"
+  if [[ "${matched_issue_count}" -eq 1 ]]; then
+    printf '%s\n' "${matched_issue}"
+    return 0
+  fi
+
+  printf '\n'
 }
 
 resolve_report_issue_id() {
