@@ -151,7 +151,6 @@
 | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
-| `origin/fix/beads-resolve-filesystem-fallback` | Needs decision |
 | `origin/fix/codex-monitor-ci-diagnostics` | Needs decision |
 | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
 
