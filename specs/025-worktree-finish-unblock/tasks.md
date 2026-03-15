@@ -47,9 +47,9 @@
 - [x] T011 Run `bash tests/unit/test_worktree_ready.sh`
 - [x] T012 Run `bash tests/static/test_beads_worktree_ownership.sh`
 - [x] T013 Run `make codex-check`
-- [ ] T014 Commit and push branch `025-worktree-finish-unblock`
-- [ ] T015 Open a PR for `025-worktree-finish-unblock`
-- [ ] T016 Review GitHub Actions logs for the PR and fix failures until all checks are green
+- [x] T014 Commit and push branch `025-worktree-finish-unblock`
+- [x] T015 Open a PR for `025-worktree-finish-unblock`
+- [x] T016 Review GitHub Actions logs for the PR and fix failures until all checks are green
 
 ---
 

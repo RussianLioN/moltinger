@@ -2,7 +2,7 @@
 
 **Feature Branch**: `025-worktree-finish-unblock`  
 **Created**: 2026-03-15  
-**Status**: In Progress  
+**Status**: Ready for Review  
 **Input**: User description: "Безопасно разблокировать ordinary `command-worktree finish` без регрессии local Beads ownership и без auto-publish topology."
 
 ## User Scenarios & Testing *(mandatory)*
