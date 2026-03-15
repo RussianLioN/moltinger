@@ -1,5 +1,5 @@
 ---
-description: Smart worktree workflow with one-shot start/attach/doctor flows for parallel development
+description: Smart worktree workflow with one-shot start/attach/doctor/finish flows for parallel development
 argument-hint: "[start|attach|doctor|finish|create|remove|list|cleanup] [issue-or-name] [optional text]"
 ---
 
@@ -93,6 +93,7 @@ scripts/worktree-ready.sh plan --slug <slug> [--issue <id>] --speckit
 scripts/worktree-ready.sh create --branch <branch> --path <path> --handoff manual
 scripts/worktree-ready.sh attach --branch <existing-branch> --handoff manual
 scripts/worktree-ready.sh doctor --branch <branch-or-path>
+scripts/worktree-ready.sh finish --branch <branch-or-path>
 ```
 
 Helper responsibilities:
@@ -101,6 +102,7 @@ Helper responsibilities:
 - exact worktree/branch detection
 - similar-name discovery
 - readiness status and next-step generation
+- conservative ordinary finish preflight and skip-close behavior when issue resolution is ambiguous
 - honest environment and handoff reporting
 - machine-readable handoff contract for boundary-safe orchestration
 
@@ -110,6 +112,12 @@ Canonical readiness vocabulary:
 - `ready_for_codex`
 - `drift_detected`
 - `action_required`
+
+Canonical finish vocabulary:
+- `finish_ready`
+- `blocked_guard_drift`
+- `blocked_missing_branch`
+- `blocked_action_required`
 
 Canonical handoff final states:
 - `handoff_ready`
@@ -315,25 +323,26 @@ Inputs:
 - optional close reason (default: `Done`)
 
 Process:
-1. Resolve issue id.
-2. Run quality gate:
+1. If the helper is available, run `scripts/worktree-ready.sh finish --branch <branch>` or `scripts/worktree-ready.sh finish --path <absolute-path>` and treat its `Issue`, `Topology`, `Close`, and `Next` lines as authoritative ordinary-flow preflight.
+2. Resolve issue id.
+3. Run quality gate:
    - `bd preflight --check`
    - if unavailable, fallback to project default fast checks.
-3. `bd sync`
-4. If working tree has changes:
+4. `bd sync`
+5. If working tree has changes:
    - create commit message (short, include issue id)
    - `git add -A && git commit -m "..."`
-5. `git pull --rebase`
-6. `bd sync`
-7. `git push -u origin <current-branch>`
-8. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
+6. `git pull --rebase`
+7. `bd sync`
+8. `git push -u origin <current-branch>`
+9. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
    - if stale, report: `Publish the topology snapshot later from a dedicated non-main topology-publish worktree/branch using command-git-topology or scripts/git-topology-registry.sh refresh --write-doc`
    - Stale topology is informational only for ordinary doctor/finish; do not auto-publish from the invoking branch.
-9. `bd close <ISSUE_ID> --reason "<reason>"`
+10. `bd close <ISSUE_ID> --reason "<reason>"`
    - if direct DB access fails in the current environment, retry with `bd close --no-db <ISSUE_ID> --reason "<reason>"`
    - if no issue id can be resolved confidently, print `Issue: n/a` and skip the close step
    - do not invent a follow-up issue or infer an unrelated issue from prose context
-10. Print final status including push result and topology status.
+11. Print final status including push result and topology status.
 
 Do not auto-delete branch/worktree in `finish` unless user explicitly asks `cleanup`.
 
@@ -393,6 +402,24 @@ Next:
   2. <second exact step if needed>
 ```
 
+For ordinary `finish`, the helper may instead render:
+
+```text
+Worktree: <absolute-path>
+Preview: <path-preview>
+Branch: <branch-name>
+Issue: <id or n/a>
+Status: <finish_ready|drift_detected|action_required>
+Phase: finish
+Boundary: stop_before_finish
+Final State: <finish_ready|blocked_*>
+Close: <exact bd close command or skip>
+Repair Command: <exact repair command when present>
+Next:
+  1. <first exact step>
+  2. <second exact step if needed>
+```
+
 For manual handoff, also render:
 
 ```bash
@@ -427,7 +454,9 @@ Phase A is complete. Do not repeat worktree setup in the originating session.
 
 - Do not treat the workflow as complete until the final reply includes a readiness status from the canonical helper vocabulary.
 - For `start`, `create`, and `attach`, do not treat the workflow as complete until the final reply includes a handoff boundary and final state from the helper contract.
+- For ordinary `finish`, if the helper is available, do not treat the workflow as complete until the final reply includes the helper's `Close:` line and finish boundary/final state.
 - If the helper returns `ready_for_codex`, keep the response short and provide the direct launch command.
+- If the helper returns `finish_ready`, follow the helper's exact next-step commands and keep `Issue: n/a` as a hard skip-close boundary.
 - If the helper returns `needs_env_approval`, the response must show `direnv allow` before any Codex launch step.
 - If the helper returns `drift_detected` or `action_required`, the response must include the concrete corrective next step instead of a generic success message.
 - Do not downgrade `ready_for_codex` or `needs_env_approval` back to a vague `created` summary in prose.

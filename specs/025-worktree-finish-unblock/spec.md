@@ -2,7 +2,7 @@
 
 **Feature Branch**: `025-worktree-finish-unblock`  
 **Created**: 2026-03-15  
-**Status**: Draft  
+**Status**: In Progress  
 **Input**: User description: "Безопасно разблокировать ordinary `command-worktree finish` без регрессии local Beads ownership и без auto-publish topology."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -13,13 +13,13 @@ As a maintainer finishing or diagnosing an ordinary worktree, I need the branch-
 
 **Why this priority**: A false-positive issue resolution can close the wrong tracking item and is more damaging than skipping close with `Issue: n/a`.
 
-**Independent Test**: Can be tested by running the helper and targeted shell tests against ambiguous branch names, local Beads ownership, and ordinary doctor output.
+**Independent Test**: Can be tested by running the helper and targeted shell tests against ambiguous branch names, local Beads ownership, and ordinary doctor/finish output.
 
 **Acceptance Scenarios**:
 
-1. **Given** a branch name that matches more than one issue id prefix, **When** ordinary worktree readiness resolves the issue, **Then** the report prints `Issue: n/a`.
+1. **Given** a branch name that matches more than one issue id prefix, **When** ordinary finish or readiness resolves the issue, **Then** the report prints `Issue: n/a`.
 2. **Given** a dedicated worktree already reporting `beads_state=local`, **When** ordinary doctor inspects it, **Then** the helper keeps the worktree ready and does not route to `beads-worktree-localize.sh`.
-3. **Given** topology registry status is stale, **When** ordinary doctor runs, **Then** the result stays actionable with a deferred publish warning instead of a blocker or auto-publish step.
+3. **Given** topology registry status is stale, **When** ordinary doctor or finish runs, **Then** the result stays actionable with a deferred publish warning instead of a blocker or auto-publish step.
 
 ---
 
@@ -51,11 +51,12 @@ As a maintainer using the documented `command-worktree finish` flow, I need the 
 - **FR-001**: Ordinary worktree readiness MUST treat branch-to-issue resolution as confident only when exactly one Beads issue id matches the normalized branch prefix.
 - **FR-002**: Ordinary worktree readiness MUST emit `Issue: n/a` when branch-to-issue resolution is ambiguous or absent.
 - **FR-003**: Ordinary doctor MUST preserve `beads_state=local` as a ready local-ownership state and MUST NOT route that state into `beads-worktree-localize.sh`.
-- **FR-004**: Ordinary doctor MUST treat stale topology as a warning with deferred publication guidance, not as a blocker and not as a trigger for automatic topology publication.
-- **FR-005**: The documented ordinary `command-worktree finish` contract MUST use plain `bd` commands rather than `bd-local.sh`.
-- **FR-006**: The documented ordinary `command-worktree finish` contract MUST explicitly skip `bd close` when the issue id cannot be resolved confidently and the report shows `Issue: n/a`.
-- **FR-007**: The documented ordinary `command-worktree` contract MUST state that topology publication happens only through a dedicated non-main publish path, never as an automatic side effect of ordinary `doctor` or `finish`.
-- **FR-008**: The implementation diff MUST stay limited to `scripts/worktree-ready.sh`, `.claude/commands/worktree.md`, `tests/unit/test_worktree_ready.sh`, `tests/static/test_beads_worktree_ownership.sh`, and `specs/025-worktree-finish-unblock/*`.
+- **FR-004**: Ordinary doctor and ordinary finish MUST treat stale topology as a warning with deferred publication guidance, not as a blocker and not as a trigger for automatic topology publication.
+- **FR-005**: `scripts/worktree-ready.sh` MUST expose an ordinary `finish` mode that reports the resolved branch/worktree, conservative issue result, and exact next steps without auto-publishing topology from the invoking branch.
+- **FR-006**: The documented ordinary `command-worktree finish` contract MUST use plain `bd` commands rather than `bd-local.sh`.
+- **FR-007**: The documented ordinary `command-worktree finish` contract MUST explicitly skip `bd close` when the issue id cannot be resolved confidently and the report shows `Issue: n/a`.
+- **FR-008**: The documented ordinary `command-worktree` contract MUST state that topology publication happens only through a dedicated non-main publish path, never as an automatic side effect of ordinary `doctor` or `finish`.
+- **FR-009**: The implementation diff MUST stay limited to `scripts/worktree-ready.sh`, `.claude/commands/worktree.md`, `tests/unit/test_worktree_ready.sh`, `tests/static/test_beads_worktree_ownership.sh`, and `specs/025-worktree-finish-unblock/*`.
 
 ### Key Entities
 
@@ -67,7 +68,7 @@ As a maintainer using the documented `command-worktree finish` flow, I need the 
 
 ### Measurable Outcomes
 
-- **SC-001**: `tests/unit/test_worktree_ready.sh` passes with explicit coverage for ambiguous branch-to-issue mapping, local Beads ownership, and stale topology in ordinary doctor flow.
+- **SC-001**: `tests/unit/test_worktree_ready.sh` passes with explicit coverage for ambiguous branch-to-issue mapping, local Beads ownership, and stale topology in ordinary doctor/finish flows.
 - **SC-002**: `tests/static/test_beads_worktree_ownership.sh` passes with guards proving ordinary worktree/finish documentation does not reintroduce `bd-local.sh` or auto topology publication.
 - **SC-003**: If `.claude/commands/worktree.md` changes, `make codex-check` passes without requiring edits outside the approved scope.
 - **SC-004**: The final branch is pushed, a PR is opened, GitHub Actions logs are reviewed, and all PR checks are green.

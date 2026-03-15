@@ -25,6 +25,8 @@
 - [x] T005 [US1] Add ambiguous branch-mapping coverage with `Issue: n/a` assertions in `tests/unit/test_worktree_ready.sh`
 - [x] T006 [US1] Add regression coverage proving `beads_state=local` does not route to `./scripts/beads-worktree-localize.sh --path .` in `tests/unit/test_worktree_ready.sh`
 - [x] T007 [US1] Add regression coverage proving stale topology in ordinary doctor remains a warning/deferred publish path in `tests/unit/test_worktree_ready.sh`
+- [x] T007a [US1] Add executable ordinary `finish` mode in `scripts/worktree-ready.sh` with conservative `Issue: n/a` and deferred topology publication
+- [x] T007b [US1] Add ordinary `finish` coverage for ambiguous issue mapping and stale topology in `tests/unit/test_worktree_ready.sh`
 
 ---
 
@@ -45,9 +47,9 @@
 - [x] T011 Run `bash tests/unit/test_worktree_ready.sh`
 - [x] T012 Run `bash tests/static/test_beads_worktree_ownership.sh`
 - [x] T013 Run `make codex-check`
-- [x] T014 Commit and push branch `025-worktree-finish-unblock`
-- [x] T015 Open a PR for `025-worktree-finish-unblock`
-- [x] T016 Review GitHub Actions logs for the PR and fix failures until all checks are green
+- [ ] T014 Commit and push branch `025-worktree-finish-unblock`
+- [ ] T015 Open a PR for `025-worktree-finish-unblock`
+- [ ] T016 Review GitHub Actions logs for the PR and fix failures until all checks are green
 
 ---
 
@@ -61,6 +63,6 @@
 ## Implementation Strategy
 
 1. Finish the constrained Speckit package for the current branch.
-2. Patch the helper and targeted tests for safe issue resolution and stale-topology handling.
+2. Patch the helper and targeted tests for safe issue resolution, executable ordinary `finish`, and stale-topology handling.
 3. Patch the command contract and static guards for plain `bd` and no auto publish.
 4. Run local quality gates, then open the PR and drive Actions to green.

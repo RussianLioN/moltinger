@@ -5,7 +5,7 @@
 
 ## Summary
 
-Harden the ordinary worktree finish/readiness contract by making helper issue resolution conservative, preserving local Beads ownership behavior, and aligning `command-worktree` documentation to plain `bd` plus deferred topology publication only through the dedicated publish path.
+Harden the ordinary worktree finish/readiness contract by making helper issue resolution conservative, adding an executable helper `finish` mode, preserving local Beads ownership behavior, and aligning `command-worktree` documentation to plain `bd` plus deferred topology publication only through the dedicated publish path.
 
 ## Technical Context
 
@@ -64,22 +64,27 @@ tests/static/
    - If more than one normalized issue id matches a branch prefix, resolve to empty and surface `Issue: n/a`.
    - Preserve confident inference when exactly one issue id matches.
 
-2. **Local Beads ownership**
+2. **Finish helper contract**
+   - Add an ordinary `finish` mode to `scripts/worktree-ready.sh`.
+   - Keep the helper non-destructive: it should prepare finish context and exact next steps, not auto-run close or topology publication.
+   - Make `Issue: n/a` authoritative for skip-close behavior and keep stale topology informational only.
+
+3. **Local Beads ownership**
    - Keep `beads_state=local` as a ready state.
    - Add regression coverage proving ordinary doctor does not suggest `beads-worktree-localize.sh` for local ownership.
 
-3. **Stale topology**
+4. **Stale topology**
    - Keep helper behavior non-blocking for `status=stale`.
-   - Add explicit regression coverage that ordinary doctor remains actionable and only defers publication to the dedicated publish path.
+   - Add explicit regression coverage that ordinary doctor and ordinary finish remain actionable and only defer publication to the dedicated publish path.
    - Align `command-worktree` finish/doctor prose with the same deferred-publication contract.
 
-4. **Plain `bd` documentation**
+5. **Plain `bd` documentation**
    - Remove `bd-local.sh` from the ordinary `command-worktree` contract and use plain `bd` with existing `--no-db` fallbacks.
    - Keep finish behavior conservative: `Issue: n/a` means skip `bd close`.
 
 ## Verification Plan
 
-1. Update/expand the targeted unit tests in `tests/unit/test_worktree_ready.sh`.
+1. Update/expand the targeted unit tests in `tests/unit/test_worktree_ready.sh`, including ordinary `finish` coverage.
 2. Update/expand the static contract guards in `tests/static/test_beads_worktree_ownership.sh`.
 3. Run:
    - `bash tests/unit/test_worktree_ready.sh`

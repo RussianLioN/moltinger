@@ -135,6 +135,16 @@ run_static_beads_worktree_ownership_tests() {
         test_fail "Ordinary finish contract must defer topology publication to the dedicated publish path instead of promising auto publication"
     fi
 
+    test_start "static_worktree_helper_integration_includes_finish_mode"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'scripts/worktree-ready\.sh finish --branch <branch-or-path>' "$WORKTREE_COMMAND" && \
+       rg -q 'Canonical finish vocabulary:' "$WORKTREE_COMMAND" && \
+       rg -q 'Close: <exact bd close command or skip>' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Worktree helper integration must advertise the finish helper contract explicitly"
+    fi
+
     generate_report
 }
 
