@@ -21,27 +21,63 @@ EOF
 
 extract_image_ref_from_file() {
     local file="$1"
-    local image_ref=""
+    local line=""
 
-    image_ref="$(sed -nE 's/^[[:space:]]*image:[[:space:]]*(ghcr\.io\/moltis-org\/moltis:[^[:space:]]+).*/\1/p' "$file" | head -1)"
-    if [[ -z "$image_ref" ]]; then
+    if [[ ! -f "$file" ]]; then
+        echo "Compose file not found: $file" >&2
+        return 1
+    fi
+
+    line="$(grep -E '^[[:space:]]*image:[[:space:]]*["'\'']?ghcr\.io/moltis-org/moltis:' "$file" | head -n 1 || true)"
+    line="${line#*image:}"
+    line="$(printf '%s\n' "$line" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//; s/^["'\'']//; s/["'\'']$//')"
+
+    if [[ -z "$line" ]]; then
         echo "No Moltis image reference found in $file" >&2
         return 1
     fi
 
-    printf '%s\n' "$image_ref"
+    printf '%s\n' "$line"
+}
+
+normalize_version_from_image_ref() {
+    local image_ref="$1"
+    local suffix="${image_ref#${MOLTIS_IMAGE_PREFIX}}"
+
+    if [[ "$image_ref" != "${MOLTIS_IMAGE_PREFIX}"* ]]; then
+        echo "Unsupported Moltis image reference: $image_ref" >&2
+        return 1
+    fi
+
+    if [[ "$suffix" =~ ^\$\{MOLTIS_VERSION:-([^}]+)\}$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    if [[ "$suffix" =~ ^\$\{MOLTIS_VERSION-([^}]+)\}$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    if [[ "$suffix" == '${MOLTIS_VERSION}' || "$suffix" == '$MOLTIS_VERSION' ]]; then
+        echo "Moltis image must include an explicit tag or a defaulted MOLTIS_VERSION expression" >&2
+        return 1
+    fi
+
+    if [[ -z "$suffix" ]]; then
+        echo "Tracked Moltis version is empty" >&2
+        return 1
+    fi
+
+    printf '%s\n' "$suffix"
 }
 
 normalize_image_ref() {
     local image_ref="$1"
-    local suffix="${image_ref#${MOLTIS_IMAGE_PREFIX}}"
+    local version=""
 
-    if [[ "$suffix" =~ ^\$\{MOLTIS_VERSION:-([^}]+)\}$ ]]; then
-        printf '%s%s\n' "$MOLTIS_IMAGE_PREFIX" "${BASH_REMATCH[1]}"
-        return 0
-    fi
-
-    printf '%s\n' "$image_ref"
+    version="$(normalize_version_from_image_ref "$image_ref")"
+    printf '%s%s\n' "$MOLTIS_IMAGE_PREFIX" "$version"
 }
 
 tracked_moltis_image_ref() {

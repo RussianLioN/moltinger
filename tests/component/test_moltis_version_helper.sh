@@ -9,12 +9,12 @@ MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 
 write_compose_fixture() {
     local path="$1"
-    local image_ref="$2"
+    local image_line="$2"
 
     cat > "$path" <<EOF
 services:
   moltis:
-    image: ${image_ref}
+    image: ${image_line}
 EOF
 }
 
@@ -65,6 +65,36 @@ run_component_moltis_version_helper_tests() {
         test_pass
     else
         test_fail "Helper should normalize and validate a pinned release-tag contract from compose files"
+    fi
+
+    test_start "component_moltis_version_helper_supports_quoted_comment_default_syntax"
+    local quoted_main quoted_prod quoted_version quoted_image
+    quoted_main="${project_dir}/docker-compose.yml"
+    quoted_prod="${project_dir}/docker-compose.prod.yml"
+    write_compose_fixture "$quoted_main" '"ghcr.io/moltis-org/moltis:${MOLTIS_VERSION-v0.10.18}" # pinned via default'
+    write_compose_fixture "$quoted_prod" "'ghcr.io/moltis-org/moltis:v0.10.18' # explicit prod image"
+
+    quoted_version="$("$helper_copy" version)"
+    quoted_image="$("$helper_copy" image)"
+
+    if [[ "$quoted_version" == "v0.10.18" ]] && \
+       [[ "$quoted_image" == "ghcr.io/moltis-org/moltis:v0.10.18" ]]; then
+        test_pass
+    else
+        test_fail "Helper should normalize quoted compose image lines, comments, and ${MOLTIS_VERSION-...} defaults"
+    fi
+
+    test_start "component_moltis_version_helper_rejects_non_defaulted_variable"
+    local variable_main variable_prod
+    variable_main="${project_dir}/docker-compose.yml"
+    variable_prod="${project_dir}/docker-compose.prod.yml"
+    write_compose_fixture "$variable_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION}'
+    write_compose_fixture "$variable_prod" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION}'
+
+    if "$helper_copy" version >/dev/null 2>&1; then
+        test_fail "Helper must reject non-defaulted MOLTIS_VERSION expressions"
+    else
+        test_pass
     fi
 
     test_start "component_moltis_version_helper_rejects_compose_mismatch"
