@@ -121,8 +121,8 @@
             <section class="composer-dock">
               <form class="composer" data-role="composer-form">
                 <div class="composer__lead">
-                  <span class="composer__lead-label" data-role="composer-lead-label">Первый вопрос</span>
-                  <strong class="composer__question" data-role="composer-mode">Что нужно автоматизировать?</strong>
+                  <span class="composer__lead-label" data-role="composer-lead-label">Сообщение</span>
+                  <strong class="composer__question" data-role="composer-mode">Ответ агенту</strong>
                 </div>
                 <p class="composer__example" data-role="composer-helper-example">
                   Например: автоматизировать подготовку one-page summary по клиенту для кредитного
@@ -137,10 +137,11 @@
                 ></textarea>
 
                 <div class="attachment-list" data-role="attachment-list" hidden></div>
+                <p class="composer__notice" data-role="composer-notice" hidden></p>
 
                 <div class="composer__footer">
                   <div class="composer__tools">
-                    <label class="attach-button" for="fileInput">
+                    <label class="attach-button" for="fileInput" aria-label="Прикрепить файлы">
                       <input
                         id="fileInput"
                         type="file"
@@ -148,22 +149,19 @@
                         hidden
                         data-role="attachment-input"
                       >
-                      Прикрепить файлы
+                      +
                     </label>
-                    <p class="composer__tool-hint">
-                      Поддерживаются <code>txt</code>, <code>csv</code>, <code>json</code>,
-                      <code>md</code>, <code>docx</code>.
-                    </p>
                   </div>
-                  <button class="button button--primary" id="sendBtn" type="submit" data-role="composer-submit">
-                    Отправить
+                  <button
+                    class="composer-send"
+                    id="sendBtn"
+                    type="submit"
+                    data-role="composer-submit"
+                    aria-label="Отправить сообщение"
+                  >
+                    ↑
                   </button>
                 </div>
-
-                <p class="composer__hint">
-                  Текст отображается локально сразу. В фабрику сообщение уходит только после
-                  отправки.
-                </p>
               </form>
             </section>
           </main>

@@ -151,8 +151,6 @@ code {
 .access-banner__copy p,
 .access-banner__note,
 .composer__example,
-.composer__tool-hint,
-.composer__hint,
 .message__body,
 .artifact-card__body,
 .panel-card__body,
@@ -584,21 +582,26 @@ code {
 }
 
 .composer__tools {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .attach-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  padding: 0 14px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   cursor: pointer;
+  font-size: 1.8rem;
+  font-weight: 300;
+  line-height: 1;
 }
 
 .attachment-list {
@@ -635,6 +638,57 @@ code {
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
+}
+
+.composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 52px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.14s ease, opacity 0.14s ease;
+}
+
+.composer-send:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.composer-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.composer-send[data-mode="stop"] {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-strong);
+  font-size: 1.25rem;
+  border-color: var(--border-strong);
+}
+
+.composer__notice {
+  min-height: 1.2rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.composer__notice[data-tone="warning"] {
+  color: var(--attention);
+}
+
+.composer__notice[data-tone="error"] {
+  color: #f6a5a5;
+}
+
+.composer__notice[data-tone="info"] {
+  color: var(--muted-strong);
 }
 
 .side-panel {
@@ -748,6 +802,12 @@ code {
   .composer__footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .composer-send {
+    width: 100%;
+    border-radius: 999px;
+    min-height: 46px;
   }
 
   .landing-panel {

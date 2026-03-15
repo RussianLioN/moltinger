@@ -5,6 +5,35 @@
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
+  const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
+    "txt",
+    "md",
+    "csv",
+    "tsv",
+    "json",
+    "xml",
+    "yaml",
+    "yml",
+    "log",
+    "pdf",
+    "doc",
+    "docx",
+    "odt",
+    "xls",
+    "xlsx",
+    "ods",
+    "ppt",
+    "pptx",
+    "odp",
+    "rtf",
+    "html",
+    "htm",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+  ]);
   const ACTION_LABELS = {
     start_project: "Новый проект",
     submit_turn: "Ответить",
@@ -66,6 +95,7 @@
     composerMode: document.querySelector('[data-role="composer-mode"]'),
     composerInput: document.querySelector('[data-role="composer-input"]'),
     composerSubmit: document.querySelector('[data-role="composer-submit"]'),
+    composerNotice: document.querySelector('[data-role="composer-notice"]'),
     attachmentInput: document.querySelector('[data-role="attachment-input"]'),
     attachmentList: document.querySelector('[data-role="attachment-list"]'),
     quickActions: document.querySelector('[data-role="quick-actions"]'),
@@ -91,6 +121,10 @@
     activeProjectId: "",
     projects: [],
     gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
+    awaitingResponse: false,
+    activeAbortController: null,
+    activeRequest: null,
+    composerNotice: { text: "", tone: "info" },
   };
 
   function safeJsonParse(value, fallback) {
@@ -188,6 +222,39 @@
       truncated,
       content_base64: bufferToBase64(buffer),
     };
+  }
+
+  function isSupportedUploadFile(file) {
+    const name = normalizeText(file?.name);
+    const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+    if (SUPPORTED_UPLOAD_EXTENSIONS.has(ext)) {
+      return true;
+    }
+    const type = normalizeText(file?.type).toLowerCase();
+    if (!type) {
+      return false;
+    }
+    if (type.startsWith("text/") || type.startsWith("image/")) {
+      return true;
+    }
+    return type === "application/pdf"
+      || type.includes("word")
+      || type.includes("excel")
+      || type.includes("spreadsheet")
+      || type.includes("presentation")
+      || type.includes("officedocument")
+      || type.includes("rtf");
+  }
+
+  function showComposerNotice(text, tone = "info") {
+    state.composerNotice = {
+      text: normalizeText(text),
+      tone: normalizeText(tone, "info"),
+    };
+  }
+
+  function clearComposerNotice() {
+    state.composerNotice = { text: "", tone: "info" };
   }
 
   function shorten(value, limit = 96) {
@@ -351,7 +418,9 @@
 
   function setBusy(isBusy) {
     dom.root.dataset.mode = isBusy ? "busy" : "ready";
-    dom.composerSubmit.disabled = isBusy;
+    dom.composerSubmit.disabled = isBusy && !state.awaitingResponse;
+    dom.composerInput.disabled = state.awaitingResponse;
+    dom.attachmentInput.disabled = state.awaitingResponse;
     dom.refreshSession.disabled = isBusy;
     dom.accessSubmit.disabled = isBusy;
     dom.projectMenu.disabled = isBusy;
@@ -415,33 +484,23 @@
     if (!state.accessToken) {
       return "Демо-доступ";
     }
-    const question = currentQuestion(project);
-    const action = project?.currentAction || "start_project";
-    if (!hasConversationActivity(project)) {
-      return "Первый вопрос";
+    if (state.awaitingResponse) {
+      return "Агент отвечает";
     }
-    if (question && ["submit_turn", "request_brief_correction", "reopen_brief"].includes(action)) {
-      return "Текущий вопрос";
-    }
-    if (question && action === "confirm_brief") {
-      return "Что проверить";
-    }
-    return "Следующий шаг";
+    return "Сообщение";
   }
 
   function modeTextFor(project) {
     if (!state.accessToken) {
       return "Открыть demo";
     }
+    if (state.awaitingResponse) {
+      return "Нажми ■ чтобы остановить";
+    }
     if (!hasConversationActivity(project)) {
-      return "Что нужно автоматизировать?";
+      return "Опиши задачу";
     }
-    const question = currentQuestion(project);
-    const action = project?.currentAction || "start_project";
-    if (question && ["submit_turn", "request_brief_correction", "reopen_brief", "confirm_brief"].includes(action)) {
-      return question;
-    }
-    return ACTION_LABELS[action] || action;
+    return "Ответ агенту";
   }
 
   function placeholderFor(project) {
@@ -559,7 +618,6 @@
 
   function projectSubtitle(project) {
     const status = currentStatus(project);
-    const question = currentQuestion(project);
     if (!hasConversationActivity(project)) {
       return "Опиши задачу простыми словами. После первого содержательного ответа проект сам получит рабочее имя.";
     }
@@ -569,10 +627,7 @@
     if (status === "playground_ready" || status === "confirmed") {
       return "Материалы готовы. Открой правую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
-    if (question) {
-      return shorten(`Сейчас агент уточняет контекст проекта: ${question}`, 136);
-    }
-    return "Можно продолжать диалог и при необходимости прикладывать файлы с примерами.";
+    return "Продолжай диалог с агентом и при необходимости прикладывай файлы с примерами.";
   }
 
   function responseActions(response) {
@@ -1036,7 +1091,12 @@
     dom.composerMode.textContent = modeTextFor(project);
     dom.composerHelperExample.textContent = helperExampleFor(project);
     dom.composerInput.placeholder = placeholderFor(project);
-    dom.composerSubmit.textContent = submitLabelFor(project);
+    dom.composerSubmit.textContent = state.awaitingResponse ? "■" : "↑";
+    dom.composerSubmit.dataset.mode = state.awaitingResponse ? "stop" : "send";
+    dom.composerSubmit.setAttribute("aria-label", state.awaitingResponse ? "Остановить ответ" : "Отправить сообщение");
+    dom.composerNotice.textContent = normalizeText(state.composerNotice?.text);
+    dom.composerNotice.hidden = !dom.composerNotice.textContent;
+    dom.composerNotice.dataset.tone = normalizeText(state.composerNotice?.tone, "info");
     dom.composerInput.value = normalizeText(project?.draftText);
   }
 
@@ -1071,6 +1131,35 @@
     return Boolean(text && !/\s/.test(text) && /-/.test(text));
   }
 
+  function titleCaseFromWords(words, maxWords = 5) {
+    const selected = words.slice(0, maxWords);
+    if (!selected.length) {
+      return "";
+    }
+    const text = selected.join(" ").replace(/\s+/g, " ").trim();
+    if (!text) {
+      return "";
+    }
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function semanticTitleFromText(text) {
+    const source = normalizeText(text).toLowerCase();
+    if (!source) {
+      return "";
+    }
+    if (/кредит/.test(source) && /(summary|one-page|саммери|one page)/.test(source)) {
+      return "Кредитный one-page summary";
+    }
+    if (/кредит/.test(source) && /(заявк|согласован|комитет)/.test(source)) {
+      return "Согласование кредитных заявок";
+    }
+    if (/(счет|счёт|инвойс|invoice)/.test(source) && /(согласован|маршрут|approval)/.test(source)) {
+      return "Маршрутизация согласования счетов";
+    }
+    return "";
+  }
+
   function prettifyTitle(text) {
     const normalized = normalizeText(text)
       .replace(/\s+/g, " ")
@@ -1082,11 +1171,25 @@
     const cleaned = firstSentence
       .replace(/^нужен агент[,]?\s*/i, "")
       .replace(/^который\s+/i, "")
+      .replace(/^надо\s+/i, "")
+      .replace(/^нужно\s+/i, "")
       .replace(/^хочу автоматизировать\s*/i, "")
       .replace(/^нужно автоматизировать\s*/i, "")
-      .replace(/^нужна автоматизация\s*/i, "");
-    const compact = shorten(cleaned || firstSentence, 58);
-    return compact.charAt(0).toUpperCase() + compact.slice(1);
+      .replace(/^нужна автоматизация\s*/i, "")
+      .replace(/^автоматизировать\s+/i, "")
+      .replace(/^ускорить\s+/i, "")
+      .replace(/^сделать\s+/i, "")
+      .replace(/^чтобы\s+/i, "");
+    const semantic = semanticTitleFromText(cleaned || firstSentence);
+    if (semantic) {
+      return semantic;
+    }
+    const words = (cleaned || firstSentence)
+      .replace(/[,:;()"'`«»]+/g, " ")
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 3);
+    return titleCaseFromWords(words, 5);
   }
 
   function maybeAutonameProject(project, userText, response) {
@@ -1094,11 +1197,13 @@
       return;
     }
     const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
-    const candidate = !looksLikeSlug(uiTitle) ? prettifyTitle(uiTitle) : prettifyTitle(userText);
+    const uiCandidate = !looksLikeSlug(uiTitle) ? prettifyTitle(uiTitle) : "";
+    const userCandidate = prettifyTitle(userText);
+    const candidate = uiCandidate && uiCandidate !== DEFAULT_PROJECT_TITLE ? uiCandidate : userCandidate;
     if (!candidate) {
       return;
     }
-    if (project.title === DEFAULT_PROJECT_TITLE || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} •`)) {
+    if (project.title === DEFAULT_PROJECT_TITLE || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} `)) {
       project.title = candidate;
     }
   }
@@ -1231,11 +1336,12 @@
     };
   }
 
-  async function postTurn(payload) {
+  async function postTurn(payload, options = {}) {
     const response = await fetch("/api/turn", {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify(payload),
+      signal: options.signal,
     });
     if (!response.ok) {
       throw new Error(`adapter_http_${response.status}`);
@@ -1249,6 +1355,13 @@
       throw new Error(`session_http_${response.status}`);
     }
     return response.json();
+  }
+
+  function stopActiveResponse() {
+    if (!state.awaitingResponse || !state.activeAbortController) {
+      return;
+    }
+    state.activeAbortController.abort();
   }
 
   function mockDiscoveryPrompt(stage) {
@@ -1533,12 +1646,18 @@
     }
     const queuedUploads = uniqueUploads(options.queuedUploads || []);
     const normalizedUserText = normalizeText(userText);
+    const payload = buildTurnPayload(project, action, userText, queuedUploads);
+    const requestId = normalizeText(payload?.web_conversation_envelope?.request_id);
+    const abortController = new AbortController();
+    let abortedByUser = false;
+
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
       project.timeline.push({
         role: "user",
         kind: action,
         title: "",
         body: normalizedUserText || "Добавил файлы к ответу.",
+        request_id: requestId,
         attachments: queuedUploads.map((upload) => ({
           upload_id: upload.upload_id,
           name: upload.name,
@@ -1553,20 +1672,55 @@
       renderTimeline(project);
     }
 
-    const payload = buildTurnPayload(project, action, userText, queuedUploads);
+    clearComposerNotice();
+    state.awaitingResponse = true;
+    state.activeAbortController = abortController;
+    state.activeRequest = {
+      projectId: project.id,
+      requestId,
+      userText: normalizedUserText,
+      queuedUploads: queuedUploads.map((item) => ({ ...item })),
+      action,
+    };
     setBusy(true);
+    renderComposer(project);
     try {
-      const response = await postTurn(payload);
+      const response = await postTurn(payload, { signal: abortController.signal });
       applyResponse(project, response, "live");
-    } catch (_error) {
-      applyResponse(project, mockAdapterTurn(project, payload), "mock");
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        abortedByUser = true;
+      } else {
+        applyResponse(project, mockAdapterTurn(project, payload), "mock");
+      }
     } finally {
-      if (queuedUploads.length) {
+      if (abortedByUser) {
+        const activeProject = state.projects.find((item) => item.id === project.id);
+        if (activeProject) {
+          const last = activeProject.timeline[activeProject.timeline.length - 1];
+          if (last && normalizeText(last.request_id) === requestId) {
+            activeProject.timeline.pop();
+          }
+          if (normalizedUserText) {
+            activeProject.draftText = normalizedUserText;
+          }
+          if (queuedUploads.length) {
+            activeProject.pendingUploads = uniqueUploads([...queuedUploads, ...activeProject.pendingUploads]);
+          }
+          activeProject.updatedAt = nowIso();
+        }
+        showComposerNotice("Ответ остановлен. Можно отредактировать сообщение и отправить снова.", "info");
+      } else if (queuedUploads.length) {
         project.pendingUploads = project.pendingUploads.filter(
           (item) => !queuedUploads.some((queued) => queued.upload_id === item.upload_id),
         );
       }
-      project.draftText = "";
+      if (!abortedByUser) {
+        project.draftText = "";
+      }
+      state.awaitingResponse = false;
+      state.activeAbortController = null;
+      state.activeRequest = null;
       renderAll();
       setBusy(false);
     }
@@ -1712,11 +1866,27 @@
         return;
       }
       project.draftText = dom.composerInput.value;
+      if (state.composerNotice.text) {
+        clearComposerNotice();
+        renderComposer(project);
+      }
       persist();
+    });
+
+    dom.composerInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      dom.composerForm.requestSubmit();
     });
 
     dom.composerForm.addEventListener("submit", (event) => {
       event.preventDefault();
+      if (state.awaitingResponse) {
+        stopActiveResponse();
+        return;
+      }
       const project = getActiveProject();
       if (!project || !state.accessToken) {
         dom.accessTokenInput.focus();
@@ -1729,6 +1899,7 @@
         dom.composerInput.focus();
         return;
       }
+      clearComposerNotice();
       project.draftText = "";
       dispatchTurn(project.currentAction, text, { queuedUploads });
       dom.composerInput.value = "";
@@ -1745,9 +1916,12 @@
         return;
       }
 
+      const unsupported = selectedFiles.filter((file) => !isSupportedUploadFile(file));
+      const supported = selectedFiles.filter((file) => isSupportedUploadFile(file));
+      const unsupportedNames = unsupported.slice(0, 3).map((file) => file.name || "без имени");
       const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - project.pendingUploads.length);
-      const acceptedFiles = selectedFiles.slice(0, remainingSlots);
-      const skippedCount = Math.max(0, selectedFiles.length - acceptedFiles.length);
+      const acceptedFiles = supported.slice(0, remainingSlots);
+      const skippedCount = Math.max(0, supported.length - acceptedFiles.length);
       const loadedUploads = [];
       const failedUploads = [];
 
@@ -1767,6 +1941,23 @@
         persist();
         dom.composerInput.focus();
       }
+
+      const warnings = [];
+      if (unsupported.length) {
+        warnings.push(`Не добавлены неподдерживаемые файлы: ${unsupportedNames.join(", ")}${unsupported.length > unsupportedNames.length ? "..." : ""}`);
+      }
+      if (skippedCount) {
+        warnings.push(`Превышен лимит: максимум ${MAX_LOCAL_UPLOAD_FILES} файла за один ответ.`);
+      }
+      if (failedUploads.length) {
+        warnings.push(`Не удалось прочитать: ${failedUploads.slice(0, 3).join(", ")}${failedUploads.length > 3 ? "..." : ""}`);
+      }
+      if (warnings.length) {
+        showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info");
+      } else if (loadedUploads.length) {
+        clearComposerNotice();
+      }
+      renderComposer(project);
     });
 
     dom.accessSubmit.addEventListener("click", () => {
