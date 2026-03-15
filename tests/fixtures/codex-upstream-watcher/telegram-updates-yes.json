@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "update_id": 1001,
+      "message": {
+        "message_id": 2001,
+        "date": 4102444800,
+        "text": "да, хочу рекомендации",
+        "chat": {
+          "id": 123456
+        },
+        "reply_to_message": {
+          "message_id": 1
+        }
+      }
+    }
+  ]
+}

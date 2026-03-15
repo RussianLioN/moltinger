@@ -12,6 +12,7 @@ FLEET_REGISTRY_FILE="${FLEET_REGISTRY_FILE:-$PROJECT_ROOT/config/fleet/agents-re
 FLEET_POLICY_FILE="${FLEET_POLICY_FILE:-$PROJECT_ROOT/config/fleet/policy.json}"
 HANDOFF_SAMPLE_FILE="${HANDOFF_SAMPLE_FILE:-$PROJECT_ROOT/specs/001-clawdiy-agent-platform/contracts/sample-handoff-submit.json}"
 CLAWDIY_AUTH_CHECK_SCRIPT="${CLAWDIY_AUTH_CHECK_SCRIPT:-$PROJECT_ROOT/scripts/clawdiy-auth-check.sh}"
+CLAWDIY_RENDER_SCRIPT="${CLAWDIY_RENDER_SCRIPT:-$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh}"
 CLAWDIY_LOCAL_AUDIT_ROOT="${CLAWDIY_LOCAL_AUDIT_ROOT:-$PROJECT_ROOT/data/clawdiy/audit}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 CLAWDIY_CONTAINER="${CLAWDIY_CONTAINER:-clawdiy}"
@@ -481,10 +482,22 @@ verify_auth_stage() {
         return 1
     fi
 
+    if [[ ! -f "$CLAWDIY_RENDER_SCRIPT" ]]; then
+        add_check "auth_render_script_exists" "fail" "Clawdiy runtime render script is missing: $CLAWDIY_RENDER_SCRIPT" "error"
+        return 1
+    fi
+
     if bash -n "$CLAWDIY_AUTH_CHECK_SCRIPT"; then
         add_check "auth_check_script_syntax" "pass" "Clawdiy auth-check script parses cleanly" "error"
     else
         add_check "auth_check_script_syntax" "fail" "Clawdiy auth-check script has shell syntax errors" "error"
+        return 1
+    fi
+
+    if bash -n "$CLAWDIY_RENDER_SCRIPT"; then
+        add_check "auth_render_script_syntax" "pass" "Clawdiy runtime render script parses cleanly" "error"
+    else
+        add_check "auth_render_script_syntax" "fail" "Clawdiy runtime render script has shell syntax errors" "error"
         return 1
     fi
 
@@ -499,7 +512,8 @@ verify_auth_stage() {
     local bad_scope_profile='{"provider":"codex-oauth","auth_type":"oauth","granted_scopes":["profile.read"],"allowed_models":["gpt-5.4"]}'
 
     {
-        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
+        printf '%s\n' 'CLAWDIY_GATEWAY_TOKEN=test-gateway-token'
+        printf '%s\n' 'OPENCLAW_GATEWAY_TOKEN=test-gateway-token'
         printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
         printf '%s\n' 'CLAWDIY_TELEGRAM_BOT_TOKEN=test-clawdiy-telegram-token'
         printf '%s\n' 'CLAWDIY_TELEGRAM_ALLOWED_USERS=user42,user99'
@@ -507,21 +521,33 @@ verify_auth_stage() {
     } >"$positive_env"
 
     {
-        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
+        printf '%s\n' 'CLAWDIY_GATEWAY_TOKEN=test-gateway-token'
+        printf '%s\n' 'OPENCLAW_GATEWAY_TOKEN=test-gateway-token'
         printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
         printf '%s\n' 'CLAWDIY_TELEGRAM_ALLOWED_USERS=user42,user99'
         printf 'CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=%s\n' "$positive_profile"
     } >"$missing_telegram_env"
 
     {
-        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
+        printf '%s\n' 'CLAWDIY_GATEWAY_TOKEN=test-gateway-token'
+        printf '%s\n' 'OPENCLAW_GATEWAY_TOKEN=test-gateway-token'
         printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
         printf '%s\n' 'CLAWDIY_TELEGRAM_BOT_TOKEN=test-clawdiy-telegram-token'
         printf '%s\n' 'CLAWDIY_TELEGRAM_ALLOWED_USERS=user42,user99'
         printf 'CLAWDIY_OPENAI_CODEX_AUTH_PROFILE=%s\n' "$bad_scope_profile"
     } >"$bad_scope_env"
 
-    if "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider telegram --env-file "$positive_env" --json >"$tmpdir/telegram-pass.json"; then
+    CLAWDIY_CONFIG_FILE="$tmpdir/rendered-positive-openclaw.json" \
+        "$CLAWDIY_RENDER_SCRIPT" --env-file "$positive_env" --output "$tmpdir/rendered-positive-openclaw.json" --json >"$tmpdir/render-positive.json"
+
+    CLAWDIY_CONFIG_FILE="$tmpdir/rendered-missing-telegram-openclaw.json" \
+        "$CLAWDIY_RENDER_SCRIPT" --env-file "$missing_telegram_env" --output "$tmpdir/rendered-missing-telegram-openclaw.json" --json >"$tmpdir/render-missing-telegram.json"
+
+    CLAWDIY_CONFIG_FILE="$tmpdir/rendered-bad-scope-openclaw.json" \
+        "$CLAWDIY_RENDER_SCRIPT" --env-file "$bad_scope_env" --output "$tmpdir/rendered-bad-scope-openclaw.json" --json >"$tmpdir/render-bad-scope.json"
+
+    if CLAWDIY_CONFIG_FILE="$tmpdir/rendered-positive-openclaw.json" \
+        "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider telegram --env-file "$positive_env" --json >"$tmpdir/telegram-pass.json"; then
         if jq -e '.status == "pass" and any(.capabilities[]; .capability == "telegram" and .status == "pass")' "$tmpdir/telegram-pass.json" >/dev/null 2>&1; then
             add_check "auth_smoke_telegram_pass" "pass" "Telegram repeat-auth validation passes with isolated test credentials" "error"
         else
@@ -532,7 +558,8 @@ verify_auth_stage() {
     fi
 
     set +e
-    "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider telegram --env-file "$missing_telegram_env" --json >"$tmpdir/telegram-fail.json"
+    CLAWDIY_CONFIG_FILE="$tmpdir/rendered-missing-telegram-openclaw.json" \
+        "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider telegram --env-file "$missing_telegram_env" --json >"$tmpdir/telegram-fail.json"
     local telegram_fail_code=$?
     set -e
     if [[ $telegram_fail_code -ne 0 ]] && jq -e '.status == "fail" and ([.errors[] | test("repeat-auth"; "i")] | any)' "$tmpdir/telegram-fail.json" >/dev/null 2>&1; then
@@ -541,7 +568,8 @@ verify_auth_stage() {
         add_check "auth_smoke_telegram_fail_closed" "fail" "Missing Telegram token must fail closed with repeat-auth guidance" "error"
     fi
 
-    if "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider codex-oauth --env-file "$positive_env" --json >"$tmpdir/provider-pass.json"; then
+    if CLAWDIY_CONFIG_FILE="$tmpdir/rendered-positive-openclaw.json" \
+        "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider codex-oauth --env-file "$positive_env" --json >"$tmpdir/provider-pass.json"; then
         if jq -e '.status == "pass" and any(.capabilities[]; .capability == "codex-oauth" and .status == "pass")' "$tmpdir/provider-pass.json" >/dev/null 2>&1; then
             add_check "auth_smoke_provider_pass" "pass" "OpenAI Codex auth validation passes with required scope and model authorization" "error"
         else
@@ -552,7 +580,8 @@ verify_auth_stage() {
     fi
 
     set +e
-    "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider codex-oauth --env-file "$bad_scope_env" --json >"$tmpdir/provider-fail.json"
+    CLAWDIY_CONFIG_FILE="$tmpdir/rendered-bad-scope-openclaw.json" \
+        "$CLAWDIY_AUTH_CHECK_SCRIPT" --provider codex-oauth --env-file "$bad_scope_env" --json >"$tmpdir/provider-fail.json"
     local provider_fail_code=$?
     set -e
     if [[ $provider_fail_code -ne 0 ]] && jq -e '.status == "fail" and ([.errors[] | test("quarantined|quarantine|repeat-auth"; "i")] | any)' "$tmpdir/provider-fail.json" >/dev/null 2>&1; then
@@ -749,19 +778,20 @@ verify_same_host_stage() {
         add_check "moltis_health_unchanged" "fail" "Moltis health endpoint did not return 200: $MOLTIS_HEALTH_URL" "error"
     fi
 
-    local config_source registry_source state_source audit_source
-    config_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/openclaw.json")"
+    local config_root_source registry_source workspace_source state_source audit_source
+    config_root_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw")"
     registry_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/registry")"
+    workspace_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw/workspace")"
     state_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/state")"
     audit_source="$(container_mount_source "$CLAWDIY_CONTAINER" "/home/node/.openclaw-data/audit")"
 
-    if [[ "$config_source" == */data/clawdiy/runtime/openclaw.json && "$registry_source" == */config/fleet && "$state_source" == */data/clawdiy/state && "$audit_source" == */data/clawdiy/audit ]]; then
-        add_check "clawdiy_mounts" "pass" "Clawdiy mounts are isolated for config, registry, state, and audit roots" "error"
+    if [[ "$config_root_source" == */data/clawdiy/runtime && "$registry_source" == */config/fleet && "$workspace_source" == */data/clawdiy/workspace && "$state_source" == */data/clawdiy/state && "$audit_source" == */data/clawdiy/audit ]]; then
+        add_check "clawdiy_mounts" "pass" "Clawdiy mounts are isolated for runtime home, registry, workspace, state, and audit roots" "error"
     else
         add_check "clawdiy_mounts" "fail" "Clawdiy mounts are not wired to the expected isolated roots" "error"
     fi
 
-    if [[ "$state_source" != "$audit_source" && "$config_source" != "$registry_source" ]]; then
+    if [[ "$workspace_source" != "$state_source" && "$workspace_source" != "$audit_source" && "$state_source" != "$audit_source" && "$config_root_source" != "$registry_source" ]]; then
         add_check "clawdiy_mounts_distinct" "pass" "Clawdiy persistent and control-plane mounts remain distinct" "error"
     else
         add_check "clawdiy_mounts_distinct" "fail" "Clawdiy mounts unexpectedly collapse onto shared paths" "error"

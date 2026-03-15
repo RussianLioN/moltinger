@@ -41,6 +41,7 @@ COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod
 BACKUP_RESTORE_RUNTIME_FILES="${BACKUP_RESTORE_RUNTIME_FILES:-true}"
 CLAWDIY_BACKUP_ENABLED="${CLAWDIY_BACKUP_ENABLED:-true}"
 CLAWDIY_CONFIG_DIR="${CLAWDIY_CONFIG_DIR:-$PROJECT_ROOT/config/clawdiy}"
+CLAWDIY_RUNTIME_DIR="${CLAWDIY_RUNTIME_DIR:-$PROJECT_ROOT/data/clawdiy/runtime}"
 CLAWDIY_STATE_DIR="${CLAWDIY_STATE_DIR:-$PROJECT_ROOT/data/clawdiy/state}"
 CLAWDIY_AUDIT_DIR="${CLAWDIY_AUDIT_DIR:-$PROJECT_ROOT/data/clawdiy/audit}"
 CLAWDIY_CONTAINER_NAME="${CLAWDIY_CONTAINER_NAME:-clawdiy}"
@@ -161,7 +162,7 @@ container_is_running() {
 }
 
 clawdiy_inventory_present() {
-    [[ -e "$CLAWDIY_CONFIG_DIR" || -e "$CLAWDIY_STATE_DIR" || -e "$CLAWDIY_AUDIT_DIR" ]]
+    [[ -e "$CLAWDIY_CONFIG_DIR" || -e "$CLAWDIY_RUNTIME_DIR" || -e "$CLAWDIY_STATE_DIR" || -e "$CLAWDIY_AUDIT_DIR" ]]
 }
 
 count_files_under() {
@@ -644,10 +645,13 @@ create_backup() {
   "schema_version": "v1",
   "captured_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "config_present": $(json_bool "$( [[ -d "$CLAWDIY_CONFIG_DIR" ]] && echo true || echo false )"),
+  "runtime_present": $(json_bool "$( [[ -d "$CLAWDIY_RUNTIME_DIR" ]] && echo true || echo false )"),
   "state_present": $(json_bool "$( [[ -d "$CLAWDIY_STATE_DIR" ]] && echo true || echo false )"),
   "audit_present": $(json_bool "$( [[ -d "$CLAWDIY_AUDIT_DIR" ]] && echo true || echo false )"),
+  "runtime_file_count": $(count_files_under "$CLAWDIY_RUNTIME_DIR"),
   "state_file_count": $(count_files_under "$CLAWDIY_STATE_DIR"),
   "audit_file_count": $(count_files_under "$CLAWDIY_AUDIT_DIR"),
+  "latest_runtime_artifact": $(latest_file_under "$CLAWDIY_RUNTIME_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "latest_state_artifact": $(latest_file_under "$CLAWDIY_STATE_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "latest_audit_artifact": $(latest_file_under "$CLAWDIY_AUDIT_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end')
 }
@@ -698,6 +702,7 @@ EOF
         "enabled": $(json_bool "$CLAWDIY_BACKUP_ENABLED"),
         "included": $(json_bool "$clawdiy_included"),
         "config_dir": "$CLAWDIY_CONFIG_DIR",
+        "runtime_dir": "$CLAWDIY_RUNTIME_DIR",
         "state_dir": "$CLAWDIY_STATE_DIR",
         "audit_dir": "$CLAWDIY_AUDIT_DIR",
         "container_name": "$CLAWDIY_CONTAINER_NAME"
@@ -726,7 +731,8 @@ EOF
                 ".env",
                 "docker-compose.yml",
                 "docker-compose.prod.yml"
-            ]
+            ],
+            "clawdiy_runtime_dir": "$CLAWDIY_RUNTIME_DIR"
         }
     },
     "docker_version": "$(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"

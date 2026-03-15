@@ -25,12 +25,19 @@ run_auth_check() {
 
 write_env_file() {
     local path="$1"
-    local telegram_token="$2"
-    local profile="$3"
+    local gateway_token="$2"
+    local telegram_token="$3"
+    local profile="$4"
+    local legacy_password="${5:-}"
 
     {
-        printf '%s\n' 'CLAWDIY_PASSWORD=test-human-password'
-        printf '%s\n' 'OPENCLAW_GATEWAY_PASSWORD=test-human-password'
+        if [[ -n "$gateway_token" ]]; then
+            printf 'CLAWDIY_GATEWAY_TOKEN=%s\n' "$gateway_token"
+            printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$gateway_token"
+        fi
+        if [[ -n "$legacy_password" ]]; then
+            printf 'CLAWDIY_PASSWORD=%s\n' "$legacy_password"
+        fi
         printf '%s\n' 'CLAWDIY_SERVICE_TOKEN=test-service-token'
         if [[ -n "$telegram_token" ]]; then
             printf 'CLAWDIY_TELEGRAM_BOT_TOKEN=%s\n' "$telegram_token"
@@ -60,11 +67,13 @@ run_clawdiy_auth_boundary_tests() {
     local pass_env="$tmpdir/pass.env"
     local missing_telegram_env="$tmpdir/missing-telegram.env"
     local bad_scope_env="$tmpdir/bad-scope.env"
+    local legacy_gateway_env="$tmpdir/legacy-gateway.env"
     local bad_policy_config="$tmpdir/policy-reused-service.json"
 
-    write_env_file "$pass_env" "test-clawdiy-telegram-token" "$GOOD_PROFILE"
-    write_env_file "$missing_telegram_env" "" "$GOOD_PROFILE"
-    write_env_file "$bad_scope_env" "test-clawdiy-telegram-token" "$BAD_SCOPE_PROFILE"
+    write_env_file "$pass_env" "test-gateway-token" "test-clawdiy-telegram-token" "$GOOD_PROFILE"
+    write_env_file "$missing_telegram_env" "test-gateway-token" "" "$GOOD_PROFILE"
+    write_env_file "$bad_scope_env" "test-gateway-token" "test-clawdiy-telegram-token" "$BAD_SCOPE_PROFILE"
+    write_env_file "$legacy_gateway_env" "" "test-clawdiy-telegram-token" "$GOOD_PROFILE" "legacy-password-token"
     sed 's/github-secret:CLAWDIY_SERVICE_TOKEN/github-secret:MOLTINGER_SERVICE_TOKEN/' "$FLEET_POLICY_FILE" >"$bad_policy_config"
 
     test_start "security_api_clawdiy_valid_auth_profile_passes"
@@ -76,6 +85,17 @@ run_clawdiy_auth_boundary_tests() {
         fi
     else
         test_fail "Valid Clawdiy provider auth profile should pass auth-check"
+    fi
+
+    test_start "security_api_clawdiy_legacy_gateway_password_fallback_warns_but_passes"
+    if run_auth_check telegram "$legacy_gateway_env" "$tmpdir/legacy-gateway.json" env; then
+        if jq -e '.status == "warning" and any(.checks[]; .name == "gateway_auth_secret_source" and .status == "warning")' "$tmpdir/legacy-gateway.json" >/dev/null 2>&1; then
+            test_pass
+        else
+            test_fail "Legacy CLAWDIY_PASSWORD fallback should pass with an explicit warning"
+        fi
+    else
+        test_fail "Legacy CLAWDIY_PASSWORD fallback should not fail auth-check"
     fi
 
     test_start "security_api_clawdiy_missing_telegram_token_fails_closed"

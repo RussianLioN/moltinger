@@ -17,8 +17,9 @@
 - Clawdiy runtime env mirror: `/opt/moltinger/clawdiy/.env`
 - Agent registry: `config/fleet/agents-registry.json`
 - Fleet policy: `config/fleet/policy.json`
-- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
+- Live git topology: authoritative runtime source
 - Reviewed topology intent: `docs/GIT-TOPOLOGY-INTENT.yaml`
+- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md` (published snapshot, not live source of truth)
 
 ## Git Topology
 
@@ -28,7 +29,9 @@ scripts/git-topology-registry.sh check
 scripts/git-topology-registry.sh refresh --write-doc
 ```
 
-Use the topology registry before cleanup worktree/branch actions and after manual git topology changes.
+Use `status`/`check` before cleanup worktree/branch actions and for ordinary topology inspection.
+Use `refresh --write-doc` only as an explicit publish step from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
+Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
 ## Core Commands
 
@@ -97,6 +100,7 @@ If `fleet-internal` is missing on the first rollout, use `deploy-clawdiy.yml` or
 - Deploy strategy: `docs/deployment-strategy.md`
 - Validation path: `specs/001-clawdiy-agent-platform/quickstart.md`
 - Clawdiy deploy runbook: `docs/runbooks/clawdiy-deploy.md`
+- Clawdiy browser bootstrap runbook: `docs/runbooks/clawdiy-browser-bootstrap.md`
 - Clawdiy repeat-auth runbook: `docs/runbooks/clawdiy-repeat-auth.md`
 - Clawdiy rollback runbook: `docs/runbooks/clawdiy-rollback.md`
 - Handoff incident runbook: `docs/runbooks/fleet-handoff-incident.md`

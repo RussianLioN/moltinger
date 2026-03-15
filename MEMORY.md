@@ -66,6 +66,22 @@ MOLTIS_DOMAIN=moltis.ainetic.tech  # NOT ainetic.tech!
 - Before asking user for env/secret values, check:
   `MEMORY.md` → `SESSION_SUMMARY.md` → `docs/SECRETS-MANAGEMENT.md` → `.github/workflows/deploy.yml`
 - Full rule: `docs/rules/context-discovery-before-questions.md`
+- Hosted Clawdiy/OpenClaw Control UI must use token auth, not password auth:
+  `docs/rules/clawdiy-hosted-control-ui-token-auth.md`
+- Hosted Clawdiy browser bootstrap must be documented and tested separately from provider auth:
+  `docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md`
+- Official OpenClaw wizard and OAuth flows require a writable Clawdiy runtime home:
+  `data/clawdiy/runtime -> /home/node/.openclaw`, not a read-only bind of only `openclaw.json`
+  Rule: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
+- If `Deploy Clawdiy` blocks on a dirty `/opt/moltinger` checkout and drift is limited to Clawdiy-managed files,
+  re-run the workflow with `repair_server_checkout=true` instead of manual SSH checkout edits:
+  `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`
+- Clawdiy Docker image default must stay pinned to the last live-verified image; test new OpenClaw images only via explicit `clawdiy_image` rollout, not by flipping tracked default to `latest`:
+  `docs/rules/clawdiy-updates-must-stay-pinned-until-live-canary.md`
+- Official OpenClaw Docker upgrades for Clawdiy can go through a transient `starting/unhealthy` warmup before recovering; do not treat the first `unhealthy` as terminal if the container is still running and `/health` later comes up:
+  `docs/rules/clawdiy-upgrade-health-must-tolerate-openclaw-startup-warmup.md`
+- Clawdiy `gpt-5.4` baseline must live in tracked `config/clawdiy/openclaw.json`, not only in runtime wizard state:
+  `docs/rules/clawdiy-model-default-must-live-in-tracked-config.md`
 
 ---
 

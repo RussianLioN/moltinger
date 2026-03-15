@@ -1,0 +1,20 @@
+# Moltis Codex Upstream Watcher Cron
+# =================================
+# Legacy cron filename retained during migration.
+# Canonical runtime is now the Moltis-native codex-update skill path, which
+# watches the official Codex changelog on a schedule and sends one Telegram
+# alert per fresh upstream fingerprint.
+#
+# Installed by: .github/workflows/deploy.yml (GitOps)
+# Manual install: sudo cp /opt/moltinger/scripts/cron.d/moltis-codex-upstream-watcher /etc/cron.d/
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+MOLTIS_ENV_FILE=/opt/moltinger/.env
+MOLTIS_CODEX_UPDATE_STATE_FILE=/opt/moltinger/.tmp/current/moltis-codex-update-state.json
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED=true
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE=/opt/moltinger/.env
+
+# Every 6 hours run the Moltis-native skill and append to the dedicated log.
+17 */6 * * * root mkdir -p /var/log/moltis /opt/moltinger/.tmp/current && /opt/moltinger/scripts/moltis-codex-update-run.sh --mode scheduler --include-issue-signals --json-out /opt/moltinger/.tmp/current/moltis-codex-update-report.json --summary-out /opt/moltinger/.tmp/current/moltis-codex-update-summary.md --stdout none >> /var/log/moltis/moltis-codex-update.log 2>&1

@@ -25,6 +25,11 @@ on:
         options:
           - production
           - staging
+      repair_server_checkout:
+        description: 'Capture evidence and reconcile a dirty /opt/moltinger checkout before deploy (workflow_dispatch only)'
+        required: false
+        default: false
+        type: boolean
       rollback:
         description: 'Rollback to previous version'
         required: false
@@ -76,6 +81,19 @@ jobs:
           DRIFT_FOUND=false
           SERVER_DIRTY=false
           PENDING_SYNC=false
+          REPAIR_PERFORMED=false
+          DRIFT_SNAPSHOT=""
+          TARGET_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}"
+          REPAIR_REQUESTED=false
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.repair_server_checkout }}" = "true" ]; then
+            REPAIR_REQUESTED=true
+          fi
+
+          if [ "$REPAIR_REQUESTED" = true ] && [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::repair_server_checkout is only allowed for production deploys from main or a matching release tag."
+            exit 1
+          fi
 
           # Function to compare files
           compare_files() {
@@ -99,6 +117,32 @@ jobs:
               fi
             fi
             return 0
+          }
+
+          is_managed_path() {
+            local candidate="$1"
+            case "$candidate" in
+              docker-compose.yml|docker-compose.prod.yml|config/*|scripts/*|systemd/*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          status_entry_is_repairable() {
+            local entry="$1"
+            local source_path target_path
+
+            if [[ "$entry" == *" -> "* ]]; then
+              source_path="${entry%% -> *}"
+              target_path="${entry##* -> }"
+              is_managed_path "$source_path" && is_managed_path "$target_path"
+              return
+            fi
+
+            is_managed_path "$entry"
           }
 
           # Check 1: docker-compose.yml
@@ -168,14 +212,54 @@ jobs:
             done
           EOF
 
-          # Check 8: server worktree cleanliness (hard block)
+          # Check 8: server worktree cleanliness (hard block unless repairable)
           echo "=== Check 8: server git status --porcelain ==="
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
-            echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
+            echo "::warning::Server working tree is dirty before deploy."
             echo "$SERVER_STATUS"
-            SERVER_DIRTY=true
-            DRIFT_FOUND=true
+
+            REPAIRABLE_DIRTY_STATE=true
+            while IFS= read -r STATUS_LINE; do
+              [ -z "$STATUS_LINE" ] && continue
+              STATUS_PATH="${STATUS_LINE:3}"
+              if ! status_entry_is_repairable "$STATUS_PATH"; then
+                echo "::error::Dirty path is outside deploy-managed surface: $STATUS_PATH"
+                REPAIRABLE_DIRTY_STATE=false
+              fi
+            done <<< "$SERVER_STATUS"
+
+            if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = true ]; then
+              echo "::warning::Attempting GitOps-safe repair of deploy-managed server checkout"
+              DRIFT_SNAPSHOT="$(bash scripts/gitops-repair-managed-checkout.sh \
+                --ssh-user "${{ env.SSH_USER }}" \
+                --ssh-host "${{ env.SSH_HOST }}" \
+                --deploy-path "${{ env.DEPLOY_PATH }}" \
+                --backup-path "${{ env.BACKUP_PATH }}" \
+                --target-ref "${{ github.ref_name }}" \
+                --target-sha "${{ github.sha }}" \
+                --run-id "${{ github.run_id }}" \
+                --repository "${{ github.repository }}")"
+              REPAIR_PERFORMED=true
+              echo "::notice::Server drift snapshot saved to $DRIFT_SNAPSHOT"
+
+              SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
+              if [ -n "$SERVER_STATUS" ]; then
+                echo "::error::Server working tree remains dirty after repair."
+                echo "$SERVER_STATUS"
+                SERVER_DIRTY=true
+                DRIFT_FOUND=true
+              else
+                echo "::notice::Server working tree repaired and clean ✅"
+              fi
+            else
+              echo "::error::Server working tree is dirty. Deployment blocked by GitOps policy."
+              if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = false ]; then
+                echo "::error::repair_server_checkout refuses to touch files outside deploy-managed surface."
+              fi
+              SERVER_DIRTY=true
+              DRIFT_FOUND=true
+            fi
           else
             echo "::notice::Server working tree is clean ✅"
           fi
@@ -187,6 +271,8 @@ jobs:
             echo "compliant=false" >> $GITHUB_OUTPUT
             echo "server_dirty=$SERVER_DIRTY" >> $GITHUB_OUTPUT
             echo "pending_sync=$PENDING_SYNC" >> $GITHUB_OUTPUT
+            echo "repair_performed=$REPAIR_PERFORMED" >> $GITHUB_OUTPUT
+            echo "drift_snapshot=$DRIFT_SNAPSHOT" >> $GITHUB_OUTPUT
           else
             if [ "$PENDING_SYNC" = true ]; then
               echo "::notice::Server is clean; deploy-managed files differ and will be synced during this run"
@@ -197,6 +283,8 @@ jobs:
             echo "compliant=true" >> $GITHUB_OUTPUT
             echo "server_dirty=false" >> $GITHUB_OUTPUT
             echo "pending_sync=$PENDING_SYNC" >> $GITHUB_OUTPUT
+            echo "repair_performed=$REPAIR_PERFORMED" >> $GITHUB_OUTPUT
+            echo "drift_snapshot=$DRIFT_SNAPSHOT" >> $GITHUB_OUTPUT
           fi
           echo "::endgroup::"
 
@@ -215,8 +303,12 @@ jobs:
           echo "| Drift Detected | \`${{ steps.check.outputs.drift_detected }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Server Dirty | \`${{ steps.check.outputs.server_dirty }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Pending Sync | \`${{ steps.check.outputs.pending_sync }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repair Performed | \`${{ steps.check.outputs.repair_performed }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliant | \`${{ steps.check.outputs.compliant }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.check.outputs.drift_snapshot }}" ]; then
+            echo "- Drift snapshot: \`${{ steps.check.outputs.drift_snapshot }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "> Hard block applies only to dirty server worktree. Deploy-managed file deltas are treated as pending sync." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
@@ -238,6 +330,7 @@ jobs:
         id: version
         run: |
           VERSION="$(bash ./scripts/moltis-version.sh version)"
+          TRACKED_VERSION="$VERSION"
 
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_VERSION="${GITHUB_REF#refs/tags/}"
@@ -247,17 +340,31 @@ jobs:
             fi
           fi
 
+          echo "tracked_version=$TRACKED_VERSION" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "::notice::Deploying tracked Moltis version from git: $VERSION"
 
       - name: Validate deployment prerequisites
         id: validate
         run: |
+          TARGET_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}"
+          TRACKED_VERSION="${{ steps.version.outputs.tracked_version }}"
+
           # Check if this is a rollback
           if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
             echo "should_deploy=false" >> $GITHUB_OUTPUT
             echo "::notice::Rollback requested, skipping preflight"
             exit 0
+          fi
+
+          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
+            exit 1
+          fi
+
+          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_type }}" = "tag" ] && [ "${{ steps.version.outputs.version }}" != "$TRACKED_VERSION" ]; then
+            echo "::error::Production tag deploy version must match tracked Moltis version $TRACKED_VERSION."
+            exit 1
           fi
 
           echo "should_deploy=true" >> $GITHUB_OUTPUT
@@ -479,7 +586,15 @@ jobs:
             fi
 
             if [ -n "$BACKUP_ITEMS" ]; then
-              tar -czf "$BACKUP_FILE" -C "$DEPLOY_DIR" $BACKUP_ITEMS
+              # data/logs.jsonl is written continuously by the live service.
+              # Treat volatile log churn as non-fatal so pre-deploy backup remains usable.
+              tar \
+                --ignore-failed-read \
+                --warning=no-file-changed \
+                --exclude='data/logs.jsonl' \
+                -czf "$BACKUP_FILE" \
+                -C "$DEPLOY_DIR" \
+                $BACKUP_ITEMS
             else
               tar -czf "$BACKUP_FILE" --files-from /dev/null
               echo "::warning::No config/data/.env found, created metadata-only backup archive"
@@ -799,7 +914,7 @@ jobs:
       # This ensures secrets are synced to server without exposing in repo
       # NOTE: This workflow renders only the Moltinger runtime env file.
       # Reserved Clawdiy secret inventory is documented here for future split-stack rollout:
-      #   CLAWDIY_PASSWORD -> future Clawdiy human auth
+      #   CLAWDIY_GATEWAY_TOKEN -> future Clawdiy hosted Control UI auth
       #   CLAWDIY_SERVICE_TOKEN -> future Clawdiy internal handoff bearer
       #   CLAWDIY_TELEGRAM_BOT_TOKEN -> future Clawdiy Telegram bot token
       #   CLAWDIY_TELEGRAM_ALLOWED_USERS -> future Clawdiy Telegram allowlist
@@ -1353,6 +1468,40 @@ jobs:
           EOF
           echo "::endgroup::"
 
+      - name: Check post-upgrade web protocol skew
+        id: protocol_skew
+        run: |
+          echo "::group::Checking for post-upgrade web protocol skew"
+          INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+
+            RECENT_PROTOCOL_SKEW=$(docker logs --since 15m moltis 2>&1 | grep -E -c 'ws: protocol mismatch|missing field minProtocol' || true)
+
+            echo "detected=false"
+            echo "count=$RECENT_PROTOCOL_SKEW"
+
+            if [ "$RECENT_PROTOCOL_SKEW" -gt 0 ]; then
+              echo "detected=true"
+            fi
+          EOF
+          )
+
+          DETECTED="$(printf '%s\n' "$INFO" | grep '^detected=' | tail -1 | cut -d= -f2)"
+          COUNT="$(printf '%s\n' "$INFO" | grep '^count=' | tail -1 | cut -d= -f2)"
+
+          [ -z "$DETECTED" ] && DETECTED="false"
+          [ -z "$COUNT" ] && COUNT="0"
+
+          echo "detected=$DETECTED" >> $GITHUB_OUTPUT
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$DETECTED" = "true" ]; then
+            echo "::warning::Detected $COUNT recent websocket protocol skew log entries after deploy. Backend may already be healthy; stale browser tabs likely need hard refresh or a fresh session."
+          else
+            echo "::notice::No recent websocket protocol skew detected in the post-deploy window."
+          fi
+          echo "::endgroup::"
+
       # ===========================================
       # LLM Failover Validation (T024-T026)
       # ===========================================
@@ -1461,6 +1610,11 @@ jobs:
 
       - name: Verification summary
         run: |
+          PROTOCOL_SKEW="${{ steps.protocol_skew.outputs.detected }}"
+          PROTOCOL_SKEW_COUNT="${{ steps.protocol_skew.outputs.count }}"
+          [ -z "$PROTOCOL_SKEW" ] && PROTOCOL_SKEW="false"
+          [ -z "$PROTOCOL_SKEW_COUNT" ] && PROTOCOL_SKEW_COUNT="0"
+
           echo "## Verification Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "All smoke tests passed successfully!" >> $GITHUB_STEP_SUMMARY
@@ -1469,6 +1623,16 @@ jobs:
           echo "- **Image**: \`${{ steps.info.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: https://moltis.ainetic.tech" >> $GITHUB_STEP_SUMMARY
           echo "- **Health**: https://moltis.ainetic.tech/health" >> $GITHUB_STEP_SUMMARY
+          echo "- **Post-upgrade protocol skew detected**: \`$PROTOCOL_SKEW\` (recent log matches: $PROTOCOL_SKEW_COUNT)" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$PROTOCOL_SKEW" = "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Operator Note" >> $GITHUB_STEP_SUMMARY
+            echo "- Backend rollout may still be successful if health and authoritative UAT are green." >> $GITHUB_STEP_SUMMARY
+            echo "- This usually means stale browser tabs are reconnecting with an older WebSocket protocol." >> $GITHUB_STEP_SUMMARY
+            echo "- Action: close old Moltis tabs and reopen the UI, or use a new incognito/private session." >> $GITHUB_STEP_SUMMARY
+            echo "- Protocol skew by itself is not a rollback trigger." >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ===========================================
   # Notify on failure

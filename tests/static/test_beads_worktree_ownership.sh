@@ -9,14 +9,21 @@ ENVRC_FILE="$PROJECT_ROOT/.envrc"
 BD_SHIM="$PROJECT_ROOT/bin/bd"
 RESOLVE_SCRIPT="$PROJECT_ROOT/scripts/beads-resolve-db.sh"
 LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
+NORMALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-normalize-issues-jsonl.sh"
 CODEX_LAUNCHER="$PROJECT_ROOT/scripts/codex-profile-launch.sh"
 WORKTREE_READY_SCRIPT="$PROJECT_ROOT/scripts/worktree-ready.sh"
 WORKTREE_PHASE_A_SCRIPT="$PROJECT_ROOT/scripts/worktree-phase-a.sh"
+HOOK_BOOTSTRAP="$PROJECT_ROOT/.githooks/_repo-local-path.sh"
+HOOK_PRE_COMMIT="$PROJECT_ROOT/.githooks/pre-commit"
+HOOK_POST_CHECKOUT="$PROJECT_ROOT/.githooks/post-checkout"
+HOOK_POST_MERGE="$PROJECT_ROOT/.githooks/post-merge"
+HOOK_PRE_PUSH="$PROJECT_ROOT/.githooks/pre-push"
 QUICKSTART_RU="$PROJECT_ROOT/.claude/docs/beads-quickstart.md"
 QUICKSTART_EN="$PROJECT_ROOT/.claude/docs/beads-quickstart.en.md"
 BEADS_SKILL="$PROJECT_ROOT/.claude/skills/beads/SKILL.md"
 BEADS_COMMAND_QUICKREF="$PROJECT_ROOT/.claude/skills/beads/resources/COMMANDS_QUICKREF.md"
 BEADS_WORKFLOWS="$PROJECT_ROOT/.claude/skills/beads/resources/WORKFLOWS.md"
+WORKTREE_COMMAND="$PROJECT_ROOT/.claude/commands/worktree.md"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -38,14 +45,16 @@ run_static_beads_worktree_ownership_tests() {
         test_fail "bin/bd must source the resolver and dispatch via explicit --db"
     fi
 
-    test_start "static_resolver_blocks_legacy_redirect_and_root_fallback"
+    test_start "static_resolver_blocks_legacy_redirect_root_fallback_and_root_mutation"
     if [[ -x "$RESOLVE_SCRIPT" ]] && \
        rg -q 'block_legacy_redirect' "$RESOLVE_SCRIPT" && \
        rg -q 'block_root_fallback' "$RESOLVE_SCRIPT" && \
+       rg -q 'block_root_mutation' "$RESOLVE_SCRIPT" && \
+       rg -q 'pass_through_root_readonly' "$RESOLVE_SCRIPT" && \
        rg -q 'beads-worktree-localize\.sh' "$RESOLVE_SCRIPT"; then
         test_pass
     else
-        test_fail "The resolver must fail closed on legacy redirect and root fallback states"
+        test_fail "The resolver must fail closed on legacy redirect, root fallback, and default canonical-root mutation states"
     fi
 
     test_start "static_localize_helper_exists_for_compatibility_migration"
@@ -64,13 +73,36 @@ run_static_beads_worktree_ownership_tests() {
         test_fail "Codex launcher must prepend the repo-local bin directory"
     fi
 
+    test_start "static_git_hooks_bootstrap_repo_local_plain_bd"
+    if [[ -f "$HOOK_BOOTSTRAP" ]] && \
+       rg -q 'export PATH="\$\{PROJECT_ROOT\}/bin:\$\{PATH\}"' "$HOOK_BOOTSTRAP" && \
+       rg -q '_repo-local-path\.sh' "$HOOK_PRE_COMMIT" "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" "$HOOK_PRE_PUSH"; then
+        test_pass
+    else
+        test_fail "Tracked git hooks must source the repo-local PATH bootstrap before any bd resolution"
+    fi
+
+    test_start "static_pre_commit_normalizes_branch_local_beads_issues"
+    if [[ -x "$NORMALIZE_SCRIPT" ]] && \
+       rg -q 'find_dependencies_slice' "$NORMALIZE_SCRIPT" && \
+       rg -q 'python3 - ' "$NORMALIZE_SCRIPT" && \
+       rg -q 'beads-normalize-issues-jsonl\.sh' "$HOOK_PRE_COMMIT" && \
+       rg -q 'git diff --cached --quiet -- \.beads/issues\.jsonl' "$HOOK_PRE_COMMIT" && \
+       rg -q 'partially staged \.beads/issues\.jsonl' "$HOOK_PRE_COMMIT" && \
+       rg -q 'git add -- \.beads/issues\.jsonl' "$HOOK_PRE_COMMIT"; then
+        test_pass
+    else
+        test_fail "Pre-commit must normalize tracked .beads/issues.jsonl before commit"
+    fi
+
     test_start "static_worktree_helpers_bootstrap_plain_bd_and_avoid_raw_create_fallback"
     if rg -q 'build_plain_bd_bootstrap_command_for_path' "$WORKTREE_READY_SCRIPT" && \
-       rg -q '"\$\{bd_command\}" worktree create' "$WORKTREE_PHASE_A_SCRIPT" && \
+       rg -q 'git -C "\$\{canonical_root\}" worktree add "\$\{target_path\}" "\$\{branch\}"' "$WORKTREE_PHASE_A_SCRIPT" && \
+       ! rg -q '"\$\{bd_command\}" worktree create' "$WORKTREE_PHASE_A_SCRIPT" && \
        ! rg -q 'add_next_step "bd worktree create' "$WORKTREE_READY_SCRIPT"; then
         test_pass
     else
-        test_fail "Managed worktree helpers must bootstrap plain bd and must not suggest raw bd worktree create"
+        test_fail "Managed worktree helpers must bootstrap plain bd while keeping Phase A off raw bd worktree create"
     fi
 
     test_start "static_high_traffic_docs_do_not_reintroduce_wrapper_choice"
@@ -81,6 +113,36 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "High-traffic Beads docs must use the plain bd contract without wrapper-choice drift"
+    fi
+
+    test_start "static_worktree_finish_contract_uses_plain_bd_and_skips_ambiguous_close"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'plain `bd`' "$WORKTREE_COMMAND" && \
+       rg -q 'Issue: n/a' "$WORKTREE_COMMAND" && \
+       ! rg -q 'bd-local\.sh' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Ordinary worktree/finish contract must use plain bd and skip close when issue resolution is ambiguous"
+    fi
+
+    test_start "static_worktree_finish_contract_defers_topology_publication"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'dedicated non-main topology-publish worktree/branch' "$WORKTREE_COMMAND" && \
+       rg -q 'do not auto-run `refresh --write-doc` during ordinary `start`, `attach`, `finish`, or `cleanup`' "$WORKTREE_COMMAND" && \
+       rg -q 'Stale topology is informational only for ordinary doctor/finish; do not auto-publish from the invoking branch.' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Ordinary finish contract must defer topology publication to the dedicated publish path instead of promising auto publication"
+    fi
+
+    test_start "static_worktree_helper_integration_includes_finish_mode"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'scripts/worktree-ready\.sh finish --branch <branch-or-path>' "$WORKTREE_COMMAND" && \
+       rg -q 'Canonical finish vocabulary:' "$WORKTREE_COMMAND" && \
+       rg -q 'Close: <exact bd close command or skip>' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Worktree helper integration must advertise the finish helper contract explicitly"
     fi
 
     generate_report

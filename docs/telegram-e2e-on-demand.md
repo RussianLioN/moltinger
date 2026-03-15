@@ -140,3 +140,29 @@ Restricted debug bundle хранит raw helper evidence:
 3. есть `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, `TELEGRAM_TEST_SESSION`.
 
 Если prerequisites отсутствуют, основной artifact фиксирует это в `fallback_assessment` как `outcome=unavailable`.
+
+## Codex Advisory Acceptance
+
+Для нового Moltis-native advisory flow не нужно руками интерпретировать ответы в Telegram-чате.
+Отдельный hermetic helper проверяет путь `alert -> accept -> recommendations` без зависимости от live ingress:
+
+```bash
+./scripts/codex-advisory-e2e.sh \
+  --output .tmp/current/codex-advisory-e2e-report.json
+```
+
+Или коротко:
+
+```bash
+make codex-advisory-e2e
+```
+
+Что именно он подтверждает:
+
+1. upstream watcher эмитит нормализованный advisory event;
+2. Moltis-native intake поднимает advisory session и рендерит alert;
+3. authoritative router принимает callback или recovery action;
+4. follow-up с рекомендациями отправляется сразу после `accept`;
+5. degraded one-way path остаётся честным и фиксируется в audit trail.
+
+Для live post-deploy проверки transport/runtime по-прежнему остается каноническим этот remote UAT workflow, а для advisory UX используется отдельный helper выше.

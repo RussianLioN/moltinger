@@ -30,7 +30,7 @@ SECRETS_DIR="$PROJECT_ROOT/secrets"
 TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-traefik-net}"
 FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
-DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
+DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11"
 
 # Output format
 OUTPUT_JSON=false
@@ -157,11 +157,12 @@ configure_target() {
             ;;
         clawdiy)
             REQUIRED_SECRETS=(
-                "clawdiy_password"
                 "clawdiy_service_token"
                 "clawdiy_telegram_bot_token"
             )
             OPTIONAL_SECRETS=(
+                "clawdiy_gateway_token"
+                "clawdiy_password"
                 "clawdiy_telegram_allowed_users"
                 "clawdiy_openai_codex_auth_profile"
             )
@@ -250,6 +251,17 @@ run_yaml_fallback_check() {
 # Validation functions
 check_secrets_exist() {
     local all_found=true
+
+    if [[ "$TARGET" == "clawdiy" ]]; then
+        if secret_present "clawdiy_gateway_token"; then
+            add_check "clawdiy_gateway_secret_present" "pass" "Clawdiy gateway token secret is present" "error"
+        elif secret_present "clawdiy_password"; then
+            add_check "clawdiy_gateway_secret_present" "pass" "Clawdiy legacy password secret is present for gateway-token compatibility fallback" "warning"
+        else
+            MISSING_SECRETS+=("clawdiy_gateway_token|clawdiy_password")
+            all_found=false
+        fi
+    fi
 
     for secret in "${REQUIRED_SECRETS[@]}"; do
         if ! secret_present "$secret"; then
@@ -495,10 +507,10 @@ check_clawdiy_runtime_config() {
         and .gateway.bind == "custom"
         and .gateway.customBindHost == "0.0.0.0"
         and (.gateway.port | type == "number")
-        and .gateway.auth.mode == "password"
-        and .gateway.auth.password.source == "env"
-        and .gateway.auth.password.provider == "default"
-        and .gateway.auth.password.id == "OPENCLAW_GATEWAY_PASSWORD"
+        and .gateway.auth.mode == "token"
+        and .gateway.auth.token.source == "env"
+        and .gateway.auth.token.provider == "default"
+        and .gateway.auth.token.id == "OPENCLAW_GATEWAY_TOKEN"
         and .gateway.controlUi.enabled == true
         and (.gateway.controlUi.allowedOrigins | type == "array" and length > 0)
         and (.agents.list | type == "array" and any(.id == "main" and .identity.name == "Clawdiy"))
@@ -520,6 +532,37 @@ check_clawdiy_runtime_config() {
     CLAWDIY_TELEGRAM_ALLOW_FROM_COUNT="$(jq -r '.channels.telegram.allowFrom | length' "$RUNTIME_CONFIG_PATH")"
 
     add_check "runtime_config_shape" "pass" "Clawdiy runtime config fields parsed successfully" "error"
+}
+
+check_clawdiy_runtime_home() {
+    local runtime_root="$PROJECT_ROOT/data/clawdiy/runtime"
+    local expected_uid="${CLAWDIY_RUNTIME_UID:-1000}"
+    local expected_gid="${CLAWDIY_RUNTIME_GID:-1000}"
+
+    if [[ ! -d "$runtime_root" ]]; then
+        if [[ "$CI_MODE" == "true" ]]; then
+            add_check "runtime_home_present" "pass" "Clawdiy runtime home is not materialized in CI checkout; deploy/render must create $runtime_root before official OpenClaw wizard writes" "error"
+            return
+        fi
+        add_check "runtime_home_present" "fail" "Clawdiy runtime home is missing: $runtime_root" "error"
+        return
+    fi
+
+    add_check "runtime_home_present" "pass" "Clawdiy runtime home exists: $runtime_root" "error"
+
+    if [[ "$CI_MODE" == "true" ]]; then
+        add_check "runtime_home_ownership" "pass" "CI checkout runtime home ownership is informational only; deploy/render must normalize it to ${expected_uid}:${expected_gid} on the target host" "error"
+        return
+    fi
+
+    local owner_group
+    owner_group="$(stat -c '%u:%g' "$runtime_root" 2>/dev/null || stat -f '%u:%g' "$runtime_root" 2>/dev/null || echo "unknown")"
+
+    if [[ "$owner_group" == "${expected_uid}:${expected_gid}" ]]; then
+        add_check "runtime_home_ownership" "pass" "Clawdiy runtime home ownership matches ${expected_uid}:${expected_gid}" "error"
+    else
+        add_check "runtime_home_ownership" "fail" "Clawdiy runtime home ownership must be ${expected_uid}:${expected_gid} for official OpenClaw wizard writes (got: $owner_group)" "error"
+    fi
 }
 
 check_fleet_registry_config() {
@@ -675,7 +718,7 @@ check_clawdiy_secret_isolation() {
     fi
 
     if [[ "$CLAWDIY_POLICY_HUMAN_REF" == "github-secret:MOLTIS_PASSWORD" ]]; then
-        add_check "fleet_secret_isolation" "fail" "Clawdiy human auth secret must not reuse MOLTIS_PASSWORD" "error"
+        add_check "fleet_secret_isolation" "fail" "Clawdiy gateway auth secret must not reuse MOLTIS_PASSWORD" "error"
         return
     fi
 
@@ -730,6 +773,7 @@ check_target_specific_config() {
     case "$TARGET" in
         clawdiy)
             check_clawdiy_runtime_config
+            check_clawdiy_runtime_home
             check_fleet_registry_config
             check_fleet_policy_config
             check_clawdiy_identity_alignment

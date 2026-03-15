@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moltinger/specs/009-codex-update-delivery-ux/contracts/delivery-report.schema.json",
+  "title": "Codex Update Delivery Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checked_at",
+    "advisor_snapshot",
+    "fingerprint",
+    "surface_decisions",
+    "surface_state",
+    "notes"
+  ],
+  "properties": {
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "advisor_snapshot": {
+      "$ref": "#/$defs/advisor_snapshot"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "surface_decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/surface_decision"
+      }
+    },
+    "surface_state": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/surface_state"
+      }
+    },
+    "telegram_target": {
+      "$ref": "#/$defs/telegram_target"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "advisor_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation",
+        "notification_status",
+        "project_change_suggestions",
+        "implementation_brief"
+      ],
+      "properties": {
+        "recommendation": {
+          "type": "string",
+          "enum": ["upgrade-now", "upgrade-later", "ignore", "investigate"]
+        },
+        "notification_status": {
+          "type": "string",
+          "enum": ["notify", "suppressed", "none", "investigate"]
+        },
+        "project_change_suggestions": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "implementation_brief": {
+          "type": "object"
+        }
+      }
+    },
+    "surface_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "status", "reason", "changed"],
+      "properties": {
+        "surface": {
+          "type": "string",
+          "enum": ["on-demand", "launcher", "telegram"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["deliver", "suppress", "retry", "investigate"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "changed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "surface_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "last_status", "notes"],
+      "properties": {
+        "surface": {
+          "type": "string",
+          "enum": ["on-demand", "launcher", "telegram"]
+        },
+        "last_delivered_fingerprint": {
+          "type": "string"
+        },
+        "last_delivered_at": {
+          "type": "string"
+        },
+        "last_status": {
+          "type": "string",
+          "enum": ["delivered", "suppressed", "failed", "unknown"]
+        },
+        "notes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "telegram_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "chat_id": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "silent": {
+          "type": "boolean"
+        },
+        "env_file": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

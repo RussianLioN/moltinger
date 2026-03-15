@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-12
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-15
 
 ---
 
@@ -18,7 +18,7 @@
 | Компонент | Технология |
 |-----------|------------|
 | **Container** | Docker Compose |
-| **AI Assistant** | Moltis (tracked default: ghcr.io/moltis-org/moltis:0.9.10) |
+| **AI Assistant** | Moltis (ghcr.io/moltis-org/moltis:latest) |
 | **Telegram Bot** | @moltinger_bot |
 | **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
 | **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
@@ -28,6 +28,71 @@
 ---
 
 ## 📊 Current Status
+
+### Current Session Update (2026-03-15, topology hotfix lane)
+
+- Ветка в работе: `fix/worktree-topology-registry-single-writer-publish`
+- `molt-ml3` фактически закрыт и доведён до automation-enforced состояния.
+- Что дожато после review blocker’ов:
+  - `scripts/git-topology-registry.sh` теперь принимает publish только из одной dedicated non-main ветки `chore/topology-registry-publish`; alias-ветки, `main`, ordinary feature-ветки и detached HEAD явно отклоняются.
+  - `.githooks/pre-push` больше не fail-open на internal error path: unexpected failure `scripts/git-topology-registry.sh check` теперь блокирует push, stale ordinary branch остаётся warning-only, stale dedicated publish branch остаётся hard-block.
+  - `tests/lib/git_topology_fixture.sh` переиспользует уже существующую canonical publish worktree, поэтому child-branch doctor flow не ломается на повторном занятии той же publish-ветки.
+  - `tests/integration/test_git_topology_registry.sh` получил детерминированный non-lock failure path, который одинаково работает и в локальном shell, и в containerized runner.
+  - `tests/run.sh` теперь включает `topology_registry` в canonical `pr` lane; отдельный `--lane topology_registry` агрегирует unit/integration/e2e suites для GitHub-style gating.
+- Проверки:
+  - `./tests/unit/test_git_topology_registry.sh`
+  - `./tests/integration/test_git_topology_registry.sh`
+  - `./tests/e2e/test_git_topology_registry_workflow.sh`
+  - `./tests/run.sh --lane topology_registry --json`
+  - `./tests/unit/test_worktree_ready.sh`
+  - `make codex-check`
+  - `git diff --check`
+- Следующий шаг по этой линии: привести branch diff к merge-ready виду, открыть PR, посмотреть реальные GitHub checks/logs и только после этого принимать финальное merge-решение.
+
+### Current Session Update (2026-03-13)
+
+- Ветка в работе: `022-clawdiy-wizard-writability-fix`
+- Live OAuth-попытка через официальный мастер `openclaw onboard` для `codex-oauth` на `ainetic.tech` успешно дошла до установки `codex-oauth/gpt-5.4` как модели по умолчанию, но упала на сохранении конфигурации с `EACCES` в `/home/node/.openclaw/openclaw.json.<tmp>.tmp`.
+- Корневая причина подтверждена live-проверкой: контракт разворачивания Clawdiy монтировал только read-only файл `openclaw.json` вместо записываемого домашнего каталога `/home/node/.openclaw`, который требуется официальному мастеру настройки OpenClaw.
+- До исправления снята резервная копия live-состояния:
+  - `/root/clawdiy-backups/clawdiy-pre-codex-oauth-20260313-004707.tar.gz`
+  - `sha256: 7684188246ea345ff60cbfd1cc267580b87a5e75427b81eee5614e1e425db0da`
+- Подготовленные исправления в ветке:
+  - `docker-compose.clawdiy.yml` монтирует `data/clawdiy/runtime -> /home/node/.openclaw`
+  - `scripts/deploy.sh` и `scripts/render-clawdiy-runtime-config.sh` нормализуют права `data/clawdiy/runtime`
+  - `scripts/preflight-check.sh` теперь валидирует наличие и владельца `runtime home`
+  - резервное копирование, smoke и статические тесты считают `runtime home` обязательным инвентарем
+- Новый RCA: `docs/rca/2026-03-13-clawdiy-official-wizard-runtime-home-contract-mismatch.md`
+- Новое правило: `docs/rules/clawdiy-official-wizard-needs-writable-runtime-home.md`
+- Follow-up issue: `molt-zze` — выкатить исправление и повторно пройти официальный мастер настройки OpenClaw на live Clawdiy
+
+### Current Session Update (2026-03-14)
+
+- PR `#56` (`022-clawdiy-wizard-writability-fix`) был успешно смержен в `main`, но production workflow `Deploy Clawdiy` run `23083872438` упал на локальном шаге `preflight`.
+- Новый RCA-014 показал, что `scripts/preflight-check.sh --ci --target clawdiy` слишком рано требовал materialized `data/clawdiy/runtime` в checkout GitHub runner, хотя этот каталог по контракту создается позже на шагах `render` и `deploy`.
+- Под это создан follow-up branch `023-clawdiy-ci-preflight-runtime-home-fix`.
+- Исправление: `preflight` теперь различает CI checkout и реальный deploy-target для `runtime home`.
+- Новый RCA: `docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md`
+- Новое правило: `docs/rules/clawdiy-preflight-must-distinguish-ci-checkout-from-deploy-target.md`
+- После merge PR `#57` (`b8b5978`) production deploy run `23084123004` стал green, а live Clawdiy теперь реально отвечает через Codex OAuth / `gpt-5.4`.
+- Для подготовки official Docker upgrade ветка `023-clawdiy-ci-preflight-runtime-home-fix` получила follow-up PR `#58`, который закрепил Clawdiy на точном official tag `ghcr.io/openclaw/openclaw:2026.3.13` вместо плавающего `latest`; merge commit `75ede505e84eed336c83461a6c60206b774b3b2a`.
+- Попытка live-update через `Deploy Clawdiy` run `23090331854` показала новый blocker: dirty server checkout в `/opt/moltinger` был ограничен `scripts/preflight-check.sh`, но сам Clawdiy workflow не имел auditable `repair_server_checkout` path, который уже был у `Deploy Moltis`.
+- Под это оформлен RCA-015: `docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md` и правило `docs/rules/clawdiy-deploy-needs-auditable-checkout-repair.md`.
+- Follow-up fix добавляет в `deploy-clawdiy.yml` input `repair_server_checkout`, использует `scripts/gitops-repair-managed-checkout.sh` только для Clawdiy-managed surface и дополняет статические проверки и runbook.
+- Дополнительная official-проверка по Docker registry показала, что `ghcr.io/openclaw/openclaw:2026.3.13` еще не опубликован как version-tag, хотя GitHub release `v2026.3.13` уже существует. Для Docker install method корректный runtime path пока возвращен на `ghcr.io/openclaw/openclaw:latest`, который реально присутствует в `ghcr`.
+- Попытка live-upgrade Clawdiy на `ghcr.io/openclaw/openclaw:latest` через run `23090853145` провалилась: контейнер ушел в `unhealthy`, внешний `/health` вернул `404`, и потребовался срочный rollback на `ghcr.io/openclaw/openclaw:2026.3.11`.
+- Новый RCA-016 зафиксировал, что floating `latest` не должен становиться tracked default для Clawdiy до отдельного live-canary; repo-default возвращен на `2026.3.11`, а future upgrades должны идти через явный `clawdiy_image`.
+- Официальный rollback run `23090952913` восстановил service health, но вскрыл второй системный дефект: OAuth-профиль Codex сохранился, а tracked config сбросил `main` обратно на `anthropic/claude-opus-4-6`.
+- Новый RCA-017 зафиксировал, что baseline `gpt-5.4` жил только в runtime wizard state. В tracked `config/clawdiy/openclaw.json` теперь закреплен baseline Codex OAuth / `gpt-5.4`, а live baseline восстановлен официальной командой `openclaw models --agent main set ...`.
+- Follow-up Beads issue: `molt-1mn` — исследовать, почему официальный Docker `latest` для OpenClaw не вышел в healthy на live Clawdiy, и определить следующий безопасный upgrade candidate.
+- Дополнительное расследование по `molt-1mn` доказало, что official Docker `latest` (`2026.3.12`) не является hard-broken образом для Clawdiy:
+  - isolated canary без Telegram начал отдавать `200` на `/health` примерно через 100 секунд;
+  - isolated canary с живым Telegram-профилем временно ушел в `unhealthy`, но затем начал отдавать `200` на `/health` и автоматически восстановился в Docker `healthy`.
+- Новый RCA-018: `docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md`
+- Под это в ветке `023-clawdiy-ci-preflight-runtime-home-fix` подготовлен fixed rollout contract:
+  - `docker-compose.clawdiy.yml` получил расширенный startup grace для OpenClaw warmup;
+  - `scripts/deploy.sh` больше не считает первый transient `unhealthy` терминальным, если контейнер жив и `/health` уже поднимается;
+  - runbook и статические проверки обновлены под новый upgrade protocol.
 
 ### Production Status
 
@@ -150,53 +215,76 @@ GitOps Compliance: Enforced ✅
 
 ## 📝 Session History
 
-### 2026-03-12: Git-Tracked Moltis Container Update Path (z8m.3)
+### 2026-03-14: Topology Registry Single-Writer Publish Policy For Worktree Flows
 
-**Статус**: 🚧 Branch implementation complete on `feat/moltinger-z8m-3-moltis-git-container-update`; live production rollout not executed in this session
+**Статус**: ✅ `command-worktree`, `command-session-summary` и связанные инструкции переведены на read-only-by-default handling для `docs/GIT-TOPOLOGY-REGISTRY.md`
 
-- Pinned the tracked Moltis image in both compose files to `ghcr.io/moltis-org/moltis:0.9.10` and added `scripts/moltis-version.sh` so git is now the single source of truth for the rollout version.
-- Hardened `scripts/deploy.sh` against ad-hoc `MOLTIS_VERSION` drift, added fallback discovery for `pre_deploy_*.tar.gz` backups and restore-check evidence, and kept rollback on the same tracked contract.
-- Removed the unsafe manual version path from `.github/workflows/uat-gate.yml`; UAT now derives the version from git and deploys Moltis only through `./scripts/deploy.sh --json moltis deploy`.
-- Aligned `.github/workflows/deploy.yml` rollback behavior with `deploy.sh rollback` and made the workflow refresh `data/moltis/.last-deployed-image`, `data/moltis/.last-moltis-backup`, and `data/moltis/.last-moltis-restore-check` so CI-created evidence is reusable during rollback without polluting the git-managed root.
-- Extended static coverage for the pinned version helper, tracked rollback pointers, and the new UAT/deploy workflow invariants; updated rollout docs and fixed rebased absolute links.
-
-**Validated**
-
-- `bash -n scripts/deploy.sh scripts/moltis-version.sh scripts/backup-moltis-enhanced.sh tests/static/test_config_validation.sh`
-- `bash ./scripts/moltis-version.sh assert-tracked`
-- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); YAML.load_file(".github/workflows/uat-gate.yml"); puts "workflow yaml ok"'`
-- `./tests/run.sh --lane static --filter config_validation --json`
-- `./tests/run.sh --lane component --filter backup_restore_readiness --json`
-- `scripts/git-topology-registry.sh check`
-
-**Next**
-
-- Execute the tracked Moltis rollout through the backup-safe CI path when a production window is intended.
-- Continue with `moltinger-z8m.4` only after that rollout, using the new restore-check and rollback evidence for post-update triage.
-- Keep `moltinger-z8m.2` blocked until the updated Moltis baseline is confirmed stable.
-
-### 2026-03-12: Moltis Backup-Safe Update Baseline (z8m.1)
-
-**Статус**: ✅ Phase B baseline complete on branch `feat/moltinger-z8m-1-moltis-backup-rollback-baseline`
-
-- Audited the existing Moltis backup/restore path and closed the main rollout gap: backup archives now include runtime rollback files (`.env`, `docker-compose.yml`, `docker-compose.prod.yml`) instead of only `config/` and `data/`.
-- Added non-destructive `restore-check` support to `scripts/backup-moltis-enhanced.sh` and wired it into `scripts/deploy.sh` so Moltis deploys stop unless a fresh pre-update backup is also restore-ready.
-- Added Moltis restore-check evidence and rollback evidence paths under `data/moltis/audit/` and documented the operator flow in `docs/runbooks/moltis-backup-safe-update.md`.
-- Hardened `.github/workflows/deploy.yml` so the Git-based Moltis rollout path now backs up both compose files and blocks deploy when the fresh backup is not restore-ready.
-- Added regression coverage via `tests/component/test_backup_restore_readiness.sh` and static assertions for the new workflow/script contract.
+- Проведён отдельный consilium по конфликтам вокруг `docs/GIT-TOPOLOGY-REGISTRY.md` в параллельных worktree-сессиях.
+- Выбран и задокументирован single-writer publish path:
+  - обычные `start` / `attach` / `finish` / `cleanup` потоки используют только `status` / `check`
+  - tracked snapshot публикуется только явным шагом `refresh --write-doc`
+  - publish должен идти из dedicated non-main topology-publish worktree/branch, а не из `main` и не из обычной feature-ветки
+- Обновлены `.ai/instructions/shared-core.md`, `.claude/commands/worktree.md`, `.claude/commands/session-summary.md`, `.claude/commands/git-topology.md`, `docs/CODEX-OPERATING-MODEL.md`, `docs/QUICK-REFERENCE.md` и `docs/WORKTREE-HOTFIX-PLAYBOOK.md`.
+- В процессе landing найден и исправлен automation mismatch: `.githooks/pre-push` раньше жёстко блокировал push при stale topology snapshot. Теперь `pre-push`, `post-checkout`, `post-merge` и `post-rewrite` переводят stale topology в warning/report path и отправляют оператора к dedicated non-main publish branch, не forcing ordinary feature branch to publish the snapshot.
+- Добавлено новое правило: `docs/rules/topology-registry-single-writer-publish-path.md`.
+- Пересобраны generated инструкции и bridge в Codex через `./scripts/sync-agent-instructions.sh --write` и `./scripts/sync-claude-skills-to-codex.sh --install`.
+- Создан follow-up issue `molt-ml3` для отдельного script-level enforcement в automation.
+- Во время landing подтверждён побочный риск manual worktree path: even with localized Beads ownership, `bd sync` из вручную созданной hotfix-ворктрии всё ещё экспортировал state в canonical root `.beads/issues.jsonl`. Это зафиксировано как дополнительный аргумент, почему enforcement нужен не только в docs, но и в automation.
 
 **Validated**
 
-- `bash -n scripts/backup-moltis-enhanced.sh scripts/deploy.sh tests/component/test_backup_restore_readiness.sh tests/static/test_config_validation.sh tests/run.sh`
-- `./tests/run.sh --lane component --filter backup_restore_readiness --json`
-- `./tests/run.sh --lane static --filter config_validation --json`
-- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml"); puts "deploy.yml ok"'`
+- `./scripts/sync-agent-instructions.sh --write`
+- `./scripts/sync-claude-skills-to-codex.sh --install`
+- `./scripts/sync-claude-skills-to-codex.sh --check`
+- `./tests/unit/test_worktree_ready.sh`
+- `bash -n .githooks/pre-push .githooks/post-checkout .githooks/post-merge .githooks/post-rewrite`
+- `make instructions-check`
+- `make codex-check`
+- `git diff --check`
+- `scripts/git-topology-registry.sh check` -> `status=stale` (ожидаемо; snapshot не публиковался из ordinary fix branch)
+- `scripts/git-topology-registry.sh status`
 
-**Next**
+### 2026-03-12: Clawdiy Remote OAuth Runtime Research Formalized
 
-- `moltinger-z8m.3`: bump Moltis via git and roll out only through the backup-safe path that now requires fresh backup + restore-check.
-- `moltinger-z8m.4`: fix any post-update regressions while preserving the new rollback evidence contract.
-- `moltinger-z8m.2`: add skills/subagents/abilities only after the updated Moltis baseline is confirmed stable.
+**Статус**: ✅ durable research + Speckit planning package created
+
+- Added durable research artifact [docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md) with official evidence, official GitHub issue evidence, explicit inference, consilium scoring, and recommended practical-now vs target-state OAuth methods.
+- Updated the research index in [docs/research/README.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/README.md) and added cross-links from [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md), [docs/SECRETS-MANAGEMENT.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/SECRETS-MANAGEMENT.md), and [specs/001-clawdiy-agent-platform/research.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/001-clawdiy-agent-platform/research.md).
+- Created a new Speckit package at [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md), [specs/017-clawdiy-remote-oauth-lifecycle/plan.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/plan.md), and [specs/017-clawdiy-remote-oauth-lifecycle/tasks.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/tasks.md) to turn the research into an implementation contract.
+- Refreshed [docs/GIT-TOPOLOGY-REGISTRY.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/GIT-TOPOLOGY-REGISTRY.md) after switching the worktree to branch `017-clawdiy-remote-oauth-lifecycle`.
+
+- Validation completed:
+  - `scripts/git-topology-registry.sh refresh --write-doc`
+  - `git diff --check`
+
+### 2026-03-12: Clawdiy OAuth Planning Switched To UI-First Bootstrap
+
+**Статус**: ✅ operator path refined before runtime implementation
+
+- Updated [specs/017-clawdiy-remote-oauth-lifecycle/plan.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/plan.md) so the first practical OAuth attempt is now the live Clawdiy web Settings flow targeting the hosted runtime directly; SSH/CLI paste-back remains fallback only.
+- Updated [specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/quickstart.md) and created [specs/017-clawdiy-remote-oauth-lifecycle/validation.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/validation.md) so the first execution checklist now starts from the Clawdiy web UI and records runtime-store/provider evidence.
+- Updated [docs/runbooks/clawdiy-repeat-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-repeat-auth.md) and [docs/deployment-strategy.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/deployment-strategy.md) so operator docs match the new UI-first contract.
+- Reconciled [specs/017-clawdiy-remote-oauth-lifecycle/tasks.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/tasks.md) with the newly completed planning/doc tasks.
+
+**Validated**
+
+- `git diff --check`
+
+### 2026-03-12: Clawdiy Browser Bootstrap Docs Corrected To Match Live UI
+
+**Статус**: ✅ official-docs re-check + live UI alignment documented
+
+- Re-checked official OpenClaw browser/control/device docs and compared them against the live Clawdiy first-run experience on `https://clawdiy.ainetic.tech`.
+- Confirmed that fresh browser bootstrap is a disconnected dashboard shell plus `Overview -> Gateway Access -> token -> device pairing`, not a dedicated welcome wizard and not a guaranteed `Settings/OAuth` first screen.
+- Added durable research [docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md) and operator runbook [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md).
+- Corrected downstream docs and spec artifacts that previously overstated the Clawdiy web Settings path for first-run OAuth.
+- Captured RCA-012 in [docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md) and added the prevention rule [docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/rules/clawdiy-browser-bootstrap-before-provider-auth.md).
+- Filed follow-up bug `molt-nm7` for the broken `rca-index.sh` automation path, which still fails on zero-padded historical RCA IDs like `008` and `009`.
+
+**Validated**
+
+- live browser inspection on `https://clawdiy.ainetic.tech`
+- `git diff --check`
 
 ### 2026-03-09: RCA On Remote Rollout Diagnosis Order
 
@@ -352,7 +440,12 @@ GitOps Compliance: Enforced ✅
 
 - `./tests/run.sh --lane static --filter 'static_(config_validation|fleet_registry)' --json`
 - `./tests/run.sh --lane security_api --filter security_api_clawdiy_auth_boundaries --json`
-- `env CLAWDIY_PASSWORD=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- `env CLAWDIY_GATEWAY_TOKEN=... CLAWDIY_SERVICE_TOKEN=... CLAWDIY_TELEGRAM_BOT_TOKEN=... ./scripts/preflight-check.sh --ci --target clawdiy --json`
+- Added hosted-Control-UI RCA and rule for Clawdiy gateway token auth:
+  `docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md`,
+  `docs/rules/clawdiy-hosted-control-ui-token-auth.md`
+- Follow-up Beads task for merge/rollout cleanup:
+  `molt-di3` — roll out canonical `CLAWDIY_GATEWAY_TOKEN` and retire legacy password fallback
 - `./scripts/clawdiy-smoke.sh --stage auth --json`
 
 **Next**
@@ -1081,6 +1174,7 @@ gh run view --workflow test.yml   # View latest test run details
 4. **moltinger-j22** — MEDIUM: AlertManager Receivers
 5. **moltinger-eb0** — MEDIUM: Grafana Dashboard
 6. Протестировать skill telegram-learner на канале @tsingular
+7. После merge hotfix-а проверить, что ordinary ветки больше не получают blocker из-за stale topology snapshot
 
 ### P4 Priority Tasks (Recommended Order)
 

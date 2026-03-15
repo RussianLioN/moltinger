@@ -1,7 +1,7 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.3.8",
-    "lastTouchedAt": "2026-03-09T00:00:00.000Z"
+    "lastTouchedVersion": "2026.3.11",
+    "lastTouchedAt": "2026-03-14T00:00:00.000Z"
   },
   "commands": {
     "native": "auto",
@@ -22,11 +22,11 @@
     "customBindHost": "0.0.0.0",
     "port": 18789,
     "auth": {
-      "mode": "password",
-      "password": {
+      "mode": "token",
+      "token": {
         "source": "env",
         "provider": "default",
-        "id": "OPENCLAW_GATEWAY_PASSWORD"
+        "id": "OPENCLAW_GATEWAY_TOKEN"
       }
     },
     "controlUi": {
@@ -37,6 +37,14 @@
     }
   },
   "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai-codex/gpt-5.4"
+      },
+      "models": {
+        "openai-codex/gpt-5.4": {}
+      }
+    },
     "list": [
       {
         "id": "main",

@@ -5,6 +5,62 @@
   "description": "Server automation scripts for Moltinger project",
   "maintainer": "DevOps Team",
   "repository": "https://github.com/RussianLioN/moltinger",
+  "dependencies": {
+    "system": {
+      "docker": ">=20.10",
+      "docker-compose": ">=2.0"
+    },
+    "packages": {
+      "curl": "any",
+      "jq": "any",
+      "tar": "any",
+      "gpg": "optional",
+      "python3": "optional",
+      "node": "optional"
+    }
+  },
+  "deploy": {
+    "target_path": "/opt/moltinger/scripts",
+    "permissions": "755",
+    "owner": "root",
+    "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
+    "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
+  },
+  "systemd_units": {},
+  "cron_jobs": {
+    "moltis-backup-verify": {
+      "source": "cron.d/moltis-backup-verify",
+      "target": "/etc/cron.d/moltis-backup-verify",
+      "schedule": "0 0 * * 0",
+      "description": "Weekly backup integrity verification (Sunday 03:00 MSK)",
+      "command": "/opt/moltinger/scripts/backup-moltis-enhanced.sh verify",
+      "issue": "moltinger-hdn"
+    },
+    "moltis-telegram-webhook-monitor": {
+      "source": "cron.d/moltis-telegram-webhook-monitor",
+      "target": "/etc/cron.d/moltis-telegram-webhook-monitor",
+      "schedule": "*/15 * * * *",
+      "description": "Telegram webhook health and response quality monitoring",
+      "command": "/opt/moltinger/scripts/telegram-webhook-monitor.sh --json",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-telegram-user-monitor": {
+      "source": "cron.d/moltis-telegram-user-monitor",
+      "target": "/etc/cron.d/moltis-telegram-user-monitor",
+      "schedule": "*/10 * * * *",
+      "description": "User-level Telegram probe and bot reply quality validation",
+      "command": "/opt/moltinger/scripts/telegram-user-monitor.sh",
+      "issue": "moltinger-2kj"
+    },
+    "moltis-codex-upstream-watcher": {
+      "source": "cron.d/moltis-codex-upstream-watcher",
+      "target": "/etc/cron.d/moltis-codex-upstream-watcher",
+      "schedule": "17 */6 * * *",
+      "description": "Moltis-native Codex update scheduler with duplicate-safe Telegram delivery",
+      "command": "/opt/moltinger/scripts/moltis-codex-update-run.sh --mode scheduler --include-issue-signals --stdout none",
+      "issue": "moltinger-eajx"
+    }
+  },
   "scripts": {
     "codex-check.sh": {
       "version": "1.0.0",
@@ -19,8 +75,8 @@
       "ci": true
     },
     "codex-profile-launch.sh": {
-      "version": "1.0.0",
-      "description": "Launch Codex with repo-specific sandbox, approval defaults, and repo-local plain-bd bootstrap",
+      "version": "1.1.0",
+      "description": "Launch Codex with repo-specific sandbox, approval defaults, and optional update delivery hooks",
       "entrypoint": true,
       "requires": [
         "codex"
@@ -49,17 +105,371 @@
     },
     "beads-worktree-localize.sh": {
       "version": "1.0.0",
-      "description": "Localize or validate Beads ownership for an existing worktree without reviving shared redirect state",
+      "description": "Remove stale Beads redirect metadata and bootstrap a worktree-local tracker database",
       "entrypoint": true,
       "requires": [
         "bash",
-        "git",
-        "bd"
+        "bd",
+        "git"
       ],
       "provides": [
-        "beads-worktree-localize",
-        "beads-ownership-migrate"
+        "beads-worktree-localize"
       ]
+    },
+    "beads-normalize-issues-jsonl.sh": {
+      "version": "1.0.0",
+      "description": "Normalize tracked .beads/issues.jsonl dependency ordering into one deterministic canonical form",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3",
+        "mktemp"
+      ],
+      "provides": [
+        "beads-issues-jsonl-normalize"
+      ],
+      "ci": true
+    },
+    "beads-recover-issue.sh": {
+      "version": "1.0.0",
+      "description": "Safely recover one leaked Beads issue into the localized tracker of the owner worktree",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq",
+        "mktemp"
+      ],
+      "provides": [
+        "beads-recover-issue"
+      ]
+    },
+    "beads-recovery-batch.sh": {
+      "version": "1.0.0",
+      "description": "Audit and apply safe batch recovery of leaked Beads issues into owner worktrees",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq",
+        "mktemp"
+      ],
+      "provides": [
+        "beads-recovery-batch"
+      ]
+    },
+    "bd-local.sh": {
+      "version": "1.0.0",
+      "description": "Fail-closed wrapper that binds Beads commands to the current worktree-local tracker database",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git"
+      ],
+      "provides": [
+        "bd-local"
+      ]
+    },
+    "telegram-bot-send-remote.sh": {
+      "version": "1.1.0",
+      "description": "Delegate Telegram bot sending with optional reply_markup payloads to the Moltinger server runtime over SSH",
+      "entrypoint": true,
+      "requires": [
+        "ssh"
+      ],
+      "provides": [
+        "telegram-bot-send-remote"
+      ]
+    },
+    "codex-telegram-consent-store.sh": {
+      "version": "1.0.0",
+      "description": "Persist authoritative Codex Telegram consent records in a shared machine-readable store",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "codex-telegram-consent-store"
+      ],
+      "env_vars": [
+        "CODEX_TELEGRAM_CONSENT_STORE_DIR"
+      ],
+      "ci": true
+    },
+    "moltis-codex-consent-router.sh": {
+      "version": "1.0.0",
+      "description": "Route tokenized Codex consent actions from Telegram into the authoritative shared consent store",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-consent-router"
+      ],
+      "env_vars": [
+        "CODEX_TELEGRAM_CONSENT_STORE_SCRIPT",
+        "CODEX_TELEGRAM_CONSENT_STORE_DIR",
+        "CODEX_TELEGRAM_CONSENT_ROUTER_SEND_SCRIPT",
+        "CODEX_TELEGRAM_CONSENT_ROUTER_ENV_FILE",
+        "CODEX_TELEGRAM_CONSENT_ROUTER_SEND_REPLY",
+        "MOLTIS_ENV_FILE"
+      ]
+    },
+    "moltis-codex-advisory-intake.sh": {
+      "version": "1.0.0",
+      "description": "Render or deliver a Moltis-native Codex advisory alert from a normalized producer event",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-advisory-intake",
+        "codex-advisory-alert-preview"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA",
+        "MOLTIS_CODEX_ADVISORY_SEND_ALERT",
+        "MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_CHAT_ID",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE",
+        "MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_AUDIT_DIR",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX",
+        "MOLTIS_CODEX_ADVISORY_DEGRADED_REASON",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS",
+        "MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND"
+      ],
+      "ci": true
+    },
+    "codex-advisory-session-store.sh": {
+      "version": "1.0.0",
+      "description": "Persist Moltis-native Codex advisory sessions and their follow-up delivery state",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "codex-advisory-session-store"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-state.sh": {
+      "version": "1.2.0",
+      "description": "Persist Moltis-native Codex update skill state, scheduler checkpoints, delivery results, and audit pointers",
+      "entrypoint": true,
+      "requires": [
+        "jq"
+      ],
+      "provides": [
+        "moltis-codex-update-state"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_STATE_FILE"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-profile.sh": {
+      "version": "1.1.0",
+      "description": "Validate and normalize stable optional project profiles for the Moltis-native Codex update skill",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-profile"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_PROFILE_SCHEMA"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-run.sh": {
+      "version": "1.3.0",
+      "description": "Canonical Moltis-native runtime entrypoint for on-demand and scheduled Codex CLI update checks with audit mirrors, scheduler-owned delivery, and profile-shaped recommendations",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-run",
+        "codex-update-check"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_UPDATE_MODE",
+        "MOLTIS_CODEX_UPDATE_STATE_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_STATE_FILE",
+        "MOLTIS_CODEX_UPDATE_AUDIT_DIR",
+        "MOLTIS_CODEX_UPDATE_RELEASE_FILE",
+        "MOLTIS_CODEX_UPDATE_RELEASE_URL",
+        "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_FILE",
+        "MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_URL",
+        "MOLTIS_CODEX_UPDATE_PROFILE_FILE",
+        "MOLTIS_CODEX_UPDATE_MAX_RELEASES",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT",
+        "MOLTIS_CODEX_UPDATE_TELEGRAM_SILENT"
+      ],
+      "ci": true
+    },
+    "moltis-codex-update-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Moltis-native Codex update proof covering manual profile handling, scheduler delivery, suppression, and audit evidence",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-update-e2e"
+      ],
+      "ci": true
+    },
+    "moltis-codex-advisory-router.sh": {
+      "version": "1.0.0",
+      "description": "Route Moltis-native Codex advisory callbacks and recovery actions into immediate Telegram follow-up delivery",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "moltis-codex-advisory-router"
+      ],
+      "env_vars": [
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR",
+        "MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT",
+        "MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE",
+        "MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY",
+        "MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX",
+        "MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND",
+        "MOLTIS_ENV_FILE"
+      ],
+      "ci": true
+    },
+    "codex-advisory-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Moltis-native Codex advisory acceptance path covering healthy callback flow and degraded one-way fallback",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "codex-advisory-e2e"
+      ],
+      "ci": true
+    },
+    "codex-cli-update-monitor.sh": {
+      "version": "1.0.0",
+      "description": "Assess local Codex CLI state against upstream releases and repo workflow relevance",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-update-monitor",
+        "codex-update-report"
+      ],
+      "ci": true
+    },
+    "codex-cli-upstream-watcher.sh": {
+      "version": "2.1.0",
+      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and authoritative consent-based project recommendations",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-upstream-watcher",
+        "codex-upstream-telegram",
+        "codex-upstream-digest",
+        "codex-upstream-practical-guidance"
+      ],
+      "env_vars": [
+        "CODEX_UPSTREAM_WATCHER_MODE",
+        "CODEX_UPSTREAM_WATCHER_STATE_FILE",
+        "CODEX_UPSTREAM_WATCHER_ADVISORY_EVENT_OUT",
+        "CODEX_UPSTREAM_WATCHER_RELEASE_FILE",
+        "CODEX_UPSTREAM_WATCHER_RELEASE_URL",
+        "CODEX_UPSTREAM_WATCHER_ISSUE_SIGNALS_FILE",
+        "CODEX_UPSTREAM_WATCHER_ISSUE_SIGNALS_URL",
+        "CODEX_UPSTREAM_WATCHER_MAX_RELEASES",
+        "CODEX_UPSTREAM_WATCHER_DELIVERY_MODE",
+        "CODEX_UPSTREAM_WATCHER_DIGEST_WINDOW_HOURS",
+        "CODEX_UPSTREAM_WATCHER_DIGEST_MAX_ITEMS",
+        "CODEX_UPSTREAM_WATCHER_ADVISOR_BRIDGE_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CHAT_ID",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_ENV_FILE",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_SEND_SCRIPT",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_WINDOW_HOURS",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_ROUTER_ENABLED",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_SCRIPT",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_CONSENT_STORE_DIR",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_UPDATES_FILE",
+        "CODEX_UPSTREAM_WATCHER_TELEGRAM_ALLOW_GETUPDATES",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "MOLTIS_ENV_FILE"
+      ],
+      "ci": true
+    },
+    "codex-telegram-consent-e2e.sh": {
+      "version": "1.0.0",
+      "description": "Run a hermetic Codex Telegram baseline check proving honest one-way alerts and degraded fallback without the retired repo-side consent UX",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "mktemp",
+        "python3"
+      ],
+      "provides": [
+        "codex-consent-e2e",
+        "codex-telegram-consent-e2e"
+      ],
+      "ci": true
+    },
+    "codex-cli-update-delivery.sh": {
+      "version": "1.0.0",
+      "description": "Deliver Codex update awareness across on-demand, launcher, and Telegram surfaces",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-update-delivery",
+        "codex-update-alert",
+        "codex-update-telegram"
+      ],
+      "ci": true
     },
     "backup-moltis-enhanced.sh": {
       "version": "3.0.0",
@@ -239,6 +649,22 @@
         "gitops_guard_config"
       ]
     },
+    "gitops-repair-managed-checkout.sh": {
+      "version": "1.0.0",
+      "description": "Auditable GitOps repair for deploy-managed remote checkout drift before deployment",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "git",
+        "ssh",
+        "tar"
+      ],
+      "provides": [
+        "gitops-repair-managed-checkout"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "gitops-metrics.sh": {
       "version": "1.0.0",
       "description": "Collect and report GitOps compliance metrics",
@@ -272,6 +698,21 @@
         "alert"
       ],
       "cron": "*/5 * * * *"
+    },
+    "moltis-version.sh": {
+      "version": "1.0.0",
+      "description": "Resolve and validate the tracked Moltis image version from git-managed compose files",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "sed"
+      ],
+      "provides": [
+        "moltis-version",
+        "moltis-image",
+        "moltis-version-assert-tracked"
+      ],
+      "gitops": true
     },
     "ollama-health.sh": {
       "version": "1.0.0",
@@ -487,16 +928,34 @@
       "version": "1.0.0",
       "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, handoff generation, and repo-local plain-bd bootstrap",
       "entrypoint": true,
-      "requires": ["git"],
-      "provides": ["worktree-plan", "worktree-readiness", "worktree-doctor", "worktree-handoff"],
-      "optional_requires": ["bd", "direnv", "jq", "osascript", "codex"]
+      "requires": [
+        "git"
+      ],
+      "provides": [
+        "worktree-plan",
+        "worktree-readiness",
+        "worktree-doctor",
+        "worktree-handoff"
+      ],
+      "optional_requires": [
+        "bd",
+        "direnv",
+        "jq",
+        "osascript",
+        "codex"
+      ]
     },
     "worktree-phase-a.sh": {
       "version": "0.1.0",
       "description": "Deterministic Phase A executor for creating new worktrees from an explicit base ref",
       "entrypoint": true,
-      "requires": ["git", "bd"],
-      "provides": ["worktree-phase-a-create"]
+      "requires": [
+        "git",
+        "bd"
+      ],
+      "provides": [
+        "worktree-phase-a-create"
+      ]
     },
     "telegram-webhook-monitor.sh": {
       "version": "1.0.0",
@@ -671,8 +1130,13 @@
       "version": "1.0.0",
       "description": "Wrapper for browser-based user monitor without API_HASH (manual/on-demand)",
       "entrypoint": true,
-      "requires": ["node"],
-      "provides": ["telegram-web", "user-monitor"],
+      "requires": [
+        "node"
+      ],
+      "provides": [
+        "telegram-web",
+        "user-monitor"
+      ],
       "env_vars": [
         "MOLTIS_ENV_FILE",
         "TELEGRAM_WEB_STATE",
@@ -728,57 +1192,30 @@
       "version": "0.1.0",
       "description": "Owner script for the sanitized git topology registry and reviewed intent sidecar",
       "entrypoint": true,
-      "requires": ["git"],
-      "provides": ["git-topology-refresh", "git-topology-check", "git-topology-status", "git-topology-doctor"],
+      "requires": [
+        "git"
+      ],
+      "provides": [
+        "git-topology-refresh",
+        "git-topology-check",
+        "git-topology-status",
+        "git-topology-doctor"
+      ],
       "gitops": true
-    }
-  },
-  "dependencies": {
-    "system": {
-      "docker": ">=20.10",
-      "docker-compose": ">=2.0"
     },
-    "packages": {
-      "curl": "any",
-      "jq": "any",
-      "tar": "any",
-      "gpg": "optional",
-      "python3": "optional",
-      "node": "optional"
-    }
-  },
-  "deploy": {
-    "target_path": "/opt/moltinger/scripts",
-    "permissions": "755",
-    "owner": "root",
-    "sync_command": "gh workflow run deploy.yml (GitOps: scripts synced via CI/CD)",
-    "note": "Manual scp disabled. All script changes must go through git push → CI/CD"
-  },
-  "systemd_units": {},
-  "cron_jobs": {
-    "moltis-backup-verify": {
-      "source": "cron.d/moltis-backup-verify",
-      "target": "/etc/cron.d/moltis-backup-verify",
-      "schedule": "0 0 * * 0",
-      "description": "Weekly backup integrity verification (Sunday 03:00 MSK)",
-      "command": "/opt/moltinger/scripts/backup-moltis-enhanced.sh verify",
-      "issue": "moltinger-hdn"
-    },
-    "moltis-telegram-webhook-monitor": {
-      "source": "cron.d/moltis-telegram-webhook-monitor",
-      "target": "/etc/cron.d/moltis-telegram-webhook-monitor",
-      "schedule": "*/15 * * * *",
-      "description": "Telegram webhook health and response quality monitoring",
-      "command": "/opt/moltinger/scripts/telegram-webhook-monitor.sh --json",
-      "issue": "moltinger-2kj"
-    },
-    "moltis-telegram-user-monitor": {
-      "source": "cron.d/moltis-telegram-user-monitor",
-      "target": "/etc/cron.d/moltis-telegram-user-monitor",
-      "schedule": "*/10 * * * *",
-      "description": "User-level Telegram probe and bot reply quality validation",
-      "command": "/opt/moltinger/scripts/telegram-user-monitor.sh",
-      "issue": "moltinger-2kj"
+    "codex-cli-update-advisor.sh": {
+      "version": "1.0.0",
+      "description": "Wrap the Codex update monitor with low-noise notifications and repository change suggestions",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "codex-update-advisor",
+        "codex-update-suggest"
+      ],
+      "ci": true
     }
   }
 }

@@ -15,8 +15,8 @@ x-clawdiy-healthcheck: &clawdiy-healthcheck
     ]
   interval: 30s
   timeout: 10s
-  retries: 3
-  start_period: 40s
+  retries: 5
+  start_period: 180s
 
 services:
   clawdiy:
@@ -35,13 +35,13 @@ services:
 
     volumes:
       - type: bind
-        source: ./data/clawdiy/runtime/openclaw.json
-        target: /home/node/.openclaw/openclaw.json
-        read_only: true
+        source: ./data/clawdiy/runtime
+        target: /home/node/.openclaw
       - type: bind
         source: ./config/fleet
         target: /home/node/.openclaw/registry
         read_only: true
+      - clawdiy-workspace:/home/node/.openclaw/workspace
       - clawdiy-state:/home/node/.openclaw-data/state
       - clawdiy-audit:/home/node/.openclaw-data/audit
     tmpfs:
@@ -56,7 +56,7 @@ services:
       OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
       OPENCLAW_REGISTRY_ROOT: /home/node/.openclaw/registry
       OPENCLAW_STATE_DIR: /home/node/.openclaw-data/state
-      OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
 
     healthcheck:
@@ -93,6 +93,12 @@ services:
       - monitoring
 
 volumes:
+  clawdiy-workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/clawdiy/workspace
   clawdiy-state:
     driver: local
     driver_opts:

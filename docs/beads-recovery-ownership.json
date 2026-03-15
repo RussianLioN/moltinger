@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "issue_id": "molt-2",
+      "branch": "007-codex-update-monitor",
+      "worktree_hint": "moltinger-molt-2-codex-update-monitor-new",
+      "reason": "Speckit-derived numeric feature branch already owns this issue family."
+    }
+  ]
+}

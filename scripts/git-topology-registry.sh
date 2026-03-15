@@ -76,6 +76,7 @@ registry_doc="${git_root}/docs/GIT-TOPOLOGY-REGISTRY.md"
 tmp_dir=""
 lock_held=false
 default_missing_intent="needs-decision"
+topology_publish_branch="${GIT_TOPOLOGY_REGISTRY_PUBLISH_BRANCH:-chore/topology-registry-publish}"
 
 intent_records_file=""
 seen_subjects_file=""
@@ -101,6 +102,112 @@ trap cleanup EXIT
 
 now_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+write_doc_command() {
+  case "${action}" in
+    refresh)
+      printf 'scripts/git-topology-registry.sh refresh --write-doc'
+      ;;
+    doctor)
+      if [[ "${prune}" == "true" ]]; then
+        printf 'scripts/git-topology-registry.sh doctor --prune --write-doc'
+      else
+        printf 'scripts/git-topology-registry.sh doctor --write-doc'
+      fi
+      ;;
+    *)
+      printf 'scripts/git-topology-registry.sh refresh --write-doc'
+      ;;
+  esac
+}
+
+current_branch_display() {
+  if [[ -n "${current_branch}" ]]; then
+    printf '%s' "${current_branch}"
+  else
+    printf 'detached HEAD'
+  fi
+}
+
+publish_lane_state() {
+  if [[ -z "${current_branch}" ]]; then
+    printf 'detached'
+    return 0
+  fi
+
+  if [[ "${current_branch}" == "main" ]]; then
+    printf 'canonical_main'
+    return 0
+  fi
+
+  if [[ "${current_branch}" == "${topology_publish_branch}" ]]; then
+    printf 'dedicated'
+    return 0
+  fi
+
+  printf 'ordinary'
+}
+
+publish_allowed_on_current_branch() {
+  [[ "$(publish_lane_state)" == "dedicated" ]]
+}
+
+publish_allowed_string() {
+  if publish_allowed_on_current_branch; then
+    printf 'true'
+  else
+    printf 'false'
+  fi
+}
+
+stale_publish_guidance_line() {
+  local command=""
+  command="$(write_doc_command)"
+
+  if publish_allowed_on_current_branch; then
+    printf 'Run: %s' "${command}"
+  else
+    printf "Publish from the dedicated non-main topology publish branch '%s': %s" "${topology_publish_branch}" "${command}"
+  fi
+}
+
+stale_status_message() {
+  local command=""
+  command="$(write_doc_command)"
+
+  if publish_allowed_on_current_branch; then
+    printf 'registry document is stale; current topology-publish branch may reconcile via %s' "${command}"
+  else
+    printf "registry document is stale; live git is authoritative here; publish later from the dedicated non-main topology publish branch '%s'" "${topology_publish_branch}"
+  fi
+}
+
+require_publish_lane_for_write_doc() {
+  local command=""
+  local publish_lane=""
+
+  if publish_allowed_on_current_branch; then
+    return 0
+  fi
+
+  command="$(write_doc_command)"
+  publish_lane="$(publish_lane_state)"
+
+  echo "[git-topology-registry] Refusing to publish docs/GIT-TOPOLOGY-REGISTRY.md from $(current_branch_display)." >&2
+  case "${publish_lane}" in
+    canonical_main)
+      echo "[git-topology-registry] Canonical main is not an allowed topology publish lane." >&2
+      ;;
+    detached)
+      echo "[git-topology-registry] Detached HEAD is not an allowed topology publish lane." >&2
+      ;;
+    ordinary)
+      echo "[git-topology-registry] Ordinary branches do not own tracked topology snapshot publication." >&2
+      ;;
+  esac
+  echo "[git-topology-registry] Switch to the dedicated non-main topology publish branch '${topology_publish_branch}' and rerun: ${command}" >&2
+  exit 1
 }
 
 ensure_tmp_dir() {
@@ -866,13 +973,13 @@ render_registry_markdown() {
   ensure_tmp_dir
 
   {
-    cat <<'EOF'
+    cat <<EOF
 # Git Topology Registry
 
 **Status**: Generated artifact from live git topology and reviewed intent sidecar
 **Scope**: Canonical maintainer workstation snapshot
 **Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
-**Refresh**: `scripts/git-topology-registry.sh refresh --write-doc`
+**Publish**: From the dedicated non-main topology publish branch \`${topology_publish_branch}\` run \`scripts/git-topology-registry.sh refresh --write-doc\`
 **Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
 
 ## Current Worktrees
@@ -1123,16 +1230,20 @@ status_flow() {
   local orphan_count=""
   local health_status="ok"
   local message="registry matches rendered topology"
+  local publish_lane=""
+  local publish_allowed=""
 
   build_snapshot
   current_hash="$(compute_current_hash)"
   rendered_hash="$(hash_file "${expected_doc_file}")"
   document_hash="$(current_doc_hash)"
   orphan_count="$(orphan_intent_count)"
+  publish_lane="$(publish_lane_state)"
+  publish_allowed="$(publish_allowed_string)"
 
   if ! docs_match_expected; then
     health_status="stale"
-    message="registry document is stale; run scripts/git-topology-registry.sh refresh --write-doc"
+    message="$(stale_status_message)"
   fi
 
   echo "repo_root=${git_root}"
@@ -1141,6 +1252,8 @@ status_flow() {
   echo "registry_doc=${registry_doc}"
   echo "state_file=${state_file}"
   echo "status=${health_status}"
+  echo "publish_lane=${publish_lane}"
+  echo "publish_allowed=${publish_allowed}"
   echo "current_hash=${current_hash}"
   echo "rendered_hash=${rendered_hash}"
   echo "document_hash=${document_hash}"
@@ -1152,14 +1265,20 @@ check_flow() {
   local current_hash=""
   local rendered_hash=""
   local document_hash=""
+  local publish_lane=""
+  local publish_allowed=""
 
   build_snapshot
   current_hash="$(compute_current_hash)"
   rendered_hash="$(hash_file "${expected_doc_file}")"
   document_hash="$(current_doc_hash)"
+  publish_lane="$(publish_lane_state)"
+  publish_allowed="$(publish_allowed_string)"
 
   if docs_match_expected; then
     echo "status=ok"
+    echo "publish_lane=${publish_lane}"
+    echo "publish_allowed=${publish_allowed}"
     echo "current_hash=${current_hash}"
     echo "rendered_hash=${rendered_hash}"
     echo "document_hash=${document_hash}"
@@ -1167,10 +1286,12 @@ check_flow() {
   fi
 
   echo "status=stale"
+  echo "publish_lane=${publish_lane}"
+  echo "publish_allowed=${publish_allowed}"
   echo "current_hash=${current_hash}"
   echo "rendered_hash=${rendered_hash}"
   echo "document_hash=${document_hash}"
-  echo "Run: scripts/git-topology-registry.sh refresh --write-doc"
+  echo "$(stale_publish_guidance_line)"
   exit 1
 }
 
@@ -1195,13 +1316,16 @@ refresh_flow() {
 
   if [[ "${write_doc}" != "true" ]]; then
     if [[ "${stale}" == "true" ]]; then
-      echo "[git-topology-registry] Registry is stale. Run: scripts/git-topology-registry.sh refresh --write-doc" >&2
+      echo "[git-topology-registry] Registry is stale." >&2
+      echo "[git-topology-registry] $(stale_status_message)" >&2
+      echo "[git-topology-registry] $(stale_publish_guidance_line)" >&2
       exit 1
     fi
     echo "[git-topology-registry] Registry already matches live topology."
     exit 0
   fi
 
+  require_publish_lane_for_write_doc
   acquire_lock
   build_snapshot
   current_hash="$(compute_current_hash)"
@@ -1238,6 +1362,10 @@ doctor_flow() {
   local orphan_count=""
   local message=""
   local backup_file=""
+
+  if [[ "${write_doc}" == "true" ]]; then
+    require_publish_lane_for_write_doc
+  fi
 
   acquire_lock
   if [[ "${prune}" == "true" ]]; then

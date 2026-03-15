@@ -1,0 +1,38 @@
+{
+  "request": {
+    "request_id": "req-abc12345",
+    "source": "codex_upstream_watcher",
+    "fingerprint": "fp-0.113.0",
+    "chat_id": "262872984",
+    "question_message_id": null,
+    "created_at": "2026-03-12T00:00:00Z",
+    "expires_at": "2099-03-15T00:00:00Z",
+    "status": "pending",
+    "action_token": "tok-xyz789",
+    "question_text": "Хотите получить практические рекомендации?",
+    "delivery_mode": "command_keyboard"
+  },
+  "recommendations": {
+    "summary": "Можно подготовить конкретные шаги для проекта.",
+    "items": [
+      {
+        "title": "Обновить runbook",
+        "rationale": "Новые возможности затрагивают рабочий процесс.",
+        "impacted_paths": [
+          "docs/codex-cli-upstream-watcher.md"
+        ],
+        "next_steps": [
+          "Проверить описание UX",
+          "Освежить примеры запуска"
+        ]
+      }
+    ]
+  },
+  "decision": null,
+  "delivery": {
+    "status": "not_sent"
+  },
+  "audit_notes": [
+    "fixture"
+  ]
+}

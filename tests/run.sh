@@ -30,6 +30,7 @@ Usage:
 Canonical lanes:
   static
   component
+  topology_registry
   integration_local
   security_api
   mcp_fake
@@ -45,7 +46,7 @@ Additional live-only aliases:
   provider_live
 
 Groups:
-  pr      = static + component + integration_local + security_api + mcp_fake
+  pr      = static + component + topology_registry + integration_local + security_api + mcp_fake
   main    = pr + e2e_browser
   nightly = resilience + live_external + security_runtime_smoke
   all     = main + nightly
@@ -116,13 +117,13 @@ lane_is_live_only() {
 group_to_lanes() {
     case "$1" in
         pr)
-            printf '%s\n' static component integration_local security_api mcp_fake
+            printf '%s\n' static component topology_registry integration_local security_api mcp_fake
             ;;
         unit_legacy)
-            printf '%s\n' static component
+            printf '%s\n' static component topology_registry
             ;;
         integration_legacy)
-            printf '%s\n' integration_local provider_live telegram_live mcp_real
+            printf '%s\n' topology_registry integration_local provider_live telegram_live mcp_real
             ;;
         security_legacy)
             printf '%s\n' security_api security_runtime_smoke
@@ -131,13 +132,13 @@ group_to_lanes() {
             printf '%s\n' e2e_browser resilience
             ;;
         main)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser
+            printf '%s\n' static component topology_registry integration_local security_api mcp_fake e2e_browser
             ;;
         nightly)
             printf '%s\n' resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         all)
-            printf '%s\n' static component integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
+            printf '%s\n' static component topology_registry integration_local security_api mcp_fake e2e_browser resilience security_runtime_smoke clawdiy_live_deploy telegram_live provider_live mcp_real
             ;;
         live_external)
             printf '%s\n' clawdiy_live_deploy telegram_live provider_live mcp_real
@@ -167,9 +168,31 @@ bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/compo
 bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_llm_failover_component.sh
 bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh
 bash|component_sync_claude_skills_bridge|Claude skills bridge component|$SCRIPT_DIR/component/test_sync_claude_skills_bridge.sh
+bash|component_codex_cli_update_monitor|Codex CLI update monitor component|$SCRIPT_DIR/component/test_codex_cli_update_monitor.sh
+bash|component_codex_cli_upstream_watcher|Codex CLI upstream watcher component|$SCRIPT_DIR/component/test_codex_cli_upstream_watcher.sh
+bash|component_codex_cli_update_advisor|Codex CLI update advisor component|$SCRIPT_DIR/component/test_codex_cli_update_advisor.sh
+bash|component_codex_cli_update_delivery|Codex CLI update delivery component|$SCRIPT_DIR/component/test_codex_cli_update_delivery.sh
+bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/component/test_codex_profile_launch.sh
+bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh
+bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$SCRIPT_DIR/component/test_codex_telegram_consent_e2e.sh
+bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh
+bash|component_moltis_codex_advisory_intake|Moltis Codex advisory intake component|$SCRIPT_DIR/component/test_moltis_codex_advisory_intake.sh
+bash|component_moltis_codex_advisory_router|Moltis Codex advisory router component|$SCRIPT_DIR/component/test_moltis_codex_advisory_router.sh
+bash|component_moltis_codex_update_run|Moltis Codex update run component|$SCRIPT_DIR/component/test_moltis_codex_update_run.sh
+bash|component_moltis_codex_update_state|Moltis Codex update state component|$SCRIPT_DIR/component/test_moltis_codex_update_state.sh
+bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh
+bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh
+bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
 bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh
 bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh
+LIST
+            ;;
+        topology_registry)
+            cat <<LIST
+bash|topology_registry_unit|Git topology registry unit|$SCRIPT_DIR/unit/test_git_topology_registry.sh
+bash|topology_registry_integration|Git topology registry integration|$SCRIPT_DIR/integration/test_git_topology_registry.sh
+bash|topology_registry_e2e|Git topology registry workflow E2E|$SCRIPT_DIR/e2e/test_git_topology_registry_workflow.sh
 LIST
             ;;
         integration_local)

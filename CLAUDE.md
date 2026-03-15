@@ -58,6 +58,8 @@ Run `check` before branch cleanup, worktree operations, or session handoff. Run 
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+In this repository, ordinary repo-local Beads work should use plain `bd`. The repo-local shim in `bin/bd` keeps dedicated-worktree ownership local, and `./scripts/bd-local.sh` remains a compatibility helper only when you need an explicit recovery/troubleshooting path.
+
 ## Quick Reference
 
 ```bash
@@ -576,6 +578,8 @@ BEFORE ssh/scp → ASK YOURSELF:
 > **Attribution**: [Beads](https://github.com/steveyegge/beads) methodology by [Steve Yegge](https://github.com/steveyegge)
 
 If project uses Beads (`/beads-init` was run), follow this workflow:
+
+Repo note for Moltinger: ordinary repo-local tracker commands should use plain `bd`.
 
 ### Session Workflow
 

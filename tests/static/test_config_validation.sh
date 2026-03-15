@@ -20,6 +20,7 @@ PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
+MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -74,10 +75,25 @@ run_static_config_validation_tests() {
     fi
 
     test_start "static_compose_clawdiy_valid"
-    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
+    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass
     else
         test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"
+    fi
+
+    test_start "static_clawdiy_config_pins_codex_default_model"
+    if python3 - "$PROJECT_ROOT/config/clawdiy/openclaw.json" <<'PY'
+import json, sys
+from pathlib import Path
+cfg = json.loads(Path(sys.argv[1]).read_text())
+primary = cfg.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+models = cfg.get("agents", {}).get("defaults", {}).get("models", {})
+raise SystemExit(0 if primary == "openai-codex/gpt-5.4" and "openai-codex/gpt-5.4" in models else 1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Tracked Clawdiy config must keep the Codex OAuth / gpt-5.4 baseline as the GitOps default model"
     fi
 
     test_start "static_config_uses_env_substitution"
@@ -101,6 +117,15 @@ run_static_config_validation_tests() {
         test_fail "Detected potential hardcoded secret material"
     else
         test_pass
+    fi
+
+    test_start "static_moltis_version_contract_stays_git_tracked_and_pinned"
+    if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
+       "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
+        test_pass
+    else
+        test_fail "Tracked Moltis version must stay git-managed and pinned for the backup-safe branch contract"
     fi
 
     test_start "static_fixture_disables_openai_for_pr_gate"
@@ -203,11 +228,80 @@ run_static_config_validation_tests() {
         test_fail "UAT gate must derive the Moltis version from git and deploy only through the backup-safe deploy.sh path"
     fi
 
+    test_start "static_deploy_compliance_checks_prod_compose_hash"
+    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
+    fi
+
+    test_start "static_deploy_supports_gitops_checkout_repair_for_managed_drift"
+    if rg -q 'repair_server_checkout:' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'gitops-drift' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must offer an auditable checkout repair path for deploy-managed server drift"
+    fi
+
+    test_start "static_deploy_checkout_repair_avoids_inline_ssh_heredoc_parser_hazards"
+    if rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -Fq "ssh \${{ env.SSH_USER }}@\${{ env.SSH_HOST }} <<'EOF'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must not embed the managed checkout repair as an inline SSH heredoc inside the run block"
+    fi
+
+    test_start "static_deploy_checkout_repair_keeps_snapshot_stdout_clean"
+    if rg -q 'git fetch --depth=1 origin "\$TARGET_REF" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'git checkout --force "\$TARGET_REF" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'git reset --hard "\$TARGET_SHA" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
+        test_pass
+    else
+        test_fail "Managed checkout repair must redirect git progress to stderr so stdout stays reserved for the drift snapshot path"
+    fi
+
+    test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
+    if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Production tag deploy version must match tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must resolve the tracked Moltis version and block feature-branch production deploys"
+    fi
+
+    test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"
+    if rg -q 'Check post-upgrade web protocol skew' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'stale browser tabs' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'not a rollback trigger' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q '## Post-upgrade stale web client' "$PROJECT_ROOT/docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md"; then
+        test_pass
+    else
+        test_fail "Deploy verification and runbook must classify post-upgrade protocol skew as an operator signal before rollback"
+    fi
+
     test_start "static_clawdiy_workflow_exists"
     if [[ -f "$CLAWDIY_WORKFLOW" ]]; then
         test_pass
     else
         test_fail "Missing .github/workflows/deploy-clawdiy.yml"
+    fi
+
+    test_start "static_clawdiy_compose_extends_startup_health_grace_for_official_openclaw_warmup"
+    if rg -q 'start_period: 180s' "$COMPOSE_CLAWDIY" && \
+       rg -q 'retries: 5' "$COMPOSE_CLAWDIY"; then
+        test_pass
+    else
+        test_fail "Clawdiy compose healthcheck must allow enough startup grace for official OpenClaw Docker warmup"
+    fi
+
+    test_start "static_clawdiy_deploy_wait_tolerates_transient_unhealthy_during_startup"
+    if rg -q 'temporarily unhealthy during startup; continuing to wait until timeout' "$DEPLOY_SCRIPT" && \
+       rg -q 'health endpoint is already serving HTTP 200 while Docker health is still catching up' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_HEALTH_CHECK_TIMEOUT' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy logic must tolerate transient startup unhealthy states until the overall timeout expires"
     fi
 
     test_start "static_clawdiy_workflow_uses_targeted_preflight_and_deploy"
@@ -246,6 +340,15 @@ run_static_config_validation_tests() {
         test_fail "Clawdiy deploy workflow must migrate legacy repo-root marker files before enforcing the clean-worktree GitOps gate"
     fi
 
+    test_start "static_clawdiy_workflow_supports_gitops_checkout_repair_for_clawdiy_surface"
+    if rg -q 'repair_server_checkout:' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'gitops-repair-managed-checkout\.sh' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'Dirty path is outside Clawdiy-managed surface' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy workflow must offer an auditable checkout repair path limited to the Clawdiy-managed surface"
+    fi
+
     test_start "static_clawdiy_workflow_syncs_backup_config_dependencies"
     if rg -q '\$\{\{ env\.DEPLOY_PATH \}\}/config/backup' "$CLAWDIY_WORKFLOW" && \
        rg -q 'scp -r config/backup/\*' "$CLAWDIY_WORKFLOW"; then
@@ -264,13 +367,14 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_uses_explicit_bind_syntax_for_runtime_paths"
     if rg -q 'type: bind' "$COMPOSE_CLAWDIY" && \
-       rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
-       rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./data/clawdiy/runtime' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw' "$COMPOSE_CLAWDIY" && \
        rg -q 'source: \./config/fleet' "$COMPOSE_CLAWDIY" && \
-       rg -q 'target: /home/node/\.openclaw/registry' "$COMPOSE_CLAWDIY"; then
+       rg -q 'target: /home/node/\.openclaw/registry' "$COMPOSE_CLAWDIY" && \
+       ! rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY"; then
         test_pass
     else
-        test_fail "Clawdiy compose must use explicit bind syntax for runtime config and registry so server-side docker compose does not misrender them"
+        test_fail "Clawdiy compose must use explicit bind syntax for writable runtime home and read-only registry mounts so official OpenClaw wizards can persist config and auth artifacts"
     fi
 
     test_start "static_clawdiy_deploy_script_stores_runtime_markers_under_ignored_data_dir"
@@ -285,11 +389,12 @@ run_static_config_validation_tests() {
     test_start "static_clawdiy_deploy_script_normalizes_runtime_state_ownership"
     if rg -q 'CLAWDIY_RUNTIME_UID="\$\{CLAWDIY_RUNTIME_UID:-1000\}"' "$DEPLOY_SCRIPT" && \
        rg -q 'CLAWDIY_RUNTIME_GID="\$\{CLAWDIY_RUNTIME_GID:-1000\}"' "$DEPLOY_SCRIPT" && \
-       rg -q 'Skipping Clawdiy state ownership normalization because deploy\.sh is not running as root' "$DEPLOY_SCRIPT" && \
+       rg -q 'Skipping Clawdiy runtime ownership normalization because deploy\.sh is not running as root' "$DEPLOY_SCRIPT" && \
+       rg -q '\$PROJECT_ROOT/data/clawdiy/runtime' "$DEPLOY_SCRIPT" && \
        rg -q 'chown -R "\$\{CLAWDIY_RUNTIME_UID\}:\$\{CLAWDIY_RUNTIME_GID\}" "\$path"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Clawdiy deploy script must normalize state and audit ownership for the node runtime user during server-side rollout"
+        test_fail "Clawdiy deploy script must normalize runtime, state, workspace, and audit ownership for the node runtime user during server-side rollout"
     fi
 
     test_start "static_clawdiy_smoke_avoids_reserved_jq_variable_names"
@@ -312,7 +417,7 @@ run_static_config_validation_tests() {
 
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
-       rg -q 'docker logs "\$container" --tail 50 >&2' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker logs "\$container" --tail 80 >&2' "$DEPLOY_SCRIPT" && \
        rg -q 'if \[\[ "\$OUTPUT_JSON" != "true" \]\]; then' "$DEPLOY_SCRIPT" && \
        rg -q 'echo -n "\."' "$DEPLOY_SCRIPT"; then
         test_pass
@@ -374,8 +479,9 @@ run_static_config_validation_tests() {
 
     test_start "static_clawdiy_compose_security_hardening"
     if rg -q '^    init: true$' "$COMPOSE_CLAWDIY" && \
-       rg -q 'source: \./data/clawdiy/runtime/openclaw\.json' "$COMPOSE_CLAWDIY" && \
-       rg -q 'target: /home/node/\.openclaw/openclaw\.json' "$COMPOSE_CLAWDIY" && \
+       rg -q 'source: \./data/clawdiy/runtime' "$COMPOSE_CLAWDIY" && \
+       rg -q 'target: /home/node/\.openclaw' "$COMPOSE_CLAWDIY" && \
+       rg -q 'clawdiy-workspace:/home/node/\.openclaw/workspace' "$COMPOSE_CLAWDIY" && \
        rg -q 'no-new-privileges:true' "$COMPOSE_CLAWDIY" && \
        rg -q '      - ALL' "$COMPOSE_CLAWDIY" && \
        rg -q '/tmp:rw,noexec,nosuid,nodev,size=64m' "$COMPOSE_CLAWDIY" && \
@@ -383,6 +489,34 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Clawdiy compose file must keep init, privilege drops, hardened tmpfs, and no docker socket mount"
+    fi
+
+    test_start "static_clawdiy_deploy_normalizes_workspace_permissions"
+    if rg -q '\$PROJECT_ROOT/data/clawdiy/workspace' "$DEPLOY_SCRIPT" && \
+       rg -q '\$PROJECT_ROOT/data/clawdiy/runtime' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_RUNTIME_UID' "$DEPLOY_SCRIPT" && \
+       rg -q 'CLAWDIY_RUNTIME_GID' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "deploy.sh must create and normalize the dedicated Clawdiy runtime home and workspace paths for the runtime uid/gid"
+    fi
+
+    test_start "static_clawdiy_render_script_normalizes_runtime_home_ownership"
+    if rg -q 'CLAWDIY_RUNTIME_UID="\$\{CLAWDIY_RUNTIME_UID:-1000\}"' "$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh" && \
+       rg -q 'CLAWDIY_RUNTIME_GID="\$\{CLAWDIY_RUNTIME_GID:-1000\}"' "$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh" && \
+       rg -q 'chown -R "\$\{CLAWDIY_RUNTIME_UID\}:\$\{CLAWDIY_RUNTIME_GID\}" "\$\(dirname "\$OUTPUT_FILE"\)"' "$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"; then
+        test_pass
+    else
+        test_fail "render-clawdiy-runtime-config.sh must normalize the writable runtime home ownership after rendering openclaw.json"
+    fi
+
+    test_start "static_clawdiy_backup_inventory_includes_runtime_home"
+    if rg -q '^CLAWDIY_RUNTIME_DIR="\$\{PROJECT_ROOT\}/data/clawdiy/runtime"' "$BACKUP_CONFIG" && \
+       rg -q 'CLAWDIY_RUNTIME_DIR="\$\{CLAWDIY_RUNTIME_DIR:-\$PROJECT_ROOT/data/clawdiy/runtime\}"' "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh" && \
+       rg -q '"runtime_dir": "\$CLAWDIY_RUNTIME_DIR"' "$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"; then
+        test_pass
+    else
+        test_fail "Clawdiy backup inventory must explicitly track the writable runtime home because official OpenClaw wizards can persist config and OAuth artifacts there"
     fi
 
     test_start "static_clawdiy_policy_header_binding_fail_closed"
@@ -411,6 +545,25 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Preflight must distinguish bootstrap-capable Clawdiy networks from blocking external network failures"
+    fi
+
+    test_start "static_preflight_enforces_clawdiy_runtime_home_writability_contract"
+    if rg -q 'check_clawdiy_runtime_home' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'runtime_home_present' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'runtime_home_ownership' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'official OpenClaw wizard writes' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must fail if Clawdiy runtime home is missing or owned incorrectly for official OpenClaw wizard writes"
+    fi
+
+    test_start "static_preflight_keeps_clawdiy_runtime_home_check_target_aware_in_ci"
+    if rg -q 'if \[\[ "\$CI_MODE" == "true" \]\]; then' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'runtime home is not materialized in CI checkout' "$PREFLIGHT_SCRIPT" && \
+       rg -q 'deploy/render must create' "$PREFLIGHT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Preflight must treat Clawdiy runtime-home materialization as a deploy-target concern in CI mode instead of failing the local checkout"
     fi
 
     generate_report

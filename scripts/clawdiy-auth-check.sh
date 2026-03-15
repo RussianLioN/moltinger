@@ -198,10 +198,10 @@ parse_runtime_config() {
 
     if ! jq -e '
         .gateway.mode == "local"
-        and .gateway.auth.mode == "password"
-        and .gateway.auth.password.source == "env"
-        and .gateway.auth.password.provider == "default"
-        and .gateway.auth.password.id == "OPENCLAW_GATEWAY_PASSWORD"
+        and .gateway.auth.mode == "token"
+        and .gateway.auth.token.source == "env"
+        and .gateway.auth.token.provider == "default"
+        and .gateway.auth.token.id == "OPENCLAW_GATEWAY_TOKEN"
         and (.channels.telegram.enabled == true)
         and (.channels.telegram.dmPolicy == "allowlist")
         and (.channels.telegram.allowFrom | type == "array")
@@ -275,10 +275,10 @@ parse_policy_config() {
 }
 
 check_common_auth_boundary() {
-    if [[ "$GATEWAY_AUTH_MODE" != "password" ]]; then
-        add_check "gateway_auth_contract" "fail" "Clawdiy gateway auth must stay on password mode for the public control UI" "error"
+    if [[ "$GATEWAY_AUTH_MODE" != "token" ]]; then
+        add_check "gateway_auth_contract" "fail" "Clawdiy gateway auth must stay on token mode for the hosted Control UI" "error"
     else
-        add_check "gateway_auth_contract" "pass" "Clawdiy gateway auth stays on password mode" "error"
+        add_check "gateway_auth_contract" "pass" "Clawdiy gateway auth stays on token mode for the hosted Control UI" "error"
     fi
 
     if [[ "$(jq -r '.service_auth.mode' "$FLEET_POLICY_FILE")" != "bearer" || "$(jq -r '.service_auth.authorization_header' "$FLEET_POLICY_FILE")" != "Authorization" || "$(jq -r '.service_auth.bind_token_to_agent_header' "$FLEET_POLICY_FILE")" != "true" ]]; then
@@ -288,7 +288,22 @@ check_common_auth_boundary() {
     fi
 
     if [[ "$POLICY_CLAWDIY_HUMAN_REF" == "github-secret:MOLTIS_PASSWORD" || "$POLICY_CLAWDIY_SERVICE_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" || "$POLICY_CLAWDIY_TELEGRAM_REF" == "github-secret:TELEGRAM_BOT_TOKEN" || "$POLICY_CLAWDIY_ALLOWLIST_REF" == "github-secret:TELEGRAM_ALLOWED_USERS" || "$PROVIDER_SECRET_REF" == "github-secret:MOLTINGER_SERVICE_TOKEN" ]]; then
-        add_check "auth_ref_isolation" "fail" "Clawdiy auth refs must stay isolated from Moltinger human, service, and Telegram refs" "error"
+        add_check "auth_ref_isolation" "fail" "Clawdiy gateway, service, and Telegram auth refs must stay isolated from Moltinger refs" "error"
+        return 1
+    fi
+
+    local gateway_secret_value=""
+    gateway_secret_value="$(lookup_secret_value "$(secret_ref_name "$POLICY_CLAWDIY_HUMAN_REF")" || true)"
+    if [[ -z "$gateway_secret_value" && -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+        gateway_secret_value="${OPENCLAW_GATEWAY_TOKEN}"
+    fi
+    if [[ -z "$gateway_secret_value" && -n "${CLAWDIY_PASSWORD:-}" ]]; then
+        gateway_secret_value="${CLAWDIY_PASSWORD}"
+        add_check "gateway_auth_secret_source" "warning" "Clawdiy gateway auth is using legacy CLAWDIY_PASSWORD fallback; rotate to CLAWDIY_GATEWAY_TOKEN when practical" "warning"
+    elif [[ -n "$gateway_secret_value" ]]; then
+        add_check "gateway_auth_secret_source" "pass" "Clawdiy gateway token material is present for the hosted Control UI" "error"
+    else
+        add_check "gateway_auth_secret_source" "fail" "Clawdiy gateway token material is missing; hosted Control UI auth cannot succeed" "error"
         return 1
     fi
 

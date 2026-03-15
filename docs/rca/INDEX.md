@@ -1,33 +1,33 @@
 # RCA Index
 
-**Last Updated**: 2026-03-08
-**Version**: 1.3.0
+**Last Updated**: 2026-03-14
+**Version**: 1.10.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 10 |
+| Total RCA | 18 |
 | Avg Resolution Time | N/A |
-| This Month | 10 |
+| This Month | 18 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 40% |
-| process | 3 | 30% |
-| cicd | 1 | 10% |
-| security | 1 | 10% |
-| shell | 1 | 10% |
+| generic | 4 | 22% |
+| process | 8 | 44% |
+| cicd | 4 | 22% |
+| security | 1 | 6% |
+| shell | 1 | 6% |
 
 ## By Severity
 
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 1 | High - production impact |
-| P2 | 3 | Medium - process issue |
+| P1 | 5 | High - production impact |
+| P2 | 7 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
 
@@ -35,6 +35,14 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
+| RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
+| RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |
+| RCA-015 | 2026-03-14 | cicd | P2 | resolved | Clawdiy deploy workflow enforced a dirty-worktree gate but lacked an auditable repair path for drift limited to the Clawdiy-managed surface | added `repair_server_checkout` to `deploy-clawdiy.yml` plus static guard and runbook update |
+| RCA-014 | 2026-03-14 | process | P2 | resolved | Clawdiy preflight treated deploy-target runtime-home materialization as a CI checkout prerequisite | made runtime-home preflight target-aware for CI vs deploy target |
+| RCA-013 | 2026-03-13 | process | P1 | mitigating | Clawdiy deploy contract mounted read-only `openclaw.json` instead of writable `~/.openclaw` required by the official OpenClaw wizard | switched to writable runtime-home mount + ownership normalization + preflight/backup/smoke guards |
+| RCA-012 | 2026-03-12 | process | P2 | resolved | Clawdiy browser bootstrap was documented as Settings/OAuth flow instead of verified dashboard token/pairing bootstrap | added browser-bootstrap runbook + rule + doc corrections |
+| RCA-011 | 2026-03-12 | process | P2 | resolved | Hosted Clawdiy UI used password auth modeled as server-side secret presence instead of browser-facing token flow | switched gateway auth to token + legacy fallback + rule |
 | RCA-010 | 2026-03-08 | cicd | P1 | resolved | Deploy workflow wrote audit markers into repo root and then detected them as drift | moved markers to `data/` + static guard |
 | RCA-009 | 2026-03-08 | process | P2 | resolved | No mandatory target-boundary check before local runtime actions | added runtime-target guardrail |
 | RCA-008 | 2026-03-07 | process | P2 | resolved | No mandatory context-first lookup before asking for secret values | added context-first protocol |
@@ -48,7 +56,7 @@
 
 ## Patterns Detected
 
-⚠️ Warning: 4+ RCA in category `generic` - continue shifting fixes from ad-hoc notes to hard rules/checklists.
+⚠️ Warning: 5+ RCA in category `process` - continue turning recurring operator mistakes into explicit rules/checklists.
 
 ---
 

@@ -3,7 +3,10 @@
 # GitOps-compliant: Non-blocking, adds metadata only
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# shellcheck source=.githooks/_repo-local-path.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/_repo-local-path.sh"
 GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
+NORMALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-normalize-issues-jsonl.sh"
 SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
 
@@ -11,6 +14,20 @@ LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
 if [[ -x "$GUARD_SCRIPT" ]]; then
     if ! "$GUARD_SCRIPT" --check --hook pre-commit; then
         exit 1
+    fi
+fi
+
+if [[ -x "$NORMALIZE_SCRIPT" ]] && git ls-files --error-unmatch .beads/issues.jsonl >/dev/null 2>&1; then
+    if git diff --cached --quiet -- .beads/issues.jsonl; then
+        :
+    elif ! git diff --quiet -- .beads/issues.jsonl; then
+        echo "✗ Cannot auto-normalize partially staged .beads/issues.jsonl." >&2
+        echo "  Stage the full file or stash the unstaged portion, then retry the commit." >&2
+        exit 1
+    elif ! "$NORMALIZE_SCRIPT" --check --path "$PROJECT_ROOT/.beads/issues.jsonl" >/dev/null 2>&1; then
+        echo "🧹 Normalizing .beads/issues.jsonl dependency order"
+        "$NORMALIZE_SCRIPT" --path "$PROJECT_ROOT/.beads/issues.jsonl" >/dev/null
+        git add -- .beads/issues.jsonl
     fi
 fi
 

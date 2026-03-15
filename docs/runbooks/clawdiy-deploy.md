@@ -11,10 +11,10 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 
 - `docker-compose.clawdiy.yml` exists and renders with `docker compose config --quiet`
 - `config/clawdiy/openclaw.json`, `config/fleet/agents-registry.json`, and `config/fleet/policy.json` are present
-- `config/clawdiy/openclaw.json` is treated as the tracked runtime template, and `data/clawdiy/runtime/openclaw.json` is the rendered deployable artifact
+- `config/clawdiy/openclaw.json` is treated as the tracked runtime template, and `data/clawdiy/runtime/` is the writable OpenClaw runtime home rendered and owned during deploy
 - DNS for `clawdiy.ainetic.tech` exists
 - Clawdiy GitHub Secrets exist and are distinct from Moltinger secrets
-- `docker-compose.clawdiy.yml` keeps the runtime config and registry mounts in explicit bind long syntax; short syntax may be misrendered by server-side Docker Compose into the old directory bind contract
+- `docker-compose.clawdiy.yml` keeps the writable runtime home and read-only registry mounts in explicit bind long syntax; short syntax may be misrendered by server-side Docker Compose into the old directory bind contract
 - Shared host networks required for phase 1 are healthy:
   - `traefik-net`
   - `moltinger_monitoring`
@@ -25,9 +25,11 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 1. Validate config and secret presence:
    ```bash
    ./scripts/preflight-check.sh --target clawdiy
-   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:latest docker compose -f docker-compose.clawdiy.yml config --quiet
+   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:2026.3.11 docker compose -f docker-compose.clawdiy.yml config --quiet
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
+   Use an explicit `clawdiy_image` override only for a dedicated upgrade rollout; the tracked default stays pinned to the last verified Clawdiy image.
+   Official OpenClaw Docker upgrades can warm up slowly when channels are enabled; Clawdiy deploy now treats a temporary `starting/unhealthy` phase as startup warmup until the overall timeout expires.
 2. Render the deployable OpenClaw runtime config from the tracked template plus the dedicated Clawdiy env file:
    ```bash
    ./scripts/render-clawdiy-runtime-config.sh --env-file /opt/moltinger/clawdiy/.env --json | jq .
@@ -35,16 +37,26 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 3. Sync repo-managed artifacts through CI/CD or GitOps deploy flow.
    For the GitHub Actions path, the remote SSH deploy command must propagate `GITHUB_ACTIONS=true` and `GITHUB_RUN_ID` so `scripts/deploy.sh` is treated as CI, not as an ad-hoc manual SSH rollout.
    The workflow also migrates legacy root-level Clawdiy marker files into ignored `data/clawdiy/` state before enforcing the clean-worktree GitOps gate.
+   If `/opt/moltinger` is dirty only inside the Clawdiy-managed surface (`docker-compose.clawdiy.yml`, `config/clawdiy`, `config/fleet`, `config/backup`, `scripts`), re-run `deploy-clawdiy.yml` via `workflow_dispatch` with `repair_server_checkout=true` instead of repairing the checkout manually over SSH.
 4. Deploy Clawdiy:
    ```bash
    ./scripts/deploy.sh clawdiy deploy
    ```
-   During deploy, `scripts/deploy.sh` must normalize `data/clawdiy/state` and `data/clawdiy/audit` to the OpenClaw runtime uid/gid (`1000:1000` by default) so the `node` process can create persistent `canvas`, `cron`, and audit artifacts without manual server fixes.
+   During deploy, `scripts/deploy.sh` and `scripts/render-clawdiy-runtime-config.sh` must normalize `data/clawdiy/runtime`, `data/clawdiy/workspace`, `data/clawdiy/state`, and `data/clawdiy/audit` to the OpenClaw runtime uid/gid (`1000:1000` by default) so the `node` process can create runtime config temp files, OAuth artifacts, workspace data, persistent `canvas`, `cron`, and audit artifacts without manual server fixes.
 5. Run same-host smoke verification:
    ```bash
    ./scripts/clawdiy-smoke.sh --stage same-host
    ./scripts/clawdiy-smoke.sh --stage restart-isolation
    ```
+
+## Upgrade Canary Notes
+
+- Official OpenClaw Docker `latest` must be tested only as an explicit canary via workflow input `clawdiy_image`; the tracked default remains pinned until the canary is proven live.
+- During OpenClaw cold start with Telegram enabled, Docker health may briefly pass through `unhealthy` before recovering. This is startup warmup, not immediate rollback evidence.
+- Deploy success still requires:
+  - локальный `/health` на host loopback
+  - green deploy workflow
+  - post-deploy live canary from `main`
 
 ## Success Criteria
 
@@ -56,12 +68,17 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 ## Ownership Boundary
 
 - Git-managed control-plane config:
-  - `config/clawdiy/openclaw.json` (tracked template)
+- `config/clawdiy/openclaw.json` (tracked template)
+  - must carry the tracked `agents.defaults.model.primary` for Clawdiy so redeploy does not erase the verified live model baseline
   - `config/fleet/agents-registry.json`
   - `config/fleet/policy.json`
 - Rendered runtime artifact:
   - `data/clawdiy/runtime/openclaw.json`
+- Writable OpenClaw runtime home:
+  - `data/clawdiy/runtime`
+  - this path also receives wizard/temp config writes and any runtime credentials OpenClaw stores under `~/.openclaw`
 - Distinct persistent host paths:
+  - `data/clawdiy/workspace`
   - `data/clawdiy/state`
   - `data/clawdiy/audit`
   - these paths are deploy-managed and normalized to the Clawdiy runtime uid/gid during rollout

@@ -194,7 +194,7 @@
         "moltinger"
       ],
       "auth_profile_refs": {
-        "human_auth": "github-secret:CLAWDIY_PASSWORD",
+        "human_auth": "github-secret:CLAWDIY_GATEWAY_TOKEN",
         "service_auth": "github-secret:CLAWDIY_SERVICE_TOKEN",
         "telegram": "github-secret:CLAWDIY_TELEGRAM_BOT_TOKEN",
         "provider_auth": [

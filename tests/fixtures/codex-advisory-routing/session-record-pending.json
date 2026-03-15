@@ -1,0 +1,100 @@
+{
+  "schema_version": "codex-advisory-session/v1",
+  "event": {
+    "event_id": "codex-advisory-f171d17b575745a0",
+    "created_at": "2026-03-12T00:00:00Z",
+    "source": "codex-cli-upstream-watcher",
+    "upstream_fingerprint": "f171d17b575745a0",
+    "latest_version": "0.114.0",
+    "severity": "important",
+    "summary_ru": "Вышло обновление Codex CLI 0.114.0",
+    "why_it_matters_ru": "Версия 0.114.0 затрагивает сценарии resume и работу с несколькими агентами.",
+    "highlights_ru": [
+      "Изменения затрагивают восстановление сессий.",
+      "Изменения затрагивают работу с рабочими деревьями."
+    ],
+    "recommendation_status": "ready",
+    "interactive_followup_eligible": true
+  },
+  "alert": {
+    "alert_id": "alert-codex-advisory-f171d17b575745a0",
+    "event_id": "codex-advisory-f171d17b575745a0",
+    "chat_id": "262872984",
+    "message_id": 203,
+    "delivery_mode": "telegram",
+    "interactive_mode": "inline_callbacks",
+    "created_at": "2026-03-12T00:00:00Z",
+    "status": "sent"
+  },
+  "session": {
+    "session_id": "advsess-abc12345",
+    "alert_id": "alert-codex-advisory-f171d17b575745a0",
+    "chat_id": "262872984",
+    "callback_token": "tok-xyz789",
+    "expires_at": "2099-03-15T00:00:00Z",
+    "status": "pending",
+    "resolved_at": null
+  },
+  "recommendation_envelope": {
+    "event_id": "codex-advisory-f171d17b575745a0",
+    "chat_id": "262872984",
+    "headline_ru": "Практические рекомендации по обновлению Codex CLI",
+    "summary_ru": "Можно подготовить конкретные шаги для проекта.",
+    "priority_checks": [
+      "Обновить runbook",
+      "Проверить сценарии resume"
+    ],
+    "impacted_surfaces": [
+      "docs/codex-cli-upstream-watcher.md",
+      "docs/codex-moltis-native-advisory.md"
+    ],
+    "raw_reference_path": "docs/codex-cli-upstream-watcher.md",
+    "items": [
+      {
+        "title": "Обновить runbook",
+        "rationale": "Новые возможности затрагивают рабочий процесс.",
+        "impacted_paths": [
+          "docs/codex-cli-upstream-watcher.md"
+        ],
+        "next_steps": [
+          "Проверить описание UX",
+          "Освежить примеры запуска"
+        ]
+      },
+      {
+        "title": "Проверить сценарии resume",
+        "rationale": "Новая версия затрагивает восстановление сессий.",
+        "impacted_paths": [
+          "docs/codex-moltis-native-advisory.md"
+        ],
+        "next_steps": [
+          "Сверить ожидаемое поведение follow-up",
+          "Обновить acceptance checklist"
+        ]
+      }
+    ]
+  },
+  "interaction_record": {
+    "schema_version": "codex-advisory-interaction/v1",
+    "event_id": "codex-advisory-f171d17b575745a0",
+    "upstream_fingerprint": "f171d17b575745a0",
+    "alert_id": "alert-codex-advisory-f171d17b575745a0",
+    "chat_id": "262872984",
+    "message_id": 203,
+    "interactive_mode": "inline_callbacks",
+    "decision": "none",
+    "decision_source": "none",
+    "followup_status": "awaiting_user",
+    "degraded_reason": "",
+    "created_at": "2026-03-12T00:00:00Z",
+    "resolved_at": null
+  },
+  "recovery": {
+    "mode": "tokenized_command",
+    "accept_command_text": "/codex-advisory-followup accept advsess-abc12345 tok-xyz789",
+    "decline_command_text": "/codex-advisory-followup decline advsess-abc12345 tok-xyz789"
+  },
+  "audit_notes": [
+    "fixture"
+  ]
+}

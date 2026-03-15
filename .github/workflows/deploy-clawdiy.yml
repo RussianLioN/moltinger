@@ -17,10 +17,15 @@ on:
       clawdiy_image:
         description: OpenClaw image reference for Clawdiy
         required: true
-        default: ghcr.io/openclaw/openclaw:latest
+        default: ghcr.io/openclaw/openclaw:2026.3.11
         type: string
       rollback:
         description: Roll back Clawdiy instead of deploying a new image
+        required: false
+        default: false
+        type: boolean
+      repair_server_checkout:
+        description: Capture evidence and reconcile a dirty /opt/moltinger checkout when drift is limited to Clawdiy-managed files
         required: false
         default: false
         type: boolean
@@ -79,8 +84,8 @@ jobs:
             echo "::error::SSH_PRIVATE_KEY secret not configured"
             missing=1
           fi
-          if [ -z "${{ secrets.CLAWDIY_PASSWORD }}" ]; then
-            echo "::error::CLAWDIY_PASSWORD secret not configured"
+          if [ -z "${{ secrets.CLAWDIY_GATEWAY_TOKEN }}" ] && [ -z "${{ secrets.CLAWDIY_PASSWORD }}" ]; then
+            echo "::error::Configure CLAWDIY_GATEWAY_TOKEN or keep legacy CLAWDIY_PASSWORD for compatibility fallback"
             missing=1
           fi
           if [ -z "${{ secrets.CLAWDIY_SERVICE_TOKEN }}" ]; then
@@ -98,6 +103,7 @@ jobs:
 
       - name: Validate auth material rendering rules
         env:
+          CLAWDIY_GATEWAY_TOKEN: ${{ secrets.CLAWDIY_GATEWAY_TOKEN }}
           CLAWDIY_PASSWORD: ${{ secrets.CLAWDIY_PASSWORD }}
           CLAWDIY_SERVICE_TOKEN: ${{ secrets.CLAWDIY_SERVICE_TOKEN }}
           CLAWDIY_TELEGRAM_BOT_TOKEN: ${{ secrets.CLAWDIY_TELEGRAM_BOT_TOKEN }}
@@ -111,13 +117,27 @@ jobs:
             esac
           }
 
-          for key in CLAWDIY_PASSWORD CLAWDIY_SERVICE_TOKEN CLAWDIY_TELEGRAM_BOT_TOKEN; do
+          for key in CLAWDIY_SERVICE_TOKEN CLAWDIY_TELEGRAM_BOT_TOKEN; do
             value="${!key}"
             if has_newline "$value"; then
               echo "::error::$key must be single-line so it can be rendered into the dedicated Clawdiy env file"
               exit 1
             fi
           done
+
+          GATEWAY_SECRET="$CLAWDIY_GATEWAY_TOKEN"
+          if [ -z "$GATEWAY_SECRET" ]; then
+            GATEWAY_SECRET="$CLAWDIY_PASSWORD"
+            echo "::notice::CLAWDIY_GATEWAY_TOKEN not configured; using legacy CLAWDIY_PASSWORD compatibility fallback"
+          fi
+          if [ -z "$GATEWAY_SECRET" ]; then
+            echo "::error::No effective Clawdiy gateway auth secret available"
+            exit 1
+          fi
+          if has_newline "$GATEWAY_SECRET"; then
+            echo "::error::Effective Clawdiy gateway auth secret must be single-line"
+            exit 1
+          fi
 
           if [ -n "$CLAWDIY_TELEGRAM_ALLOWED_USERS" ] && ! printf '%s' "$CLAWDIY_TELEGRAM_ALLOWED_USERS" | grep -Eq '^[^[:space:],]+(,[^[:space:],]+)*$'; then
             echo "::error::CLAWDIY_TELEGRAM_ALLOWED_USERS must be a comma-separated allowlist without spaces"
@@ -199,10 +219,88 @@ jobs:
 
       - name: Verify server worktree is clean
         run: |
+          TARGET_ENV="${{ github.event.inputs.environment }}"
+          REPAIR_REQUESTED=false
+
+          if [ "${{ github.event.inputs.repair_server_checkout }}" = "true" ]; then
+            REPAIR_REQUESTED=true
+          fi
+
+          if [ "$REPAIR_REQUESTED" = true ] && [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::repair_server_checkout is only allowed for production deploys from main or a matching release tag."
+            exit 1
+          fi
+
+          is_managed_path() {
+            local candidate="$1"
+            case "$candidate" in
+              docker-compose.clawdiy.yml|config/clawdiy/*|config/fleet/*|config/backup/*|scripts/*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          status_entry_is_repairable() {
+            local entry="$1"
+            local source_path target_path
+
+            if [[ "$entry" == *" -> "* ]]; then
+              source_path="${entry%% -> *}"
+              target_path="${entry##* -> }"
+              is_managed_path "$source_path" && is_managed_path "$target_path"
+              return
+            fi
+
+            is_managed_path "$entry"
+          }
+
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
-            echo "::error::Server working tree is dirty. Clawdiy deployment blocked by GitOps policy."
+            echo "::warning::Server working tree is dirty before Clawdiy deploy."
             echo "$SERVER_STATUS"
+
+            REPAIRABLE_DIRTY_STATE=true
+            while IFS= read -r STATUS_LINE; do
+              [ -z "$STATUS_LINE" ] && continue
+              STATUS_PATH="${STATUS_LINE:3}"
+              if ! status_entry_is_repairable "$STATUS_PATH"; then
+                echo "::error::Dirty path is outside Clawdiy-managed surface: $STATUS_PATH"
+                REPAIRABLE_DIRTY_STATE=false
+              fi
+            done <<< "$SERVER_STATUS"
+
+            if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = true ]; then
+              DRIFT_SNAPSHOT="$(bash scripts/gitops-repair-managed-checkout.sh \
+                --ssh-user "${{ env.SSH_USER }}" \
+                --ssh-host "${{ env.SSH_HOST }}" \
+                --deploy-path "${{ env.DEPLOY_PATH }}" \
+                --backup-path "${{ env.BACKUP_PATH }}" \
+                --target-ref "${{ github.ref_name }}" \
+                --target-sha "${{ github.sha }}" \
+                --run-id "${{ github.run_id }}" \
+                --repository "${{ github.repository }}")"
+              echo "::notice::Server drift snapshot saved to $DRIFT_SNAPSHOT"
+
+              SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
+              if [ -n "$SERVER_STATUS" ]; then
+                echo "::error::Server working tree remains dirty after repair."
+                echo "$SERVER_STATUS"
+                exit 1
+              fi
+
+              echo "::notice::Server working tree repaired and clean"
+              exit 0
+            fi
+
+            echo "::error::Server working tree is dirty. Clawdiy deployment blocked by GitOps policy."
+            if [ "$REPAIR_REQUESTED" = true ] && [ "$REPAIRABLE_DIRTY_STATE" = false ]; then
+              echo "::error::repair_server_checkout refuses to touch files outside Clawdiy-managed surface."
+            else
+              echo "::error::Re-run workflow_dispatch with repair_server_checkout=true if drift is limited to Clawdiy-managed files."
+            fi
             exit 1
           fi
           echo "::notice::Server working tree is clean"
@@ -239,11 +337,18 @@ jobs:
             CLAWDIY_OPENAI_CODEX_AUTH_ENABLED=true
           fi
 
+          EFFECTIVE_GATEWAY_TOKEN='${{ secrets.CLAWDIY_GATEWAY_TOKEN }}'
+          if [ -z "$EFFECTIVE_GATEWAY_TOKEN" ]; then
+            EFFECTIVE_GATEWAY_TOKEN='${{ secrets.CLAWDIY_PASSWORD }}'
+            echo "::notice::Rendering Clawdiy gateway token from legacy CLAWDIY_PASSWORD fallback"
+          fi
+
           {
             printf '%s\n' '# Auto-generated by deploy-clawdiy.yml'
             printf 'CLAWDIY_IMAGE=%s\n' '${{ needs.preflight.outputs.clawdiy_image }}'
             printf 'CLAWDIY_PASSWORD=%s\n' '${{ secrets.CLAWDIY_PASSWORD }}'
-            printf 'OPENCLAW_GATEWAY_PASSWORD=%s\n' '${{ secrets.CLAWDIY_PASSWORD }}'
+            printf 'CLAWDIY_GATEWAY_TOKEN=%s\n' "$EFFECTIVE_GATEWAY_TOKEN"
+            printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$EFFECTIVE_GATEWAY_TOKEN"
             printf 'CLAWDIY_SERVICE_TOKEN=%s\n' '${{ secrets.CLAWDIY_SERVICE_TOKEN }}'
             printf 'CLAWDIY_TELEGRAM_BOT_TOKEN=%s\n' '${{ secrets.CLAWDIY_TELEGRAM_BOT_TOKEN }}'
             printf 'TELEGRAM_BOT_TOKEN=%s\n' '${{ secrets.CLAWDIY_TELEGRAM_BOT_TOKEN }}'

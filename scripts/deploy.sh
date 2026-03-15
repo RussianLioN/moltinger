@@ -62,15 +62,17 @@ TARGET_LAST_RESTORE_CHECK_FILE=""
 TARGET_NOTIFICATION_NAME=""
 TARGET_REQUIRED_NETWORKS=()
 TARGET_AUXILIARY_SERVICES=()
+TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
 CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
 CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
-DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:latest"
+DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
+CLAWDIY_HEALTH_CHECK_TIMEOUT="${CLAWDIY_HEALTH_CHECK_TIMEOUT:-420}"
 
 # ========================================================================
 # UTILITY FUNCTIONS
@@ -356,6 +358,7 @@ configure_target() {
             TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/data/moltis/.last-moltis-backup"
             TARGET_LAST_RESTORE_CHECK_FILE="$PROJECT_ROOT/data/moltis/.last-moltis-restore-check"
             TARGET_NOTIFICATION_NAME="Moltis"
+            TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
             TARGET_REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
             TARGET_AUXILIARY_SERVICES=("watchtower")
             ;;
@@ -368,6 +371,7 @@ configure_target() {
             TARGET_LAST_IMAGE_FILE="$PROJECT_ROOT/data/clawdiy/.last-deployed-image"
             TARGET_LAST_BACKUP_FILE="$PROJECT_ROOT/data/clawdiy/.last-backup"
             TARGET_NOTIFICATION_NAME="Clawdiy"
+            TARGET_HEALTH_TIMEOUT="$CLAWDIY_HEALTH_CHECK_TIMEOUT"
             TARGET_REQUIRED_NETWORKS=(
                 "$TRAEFIK_NETWORK"
                 "$FLEET_INTERNAL_NETWORK"
@@ -404,6 +408,7 @@ ensure_clawdiy_runtime_paths() {
         "$PROJECT_ROOT/config/clawdiy"
         "$PROJECT_ROOT/config/fleet"
         "$PROJECT_ROOT/data/clawdiy/runtime"
+        "$PROJECT_ROOT/data/clawdiy/workspace"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"
         "$PROJECT_ROOT/data/clawdiy/audit/rollback-evidence"
@@ -414,11 +419,13 @@ ensure_clawdiy_runtime_paths() {
     done
 
     if [[ "$EUID" -ne 0 ]]; then
-        log_warn "Skipping Clawdiy state ownership normalization because deploy.sh is not running as root"
+        log_warn "Skipping Clawdiy runtime ownership normalization because deploy.sh is not running as root"
         return 0
     fi
 
     local runtime_paths=(
+        "$PROJECT_ROOT/data/clawdiy/runtime"
+        "$PROJECT_ROOT/data/clawdiy/workspace"
         "$PROJECT_ROOT/data/clawdiy/state"
         "$PROJECT_ROOT/data/clawdiy/audit"
     )
@@ -730,12 +737,20 @@ wait_for_healthy() {
     local container="$1"
     local timeout="${2:-$HEALTH_CHECK_TIMEOUT}"
     local elapsed=0
+    local warned_unhealthy=false
 
     log_info "Waiting for $container to become healthy (timeout: ${timeout}s)..."
 
     while [[ $elapsed -lt $timeout ]]; do
         local health
+        local state
+        local http_code="000"
         health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "unknown")
+        state=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
+
+        if [[ -n "${TARGET_HEALTH_URL:-}" && "$state" == "running" ]]; then
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$TARGET_HEALTH_URL" 2>/dev/null || echo "000")
+        fi
 
         case "$health" in
             healthy)
@@ -743,11 +758,29 @@ wait_for_healthy() {
                 return 0
                 ;;
             unhealthy)
-                log_error "$container is unhealthy"
-                docker logs "$container" --tail 50 >&2 || true
-                return 1
+                if [[ "$http_code" == "200" ]]; then
+                    log_success "$container health endpoint is already serving HTTP 200 while Docker health is still catching up"
+                    return 0
+                fi
+
+                if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+                    log_error "$container is unhealthy and no longer running"
+                    docker logs "$container" --tail 80 >&2 || true
+                    return 1
+                fi
+
+                if [[ "$warned_unhealthy" == "false" ]]; then
+                    log_warn "$container is temporarily unhealthy during startup; continuing to wait until timeout"
+                    docker inspect --format='{{json .State.Health}}' "$container" 2>/dev/null | jq . >&2 || true
+                    docker logs "$container" --tail 80 >&2 || true
+                    warned_unhealthy=true
+                fi
                 ;;
             starting)
+                if [[ "$http_code" == "200" ]]; then
+                    log_success "$container health endpoint is already serving HTTP 200 while Docker health is still starting"
+                    return 0
+                fi
                 ;;
         esac
 
@@ -887,7 +920,7 @@ rollback() {
 verify_deployment() {
     log_info "Verifying deployment for target $TARGET..."
 
-    if ! wait_for_healthy "$TARGET_CONTAINER" "$HEALTH_CHECK_TIMEOUT"; then
+    if ! wait_for_healthy "$TARGET_CONTAINER" "$TARGET_HEALTH_TIMEOUT"; then
         return 1
     fi
 
@@ -1112,7 +1145,7 @@ cmd_start() {
     log_info "Starting target $TARGET..."
     check_prerequisites "start"
     compose_cmd normal up -d
-    wait_for_healthy "$TARGET_CONTAINER"
+    wait_for_healthy "$TARGET_CONTAINER" "$TARGET_HEALTH_TIMEOUT"
     log_success "Target $TARGET started"
 }
 
@@ -1176,6 +1209,7 @@ show_usage() {
     echo "Environment Variables:"
     echo "  SLACK_WEBHOOK        - Slack webhook for notifications"
     echo "  HEALTH_CHECK_TIMEOUT - Health check timeout in seconds"
+    echo "  CLAWDIY_HEALTH_CHECK_TIMEOUT - Clawdiy-specific health timeout in seconds"
     echo "  ROLLBACK_ENABLED     - Enable automatic rollback (true/false)"
     echo "  CLAWDIY_IMAGE        - OpenClaw image for target=clawdiy deploys"
     echo "  CLAWDIY_ENV_FILE     - Optional env file for target=clawdiy"

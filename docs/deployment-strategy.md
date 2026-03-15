@@ -87,6 +87,17 @@ If `fleet-internal` is absent on the first rollout, the GitHub deploy workflow o
 ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth --json
 ```
 
+Preferred first operator path:
+- open the live UI at `https://clawdiy.ainetic.tech`
+- complete hosted browser bootstrap through `Overview -> Gateway Access -> Gateway Token -> Connect -> device pairing`
+- do not expect a dedicated first-run wizard; on a fresh browser the normal initial state is `Version n/a` / `Health Offline`
+- only after browser bootstrap inspect whether the current build exposes a provider-auth UI entrypoint
+- treat SSH/CLI paste-back as fallback only if the UI layer still lacks a provider-auth path or fails to write into the actual runtime store
+
+Related planning package:
+- [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md)
+- [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md)
+
 ### 5. Recovery verification
 
 ```bash
@@ -105,10 +116,11 @@ If `fleet-internal` is absent on the first rollout, the GitHub deploy workflow o
 | Scope | Secret refs |
 |-------|-------------|
 | Moltinger | `MOLTIS_PASSWORD`, `MOLTINGER_SERVICE_TOKEN`, `TELEGRAM_BOT_TOKEN` |
-| Clawdiy baseline | `CLAWDIY_PASSWORD`, `CLAWDIY_SERVICE_TOKEN`, `CLAWDIY_TELEGRAM_BOT_TOKEN`, `CLAWDIY_TELEGRAM_ALLOWED_USERS` |
+| Clawdiy baseline | `CLAWDIY_GATEWAY_TOKEN`, `CLAWDIY_SERVICE_TOKEN`, `CLAWDIY_TELEGRAM_BOT_TOKEN`, `CLAWDIY_TELEGRAM_ALLOWED_USERS` |
 | Clawdiy rollout gate | `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` |
 
 Canonical source of truth is GitHub Secrets. The server runtime copy is generated into `/opt/moltinger/.env` and `/opt/moltinger/clawdiy/.env` by CI.
+During the gateway-auth migration, `CLAWDIY_PASSWORD` remains an accepted compatibility fallback for rendering `OPENCLAW_GATEWAY_TOKEN`, but it is no longer the preferred secret.
 
 ## Rollout Gates
 

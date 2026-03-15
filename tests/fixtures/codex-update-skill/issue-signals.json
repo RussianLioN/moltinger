@@ -1,0 +1,14 @@
+[
+  {
+    "id": 2001,
+    "title": "Codex CLI issue: changelog preview missing latest release highlights",
+    "state": "open",
+    "html_url": "https://github.com/openai/codex/issues/2001"
+  },
+  {
+    "id": 2002,
+    "title": "Codex CLI issue: scheduler notification text should stay short",
+    "state": "open",
+    "html_url": "https://github.com/openai/codex/issues/2002"
+  }
+]

@@ -1,0 +1,70 @@
+{
+  "schema_version": "codex-advisory-session/v1",
+  "event": {
+    "event_id": "codex-advisory-expired01",
+    "created_at": "2026-03-10T00:00:00Z",
+    "source": "codex-cli-upstream-watcher",
+    "upstream_fingerprint": "expired01",
+    "latest_version": "0.114.0",
+    "severity": "important",
+    "summary_ru": "Вышло обновление Codex CLI 0.114.0",
+    "why_it_matters_ru": "Нужно проверить, как обновление влияет на проект.",
+    "highlights_ru": [
+      "Изменения затрагивают resume."
+    ],
+    "recommendation_status": "ready",
+    "interactive_followup_eligible": true
+  },
+  "alert": {
+    "alert_id": "alert-codex-advisory-expired01",
+    "event_id": "codex-advisory-expired01",
+    "chat_id": "262872984",
+    "message_id": 77,
+    "delivery_mode": "telegram",
+    "interactive_mode": "inline_callbacks",
+    "created_at": "2026-03-10T00:00:00Z",
+    "status": "sent"
+  },
+  "session": {
+    "session_id": "advsess-expired01",
+    "alert_id": "alert-codex-advisory-expired01",
+    "chat_id": "262872984",
+    "callback_token": "tok-expired",
+    "expires_at": "2026-03-10T01:00:00Z",
+    "status": "pending",
+    "resolved_at": null
+  },
+  "recommendation_envelope": {
+    "event_id": "codex-advisory-expired01",
+    "chat_id": "262872984",
+    "headline_ru": "Практические рекомендации по обновлению Codex CLI",
+    "summary_ru": "Нужно обновить проектные инструкции.",
+    "priority_checks": [],
+    "impacted_surfaces": [],
+    "raw_reference_path": "",
+    "items": []
+  },
+  "interaction_record": {
+    "schema_version": "codex-advisory-interaction/v1",
+    "event_id": "codex-advisory-expired01",
+    "upstream_fingerprint": "expired01",
+    "alert_id": "alert-codex-advisory-expired01",
+    "chat_id": "262872984",
+    "message_id": 77,
+    "interactive_mode": "inline_callbacks",
+    "decision": "none",
+    "decision_source": "none",
+    "followup_status": "awaiting_user",
+    "degraded_reason": "",
+    "created_at": "2026-03-10T00:00:00Z",
+    "resolved_at": null
+  },
+  "recovery": {
+    "mode": "tokenized_command",
+    "accept_command_text": "/codex-advisory-followup accept advsess-expired01 tok-expired",
+    "decline_command_text": "/codex-advisory-followup decline advsess-expired01 tok-expired"
+  },
+  "audit_notes": [
+    "expired fixture"
+  ]
+}

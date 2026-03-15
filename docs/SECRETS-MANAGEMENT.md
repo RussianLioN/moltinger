@@ -187,9 +187,16 @@ gh secret set OLLAMA_API_KEY --repo RussianLioN/moltinger
 
 These secrets are reserved for the separate Clawdiy runtime and must stay distinct from the current Moltinger secret set.
 
+See also:
+- [Clawdiy / OpenClaw Remote Runtime OAuth Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-remote-oauth-runtime-2026-03-12.md)
+- [Clawdiy / OpenClaw Browser Bootstrap Research](/Users/rl/coding/moltinger-openclaw-control-plane/docs/research/clawdiy-openclaw-browser-bootstrap-2026-03-12.md)
+- [docs/runbooks/clawdiy-browser-bootstrap.md](/Users/rl/coding/moltinger-openclaw-control-plane/docs/runbooks/clawdiy-browser-bootstrap.md)
+- [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md)
+
 | Secret | Required for first Clawdiy deploy | Purpose | Planned mapping |
 |--------|-----------------------------------|---------|-----------------|
-| `CLAWDIY_PASSWORD` | Yes | Human/web auth for Clawdiy | `CLAWDIY_PASSWORD` in Clawdiy-only env file |
+| `CLAWDIY_GATEWAY_TOKEN` | Yes | Hosted Control UI token auth for Clawdiy | `CLAWDIY_GATEWAY_TOKEN` and `OPENCLAW_GATEWAY_TOKEN` in Clawdiy-only env file |
+| `CLAWDIY_PASSWORD` | Legacy fallback only | Temporary compatibility alias while migrating to token auth | fallback-only source for `OPENCLAW_GATEWAY_TOKEN` when `CLAWDIY_GATEWAY_TOKEN` is absent |
 | `CLAWDIY_SERVICE_TOKEN` | Yes | Private HTTP bearer auth for inter-agent handoff | `CLAWDIY_SERVICE_TOKEN` in Clawdiy-only env file |
 | `CLAWDIY_TELEGRAM_BOT_TOKEN` | Yes | Dedicated Telegram bot identity for Clawdiy | `CLAWDIY_TELEGRAM_BOT_TOKEN` in Clawdiy-only env file |
 | `CLAWDIY_TELEGRAM_ALLOWED_USERS` | Optional | Dedicated Telegram allowlist for Clawdiy bot | `CLAWDIY_TELEGRAM_ALLOWED_USERS` in Clawdiy-only env file |
@@ -199,10 +206,12 @@ Rules:
 - Do not reuse `MOLTIS_PASSWORD`, `TELEGRAM_BOT_TOKEN`, or any existing Moltinger provider auth material for Clawdiy.
 - Do not render Clawdiy secrets into the current `/opt/moltinger/.env`.
 - `deploy.yml` remains Moltinger-only; `deploy-clawdiy.yml` is the only workflow allowed to render and sync the separate Clawdiy env/runtime secret set.
+- `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` is metadata and policy evidence only; it is not the runtime OAuth credential artifact used by OpenClaw itself.
 
 Dedicated Clawdiy env rendering rules:
 - The authoritative Clawdiy runtime env file is `/opt/moltinger/clawdiy/.env`.
-- `CLAWDIY_PASSWORD`, `CLAWDIY_SERVICE_TOKEN`, and `CLAWDIY_TELEGRAM_BOT_TOKEN` must be single-line values because they are rendered verbatim into the dedicated env file.
+- `CLAWDIY_GATEWAY_TOKEN`, `CLAWDIY_SERVICE_TOKEN`, and `CLAWDIY_TELEGRAM_BOT_TOKEN` must be single-line values because they are rendered verbatim into the dedicated env file.
+- During the password-to-token migration, `deploy-clawdiy.yml` may derive `OPENCLAW_GATEWAY_TOKEN` from legacy `CLAWDIY_PASSWORD` if `CLAWDIY_GATEWAY_TOKEN` is still unset. Rotate to the canonical token secret as soon as practical.
 - `deploy-clawdiy.yml` may also render `TELEGRAM_BOT_TOKEN` inside `/opt/moltinger/clawdiy/.env` as a runtime alias for OpenClaw; operators and validation scripts must continue to treat `CLAWDIY_TELEGRAM_BOT_TOKEN` as the canonical Clawdiy secret and must not interpret the alias as Moltinger secret reuse by itself.
 - `CLAWDIY_TELEGRAM_ALLOWED_USERS`, when set, must be a comma-separated allowlist without spaces.
 - `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` must be compact single-line JSON and is rejected by CI if it is multiline or missing the required `codex-oauth` OAuth markers for `api.responses.write` and `gpt-5.4`.

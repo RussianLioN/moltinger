@@ -75,18 +75,135 @@ beads_resolve_normalize_path() {
   )
 }
 
+beads_resolve_git() {
+  env \
+    -u GIT_DIR \
+    -u GIT_WORK_TREE \
+    -u GIT_COMMON_DIR \
+    -u GIT_NAMESPACE \
+    -u GIT_INDEX_FILE \
+    -u GIT_OBJECT_DIRECTORY \
+    -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_PREFIX \
+    -u GIT_CEILING_DIRECTORIES \
+    -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+    git "$@"
+}
+
+beads_resolve_find_git_marker_root() {
+  local probe_path="${1:-$PWD}"
+  local cursor=""
+  local next_cursor=""
+
+  cursor="$(beads_resolve_normalize_path "${probe_path}")" || return 1
+  if [[ ! -d "${cursor}" ]]; then
+    cursor="$(dirname "${cursor}")"
+  fi
+
+  while [[ -n "${cursor}" ]]; do
+    if [[ -e "${cursor}/.git" ]]; then
+      printf '%s\n' "${cursor}"
+      return 0
+    fi
+
+    if [[ "${cursor}" == "/" ]]; then
+      break
+    fi
+
+    next_cursor="$(dirname "${cursor}")"
+    if [[ "${next_cursor}" == "${cursor}" ]]; then
+      break
+    fi
+    cursor="${next_cursor}"
+  done
+
+  return 1
+}
+
+beads_resolve_gitdir_path() {
+  local repo_root="$1"
+  local marker_path="${repo_root}/.git"
+  local gitdir_value=""
+
+  if [[ -d "${marker_path}" ]]; then
+    beads_resolve_normalize_path "${marker_path}"
+    return 0
+  fi
+
+  if [[ ! -f "${marker_path}" ]]; then
+    return 1
+  fi
+
+  gitdir_value="$(sed -n '1s/^gitdir: //p' "${marker_path}")"
+  [[ -n "${gitdir_value}" ]] || return 1
+
+  beads_resolve_normalize_path "${gitdir_value}" "${repo_root}"
+}
+
+beads_resolve_canonical_root_from_gitdir() {
+  local repo_root="$1"
+  local gitdir_path=""
+  local common_dir_rel=""
+  local common_dir=""
+
+  gitdir_path="$(beads_resolve_gitdir_path "${repo_root}")" || return 1
+
+  if [[ -d "${repo_root}/.git" ]]; then
+    printf '%s\n' "${repo_root}"
+    return 0
+  fi
+
+  if [[ -f "${gitdir_path}/commondir" ]]; then
+    common_dir_rel="$(<"${gitdir_path}/commondir")"
+    [[ -n "${common_dir_rel}" ]] || return 1
+    common_dir="$(beads_resolve_normalize_path "${common_dir_rel}" "${gitdir_path}")" || return 1
+  else
+    common_dir="${gitdir_path}"
+  fi
+
+  if [[ "$(basename "${common_dir}")" == ".git" ]]; then
+    (
+      cd "${common_dir}"
+      cd ..
+      pwd -P
+    )
+    return 0
+  fi
+
+  if [[ "$(basename "$(dirname "${common_dir}")")" == "worktrees" ]]; then
+    (
+      cd "${common_dir}"
+      cd ../..
+      cd ..
+      pwd -P
+    )
+    return 0
+  fi
+
+  return 1
+}
+
 beads_resolve_repo_root() {
   local probe_path="${1:-$PWD}"
-  git -C "${probe_path}" rev-parse --show-toplevel 2>/dev/null || true
+  local repo_root=""
+
+  repo_root="$(beads_resolve_git -C "${probe_path}" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "${repo_root}" ]]; then
+    printf '%s\n' "${repo_root}"
+    return 0
+  fi
+
+  beads_resolve_find_git_marker_root "${probe_path}" || true
 }
 
 beads_resolve_canonical_root() {
   local repo_root="$1"
   local common_dir=""
 
-  common_dir="$(git -C "${repo_root}" rev-parse --git-common-dir 2>/dev/null || true)"
+  common_dir="$(beads_resolve_git -C "${repo_root}" rev-parse --git-common-dir 2>/dev/null || true)"
   if [[ -z "${common_dir}" ]]; then
-    return 1
+    beads_resolve_canonical_root_from_gitdir "${repo_root}"
+    return $?
   fi
 
   (
@@ -122,6 +239,89 @@ beads_resolve_is_explicit_troubleshooting() {
   done
 
   return 1
+}
+
+beads_resolve_requests_readonly_mode() {
+  local arg=""
+
+  for arg in "$@"; do
+    if [[ "${arg}" == "--readonly" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+beads_resolve_extract_command() {
+  local -a args=("$@")
+  local index=0
+  local arg=""
+
+  BEADS_RESOLVE_COMMAND=""
+  BEADS_RESOLVE_SUBCOMMAND=""
+
+  while [[ "${index}" -lt "${#args[@]}" ]]; do
+    arg="${args[$index]}"
+    case "${arg}" in
+      --)
+        ((index += 1))
+        break
+        ;;
+      --actor|--lock-timeout|--db)
+        ((index += 2))
+        continue
+        ;;
+      --actor=*|--lock-timeout=*|--db=*|--allow-stale|--json|--no-auto-flush|--no-auto-import|--no-daemon|--no-db|--profile|--readonly|--sandbox|-h|--help|-q|--quiet|-v|--verbose|-V|--version)
+        ((index += 1))
+        continue
+        ;;
+      -*)
+        ((index += 1))
+        continue
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if [[ "${index}" -lt "${#args[@]}" ]]; then
+    BEADS_RESOLVE_COMMAND="${args[$index]}"
+    if [[ $((index + 1)) -lt "${#args[@]}" ]]; then
+      BEADS_RESOLVE_SUBCOMMAND="${args[$((index + 1))]}"
+    fi
+  fi
+}
+
+beads_resolve_is_canonical_root_read_only_command() {
+  local command=""
+  local subcommand=""
+
+  beads_resolve_extract_command "$@"
+  command="${BEADS_RESOLVE_COMMAND}"
+  subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
+
+  case "${command}" in
+    ""|activity|blocked|children|completion|count|diff|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
+      return 0
+      ;;
+    branch)
+      [[ "${subcommand}" == "list" ]]
+      return
+      ;;
+    dep)
+      [[ "${subcommand}" == "cycles" ]]
+      return
+      ;;
+    worktree)
+      [[ "${subcommand}" == "list" ]]
+      return
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 beads_resolve_set_decision() {
@@ -189,7 +389,17 @@ beads_resolve_dispatch() {
   fi
 
   if [[ "${repo_root}" == "${canonical_root}" ]]; then
-    beads_resolve_set_decision "pass_through_root" "canonical_root" 0
+    if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
+      beads_resolve_set_decision "pass_through_root_readonly" "canonical_root" 0
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_root_mutation" \
+      "canonical_root" \
+      26 \
+      "bd: mutating canonical-root tracker commands are blocked by default in ${repo_root}." \
+      "For intentional canonical-root admin/troubleshooting work only, rerun with an explicit target such as: bd --db $(printf '%q' "${repo_root}/.beads/beads.db") <command>"
     return 0
   fi
 

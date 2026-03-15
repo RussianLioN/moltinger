@@ -112,8 +112,22 @@ check_instruction_references() {
   local failures=0
   assert_contains ".ai/instructions/shared-core.md" "Speckit Artifact Guard" "root Speckit guard" || failures=1
   assert_contains ".ai/instructions/shared-core.md" "docs/GIT-TOPOLOGY-REGISTRY.md" "topology registry reference" || failures=1
+  if grep -Fq -- "./scripts/bd-local.sh sync" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.ai/instructions/shared-core.md"; then
+    log_success "Verified safe Beads sync guidance in .ai/instructions/shared-core.md"
+  else
+    log_error "Missing safe Beads sync guidance in .ai/instructions/shared-core.md"
+    failures=1
+  fi
   assert_contains ".ai/instructions/codex-adapter.md" "docs/CODEX-OPERATING-MODEL.md" "operating model reference" || failures=1
   assert_contains ".ai/instructions/codex-adapter.md" "make codex-check" "Codex governance check command" || failures=1
+  if grep -Fq -- "./scripts/bd-local.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md" || \
+     grep -Fq -- "plain `bd`" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md"; then
+    log_success "Verified local Beads ownership guidance in docs/CODEX-OPERATING-MODEL.md"
+  else
+    log_error "Missing local Beads ownership guidance in docs/CODEX-OPERATING-MODEL.md"
+    failures=1
+  fi
 
   return "${failures}"
 }
@@ -123,6 +137,7 @@ check_deprecated_references() {
 
   local pattern='gpt-5\.2(-codex)?|gpt 5\.2|openai-codex|providers\.openai-codex'
   local matches
+  local filtered_matches
 
   if command -v rg >/dev/null 2>&1; then
     matches="$(cd "${REPO_ROOT}" && rg -n -S "${pattern}" . -g '!scripts/codex-check.sh' || true)"
@@ -130,9 +145,11 @@ check_deprecated_references() {
     matches="$(cd "${REPO_ROOT}" && grep -RInE --exclude-dir=.git --exclude=codex-check.sh "${pattern}" . || true)"
   fi
 
-  if [[ -n "${matches}" ]]; then
+  filtered_matches="$(printf '%s\n' "${matches}" | grep -Ev '^(\./)?(config/clawdiy/openclaw\.json|tests/static/test_config_validation\.sh):' || true)"
+
+  if [[ -n "${filtered_matches}" ]]; then
     log_error "Deprecated references found:"
-    printf '%s\n' "${matches}"
+    printf '%s\n' "${filtered_matches}"
     return 1
   fi
 
