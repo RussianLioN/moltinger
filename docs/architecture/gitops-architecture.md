@@ -4,6 +4,15 @@
 **Дата:** 2025-02-15
 **Автор:** Architecture Team
 
+> **Status Note (2026-03-15)**:
+> This document contains historical architecture material.
+> The current operational contract for Moltis version changes and rollback lives in
+> [../version-update.md](../version-update.md)
+> and
+> [../runbooks/moltis-backup-safe-update.md](../runbooks/moltis-backup-safe-update.md).
+> If examples below mention `scripts/rollback.sh`, `restore-moltis.sh`, server-side `sed`,
+> or arbitrary tag rollback, treat them as legacy design notes rather than the current runtime contract.
+
 ---
 
 ## 1. Обзор архитектуры

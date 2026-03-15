@@ -2,6 +2,20 @@
 
 This document defines the safe way to update Moltis versions in this repository.
 
+## Upstream Version Model
+
+Official Moltis upstream supports both:
+
+- `ghcr.io/moltis-org/moltis:latest` as a quickstart/default image path
+- release-based images published on each upstream release
+
+Project policy for this repository:
+
+- `latest` is acceptable for local/dev/UAT or explicit operator validation
+- production should prefer an explicit upstream release tag recorded in git
+- `latest` is never treated as a rollback target
+- rollback is not documented here as "return to any operator-chosen tag"
+
 ## Current Version
 
 Check the tracked version defaults:
@@ -29,15 +43,23 @@ Forbidden:
 - ad-hoc image pulls without a matching pre-update backup
 - rollout when restore-check has not passed for the same backup
 
+Current tracked-helper contract in this branch:
+
+- `./scripts/moltis-version.sh` enforces a pinned tracked version for the managed production path
+- if operators intentionally validate `latest`, that is an upstream/dev/UAT path, not the default tracked production contract in git
+
 ## Required Update Flow
 
-1. Change the tracked image version in:
+1. Choose the target image version:
+   - preferred for production: explicit upstream release tag
+   - allowed by upstream for local/dev/UAT: `latest`
+2. If using the preferred production path, change the tracked image version in:
    - `docker-compose.yml`
    - `docker-compose.prod.yml`
-2. Commit the change in git.
-3. Capture a fresh pre-update backup.
-4. Run restore-check against that fresh backup.
-5. Only then roll out the updated Moltis container.
+3. Commit the change in git.
+4. Capture a fresh pre-update backup.
+5. Run restore-check against that fresh backup.
+6. Only then roll out the updated Moltis container.
 
 Preferred operator runbook:
 
@@ -84,6 +106,13 @@ Runtime audit paths:
 - `data/moltis/.last-moltis-restore-check`
 - `data/moltis/audit/restore-checks/`
 - `data/moltis/audit/rollback-evidence/`
+
+Current rollback contract:
+
+- first attempt: return to the previous deployed image if it is known
+- fallback: restore from the latest verified backup
+- not a supported contract: rollback to an arbitrary operator-selected version tag
+- if state or schema compatibility is uncertain, prefer verified restore over image-only rollback
 
 ## References
 
