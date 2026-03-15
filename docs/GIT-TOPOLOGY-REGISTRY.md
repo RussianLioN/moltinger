@@ -140,7 +140,6 @@
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
-| `origin/feat/beads-root-write-guard` | Needs decision |
 | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `origin/feat/moltinger-ewde-codex-advisory-rollout` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
