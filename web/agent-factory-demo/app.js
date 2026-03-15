@@ -34,18 +34,6 @@
     playground_ready: "Готово",
     reopened: "Нужно внимание",
   };
-  const MESSAGE_KIND_LABELS = {
-    initial_shell: "Начало работы",
-    discovery_question: "Следующий вопрос",
-    clarification_prompt: "Нужно уточнение",
-    confirmation_prompt: "Проверка brief",
-    session_resume: "Сессия восстановлена",
-    session_refresh: "Сессия обновлена",
-    upload_warning: "Файлы",
-    artifact_pending: "Артефакты",
-    error_message: "Нужен доступ",
-  };
-
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
@@ -71,8 +59,8 @@
     connectionState: document.querySelector('[data-role="connection-state"]'),
     sessionBadge: document.querySelector('[data-role="session-badge"]'),
     refreshSession: document.querySelector('[data-role="refresh-session"]'),
+    threadPanel: document.querySelector('[data-role="thread-panel"]'),
     chatLog: document.querySelector('[data-role="chat-log"]'),
-    chatEmpty: document.querySelector('[data-role="chat-empty"]'),
     composerForm: document.querySelector('[data-role="composer-form"]'),
     composerLeadLabel: document.querySelector('[data-role="composer-lead-label"]'),
     composerMode: document.querySelector('[data-role="composer-mode"]'),
@@ -138,26 +126,6 @@
 
   function defaultSessionId(projectId) {
     return `web-demo-session-${slugify(projectId, "project")}`;
-  }
-
-  function buildWelcomeMessage() {
-    return {
-      role: "agent",
-      kind: "initial_shell",
-      title: "Начни с описания задачи",
-      body: "Опиши процесс, который хочешь автоматизировать. Если примеры лежат в файлах, прикрепи их прямо в поле ниже.",
-      actions: [],
-    };
-  }
-
-  function buildSystemMessage(title, body, kind = "system_update") {
-    return {
-      role: "system",
-      kind,
-      title,
-      body,
-      actions: [],
-    };
   }
 
   function formatBytes(value) {
@@ -278,7 +246,7 @@
       sidePanelOpen: Boolean(project.sidePanelOpen),
       lastPanelMode: normalizeText(project.lastPanelMode),
       sessionId: project.sessionId,
-      timeline: Array.isArray(project.timeline) ? project.timeline : [buildWelcomeMessage()],
+      timeline: Array.isArray(project.timeline) ? project.timeline : [],
       lastResponse: project.lastResponse && typeof project.lastResponse === "object" ? project.lastResponse : null,
       draftText: normalizeText(project.draftText),
       createdAt: normalizeText(project.createdAt, nowIso()),
@@ -301,7 +269,7 @@
       sidePanelOpen: Boolean(record.sidePanelOpen),
       lastPanelMode: normalizeText(record.lastPanelMode),
       sessionId: normalizeText(record.sessionId, defaultSessionId(id)),
-      timeline: Array.isArray(record.timeline) && record.timeline.length ? record.timeline : [buildWelcomeMessage()],
+      timeline: Array.isArray(record.timeline) ? record.timeline : [],
       lastResponse: record.lastResponse && typeof record.lastResponse === "object" ? record.lastResponse : null,
       draftText: normalizeText(record.draftText),
       createdAt: normalizeText(record.createdAt, updatedAt),
@@ -321,7 +289,7 @@
       title: normalizeText(seed.title, DEFAULT_PROJECT_TITLE),
       titleEdited: Boolean(seed.titleEdited),
       sessionId: normalizeText(seed.sessionId, defaultSessionId(id)),
-      timeline: [buildWelcomeMessage()],
+      timeline: [],
       lastResponse: null,
       draftText: "",
       createdAt: nowIso(),
@@ -397,7 +365,7 @@
     const response = project.lastResponse || {};
     const visibleStatus = normalizeText(response.status_snapshot?.user_visible_status || response.status);
     const transcriptSize = Array.isArray(project.timeline) ? project.timeline.length : 0;
-    return Boolean(project.sessionId && response.web_demo_session?.status) || transcriptSize > 1 || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "reopened"].includes(visibleStatus);
+    return Boolean(project.sessionId && response.web_demo_session?.status) || transcriptSize > 0 || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "reopened"].includes(visibleStatus);
   }
 
   function currentResponse(project) {
@@ -593,18 +561,18 @@
     const status = currentStatus(project);
     const question = currentQuestion(project);
     if (!hasConversationActivity(project)) {
-      return "Опиши задачу простыми словами. После первого ответа проект получит рабочее название автоматически.";
+      return "Опиши задачу простыми словами. После первого содержательного ответа проект сам получит рабочее имя.";
     }
     if (status === "awaiting_confirmation") {
-      return "Brief собран. Открой боковую панель, чтобы проверить summary, внести правки или подтвердить версию.";
+      return "Brief собран. Открой правую панель, чтобы проверить summary, внести правки или подтвердить версию.";
     }
     if (status === "playground_ready" || status === "confirmed") {
-      return "Материалы готовы. Открой боковую панель, чтобы скачать артефакты или вернуть проект на доработку.";
+      return "Материалы готовы. Открой правую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
     if (question) {
-      return shorten(`Сейчас агент уточняет контекст: ${question}`, 136);
+      return shorten(`Сейчас агент уточняет контекст проекта: ${question}`, 136);
     }
-    return "Сессия активна. Можно продолжать диалог или запросить статус.";
+    return "Можно продолжать диалог и при необходимости прикладывать файлы с примерами.";
   }
 
   function responseActions(response) {
@@ -760,6 +728,7 @@
   function createMessageNode(message) {
     const fragment = dom.messageTemplate.content.cloneNode(true);
     const article = fragment.querySelector(".message");
+    const meta = fragment.querySelector(".message__meta");
     const author = fragment.querySelector(".message__author");
     const kind = fragment.querySelector(".message__kind");
     const title = fragment.querySelector(".message__title");
@@ -780,9 +749,12 @@
       system: "Система",
       artifact: "Фабрика",
     }[message.role || "agent"];
-    kind.textContent = MESSAGE_KIND_LABELS[message.kind] || "";
-    kind.hidden = !kind.textContent;
-    title.textContent = message.title || "Ответ";
+    kind.textContent = "";
+    kind.hidden = true;
+    const titleText = normalizeText(message.title);
+    title.textContent = titleText;
+    title.hidden = !titleText;
+    meta.hidden = true;
     body.textContent = message.body || "";
     attachments.innerHTML = "";
     (message.attachments || []).forEach((upload) => {
@@ -799,39 +771,28 @@
     });
     attachments.hidden = (message.attachments || []).length === 0;
 
-    (message.actions || []).forEach((action) => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "chip";
-      chip.dataset.uiAction = action;
-      chip.textContent = ACTION_LABELS[action] || action;
-      chip.addEventListener("click", () => handleActionShortcut(action));
-      actions.appendChild(chip);
-    });
+    actions.hidden = true;
     return fragment;
   }
 
   function timelineMessagesFromResponse(response) {
     return (response?.reply_cards || [])
-      .filter((card) => !["brief_summary_section", "download_prompt", "status_update"].includes(card.card_kind))
+      .filter((card) => ["discovery_question", "clarification_prompt"].includes(card.card_kind))
       .map((card) => ({
-        role: card.card_kind === "error_message" ? "system" : "agent",
+        role: "agent",
         kind: card.card_kind || "reply_card",
-        title: card.title || "Ответ фабрики",
+        title: "",
         body: card.body_text || "",
-        actions: Array.isArray(card.action_hints)
-          ? card.action_hints.filter((action) => ["submit_turn", "request_brief_correction", "confirm_brief", "reopen_brief"].includes(action))
-          : [],
+        actions: [],
       }));
   }
 
   function renderTimeline(project) {
     dom.chatLog.innerHTML = "";
-    const items = project?.timeline?.length ? project.timeline : [buildWelcomeMessage()];
+    const items = project?.timeline?.length ? project.timeline : [];
     items.forEach((message) => {
       dom.chatLog.appendChild(createMessageNode(message));
     });
-    dom.chatEmpty.hidden = items.length > 0;
     dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
   }
 
@@ -869,6 +830,7 @@
 
   function renderHome(project) {
     dom.homePanel.hidden = !state.accessToken || hasConversationActivity(project);
+    dom.threadPanel.hidden = !state.accessToken || !hasConversationActivity(project);
   }
 
   function renderSidePanelToggle(project) {
@@ -950,16 +912,6 @@
 
       button.addEventListener("click", () => {
         if (!ready) {
-          project.timeline.push(
-            buildSystemMessage(
-              "Загрузка ещё недоступна",
-              "Сначала нужно довести проект до confirmed brief и закончить downstream handoff.",
-              "artifact_pending",
-            ),
-          );
-          project.updatedAt = nowIso();
-          renderTimeline(project);
-          persist();
           return;
         }
         const href = artifact.download_url || createMockDownload(project, artifact);
@@ -1518,25 +1470,6 @@
     };
   }
 
-  function buildResumeNotice(response, reason) {
-    const resumeContext = response?.resume_context || {};
-    const summary = normalizeText(resumeContext.summary_text);
-    const currentLabel = normalizeText(resumeContext.current_status_label);
-    const briefVersion = normalizeText(resumeContext.latest_brief_version || response?.status_snapshot?.brief_version);
-    if (reason === "manual_refresh") {
-      return {
-        title: "Сессия обновлена",
-        body: summary || (currentLabel ? `Проект обновлён. Текущий этап: ${currentLabel}.` : "Проект обновлён из сохранённого состояния."),
-        kind: "session_refresh",
-      };
-    }
-    return {
-      title: "Сессия восстановлена",
-      body: summary || (briefVersion ? `Проект восстановлен вместе с версией brief ${briefVersion}.` : "Проект восстановлен из сохранённого состояния."),
-      kind: "session_resume",
-    };
-  }
-
   function applyResponse(project, response, connectionMode, options = {}) {
     const appendReplyMessages = options.appendReplyMessages !== false;
     const syncReason = normalizeText(options.syncReason);
@@ -1557,14 +1490,6 @@
     const replyMessages = appendReplyMessages ? timelineMessagesFromResponse(response) : [];
     if (replyMessages.length) {
       project.timeline.push(...replyMessages);
-    } else if (appendReplyMessages && response.next_question) {
-      project.timeline.push({
-        role: "agent",
-        kind: "next_question",
-        title: "Следующий вопрос",
-        body: response.next_question,
-        actions: ["submit_turn"],
-      });
     }
 
     maybeAutonameProject(project, project.timeline.find((message) => message.role === "user")?.body || "", response);
@@ -1578,19 +1503,7 @@
       project.sidePanelOpen = true;
     }
     project.lastPanelMode = panelMode;
-
-    const resumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint);
-    if (syncReason === "manual_refresh") {
-      const notice = buildResumeNotice(response, syncReason);
-      project.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
-      if (resumeFingerprint) {
-        project.lastResumeFingerprint = resumeFingerprint;
-      }
-    } else if (syncReason && resumeFingerprint && project.lastResumeFingerprint !== resumeFingerprint) {
-      const notice = buildResumeNotice(response, syncReason);
-      project.timeline.push(buildSystemMessage(notice.title, notice.body, notice.kind));
-      project.lastResumeFingerprint = resumeFingerprint;
-    }
+    project.lastResumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint, project.lastResumeFingerprint);
 
     persist();
     renderAll();
@@ -1624,8 +1537,8 @@
       project.timeline.push({
         role: "user",
         kind: action,
-        title: ACTION_LABELS[action] || "Сообщение",
-        body: normalizedUserText || "Прикрепил файлы к текущему вопросу.",
+        title: "",
+        body: normalizedUserText || "Добавил файлы к ответу.",
         attachments: queuedUploads.map((upload) => ({
           upload_id: upload.upload_id,
           name: upload.name,
@@ -1667,16 +1580,6 @@
     const syncReason = normalizeText(options.syncReason, "manual_refresh");
     const suppressFailureBanner = Boolean(options.suppressFailureBanner);
     if (!project.sessionId) {
-      project.timeline.push(
-        buildSystemMessage(
-          "Сессия ещё не создана",
-          "Сначала отправь первый turn, после этого shell сможет дергать GET /api/session.",
-          "session_missing",
-        ),
-      );
-      project.updatedAt = nowIso();
-      renderTimeline(project);
-      persist();
       return;
     }
 
@@ -1688,16 +1591,7 @@
       state.connectionMode = project.lastResponse ? state.connectionMode : "mock";
       renderConnection();
       if (!suppressFailureBanner) {
-        project.timeline.push(
-          buildSystemMessage(
-            "Live session недоступна",
-            "GET /api/session пока не ответил. Shell остаётся в mock/local режиме и не теряет текущее состояние.",
-            "session_refresh_failed",
-          ),
-        );
-        project.updatedAt = nowIso();
-        renderTimeline(project);
-        persist();
+        renderAll();
       }
     } finally {
       setBusy(false);
@@ -1872,26 +1766,6 @@
         renderStatus(project);
         persist();
         dom.composerInput.focus();
-      }
-
-      if (skippedCount || failedUploads.length) {
-        const details = [];
-        if (skippedCount) {
-          details.push(`Лишние файлы не добавлены: лимит ${MAX_LOCAL_UPLOAD_FILES} файла на один turn.`);
-        }
-        if (failedUploads.length) {
-          details.push(`Не удалось прочитать: ${failedUploads.join(", ")}.`);
-        }
-        project.timeline.push(
-          buildSystemMessage(
-            "Не все файлы добавлены",
-            details.join(" "),
-            "upload_warning",
-          ),
-        );
-        project.updatedAt = nowIso();
-        renderTimeline(project);
-        persist();
       }
     });
 

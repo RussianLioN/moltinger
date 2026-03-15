@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-15
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-16
 
 ---
 
@@ -50,7 +50,17 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-15)
+### Current Session Update (2026-03-16)
+
+- После нового пользовательского UX-review для `https://asc.ainetic.tech` дополнительно упрощена именно лента диалога в `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css` и `web/agent-factory-demo/app.js`: из primary chat feed убраны service/status карточки, кнопки действий внутри самих сообщений и визуально тяжёлый panel-header; в ленте остались только реальные реплики пользователя и фабричного агента.
+- `thread-panel` теперь работает как лёгкий bubble-feed без видимого dashboard-header, стартовый `empty shell` больше не вставляется в timeline, а пользовательские сообщения отправляются без служебных заголовков вроде `Новый проект` или `Ответить`, чтобы поток ощущался ближе к Telegram/Codex chat UX.
+- Визуал ленты упрощён под calm chat pattern: уменьшен стартовый hero, ослаблен фон thread area, сообщения превращены в компактные bubble-блоки с мягким разделением `agent/user`, а системные runtime-детали по-прежнему остаются только в hidden debug surface и не попадают в primary viewport.
+- Быстрые проверки после этого UX-pass прошли:
+  - `node --check web/agent-factory-demo/app.js`
+  - `git diff --check`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery|uploads)' --json`
+  - `./tests/run.sh --lane integration_local --filter 'integration_local_agent_factory_web_(flow|confirmation|handoff|resume)' --json`
+- `./tests/run.sh --lane e2e_browser --filter agent_factory_web_demo --json` в этой среде снова застревает на контейнерном browser-runner и не используется как blocking signal для этой UX-итерации; актуальный follow-up по browser-runtime остаётся в `molt-x3o`.
 
 - Завершён ещё один полный UX-pass для `asc.ainetic.tech` уже не как “облегчённый dashboard”, а как явный `Codex-first workspace`: `web/agent-factory-demo/index.html` теперь разделяет `Access gate -> Empty home -> Project workspace -> Review/downloads side panel`, без service-noise в primary viewport.
 - `web/agent-factory-demo/app.css` и `web/agent-factory-demo/app.js` переписаны под новый interaction model: sidebar показывает только названия проектов, первый экран сразу задаёт рабочий вопрос с примерами ответов, текущий discovery-вопрос поднимается в composer, а review/downloads живут в правой side panel, которая открывается только по событию или явному действию пользователя.

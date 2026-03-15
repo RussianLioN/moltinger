@@ -113,27 +113,9 @@
               </div>
             </section>
 
-            <section class="thread-panel" aria-labelledby="chat-panel-title">
-              <div class="thread-panel__header">
-                <div class="thread-panel__header-copy">
-                  <p class="thread-panel__eyebrow">Диалог</p>
-                  <h2 id="chat-panel-title">Рабочая сессия по проекту</h2>
-                </div>
-              </div>
-
-              <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite">
-                <article class="message message--agent" data-role="chat-empty">
-                  <div class="message__meta">
-                    <span class="message__author">Фабричный агент</span>
-                    <span class="message__kind">Начало работы</span>
-                  </div>
-                  <h3>Начни с описания задачи</h3>
-                  <p>
-                    Напиши, какую часть бизнес-процесса хочешь автоматизировать. Если примеры лежат
-                    в файлах, прикрепи их прямо в поле ниже.
-                  </p>
-                </article>
-              </div>
+            <section class="thread-panel" data-role="thread-panel" aria-labelledby="chat-panel-title">
+              <h2 id="chat-panel-title" class="sr-only">Диалог по проекту</h2>
+              <div class="chat-log" id="messages" data-role="chat-log" aria-live="polite"></div>
             </section>
 
             <section class="composer-dock">
