@@ -18,6 +18,12 @@ const assetsRoot = path.join(projectRoot, 'web', 'agent-factory-demo');
 const serverPort = 18791;
 const serverUrl = `http://127.0.0.1:${serverPort}`;
 const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-factory-web-demo-state-'));
+const uploadFixturePath = path.join(stateRoot, 'input-example-browser.txt');
+fs.writeFileSync(
+  uploadFixturePath,
+  'Счёт №77 от тестового поставщика\nСумма: 35000\nНужно выбрать маршрут согласования.',
+  'utf8',
+);
 
 const cases = [];
 const failures = [];
@@ -166,6 +172,29 @@ async function run() {
         assert(/Ответить на следующий вопрос/i.test(nextAction), `Expected browser-readable next action, got: ${nextAction}`);
         assert(/Ответить/i.test(composerMode), `Composer should default to reply mode after the first follow-up, got: ${composerMode}`);
         assert(await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().isVisible(), 'Chat transcript should render the first discovery follow-up question');
+      } finally {
+        await context.close();
+      }
+    });
+
+    await runCase('e2e_browser_web_demo_accepts_file_attachment', 'Browser user can attach a file inside the chat composer', async () => {
+      const { context, page } = await createPage(browser, { defaultTimeoutMs });
+      try {
+        await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+        await page.locator('#accessToken').fill('asc-demo-shared');
+        await page.locator('[data-role="access-submit"]').click();
+        await page.locator('#fileInput').setInputFiles(uploadFixturePath);
+        await page.getByText('input-example-browser.txt').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#chatInput').fill('Примеры приложил файлом.');
+        await page.locator('#sendBtn').click();
+        await page.locator('[data-role="connection-state"]').filter({ hasText: 'Подключен live adapter' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+
+        const uploadCount = ((await page.locator('[data-role="status-upload-count"]').textContent()) || '').trim();
+        assert(uploadCount === '1', `Expected one uploaded file in browser status, got: ${uploadCount}`);
+        assert(
+          await page.locator('#messages .message').filter({ hasText: 'input-example-browser.txt' }).first().isVisible(),
+          'Chat transcript should render the attached file in the user message',
+        );
       } finally {
         await context.close();
       }

@@ -1,6 +1,8 @@
 (() => {
-  const STORAGE_KEY = "agent-factory-web-demo-shell.v1";
+  const STORAGE_KEY = "agent-factory-web-demo-shell.v2";
   const DEFAULT_ACCESS_TOKEN = "demo-access-token";
+  const MAX_LOCAL_UPLOAD_FILES = 4;
+  const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
   const ACTION_LABELS = {
     start_project: "Новый проект",
     submit_turn: "Ответить",
@@ -37,10 +39,13 @@
     composerMode: document.querySelector('[data-role="composer-mode"]'),
     composerInput: document.querySelector('[data-role="composer-input"]'),
     composerSubmit: document.querySelector('[data-role="composer-submit"]'),
+    attachmentInput: document.querySelector('[data-role="attachment-input"]'),
+    attachmentList: document.querySelector('[data-role="attachment-list"]'),
     refreshSession: document.querySelector('[data-role="refresh-session"]'),
     statusUserVisible: document.querySelector('[data-role="status-user-visible"]'),
     statusNextAction: document.querySelector('[data-role="status-next-action"]'),
     statusBriefVersion: document.querySelector('[data-role="status-brief-version"]'),
+    statusUploadCount: document.querySelector('[data-role="status-upload-count"]'),
     statusDownloadReadiness: document.querySelector('[data-role="status-download-readiness"]'),
     statusProjectKey: document.querySelector('[data-role="status-project-key"]'),
     statusSessionId: document.querySelector('[data-role="status-session-id"]'),
@@ -62,6 +67,7 @@
     mockStage: "gate_pending",
     lastAutoFollowupSource: "",
     lastResumeFingerprint: "",
+    pendingUploads: [],
   };
 
   function safeJsonParse(value, fallback) {
@@ -89,6 +95,72 @@
       .replace(/[^a-z0-9а-яё]+/gi, "-")
       .replace(/^-+|-+$/g, "");
     return normalized || fallback;
+  }
+
+  function activeSessionUploads() {
+    return Array.isArray(state.lastResponse?.uploaded_files) ? state.lastResponse.uploaded_files : [];
+  }
+
+  function formatBytes(value) {
+    const size = Number(value) || 0;
+    if (size >= 1024 * 1024) {
+      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (size >= 1024) {
+      return `${Math.round(size / 1024)} KB`;
+    }
+    return `${size} B`;
+  }
+
+  function summarizeUploadMeta(upload) {
+    const meta = [];
+    if (upload?.original_size_bytes || upload?.size_bytes) {
+      meta.push(formatBytes(upload.original_size_bytes || upload.size_bytes));
+    }
+    if (upload?.truncated) {
+      meta.push("обрезан");
+    }
+    if (upload?.ingest_status === "metadata_only") {
+      meta.push("без авто-извлечения");
+    }
+    return meta.join(" · ");
+  }
+
+  function uniqueUploads(items) {
+    const seen = new Set();
+    return (items || []).filter((item) => {
+      const key = normalizeText(item?.upload_id) || `${normalizeText(item?.name)}:${item?.original_size_bytes || item?.size_bytes || 0}`;
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function bufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return window.btoa(binary);
+  }
+
+  async function readLocalUpload(file) {
+    const truncated = file.size > MAX_LOCAL_UPLOAD_BYTES;
+    const source = truncated ? file.slice(0, MAX_LOCAL_UPLOAD_BYTES) : file;
+    const buffer = await source.arrayBuffer();
+    return {
+      upload_id: `upload-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      name: file.name,
+      content_type: file.type || "application/octet-stream",
+      size_bytes: buffer.byteLength,
+      original_size_bytes: file.size,
+      truncated,
+      content_base64: bufferToBase64(buffer),
+    };
   }
 
   function hydrate() {
@@ -223,6 +295,9 @@
     dom.statusBriefVersion.textContent = statusSnapshot.brief_version
       ? `${statusSnapshot.brief_version}${statusSnapshot.brief_status_label ? ` · ${statusSnapshot.brief_status_label}` : ""}`
       : "ещё нет";
+    dom.statusUploadCount.textContent = String(
+      uniqueUploads([...activeSessionUploads(), ...state.pendingUploads]).length,
+    );
     dom.statusDownloadReadiness.textContent = statusSnapshot.download_readiness || "pending";
     dom.statusProjectKey.textContent = pointer.project_key || "не выбран";
     dom.statusSessionId.textContent = session.web_demo_session_id || state.sessionId || "не открыт";
@@ -235,6 +310,45 @@
     renderSessionBadge();
   }
 
+  function renderAttachmentList() {
+    const pending = uniqueUploads(state.pendingUploads);
+    const sessionUploads = uniqueUploads(activeSessionUploads());
+    const items = [
+      ...pending.map((item) => ({ ...item, scope: "pending" })),
+      ...sessionUploads
+        .filter((item) => !pending.some((pendingItem) => pendingItem.upload_id === item.upload_id))
+        .map((item) => ({ ...item, scope: "session" })),
+    ];
+    dom.attachmentList.innerHTML = "";
+    dom.attachmentList.hidden = items.length === 0;
+    items.forEach((upload) => {
+      const pill = document.createElement("div");
+      pill.className = `attachment-pill${upload.scope === "session" ? " attachment-pill--session" : ""}`;
+      const label = document.createElement("span");
+      label.className = "attachment-pill__label";
+      label.textContent = upload.name || "Файл";
+      const meta = document.createElement("span");
+      meta.className = "attachment-pill__meta";
+      meta.textContent = summarizeUploadMeta(upload) || (upload.scope === "pending" ? "к отправке" : "в сессии");
+      pill.append(label, meta);
+      if (upload.scope === "pending") {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "attachment-pill__remove";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", `Убрать файл ${upload.name || ""}`.trim());
+        remove.addEventListener("click", () => {
+          state.pendingUploads = state.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
+          renderAttachmentList();
+          renderStatus();
+          persist();
+        });
+        pill.appendChild(remove);
+      }
+      dom.attachmentList.appendChild(pill);
+    });
+  }
+
   function createMessageNode(message) {
     const fragment = dom.messageTemplate.content.cloneNode(true);
     const article = fragment.querySelector(".message");
@@ -242,6 +356,7 @@
     const kind = fragment.querySelector(".message__kind");
     const title = fragment.querySelector(".message__title");
     const body = fragment.querySelector(".message__body");
+    const attachments = fragment.querySelector(".message__attachments");
     const actions = fragment.querySelector(".message__actions");
 
     const roleClass = {
@@ -260,6 +375,20 @@
     kind.textContent = message.kind || "reply_card";
     title.textContent = message.title || "Ответ";
     body.textContent = message.body || "";
+    attachments.innerHTML = "";
+    (message.attachments || []).forEach((upload) => {
+      const chip = document.createElement("span");
+      chip.className = "attachment-pill";
+      const label = document.createElement("span");
+      label.className = "attachment-pill__label";
+      label.textContent = upload.name || "Файл";
+      const meta = document.createElement("span");
+      meta.className = "attachment-pill__meta";
+      meta.textContent = summarizeUploadMeta(upload) || "прикреплён";
+      chip.append(label, meta);
+      attachments.appendChild(chip);
+    });
+    attachments.hidden = (message.attachments || []).length === 0;
 
     (message.actions || []).forEach((action) => {
       const chip = document.createElement("button");
@@ -457,9 +586,21 @@
     }));
   }
 
-  function buildTurnPayload(action, userText) {
+  function serializeUploadsForTransport(uploads) {
+    return uniqueUploads(uploads).map((upload) => ({
+      upload_id: upload.upload_id,
+      name: upload.name,
+      content_type: upload.content_type,
+      size_bytes: upload.size_bytes,
+      original_size_bytes: upload.original_size_bytes,
+      truncated: Boolean(upload.truncated),
+      content_base64: upload.content_base64 || "",
+    }));
+  }
+
+  function buildTurnPayload(action, userText, queuedUploads = []) {
     const last = state.lastResponse || {};
-    return {
+    const payload = {
       working_language: "ru",
       project_key: last.browser_project_pointer?.project_key || "",
       requester_identity: {
@@ -497,6 +638,10 @@
       },
       discovery_runtime_state: last.discovery_runtime_state || {},
     };
+    if (queuedUploads.length) {
+      payload.uploaded_files = serializeUploadsForTransport(queuedUploads);
+    }
+    return payload;
   }
 
   async function postTurn(payload) {
@@ -627,9 +772,24 @@
     ];
   }
 
+  function sanitizeMockUploads(uploads) {
+    return uniqueUploads(uploads).map((upload) => ({
+      upload_id: upload.upload_id,
+      name: upload.name,
+      content_type: upload.content_type,
+      size_bytes: upload.size_bytes,
+      original_size_bytes: upload.original_size_bytes,
+      truncated: Boolean(upload.truncated),
+      ingest_status: upload.content_base64 ? "excerpt_ready" : "metadata_only",
+      excerpt: "",
+      uploaded_at: new Date().toISOString(),
+    }));
+  }
+
   function mockAdapterTurn(payload) {
     const action = payload.web_conversation_envelope?.ui_action || "submit_turn";
     const userText = normalizeText(payload.web_conversation_envelope?.user_text);
+    const uploadedFiles = sanitizeMockUploads(payload.uploaded_files || []);
     const accessGranted = Boolean(state.accessToken);
     const projectKey =
       state.lastResponse?.browser_project_pointer?.project_key ||
@@ -668,6 +828,7 @@
           next_recommended_action: "request_demo_access",
           brief_version: "",
           download_readiness: "pending",
+          uploaded_file_count: uploadedFiles.length,
         },
         reply_cards: [
           {
@@ -677,6 +838,7 @@
             action_hints: ["submit_access_token"],
           },
         ],
+        uploaded_files: uploadedFiles,
       };
     }
 
@@ -761,9 +923,11 @@
               : "Ответить на следующий вопрос",
         brief_version: brief.version || "",
         download_readiness: stage === "downloads_ready" ? "ready" : "pending",
+        uploaded_file_count: uploadedFiles.length,
       },
       reply_cards: mockReplyCards(stage, projectKey),
       download_artifacts: mockArtifacts(stage),
+      uploaded_files: uploadedFiles,
       discovery_runtime_state: {
         status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
         next_question: mockDiscoveryPrompt(stage),
@@ -790,6 +954,7 @@
                 ? "expected_outputs"
                 : "",
         project_title: projectKey,
+        uploaded_file_count: uploadedFiles.length,
       },
     };
   }
@@ -837,6 +1002,7 @@
     renderStatus();
     renderTimeline();
     renderArtifacts();
+    renderAttachmentList();
     persist();
 
     const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
@@ -858,17 +1024,28 @@
   }
 
   async function dispatchTurn(action, userText, options = {}) {
-    if (!options.skipUserMessage && normalizeText(userText)) {
+    const queuedUploads = uniqueUploads(options.queuedUploads || []);
+    const normalizedUserText = normalizeText(userText);
+    if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
       state.timeline.push({
         role: "user",
         kind: action,
         title: ACTION_LABELS[action] || "Сообщение",
-        body: normalizeText(userText),
+        body: normalizedUserText || "Прикрепил файлы к текущему вопросу.",
+        attachments: queuedUploads.map((upload) => ({
+          upload_id: upload.upload_id,
+          name: upload.name,
+          content_type: upload.content_type,
+          size_bytes: upload.size_bytes,
+          original_size_bytes: upload.original_size_bytes,
+          truncated: Boolean(upload.truncated),
+        })),
         actions: [],
       });
+      renderTimeline();
     }
 
-    const payload = buildTurnPayload(action, userText);
+    const payload = buildTurnPayload(action, userText, queuedUploads);
     setBusy(true);
     try {
       const response = await postTurn(payload);
@@ -876,6 +1053,13 @@
     } catch (_error) {
       applyResponse(mockAdapterTurn(payload), "mock");
     } finally {
+      if (queuedUploads.length) {
+        state.pendingUploads = state.pendingUploads.filter(
+          (item) => !queuedUploads.some((queued) => queued.upload_id === item.upload_id),
+        );
+        renderAttachmentList();
+        renderStatus();
+      }
       setBusy(false);
     }
   }
@@ -954,14 +1138,64 @@
     dom.composerForm.addEventListener("submit", (event) => {
       event.preventDefault();
       const text = normalizeText(dom.composerInput.value);
-      if (!text && !["request_status", "request_brief_review", "confirm_brief"].includes(state.currentAction)) {
+      const queuedUploads = uniqueUploads(state.pendingUploads);
+      if (!text && !queuedUploads.length && !["request_status", "request_brief_review", "confirm_brief"].includes(state.currentAction)) {
         dom.composerInput.focus();
         return;
       }
-      dispatchTurn(state.currentAction, text);
+      dispatchTurn(state.currentAction, text, { queuedUploads });
       dom.composerInput.value = "";
       if (state.currentAction !== "submit_turn") {
         setCurrentAction("submit_turn");
+      }
+    });
+
+    dom.attachmentInput.addEventListener("change", async () => {
+      const selectedFiles = Array.from(dom.attachmentInput.files || []);
+      dom.attachmentInput.value = "";
+      if (!selectedFiles.length) {
+        return;
+      }
+
+      const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - state.pendingUploads.length);
+      const acceptedFiles = selectedFiles.slice(0, remainingSlots);
+      const skippedCount = Math.max(0, selectedFiles.length - acceptedFiles.length);
+      const loadedUploads = [];
+      const failedUploads = [];
+
+      for (const file of acceptedFiles) {
+        try {
+          loadedUploads.push(await readLocalUpload(file));
+        } catch (_error) {
+          failedUploads.push(file.name || "без имени");
+        }
+      }
+
+      if (loadedUploads.length) {
+        state.pendingUploads = uniqueUploads([...state.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
+        renderAttachmentList();
+        renderStatus();
+        persist();
+        dom.composerInput.focus();
+      }
+
+      if (skippedCount || failedUploads.length) {
+        const details = [];
+        if (skippedCount) {
+          details.push(`Лишние файлы не добавлены: лимит ${MAX_LOCAL_UPLOAD_FILES} файла на один turn.`);
+        }
+        if (failedUploads.length) {
+          details.push(`Не удалось прочитать: ${failedUploads.join(", ")}.`);
+        }
+        state.timeline.push(
+          buildSystemMessage(
+            "Не все файлы добавлены",
+            details.join(" "),
+            "upload_warning",
+          ),
+        );
+        renderTimeline();
+        persist();
       }
     });
 
@@ -993,6 +1227,7 @@
     renderStatus();
     renderTimeline();
     renderArtifacts();
+    renderAttachmentList();
     if (state.lastResponse) {
       updateQuickActions(responseActions(state.lastResponse));
       const preferredAction = normalizeText(state.lastResponse.ui_projection?.preferred_ui_action);

@@ -2,17 +2,24 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import io
 import json
 import mimetypes
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import zipfile
 from copy import deepcopy
+from html import unescape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from xml.etree import ElementTree
 
 from agent_factory_common import (
     build_web_reply_card,
@@ -36,7 +43,7 @@ INTAKE_SCRIPT = SCRIPT_ROOT / "agent-factory-intake.py"
 ARTIFACT_SCRIPT = SCRIPT_ROOT / "agent-factory-artifacts.py"
 DEFAULT_STATE_ROOT = PROJECT_ROOT / "data/agent-factory/web-demo"
 DEFAULT_ASSET_ROOT = PROJECT_ROOT / "web/agent-factory-demo"
-STATE_DIRS = ("sessions", "pointers", "resume", "access", "history", "downloads")
+STATE_DIRS = ("sessions", "pointers", "resume", "access", "history", "downloads", "uploads")
 DISCOVERY_STATE_KEYS = (
     "project_key",
     "raw_idea",
@@ -64,6 +71,23 @@ DISCOVERY_STATE_KEYS = (
     "next_question",
     "brief_markdown",
 )
+MAX_UPLOADED_FILES = 4
+MAX_UPLOADED_FILE_BYTES = 512 * 1024
+MAX_UPLOADED_EXCERPT_CHARS = 2200
+TEXT_UPLOAD_SUFFIXES = {
+    ".txt",
+    ".md",
+    ".csv",
+    ".tsv",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".html",
+    ".htm",
+    ".log",
+    ".docx",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -384,6 +408,181 @@ def hydrate_saved_session_response(state_root: Path, saved_session: dict[str, An
     return response
 
 
+def upload_session_root(state_root: Path, session_id: str) -> Path:
+    return state_root / "uploads" / (session_id or "anonymous-session")
+
+
+def sanitize_upload_name(value: Any) -> str:
+    name = Path(normalize_text(value) or "attachment").name
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
+    return sanitized or "attachment"
+
+
+def truncate_excerpt(text: str, *, limit: int = MAX_UPLOADED_EXCERPT_CHARS) -> str:
+    normalized_lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    normalized = "\n".join(line for line in normalized_lines if line)
+    if len(normalized) <= limit:
+        return normalized
+    shortened = normalized[:limit].rsplit(" ", 1)[0].rstrip()
+    return f"{shortened or normalized[:limit]}…"
+
+
+def decode_text_excerpt(raw_bytes: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-16", "cp1251", "latin-1"):
+        try:
+            return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_bytes.decode("utf-8", errors="ignore")
+
+
+def extract_docx_excerpt(raw_bytes: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as archive:
+        document_xml = archive.read("word/document.xml")
+    root = ElementTree.fromstring(document_xml)
+    text_parts = [chunk.strip() for chunk in root.itertext() if normalize_text(chunk)]
+    return "\n".join(text_parts)
+
+
+def extract_upload_excerpt(raw_bytes: bytes, *, content_type: str, upload_name: str) -> tuple[str, str]:
+    suffix = Path(upload_name).suffix.lower()
+    media_type = normalize_text(content_type).lower()
+    try:
+        if suffix == ".docx":
+            excerpt = extract_docx_excerpt(raw_bytes)
+            return truncate_excerpt(unescape(excerpt)), "excerpt_ready"
+        if media_type.startswith("text/") or suffix in TEXT_UPLOAD_SUFFIXES or media_type in {
+            "application/json",
+            "application/xml",
+            "application/x-yaml",
+            "text/csv",
+            "application/csv",
+        }:
+            excerpt = decode_text_excerpt(raw_bytes)
+            return truncate_excerpt(unescape(excerpt)), "excerpt_ready"
+    except (OSError, ValueError, zipfile.BadZipFile, KeyError, ElementTree.ParseError):
+        return "", "metadata_only"
+    return "", "metadata_only"
+
+
+def normalize_uploaded_files(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            size_bytes = int(item.get("size_bytes") or 0)
+        except (TypeError, ValueError):
+            size_bytes = 0
+        try:
+            original_size_bytes = int(item.get("original_size_bytes") or item.get("size_bytes") or 0)
+        except (TypeError, ValueError):
+            original_size_bytes = size_bytes
+        normalized.append(
+            {
+                "upload_id": normalize_text(item.get("upload_id")),
+                "name": sanitize_upload_name(item.get("name")),
+                "content_type": normalize_text(item.get("content_type")) or "application/octet-stream",
+                "size_bytes": size_bytes,
+                "original_size_bytes": original_size_bytes,
+                "truncated": bool(item.get("truncated")),
+                "ingest_status": normalize_text(item.get("ingest_status")) or "metadata_only",
+                "excerpt": normalize_text(item.get("excerpt")),
+                "uploaded_at": normalize_text(item.get("uploaded_at")),
+            }
+        )
+    return normalized
+
+
+def merge_uploaded_files(existing: list[dict[str, Any]], new_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*new_items, *existing]:
+        key = normalize_text(item.get("upload_id")) or f"{normalize_text(item.get('name'))}:{item.get('original_size_bytes')}"
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
+
+
+def materialize_uploaded_files(
+    payload: dict[str, Any],
+    saved_session: dict[str, Any],
+    *,
+    state_root: Path,
+    session_id: str,
+    now: str,
+) -> list[dict[str, Any]]:
+    existing = normalize_uploaded_files(saved_session.get("uploaded_files"))
+    raw_uploads = payload.get("uploaded_files")
+    if not isinstance(raw_uploads, list) or not raw_uploads:
+        return existing
+
+    upload_root = upload_session_root(state_root, session_id)
+    upload_root.mkdir(parents=True, exist_ok=True)
+    materialized: list[dict[str, Any]] = []
+    for index, item in enumerate(raw_uploads[:MAX_UPLOADED_FILES], start=1):
+        if not isinstance(item, dict):
+            continue
+        upload_name = sanitize_upload_name(item.get("name"))
+        upload_id = normalize_text(item.get("upload_id")) or f"upload-{slugify(upload_name, 'file')}-{index:02d}"
+        content_type = normalize_text(item.get("content_type")) or mimetypes.guess_type(upload_name)[0] or "application/octet-stream"
+        raw_base64 = normalize_text(item.get("content_base64"))
+        raw_bytes = b""
+        if raw_base64:
+            try:
+                raw_bytes = base64.b64decode(raw_base64, validate=True)
+            except (ValueError, binascii.Error):
+                raw_bytes = b""
+        try:
+            original_size = int(item.get("original_size_bytes") or item.get("size_bytes") or len(raw_bytes))
+        except (TypeError, ValueError):
+            original_size = len(raw_bytes)
+        truncated = bool(item.get("truncated"))
+        if len(raw_bytes) > MAX_UPLOADED_FILE_BYTES:
+            raw_bytes = raw_bytes[:MAX_UPLOADED_FILE_BYTES]
+            truncated = True
+        stored_name = f"{upload_id}{Path(upload_name).suffix.lower()}"
+        if raw_bytes:
+            (upload_root / stored_name).write_bytes(raw_bytes)
+        excerpt, ingest_status = extract_upload_excerpt(raw_bytes, content_type=content_type, upload_name=upload_name)
+        materialized.append(
+            {
+                "upload_id": upload_id,
+                "name": upload_name,
+                "content_type": content_type,
+                "size_bytes": len(raw_bytes) or original_size,
+                "original_size_bytes": original_size,
+                "truncated": truncated,
+                "ingest_status": ingest_status,
+                "excerpt": excerpt,
+                "uploaded_at": now,
+            }
+        )
+    return merge_uploaded_files(existing, materialized)
+
+
+def uploaded_files_context(uploaded_files: list[dict[str, Any]]) -> str:
+    normalized = normalize_uploaded_files(uploaded_files)
+    if not normalized:
+        return ""
+    parts = ["Контекст из прикреплённых файлов:"]
+    for item in normalized:
+        header = f"- {normalize_text(item.get('name'))} ({normalize_text(item.get('content_type')) or 'file'})"
+        if bool(item.get("truncated")):
+            header += ", файл обрезан до безопасного объёма"
+        parts.append(header)
+        excerpt = normalize_text(item.get("excerpt"))
+        if excerpt:
+            parts.append(f"  Фрагмент:\n{excerpt}")
+        else:
+            parts.append("  Содержимое не извлечено автоматически; используй файл как вспомогательный контекст.")
+    return "\n".join(parts)
+
+
 def normalize_requester_identity(payload: dict[str, Any], discovery_state: dict[str, Any]) -> dict[str, Any]:
     requester_identity = payload.get("requester_identity", {})
     if isinstance(requester_identity, dict) and requester_identity:
@@ -671,10 +870,13 @@ def build_discovery_request(
     envelope: dict[str, Any],
     web_demo_session: dict[str, Any],
     pointer: dict[str, Any],
+    uploaded_files: list[dict[str, Any]],
     now: str,
 ) -> tuple[dict[str, Any], bool]:
     ui_action = normalize_text(envelope.get("ui_action"))
     user_text = normalize_text(envelope.get("user_text"))
+    attachment_context = uploaded_files_context(uploaded_files)
+    combined_text = "\n\n".join(part for part in (user_text, attachment_context) if part)
     request = seed_discovery_request(payload, discovery_state, requester_identity)
     current_topic = normalize_text(
         request.get("discovery_session", {}).get("current_topic")
@@ -690,25 +892,25 @@ def build_discovery_request(
         return request, True
 
     if ui_action == "start_project":
-        request["raw_idea"] = user_text or normalize_text(payload.get("raw_idea"))
+        request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
     elif ui_action == "submit_turn":
         captured_answers = request.get("captured_answers", {})
         if not isinstance(captured_answers, dict):
             captured_answers = {}
-        if current_topic and user_text:
-            captured_answers[current_topic] = user_text
-        elif user_text and not normalize_text(request.get("raw_idea")):
-            request["raw_idea"] = user_text
+        if current_topic and combined_text:
+            captured_answers[current_topic] = combined_text
+        elif combined_text and not normalize_text(request.get("raw_idea")):
+            request["raw_idea"] = combined_text
         request["captured_answers"] = captured_answers
-        append_user_turn(request, user_text, current_topic, now)
+        append_user_turn(request, combined_text, current_topic, now)
     elif ui_action == "request_brief_correction":
-        request["brief_feedback_text"] = user_text or normalize_text(payload.get("brief_feedback_text"))
+        request["brief_feedback_text"] = combined_text or normalize_text(payload.get("brief_feedback_text"))
         if isinstance(payload.get("brief_section_updates"), dict):
             request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
     elif ui_action == "confirm_brief":
-        request["confirmation_reply"] = build_confirmation_reply(user_text, requester_identity)
+        request["confirmation_reply"] = build_confirmation_reply(combined_text, requester_identity)
     elif ui_action == "reopen_brief":
-        request["brief_feedback_text"] = user_text or "Нужно переоткрыть brief и уточнить детали."
+        request["brief_feedback_text"] = combined_text or "Нужно переоткрыть brief и уточнить детали."
         if isinstance(payload.get("brief_section_updates"), dict):
             request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
 
@@ -918,6 +1120,7 @@ def build_web_resume_context(
     *,
     next_question: str,
     download_artifacts: list[dict[str, Any]] | None = None,
+    uploaded_files: list[dict[str, Any]] | None = None,
     resumed_from_saved_session: bool = False,
     now: str,
 ) -> dict[str, Any]:
@@ -946,6 +1149,7 @@ def build_web_resume_context(
         download_artifacts or [],
         web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
     )
+    upload_count = len(normalize_uploaded_files(uploaded_files))
     if not summary_text:
         if user_visible_status == "downloads_ready" and artifacts:
             summary_text = "Возобновляю browser-сессию: concept pack уже готов к скачиванию."
@@ -971,6 +1175,7 @@ def build_web_resume_context(
             confirmed_version,
             normalize_text(web_demo_session.get("last_agent_turn_at")),
             str(len(artifacts)),
+            str(upload_count),
         ]
     )
     return {
@@ -993,6 +1198,7 @@ def build_web_resume_context(
         "confirmation_history_count": len(confirmation_history),
         "handoff_history_count": len(handoff_history),
         "download_artifact_count": len(artifacts),
+        "uploaded_file_count": upload_count,
         "last_user_turn_at": normalize_text(web_demo_session.get("last_user_turn_at")),
         "last_agent_turn_at": normalize_text(web_demo_session.get("last_agent_turn_at")),
         "resume_fingerprint": sha256_hex(fingerprint_source)[:16],
@@ -1039,6 +1245,13 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     envelope = normalize_web_conversation_envelope(payload, discovery_state, now)
     web_demo_session = normalize_web_demo_session(payload, saved_session, discovery_state, requester_identity, now)
     pointer = normalize_project_pointer(payload, saved_session, discovery_state, web_demo_session, envelope, now)
+    uploaded_files = materialize_uploaded_files(
+        payload,
+        saved_session,
+        state_root=state_root,
+        session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
+        now=now,
+    )
 
     access_granted, access_gate, access_message = access_gate_result(payload, discovery_state, web_demo_session, now)
     web_demo_session["access_grant_id"] = normalize_text(access_gate.get("demo_access_grant_id"))
@@ -1056,6 +1269,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             envelope,
             web_demo_session,
             pointer,
+            uploaded_files,
             now,
         )
         runtime_state = discovery_state if skip_runtime and discovery_state else run_discovery_runtime(discovery_request)
@@ -1113,6 +1327,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         brief=requirement_brief,
         now=now,
         download_artifacts=download_artifacts,
+        uploaded_files=uploaded_files,
         needs_operator_attention=not access_granted,
     )
     web_demo_session["status"] = web_session_runtime_status(
@@ -1137,6 +1352,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         status_snapshot,
         next_question=next_question,
         download_artifacts=download_artifacts,
+        uploaded_files=uploaded_files,
         resumed_from_saved_session=resumed_from_saved_session,
         now=now,
     )
@@ -1148,6 +1364,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         "project_key": normalize_text(pointer.get("project_key")),
         "current_topic": normalize_text(discovery_session.get("current_topic")) or next_topic,
         "request_channel": "web",
+        "uploaded_file_count": len(uploaded_files),
     }
 
     card_runtime_state = deepcopy(runtime_state)
@@ -1160,6 +1377,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         access_granted=access_granted,
         now=now,
         download_artifacts=download_artifacts,
+        uploaded_files=uploaded_files,
     )
     if delivery_error:
         reply_cards.append(
@@ -1211,6 +1429,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         "reply_cards": reply_cards,
         "audit_record": audit_record,
         "resume_context": resume_context,
+        "uploaded_files": uploaded_files,
         "ui_projection": {
             "preferred_ui_action": preferred_ui_action(reply_cards, fallback="request_status" if access_granted else "submit_access_token"),
             "current_question": next_question,
@@ -1218,6 +1437,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "project_title": normalize_text(pointer.get("project_key")) or "Новый проект фабрики",
             "brief_version": normalize_text(requirement_brief.get("version")),
             "brief_status": normalize_text(requirement_brief.get("status")) or adapter_status,
+            "uploaded_file_count": len(uploaded_files),
         },
     }
     if access_granted:

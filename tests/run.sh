@@ -177,6 +177,7 @@ agent_factory_suite_entries() {
             optional_suite_entry bash component_agent_factory_web_discovery "Agent factory web discovery" "$SCRIPT_DIR/component/test_agent_factory_web_discovery.sh"
             optional_suite_entry bash component_agent_factory_web_brief "Agent factory web brief" "$SCRIPT_DIR/component/test_agent_factory_web_brief.sh"
             optional_suite_entry bash component_agent_factory_web_delivery "Agent factory web delivery" "$SCRIPT_DIR/component/test_agent_factory_web_delivery.sh"
+            optional_suite_entry bash component_agent_factory_web_uploads "Agent factory web uploads" "$SCRIPT_DIR/component/test_agent_factory_web_uploads.sh"
             ;;
         integration_local)
             optional_suite_entry bash integration_local_agent_factory_discovery_flow "Agent factory discovery flow" "$SCRIPT_DIR/integration_local/test_agent_factory_discovery_flow.sh"

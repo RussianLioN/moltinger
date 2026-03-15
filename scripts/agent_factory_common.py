@@ -801,9 +801,13 @@ def build_web_demo_status_snapshot(
     brief: dict[str, Any] | None,
     now: str,
     download_artifacts: list[dict[str, Any]] | None = None,
+    uploaded_files: list[dict[str, Any]] | None = None,
     needs_operator_attention: bool = False,
 ) -> dict[str, Any]:
     artifacts = normalize_download_artifacts(download_artifacts or [])
+    normalized_uploads = normalize_list(
+        [normalize_text(item.get("name")) for item in (uploaded_files or []) if isinstance(item, dict)]
+    )
     user_visible_status = web_user_visible_status(
         adapter_status,
         next_action=next_action,
@@ -827,6 +831,8 @@ def build_web_demo_status_snapshot(
             needs_operator_attention=needs_operator_attention,
             download_artifacts=artifacts,
         ),
+        "uploaded_file_count": len(normalized_uploads),
+        "uploaded_file_names": normalized_uploads,
         "needs_operator_attention": needs_operator_attention,
         "captured_at": now,
     }
@@ -1035,6 +1041,7 @@ def build_web_reply_cards(
     access_granted: bool,
     now: str,
     download_artifacts: list[dict[str, Any]] | None = None,
+    uploaded_files: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     session_id = normalize_text(web_demo_session_id)
     discovery_session = runtime_response.get("discovery_session", {}) if isinstance(runtime_response.get("discovery_session"), dict) else {}
@@ -1052,6 +1059,7 @@ def build_web_reply_cards(
         brief=requirement_brief,
         now=now,
         download_artifacts=download_artifacts,
+        uploaded_files=uploaded_files,
         needs_operator_attention=not access_granted,
     )
 

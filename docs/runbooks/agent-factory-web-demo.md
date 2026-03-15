@@ -25,10 +25,12 @@
 - маршрутизировать `start_project`, `submit_turn` и `request_status`
 - сохранять session/access/history snapshots под `data/agent-factory/web-demo/`
 - раздавать `index.html`, `app.css`, `app.js` и `/health` через lightweight Python server
+- показывать минималистичный single-column chat-first shell без правой clutter-панели
 - показывать первый live discovery follow-up вопрос в том же browser shell после сырой идеи пользователя
 - возвращать browser-safe `status_update` и `discovery_question` cards без leakage внутренних runtime полей
 - подсказывать shell правильный следующий режим через `ui_projection.preferred_ui_action`
 - рендерить reviewable brief по секциям, принимать correction/confirm/reopen actions и сохранять versioned confirmation history
+- принимать файлы прямо из browser composer и безопасно извлекать excerpt для `txt/csv/json/md/docx`
 - после `confirm_brief` автоматически запускать downstream handoff chain через `scripts/agent-factory-intake.py` и `scripts/agent-factory-artifacts.py`
 - публиковать browser-safe `download_artifacts` и HTTP download endpoint `/api/download`
 - хранить отдельные `pointers/` и `resume/` snapshots, чтобы refresh/resume не зависели только от localStorage
@@ -92,7 +94,8 @@ data/agent-factory/web-demo/
 ├── history/
 ├── pointers/
 ├── resume/
-└── sessions/
+├── sessions/
+└── uploads/
 ```
 
 ### access/
@@ -132,6 +135,18 @@ Stores per-session browser delivery state:
 - `downloads/presentation.md`
 - `delivery-index.json` with private `download_ref -> token` resolution
 
+### uploads/
+
+Stores per-session raw attachment bytes under a separate adapter-owned root.
+
+Browser responses never echo raw payloads back. The adapter returns only:
+
+- file name
+- content type
+- safe excerpt when auto-extraction is available
+- truncation flag
+- upload timestamp
+
 ## Browser Envelope Contract
 
 Minimal request shape:
@@ -167,6 +182,24 @@ Supported foundational actions:
 - `confirm_brief`
 - `reopen_brief`
 - `download_artifact`
+
+## Browser Composer Attachments
+
+В web shell пользователь может прикладывать файлы прямо в chat composer.
+
+Current behavior:
+
+- до 4 файлов на один turn
+- безопасный лимит чтения: `512 KB` на файл
+- auto-excerpt для `txt`, `md`, `csv`, `tsv`, `json`, `yaml`, `xml`, `html`, `log`, `docx`
+- unsupported formats пока идут как metadata-only attachment
+
+Current UX contract:
+
+- текст печатается локально сразу и не зависит от round-trip на сервер
+- отправка в фабрику происходит только по кнопке `Отправить`
+- прикреплённые файлы видны в composer до отправки
+- после ответа сервера attachment count и session attachment list отражаются в status strip
 
 ## Live Discovery UX (US1)
 

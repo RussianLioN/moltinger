@@ -52,6 +52,26 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-15)
 
+- Applied a post-pilot UX hotfix on top of `024-web-factory-demo-adapter` after live user feedback from `https://asc.ainetic.tech`: the browser shell was simplified into a lighter single-column chat-first layout, the distracting right-side surface was removed, and `web/agent-factory-demo/app.css` now uses a much cheaper visual style so typing renders locally without the previous “echo from server” feel.
+- Added direct browser attachment support for discovery in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.js`, `scripts/agent-factory-web-adapter.py`, and `scripts/agent_factory_common.py`: the composer now accepts up to 4 files per turn, safely truncates file reads to `512 KB`, extracts browser-safe excerpts for `txt/csv/json/md/docx`, stores raw bytes only under adapter-owned `data/agent-factory/web-demo/uploads/`, and injects the sanitized file context into the current discovery answer instead of forcing the user to retype examples manually.
+- Added regression coverage for the new attachment path in `tests/component/test_agent_factory_web_uploads.sh`, registered it in `tests/run.sh`, and extended `tests/e2e_browser/agent_factory_web_demo.mjs` toward browser-level attachment validation. The local automation environment still lacks a working Playwright runtime for that node-based harness, so a dedicated follow-up Beads task `molt-x3o` was created to restore browser-e2e coverage.
+- Updated `docs/runbooks/agent-factory-web-demo.md` to document the simplified shell, browser attachment behavior, the new `uploads/` state root, and the current safe-ingestion limits so the operator and next session can reproduce the same flow without guessing.
+- Verified the UX hotfix with:
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py scripts/agent_factory_common.py`
+  - `node --check web/agent-factory-demo/app.js`
+  - `bash -n tests/component/test_agent_factory_web_uploads.sh tests/component/test_agent_factory_web_access.sh tests/integration_local/test_agent_factory_web_flow.sh tests/e2e_browser/agent_factory_web_demo.mjs`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery|uploads)' --json`
+  - `bash tests/component/test_agent_factory_web_uploads.sh`
+  - `bash tests/integration_local/test_agent_factory_web_flow.sh`
+  - `bash tests/integration_local/test_agent_factory_web_confirmation.sh`
+  - `bash tests/integration_local/test_agent_factory_web_handoff.sh` (rerun with local port bind outside sandbox to verify `/api/download`)
+  - `bash tests/integration_local/test_agent_factory_web_resume.sh`
+  - `bash scripts/scripts-verify.sh`
+  - `git diff --check`
+- Environment caveat preserved for next session:
+  - `./tests/run.sh --lane integration_local ...` can still collide with stale `moltinger-test_*` docker resources in the local machine
+  - `node tests/e2e_browser/agent_factory_web_demo.mjs` currently fails in this environment with `Playwright runtime is not available in the test runner image`, tracked by `molt-x3o`
+
 - Branch in progress: `024-web-factory-demo-adapter`
 - Pilot web demo is now deployed on `https://asc.ainetic.tech` from isolated remote worktree `/opt/moltinger-asc-demo` at branch `024-web-factory-demo-adapter` (`07e5c2b`), while the canonical server checkout `/opt/moltinger` remains on `main`.
 - The published demo uses `ASC_DEMO_ACCESS_MODE=shared_token_hash`; the server only received the hash, and the raw pilot token was kept out of repo state for operator sharing.
