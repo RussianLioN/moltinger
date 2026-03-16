@@ -262,14 +262,16 @@ Why OK:
 - File content comes from verified git checkout
 - Rollback via git revert
 
-**2. Pull-based GitOps (git pull on server):**
+**2. Git-tracked rollout helper (server execution triggered from CI/CD):**
 ```yaml
-# Trigger server to pull - ACCEPTABLE ✅
-- run: ssh server "cd /app && git pull && docker compose up -d"
+# Trigger tracked rollout on server - ACCEPTABLE ✅
+- run: bash ./scripts/moltis-version.sh assert-tracked
+- run: ssh server "cd /opt/moltinger && ./scripts/deploy.sh --json moltis deploy"
 ```
 Why OK:
-- Git is source of truth
-- Audit in git history
+- Git-tracked compose files remain the version authority
+- Helper enforces fresh backup + restore-check before Moltis update
+- Rollback evidence stays aligned with the same deployment contract
 
 ### 🎯 PREFERRED (Full GitOps 2.0)
 

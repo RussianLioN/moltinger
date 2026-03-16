@@ -10,12 +10,16 @@ TEST_FIXTURE_CONFIG="$PROJECT_ROOT/tests/fixtures/config/moltis.toml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
+DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
+UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
 DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
+BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
+MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 
 validate_toml() {
@@ -109,6 +113,15 @@ PY
         test_fail "Expected environment variable substitution in config files"
     fi
 
+    test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
+    if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
+       bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
+       ! rg -q '\$\{MOLTIS_VERSION:-latest\}|image:\s*ghcr\.io/moltis-org/moltis:latest' "$PROJECT_ROOT/docker-compose.yml" "$COMPOSE_PROD"; then
+        test_pass
+    else
+        test_fail "Moltis version helper must exist, validate compose alignment, and forbid latest as the tracked default"
+    fi
+
     test_start "static_config_has_no_hardcoded_secrets"
     if rg -n 'sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' "$PROJECT_ROOT/config" "$PROJECT_ROOT/tests/fixtures/config" "$COMPOSE_PROD" "$COMPOSE_TEST" >/dev/null 2>&1; then
         test_fail "Detected potential hardcoded secret material"
@@ -116,13 +129,13 @@ PY
         test_pass
     fi
 
-    test_start "static_moltis_version_contract_matches_official_docker_channel"
+    test_start "static_moltis_version_contract_stays_git_tracked_and_pinned"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" == "latest" ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
         test_pass
     else
-        test_fail "Tracked Moltis version must match the official Docker channel in git and be validated by scripts/moltis-version.sh"
+        test_fail "Tracked Moltis version must stay git-managed and pinned for the backup-safe branch contract"
     fi
 
     test_start "static_fixture_disables_openai_for_pr_gate"
@@ -152,34 +165,89 @@ PY
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
-    if rg -q 'data/\.deployed-sha' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'data/\.deployment-info' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if rg -q 'data/\.deployed-sha' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/\.deployment-info' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
         test_fail "Deploy workflow should write audit markers under data/"
     fi
 
     test_start "static_deploy_audit_markers_not_written_to_repo_root"
-    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$PROJECT_ROOT/.github/workflows/deploy.yml" >/dev/null 2>&1; then
+    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$DEPLOY_WORKFLOW" >/dev/null 2>&1; then
         test_fail "Deploy workflow still writes audit markers to repo root"
     else
         test_pass
     fi
 
     test_start "static_deploy_server_git_checkout_aligned_after_success"
-    if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -Fq 'git reset --hard "${{ github.sha }}"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'git reset --hard "${{ github.sha }}"' "$DEPLOY_WORKFLOW" && \
+       rg -q 'Align server git checkout before sync' "$DEPLOY_WORKFLOW" && \
+       rg -q 'git clean -fd' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
-        test_fail "Deploy workflow should align server git checkout after successful sync"
+        test_fail "Deploy workflow should align and clean the server git checkout before sync so failed rollouts do not self-create drift"
     fi
 
     test_start "static_deploy_pending_sync_is_not_treated_as_hard_drift"
-    if rg -q 'Pending Sync' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'Hard block applies only to dirty server worktree' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if rg -q 'Pending Sync' "$DEPLOY_WORKFLOW" && \
+       rg -q 'Hard block applies only to dirty server worktree' "$DEPLOY_WORKFLOW"; then
         test_pass
     else
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
+    fi
+
+    test_start "static_moltis_workflow_validates_restore_readiness"
+    if rg -q 'Validate Moltis restore readiness' "$DEPLOY_WORKFLOW" && \
+       rg -q 'compose-main' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/moltis/audit/restore-checks' "$DEPLOY_WORKFLOW" && \
+       rg -q 'has_env' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must enforce a restore-readiness gate for the fresh Moltis pre-update backup"
+    fi
+
+    test_start "static_backup_script_captures_runtime_restore_payload"
+    if rg -q 'RUNTIME_ENV_FILE' "$BACKUP_SCRIPT" && \
+       rg -q 'docker-compose.prod.yml' "$BACKUP_SCRIPT" && \
+       rg -q 'restore-check' "$BACKUP_SCRIPT" && \
+       rg -q 'restore_readiness' "$BACKUP_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Backup script must archive Moltis runtime files and expose restore-check readiness validation"
+    fi
+
+    test_start "static_deploy_script_enforces_moltis_backup_safe_rollout"
+    if rg -q 'restore-check "\$backup_path"' "$DEPLOY_SCRIPT" && \
+       rg -q 'data/moltis/\.last-moltis-restore-check' "$DEPLOY_SCRIPT" && \
+       rg -q 'data/moltis/audit/rollback-evidence' "$DEPLOY_SCRIPT" && \
+       rg -q 'pre_deploy_\*\.tar\.gz' "$DEPLOY_SCRIPT" && \
+       rg -q 'latest_file_under "\$PROJECT_ROOT/data/moltis/audit/restore-checks"' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "deploy.sh must require restore-check before Moltis deploy and record rollback evidence for rollback-safe updates"
+    fi
+
+    test_start "static_deploy_workflow_tracks_git_managed_rollback_pointers"
+    if rg -q 'data/moltis/\.last-deployed-image' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/moltis/\.last-moltis-backup' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/moltis/\.last-moltis-restore-check' "$DEPLOY_WORKFLOW" && \
+       rg -q 'migrate legacy Moltis runtime pointers' "$DEPLOY_WORKFLOW" && \
+       rg -q 'deploy\.sh --json moltis rollback' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must keep Moltis rollback pointers under data/moltis, migrate legacy root markers, and route rollback through deploy.sh"
+    fi
+
+    test_start "static_uat_gate_uses_tracked_git_version_and_backup_safe_deploy"
+    if ! rg -q 'target_version' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'scripts/moltis-version\.sh version' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'deploy\.sh --json moltis deploy' "$UAT_GATE_WORKFLOW" && \
+       ! rg -q 'docker pull ghcr\.io/moltis-org/moltis:\$VERSION' "$UAT_GATE_WORKFLOW" && \
+       ! rg -q 'MOLTIS_VERSION="\$VERSION"' "$UAT_GATE_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "UAT gate must derive the Moltis version from git and deploy only through the backup-safe deploy.sh path"
     fi
 
     test_start "static_deploy_compliance_checks_prod_compose_hash"
@@ -218,11 +286,10 @@ PY
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'Production workflow_dispatch must use tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+       rg -q 'Production tag deploy version must match tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass
     else
-        test_fail "Deploy workflow must resolve the tracked Moltis version, stay on the official latest channel, and block feature-branch production deploys"
+        test_fail "Deploy workflow must resolve the tracked Moltis version and block feature-branch production deploys"
     fi
 
     test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"

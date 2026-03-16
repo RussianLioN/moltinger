@@ -4,6 +4,15 @@
 **Дата:** 2025-02-15
 **Автор:** Architecture Team
 
+> **Status Note (2026-03-15)**:
+> This document contains historical architecture material.
+> The current operational contract for Moltis version changes and rollback lives in
+> [../version-update.md](../version-update.md)
+> and
+> [../runbooks/moltis-backup-safe-update.md](../runbooks/moltis-backup-safe-update.md).
+> If examples below mention `scripts/rollback.sh`, `restore-moltis.sh`, server-side `sed`,
+> or arbitrary tag rollback, treat them as legacy design notes rather than the current runtime contract.
+
 ---
 
 ## 1. Обзор архитектуры
@@ -183,26 +192,12 @@ jobs:
       - name: Deploy with Docker Compose
         run: |
           ssh $DEPLOY_USER@ainetic.tech << 'ENDSSH'
+          set -e
           cd /opt/moltinger
 
-          # Pull latest images
-          docker compose pull
-
-          # Create backup before deployment
-          if [ -f "scripts/backup-moltis.sh" ]; then
-            chmod +x scripts/backup-moltis.sh
-            ./scripts/backup-moltis.sh || true
-          fi
-
-          # Rolling update with zero downtime
-          docker compose up -d --remove-orphans
-
-          # Wait for health check
-          echo "Waiting for Moltis to be healthy..."
-          timeout 60s bash -c 'until docker compose ps | grep -q "healthy"; do sleep 2; done' || true
-
-          # Show status
-          docker compose ps
+          chmod +x scripts/deploy.sh scripts/backup-moltis-enhanced.sh scripts/moltis-version.sh || true
+          ./scripts/moltis-version.sh assert-tracked
+          ./scripts/deploy.sh --json moltis deploy
           ENDSSH
 
       - name: Verify deployment
@@ -266,8 +261,10 @@ jobs:
       - name: Select backup to restore
         run: |
           echo "To restore a backup, run manually:"
-          echo "ssh deploy@ainetic.tech /opt/moltinger/scripts/restore-moltis.sh <backup_file>"
+          echo "ssh deploy@ainetic.tech 'cd /opt/moltinger && ./scripts/deploy.sh --json moltis rollback'"
 ```
+
+For Moltis, do not treat `docker compose pull/up`, server-side `sed`, or ad-hoc restarts as the primary rollout path anymore. The tracked compose files in git plus `backup-moltis-enhanced.sh` and `deploy.sh` are the authoritative contract.
 
 ---
 
@@ -281,10 +278,9 @@ moltinger/
 ├── config/
 │   └── moltis.toml              # Конфигурация Moltis
 ├── scripts/
-│   ├── backup-moltis.sh         # Резервное копирование
-│   ├── restore-moltis.sh        # Восстановление (NEW)
-│   ├── health-check.sh          # Проверка здоровья (NEW)
-│   └── rollback.sh              # Откат (NEW)
+│   ├── backup-moltis-enhanced.sh # Backup + restore-check
+│   ├── deploy.sh                # Deploy/rollback helper
+│   └── health-check.sh          # Проверка здоровья (NEW)
 ├── deploy/
 │   ├── setup-server.sh          # Начальная настройка сервера (NEW)
 │   └── cron-backup              # Cron job для бэкапов (NEW)
@@ -381,64 +377,17 @@ else
 fi
 ```
 
-### 3.4 Restore Script
+### 3.4 Restore / Rollback Helper
 
-**Файл:** `scripts/restore-moltis.sh`
+**Файл:** `scripts/deploy.sh`
 
 ```bash
-#!/bin/bash
-# Restore Moltis from backup
-# Usage: ./restore-moltis.sh <backup_file>
-
-set -e
-
-BACKUP_DIR="/var/backups/moltis"
-DEPLOY_PATH="/opt/moltinger"
-
-if [ -z "$1" ]; then
-    echo "Usage: $0 <backup_file>"
-    echo "Available backups:"
-    ls -lt $BACKUP_DIR/*.tar.gz 2>/dev/null | head -10
-    exit 1
-fi
-
-BACKUP_FILE="$1"
-
-if [ ! -f "$BACKUP_FILE" ]; then
-    echo "Error: Backup file not found: $BACKUP_FILE"
-    exit 1
-fi
-
-echo "=== Restoring from $BACKUP_FILE ==="
-
-# Stop containers
-echo "Stopping containers..."
-cd $DEPLOY_PATH
-docker compose down
-
-# Backup current state
-CURRENT_BACKUP="$BACKUP_DIR/pre-restore-$(date +%Y%m%d_%H%M%S).tar.gz"
-echo "Creating pre-restore backup..."
-tar -czf "$CURRENT_BACKUP" -C $DEPLOY_PATH config data 2>/dev/null || true
-
-# Restore from backup
-echo "Extracting backup..."
-tar -xzf "$BACKUP_FILE" -C /
-
-# Start containers
-echo "Starting containers..."
-docker compose up -d
-
-# Wait and verify
-sleep 10
-if curl -sf http://localhost:13131/health > /dev/null; then
-    echo "✅ Restore completed successfully"
-else
-    echo "❌ Restore failed - health check not passing"
-    echo "Check logs: docker compose logs"
-    exit 1
-fi
+# Roll back Moltis through the tracked helper
+cd /opt/moltinger
+./scripts/deploy.sh --json moltis rollback
 ```
+
+The helper reuses the latest tracked backup reference, restore-check evidence, and previous image pointer instead of relying on manual untar/restart steps.
 
 ---
 
@@ -544,50 +493,30 @@ nano .env.local
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.3 Rollback Script
+### 5.3 Rollback Helper
 
-**Файл:** `scripts/rollback.sh`
+**Файл:** `scripts/deploy.sh`
 
 ```bash
-#!/bin/bash
-# Quick rollback script for Moltis
-# Usage: ./rollback.sh [image_tag]
+# Roll back Moltis through the tracked helper
+# Usage: ./scripts/deploy.sh --json moltis rollback
 
 set -e
 
 DEPLOY_PATH="/opt/moltinger"
 cd $DEPLOY_PATH
 
-CURRENT_IMAGE=$(docker compose config | grep "image:" | head -1 | awk '{print $2}')
-echo "Current image: $CURRENT_IMAGE"
-
-if [ -n "$1" ]; then
-    # Rollback to specific image
-    TARGET_IMAGE="ghcr.io/moltis-org/moltis:$1"
-    echo "Rolling back to: $TARGET_IMAGE"
-
-    # Update docker-compose.yml
-    sed -i "s|image: ghcr.io/moltis-org/moltis:.*|image: $TARGET_IMAGE|" docker-compose.yml
-
-    # Pull and restart
-    docker compose pull
-    docker compose up -d
-else
-    # Quick restart current version
-    echo "Quick restart of current version..."
-    docker compose restart
-fi
+./scripts/deploy.sh --json moltis rollback
 
 # Wait and verify
 echo "Waiting for health check..."
 sleep 15
-
 if curl -sf http://localhost:13131/health > /dev/null; then
     echo "✅ Rollback successful"
-    docker compose ps
+    env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml ps
 else
     echo "❌ Rollback failed"
-    docker compose logs --tail=50
+    env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml logs --tail=50
     exit 1
 fi
 ```
@@ -601,23 +530,19 @@ fi
         if: failure()
         run: |
           ssh $DEPLOY_USER@ainetic.tech << 'ENDSSH'
+          set -e
           cd /opt/moltinger
 
           echo "Deployment failed, attempting rollback..."
-
-          # Get previous image
-          PREVIOUS_IMAGE=$(docker images ghcr.io/moltis-org/moltis --format "{{.ID}}" | sed -n '2p')
-
-          if [ -n "$PREVIOUS_IMAGE" ]; then
-            echo "Rolling back to image: $PREVIOUS_IMAGE"
-            docker tag $PREVIOUS_IMAGE ghcr.io/moltis-org/moltis:latest
-            docker compose up -d
-          else
-            echo "No previous image found, restarting..."
-            docker compose restart
-          fi
+          ./scripts/deploy.sh --json moltis rollback
           ENDSSH
 ```
+
+Rollback authority should come from the same tracked evidence path:
+- latest fresh backup reference
+- matching restore-check evidence
+- previous image pointer
+- rollback evidence under `data/moltis/audit/rollback-evidence/`
 
 ---
 
@@ -745,10 +670,10 @@ git push
 # Вариант 2: Напрямую на сервере
 ssh deploy@ainetic.tech
 cd /opt/moltinger
-./scripts/rollback.sh
+./scripts/deploy.sh --json moltis rollback
 
 # Вариант 3: Восстановление из бэкапа
-./scripts/restore-moltis.sh /var/backups/moltis/moltis_20250215_030000.tar.gz
+./scripts/deploy.sh --json moltis rollback
 ```
 
 ---

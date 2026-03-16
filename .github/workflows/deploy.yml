@@ -25,11 +25,6 @@ on:
         options:
           - production
           - staging
-      version:
-        description: 'Moltis image version (leave blank to use tracked git version, typically latest per official Docker docs)'
-        required: false
-        default: 'latest'
-        type: string
       repair_server_checkout:
         description: 'Capture evidence and reconcile a dirty /opt/moltinger checkout before deploy (workflow_dispatch only)'
         required: false
@@ -202,8 +197,23 @@ jobs:
             done
           fi
 
-          # Check 7: server worktree cleanliness (hard block unless repairable)
-          echo "=== Check 7: server git status --porcelain ==="
+          # Check 7: migrate legacy runtime pointers out of git-managed root
+          echo "=== Check 7: migrate legacy Moltis runtime pointers ==="
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            mkdir -p data/moltis
+
+            for MARKER in .last-deployed-image .last-moltis-backup .last-moltis-restore-check; do
+              if [ -f "$MARKER" ]; then
+                mv "$MARKER" "data/moltis/$MARKER"
+              fi
+            done
+          EOF
+
+          # Check 8: server worktree cleanliness (hard block unless repairable)
+          echo "=== Check 8: server git status --porcelain ==="
           SERVER_STATUS=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && git status --porcelain 2>/dev/null" || true)
           if [ -n "$SERVER_STATUS" ]; then
             echo "::warning::Server working tree is dirty before deploy."
@@ -319,23 +329,20 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          chmod +x scripts/moltis-version.sh
-          TRACKED_VERSION="$(scripts/moltis-version.sh version)"
+          VERSION="$(bash ./scripts/moltis-version.sh version)"
+          TRACKED_VERSION="$VERSION"
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-            if [ -z "$VERSION" ]; then
-              VERSION="$TRACKED_VERSION"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/}"
+            if [ "$TAG_VERSION" != "$VERSION" ]; then
+              echo "::error::Git tag $TAG_VERSION does not match tracked Moltis version $VERSION"
+              exit 1
             fi
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION="$TRACKED_VERSION"
           fi
+
           echo "tracked_version=$TRACKED_VERSION" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Tracked Moltis version in git: $TRACKED_VERSION"
-          echo "::notice::Deploying Moltis version: $VERSION"
+          echo "::notice::Deploying tracked Moltis version from git: $VERSION"
 
       - name: Validate deployment prerequisites
         id: validate
@@ -352,11 +359,6 @@ jobs:
 
           if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
             echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
-            exit 1
-          fi
-
-          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ] && [ "${{ github.event.inputs.version }}" != "$TRACKED_VERSION" ]; then
-            echo "::error::Production workflow_dispatch must use tracked Moltis version $TRACKED_VERSION or leave version blank."
             exit 1
           fi
 
@@ -534,6 +536,7 @@ jobs:
     if: needs.preflight.outputs.should_deploy == 'true' && github.event.inputs.rollback != 'true'
     outputs:
       backup_file: ${{ steps.backup.outputs.backup_file }}
+      restore_check_file: ${{ steps.restore_readiness.outputs.restore_check_file }}
 
     steps:
       - name: Setup SSH
@@ -559,6 +562,7 @@ jobs:
             CONFIG_DIR="$DEPLOY_DIR/config"
             DATA_DIR="$DEPLOY_DIR/data"
             ENV_FILE="$DEPLOY_DIR/.env"
+            COMPOSE_FILE_MAIN="$DEPLOY_DIR/docker-compose.yml"
             COMPOSE_FILE="$DEPLOY_DIR/docker-compose.prod.yml"
 
             mkdir -p "$BACKUP_DIR"
@@ -604,8 +608,22 @@ jobs:
               exit 1
             fi
 
+            # Backup docker-compose.yml separately so full GitOps state can be restored
+            if [ -f "$COMPOSE_FILE_MAIN" ]; then
+              cp "$COMPOSE_FILE_MAIN" "$BACKUP_FILE.compose-main"
+            else
+              echo "::error::Missing compose file for rollback: $COMPOSE_FILE_MAIN"
+              exit 1
+            fi
+
             # Save image version metadata
             echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
+
+            # Refresh rollback pointers so deploy.sh rollback can recover the
+            # exact pre-update state even when CI created the backup.
+            mkdir -p "$DEPLOY_DIR/data/moltis"
+            echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/data/moltis/.last-deployed-image"
+            echo "$BACKUP_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-backup"
 
             if [ ! -f "$BACKUP_FILE" ]; then
               echo "::error::Backup archive was not created"
@@ -622,12 +640,18 @@ jobs:
               exit 1
             fi
 
+            if [ ! -f "$BACKUP_FILE.compose-main" ]; then
+              echo "::error::Backup main compose metadata missing"
+              exit 1
+            fi
+
             echo "::notice::Backup created: $BACKUP_FILE ($CURRENT_IMAGE)"
 
             # Rotate old backups (keep last 10)
             cd "$BACKUP_DIR"
             ls -t pre_deploy_*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
             ls -t pre_deploy_*.compose 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
+            ls -t pre_deploy_*.compose-main 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
             ls -t pre_deploy_*.version 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
           EOF
 
@@ -639,6 +663,104 @@ jobs:
 
           echo "backup_timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
           echo "backup_file=$LATEST_BACKUP" >> $GITHUB_OUTPUT
+
+      - name: Validate Moltis restore readiness
+        id: restore_readiness
+        run: |
+          set -euo pipefail
+          echo "::group::Validate Moltis restore readiness"
+
+          RESULT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+
+            BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
+            EVIDENCE_ROOT="$DEPLOY_DIR/data/moltis/audit/restore-checks"
+            TMP_DIR=$(mktemp -d /tmp/moltis-restore-readiness.XXXXXX)
+            trap 'rm -rf "$TMP_DIR"' EXIT
+
+            mkdir -p "$EVIDENCE_ROOT"
+
+            tar -tzf "$BACKUP_FILE" > /dev/null
+            tar -xzf "$BACKUP_FILE" -C "$TMP_DIR"
+
+            HAS_CONFIG=false
+            HAS_DATA=false
+            HAS_ENV=false
+            HAS_COMPOSE_PROD_SIDECAR=false
+            HAS_COMPOSE_MAIN_SIDECAR=false
+            HAS_VERSION=false
+
+            [ -d "$TMP_DIR/config" ] && HAS_CONFIG=true
+            [ -d "$TMP_DIR/data" ] && HAS_DATA=true
+            [ -f "$TMP_DIR/.env" ] && HAS_ENV=true
+            [ -f "${BACKUP_FILE}.compose" ] && HAS_COMPOSE_PROD_SIDECAR=true
+            [ -f "${BACKUP_FILE}.compose-main" ] && HAS_COMPOSE_MAIN_SIDECAR=true
+            [ -f "${BACKUP_FILE}.version" ] && HAS_VERSION=true
+
+            STATUS=failed
+            if [ "$HAS_CONFIG" = "true" ] && [ "$HAS_DATA" = "true" ] && [ "$HAS_ENV" = "true" ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = "true" ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = "true" ] && [ "$HAS_VERSION" = "true" ]; then
+              STATUS=passed
+            fi
+
+            RESTORE_CHECK_FILE="$EVIDENCE_ROOT/restore-check-$(date -u +%Y%m%dT%H%M%SZ).json"
+            jq -n \
+              --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg backup_reference "$BACKUP_FILE" \
+              --argjson has_config "$HAS_CONFIG" \
+              --argjson has_data "$HAS_DATA" \
+              --argjson has_env "$HAS_ENV" \
+              --argjson has_compose_prod_sidecar "$HAS_COMPOSE_PROD_SIDECAR" \
+              --argjson has_compose_main_sidecar "$HAS_COMPOSE_MAIN_SIDECAR" \
+              --argjson has_version_sidecar "$HAS_VERSION" \
+              --arg status "$STATUS" \
+              '{
+                schema_version: "v1",
+                target: "moltis",
+                checked_at: $checked_at,
+                backup_reference: $backup_reference,
+                has_config: $has_config,
+                has_data: $has_data,
+                has_env: $has_env,
+                has_compose_prod_sidecar: $has_compose_prod_sidecar,
+                has_compose_main_sidecar: $has_compose_main_sidecar,
+                has_version_sidecar: $has_version_sidecar,
+                status: $status
+              }' > "$RESTORE_CHECK_FILE"
+
+            echo "restore_check_file=$RESTORE_CHECK_FILE"
+            echo "has_config=$HAS_CONFIG"
+            echo "has_data=$HAS_DATA"
+            echo "has_env=$HAS_ENV"
+            echo "has_compose_prod_sidecar=$HAS_COMPOSE_PROD_SIDECAR"
+            echo "has_compose_main_sidecar=$HAS_COMPOSE_MAIN_SIDECAR"
+            echo "has_version=$HAS_VERSION"
+
+            if [ "$HAS_CONFIG" = "true" ] && [ "$HAS_DATA" = "true" ] && [ "$HAS_ENV" = "true" ] && [ "$HAS_COMPOSE_PROD_SIDECAR" = "true" ] && [ "$HAS_COMPOSE_MAIN_SIDECAR" = "true" ] && [ "$HAS_VERSION" = "true" ]; then
+              mkdir -p "$DEPLOY_DIR/data/moltis"
+              echo "$RESTORE_CHECK_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-restore-check"
+            fi
+          EOF
+          )
+
+          echo "$RESULT"
+
+          RESTORE_CHECK_FILE=$(echo "$RESULT" | grep '^restore_check_file=' | cut -d= -f2-)
+          HAS_CONFIG=$(echo "$RESULT" | grep '^has_config=' | cut -d= -f2-)
+          HAS_DATA=$(echo "$RESULT" | grep '^has_data=' | cut -d= -f2-)
+          HAS_ENV=$(echo "$RESULT" | grep '^has_env=' | cut -d= -f2-)
+          HAS_COMPOSE_PROD_SIDECAR=$(echo "$RESULT" | grep '^has_compose_prod_sidecar=' | cut -d= -f2-)
+          HAS_COMPOSE_MAIN_SIDECAR=$(echo "$RESULT" | grep '^has_compose_main_sidecar=' | cut -d= -f2-)
+          HAS_VERSION=$(echo "$RESULT" | grep '^has_version=' | cut -d= -f2-)
+
+          if [ "$HAS_CONFIG" != "true" ] || [ "$HAS_DATA" != "true" ] || [ "$HAS_ENV" != "true" ] || [ "$HAS_COMPOSE_PROD_SIDECAR" != "true" ] || [ "$HAS_COMPOSE_MAIN_SIDECAR" != "true" ] || [ "$HAS_VERSION" != "true" ]; then
+            echo "::error::Pre-update backup is not restore-ready for Moltis rollout"
+            exit 1
+          fi
+
+          echo "restore_check_file=$RESTORE_CHECK_FILE" >> "$GITHUB_OUTPUT"
+          echo "::notice::Restore readiness validated: $RESTORE_CHECK_FILE"
+          echo "::endgroup::"
 
   # ===========================================
   # Deploy Moltis container
@@ -667,6 +789,20 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Align server git checkout before sync
+        run: |
+          echo "::group::Aligning server git checkout before sync"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
+            git fetch --depth=1 origin "${{ github.ref_name }}"
+            git checkout --force "${{ github.ref_name }}"
+            git reset --hard "${{ github.sha }}"
+            git clean -fd
+            git status --short
+          EOF
+          echo "::endgroup::"
 
       # ===========================================
       # GitOps Step 1: Sync ALL configuration files
@@ -788,7 +924,6 @@ jobs:
       # ===========================================
       - name: Generate .env from Secrets
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
           echo "::group::Generating .env file from GitHub Secrets"
 
           # Create .env file content with secrets expanded
@@ -816,9 +951,6 @@ jobs:
 
           # Domain
           MOLTIS_DOMAIN=moltis.ainetic.tech
-
-          # Deployment
-          MOLTIS_VERSION=$VERSION
           EOF
 
           # Copy to server
@@ -862,6 +994,11 @@ jobs:
             set -e
             cd ${{ env.DEPLOY_PATH }}
 
+            if grep -q '^MOLTIS_VERSION=' .env 2>/dev/null; then
+              echo "::error::MOLTIS_VERSION override is forbidden in /opt/moltinger/.env; track Moltis version in git compose files instead"
+              exit 1
+            fi
+
             # Validate docker-compose.prod.yml syntax (production config)
             docker compose -f docker-compose.prod.yml config --quiet
 
@@ -888,7 +1025,7 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
 
             # Pull pinned image version (use production compose file)
-            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml pull moltis
+            env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml pull moltis
 
             # Stop container gracefully
             echo "Stopping current container..."
@@ -896,7 +1033,7 @@ jobs:
 
             # Start new container
             echo "Starting new container..."
-            MOLTIS_VERSION="$VERSION" docker compose -f docker-compose.prod.yml up -d moltis
+            env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml up -d moltis
 
             # Verify expected image is running
             RUNNING_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo "unknown")
@@ -956,33 +1093,15 @@ jobs:
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
-            BACKUP_FILE="${{ needs.backup.outputs.backup_file }}"
-            if [ -z "$BACKUP_FILE" ]; then
-              echo "::error::Auto rollback requires backup_file output"
-              exit 1
-            fi
-
             cd ${{ env.DEPLOY_PATH }}
+            OUTPUT=$(./scripts/deploy.sh --json moltis rollback)
+            echo "$OUTPUT"
 
-            # Stop failed deployment
-            docker compose -f docker-compose.prod.yml stop moltis || true
-
-            # Restore pre-deploy state
-            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
-
-            if [ -f "${BACKUP_FILE}.compose" ]; then
-              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
-            else
-              echo "::error::Rollback compose metadata missing: ${BACKUP_FILE}.compose"
+            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
+            if [ "$STATUS" != "success" ]; then
+              echo "::error::deploy.sh rollback failed"
               exit 1
             fi
-
-            BACKUP_VERSION=$(cat "${BACKUP_FILE}.version" 2>/dev/null || echo "unknown")
-            if [ "$BACKUP_VERSION" != "unknown" ]; then
-              docker pull "$BACKUP_VERSION" || true
-            fi
-
-            docker compose -f docker-compose.prod.yml up -d moltis
           EOF
           echo "rolled_back=true" >> $GITHUB_OUTPUT
           echo "::endgroup::"
@@ -1052,6 +1171,8 @@ jobs:
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backup | \`${{ needs.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Restore Check | \`${{ needs.backup.outputs.restore_check_file }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
           echo "| Auto Rollback | $ROLLED_BACK |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
@@ -1170,67 +1291,72 @@ jobs:
       - name: Find last backup
         id: backup
         run: |
-          echo "::group::Finding last backup"
+          echo "::group::Resolving tracked rollback evidence"
           BACKUP_INFO=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            BACKUP_DIR="${{ env.BACKUP_PATH }}"
-            LATEST=$(ls -t $BACKUP_DIR/pre_deploy_*.tar.gz 2>/dev/null | head -1)
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
 
-            if [ -z "$LATEST" ]; then
+            BACKUP_FILE=""
+            RESTORE_CHECK_FILE=""
+            PREVIOUS_IMAGE=""
+
+            if [ -f data/moltis/.last-moltis-backup ] && [ -s data/moltis/.last-moltis-backup ]; then
+              BACKUP_FILE=$(cat data/moltis/.last-moltis-backup)
+            else
+              BACKUP_FILE=$(ls -t "${{ env.BACKUP_PATH }}"/pre_deploy_*.tar.gz 2>/dev/null | head -1 || true)
+            fi
+
+            if [ -f data/moltis/.last-moltis-restore-check ] && [ -s data/moltis/.last-moltis-restore-check ]; then
+              RESTORE_CHECK_FILE=$(cat data/moltis/.last-moltis-restore-check)
+            else
+              RESTORE_CHECK_FILE=$(find data/moltis/audit/restore-checks -type f -name 'restore-check-*.json' 2>/dev/null | sort | tail -1 || true)
+            fi
+
+            if [ -f data/moltis/.last-deployed-image ] && [ -s data/moltis/.last-deployed-image ]; then
+              PREVIOUS_IMAGE=$(cat data/moltis/.last-deployed-image)
+            fi
+
+            if [ -z "$BACKUP_FILE" ]; then
               echo "ERROR: No backup found"
               exit 1
             fi
 
-            VERSION=$(cat "${LATEST}.version" 2>/dev/null || echo "unknown")
-            echo "backup_file=$LATEST"
-            echo "backup_version=$VERSION"
+            echo "backup_file=$BACKUP_FILE"
+            echo "restore_check_file=$RESTORE_CHECK_FILE"
+            echo "previous_image=$PREVIOUS_IMAGE"
           EOF
           )
 
-          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep "backup_file=" | cut -d= -f2)
-          BACKUP_VERSION=$(echo "$BACKUP_INFO" | grep "backup_version=" | cut -d= -f2)
+          BACKUP_FILE=$(echo "$BACKUP_INFO" | grep '^backup_file=' | cut -d= -f2-)
+          RESTORE_CHECK_FILE=$(echo "$BACKUP_INFO" | grep '^restore_check_file=' | cut -d= -f2-)
+          PREVIOUS_IMAGE=$(echo "$BACKUP_INFO" | grep '^previous_image=' | cut -d= -f2-)
 
           if [ -z "$BACKUP_FILE" ]; then
-            echo "::error::No backup found for rollback"
+            echo "::error::No rollback backup found"
             exit 1
           fi
 
           echo "backup_file=$BACKUP_FILE" >> $GITHUB_OUTPUT
-          echo "backup_version=$BACKUP_VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Found backup: $BACKUP_FILE (version: $BACKUP_VERSION)"
+          echo "restore_check_file=$RESTORE_CHECK_FILE" >> $GITHUB_OUTPUT
+          echo "previous_image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
+          echo "::notice::Rollback evidence resolved: $BACKUP_FILE"
           echo "::endgroup::"
 
-      - name: Restore backup
+      - name: Run tracked rollback
         run: |
-          BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
-          BACKUP_VERSION="${{ steps.backup.outputs.backup_version }}"
-
-          echo "::group::Restoring backup (GitOps)"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+          echo "::group::Running tracked rollback"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -e
 
             cd ${{ env.DEPLOY_PATH }}
+            OUTPUT=$(./scripts/deploy.sh --json moltis rollback)
+            echo "$OUTPUT"
 
-            # Stop container (use production compose file)
-            docker compose -f docker-compose.prod.yml stop moltis || true
-
-            # Restore config/data/.env to deployment directory
-            tar -xzf "$BACKUP_FILE" -C "${{ env.DEPLOY_PATH }}"
-
-            # Restore docker-compose.prod.yml from backup (GitOps: exact config restore)
-            if [ -f "${BACKUP_FILE}.compose" ]; then
-              cp "${BACKUP_FILE}.compose" docker-compose.prod.yml
-              echo "Restored docker-compose.prod.yml from backup"
+            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
+            if [ "$STATUS" != "success" ]; then
+              echo "::error::deploy.sh rollback failed"
+              exit 1
             fi
-
-            # Pull the backed-up image version if known
-            if [ "$BACKUP_VERSION" != "unknown" ]; then
-              docker pull $BACKUP_VERSION
-            fi
-
-            # Start container (use production compose file)
-            docker compose -f docker-compose.prod.yml up -d moltis
-
-            echo "Rollback completed to version: $BACKUP_VERSION"
           EOF
           echo "::endgroup::"
 
@@ -1264,7 +1390,8 @@ jobs:
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Backup | \`${{ steps.backup.outputs.backup_file }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | \`${{ steps.backup.outputs.backup_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Restore Check | \`${{ steps.backup.outputs.restore_check_file }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Previous Image | \`${{ steps.backup.outputs.previous_image }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
