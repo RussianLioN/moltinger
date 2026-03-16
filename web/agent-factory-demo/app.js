@@ -173,6 +173,7 @@
     activeAbortController: null,
     activeRequest: null,
     composerNotice: { text: "", tone: "info" },
+    accessProbePending: false,
     projectActions: {
       open: false,
       projectId: "",
@@ -505,6 +506,7 @@
     dom.attachmentInput.disabled = state.awaitingResponse;
     dom.refreshSession.disabled = isBusy;
     dom.accessSubmit.disabled = isBusy;
+    dom.accessTokenInput.disabled = isBusy && !state.accessToken;
     dom.projectMenu.disabled = isBusy;
     dom.newProject.disabled = isBusy;
   }
@@ -516,6 +518,18 @@
     window.setTimeout(() => {
       dom.composerInput.focus();
     }, 0);
+  }
+
+  function ensureWorkspaceAccess() {
+    if (state.accessToken) {
+      return true;
+    }
+    closeProjectActionsMenu();
+    renderProjectActionsMenu();
+    if (dom.accessTokenInput) {
+      dom.accessTokenInput.focus();
+    }
+    return false;
   }
 
   function hasConversationActivity(project) {
@@ -790,6 +804,9 @@
   }
 
   function openProjectActionsMenu(projectId, triggerElement) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     const project = state.projects.find((item) => item.id === projectId);
     if (!project || !triggerElement) {
       return;
@@ -1407,6 +1424,9 @@
   }
 
   function promptRenameProject(projectId) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     const project = state.projects.find((item) => item.id === projectId);
     if (!project) {
       return;
@@ -1424,6 +1444,9 @@
   }
 
   function deleteProject(projectId) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     const target = state.projects.find((item) => item.id === projectId);
     if (!target) {
       return;
@@ -1447,6 +1470,9 @@
   }
 
   function deleteProjectWithConfirm(projectId) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     const project = state.projects.find((item) => item.id === projectId);
     if (!project) {
       return;
@@ -1460,6 +1486,9 @@
   }
 
   function createNewProject(options = {}) {
+    if (!ensureWorkspaceAccess()) {
+      return getActiveProject();
+    }
     saveComposerDraft();
     closeProjectActionsMenu();
     const active = getActiveProject();
@@ -1498,6 +1527,9 @@
   }
 
   function switchProject(projectId) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     saveComposerDraft();
     closeProjectActionsMenu();
     if (!state.projects.some((project) => project.id === projectId)) {
@@ -1513,24 +1545,125 @@
     focusComposerSoon();
   }
 
-  function unlockAccess() {
-    const provided = normalizeText(dom.accessTokenInput.value, DEFAULT_ACCESS_TOKEN);
-    state.accessToken = provided;
+  function buildAccessProbePayload(project, token) {
+    const last = currentResponse(project) || {};
+    return {
+      working_language: "ru",
+      project_key: last.browser_project_pointer?.project_key || "",
+      requester_identity: {
+        display_name: "Demo user",
+        browser_session_label: "agent-factory-web-shell",
+      },
+      demo_access_grant: {
+        grant_type: "shared_demo_token",
+        grant_value: token,
+        status: "active",
+      },
+      web_demo_session: {
+        web_demo_session_id: last.web_demo_session?.web_demo_session_id || project.sessionId,
+        session_cookie_id: last.web_demo_session?.session_cookie_id || "",
+        status: last.web_demo_session?.status || "gate_pending",
+      },
+      browser_project_pointer: {
+        pointer_id: last.browser_project_pointer?.pointer_id || "",
+        project_key: last.browser_project_pointer?.project_key || "",
+        linked_discovery_session_id: last.browser_project_pointer?.linked_discovery_session_id || "",
+        linked_brief_id: last.browser_project_pointer?.linked_brief_id || "",
+        linked_brief_version: last.browser_project_pointer?.linked_brief_version || "",
+        selection_mode: "new_project",
+        pointer_status: "active",
+      },
+      web_conversation_envelope: {
+        request_id: nextRequestId(project, "request_demo_access"),
+        ui_action: "request_demo_access",
+        user_text: "",
+        transport_mode: "browser_shell",
+        linked_discovery_session_id: last.web_conversation_envelope?.linked_discovery_session_id || "",
+        linked_brief_id: last.web_conversation_envelope?.linked_brief_id || "",
+      },
+      discovery_runtime_state: last.discovery_runtime_state || {},
+    };
+  }
+
+  function responseRequiresAccessGate(response) {
+    const accessGate = response?.access_gate || {};
+    const granted = accessGate.granted;
+    const status = normalizeText(response?.status_snapshot?.user_visible_status || response?.status).toLowerCase();
+    const nextAction = normalizeText(response?.status_snapshot?.next_recommended_action || response?.next_action).toLowerCase();
+    if (granted === false) {
+      return true;
+    }
+    if (status === "gate_pending" || nextAction === "request_demo_access") {
+      return true;
+    }
+    return granted !== true && Boolean(normalizeText(accessGate.reason));
+  }
+
+  function gateReasonFromResponse(response) {
+    const explicit = normalizeText(response?.access_gate?.reason);
+    if (explicit) {
+      return explicit;
+    }
+    const hinted = normalizeText(response?.ui_projection?.current_question || response?.next_question);
+    if (hinted && /(token|доступ|access)/i.test(hinted)) {
+      return hinted;
+    }
+    return "Этот demo access token не подходит. Проверь токен или запроси актуальный доступ у оператора.";
+  }
+
+  async function unlockAccess(tokenOverride = "") {
+    if (state.accessProbePending) {
+      return;
+    }
+    const provided = normalizeText(tokenOverride || dom.accessTokenInput.value);
+    if (!provided) {
+      state.gateNote = "Укажи access token для входа в demo.";
+      renderGateNote();
+      dom.accessTokenInput.focus();
+      return;
+    }
     closeProjectActionsMenu();
-    state.gateNote = "Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.";
-    if (!state.projects.length) {
-      state.projects = [createProject()];
+    state.accessProbePending = true;
+    state.gateNote = "Проверяю access token...";
+    renderGateNote();
+    setBusy(true);
+    try {
+      if (!state.projects.length) {
+        state.projects = [createProject()];
+      }
+      if (!state.activeProjectId || !state.projects.some((project) => project.id === state.activeProjectId)) {
+        state.activeProjectId = state.projects[0].id;
+      }
+      const project = getActiveProject();
+      const payload = buildAccessProbePayload(project, provided);
+      const response = await postTurn(payload);
+      if (responseRequiresAccessGate(response)) {
+        project.lastResponse = response;
+        project.updatedAt = nowIso();
+        state.connectionMode = "live";
+        persist();
+        relockAccess(gateReasonFromResponse(response));
+        return;
+      }
+      state.accessToken = provided;
+      state.gateNote = "Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.";
+      applyResponse(project, response, "live");
+      persist();
+      renderAll();
+      focusComposerSoon();
+    } catch (_error) {
+      state.connectionMode = "error";
+      relockAccess("Не удалось проверить access token. Повтори попытку через несколько секунд.");
+    } finally {
+      state.accessProbePending = false;
+      setBusy(false);
+      renderAll();
     }
-    if (!state.activeProjectId) {
-      state.activeProjectId = state.projects[0].id;
-    }
-    persist();
-    renderAll();
-    focusComposerSoon();
   }
 
   function relockAccess(reason) {
     state.accessToken = "";
+    state.accessProbePending = false;
     closeProjectActionsMenu();
     state.gateNote = normalizeText(reason, "Нужен access token для controlled demo surface.");
     persist();
@@ -1912,11 +2045,11 @@
     const appendReplyMessages = options.appendReplyMessages !== false;
     const syncReason = normalizeText(options.syncReason);
 
-    if (response?.access_gate && response.access_gate.granted === false) {
+    if (responseRequiresAccessGate(response)) {
       project.lastResponse = response;
       project.updatedAt = nowIso();
       persist();
-      relockAccess(response.access_gate.reason);
+      relockAccess(gateReasonFromResponse(response));
       return;
     }
 
@@ -1965,6 +2098,9 @@
   }
 
   async function dispatchTurn(action, userText, options = {}) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     const project = getActiveProject();
     if (!project) {
       return;
@@ -2053,6 +2189,9 @@
   }
 
   async function refreshActiveProject(options = {}) {
+    if (!ensureWorkspaceAccess()) {
+      return;
+    }
     const project = getActiveProject();
     if (!project) {
       return;
@@ -2314,7 +2453,7 @@
     if (dom.accessForm) {
       dom.accessForm.addEventListener("submit", (event) => {
         event.preventDefault();
-        unlockAccess();
+        void unlockAccess();
       });
     }
 
@@ -2352,9 +2491,17 @@
   function init() {
     hydrate();
     bindEvents();
-    dom.accessTokenInput.value = state.accessToken;
+    const restoredToken = normalizeText(state.accessToken);
+    state.accessToken = "";
+    dom.accessTokenInput.value = restoredToken;
     renderAll();
     dom.root.dataset.mode = "ready";
+    if (restoredToken) {
+      state.gateNote = "Проверяю сохранённый access token...";
+      renderGateNote();
+      void unlockAccess(restoredToken);
+      return;
+    }
     void restoreSessionOnLoad();
   }
 
