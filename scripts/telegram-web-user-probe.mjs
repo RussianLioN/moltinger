@@ -18,6 +18,7 @@ const DEFAULT_TIMEOUT_SEC = Number(process.env.TELEGRAM_WEB_TIMEOUT_SECONDS || 4
 const DEFAULT_MIN_REPLY_LEN = Number(process.env.TELEGRAM_WEB_MIN_REPLY_LEN || 2);
 const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIES || 2);
 const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
+const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 
 function getArg(name, fallback = "") {
   const idx = process.argv.indexOf(name);
@@ -36,6 +37,7 @@ const timeoutSec = Number(getArg("--timeout", String(DEFAULT_TIMEOUT_SEC)));
 const minReplyLen = Number(getArg("--min-reply-len", String(DEFAULT_MIN_REPLY_LEN)));
 const composerRetries = Math.max(0, Number(getArg("--composer-retries", String(DEFAULT_COMPOSER_RETRIES))) || 0);
 const quietWindowMs = Math.max(500, Number(getArg("--quiet-window-ms", String(DEFAULT_QUIET_WINDOW_MS))) || 0);
+const replySettleMs = Math.max(1000, Number(getArg("--reply-settle-ms", String(DEFAULT_REPLY_SETTLE_MS))) || 0);
 const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
@@ -68,6 +70,11 @@ function normalizeProbeMessage(message) {
     direction: String(message?.direction || "unknown"),
     text: normalizeMessageText(message?.text),
   };
+}
+
+function messageFingerprint(message) {
+  const normalized = normalizeProbeMessage(message);
+  return `${normalized.mid}:${normalized.direction}:${normalized.text}`;
 }
 
 function previewText(value, limit = 160) {
@@ -116,6 +123,13 @@ export function findAttributedReply(messages, sentMid) {
   return earliest;
 }
 
+export function findAttributedReplies(messages, sentMid) {
+  return messages
+    .map(normalizeProbeMessage)
+    .filter((message) => message.direction === "in" && message.mid > sentMid && message.text.length > 0)
+    .sort((left, right) => left.mid - right.mid);
+}
+
 function summarizeMessage(message) {
   if (!message) return null;
   const normalized = normalizeProbeMessage(message);
@@ -144,9 +158,11 @@ function buildBasePayload() {
 
 function buildCorrelationWindow(details) {
   return {
-    strategy: "quiet_window_then_first_incoming_after_sent_mid",
+    strategy: "quiet_window_then_stable_incoming_after_sent_mid",
     quiet_window_ms: details.quietWindowMs,
     quiet_window_wait_ms: details.quietWindowWaitMs,
+    reply_settle_ms: details.replySettleMs || null,
+    reply_settle_wait_ms: details.replySettleWaitMs || null,
     baseline_max_message_id: details.baselineMaxMid,
     sent_observed_at_ms: details.sentObservedAtMs || null,
     reply_observed_at_ms: details.replyObservedAtMs || null,
@@ -517,6 +533,70 @@ async function waitForQuietWindow(page, quietMs, maxWaitMs, baselineMaxMid) {
     quietMs,
     maxWaitMs,
     baselineMaxMid,
+  });
+}
+
+export async function waitForReplySettleWithCollector({
+  collectMessagesFn,
+  sleepFn,
+  settleMs,
+  maxWaitMs,
+  sentMid,
+}) {
+  const startedAt = Date.now();
+  let firstReplyObservedAtMs = null;
+  let lastChangeAt = null;
+  let lastFingerprint = null;
+  let latestIncoming = null;
+  let stableReply = null;
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    const messages = await collectMessagesFn();
+    const replies = findAttributedReplies(messages, sentMid);
+    latestIncoming = replies.length > 0 ? replies[replies.length - 1] : null;
+
+    if (latestIncoming) {
+      const currentFingerprint = messageFingerprint(latestIncoming);
+      if (firstReplyObservedAtMs === null) {
+        firstReplyObservedAtMs = Date.now();
+      }
+      if (currentFingerprint !== lastFingerprint) {
+        lastFingerprint = currentFingerprint;
+        lastChangeAt = Date.now();
+        stableReply = latestIncoming;
+      }
+      if (lastChangeAt !== null && Date.now() - lastChangeAt >= settleMs) {
+        return {
+          ok: true,
+          settled: true,
+          settleWaitMs: Date.now() - startedAt,
+          replyObservedAtMs: firstReplyObservedAtMs,
+          replyMessage: stableReply,
+          latestIncoming,
+        };
+      }
+    }
+
+    await sleepFn(Math.min(1000, Math.max(250, Math.floor(settleMs / 3))));
+  }
+
+  return {
+    ok: stableReply !== null,
+    settled: false,
+    settleWaitMs: Date.now() - startedAt,
+    replyObservedAtMs: firstReplyObservedAtMs,
+    replyMessage: stableReply,
+    latestIncoming,
+  };
+}
+
+async function waitForReplySettle(page, settleMs, maxWaitMs, sentMid) {
+  return waitForReplySettleWithCollector({
+    collectMessagesFn: () => collectMessages(page),
+    sleepFn: (ms) => page.waitForTimeout(ms),
+    settleMs,
+    maxWaitMs,
+    sentMid,
   });
 }
 
@@ -958,24 +1038,10 @@ async function main() {
 
     stage = "wait_reply";
     const deadline = Date.now() + timeoutSec * 1000;
-    let replyMessage = null;
-    let latestIncoming = null;
-    let replyObservedAtMs = null;
-
-    while (Date.now() < deadline) {
-      await page.waitForTimeout(1500);
-      const nowMessages = await collectMessages(page);
-      const incomingMessages = nowMessages
-        .map(normalizeProbeMessage)
-        .filter((message) => message.direction === "in" && message.text.length > 0)
-        .sort((left, right) => left.mid - right.mid);
-      latestIncoming = incomingMessages.length > 0 ? incomingMessages[incomingMessages.length - 1] : null;
-      replyMessage = findAttributedReply(nowMessages, sentMessage.mid);
-      if (replyMessage) {
-        replyObservedAtMs = Date.now();
-        break;
-      }
-    }
+    const settledReply = await waitForReplySettle(page, replySettleMs, timeoutSec * 1000, sentMessage.mid);
+    let replyMessage = settledReply.replyMessage;
+    let latestIncoming = settledReply.latestIncoming;
+    let replyObservedAtMs = settledReply.replyObservedAtMs;
 
     if (!replyMessage) {
       const nowMessages = await collectMessages(page);
@@ -992,6 +1058,8 @@ async function main() {
       const correlation = buildCorrelationWindow({
         quietWindowMs,
         quietWindowWaitMs,
+        replySettleMs,
+        replySettleWaitMs: settledReply.settleWaitMs,
         baselineMaxMid: beforeMaxMid,
         sentObservedAtMs,
         replyObservedAtMs: null,
@@ -1025,6 +1093,7 @@ async function main() {
     const checks = {
       non_empty: replyText.length > 0,
       min_length: replyText.length >= minReplyLen,
+      reply_settled: settledReply.settled === true,
       error_signature_clean: !ERROR_RE.test(replyText),
       sensitive_signature_clean: !SENSITIVE_RE.test(replyText),
     };
@@ -1034,6 +1103,8 @@ async function main() {
     const correlation = buildCorrelationWindow({
       quietWindowMs,
       quietWindowWaitMs,
+      replySettleMs,
+      replySettleWaitMs: settledReply.settleWaitMs,
       baselineMaxMid: beforeMaxMid,
       sentObservedAtMs,
       replyObservedAtMs,

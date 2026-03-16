@@ -107,6 +107,21 @@ gh workflow run telegram-e2e-on-demand.yml \
 - `failure.code`
 - `recommended_action`
 
+### Как authoritative path теперь отличает финальный ответ от промежуточного
+
+Authoritative `Telegram Web` probe больше не принимает первый попавшийся входящий bubble за окончательный успех.
+
+Теперь он:
+
+1. ждёт первый attributable reply после sent message;
+2. затем выдерживает `reply settle window`;
+3. и только после этого оценивает последний стабильный ответ.
+
+Практический смысл:
+
+- ранняя промежуточная реплика вроде `Проверяю снова...` больше не считается достаточным pass;
+- если следом приходит `Timed out: Agent run timed out after 30s`, authoritative verdict должен стать `failed`, а не `passed`.
+
 ## Failure Codes
 
 Authoritative Telegram Web path различает минимум:

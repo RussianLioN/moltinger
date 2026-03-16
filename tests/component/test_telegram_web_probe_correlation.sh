@@ -86,6 +86,57 @@ NODE
         test_fail "Attributed reply should be the first incoming message after the sent probe"
     fi
 
+    test_start "component_telegram_web_probe_waits_for_stable_final_reply_before_passing"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { waitForReplySettleWithCollector } = await import(process.env.NODE_SCRIPT);
+const snapshots = [
+  [{ mid: 31, direction: "out", text: "/status" }],
+  [
+    { mid: 31, direction: "out", text: "/status" },
+    { mid: 32, direction: "in", text: "Проверяю снова" }
+  ],
+  [
+    { mid: 31, direction: "out", text: "/status" },
+    { mid: 32, direction: "in", text: "Проверяю снова, включая поиск в системе" }
+  ],
+  [
+    { mid: 31, direction: "out", text: "/status" },
+    { mid: 32, direction: "in", text: "Проверяю снова, включая поиск в системе" },
+    { mid: 33, direction: "in", text: "Timed out: Agent run timed out after 30s" }
+  ],
+  [
+    { mid: 31, direction: "out", text: "/status" },
+    { mid: 32, direction: "in", text: "Проверяю снова, включая поиск в системе" },
+    { mid: 33, direction: "in", text: "Timed out: Agent run timed out after 30s" }
+  ],
+  [
+    { mid: 31, direction: "out", text: "/status" },
+    { mid: 32, direction: "in", text: "Проверяю снова, включая поиск в системе" },
+    { mid: 33, direction: "in", text: "Timed out: Agent run timed out after 30s" }
+  ]
+];
+let index = 0;
+const result = await waitForReplySettleWithCollector({
+  collectMessagesFn: async () => snapshots[Math.min(index++, snapshots.length - 1)],
+  sleepFn: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  settleMs: 150,
+  maxWaitMs: 1200,
+  sentMid: 31,
+});
+if (!result.ok || !result.settled || !result.replyMessage || result.replyMessage.mid !== 33) {
+  throw new Error(`unexpected settled result: ${JSON.stringify(result)}`);
+}
+if (!/Timed out/i.test(result.replyMessage.text)) {
+  throw new Error(`expected final timeout reply, got ${JSON.stringify(result.replyMessage)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must settle on the final stable incoming reply instead of passing on an early intermediate response"
+    fi
+
     test_start "component_telegram_web_probe_waits_for_quiet_window_before_send"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
