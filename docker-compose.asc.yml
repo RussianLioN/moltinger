@@ -77,6 +77,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-net"
+      - "traefik.http.routers.asc-demo-http.rule=Host(`${ASC_DEMO_DOMAIN:-asc.ainetic.tech}`)"
+      - "traefik.http.routers.asc-demo-http.entrypoints=web"
+      - "traefik.http.routers.asc-demo-http.middlewares=asc-demo-https-redirect@docker"
+      - "traefik.http.middlewares.asc-demo-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.asc-demo-https-redirect.redirectscheme.permanent=true"
       - "traefik.http.routers.asc-demo.rule=Host(`${ASC_DEMO_DOMAIN:-asc.ainetic.tech}`)"
       - "traefik.http.routers.asc-demo.entrypoints=websecure"
       - "traefik.http.routers.asc-demo.tls=true"
