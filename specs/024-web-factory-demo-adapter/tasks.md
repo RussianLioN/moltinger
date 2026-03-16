@@ -176,6 +176,12 @@
 - [x] T046 [US1] Prevent duplicate empty projects on repeated `Новый проект` clicks by reusing an existing empty draft in `web/agent-factory-demo/app.js`
 - [x] T047 [US1] Remove redundant `Следующий вопрос` headings from chat timeline rendering and migrated local state in `web/agent-factory-demo/app.js`
 - [x] T048 [US1] Switch composer to one-line start with auto-grow behavior in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js`
+- [x] T049 [US1] Restore Codex-like keyboard UX: `Enter` send, `Shift+Enter` newline, and stable composer focus in `web/agent-factory-demo/app.js`
+- [x] T050 [US1] Convert demo-access gate to explicit submit flow so token is confirmed by `Enter` and compact button in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js`
+- [x] T051 [US1] Add project actions popover (`Переименовать`, `Удалить`) instead of immediate rename on `⋯` in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js`
+- [x] T052 [US1] Implement safe project deletion flow with confirm and clean new-project workspace focus (without forced switch to neighboring chat) in `web/agent-factory-demo/app.js`
+- [x] T053 [US1] Harden mock fallback to adaptive discovery questioning with low-signal reprompts and coverage tracking in `web/agent-factory-demo/app.js`
+- [x] T054 [US1] Remove residual `Следующий вопрос` title generation in shared web card builder `scripts/agent_factory_common.py`
 
 ---
 

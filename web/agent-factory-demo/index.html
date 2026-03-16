@@ -28,7 +28,7 @@
             <strong>Демо-доступ</strong>
             <p>Укажи access token и перейди в рабочее пространство фабрики.</p>
           </div>
-          <div class="access-banner__controls">
+          <form class="access-banner__controls" data-role="access-form">
             <input
               id="accessToken"
               type="password"
@@ -36,8 +36,8 @@
               placeholder="demo-access-token"
               data-role="access-token-input"
             >
-            <button class="button button--primary" type="button" data-role="access-submit">Открыть demo</button>
-          </div>
+            <button class="button button--ghost access-banner__submit" type="submit" data-role="access-submit">Открыть demo</button>
+          </form>
           <p class="access-banner__note" data-role="gate-note">Токен запрашивается только один раз для этой браузерной сессии.</p>
         </section>
       </section>
@@ -214,6 +214,11 @@
           <span data-role="status-session-id">не открыт</span>
           <p data-role="status-operator-attention">Нужен access token.</p>
         </div>
+      </div>
+
+      <div class="project-actions-menu" data-role="project-actions-menu" hidden>
+        <button type="button" data-role="project-actions-rename">Переименовать</button>
+        <button type="button" data-role="project-actions-delete">Удалить проект</button>
       </div>
     </div>
 

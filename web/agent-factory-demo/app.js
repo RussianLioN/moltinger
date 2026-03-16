@@ -63,10 +63,55 @@
     playground_ready: "Готово",
     reopened: "Нужно внимание",
   };
+  const MOCK_DISCOVERY_TOPICS = [
+    {
+      id: "problem",
+      question: "Какую бизнес-проблему должен решить будущий агент?",
+      why: "Нужно зафиксировать ценность автоматизации и целевой эффект.",
+      signals: ["проблем", "боль", "долго", "ошиб", "срок", "узкое место"],
+    },
+    {
+      id: "target_users",
+      question: "Кто основной пользователь или выгодоприобретатель результата?",
+      why: "Нужно понимать, для кого проектируем сценарий и интерфейс.",
+      signals: ["пользоват", "клиент", "комитет", "отдел", "команда", "роль"],
+    },
+    {
+      id: "current_workflow",
+      question: "Как процесс устроен сейчас и на каком шаге возникают потери?",
+      why: "Нужно зафиксировать текущий процесс, чтобы измерять улучшение.",
+      signals: ["сейчас", "вруч", "excel", "этап", "процесс", "согласован"],
+    },
+    {
+      id: "input_examples",
+      question: "Какие входные данные или кейсы агент получает на вход?",
+      why: "Нужно понять формат входов для корректной обработки и тестов.",
+      signals: ["вход", "данн", "файл", "заявк", "документ", "пример"],
+    },
+    {
+      id: "expected_outputs",
+      question: "Какой результат должен быть на выходе и в каком формате?",
+      why: "Нужно зафиксировать ожидаемый output будущего агента.",
+      signals: ["выход", "результ", "отчет", "карточк", "summary", "рекомендац"],
+    },
+    {
+      id: "branching_rules",
+      question: "Какие ветвления, исключения и бизнес-правила нужно учесть?",
+      why: "Нужно собрать edge-cases и правила принятия решения.",
+      signals: ["если", "иначе", "исключ", "ветвл", "правил", "эскалац"],
+    },
+    {
+      id: "success_metrics",
+      question: "Как измерим успех автоматизации: время, качество, SLA или другие метрики?",
+      why: "Нужны измеримые критерии, чтобы подтвердить эффективность решения.",
+      signals: ["метрик", "kpi", "sla", "успех", "точност", "время"],
+    },
+  ];
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
+    accessForm: document.querySelector('[data-role="access-form"]'),
     accessTokenInput: document.querySelector('[data-role="access-token-input"]'),
     accessSubmit: document.querySelector('[data-role="access-submit"]'),
     projectList: document.querySelector('[data-role="project-list"]'),
@@ -112,6 +157,9 @@
     messageTemplate: document.querySelector('[data-role="message-template"]'),
     artifactTemplate: document.querySelector('[data-role="artifact-template"]'),
     panelCardTemplate: document.querySelector('[data-role="panel-card-template"]'),
+    projectActionsMenu: document.querySelector('[data-role="project-actions-menu"]'),
+    projectActionsRename: document.querySelector('[data-role="project-actions-rename"]'),
+    projectActionsDelete: document.querySelector('[data-role="project-actions-delete"]'),
   };
 
   const state = {
@@ -125,6 +173,12 @@
     activeAbortController: null,
     activeRequest: null,
     composerNotice: { text: "", tone: "info" },
+    projectActions: {
+      open: false,
+      projectId: "",
+      x: 0,
+      y: 0,
+    },
   };
 
   function safeJsonParse(value, fallback) {
@@ -447,12 +501,21 @@
   function setBusy(isBusy) {
     dom.root.dataset.mode = isBusy ? "busy" : "ready";
     dom.composerSubmit.disabled = isBusy && !state.awaitingResponse;
-    dom.composerInput.disabled = state.awaitingResponse;
+    dom.composerInput.disabled = false;
     dom.attachmentInput.disabled = state.awaitingResponse;
     dom.refreshSession.disabled = isBusy;
     dom.accessSubmit.disabled = isBusy;
     dom.projectMenu.disabled = isBusy;
     dom.newProject.disabled = isBusy;
+  }
+
+  function focusComposerSoon() {
+    if (!state.accessToken || !dom.composerInput || dom.composerInput.disabled) {
+      return;
+    }
+    window.setTimeout(() => {
+      dom.composerInput.focus();
+    }, 0);
   }
 
   function hasConversationActivity(project) {
@@ -721,6 +784,49 @@
       : "gated";
   }
 
+  function closeProjectActionsMenu() {
+    state.projectActions.open = false;
+    state.projectActions.projectId = "";
+  }
+
+  function openProjectActionsMenu(projectId, triggerElement) {
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project || !triggerElement) {
+      return;
+    }
+    if (state.projectActions.open && state.projectActions.projectId === project.id) {
+      closeProjectActionsMenu();
+      renderProjectActionsMenu();
+      return;
+    }
+    const rect = triggerElement.getBoundingClientRect();
+    state.projectActions.open = true;
+    state.projectActions.projectId = project.id;
+    state.projectActions.x = Math.max(12, Math.round(rect.right - 180));
+    state.projectActions.y = Math.max(12, Math.round(rect.bottom + 8));
+    renderProjectActionsMenu();
+  }
+
+  function renderProjectActionsMenu() {
+    const menu = dom.projectActionsMenu;
+    if (!menu) {
+      return;
+    }
+    const selectedProject = state.projects.find((item) => item.id === state.projectActions.projectId);
+    if (!state.projectActions.open || !selectedProject) {
+      menu.hidden = true;
+      return;
+    }
+    menu.hidden = false;
+    const menuRect = menu.getBoundingClientRect();
+    const maxLeft = Math.max(12, window.innerWidth - menuRect.width - 12);
+    const maxTop = Math.max(12, window.innerHeight - menuRect.height - 12);
+    const left = Math.min(state.projectActions.x, maxLeft);
+    const top = Math.min(state.projectActions.y, maxTop);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
   function createProjectCard(project) {
     const article = document.createElement("article");
     article.className = `project-card${project.id === state.activeProjectId ? " is-active" : ""}`;
@@ -742,10 +848,10 @@
     menu.type = "button";
     menu.className = "project-card__menu";
     menu.textContent = "⋯";
-    menu.setAttribute("aria-label", `Переименовать проект ${project.title}`);
+    menu.setAttribute("aria-label", `Действия для проекта ${project.title}`);
     menu.addEventListener("click", (event) => {
       event.stopPropagation();
-      promptRenameProject(project.id);
+      openProjectActionsMenu(project.id, menu);
     });
 
     article.append(main, menu);
@@ -1144,6 +1250,7 @@
     renderAttachmentList(project);
     renderComposer(project);
     renderSidePanel(project);
+    renderProjectActionsMenu();
   }
 
   function resizeComposerInput() {
@@ -1316,8 +1423,45 @@
     renderAll();
   }
 
+  function deleteProject(projectId) {
+    const target = state.projects.find((item) => item.id === projectId);
+    if (!target) {
+      return;
+    }
+    const remaining = state.projects.filter((item) => item.id !== projectId);
+    const deletedActive = projectId === state.activeProjectId;
+    if (deletedActive) {
+      const fresh = createProject({ title: DEFAULT_PROJECT_TITLE });
+      state.projects = [fresh, ...remaining];
+      state.activeProjectId = fresh.id;
+    } else {
+      state.projects = remaining.length ? remaining : [createProject({ title: DEFAULT_PROJECT_TITLE })];
+      if (!state.projects.some((item) => item.id === state.activeProjectId)) {
+        state.activeProjectId = state.projects[0].id;
+      }
+    }
+    closeProjectActionsMenu();
+    persist();
+    renderAll();
+    focusComposerSoon();
+  }
+
+  function deleteProjectWithConfirm(projectId) {
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) {
+      return;
+    }
+    const projectTitle = normalizeText(project.title, DEFAULT_PROJECT_TITLE);
+    const approved = window.confirm(`Удалить проект "${projectTitle}"? Это действие нельзя отменить.`);
+    if (!approved) {
+      return;
+    }
+    deleteProject(projectId);
+  }
+
   function createNewProject(options = {}) {
     saveComposerDraft();
+    closeProjectActionsMenu();
     const active = getActiveProject();
     const reusable = isEmptyDraftProject(active)
       ? active
@@ -1355,6 +1499,7 @@
 
   function switchProject(projectId) {
     saveComposerDraft();
+    closeProjectActionsMenu();
     if (!state.projects.some((project) => project.id === projectId)) {
       return;
     }
@@ -1365,14 +1510,13 @@
     if (state.accessToken && active?.sessionId && active?.lastResponse) {
       void refreshActiveProject({ syncReason: "switch_project", suppressFailureBanner: true });
     }
-    window.setTimeout(() => {
-      dom.composerInput.focus();
-    }, 0);
+    focusComposerSoon();
   }
 
   function unlockAccess() {
     const provided = normalizeText(dom.accessTokenInput.value, DEFAULT_ACCESS_TOKEN);
     state.accessToken = provided;
+    closeProjectActionsMenu();
     state.gateNote = "Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.";
     if (!state.projects.length) {
       state.projects = [createProject()];
@@ -1382,13 +1526,12 @@
     }
     persist();
     renderAll();
-    window.setTimeout(() => {
-      dom.composerInput.focus();
-    }, 0);
+    focusComposerSoon();
   }
 
   function relockAccess(reason) {
     state.accessToken = "";
+    closeProjectActionsMenu();
     state.gateNote = normalizeText(reason, "Нужен access token для controlled demo surface.");
     persist();
     renderAll();
@@ -1480,19 +1623,67 @@
     state.activeAbortController.abort();
   }
 
-  function mockDiscoveryPrompt(stage) {
-    const prompts = {
-      discovery_problem: "Какую конкретную бизнес-проблему должен решить будущий агент?",
-      discovery_inputs: "Какие данные приходят на вход и в каком виде их получают сотрудники?",
-      discovery_outputs: "Какой результат должен получить пользователь на выходе?",
-      awaiting_confirmation: "Я собрал черновой brief. Проверь summary, попроси правки или явно подтверди текущую версию.",
-      downloads_ready: "Brief подтверждён. Shell показывает подготовку concept pack и зону загрузок.",
-    };
-    return prompts[stage] || prompts.discovery_problem;
+  function isLowSignalInput(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    if (normalized.length <= 2) {
+      return true;
+    }
+    if (/^[0-9\s.,!?-]+$/.test(normalized)) {
+      return true;
+    }
+    if (/^(ок|ага|угу|да|нет|норм|понял|поняла|хз|лол|test|123+|qwe+)$/i.test(normalized)) {
+      return true;
+    }
+    const words = normalized.split(/\s+/).filter(Boolean);
+    return words.length <= 2 && normalized.length < 18;
   }
 
-  function mockReplyCards(stage, projectKey) {
-    if (stage === "awaiting_confirmation") {
+  function buildMockCoverage(project, uploadedFiles = []) {
+    const covered = new Set();
+    if ((uploadedFiles || []).length > 0) {
+      covered.add("input_examples");
+    }
+    const userTurns = (project.timeline || [])
+      .filter((message) => message.role === "user")
+      .map((message) => normalizeText(message.body).toLowerCase())
+      .filter(Boolean);
+    userTurns.forEach((turn) => {
+      MOCK_DISCOVERY_TOPICS.forEach((topic) => {
+        if (covered.has(topic.id)) {
+          return;
+        }
+        if (topic.signals.some((signal) => turn.includes(signal))) {
+          covered.add(topic.id);
+        }
+      });
+    });
+    return covered;
+  }
+
+  function mockNextDiscoveryStep(project, userText, uploadedFiles = []) {
+    const coverage = buildMockCoverage(project, uploadedFiles);
+    const missing = MOCK_DISCOVERY_TOPICS.filter((topic) => !coverage.has(topic.id));
+    const next = missing[0] || MOCK_DISCOVERY_TOPICS[0];
+    const lowSignal = isLowSignalInput(userText);
+    const question = lowSignal
+      ? `Похоже, ответ получился слишком общим. Перефразируй, пожалуйста. ${next.question}`
+      : next.question;
+    return {
+      coveredCount: coverage.size,
+      totalCount: MOCK_DISCOVERY_TOPICS.length,
+      missing,
+      nextTopic: next.id,
+      nextQuestion: question,
+      whyAskingNow: next.why,
+      lowSignal,
+    };
+  }
+
+  function mockReplyCards(mode, projectKey, discoveryStep) {
+    if (mode === "awaiting_confirmation") {
       return [
         {
           card_kind: "status_update",
@@ -1514,7 +1705,7 @@
         },
       ];
     }
-    if (stage === "downloads_ready") {
+    if (mode === "downloads_ready") {
       return [
         {
           card_kind: "status_update",
@@ -1530,20 +1721,30 @@
         },
       ];
     }
-    return [
+    const progress = `${discoveryStep.coveredCount}/${discoveryStep.totalCount}`;
+    const cards = [
       {
         card_kind: "status_update",
         title: "Статус проекта",
-        body_text: `Сессия активна. Текущий этап: ${stage}.`,
+        body_text: `Сбор требований продолжается. Закрыто тем: ${progress}. ${discoveryStep.whyAskingNow}`,
         action_hints: ["request_status"],
       },
       {
         card_kind: "discovery_question",
         title: "",
-        body_text: mockDiscoveryPrompt(stage),
+        body_text: discoveryStep.nextQuestion,
         action_hints: ["submit_turn"],
       },
     ];
+    if (discoveryStep.lowSignal) {
+      cards.push({
+        card_kind: "clarification_prompt",
+        title: "Нужно уточнение",
+        body_text: "Сформулируй ответ чуть подробнее, чтобы я корректно зафиксировал требования в brief.",
+        action_hints: ["submit_turn"],
+      });
+    }
+    return cards;
   }
 
   function mockArtifacts(stage) {
@@ -1621,35 +1822,40 @@
       };
     }
 
+    const discoveryStep = mockNextDiscoveryStep(project, userText, uploadedFiles);
+    let mode = normalizeText(project.mockStage, "discovery");
     if (action === "confirm_brief") {
-      project.mockStage = "downloads_ready";
+      mode = "downloads_ready";
     } else if (action === "request_brief_correction" || action === "reopen_brief") {
-      project.mockStage = "awaiting_confirmation";
-    } else if (action === "request_status" && project.lastResponse) {
-      project.mockStage = project.mockStage || "discovery_problem";
-    } else if (project.mockStage === "gate_pending") {
-      project.mockStage = "discovery_problem";
-    } else if (project.mockStage === "discovery_problem") {
-      project.mockStage = "discovery_inputs";
-    } else if (project.mockStage === "discovery_inputs") {
-      project.mockStage = "discovery_outputs";
-    } else if (project.mockStage === "discovery_outputs") {
-      project.mockStage = "awaiting_confirmation";
+      mode = "awaiting_confirmation";
+    } else if (mode === "downloads_ready" && action === "request_status") {
+      mode = "downloads_ready";
+    } else if (discoveryStep.missing.length === 0 && !discoveryStep.lowSignal) {
+      mode = "awaiting_confirmation";
+    } else {
+      mode = "discovery";
     }
+    project.mockStage = mode;
 
-    const stage = project.mockStage;
-    const brief = stage === "awaiting_confirmation" || stage === "downloads_ready"
+    const brief = mode === "awaiting_confirmation" || mode === "downloads_ready"
       ? {
           brief_id: "brief-web-demo-001",
-          version: stage === "downloads_ready" ? "v3" : "v2",
+          version: mode === "downloads_ready" ? "v3" : "v2",
         }
       : {};
+    const confirmationPrompt = "Я собрал черновой brief. Проверь summary, попроси правки или явно подтверди текущую версию.";
+    const nextQuestion = mode === "awaiting_confirmation"
+      ? confirmationPrompt
+      : mode === "downloads_ready"
+        ? "Brief подтверждён. Можно скачать concept pack и при необходимости переоткрыть brief."
+        : discoveryStep.nextQuestion;
+    const nextTopic = mode === "discovery" ? discoveryStep.nextTopic : "";
 
     return {
-      status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
-      next_action: stage === "downloads_ready" ? "start_concept_pack_handoff" : stage === "awaiting_confirmation" ? "await_for_confirmation" : "continue_discovery",
-      next_topic: stage === "discovery_problem" ? "problem" : stage === "discovery_inputs" ? "input_examples" : "output_expectations",
-      next_question: mockDiscoveryPrompt(stage),
+      status: mode === "downloads_ready" ? "confirmed" : mode === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+      next_action: mode === "downloads_ready" ? "start_concept_pack_handoff" : mode === "awaiting_confirmation" ? "await_for_confirmation" : "continue_discovery",
+      next_topic: nextTopic,
+      next_question: nextQuestion,
       access_gate: {
         granted: true,
         reason: "",
@@ -1657,7 +1863,7 @@
       web_demo_session: {
         web_demo_session_id: project.sessionId,
         session_cookie_id: `cookie-${project.sessionId}`,
-        status: stage === "downloads_ready" ? "download_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        status: mode === "downloads_ready" ? "download_ready" : mode === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
         active_project_key: projectKey,
       },
       browser_project_pointer: {
@@ -1670,28 +1876,31 @@
         pointer_status: "active",
       },
       status_snapshot: {
-        user_visible_status: stage === "downloads_ready" ? "playground_ready" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
-        user_visible_status_label: stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
-        next_recommended_action: stage === "downloads_ready" ? "start_concept_pack_handoff" : stage === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
-        next_recommended_action_label: stage === "downloads_ready" ? "Передать brief в фабрику" : stage === "awaiting_confirmation" ? "Проверить и подтвердить brief" : "Ответить на следующий вопрос",
+        user_visible_status: mode === "downloads_ready" ? "playground_ready" : mode === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        user_visible_status_label: mode === "downloads_ready" ? "Артефакты готовы" : mode === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
+        next_recommended_action: mode === "downloads_ready" ? "start_concept_pack_handoff" : mode === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
+        next_recommended_action_label: mode === "downloads_ready" ? "Передать brief в фабрику" : mode === "awaiting_confirmation" ? "Проверить и подтвердить brief" : "Ответить на следующий вопрос",
         brief_version: brief.version || "",
-        download_readiness: stage === "downloads_ready" ? "ready" : "pending",
+        download_readiness: mode === "downloads_ready" ? "ready" : "pending",
         uploaded_file_count: uploadedFiles.length,
       },
-      reply_cards: mockReplyCards(stage, projectKey),
-      download_artifacts: mockArtifacts(stage),
+      reply_cards: mockReplyCards(mode, projectKey, discoveryStep),
+      download_artifacts: mockArtifacts(mode),
       uploaded_files: uploadedFiles,
       discovery_runtime_state: {
-        status: stage === "downloads_ready" ? "confirmed" : stage === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
-        next_question: mockDiscoveryPrompt(stage),
+        status: mode === "downloads_ready" ? "confirmed" : mode === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
+        next_question: nextQuestion,
+        missing_coverage: discoveryStep.missing.map((topic) => topic.id),
       },
       ui_projection: {
-        preferred_ui_action: stage === "downloads_ready" ? "request_status" : stage === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
-        current_question: mockDiscoveryPrompt(stage),
-        current_topic: stage === "discovery_problem" ? "problem" : stage === "discovery_inputs" ? "input_examples" : stage === "discovery_outputs" ? "expected_outputs" : "",
-        side_panel_mode: stage === "downloads_ready" ? "downloads" : stage === "awaiting_confirmation" ? "brief_review" : "hidden",
+        preferred_ui_action: mode === "downloads_ready" ? "request_status" : mode === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
+        current_question: nextQuestion,
+        current_topic: nextTopic,
+        why_asking_now: mode === "discovery" ? discoveryStep.whyAskingNow : "",
+        missing_coverage: discoveryStep.missing.map((topic) => topic.id),
+        side_panel_mode: mode === "downloads_ready" ? "downloads" : mode === "awaiting_confirmation" ? "brief_review" : "hidden",
         composer_helper_example: helperExampleFor(project),
-        project_stage_label: stage === "downloads_ready" ? "Артефакты готовы" : stage === "awaiting_confirmation" ? "Brief на проверке" : "Сбор требований",
+        project_stage_label: mode === "downloads_ready" ? "Артефакты готовы" : mode === "awaiting_confirmation" ? "Brief на проверке" : "Сбор требований",
         display_project_title: project.title,
         project_title: project.title,
         uploaded_file_count: uploadedFiles.length,
@@ -1839,6 +2048,7 @@
       state.activeRequest = null;
       renderAll();
       setBusy(false);
+      focusComposerSoon();
     }
   }
 
@@ -1877,6 +2087,7 @@
   }
 
   function handleActionShortcut(action) {
+    closeProjectActionsMenu();
     const project = getActiveProject();
     if (!state.accessToken || action === "submit_access_token") {
       dom.accessTokenInput.focus();
@@ -1886,12 +2097,10 @@
     if (action === "start_project") {
       if (!project || hasConversationActivity(project)) {
         createNewProject({ activate: true });
-        persist();
-        renderAll();
       }
       const active = getActiveProject();
       setProjectAction(active, "start_project");
-      dom.composerInput.focus();
+      focusComposerSoon();
       return;
     }
 
@@ -1924,20 +2133,41 @@
     }
 
     setProjectAction(project, action);
-    dom.composerInput.focus();
+    focusComposerSoon();
   }
 
   function bindEvents() {
     dom.newProject.addEventListener("click", () => {
       createNewProject({ activate: true });
-      dom.composerInput.focus();
+      focusComposerSoon();
     });
 
-    dom.projectMenu.addEventListener("click", () => {
+    dom.projectMenu.addEventListener("click", (event) => {
+      event.stopPropagation();
       const project = getActiveProject();
       if (project) {
-        promptRenameProject(project.id);
+        openProjectActionsMenu(project.id, dom.projectMenu);
       }
+    });
+
+    dom.projectActionsRename.addEventListener("click", () => {
+      const projectId = normalizeText(state.projectActions.projectId);
+      closeProjectActionsMenu();
+      renderProjectActionsMenu();
+      if (!projectId) {
+        return;
+      }
+      promptRenameProject(projectId);
+    });
+
+    dom.projectActionsDelete.addEventListener("click", () => {
+      const projectId = normalizeText(state.projectActions.projectId);
+      closeProjectActionsMenu();
+      renderProjectActionsMenu();
+      if (!projectId) {
+        return;
+      }
+      deleteProjectWithConfirm(projectId);
     });
 
     dom.sidePanelToggle.addEventListener("click", () => {
@@ -1972,7 +2202,7 @@
         persist();
       }
       resizeComposerInput();
-      dom.composerInput.focus();
+      focusComposerSoon();
     });
 
     dom.composerInput.addEventListener("input", () => {
@@ -1990,7 +2220,7 @@
     });
 
     dom.composerInput.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || !event.shiftKey || event.isComposing) {
+      if (state.awaitingResponse || event.key !== "Enter" || event.shiftKey || event.isComposing) {
         return;
       }
       event.preventDefault();
@@ -2000,7 +2230,10 @@
     dom.composerForm.addEventListener("submit", (event) => {
       event.preventDefault();
       if (state.awaitingResponse) {
-        stopActiveResponse();
+        const stopRequested = event.submitter === dom.composerSubmit || document.activeElement === dom.composerSubmit;
+        if (stopRequested) {
+          stopActiveResponse();
+        }
         return;
       }
       const project = getActiveProject();
@@ -2023,6 +2256,7 @@
       if (project.currentAction !== "submit_turn") {
         setProjectAction(project, "submit_turn");
       }
+      focusComposerSoon();
     });
 
     dom.attachmentInput.addEventListener("change", async () => {
@@ -2056,7 +2290,7 @@
         renderAttachmentList(project);
         renderStatus(project);
         persist();
-        dom.composerInput.focus();
+        focusComposerSoon();
       }
 
       const warnings = [];
@@ -2077,19 +2311,41 @@
       renderComposer(project);
     });
 
-    dom.accessSubmit.addEventListener("click", () => {
-      unlockAccess();
-    });
-
-    dom.accessTokenInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
+    if (dom.accessForm) {
+      dom.accessForm.addEventListener("submit", (event) => {
         event.preventDefault();
         unlockAccess();
-      }
-    });
+      });
+    }
 
     dom.refreshSession.addEventListener("click", () => {
       refreshActiveProject({ syncReason: "manual_refresh" });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!state.projectActions.open) {
+        return;
+      }
+      if (!dom.projectActionsMenu || !dom.projectMenu) {
+        return;
+      }
+      if (dom.projectActionsMenu.contains(event.target) || dom.projectMenu.contains(event.target)) {
+        return;
+      }
+      const clickedMenuTrigger = event.target instanceof Element ? event.target.closest(".project-card__menu") : null;
+      if (clickedMenuTrigger) {
+        return;
+      }
+      closeProjectActionsMenu();
+      renderProjectActionsMenu();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.projectActions.open) {
+        closeProjectActionsMenu();
+        renderProjectActionsMenu();
+        focusComposerSoon();
+      }
     });
   }
 

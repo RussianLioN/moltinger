@@ -1173,7 +1173,7 @@ def build_web_reply_cards(
         cards.append(
             build_web_reply_card(
                 "clarification_prompt" if next_action == "resolve_clarification" else "discovery_question",
-                title="Нужно уточнение" if next_action == "resolve_clarification" else "Следующий вопрос",
+                title="Нужно уточнение" if next_action == "resolve_clarification" else "",
                 body_text=next_question,
                 web_demo_session_id=session_id,
                 action_hints=["submit_turn"],
