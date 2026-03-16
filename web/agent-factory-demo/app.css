@@ -569,9 +569,12 @@ code {
 }
 
 .composer textarea {
-  min-height: 132px;
-  padding: 16px 18px;
-  resize: vertical;
+  min-height: 52px;
+  max-height: 220px;
+  padding: 14px 18px;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: hidden;
 }
 
 .composer__footer {
@@ -805,8 +808,8 @@ code {
   }
 
   .composer-send {
-    width: 100%;
-    border-radius: 999px;
+    width: 52px;
+    border-radius: 50%;
     min-height: 46px;
   }
 

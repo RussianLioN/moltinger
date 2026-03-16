@@ -325,6 +325,17 @@
     };
   }
 
+  function sanitizeTimeline(items) {
+    return (Array.isArray(items) ? items : []).map((entry) => {
+      const message = entry && typeof entry === "object" ? { ...entry } : {};
+      const title = normalizeText(message.title);
+      if (/^следующий вопрос$/i.test(title)) {
+        message.title = "";
+      }
+      return message;
+    });
+  }
+
   function normalizeProjectRecord(value) {
     const record = value && typeof value === "object" ? value : {};
     const id = normalizeText(record.id, `project-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`);
@@ -336,7 +347,7 @@
       sidePanelOpen: Boolean(record.sidePanelOpen),
       lastPanelMode: normalizeText(record.lastPanelMode),
       sessionId: normalizeText(record.sessionId, defaultSessionId(id)),
-      timeline: Array.isArray(record.timeline) ? record.timeline : [],
+      timeline: sanitizeTimeline(record.timeline),
       lastResponse: record.lastResponse && typeof record.lastResponse === "object" ? record.lastResponse : null,
       draftText: normalizeText(record.draftText),
       createdAt: normalizeText(record.createdAt, updatedAt),
@@ -398,6 +409,23 @@
       state.projects = Array.isArray(saved.projects) && saved.projects.length
         ? saved.projects.map((project) => normalizeProjectRecord(project))
         : [];
+      state.projects.forEach((project) => {
+        if (project.titleEdited) {
+          return;
+        }
+        const firstUserMessage = (project.timeline || []).find(
+          (message) => message.role === "user" && Boolean(normalizeText(message.body)),
+        );
+        if (!firstUserMessage) {
+          return;
+        }
+        if (looksLikeExcerpt(project.title, firstUserMessage.body)) {
+          const repaired = prettifyTitle(firstUserMessage.body);
+          if (repaired) {
+            project.title = repaired;
+          }
+        }
+      });
       state.activeProjectId = normalizeText(saved.activeProjectId);
     }
     if (!state.projects.length) {
@@ -807,8 +835,9 @@
     kind.textContent = "";
     kind.hidden = true;
     const titleText = normalizeText(message.title);
+    const hideRedundantTitle = /^следующий вопрос$/i.test(titleText);
     title.textContent = titleText;
-    title.hidden = !titleText;
+    title.hidden = !titleText || hideRedundantTitle;
     meta.hidden = true;
     body.textContent = message.body || "";
     attachments.innerHTML = "";
@@ -1098,6 +1127,7 @@
     dom.composerNotice.hidden = !dom.composerNotice.textContent;
     dom.composerNotice.dataset.tone = normalizeText(state.composerNotice?.tone, "info");
     dom.composerInput.value = normalizeText(project?.draftText);
+    resizeComposerInput();
   }
 
   function renderAll() {
@@ -1116,6 +1146,17 @@
     renderSidePanel(project);
   }
 
+  function resizeComposerInput() {
+    if (!dom.composerInput) {
+      return;
+    }
+    const maxHeight = 220;
+    dom.composerInput.style.height = "auto";
+    const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, 52), maxHeight);
+    dom.composerInput.style.height = `${nextHeight}px`;
+    dom.composerInput.style.overflowY = dom.composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
   function setProjectAction(project, action) {
     if (!project) {
       return;
@@ -1129,6 +1170,25 @@
   function looksLikeSlug(value) {
     const text = normalizeText(value);
     return Boolean(text && !/\s/.test(text) && /-/.test(text));
+  }
+
+  function looksLikeExcerpt(value, sourceText = "") {
+    const title = normalizeText(value);
+    if (!title) {
+      return false;
+    }
+    if (/[.…]$/.test(title) || /\.\.\./.test(title)) {
+      return true;
+    }
+    if (title.length > 58) {
+      return true;
+    }
+    const source = normalizeText(sourceText).toLowerCase();
+    if (!source) {
+      return false;
+    }
+    const normalizedTitle = title.toLowerCase().replace(/[.…]+$/, "");
+    return normalizedTitle.length >= 18 && source.startsWith(normalizedTitle);
   }
 
   function titleCaseFromWords(words, maxWords = 5) {
@@ -1157,12 +1217,16 @@
     if (/(счет|счёт|инвойс|invoice)/.test(source) && /(согласован|маршрут|approval)/.test(source)) {
       return "Маршрутизация согласования счетов";
     }
+    if (/(клиент|customer)/.test(source) && /(профил|карточк|summary|саммари)/.test(source)) {
+      return "Карточка клиента";
+    }
     return "";
   }
 
   function prettifyTitle(text) {
     const normalized = normalizeText(text)
       .replace(/\s+/g, " ")
+      .replace(/…|\.\.\./g, " ")
       .replace(/^[\-\s]+|[\-\s]+$/g, "");
     if (!normalized) {
       return "";
@@ -1177,6 +1241,7 @@
       .replace(/^нужно автоматизировать\s*/i, "")
       .replace(/^нужна автоматизация\s*/i, "")
       .replace(/^автоматизировать\s+/i, "")
+      .replace(/^автоматизация\s+/i, "")
       .replace(/^ускорить\s+/i, "")
       .replace(/^сделать\s+/i, "")
       .replace(/^чтобы\s+/i, "");
@@ -1184,12 +1249,34 @@
     if (semantic) {
       return semantic;
     }
+    const stopwords = new Set([
+      "который",
+      "которая",
+      "которые",
+      "чтобы",
+      "если",
+      "тогда",
+      "нужно",
+      "надо",
+      "очень",
+      "просто",
+      "процесс",
+      "проект",
+      "система",
+      "данные",
+      "пользователь",
+    ]);
     const words = (cleaned || firstSentence)
       .replace(/[,:;()"'`«»]+/g, " ")
       .split(/\s+/)
       .map((word) => word.trim())
-      .filter((word) => word.length >= 3);
-    return titleCaseFromWords(words, 5);
+      .filter((word) => word.length >= 3)
+      .filter((word) => !stopwords.has(word.toLowerCase()));
+    const candidate = titleCaseFromWords(words, 4);
+    if (/^(новый проект|проект|автоматизация|задача)$/i.test(candidate)) {
+      return "";
+    }
+    return candidate;
   }
 
   function maybeAutonameProject(project, userText, response) {
@@ -1197,13 +1284,17 @@
       return;
     }
     const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
-    const uiCandidate = !looksLikeSlug(uiTitle) ? prettifyTitle(uiTitle) : "";
+    const uiCandidate = !looksLikeSlug(uiTitle) && !looksLikeExcerpt(uiTitle, userText) ? prettifyTitle(uiTitle) : "";
     const userCandidate = prettifyTitle(userText);
-    const candidate = uiCandidate && uiCandidate !== DEFAULT_PROJECT_TITLE ? uiCandidate : userCandidate;
+    const candidate = userCandidate || uiCandidate;
     if (!candidate) {
       return;
     }
-    if (project.title === DEFAULT_PROJECT_TITLE || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} `)) {
+    if (
+      project.title === DEFAULT_PROJECT_TITLE
+      || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} `)
+      || looksLikeExcerpt(project.title, userText)
+    ) {
       project.title = candidate;
     }
   }
@@ -1227,6 +1318,19 @@
 
   function createNewProject(options = {}) {
     saveComposerDraft();
+    const active = getActiveProject();
+    const reusable = isEmptyDraftProject(active)
+      ? active
+      : state.projects.find((item) => item.id !== active?.id && isEmptyDraftProject(item));
+    if (reusable && options.forceCreate !== true) {
+      state.activeProjectId = reusable.id;
+      reusable.updatedAt = nowIso();
+      if (options.activate !== false) {
+        renderAll();
+      }
+      persist();
+      return reusable;
+    }
     const project = createProject();
     state.projects.unshift(project);
     state.activeProjectId = project.id;
@@ -1235,6 +1339,18 @@
     }
     persist();
     return project;
+  }
+
+  function isEmptyDraftProject(project) {
+    if (!project) {
+      return false;
+    }
+    const hasUserMessages = (project.timeline || []).some(
+      (message) => message.role === "user" && Boolean(normalizeText(message.body)),
+    );
+    const hasDraftText = Boolean(normalizeText(project.draftText));
+    const hasUploads = uniqueUploads(project.pendingUploads || []).length > 0;
+    return !hasUserMessages && !hasConversationActivity(project) && !hasDraftText && !hasUploads;
   }
 
   function switchProject(projectId) {
@@ -1423,7 +1539,7 @@
       },
       {
         card_kind: "discovery_question",
-        title: "Следующий вопрос",
+        title: "",
         body_text: mockDiscoveryPrompt(stage),
         action_hints: ["submit_turn"],
       },
@@ -1814,8 +1930,6 @@
   function bindEvents() {
     dom.newProject.addEventListener("click", () => {
       createNewProject({ activate: true });
-      persist();
-      renderAll();
       dom.composerInput.focus();
     });
 
@@ -1857,6 +1971,7 @@
         project.draftText = dom.composerInput.value;
         persist();
       }
+      resizeComposerInput();
       dom.composerInput.focus();
     });
 
@@ -1870,11 +1985,12 @@
         clearComposerNotice();
         renderComposer(project);
       }
+      resizeComposerInput();
       persist();
     });
 
     dom.composerInput.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+      if (event.key !== "Enter" || !event.shiftKey || event.isComposing) {
         return;
       }
       event.preventDefault();
@@ -1903,6 +2019,7 @@
       project.draftText = "";
       dispatchTurn(project.currentAction, text, { queuedUploads });
       dom.composerInput.value = "";
+      resizeComposerInput();
       if (project.currentAction !== "submit_turn") {
         setProjectAction(project, "submit_turn");
       }

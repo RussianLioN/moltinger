@@ -52,6 +52,11 @@ GitOps Compliance: Enforced ✅
 
 ### Current Session Update (2026-03-16)
 
+- Применён targeted UX-hotfix для `https://asc.ainetic.tech` в `web/agent-factory-demo/app.js`, `web/agent-factory-demo/app.css`, `web/agent-factory-demo/index.html`: устранён повторный anti-pattern с названием проекта (автоимя теперь не берётся как обрезанный первый ответ с многоточием), повторный клик `Новый проект` больше не создаёт дубликаты пустых чатов, из ленты убран избыточный заголовок `Следующий вопрос`, а composer стартует в одну строку и автоматически растёт по мере ввода.
+- Для обратной совместимости добавлена мягкая миграция локального состояния браузера: старые timeline-сообщения с заголовком `Следующий вопрос` очищаются при hydrate, а слабые/обрезанные автоназвания существующих проектов пересобираются из первого пользовательского ответа без ручного вмешательства.
+- Обновлён Speckit-артефакт `specs/024-web-factory-demo-adapter/tasks.md`: добавлены и закрыты задачи `T045-T048` под текущий UX-hardening pass.
+- Локальная проверка после патча: `node --check web/agent-factory-demo/app.js` (green).
+
 - После нового пользовательского UX-review для `https://asc.ainetic.tech` дополнительно упрощена именно лента диалога в `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css` и `web/agent-factory-demo/app.js`: из primary chat feed убраны service/status карточки, кнопки действий внутри самих сообщений и визуально тяжёлый panel-header; в ленте остались только реальные реплики пользователя и фабричного агента.
 - `thread-panel` теперь работает как лёгкий bubble-feed без видимого dashboard-header, стартовый `empty shell` больше не вставляется в timeline, а пользовательские сообщения отправляются без служебных заголовков вроде `Новый проект` или `Ответить`, чтобы поток ощущался ближе к Telegram/Codex chat UX.
 - Визуал ленты упрощён под calm chat pattern: уменьшен стартовый hero, ослаблен фон thread area, сообщения превращены в компактные bubble-блоки с мягким разделением `agent/user`, а системные runtime-детали по-прежнему остаются только в hidden debug surface и не попадают в primary viewport.

@@ -172,6 +172,10 @@
 - [x] T042 [P] Refresh topology documentation in `docs/GIT-TOPOLOGY-REGISTRY.md`
 - [x] T043 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
 - [x] T044 Run target web-demo validation slices from `specs/024-web-factory-demo-adapter/quickstart.md`
+- [x] T045 [US1] Harden project auto-naming so title is semantic and never a truncated first user message in `web/agent-factory-demo/app.js`
+- [x] T046 [US1] Prevent duplicate empty projects on repeated `Новый проект` clicks by reusing an existing empty draft in `web/agent-factory-demo/app.js`
+- [x] T047 [US1] Remove redundant `Следующий вопрос` headings from chat timeline rendering and migrated local state in `web/agent-factory-demo/app.js`
+- [x] T048 [US1] Switch composer to one-line start with auto-grow behavior in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js`
 
 ---
 
