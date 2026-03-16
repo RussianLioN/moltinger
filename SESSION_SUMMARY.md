@@ -147,6 +147,23 @@ GitOps Compliance: Enforced ✅
 - Completed `Phase 2: Foundational` for `024-web-factory-demo-adapter` (`molt-vd0.3.*`): added the reusable browser-session fixture `tests/fixtures/agent-factory/web-demo/session-new.json`, implemented the new adapter runtime `scripts/agent-factory-web-adapter.py`, and extended `scripts/agent_factory_common.py` with browser-oriented status, reply-card, and download projection helpers so one browser turn can already be gated, normalized, routed, persisted, and rendered without touching the downstream factory flow.
 - Added foundational validation coverage for the browser adapter in `tests/component/test_agent_factory_web_access.sh` and `tests/integration_local/test_agent_factory_web_flow.sh`, covering fail-closed access gating, restored-session status requests, first-turn discovery routing, and continued discovery after a follow-up browser answer.
 - Added the initial browser shell assets under `web/agent-factory-demo/` (`index.html`, `app.css`, `app.js`) plus the operator runbook `docs/runbooks/agent-factory-web-demo.md`, so the repo now contains a concrete local web shell, adapter contract notes, storage layout, and the current lightweight HTTP surface (`/health`, `/`, `/app.css`, `/app.js`, `/api/session`, `/api/turn`).
+
+### Current Session Update (2026-03-17)
+
+- Устранена ключевая причина «неинтеллектуального» диалога в web-demo: в `scripts/agent-factory-web-adapter.py` добавлен server-side `low-signal guard`, поэтому ответы вида `ping/ok/123` больше не считаются валидным закрытием темы и не продвигают discovery дальше по topic chain.
+- Добавлен adaptive `Агент-архитектор Moltis` question composer в `scripts/agent-factory-web-adapter.py`: следующий вопрос теперь формируется с учётом текущего `next_topic`, уже собранных summary по темам и контекста вложенных файлов, а в `ui_projection` публикуются `agent_display_name`, `agent_role=architect` и `question_source`.
+- Обновлён browser shell под новую ролевую модель: `web/agent-factory-demo/index.html` и `web/agent-factory-demo/app.js` теперь явно маркируют реплики как ответы `Агента-архитектора Moltis`, включая author label сообщений и composer copy.
+- Расширено покрытие:
+  - `tests/component/test_agent_factory_web_discovery.sh` проверяет architect projection (`agent_display_name`, `question_source`).
+  - `tests/integration_local/test_agent_factory_web_flow.sh` добавляет сценарий `low-signal reply` и проверяет, что topic не меняется, summary не затирается и возвращается reprompt.
+- В Speckit синхронизированы и закрыты задачи `T055-T056` в `specs/024-web-factory-demo-adapter/tasks.md`.
+- Проверки в этой сессии:
+  - `python3 -m py_compile scripts/agent-factory-web-adapter.py`
+  - `node --check web/agent-factory-demo/app.js`
+  - `bash tests/component/test_agent_factory_web_discovery.sh`
+  - `bash tests/integration_local/test_agent_factory_web_flow.sh`
+  - `./tests/run.sh --lane component --filter 'component_agent_factory_web_(access|discovery|brief|delivery)' --json`
+- Ограничение среды: `./tests/run.sh --lane integration_local ...` в этой среде утыкается в недоступный Docker socket (`/Users/rl/.docker/run/docker.sock`), поэтому как blocking signal использованы прямые integration-скрипты выше.
 - Completed `Phase 3 / User Story 1` for `024-web-factory-demo-adapter` (`molt-vd0.4.*`): the browser adapter now keeps the live discovery shell on the correct next action after the first runtime response, exposes `ui_projection.preferred_ui_action`, and publishes business-readable browser labels through `status_snapshot.user_visible_status_label` and `status_snapshot.next_recommended_action_label` instead of leaking internal state codes.
 - Added the US1 fixture `tests/fixtures/agent-factory/web-demo/session-discovery-answer.json`, component coverage in `tests/component/test_agent_factory_web_discovery.sh`, and browser e2e coverage in `tests/e2e_browser/agent_factory_web_demo.mjs`, validating the first raw idea turn, the first follow-up question, the continued answer turn, and the user-safe rendering contract inside the web shell.
 - Updated `web/agent-factory-demo/index.html` and `web/agent-factory-demo/app.js` so the live shell now exposes stable browser selectors (`accessToken`, `messages`, `chatInput`, `sendBtn`), renders human-readable discovery status text, and keeps the composer in `submit_turn` mode after the first follow-up question instead of falling back to a status-only action.

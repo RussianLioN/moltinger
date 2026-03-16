@@ -58,6 +58,25 @@ run_integration_local_agent_factory_web_flow_tests() {
         test_fail "Browser adapter should resume the saved session and advance discovery after a follow-up answer"
     fi
 
+    test_start "integration_local_agent_factory_web_flow_keeps_topic_on_low_signal_reply"
+    if jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-004",
+          "request_id": "web-request-claims-routing-004",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "ping"
+        } | del(.demo_access_grant)' "$tmpdir/start-out.json" >"$tmpdir/turn-low-signal.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-low-signal.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-low-signal-out.json" >/dev/null; then
+        assert_eq "awaiting_user_reply" "$(jq -r '.status' "$tmpdir/turn-low-signal-out.json")" "Low-signal browser reply should keep the dialog active"
+        assert_eq "target_users" "$(jq -r '.next_topic' "$tmpdir/turn-low-signal-out.json")" "Low-signal reply should not advance discovery to the next topic"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/turn-low-signal-out.json")" "слишком общий" "Low-signal reply should trigger an architect reprompt"
+        assert_eq "" "$(jq -r '.discovery_runtime_state.requirement_topics[] | select(.topic_name == "target_users") | .summary' "$tmpdir/turn-low-signal-out.json")" "Low-signal reply must not overwrite canonical topic summary"
+        assert_eq "low_signal_guard" "$(jq -r '.ui_projection.question_source' "$tmpdir/turn-low-signal-out.json")" "UI projection should expose low-signal guard mode"
+        test_pass
+    else
+        test_fail "Browser adapter should keep the same discovery topic when the user sends low-signal input"
+    fi
+
     generate_report
 }
 

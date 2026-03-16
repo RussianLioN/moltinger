@@ -606,7 +606,7 @@
     if (!hasConversationActivity(project)) {
       return "Опиши задачу";
     }
-    return "Ответ агенту";
+    return "Ответ агенту-архитектору";
   }
 
   function placeholderFor(project) {
@@ -733,7 +733,7 @@
     if (status === "playground_ready" || status === "confirmed") {
       return "Материалы готовы. Открой правую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
-    return "Продолжай диалог с агентом и при необходимости прикладывай файлы с примерами.";
+    return "Продолжай диалог с агентом-архитектором и при необходимости прикладывай файлы с примерами.";
   }
 
   function responseActions(response) {
@@ -961,7 +961,7 @@
     }[message.role || "agent"];
     article.classList.add(roleClass);
     author.textContent = message.author || {
-      agent: "Фабричный агент",
+      agent: "Агент-архитектор Moltis",
       user: "Пользователь",
       system: "Система",
       artifact: "Фабрика",
@@ -994,10 +994,12 @@
   }
 
   function timelineMessagesFromResponse(response) {
+    const architectName = normalizeText(response?.ui_projection?.agent_display_name, "Агент-архитектор Moltis");
     return (response?.reply_cards || [])
       .filter((card) => ["discovery_question", "clarification_prompt"].includes(card.card_kind))
       .map((card) => ({
         role: "agent",
+        author: architectName,
         kind: card.card_kind || "reply_card",
         title: "",
         body: card.body_text || "",

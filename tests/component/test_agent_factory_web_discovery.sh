@@ -41,6 +41,8 @@ run_component_agent_factory_web_discovery_tests() {
 
         assert_eq "status_update,discovery_question" "$card_kinds" "US1 should render a status card plus the next discovery question"
         assert_eq "Сбор требований продолжается | Ответить на следующий вопрос" "$label_text" "Status snapshot should project browser-readable discovery labels"
+        assert_eq "Агент-архитектор Moltis" "$(jq -r '.ui_projection.agent_display_name' "$tmpdir/session-new.json")" "UI projection should expose the architect agent identity"
+        assert_eq "adaptive_architect" "$(jq -r '.ui_projection.question_source' "$tmpdir/session-new.json")" "First follow-up question should come from adaptive architect composer"
         assert_contains "$card_text" "Кто будет основным пользователем" "The first browser follow-up must stay business-readable"
         assert_contains "$card_text" "Сбор требований продолжается" "Status copy should explain the live discovery state in plain language"
         if assert_safe_browser_copy "$card_text" "Browser-visible reply cards must not leak internal machine codes or repo paths"; then
@@ -58,6 +60,7 @@ run_component_agent_factory_web_discovery_tests() {
         card_text="$(jq -r '[.reply_cards[].body_text] | join("\n---\n")' "$tmpdir/session-answer.json")"
 
         assert_eq "current_workflow" "$(jq -r '.next_topic' "$tmpdir/session-answer.json")" "Second browser turn should advance the interview to current workflow"
+        assert_eq "adaptive_architect" "$(jq -r '.ui_projection.question_source' "$tmpdir/session-answer.json")" "Follow-up question should stay in adaptive architect mode"
         assert_eq "status_update,discovery_question" "$card_kinds" "Follow-up browser turn should keep the status card plus the next discovery question"
         assert_eq "Сбор требований продолжается | Ответить на следующий вопрос" "$label_text" "Follow-up browser turn should preserve the same browser-readable status projection"
         assert_contains "$card_text" "Как этот процесс работает сейчас" "The next browser question should move to the current workflow topic"

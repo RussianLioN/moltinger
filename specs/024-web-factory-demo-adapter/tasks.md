@@ -182,6 +182,8 @@
 - [x] T052 [US1] Implement safe project deletion flow with confirm and clean new-project workspace focus (without forced switch to neighboring chat) in `web/agent-factory-demo/app.js`
 - [x] T053 [US1] Harden mock fallback to adaptive discovery questioning with low-signal reprompts and coverage tracking in `web/agent-factory-demo/app.js`
 - [x] T054 [US1] Remove residual `Следующий вопрос` title generation in shared web card builder `scripts/agent_factory_common.py`
+- [x] T055 [US1] Add server-side low-signal guard and adaptive architect question composer in `scripts/agent-factory-web-adapter.py` so weak replies do not advance discovery topics
+- [x] T056 [US1] Surface `Агент-архитектор Moltis` identity in `ui_projection` and browser shell (`web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.js`) with updated discovery/integration tests
 
 ---
 

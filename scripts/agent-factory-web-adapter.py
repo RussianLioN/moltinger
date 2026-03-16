@@ -88,6 +88,71 @@ TEXT_UPLOAD_SUFFIXES = {
     ".log",
     ".docx",
 }
+ARCHITECT_AGENT_DISPLAY_NAME_DEFAULT = "Агент-архитектор Moltis"
+LOW_SIGNAL_MARKERS = {
+    "ok",
+    "okay",
+    "test",
+    "ping",
+    "ок",
+    "ага",
+    "угу",
+    "да",
+    "нет",
+    "норм",
+    "понял",
+    "поняла",
+    "хз",
+    "лол",
+    "+",
+}
+ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
+    "problem": {
+        "lead": "Начинаем с контекста задачи.",
+        "question": "Какую конкретную бизнес-проблему должен решить будущий агент?",
+        "example": "Например: заявки согласуются слишком долго, из-за чего сделки теряются.",
+    },
+    "target_users": {
+        "lead": "Чтобы спроектировать рабочие сценарии агента, уточню роли пользователей.",
+        "question": "Кто будет основным пользователем или выгодоприобретателем результата?",
+        "example": "Например: оператор первой линии и руководитель кредитного комитета.",
+    },
+    "current_workflow": {
+        "lead": "Теперь нужно зафиксировать текущий процесс как есть.",
+        "question": "Как этот процесс работает сейчас и где основные потери?",
+        "example": "Например: часть шагов делается в Excel вручную и теряется время на сверку.",
+    },
+    "desired_outcome": {
+        "lead": "Дальше уточним целевое состояние после автоматизации.",
+        "question": "Какой результат должен получать бизнес после автоматизации?",
+        "example": "Например: время обработки сокращено вдвое, а исключения автоматически эскалируются.",
+    },
+    "user_story": {
+        "lead": "Нужно закрепить приоритетный пользовательский сценарий.",
+        "question": "Какому сотруднику и в какой ситуации агент должен помогать в первую очередь?",
+        "example": "Например: дежурному аналитику при первичной проверке входящей заявки.",
+    },
+    "input_examples": {
+        "lead": "Теперь зафиксируем входы, на которых агент будет работать.",
+        "question": "Приведи 1-2 типовых примера входных данных или ситуаций, с которыми агент будет работать.",
+        "example": "Например: заявка клиента, письмо в свободной форме, CSV-выгрузка.",
+    },
+    "expected_outputs": {
+        "lead": "Фиксируем ожидаемый результат работы агента.",
+        "question": "Что пользователь должен получить на выходе по итогам обработки?",
+        "example": "Например: решение, пояснение причин и список шагов для исполнения.",
+    },
+    "constraints": {
+        "lead": "Перед сборкой решения уточним ограничения и запреты.",
+        "question": "Какие ограничения, запреты или исключения нужно учитывать?",
+        "example": "Например: не использовать персональные данные и не отправлять сообщения клиенту без согласования.",
+    },
+    "success_metrics": {
+        "lead": "Нужны измеримые критерии, по которым проверим пользу автоматизации.",
+        "question": "По каким признакам поймем, что решение действительно приносит пользу?",
+        "example": "Например: время обработки, точность классификации и доля ручных эскалаций.",
+    },
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -583,6 +648,148 @@ def uploaded_files_context(uploaded_files: list[dict[str, Any]]) -> str:
     return "\n".join(parts)
 
 
+def architect_agent_display_name() -> str:
+    return env_text("ASC_DEMO_ARCHITECT_AGENT_LABEL") or ARCHITECT_AGENT_DISPLAY_NAME_DEFAULT
+
+
+def shorten_text(value: Any, limit: int = 120) -> str:
+    text = normalize_text(value)
+    if not text:
+        return ""
+    compact = re.sub(r"\s+", " ", text).strip()
+    if len(compact) <= limit:
+        return compact
+    trimmed = compact[:limit].rsplit(" ", 1)[0].strip()
+    return f"{trimmed or compact[:limit]}…"
+
+
+def is_low_signal_reply(user_text: str, uploaded_files: list[dict[str, Any]] | None = None) -> bool:
+    if normalize_uploaded_files(uploaded_files):
+        return False
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    if normalized in LOW_SIGNAL_MARKERS:
+        return True
+    if len(normalized) <= 2:
+        return True
+    if re.fullmatch(r"[0-9\s.,!?+\-_/\\]+", normalized):
+        return True
+    words = [word for word in re.split(r"\s+", normalized) if word]
+    return len(words) <= 2 and len(normalized) < 20
+
+
+def requirement_topic_summaries(runtime_state: dict[str, Any]) -> dict[str, str]:
+    summaries: dict[str, str] = {}
+    topics = runtime_state.get("requirement_topics")
+    if not isinstance(topics, list):
+        return summaries
+    for item in topics:
+        if not isinstance(item, dict):
+            continue
+        topic_name = normalize_text(item.get("topic_name"))
+        summary = normalize_text(item.get("summary"))
+        if topic_name and summary:
+            summaries[topic_name] = summary
+    return summaries
+
+
+def context_hint_for_topic(
+    next_topic: str,
+    topic_summaries: dict[str, str],
+    uploaded_files: list[dict[str, Any]],
+) -> str:
+    problem = topic_summaries.get("problem", "")
+    target_users = topic_summaries.get("target_users", "")
+    current_workflow = topic_summaries.get("current_workflow", "")
+    desired_outcome = topic_summaries.get("desired_outcome", "")
+    normalized_uploads = normalize_uploaded_files(uploaded_files)
+    upload_names = [normalize_text(item.get("name")) for item in normalized_uploads if normalize_text(item.get("name"))]
+
+    if next_topic == "target_users" and problem:
+        return f"Понял проблему: {shorten_text(problem, 90)}."
+    if next_topic == "current_workflow" and target_users:
+        return f"Зафиксировал пользователей: {shorten_text(target_users, 80)}."
+    if next_topic == "desired_outcome" and current_workflow:
+        return f"Принял текущий процесс: {shorten_text(current_workflow, 90)}."
+    if next_topic == "user_story" and target_users:
+        return f"Роли уже понятны: {shorten_text(target_users, 80)}."
+    if next_topic == "input_examples" and upload_names:
+        listed = ", ".join(upload_names[:2])
+        suffix = " и ещё файлы" if len(upload_names) > 2 else ""
+        return f"Вижу приложенные файлы: {listed}{suffix}."
+    if next_topic == "expected_outputs" and desired_outcome:
+        return f"Целевой бизнес-эффект уже зафиксирован: {shorten_text(desired_outcome, 90)}."
+    if next_topic == "constraints" and desired_outcome:
+        return "Чтобы решение было безопасным и выполнимым, уточним ограничения."
+    if next_topic == "success_metrics" and desired_outcome:
+        return "Осталось зафиксировать измеримые критерии успеха для запуска в фабрику."
+    return ""
+
+
+def adaptive_architect_question(
+    *,
+    next_question: str,
+    next_topic: str,
+    runtime_state: dict[str, Any],
+    envelope: dict[str, Any],
+    uploaded_files: list[dict[str, Any]],
+    force_low_signal_guard: bool = False,
+) -> tuple[str, str]:
+    topic = normalize_text(next_topic)
+    frame = ARCHITECT_TOPIC_FRAMES.get(topic, {})
+    base_question = normalize_text(frame.get("question")) or normalize_text(next_question)
+    if not base_question:
+        base_question = "Опиши, пожалуйста, подробнее рабочий контекст, чтобы я корректно зафиксировал требования."
+    example = normalize_text(frame.get("example"))
+    lead = normalize_text(frame.get("lead"))
+    user_text = normalize_text(envelope.get("user_text"))
+    low_signal = force_low_signal_guard or is_low_signal_reply(user_text, uploaded_files)
+    if low_signal:
+        reprompt = "Ответ пока слишком общий, из него нельзя зафиксировать требование в brief."
+        question = f"{reprompt} {base_question}"
+        if example:
+            question = f"{question} Например: {example}"
+        return question, "low_signal_guard"
+
+    summaries = requirement_topic_summaries(runtime_state)
+    context_hint = context_hint_for_topic(topic, summaries, uploaded_files)
+    parts = [context_hint or lead, base_question]
+    if example:
+        parts.append(f"Например: {example}")
+    question = " ".join(part for part in parts if normalize_text(part))
+    return question, "adaptive_architect"
+
+
+def patch_runtime_next_question(runtime_state: dict[str, Any], *, next_question: str, next_topic: str) -> None:
+    if not isinstance(runtime_state, dict):
+        return
+    question = normalize_text(next_question)
+    topic = normalize_text(next_topic)
+    if not question:
+        return
+    runtime_state["next_question"] = question
+    if topic:
+        runtime_state["next_topic"] = topic
+    open_questions = runtime_state.get("open_questions")
+    if isinstance(open_questions, list):
+        runtime_state["open_questions"] = [question]
+    turns = runtime_state.get("conversation_turns")
+    if not isinstance(turns, list):
+        return
+    for turn in reversed(turns):
+        if not isinstance(turn, dict):
+            continue
+        if normalize_text(turn.get("actor")) != "agent":
+            continue
+        if normalize_text(turn.get("turn_type")) != "clarifying_question":
+            continue
+        turn["raw_text"] = question
+        if topic:
+            turn["extracted_topics"] = [topic]
+        break
+
+
 def normalize_requester_identity(payload: dict[str, Any], discovery_state: dict[str, Any]) -> dict[str, Any]:
     requester_identity = payload.get("requester_identity", {})
     if isinstance(requester_identity, dict) and requester_identity:
@@ -872,7 +1079,7 @@ def build_discovery_request(
     pointer: dict[str, Any],
     uploaded_files: list[dict[str, Any]],
     now: str,
-) -> tuple[dict[str, Any], bool]:
+) -> tuple[dict[str, Any], bool, bool]:
     ui_action = normalize_text(envelope.get("ui_action"))
     user_text = normalize_text(envelope.get("user_text"))
     attachment_context = uploaded_files_context(uploaded_files)
@@ -884,22 +1091,24 @@ def build_discovery_request(
         else ""
     ) or normalize_text(request.get("next_topic"))
     request["project_key"] = normalize_text(pointer.get("project_key")) or normalize_text(web_demo_session.get("active_project_key"))
+    low_signal_submission = False
 
     if ui_action == "request_status" and discovery_state:
-        return request, True
+        return request, True, low_signal_submission
 
     if ui_action in {"request_brief_review"} and discovery_state:
-        return request, True
+        return request, True, low_signal_submission
 
     if ui_action == "start_project":
         request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
     elif ui_action == "submit_turn":
+        low_signal_submission = is_low_signal_reply(combined_text, uploaded_files)
         captured_answers = request.get("captured_answers", {})
         if not isinstance(captured_answers, dict):
             captured_answers = {}
-        if current_topic and combined_text:
+        if current_topic and combined_text and not low_signal_submission:
             captured_answers[current_topic] = combined_text
-        elif combined_text and not normalize_text(request.get("raw_idea")):
+        elif combined_text and not normalize_text(request.get("raw_idea")) and not low_signal_submission:
             request["raw_idea"] = combined_text
         request["captured_answers"] = captured_answers
         append_user_turn(request, combined_text, current_topic, now)
@@ -914,7 +1123,7 @@ def build_discovery_request(
         if isinstance(payload.get("brief_section_updates"), dict):
             request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
 
-    return request, False
+    return request, False, low_signal_submission
 
 
 def run_discovery_runtime(discovery_request: dict[str, Any]) -> dict[str, Any]:
@@ -1307,7 +1516,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     if access_granted:
         ui_action = normalize_text(envelope.get("ui_action"))
         reuse_saved_downloads = ui_action in {"request_status", "download_artifact"}
-        discovery_request, skip_runtime = build_discovery_request(
+        discovery_request, skip_runtime, low_signal_submission = build_discovery_request(
             payload,
             discovery_state,
             requester_identity,
@@ -1340,6 +1549,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             except Exception as exc:  # noqa: BLE001
                 delivery_error = normalize_text(exc) or "Concept pack generation failed."
     else:
+        low_signal_submission = False
         runtime_state = {
             "status": "gate_pending",
             "next_action": "request_demo_access",
@@ -1364,6 +1574,30 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         if download_artifacts
         else normalize_text(runtime_state.get("next_question"))
     )
+    architect_question_source = "runtime"
+    if access_granted and low_signal_submission and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}:
+        next_action = "ask_next_question"
+        if not next_topic:
+            next_topic = (
+                normalize_text(discovery_session.get("current_topic"))
+                or normalize_text(runtime_state.get("next_topic"))
+            )
+    if (
+        access_granted
+        and not download_artifacts
+        and next_question
+        and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}
+    ):
+        adaptive_question, architect_question_source = adaptive_architect_question(
+            next_question=next_question,
+            next_topic=next_topic,
+            runtime_state=runtime_state,
+            envelope=envelope,
+            uploaded_files=uploaded_files,
+            force_low_signal_guard=low_signal_submission,
+        )
+        next_question = normalize_text(adaptive_question) or next_question
+        patch_runtime_next_question(runtime_state, next_question=next_question, next_topic=next_topic)
     status_snapshot = build_web_demo_status_snapshot(
         web_demo_session.get("web_demo_session_id"),
         pointer.get("project_key"),
@@ -1479,6 +1713,9 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "preferred_ui_action": preferred_ui_action(reply_cards, fallback="request_status" if access_granted else "submit_access_token"),
             "current_question": next_question,
             "current_topic": envelope["normalized_payload"]["current_topic"],
+            "question_source": architect_question_source,
+            "agent_role": "architect",
+            "agent_display_name": architect_agent_display_name(),
             "project_title": normalize_text(pointer.get("project_key")) or "Новый проект фабрики",
             "display_project_title": compact_display_title(
                 requirement_brief.get("problem_statement"),
