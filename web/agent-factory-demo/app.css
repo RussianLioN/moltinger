@@ -208,6 +208,19 @@ code {
   color: var(--text-strong);
 }
 
+.access-banner__note[data-tone="neutral"],
+.access-banner__note[data-tone="info"] {
+  color: var(--muted);
+}
+
+.access-banner__note[data-tone="success"] {
+  color: var(--success);
+}
+
+.access-banner__note[data-tone="error"] {
+  color: #f7b4b4;
+}
+
 .access-banner input,
 .composer textarea {
   width: 100%;

@@ -169,6 +169,7 @@
     activeProjectId: "",
     projects: [],
     gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
+    gateNoteTone: "neutral",
     awaitingResponse: false,
     activeAbortController: null,
     activeRequest: null,
@@ -788,7 +789,17 @@
   }
 
   function renderGateNote() {
+    if (!dom.gateNote) {
+      return;
+    }
     dom.gateNote.textContent = state.gateNote;
+    dom.gateNote.dataset.tone = normalizeText(state.gateNoteTone, "neutral");
+  }
+
+  function setGateNote(note, tone = "neutral") {
+    state.gateNote = normalizeText(note, "Нужен access token для controlled demo surface.");
+    state.gateNoteTone = normalizeText(tone, "neutral");
+    renderGateNote();
   }
 
   function renderShellStage(project) {
@@ -1617,15 +1628,13 @@
     }
     const provided = normalizeText(tokenOverride || dom.accessTokenInput.value);
     if (!provided) {
-      state.gateNote = "Укажи access token для входа в demo.";
-      renderGateNote();
+      setGateNote("Укажи access token для входа в demo.", "error");
       dom.accessTokenInput.focus();
       return;
     }
     closeProjectActionsMenu();
     state.accessProbePending = true;
-    state.gateNote = "Проверяю access token...";
-    renderGateNote();
+    setGateNote("Проверяю access token...", "info");
     setBusy(true);
     try {
       if (!state.projects.length) {
@@ -1646,7 +1655,7 @@
         return;
       }
       state.accessToken = provided;
-      state.gateNote = "Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.";
+      setGateNote("Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.", "success");
       applyResponse(project, response, "live");
       persist();
       renderAll();
@@ -1665,7 +1674,7 @@
     state.accessToken = "";
     state.accessProbePending = false;
     closeProjectActionsMenu();
-    state.gateNote = normalizeText(reason, "Нужен access token для controlled demo surface.");
+    setGateNote(normalizeText(reason, "Нужен access token для controlled demo surface."), "error");
     persist();
     renderAll();
     window.setTimeout(() => {
@@ -2497,8 +2506,7 @@
     renderAll();
     dom.root.dataset.mode = "ready";
     if (restoredToken) {
-      state.gateNote = "Проверяю сохранённый access token...";
-      renderGateNote();
+      setGateNote("Проверяю сохранённый access token...", "info");
       void unlockAccess(restoredToken);
       return;
     }
