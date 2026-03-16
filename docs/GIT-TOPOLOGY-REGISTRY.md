@@ -24,6 +24,7 @@
 | `moltinger-pr40` | `tmp-pr40-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr41` | `tmp-pr41-fix` | `sibling-worktree` | Needs decision |
 | `moltinger-pr42` | `tmp-pr42-fix` | `sibling-worktree` | Needs decision |
+| `moltinger-topology-publish-023.05o7ky` | `chore/topology-registry-publish` | `sibling-worktree` | Needs decision |
 | `moltinger-topology-refresh` | `chore/topology-registry-after-cleanup-20260312` | `sibling-worktree` | Needs decision |
 | `moltinger-worktree-topology-registry-publish` | `fix/worktree-topology-registry-single-writer-publish` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-1-moltis-backup-rollback-baseline` | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `sibling-worktree` | Needs decision |
@@ -56,6 +57,7 @@
 | `024-clawdiy-oauth-store-drift-fix` | `origin/024-clawdiy-oauth-store-drift-fix` | Needs decision |
 | `024-web-factory-demo-adapter` | `origin/024-web-factory-demo-adapter` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
+| `chore/topology-registry-publish` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `codex/gpt54-agents-split` | `origin/codex/gpt54-agents-split` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
@@ -130,7 +132,6 @@
 | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `origin/020-agent-factory-prototype` | Needs decision |
 | `origin/022-telegram-ba-intake` | Needs decision |
-| `origin/023-full-moltis-codex-update-skill` | Needs decision |
 | `origin/023-telegram-factory-adapter` | Needs decision |
 | `origin/024-clawdiy-oauth-store-drift-fix` | Needs decision |
 | `origin/024-web-factory-demo-adapter` | Needs decision |
