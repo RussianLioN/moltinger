@@ -22,7 +22,6 @@
 | `moltinger-worktree-topology-registry-publish` | `fix/worktree-topology-registry-single-writer-publish` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-1-moltis-backup-rollback-baseline` | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
-| `moltinger-z8m-4-moltis-post-update-error-remediation` | `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `sibling-worktree` | Needs decision |
 | `moltis-pin-v0-10-18-mainline` | `feat/moltis-pin-v0-10-18-mainline` | `sibling-worktree` | Needs decision |
 | `moltis-pin-v0-10-18-prod` | `feat/moltis-pin-v0-10-18-prod` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
@@ -57,7 +56,6 @@
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
 | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
-| `feat/moltinger-z8m-4-moltis-post-update-error-remediation` | `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `feat/moltis-pin-v0-10-18-mainline` | `origin/main` | Needs decision |
 | `feat/moltis-pin-v0-10-18-prod` | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
@@ -123,7 +121,6 @@
 | `origin/019-clawdiy-ui-onboarding-doc-correction` | Needs decision |
 | `origin/020-agent-factory-prototype` | Needs decision |
 | `origin/022-telegram-ba-intake` | Needs decision |
-| `origin/023-full-moltis-codex-update-skill` | Needs decision |
 | `origin/023-telegram-factory-adapter` | Needs decision |
 | `origin/024-clawdiy-oauth-store-drift-fix` | Needs decision |
 | `origin/024-web-factory-demo-adapter` | Needs decision |
@@ -135,7 +132,6 @@
 | `origin/feat/moltinger-ewde-codex-advisory-rollout` | Needs decision |
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
-| `origin/feat/moltinger-z8m-4-moltis-post-update-error-remediation` | Needs decision |
 | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
