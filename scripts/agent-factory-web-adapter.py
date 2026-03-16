@@ -742,21 +742,22 @@ def adaptive_architect_question(
     if not base_question:
         base_question = "Опиши, пожалуйста, подробнее рабочий контекст, чтобы я корректно зафиксировал требования."
     example = normalize_text(frame.get("example"))
+    example_hint = example if example.lower().startswith("например") else (f"Например: {example}" if example else "")
     lead = normalize_text(frame.get("lead"))
     user_text = normalize_text(envelope.get("user_text"))
     low_signal = force_low_signal_guard or is_low_signal_reply(user_text, uploaded_files)
     if low_signal:
         reprompt = "Ответ пока слишком общий, из него нельзя зафиксировать требование в brief."
         question = f"{reprompt} {base_question}"
-        if example:
-            question = f"{question} Например: {example}"
+        if example_hint:
+            question = f"{question} {example_hint}"
         return question, "low_signal_guard"
 
     summaries = requirement_topic_summaries(runtime_state)
     context_hint = context_hint_for_topic(topic, summaries, uploaded_files)
     parts = [context_hint or lead, base_question]
-    if example:
-        parts.append(f"Например: {example}")
+    if example_hint:
+        parts.append(example_hint)
     question = " ".join(part for part in parts if normalize_text(part))
     return question, "adaptive_architect"
 
