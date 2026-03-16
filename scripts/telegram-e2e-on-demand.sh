@@ -790,8 +790,20 @@ evaluate_secondary_mtproto() {
         path_used: "mtproto",
         prerequisites_present: true,
         outcome: ($helper.status // "unknown"),
+        comparable_to_authoritative:
+          (if (($helper.status // "") == "completed") and (($helper.observed_response // "") | test("verification code|enter the verification code"; "i"))
+           then false
+           else true
+           end),
+        observed_verification_gate:
+          (if (($helper.observed_response // "") | test("verification code|enter the verification code"; "i"))
+           then true
+           else false
+           end),
         decision_note:
-          (if ($helper.status // "") == "completed"
+          (if (($helper.status // "") == "completed") and (($helper.observed_response // "") | test("verification code|enter the verification code"; "i"))
+           then "Secondary MTProto diagnostics reached the bot but hit the verification-code gate. This usually means TELEGRAM_TEST_SESSION belongs to a different or non-allowlisted test user, so the result is not directly comparable to the authoritative Telegram Web account."
+           elif ($helper.status // "") == "completed"
            then "Secondary MTProto diagnostics succeeded; Telegram Web remains authoritative but fallback may help isolate UI-only issues."
            elif ($helper.status // "") == "timeout"
            then "Secondary MTProto diagnostics also missed a reply; investigate deployed bot/runtime before enabling fallback."

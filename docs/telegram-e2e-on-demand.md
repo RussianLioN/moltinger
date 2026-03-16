@@ -141,6 +141,25 @@ Restricted debug bundle хранит raw helper evidence:
 
 Если prerequisites отсутствуют, основной artifact фиксирует это в `fallback_assessment` как `outcome=unavailable`.
 
+### Важная оговорка про comparability
+
+`TELEGRAM_TEST_SESSION` в secondary lane может принадлежать отдельному test user, а не тому же allowlisted пользователю, под которым авторизован authoritative `Telegram Web`.
+
+Если этот test user не входит в `dm_policy = "allowlist"` для `@moltinger_bot`, secondary `MTProto` может получить ответ вида:
+
+`To use this bot, please enter the verification code...`
+
+Это не означает регрессию `codex-update` или failure authoritative path. Теперь review-safe artifact фиксирует такой случай как:
+
+- `fallback_assessment.observed_verification_gate = true`
+- `fallback_assessment.comparable_to_authoritative = false`
+
+Практический смысл:
+
+- authoritative `Telegram Web` остаётся источником истины для pass/fail;
+- `MTProto` в таком случае показывает только то, что отдельный test user упёрся в sender verification gate;
+- для полностью сопоставимой secondary проверки нужно либо использовать ту же allowlisted учётку, либо добавить MTProto test user в allowlist.
+
 ## Codex Advisory Acceptance
 
 Для нового Moltis-native advisory flow не нужно руками интерпретировать ответы в Telegram-чате.

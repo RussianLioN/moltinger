@@ -165,6 +165,7 @@ For on-demand Telegram E2E harness:
 - `synthetic` mode requires only `MOLTIS_PASSWORD`.
 - `real_user` mode requires `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, and `TELEGRAM_TEST_SESSION`; `TELEGRAM_TEST_BOT_USERNAME` is optional.
 - `TELEGRAM_TEST_SESSION` is generated once via `scripts/telegram-real-user-bootstrap.py` (OTP login).
+- `TELEGRAM_TEST_SESSION` may belong to a dedicated test user. If that user is not included in the bot allowlist, secondary MTProto diagnostics can legitimately see a verification-code reply even when the authoritative Telegram Web path passes.
 
 ### LLM Failover Secrets
 

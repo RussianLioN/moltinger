@@ -47,6 +47,7 @@ gh workflow run telegram-e2e-on-demand.yml \
 ```
 
 Canonical post-deploy verdict path is `Telegram Web`; `MTProto` is secondary diagnostics only.
+If secondary `MTProto` sees a verification-code prompt while Telegram Web passes, treat that as a sender-policy mismatch for the test user, not as a regression of the authoritative path.
 
 ### Clawdiy deploy
 

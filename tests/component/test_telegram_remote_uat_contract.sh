@@ -63,14 +63,28 @@ SH
     cat > "$TEST_TMPDIR/telegram-real-user-e2e.py" <<'PY'
 #!/usr/bin/env python3
 import json
-print(json.dumps({
-    "status": "precondition_failed",
-    "observed_response": None,
-    "error_code": "precondition",
-    "error_message": "missing TELEGRAM_TEST_SESSION",
-    "context": {"missing": ["TELEGRAM_TEST_SESSION"]},
-    "transport": "telegram_mtproto_real_user"
-}))
+import os
+
+mode = os.environ.get("MTPROTO_STUB_MODE", "precondition")
+if mode == "verification_gate":
+    payload = {
+        "status": "completed",
+        "observed_response": "To use this bot, please enter the verification code.",
+        "error_code": None,
+        "error_message": None,
+        "context": {"bot_username": "moltinger_bot"},
+        "transport": "telegram_mtproto_real_user"
+    }
+else:
+    payload = {
+        "status": "precondition_failed",
+        "observed_response": None,
+        "error_code": "precondition",
+        "error_message": "missing TELEGRAM_TEST_SESSION",
+        "context": {"missing": ["TELEGRAM_TEST_SESSION"]},
+        "transport": "telegram_mtproto_real_user"
+    }
+print(json.dumps(payload))
 PY
     chmod +x "$TEST_TMPDIR/telegram-real-user-e2e.py"
 }
@@ -127,6 +141,28 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must record unavailable MTProto fallback prerequisites explicitly"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_marks_mtproto_verification_gate_as_noncomparable"
+    if MTPROTO_STUB_MODE=verification_gate \
+        TELEGRAM_TEST_API_ID=12345 \
+        TELEGRAM_TEST_API_HASH=test-hash \
+        TELEGRAM_TEST_SESSION=test-session \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --secondary-diagnostics mtproto \
+        --message "/status" \
+        --output "$TEST_TMPDIR/result-verification-gate.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper should still fail when the primary verdict is red even if MTProto only reaches a verification gate"
+    else
+        if jq -e '.fallback_assessment.requested == true and .fallback_assessment.outcome == "completed" and .fallback_assessment.observed_verification_gate == true and .fallback_assessment.comparable_to_authoritative == false' "$TEST_TMPDIR/result-verification-gate.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must mark MTProto verification-code responses as non-comparable secondary diagnostics"
         fi
     fi
 
