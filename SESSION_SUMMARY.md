@@ -157,6 +157,11 @@ GitOps Compliance: Enforced ✅
   - `tests/component/test_agent_factory_web_discovery.sh` проверяет architect projection (`agent_display_name`, `question_source`).
   - `tests/integration_local/test_agent_factory_web_flow.sh` добавляет сценарий `low-signal reply` и проверяет, что topic не меняется, summary не затирается и возвращается reprompt.
 - В Speckit синхронизированы и закрыты задачи `T055-T056` в `specs/024-web-factory-demo-adapter/tasks.md`.
+- Дополнительно исправлена формулировка adaptive-вопросов (`scripts/agent-factory-web-adapter.py`): убран дублирующийся префикс `Например: Например: ...`.
+- Изменения выкачены на live `asc.ainetic.tech` через `/opt/moltinger-asc-demo` (`git pull --rebase` + `GITOPS_CONFIRM_SKIP=true ./scripts/deploy.sh --json asc-demo restart`), после чего проверка `/api/turn` подтверждает:
+  - `ui_projection.agent_display_name = "Агент-архитектор Moltis"`
+  - `ui_projection.question_source = "adaptive_architect"` на нормальном ответе
+  - `ui_projection.question_source = "low_signal_guard"` и отсутствие topic-advance на `ping`.
 - Проверки в этой сессии:
   - `python3 -m py_compile scripts/agent-factory-web-adapter.py`
   - `node --check web/agent-factory-demo/app.js`
