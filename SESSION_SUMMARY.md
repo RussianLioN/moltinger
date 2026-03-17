@@ -50,7 +50,23 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
-### Current Session Update (2026-03-16)
+### Current Session Update (2026-03-18)
+
+- Восстановлена корректная привязка ворктри `moltinger-019-asc-fabrique-prototype` к canonical gitdir (`/Users/rl/coding/moltinger/moltinger-main/.git/worktrees/moltinger-019-asc-fabrique-prototype`) и обновлён guard через `scripts/git-session-guard.sh --refresh`.
+- Зафиксированы и запушены добавленные пользователем материалы по ASC demo и BPMN (commit `bfa46db`): `asc-demo/*`, `docs/concept/asc-ai-fabrique-2-0-user-story-q-and-a.md`, `docs/concept/specs/001-approval-level-user-story-bpmn/*`.
+- Поднят новый Speckit-пакет backend-среза: `specs/025-asc-demo-llm-backend/{spec.md,plan.md,tasks.md}` на базе `asc-demo/docs/plans/sleepy-munching-turing.md`.
+- Реализован standalone Node backend для `asc-demo`:
+  - runtime bootstrap: `asc-demo/package.json`, `asc-demo/.env.example`, `asc-demo/server.js`
+  - core/domain modules: `asc-demo/src/llm.js`, `sessions.js`, `response-builder.js`, `discovery.js`, `brief.js`, `summary-generator.js`, `router.js`
+  - prompts/data: `asc-demo/src/prompts/*`, `asc-demo/src/demo-data/boku-do-manzh.json`
+  - стек в `asc-demo/CLAUDE.md` переведён с Anthropic на OpenAI-compatible/Fireworks.
+- Локальная проверка backend-среза (green):
+  - `node --check` для всех backend-модулей
+  - `cd asc-demo && npm install`
+  - API smoke `gate -> discovery -> awaiting_confirmation -> confirm_brief -> request_status -> 4 download_artifacts`
+  - скачивание `one-page-summary.md` по `GET /api/download/:sessionId/one_page_summary`.
+
+### Previous Session Update (2026-03-16)
 
 - Реализован UX-slice под baseline Codex App для `asc.ainetic.tech` в `web/agent-factory-demo/*`: токен-гейт переведен на form-submit (`Enter` + аккуратная кнопка), composer возвращен к паттерну `Enter=send`, `Shift+Enter=newline`, а после отправки/ответа фокус стабильно возвращается в поле ввода вместо «улета» по DOM.
 - Добавлен полноценный проектный action-menu `⋯` (popover) с явными действиями `Переименовать` и `Удалить`; immediate rename по клику на троеточие убран. Для удаления проекта добавлено подтверждение и безопасный сценарий: при удалении активного проекта открывается чистый новый workspace (без принудительного перехода в соседний старый проект).

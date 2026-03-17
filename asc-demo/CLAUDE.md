@@ -6,7 +6,7 @@
 ## Стек
 - **Frontend**: Vanilla HTML/CSS/JS (уже готов, менять минимально)
 - **Backend**: Node.js + Express
-- **AI**: Anthropic Claude API (claude-sonnet-4-20250514)
+- **AI**: OpenAI-compatible API (Fireworks `glm-5` по умолчанию)
 - **Хранение**: In-memory (сессии, артефакты)
 - **Деплой**: Локальный dev-сервер (порт 3000)
 
@@ -15,7 +15,7 @@
 asc-demo/                        # Корень Node.js проекта (рабочая директория)
 ├── CLAUDE.md                    # Этот файл
 ├── package.json
-├── .env                         # ANTHROPIC_API_KEY (не коммитить)
+├── .env                         # OPENAI_API_KEY (не коммитить)
 ├── server.js                    # Express-сервер, роуты
 ├── src/
 │   ├── sessions.js              # In-memory хранилище сессий
@@ -120,9 +120,11 @@ npm start            # Запуск production
 
 ## Переменные окружения (.env)
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=fw_...
+OPENAI_BASE_URL=https://api.fireworks.ai/inference/v1
+MODEL_NAME=accounts/fireworks/models/glm-5
+DEMO_ACCESS_TOKEN=demo-access-token
 PORT=3000
-DEFAULT_MODEL=claude-sonnet-4-20250514
 ```
 
 ## Контекст предметной области
