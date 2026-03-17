@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             id="Definitions_FactoryE2E"
+             targetNamespace="http://asc-ai-fabrique/specs/factory-e2e">
+  <process id="Process_FactoryE2E"
+           name="ASC AI Fabrique End-to-End Route"
+           isExecutable="false">
+    <laneSet id="LaneSet_FactoryE2E">
+      <lane id="Lane_User" name="Пользователь">
+        <flowNodeRef>StartEvent_UserNeed</flowNodeRef>
+        <flowNodeRef>Task_SubmitCase</flowNodeRef>
+        <flowNodeRef>Task_ProvideClarification</flowNodeRef>
+        <flowNodeRef>Task_ConfirmArtifactPackage</flowNodeRef>
+      </lane>
+      <lane id="Lane_SurfaceOrchestrator" name="Поверхность и оркестратор">
+        <flowNodeRef>Task_IntakeCase</flowNodeRef>
+        <flowNodeRef>Task_CheckOperationalProjection</flowNodeRef>
+        <flowNodeRef>Gateway_RouteableSolutionExists</flowNodeRef>
+        <flowNodeRef>Task_RouteToExistingAsset</flowNodeRef>
+        <flowNodeRef>Task_OfferAlternativeOrFallback</flowNodeRef>
+        <flowNodeRef>Task_RerouteOriginalCase</flowNodeRef>
+        <flowNodeRef>Task_ReturnResultToUser</flowNodeRef>
+      </lane>
+      <lane id="Lane_Factory" name="Фабрика">
+        <flowNodeRef>Task_RegisterDemand</flowNodeRef>
+        <flowNodeRef>Task_QualifyCase</flowNodeRef>
+        <flowNodeRef>Gateway_UnderstandingSufficient</flowNodeRef>
+        <flowNodeRef>Task_FacilitatedInterview</flowNodeRef>
+        <flowNodeRef>Task_UpdateSummaryAndInitiative</flowNodeRef>
+        <flowNodeRef>Gateway_NewAssetRequired</flowNodeRef>
+        <flowNodeRef>Task_AssembleArtifactPackage</flowNodeRef>
+        <flowNodeRef>Gateway_UserConfirmedPackage</flowNodeRef>
+        <flowNodeRef>Task_ReviseArtifactPackage</flowNodeRef>
+        <flowNodeRef>Task_OpenImprovementCase</flowNodeRef>
+        <flowNodeRef>Task_PromoteReuseOrSegmentation</flowNodeRef>
+        <flowNodeRef>EndEvent_Frozen</flowNodeRef>
+        <flowNodeRef>EndEvent_ClosedAlternative</flowNodeRef>
+        <flowNodeRef>EndEvent_NoConfirmedResult</flowNodeRef>
+      </lane>
+      <lane id="Lane_Verification" name="Группа верификаторов и стейкхолдеров">
+        <flowNodeRef>Task_ReviewApprovalPackage</flowNodeRef>
+        <flowNodeRef>Gateway_ApprovalDecision</flowNodeRef>
+        <flowNodeRef>Task_ReturnApprovalComments</flowNodeRef>
+        <flowNodeRef>Task_EscalationReview</flowNodeRef>
+        <flowNodeRef>Gateway_EscalationOutcome</flowNodeRef>
+      </lane>
+      <lane id="Lane_ProductionRegistry" name="Production и реестр активов">
+        <flowNodeRef>Task_ImplementAsset</flowNodeRef>
+        <flowNodeRef>Task_RegisterAsset</flowNodeRef>
+        <flowNodeRef>Task_AssignGovernanceAndOwner</flowNodeRef>
+        <flowNodeRef>Gateway_PublicationAllowed</flowNodeRef>
+        <flowNodeRef>Task_CorrectBeforePublication</flowNodeRef>
+        <flowNodeRef>Task_PublishCapability</flowNodeRef>
+      </lane>
+      <lane id="Lane_RuntimeMonitoring" name="Runtime и monitoring">
+        <flowNodeRef>Task_ExecuteWithExistingAsset</flowNodeRef>
+        <flowNodeRef>Task_ExecuteWithNewAsset</flowNodeRef>
+        <flowNodeRef>Task_CaptureFeedbackAndEffect</flowNodeRef>
+        <flowNodeRef>Gateway_EffectConfirmed</flowNodeRef>
+        <flowNodeRef>EndEvent_Success</flowNodeRef>
+      </lane>
+    </laneSet>
+
+    <startEvent id="StartEvent_UserNeed" name="Пользователь формулирует кейс">
+      <outgoing>Flow_01</outgoing>
+    </startEvent>
+
+    <userTask id="Task_SubmitCase" name="Отправить кейс на поверхность">
+      <incoming>Flow_01</incoming>
+      <outgoing>Flow_02</outgoing>
+    </userTask>
+
+    <task id="Task_IntakeCase" name="Принять и нормализовать кейс на поверхности">
+      <incoming>Flow_02</incoming>
+      <outgoing>Flow_03</outgoing>
+    </task>
+
+    <task id="Task_CheckOperationalProjection" name="Проверить operational projection">
+      <incoming>Flow_03</incoming>
+      <outgoing>Flow_04</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_RouteableSolutionExists" name="Есть routeable-решение?">
+      <incoming>Flow_04</incoming>
+      <outgoing>Flow_05</outgoing>
+      <outgoing>Flow_06</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_RouteToExistingAsset" name="Маршрутизировать на существующий актив">
+      <incoming>Flow_05</incoming>
+      <outgoing>Flow_07</outgoing>
+    </task>
+
+    <task id="Task_ExecuteWithExistingAsset" name="Исполнить кейс существующим активом">
+      <incoming>Flow_07</incoming>
+      <outgoing>Flow_08</outgoing>
+    </task>
+
+    <task id="Task_ReturnResultToUser" name="Вернуть результат пользователю">
+      <incoming>Flow_08</incoming>
+      <incoming>Flow_31</incoming>
+      <outgoing>Flow_09</outgoing>
+    </task>
+
+    <task id="Task_CaptureFeedbackAndEffect" name="Собрать feedback и измерить эффект">
+      <incoming>Flow_09</incoming>
+      <outgoing>Flow_10</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_EffectConfirmed" name="Эффект подтвержден?">
+      <incoming>Flow_10</incoming>
+      <outgoing>Flow_11</outgoing>
+      <outgoing>Flow_12</outgoing>
+      <outgoing>Flow_13</outgoing>
+      <outgoing>Flow_37</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="EndEvent_Success" name="Кейс успешно завершен">
+      <incoming>Flow_11</incoming>
+      <incoming>Flow_49</incoming>
+    </endEvent>
+
+    <task id="Task_OpenImprovementCase" name="Открыть improvement or correction case">
+      <incoming>Flow_12</incoming>
+      <outgoing>Flow_14</outgoing>
+    </task>
+
+    <endEvent id="EndEvent_NoConfirmedResult" name="Нет подтвержденного результата">
+      <incoming>Flow_13</incoming>
+    </endEvent>
+
+    <task id="Task_RegisterDemand" name="Зарегистрировать спрос в фабрике">
+      <incoming>Flow_06</incoming>
+      <incoming>Flow_14</incoming>
+      <outgoing>Flow_15</outgoing>
+    </task>
+
+    <task id="Task_QualifyCase" name="Провести архитектурную квалификацию">
+      <incoming>Flow_15</incoming>
+      <outgoing>Flow_16</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_UnderstandingSufficient" name="Понимание кейса достаточно?">
+      <incoming>Flow_16</incoming>
+      <outgoing>Flow_17</outgoing>
+      <outgoing>Flow_18</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_FacilitatedInterview" name="Провести facilitated interview">
+      <incoming>Flow_18</incoming>
+      <outgoing>Flow_19</outgoing>
+    </task>
+
+    <userTask id="Task_ProvideClarification" name="Дать уточнения по кейсу">
+      <incoming>Flow_19</incoming>
+      <outgoing>Flow_20</outgoing>
+    </userTask>
+
+    <task id="Task_UpdateSummaryAndInitiative" name="Обновить summary и карту инициативы">
+      <incoming>Flow_20</incoming>
+      <outgoing>Flow_21</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_NewAssetRequired" name="Нужен новый актив?">
+      <incoming>Flow_17</incoming>
+      <incoming>Flow_21</incoming>
+      <outgoing>Flow_22</outgoing>
+      <outgoing>Flow_23</outgoing>
+      <outgoing>Flow_24</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_OfferAlternativeOrFallback" name="Предложить alternative or fallback">
+      <incoming>Flow_22</incoming>
+      <outgoing>Flow_25</outgoing>
+    </task>
+
+    <endEvent id="EndEvent_ClosedAlternative" name="Кейс закрыт альтернативой">
+      <incoming>Flow_25</incoming>
+      <incoming>Flow_35</incoming>
+    </endEvent>
+
+    <endEvent id="EndEvent_Frozen" name="Кейс заморожен">
+      <incoming>Flow_24</incoming>
+    </endEvent>
+
+    <task id="Task_AssembleArtifactPackage" name="Собрать пакет артефактов">
+      <incoming>Flow_23</incoming>
+      <incoming>Flow_34</incoming>
+      <outgoing>Flow_26</outgoing>
+    </task>
+
+    <userTask id="Task_ConfirmArtifactPackage" name="Подтвердить понимание и маршрут">
+      <incoming>Flow_26</incoming>
+      <outgoing>Flow_27</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_UserConfirmedPackage" name="Пакет подтвержден пользователем?">
+      <incoming>Flow_27</incoming>
+      <outgoing>Flow_28</outgoing>
+      <outgoing>Flow_29</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_ReviseArtifactPackage" name="Доработать пакет артефактов">
+      <incoming>Flow_28</incoming>
+      <incoming>Flow_33</incoming>
+      <outgoing>Flow_34</outgoing>
+    </task>
+
+    <userTask id="Task_ReviewApprovalPackage" name="Провести approval review">
+      <incoming>Flow_29</incoming>
+      <outgoing>Flow_30</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_ApprovalDecision" name="Approval decision?">
+      <incoming>Flow_30</incoming>
+      <outgoing>Flow_36</outgoing>
+      <outgoing>Flow_32</outgoing>
+      <outgoing>Flow_38</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="Task_ReturnApprovalComments" name="Вернуть комментарии на доработку">
+      <incoming>Flow_32</incoming>
+      <incoming>Flow_39</incoming>
+      <outgoing>Flow_33</outgoing>
+    </userTask>
+
+    <userTask id="Task_EscalationReview" name="Провести escalation review">
+      <incoming>Flow_38</incoming>
+      <outgoing>Flow_40</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_EscalationOutcome" name="Исход эскалации?">
+      <incoming>Flow_40</incoming>
+      <outgoing>Flow_50</outgoing>
+      <outgoing>Flow_39</outgoing>
+      <outgoing>Flow_35</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_ImplementAsset" name="Создать новый цифровой сотрудник">
+      <incoming>Flow_36</incoming>
+      <incoming>Flow_42</incoming>
+      <outgoing>Flow_41</outgoing>
+    </task>
+
+    <task id="Task_RegisterAsset" name="Зарегистрировать актив в едином реестре">
+      <incoming>Flow_41</incoming>
+      <outgoing>Flow_43</outgoing>
+    </task>
+
+    <task id="Task_AssignGovernanceAndOwner" name="Назначить class, governance и owner">
+      <incoming>Flow_43</incoming>
+      <outgoing>Flow_44</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_PublicationAllowed" name="Публикация в оркестратор допустима?">
+      <incoming>Flow_44</incoming>
+      <outgoing>Flow_45</outgoing>
+      <outgoing>Flow_46</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_CorrectBeforePublication" name="Исправить актив до публикации">
+      <incoming>Flow_46</incoming>
+      <outgoing>Flow_42</outgoing>
+    </task>
+
+    <task id="Task_PublishCapability" name="Опубликовать capability в оркестратор">
+      <incoming>Flow_45</incoming>
+      <outgoing>Flow_47</outgoing>
+    </task>
+
+    <task id="Task_RerouteOriginalCase" name="Повторно маршрутизировать исходный кейс">
+      <incoming>Flow_47</incoming>
+      <outgoing>Flow_48</outgoing>
+    </task>
+
+    <task id="Task_ExecuteWithNewAsset" name="Исполнить кейс новым активом">
+      <incoming>Flow_48</incoming>
+      <outgoing>Flow_31</outgoing>
+    </task>
+
+    <task id="Task_PromoteReuseOrSegmentation" name="Запустить reuse, scaling или segmentation">
+      <incoming>Flow_37</incoming>
+      <outgoing>Flow_49</outgoing>
+    </task>
+
+    <sequenceFlow id="Flow_01" sourceRef="StartEvent_UserNeed" targetRef="Task_SubmitCase" />
+    <sequenceFlow id="Flow_02" sourceRef="Task_SubmitCase" targetRef="Task_IntakeCase" />
+    <sequenceFlow id="Flow_03" sourceRef="Task_IntakeCase" targetRef="Task_CheckOperationalProjection" />
+    <sequenceFlow id="Flow_04" sourceRef="Task_CheckOperationalProjection" targetRef="Gateway_RouteableSolutionExists" />
+    <sequenceFlow id="Flow_05" name="Да" sourceRef="Gateway_RouteableSolutionExists" targetRef="Task_RouteToExistingAsset" />
+    <sequenceFlow id="Flow_06" name="Нет или currently unavailable" sourceRef="Gateway_RouteableSolutionExists" targetRef="Task_RegisterDemand" />
+    <sequenceFlow id="Flow_07" sourceRef="Task_RouteToExistingAsset" targetRef="Task_ExecuteWithExistingAsset" />
+    <sequenceFlow id="Flow_08" sourceRef="Task_ExecuteWithExistingAsset" targetRef="Task_ReturnResultToUser" />
+    <sequenceFlow id="Flow_09" sourceRef="Task_ReturnResultToUser" targetRef="Task_CaptureFeedbackAndEffect" />
+    <sequenceFlow id="Flow_10" sourceRef="Task_CaptureFeedbackAndEffect" targetRef="Gateway_EffectConfirmed" />
+    <sequenceFlow id="Flow_11" name="Подтверждено" sourceRef="Gateway_EffectConfirmed" targetRef="EndEvent_Success" />
+    <sequenceFlow id="Flow_12" name="Нужна корректировка" sourceRef="Gateway_EffectConfirmed" targetRef="Task_OpenImprovementCase" />
+    <sequenceFlow id="Flow_13" name="Нет подтвержденной пользы" sourceRef="Gateway_EffectConfirmed" targetRef="EndEvent_NoConfirmedResult" />
+    <sequenceFlow id="Flow_14" sourceRef="Task_OpenImprovementCase" targetRef="Task_RegisterDemand" />
+    <sequenceFlow id="Flow_15" sourceRef="Task_RegisterDemand" targetRef="Task_QualifyCase" />
+    <sequenceFlow id="Flow_16" sourceRef="Task_QualifyCase" targetRef="Gateway_UnderstandingSufficient" />
+    <sequenceFlow id="Flow_17" name="Да" sourceRef="Gateway_UnderstandingSufficient" targetRef="Gateway_NewAssetRequired" />
+    <sequenceFlow id="Flow_18" name="Нет" sourceRef="Gateway_UnderstandingSufficient" targetRef="Task_FacilitatedInterview" />
+    <sequenceFlow id="Flow_19" sourceRef="Task_FacilitatedInterview" targetRef="Task_ProvideClarification" />
+    <sequenceFlow id="Flow_20" sourceRef="Task_ProvideClarification" targetRef="Task_UpdateSummaryAndInitiative" />
+    <sequenceFlow id="Flow_21" sourceRef="Task_UpdateSummaryAndInitiative" targetRef="Gateway_NewAssetRequired" />
+    <sequenceFlow id="Flow_22" name="Alternative or fallback" sourceRef="Gateway_NewAssetRequired" targetRef="Task_OfferAlternativeOrFallback" />
+    <sequenceFlow id="Flow_23" name="Новый цифровой сотрудник" sourceRef="Gateway_NewAssetRequired" targetRef="Task_AssembleArtifactPackage" />
+    <sequenceFlow id="Flow_24" name="Заморозить до нового цикла" sourceRef="Gateway_NewAssetRequired" targetRef="EndEvent_Frozen" />
+    <sequenceFlow id="Flow_25" sourceRef="Task_OfferAlternativeOrFallback" targetRef="EndEvent_ClosedAlternative" />
+    <sequenceFlow id="Flow_26" sourceRef="Task_AssembleArtifactPackage" targetRef="Task_ConfirmArtifactPackage" />
+    <sequenceFlow id="Flow_27" sourceRef="Task_ConfirmArtifactPackage" targetRef="Gateway_UserConfirmedPackage" />
+    <sequenceFlow id="Flow_28" name="Нет, требуется переработка" sourceRef="Gateway_UserConfirmedPackage" targetRef="Task_ReviseArtifactPackage" />
+    <sequenceFlow id="Flow_29" name="Да" sourceRef="Gateway_UserConfirmedPackage" targetRef="Task_ReviewApprovalPackage" />
+    <sequenceFlow id="Flow_30" sourceRef="Task_ReviewApprovalPackage" targetRef="Gateway_ApprovalDecision" />
+    <sequenceFlow id="Flow_31" sourceRef="Task_ExecuteWithNewAsset" targetRef="Task_ReturnResultToUser" />
+    <sequenceFlow id="Flow_32" name="Revise and resubmit" sourceRef="Gateway_ApprovalDecision" targetRef="Task_ReturnApprovalComments" />
+    <sequenceFlow id="Flow_33" sourceRef="Task_ReturnApprovalComments" targetRef="Task_ReviseArtifactPackage" />
+    <sequenceFlow id="Flow_34" sourceRef="Task_ReviseArtifactPackage" targetRef="Task_AssembleArtifactPackage" />
+    <sequenceFlow id="Flow_35" name="Defer or close with alternative" sourceRef="Gateway_EscalationOutcome" targetRef="EndEvent_ClosedAlternative" />
+    <sequenceFlow id="Flow_36" name="Approve" sourceRef="Gateway_ApprovalDecision" targetRef="Task_ImplementAsset" />
+    <sequenceFlow id="Flow_37" name="Подтверждено и готово к scaling" sourceRef="Gateway_EffectConfirmed" targetRef="Task_PromoteReuseOrSegmentation" />
+    <sequenceFlow id="Flow_38" name="Escalate" sourceRef="Gateway_ApprovalDecision" targetRef="Task_EscalationReview" />
+    <sequenceFlow id="Flow_39" name="Revise after escalation" sourceRef="Gateway_EscalationOutcome" targetRef="Task_ReturnApprovalComments" />
+    <sequenceFlow id="Flow_40" sourceRef="Task_EscalationReview" targetRef="Gateway_EscalationOutcome" />
+    <sequenceFlow id="Flow_41" sourceRef="Task_ImplementAsset" targetRef="Task_RegisterAsset" />
+    <sequenceFlow id="Flow_42" sourceRef="Task_CorrectBeforePublication" targetRef="Task_ImplementAsset" />
+    <sequenceFlow id="Flow_43" sourceRef="Task_RegisterAsset" targetRef="Task_AssignGovernanceAndOwner" />
+    <sequenceFlow id="Flow_44" sourceRef="Task_AssignGovernanceAndOwner" targetRef="Gateway_PublicationAllowed" />
+    <sequenceFlow id="Flow_45" name="Да" sourceRef="Gateway_PublicationAllowed" targetRef="Task_PublishCapability" />
+    <sequenceFlow id="Flow_46" name="Нет, нужна коррекция" sourceRef="Gateway_PublicationAllowed" targetRef="Task_CorrectBeforePublication" />
+    <sequenceFlow id="Flow_47" sourceRef="Task_PublishCapability" targetRef="Task_RerouteOriginalCase" />
+    <sequenceFlow id="Flow_48" sourceRef="Task_RerouteOriginalCase" targetRef="Task_ExecuteWithNewAsset" />
+    <sequenceFlow id="Flow_49" sourceRef="Task_PromoteReuseOrSegmentation" targetRef="EndEvent_Success" />
+    <sequenceFlow id="Flow_50" name="Approve after escalation" sourceRef="Gateway_EscalationOutcome" targetRef="Task_ImplementAsset" />
+  </process>
+</definitions>

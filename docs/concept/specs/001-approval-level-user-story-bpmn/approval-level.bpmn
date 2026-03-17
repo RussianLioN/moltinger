@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             id="Definitions_ApprovalLevel"
+             targetNamespace="http://asc-ai-fabrique/specs/approval-level">
+  <process id="Process_ApprovalLevel"
+           name="ASC AI Fabrique Approval-Level Routing"
+           isExecutable="false">
+    <laneSet id="LaneSet_ApprovalLevel">
+      <lane id="Lane_Initiator" name="Инициатор / владелец пользы">
+        <flowNodeRef>Task_ReviewUnderstanding</flowNodeRef>
+        <flowNodeRef>Task_ProvideClarification</flowNodeRef>
+        <flowNodeRef>Task_AcceptReassignment</flowNodeRef>
+        <flowNodeRef>Task_AcceptBenefitOwnership</flowNodeRef>
+      </lane>
+      <lane id="Lane_Factory" name="Фабрика">
+        <flowNodeRef>StartEvent_ApprovalNeeded</flowNodeRef>
+        <flowNodeRef>Task_PrepareApprovalPackage</flowNodeRef>
+        <flowNodeRef>Gateway_UserConfirmationRequired</flowNodeRef>
+        <flowNodeRef>Task_SendSummaryWithNextStep</flowNodeRef>
+        <flowNodeRef>Gateway_UserConfirmationOutcome</flowNodeRef>
+        <flowNodeRef>Task_RefinePackage</flowNodeRef>
+        <flowNodeRef>Task_RemindEscalateAndSeekRecovery</flowNodeRef>
+        <flowNodeRef>Gateway_RecoveryRoute</flowNodeRef>
+        <flowNodeRef>Task_RegisterReassignedInitiator</flowNodeRef>
+        <flowNodeRef>Task_SubmitForApproval</flowNodeRef>
+        <flowNodeRef>Task_RecordApprovedPackage</flowNodeRef>
+        <flowNodeRef>Gateway_BenefitOwnerAssigned</flowNodeRef>
+        <flowNodeRef>Task_SearchBenefitOwner</flowNodeRef>
+        <flowNodeRef>Gateway_BenefitOwnerFound</flowNodeRef>
+        <flowNodeRef>Task_OfferAlternativeSummary</flowNodeRef>
+        <flowNodeRef>Task_HandoffToProduction</flowNodeRef>
+        <flowNodeRef>Task_ReworkAfterProductionReturn</flowNodeRef>
+        <flowNodeRef>EndEvent_Frozen</flowNodeRef>
+        <flowNodeRef>EndEvent_ClosedAlternative</flowNodeRef>
+        <flowNodeRef>EndEvent_OpportunityFrozen</flowNodeRef>
+      </lane>
+      <lane id="Lane_Verification" name="Группа верификаторов и стейкхолдеров">
+        <flowNodeRef>Task_ReviewApprovalPackage</flowNodeRef>
+        <flowNodeRef>Gateway_VerificationDecision</flowNodeRef>
+        <flowNodeRef>Task_ReturnApprovalComments</flowNodeRef>
+        <flowNodeRef>Task_EscalatedReview</flowNodeRef>
+        <flowNodeRef>Gateway_EscalationOutcome</flowNodeRef>
+      </lane>
+      <lane id="Lane_Production" name="Production contour">
+        <flowNodeRef>Task_ReviewProductionIntake</flowNodeRef>
+        <flowNodeRef>Gateway_ProductionAccepted</flowNodeRef>
+        <flowNodeRef>Task_ReturnIntakeComments</flowNodeRef>
+        <flowNodeRef>EndEvent_AcceptedForProduction</flowNodeRef>
+      </lane>
+    </laneSet>
+
+    <startEvent id="StartEvent_ApprovalNeeded" name="Пакет готов к согласованию">
+      <outgoing>Flow_01</outgoing>
+    </startEvent>
+
+    <task id="Task_PrepareApprovalPackage" name="Собрать approval package">
+      <incoming>Flow_01</incoming>
+      <outgoing>Flow_02</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_UserConfirmationRequired" name="Нужно подтверждение инициатора?">
+      <incoming>Flow_02</incoming>
+      <incoming>Flow_09</incoming>
+      <incoming>Flow_32</incoming>
+      <outgoing>Flow_03</outgoing>
+      <outgoing>Flow_04</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_SendSummaryWithNextStep" name="Показать summary, зависимости и next step">
+      <incoming>Flow_03</incoming>
+      <incoming>Flow_13</incoming>
+      <incoming>Flow_14</incoming>
+      <outgoing>Flow_05</outgoing>
+    </task>
+
+    <userTask id="Task_ReviewUnderstanding" name="Проверить понимание и выбрать действие">
+      <incoming>Flow_05</incoming>
+      <outgoing>Flow_06</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_UserConfirmationOutcome" name="Каков outcome подтверждения?">
+      <incoming>Flow_06</incoming>
+      <outgoing>Flow_07</outgoing>
+      <outgoing>Flow_08</outgoing>
+      <outgoing>Flow_10</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="Task_ProvideClarification" name="Дать уточнения по кейсу">
+      <incoming>Flow_08</incoming>
+      <outgoing>Flow_11</outgoing>
+    </userTask>
+
+    <task id="Task_RefinePackage" name="Уточнить и пересобрать пакет">
+      <incoming>Flow_11</incoming>
+      <incoming>Flow_20</incoming>
+      <outgoing>Flow_09</outgoing>
+    </task>
+
+    <task id="Task_RemindEscalateAndSeekRecovery" name="Напомнить, эскалировать и найти допустимый обходной путь">
+      <incoming>Flow_10</incoming>
+      <outgoing>Flow_12</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_RecoveryRoute" name="Есть способ продолжить маршрут?">
+      <incoming>Flow_12</incoming>
+      <outgoing>Flow_13</outgoing>
+      <outgoing>Flow_15</outgoing>
+      <outgoing>Flow_16</outgoing>
+      <outgoing>Flow_17</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_RegisterReassignedInitiator" name="Зафиксировать нового инициатора и передать контекст">
+      <incoming>Flow_15</incoming>
+      <outgoing>Flow_18</outgoing>
+    </task>
+
+    <userTask id="Task_AcceptReassignment" name="Принять роль нового инициатора">
+      <incoming>Flow_18</incoming>
+      <outgoing>Flow_14</outgoing>
+    </userTask>
+
+    <task id="Task_OfferAlternativeSummary" name="Показать business-summary и безопасную альтернативу">
+      <incoming>Flow_16</incoming>
+      <incoming>Flow_29</incoming>
+      <outgoing>Flow_19</outgoing>
+    </task>
+
+    <endEvent id="EndEvent_Frozen" name="Кейс заморожен до нового цикла">
+      <incoming>Flow_17</incoming>
+    </endEvent>
+
+    <endEvent id="EndEvent_ClosedAlternative" name="Кейс закрыт с альтернативой">
+      <incoming>Flow_19</incoming>
+    </endEvent>
+
+    <task id="Task_SubmitForApproval" name="Передать пакет на review">
+      <incoming>Flow_04</incoming>
+      <incoming>Flow_07</incoming>
+      <outgoing>Flow_21</outgoing>
+    </task>
+
+    <userTask id="Task_ReviewApprovalPackage" name="Провести approval review">
+      <incoming>Flow_21</incoming>
+      <outgoing>Flow_22</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_VerificationDecision" name="Решение верификаторов?">
+      <incoming>Flow_22</incoming>
+      <outgoing>Flow_23</outgoing>
+      <outgoing>Flow_24</outgoing>
+      <outgoing>Flow_25</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="Task_ReturnApprovalComments" name="Вернуть замечания на доработку">
+      <incoming>Flow_24</incoming>
+      <incoming>Flow_28</incoming>
+      <outgoing>Flow_20</outgoing>
+    </userTask>
+
+    <userTask id="Task_EscalatedReview" name="Провести escalation review">
+      <incoming>Flow_25</incoming>
+      <outgoing>Flow_26</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_EscalationOutcome" name="Исход эскалации?">
+      <incoming>Flow_26</incoming>
+      <outgoing>Flow_27</outgoing>
+      <outgoing>Flow_28</outgoing>
+      <outgoing>Flow_29</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_RecordApprovedPackage" name="Зафиксировать согласованный пакет">
+      <incoming>Flow_23</incoming>
+      <incoming>Flow_27</incoming>
+      <outgoing>Flow_30</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_BenefitOwnerAssigned" name="Владелец пользы назначен?">
+      <incoming>Flow_30</incoming>
+      <outgoing>Flow_31</outgoing>
+      <outgoing>Flow_33</outgoing>
+    </exclusiveGateway>
+
+    <task id="Task_SearchBenefitOwner" name="Найти владельца пользы и сохранить lineage">
+      <incoming>Flow_33</incoming>
+      <outgoing>Flow_34</outgoing>
+    </task>
+
+    <exclusiveGateway id="Gateway_BenefitOwnerFound" name="Владелец найден?">
+      <incoming>Flow_34</incoming>
+      <outgoing>Flow_36</outgoing>
+      <outgoing>Flow_37</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="Task_AcceptBenefitOwnership" name="Принять роль владельца пользы">
+      <incoming>Flow_36</incoming>
+      <outgoing>Flow_38</outgoing>
+    </userTask>
+
+    <endEvent id="EndEvent_OpportunityFrozen" name="Инициатива заморожена до появления владельца">
+      <incoming>Flow_37</incoming>
+    </endEvent>
+
+    <task id="Task_HandoffToProduction" name="Передать approved package во 2-й контур">
+      <incoming>Flow_31</incoming>
+      <incoming>Flow_38</incoming>
+      <outgoing>Flow_39</outgoing>
+    </task>
+
+    <userTask id="Task_ReviewProductionIntake" name="Проверить intake пакета">
+      <incoming>Flow_39</incoming>
+      <outgoing>Flow_40</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="Gateway_ProductionAccepted" name="Production принимает handoff?">
+      <incoming>Flow_40</incoming>
+      <outgoing>Flow_41</outgoing>
+      <outgoing>Flow_42</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="Task_ReturnIntakeComments" name="Вернуть intake-замечания через фабрику">
+      <incoming>Flow_42</incoming>
+      <outgoing>Flow_43</outgoing>
+    </userTask>
+
+    <task id="Task_ReworkAfterProductionReturn" name="Доработать пакет после возврата из production">
+      <incoming>Flow_43</incoming>
+      <outgoing>Flow_32</outgoing>
+    </task>
+
+    <endEvent id="EndEvent_AcceptedForProduction" name="Пакет принят в production">
+      <incoming>Flow_41</incoming>
+    </endEvent>
+
+    <sequenceFlow id="Flow_01" sourceRef="StartEvent_ApprovalNeeded" targetRef="Task_PrepareApprovalPackage" />
+    <sequenceFlow id="Flow_02" sourceRef="Task_PrepareApprovalPackage" targetRef="Gateway_UserConfirmationRequired" />
+    <sequenceFlow id="Flow_03" name="Да" sourceRef="Gateway_UserConfirmationRequired" targetRef="Task_SendSummaryWithNextStep" />
+    <sequenceFlow id="Flow_04" name="Нет, self-generated track" sourceRef="Gateway_UserConfirmationRequired" targetRef="Task_SubmitForApproval" />
+    <sequenceFlow id="Flow_05" sourceRef="Task_SendSummaryWithNextStep" targetRef="Task_ReviewUnderstanding" />
+    <sequenceFlow id="Flow_06" sourceRef="Task_ReviewUnderstanding" targetRef="Gateway_UserConfirmationOutcome" />
+    <sequenceFlow id="Flow_07" name="Подтверждено" sourceRef="Gateway_UserConfirmationOutcome" targetRef="Task_SubmitForApproval" />
+    <sequenceFlow id="Flow_08" name="Нужно уточнение" sourceRef="Gateway_UserConfirmationOutcome" targetRef="Task_ProvideClarification" />
+    <sequenceFlow id="Flow_09" sourceRef="Task_RefinePackage" targetRef="Gateway_UserConfirmationRequired" />
+    <sequenceFlow id="Flow_10" name="Нет ответа или подтвержден отказ" sourceRef="Gateway_UserConfirmationOutcome" targetRef="Task_RemindEscalateAndSeekRecovery" />
+    <sequenceFlow id="Flow_11" sourceRef="Task_ProvideClarification" targetRef="Task_RefinePackage" />
+    <sequenceFlow id="Flow_12" sourceRef="Task_RemindEscalateAndSeekRecovery" targetRef="Gateway_RecoveryRoute" />
+    <sequenceFlow id="Flow_13" name="Ответ получен" sourceRef="Gateway_RecoveryRoute" targetRef="Task_SendSummaryWithNextStep" />
+    <sequenceFlow id="Flow_14" sourceRef="Task_AcceptReassignment" targetRef="Task_SendSummaryWithNextStep" />
+    <sequenceFlow id="Flow_15" name="Новый инициатор найден" sourceRef="Gateway_RecoveryRoute" targetRef="Task_RegisterReassignedInitiator" />
+    <sequenceFlow id="Flow_16" name="Безопасная альтернатива" sourceRef="Gateway_RecoveryRoute" targetRef="Task_OfferAlternativeSummary" />
+    <sequenceFlow id="Flow_17" name="Заморозить" sourceRef="Gateway_RecoveryRoute" targetRef="EndEvent_Frozen" />
+    <sequenceFlow id="Flow_18" sourceRef="Task_RegisterReassignedInitiator" targetRef="Task_AcceptReassignment" />
+    <sequenceFlow id="Flow_19" sourceRef="Task_OfferAlternativeSummary" targetRef="EndEvent_ClosedAlternative" />
+    <sequenceFlow id="Flow_20" sourceRef="Task_ReturnApprovalComments" targetRef="Task_RefinePackage" />
+    <sequenceFlow id="Flow_21" sourceRef="Task_SubmitForApproval" targetRef="Task_ReviewApprovalPackage" />
+    <sequenceFlow id="Flow_22" sourceRef="Task_ReviewApprovalPackage" targetRef="Gateway_VerificationDecision" />
+    <sequenceFlow id="Flow_23" name="Одобрить" sourceRef="Gateway_VerificationDecision" targetRef="Task_RecordApprovedPackage" />
+    <sequenceFlow id="Flow_24" name="Вернуть на доработку" sourceRef="Gateway_VerificationDecision" targetRef="Task_ReturnApprovalComments" />
+    <sequenceFlow id="Flow_25" name="Эскалировать" sourceRef="Gateway_VerificationDecision" targetRef="Task_EscalatedReview" />
+    <sequenceFlow id="Flow_26" sourceRef="Task_EscalatedReview" targetRef="Gateway_EscalationOutcome" />
+    <sequenceFlow id="Flow_27" name="Approve" sourceRef="Gateway_EscalationOutcome" targetRef="Task_RecordApprovedPackage" />
+    <sequenceFlow id="Flow_28" name="Revise and resubmit" sourceRef="Gateway_EscalationOutcome" targetRef="Task_ReturnApprovalComments" />
+    <sequenceFlow id="Flow_29" name="Defer or close with alternative" sourceRef="Gateway_EscalationOutcome" targetRef="Task_OfferAlternativeSummary" />
+    <sequenceFlow id="Flow_30" sourceRef="Task_RecordApprovedPackage" targetRef="Gateway_BenefitOwnerAssigned" />
+    <sequenceFlow id="Flow_31" name="Да" sourceRef="Gateway_BenefitOwnerAssigned" targetRef="Task_HandoffToProduction" />
+    <sequenceFlow id="Flow_32" sourceRef="Task_ReworkAfterProductionReturn" targetRef="Gateway_UserConfirmationRequired" />
+    <sequenceFlow id="Flow_33" name="Нет, требуется owner search" sourceRef="Gateway_BenefitOwnerAssigned" targetRef="Task_SearchBenefitOwner" />
+    <sequenceFlow id="Flow_34" sourceRef="Task_SearchBenefitOwner" targetRef="Gateway_BenefitOwnerFound" />
+    <sequenceFlow id="Flow_36" name="Да" sourceRef="Gateway_BenefitOwnerFound" targetRef="Task_AcceptBenefitOwnership" />
+    <sequenceFlow id="Flow_37" name="Нет, заморозить opportunity" sourceRef="Gateway_BenefitOwnerFound" targetRef="EndEvent_OpportunityFrozen" />
+    <sequenceFlow id="Flow_38" sourceRef="Task_AcceptBenefitOwnership" targetRef="Task_HandoffToProduction" />
+    <sequenceFlow id="Flow_39" sourceRef="Task_HandoffToProduction" targetRef="Task_ReviewProductionIntake" />
+    <sequenceFlow id="Flow_40" sourceRef="Task_ReviewProductionIntake" targetRef="Gateway_ProductionAccepted" />
+    <sequenceFlow id="Flow_41" name="Да" sourceRef="Gateway_ProductionAccepted" targetRef="EndEvent_AcceptedForProduction" />
+    <sequenceFlow id="Flow_42" name="Нет" sourceRef="Gateway_ProductionAccepted" targetRef="Task_ReturnIntakeComments" />
+    <sequenceFlow id="Flow_43" sourceRef="Task_ReturnIntakeComments" targetRef="Task_ReworkAfterProductionReturn" />
+  </process>
+</definitions>
