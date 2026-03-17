@@ -106,6 +106,31 @@ LOW_SIGNAL_MARKERS = {
     "лол",
     "+",
 }
+BUSINESS_IDEA_SIGNALS = (
+    "автомат",
+    "процесс",
+    "заявк",
+    "скоринг",
+    "согласован",
+    "обработ",
+    "клиент",
+    "договор",
+    "счет",
+    "счёт",
+    "invoice",
+    "approval",
+    "support",
+    "тикет",
+    "ticket",
+    "анализ",
+    "отчет",
+    "отчёт",
+    "проверк",
+    "кредит",
+    "документ",
+    "эскалац",
+    "workflow",
+)
 ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
     "problem": {
         "lead": "Начинаем с контекста задачи.",
@@ -679,6 +704,27 @@ def is_low_signal_reply(user_text: str, uploaded_files: list[dict[str, Any]] | N
     return len(words) <= 2 and len(normalized) < 20
 
 
+def has_business_idea_signal(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(token in normalized for token in BUSINESS_IDEA_SIGNALS)
+
+
+def is_adequate_start_idea(user_text: str, uploaded_files: list[dict[str, Any]] | None = None) -> bool:
+    if normalize_uploaded_files(uploaded_files):
+        return True
+    normalized = normalize_text(user_text)
+    if not normalized:
+        return False
+    if is_low_signal_reply(normalized, uploaded_files):
+        return False
+    words = [word for word in re.split(r"\s+", normalized) if word]
+    if has_business_idea_signal(normalized) and len(words) >= 3:
+        return True
+    return len(normalized) >= 48 and len(words) >= 6
+
+
 def requirement_topic_summaries(runtime_state: dict[str, Any]) -> dict[str, str]:
     summaries: dict[str, str] = {}
     topics = runtime_state.get("requirement_topics")
@@ -747,7 +793,11 @@ def adaptive_architect_question(
     user_text = normalize_text(envelope.get("user_text"))
     low_signal = force_low_signal_guard or is_low_signal_reply(user_text, uploaded_files)
     if low_signal:
-        reprompt = "Ответ пока слишком общий, из него нельзя зафиксировать требование в brief."
+        reprompt = (
+            "Описание предмета автоматизации пока слишком общее, его нельзя зафиксировать в brief."
+            if topic == "problem"
+            else "Ответ пока слишком общий, из него нельзя зафиксировать требование в brief."
+        )
         question = f"{reprompt} {base_question}"
         if example_hint:
             question = f"{question} {example_hint}"
@@ -1101,7 +1151,7 @@ def build_discovery_request(
         return request, True, low_signal_submission
 
     if ui_action == "start_project":
-        low_signal_submission = is_low_signal_reply(combined_text, uploaded_files)
+        low_signal_submission = not is_adequate_start_idea(combined_text, uploaded_files)
         if not low_signal_submission:
             request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
     elif ui_action == "submit_turn":

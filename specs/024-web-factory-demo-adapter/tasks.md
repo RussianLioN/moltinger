@@ -185,6 +185,7 @@
 - [x] T055 [US1] Add server-side low-signal guard and adaptive architect question composer in `scripts/agent-factory-web-adapter.py` so weak replies do not advance discovery topics
 - [x] T056 [US1] Surface `Агент-архитектор Moltis` identity in `ui_projection` and browser shell (`web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.js`) with updated discovery/integration tests
 - [x] T057 [US1] Extend low-signal validation to `start_project` and prevent auto-naming from weak first inputs in `scripts/agent-factory-web-adapter.py`, `web/agent-factory-demo/app.js`, and `tests/integration_local/test_agent_factory_web_flow.sh`
+- [x] T058 [US1] Tighten `start_project` adequacy validation (business-context threshold, not only stop-words) in `scripts/agent-factory-web-adapter.py` with additional integration coverage
 
 ---
 

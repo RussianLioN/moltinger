@@ -163,6 +163,7 @@ GitOps Compliance: Enforced ✅
   - `ui_projection.question_source = "adaptive_architect"` на нормальном ответе
   - `ui_projection.question_source = "low_signal_guard"` и отсутствие topic-advance на `ping`.
 - Расширен guard на самый первый ввод (`start_project`): сообщения вида `test/ping/ok` больше не принимаются как предмет автоматизации и вызывают reprompt по теме `problem`; параллельно автонейм проекта больше не берёт low-signal первую реплику в качестве названия.
+- Усилен `start_project` guard по достаточности контекста: теперь первый ввод блокируется не только по стоп-словам, но и при недостатке бизнес-сигналов (например `хочу помощь`). Валидация остаётся fail-closed: `problem` не заполняется, тема остаётся `problem`, а пользователю возвращается reprompt с шаблоном корректного описания.
 - Проверки в этой сессии:
   - `python3 -m py_compile scripts/agent-factory-web-adapter.py`
   - `node --check web/agent-factory-demo/app.js`
