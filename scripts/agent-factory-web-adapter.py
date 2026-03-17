@@ -1101,7 +1101,9 @@ def build_discovery_request(
         return request, True, low_signal_submission
 
     if ui_action == "start_project":
-        request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
+        low_signal_submission = is_low_signal_reply(combined_text, uploaded_files)
+        if not low_signal_submission:
+            request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
     elif ui_action == "submit_turn":
         low_signal_submission = is_low_signal_reply(combined_text, uploaded_files)
         captured_answers = request.get("captured_answers", {})

@@ -1420,6 +1420,9 @@
     if (!project || project.titleEdited) {
       return;
     }
+    if (isLowSignalInput(userText)) {
+      return;
+    }
     const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
     const uiCandidate = !looksLikeSlug(uiTitle) && !looksLikeExcerpt(uiTitle, userText) ? prettifyTitle(uiTitle) : "";
     const userCandidate = prettifyTitle(userText);

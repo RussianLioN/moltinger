@@ -162,6 +162,7 @@ GitOps Compliance: Enforced ✅
   - `ui_projection.agent_display_name = "Агент-архитектор Moltis"`
   - `ui_projection.question_source = "adaptive_architect"` на нормальном ответе
   - `ui_projection.question_source = "low_signal_guard"` и отсутствие topic-advance на `ping`.
+- Расширен guard на самый первый ввод (`start_project`): сообщения вида `test/ping/ok` больше не принимаются как предмет автоматизации и вызывают reprompt по теме `problem`; параллельно автонейм проекта больше не берёт low-signal первую реплику в качестве названия.
 - Проверки в этой сессии:
   - `python3 -m py_compile scripts/agent-factory-web-adapter.py`
   - `node --check web/agent-factory-demo/app.js`

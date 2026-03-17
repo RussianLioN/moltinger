@@ -39,6 +39,19 @@ run_integration_local_agent_factory_web_flow_tests() {
         test_fail "Browser adapter should start discovery directly from the session-new fixture"
     fi
 
+    test_start "integration_local_agent_factory_web_flow_reprompts_on_low_signal_start_idea"
+    if jq '.web_conversation_envelope.user_text = "test"' "$SESSION_NEW_FIXTURE" >"$tmpdir/start-low-signal.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/start-low-signal.json" --state-root "$tmpdir/state-low-signal" --output "$tmpdir/start-low-signal-out.json" >/dev/null; then
+        assert_eq "awaiting_user_reply" "$(jq -r '.status' "$tmpdir/start-low-signal-out.json")" "Low-signal start should keep discovery waiting for a valid idea"
+        assert_eq "problem" "$(jq -r '.next_topic' "$tmpdir/start-low-signal-out.json")" "Low-signal start should keep focus on business problem topic"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/start-low-signal-out.json")" "слишком общий" "Low-signal start should trigger an explicit reprompt"
+        assert_eq "" "$(jq -r '.discovery_runtime_state.requirement_topics[] | select(.topic_name == "problem") | .summary' "$tmpdir/start-low-signal-out.json")" "Low-signal start must not be accepted as problem statement"
+        assert_eq "low_signal_guard" "$(jq -r '.ui_projection.question_source' "$tmpdir/start-low-signal-out.json")" "UI projection should expose low-signal guard mode for start turn"
+        test_pass
+    else
+        test_fail "Browser adapter should reject low-signal start messages as automation subject"
+    fi
+
     test_start "integration_local_agent_factory_web_flow_advances_after_submit_turn"
     if jq '.web_conversation_envelope = {
           "web_conversation_envelope_id": "web-envelope-claims-routing-002",
