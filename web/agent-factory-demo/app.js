@@ -1124,6 +1124,31 @@
       }));
   }
 
+  function messageSignature(message) {
+    if (!message || typeof message !== "object") {
+      return "";
+    }
+    return [
+      normalizeText(message.role),
+      normalizeText(message.kind),
+      normalizeText(message.title),
+      normalizeText(message.body),
+    ].join("|");
+  }
+
+  function appendTimelineMessagesWithoutContiguousDuplicates(project, incomingMessages) {
+    if (!project || !Array.isArray(project.timeline) || !Array.isArray(incomingMessages) || incomingMessages.length === 0) {
+      return;
+    }
+    for (const message of incomingMessages) {
+      const last = project.timeline[project.timeline.length - 1];
+      if (messageSignature(last) && messageSignature(last) === messageSignature(message)) {
+        continue;
+      }
+      project.timeline.push(message);
+    }
+  }
+
   function renderTimeline(project) {
     dom.chatLog.innerHTML = "";
     const items = project?.timeline?.length ? project.timeline : [];
@@ -1821,7 +1846,10 @@
       }
       state.accessToken = provided;
       setGateNote("Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.", "success");
-      applyResponse(project, response, "live");
+      applyResponse(project, response, "live", {
+        appendReplyMessages: !hasConversationActivity(project),
+        syncReason: "unlock_access",
+      });
       persist();
       renderAll();
       focusComposerSoon();
@@ -2234,7 +2262,7 @@
 
     const replyMessages = appendReplyMessages ? timelineMessagesFromResponse(response) : [];
     if (replyMessages.length) {
-      project.timeline.push(...replyMessages);
+      appendTimelineMessagesWithoutContiguousDuplicates(project, replyMessages);
     }
 
     const firstMeaningfulUserMessage = project.timeline.find(
