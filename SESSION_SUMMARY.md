@@ -57,6 +57,10 @@ GitOps Compliance: Enforced ✅
 - Поднят новый Speckit-пакет backend-среза: `specs/025-asc-demo-llm-backend/{spec.md,plan.md,tasks.md}` на базе `asc-demo/docs/plans/sleepy-munching-turing.md`.
 - Входные параметры от пользователя зафиксированы в конфигурации и Speckit-пакете: `DEMO_ACCESS_TOKEN=demo-access-token`, целевой публичный домен `demo.ainetic.tech` (`DEMO_DOMAIN`, `DEMO_PUBLIC_BASE_URL`).
 - Operational defaults для web demo переведены на `demo.ainetic.tech`: обновлены `docker-compose.asc.yml` (`ASC_DEMO_DOMAIN`, `ASC_DEMO_PUBLIC_BASE_URL`, Traefik host rules), `config/moltis.toml` (`MOLTIS_FACTORY_PRIMARY_DEMO_DOMAIN`) и smoke-пример в `docs/runbooks/agent-factory-web-demo.md`.
+- Выполнен live-rollout на `demo.ainetic.tech` в remote worktree `/opt/moltinger-asc-demo`: подтянуты коммиты ветки `024-web-factory-demo-adapter`, обновлены серверные anchors в `.env.asc` (`ASC_DEMO_DOMAIN`, `ASC_DEMO_PUBLIC_BASE_URL`, `ASC_DEMO_SHARED_TOKEN_HASH` для `demo-access-token`), затем выполнен `./scripts/deploy.sh --json asc-demo deploy/restart`.
+- Post-deploy проверка (green):
+  - `https://demo.ainetic.tech/health` и `https://demo.ainetic.tech/api/health` возвращают `status=ok`, `demo_domain=demo.ainetic.tech`, `publication_status=ready`.
+  - `POST https://demo.ainetic.tech/api/turn` с `request_demo_access` и `demo-access-token` открывает discovery (`status=awaiting_user_reply`, `question_source=adaptive_architect`).
 - Реализован standalone Node backend для `asc-demo`:
   - runtime bootstrap: `asc-demo/package.json`, `asc-demo/.env.example`, `asc-demo/server.js`
   - core/domain modules: `asc-demo/src/llm.js`, `sessions.js`, `response-builder.js`, `discovery.js`, `brief.js`, `summary-generator.js`, `router.js`
