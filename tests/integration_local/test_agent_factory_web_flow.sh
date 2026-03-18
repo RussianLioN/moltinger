@@ -103,6 +103,77 @@ run_integration_local_agent_factory_web_flow_tests() {
         test_fail "Browser adapter should keep the same discovery topic when the user sends low-signal input"
     fi
 
+    test_start "integration_local_agent_factory_web_flow_syncs_topic_after_upload_bridge_and_handles_repeat_meta_reply"
+    if jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-005",
+          "request_id": "web-request-claims-routing-005",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Сейчас данные собираются вручную из банковских систем и финальный материал готовится в Word."
+        } | del(.demo_access_grant)' "$tmpdir/turn-two-out.json" >"$tmpdir/turn-three.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-three.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-three-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-006",
+          "request_id": "web-request-claims-routing-006",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Нужно сократить время подготовки материалов минимум вдвое и повысить качество рекомендаций."
+        } | del(.demo_access_grant)' "$tmpdir/turn-three-out.json" >"$tmpdir/turn-four.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-four.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-four-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-007",
+          "request_id": "web-request-claims-routing-007",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Агент помогает клиентскому менеджеру перед заседанием коллегиального органа."
+        } | del(.demo_access_grant)' "$tmpdir/turn-four-out.json" >"$tmpdir/turn-five.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-five.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-five-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-008",
+          "request_id": "web-request-claims-routing-008",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Во вложении типовой CSV по клиенту."
+        }
+        | .uploaded_files = [{
+          "upload_id": "upload-csv-01",
+          "name": "demo-client-data.csv",
+          "content_type": "text/csv",
+          "content_base64": "aWQsc2NvcmUKMSw3NDIK",
+          "size_bytes": 14,
+          "original_size_bytes": 14,
+          "truncated": false
+        }]
+        | del(.demo_access_grant)' "$tmpdir/turn-five-out.json" >"$tmpdir/turn-upload.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-upload.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-upload-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-009",
+          "request_id": "web-request-claims-routing-009",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Я уже отвечал на этот вопрос, перефразируй."
+        } | del(.demo_access_grant)' "$tmpdir/turn-upload-out.json" >"$tmpdir/turn-repeat-meta.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-repeat-meta.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-repeat-meta-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-010",
+          "request_id": "web-request-claims-routing-010",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "PDF с рекомендацией."
+        } | del(.demo_access_grant)' "$tmpdir/turn-repeat-meta-out.json" >"$tmpdir/turn-expected-output-answer.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-expected-output-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-expected-output-answer-out.json" >/dev/null; then
+        assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/turn-upload-out.json")" "Upload bridge should move discovery to expected outputs topic"
+        assert_eq "expected_outputs" "$(jq -r '.web_conversation_envelope.normalized_payload.current_topic' "$tmpdir/turn-upload-out.json")" "Normalized payload topic should stay synchronized after upload bridge"
+        assert_eq "expected_outputs" "$(jq -r '.discovery_runtime_state.discovery_session.current_topic' "$tmpdir/turn-upload-out.json")" "Discovery session current topic should stay synchronized after upload bridge"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/turn-repeat-meta-out.json")" "Бизнес-эффект уже зафиксирован" "Repeat marker for expected outputs should produce a semantic rephrase instead of looping back"
+        assert_eq "repeat_marker_rephrase" "$(jq -r '.ui_projection.question_source' "$tmpdir/turn-repeat-meta-out.json")" "Repeat marker branch should be visible in UI projection source"
+        assert_eq "constraints" "$(jq -r '.next_topic' "$tmpdir/turn-expected-output-answer-out.json")" "Short but valid expected output answer should advance to constraints"
+        assert_contains "$(jq -r '.discovery_runtime_state.requirement_topics[] | select(.topic_name == "expected_outputs") | .summary' "$tmpdir/turn-expected-output-answer-out.json")" "PDF с рекомендацией." "Expected outputs topic should capture the short valid answer without regressing to partial status"
+        test_pass
+    else
+        test_fail "Browser adapter should bridge uploads, handle repeat meta-replies, and accept short valid expected output answers"
+    fi
+
     generate_report
 }
 

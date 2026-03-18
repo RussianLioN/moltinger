@@ -514,7 +514,16 @@ def discovery_value_is_ambiguous(value: Any) -> bool:
     return any(marker in text for marker in DISCOVERY_AMBIGUOUS_MARKERS)
 
 
-def discovery_topic_status(value: Any, existing_status: str = "") -> str:
+def discovery_topic_min_words(topic_name: str) -> int:
+    topic = canonical_discovery_topic_name(topic_name)
+    if topic in {"expected_outputs", "input_examples", "target_users"}:
+        return 1
+    if topic in {"user_story"}:
+        return 2
+    return 4
+
+
+def discovery_topic_status(value: Any, existing_status: str = "", topic_name: str = "") -> str:
     status = normalize_text(existing_status)
     if status == "confirmed":
         return "confirmed"
@@ -527,7 +536,7 @@ def discovery_topic_status(value: Any, existing_status: str = "") -> str:
     summary = discovery_summary(value)
     if discovery_value_is_ambiguous(value):
         return "partial"
-    if len(summary.split()) < 4:
+    if len(summary.split()) < discovery_topic_min_words(topic_name):
         return "partial"
     return "clarified"
 
@@ -555,7 +564,7 @@ def build_discovery_topic(
     if existing_status in {"confirmed", "clarified", "partial", "unresolved"} and summary == existing_summary:
         status = existing_status
     else:
-        status = discovery_topic_status(summary, existing_status)
+        status = discovery_topic_status(summary, existing_status, canonical)
         if existing_status == "unresolved" and summary:
             status = "unresolved"
 

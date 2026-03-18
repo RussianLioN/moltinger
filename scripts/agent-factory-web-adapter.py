@@ -106,6 +106,17 @@ LOW_SIGNAL_MARKERS = {
     "лол",
     "+",
 }
+REPEAT_ACK_MARKERS = (
+    "уже отвечал",
+    "уже отвечала",
+    "на этот вопрос я тоже отвечал",
+    "на этот вопрос я уже отвечал",
+    "дублирую ответ",
+    "дублирую",
+    "перефразируй",
+    "неправильно понимаю",
+    "already answered",
+)
 BUSINESS_IDEA_SIGNALS = (
     "автомат",
     "процесс",
@@ -777,6 +788,113 @@ def context_hint_for_topic(
     return ""
 
 
+def next_architect_topic(current_topic: str) -> str:
+    topic = normalize_text(current_topic)
+    if not topic:
+        return ""
+    ordered_topics = list(ARCHITECT_TOPIC_FRAMES.keys())
+    try:
+        index = ordered_topics.index(topic)
+    except ValueError:
+        return ""
+    if index + 1 >= len(ordered_topics):
+        return ""
+    return ordered_topics[index + 1]
+
+
+def has_repeat_ack_marker(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in REPEAT_ACK_MARKERS)
+
+
+def upsert_topic_summary(runtime_state: dict[str, Any], *, topic_name: str, summary: str, now: str) -> None:
+    topic = normalize_text(topic_name)
+    summary_text = normalize_text(summary)
+    if not topic or not summary_text or not isinstance(runtime_state, dict):
+        return
+
+    captured_answers = runtime_state.get("captured_answers")
+    if not isinstance(captured_answers, dict):
+        captured_answers = {}
+    captured_answers[topic] = summary_text
+    runtime_state["captured_answers"] = captured_answers
+
+    requirement_topics = runtime_state.get("requirement_topics")
+    if not isinstance(requirement_topics, list):
+        requirement_topics = []
+    updated = False
+    for item in requirement_topics:
+        if not isinstance(item, dict):
+            continue
+        if normalize_text(item.get("topic_name")) != topic:
+            continue
+        item["summary"] = summary_text
+        item["status"] = "clarified"
+        item["last_updated_at"] = now
+        updated = True
+        break
+    if not updated:
+        requirement_topics.append(
+            {
+                "topic_id": f"topic-{topic}-bridge",
+                "topic_name": topic,
+                "category": "functional",
+                "status": "clarified",
+                "summary": summary_text,
+                "source_turn_ids": [],
+                "last_updated_at": now,
+            }
+        )
+    runtime_state["requirement_topics"] = requirement_topics
+
+
+def bridge_repeat_answer(
+    runtime_state: dict[str, Any],
+    *,
+    next_topic: str,
+    next_question: str,
+    envelope: dict[str, Any],
+    now: str,
+) -> tuple[str, str, bool, bool, str]:
+    topic = normalize_text(next_topic)
+    if not topic:
+        return next_topic, next_question, False, False, "runtime"
+    if not has_repeat_ack_marker(normalize_text(envelope.get("user_text"))):
+        return next_topic, next_question, False, False, "runtime"
+
+    summaries = requirement_topic_summaries(runtime_state)
+    topic_summary = normalize_text(summaries.get(topic))
+    if not topic_summary:
+        if topic == "expected_outputs":
+            business_effect = normalize_text(summaries.get("desired_outcome"))
+            if business_effect:
+                rephrased = (
+                    f"Понял. Бизнес-эффект уже зафиксирован: {shorten_text(business_effect, 90)}.\n\n"
+                    "Теперь нужен именно выход для пользователя: какой конкретный файл, материал или экран агент должен выдавать после обработки?"
+                )
+                return topic, rephrased, True, True, "repeat_marker_rephrase"
+            rephrased = (
+                "Понял, что ты уже отвечал. Уточню формулировку: "
+                "какой конкретный артефакт должен получить пользователь на выходе "
+                "(например, PDF, one-page summary, карточка клиента или письмо-рекомендация)?"
+            )
+            return topic, rephrased, True, True, "repeat_marker_rephrase"
+        rephrased = (
+            "Понял, что ты уже давал ответ. Сформулирую проще: "
+            f"{normalize_text(ARCHITECT_TOPIC_FRAMES.get(topic, {}).get('question')) or normalize_text(next_question)}"
+        )
+        return topic, rephrased, True, True, "repeat_marker_rephrase"
+
+    upsert_topic_summary(runtime_state, topic_name=topic, summary=topic_summary, now=now)
+    bridged_topic = normalize_text(next_architect_topic(topic))
+    if not bridged_topic:
+        return topic, next_question, False, False, "runtime"
+    bridged_question = normalize_text(ARCHITECT_TOPIC_FRAMES.get(bridged_topic, {}).get("question")) or normalize_text(next_question)
+    return bridged_topic, bridged_question, True, False, "repeat_marker_bridge"
+
+
 def adaptive_architect_question(
     *,
     next_question: str,
@@ -811,16 +929,36 @@ def adaptive_architect_question(
     return question, "adaptive_architect"
 
 
-def patch_runtime_next_question(runtime_state: dict[str, Any], *, next_question: str, next_topic: str) -> None:
+def patch_runtime_next_question(
+    runtime_state: dict[str, Any],
+    *,
+    next_question: str,
+    next_topic: str,
+    next_action: str = "",
+) -> None:
     if not isinstance(runtime_state, dict):
         return
     question = normalize_text(next_question)
     topic = normalize_text(next_topic)
-    if not question:
-        return
-    runtime_state["next_question"] = question
+    action = normalize_text(next_action)
+    if question:
+        runtime_state["next_question"] = question
     if topic:
         runtime_state["next_topic"] = topic
+    if action:
+        runtime_state["next_action"] = action
+
+    discovery_session = runtime_state.get("discovery_session")
+    if not isinstance(discovery_session, dict):
+        discovery_session = {}
+    if topic:
+        discovery_session["current_topic"] = topic
+    if action:
+        discovery_session["next_recommended_action"] = action
+    runtime_state["discovery_session"] = discovery_session
+
+    if not question:
+        return
     open_questions = runtime_state.get("open_questions")
     if isinstance(open_questions, list):
         runtime_state["open_questions"] = [question]
@@ -1154,13 +1292,14 @@ def build_discovery_request(
         if not low_signal_submission:
             request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
     elif ui_action == "submit_turn":
-        low_signal_submission = is_low_signal_reply(combined_text, uploaded_files)
+        repeat_ack_submission = has_repeat_ack_marker(combined_text)
+        low_signal_submission = False if repeat_ack_submission else is_low_signal_reply(combined_text, uploaded_files)
         captured_answers = request.get("captured_answers", {})
         if not isinstance(captured_answers, dict):
             captured_answers = {}
-        if current_topic and combined_text and not low_signal_submission:
+        if current_topic and combined_text and not low_signal_submission and not repeat_ack_submission:
             captured_answers[current_topic] = combined_text
-        elif combined_text and not normalize_text(request.get("raw_idea")) and not low_signal_submission:
+        elif combined_text and not normalize_text(request.get("raw_idea")) and not low_signal_submission and not repeat_ack_submission:
             request["raw_idea"] = combined_text
         request["captured_answers"] = captured_answers
         append_user_turn(request, combined_text, current_topic, now)
@@ -1378,11 +1517,13 @@ def compact_display_title(*candidates: Any) -> str:
         if not normalized:
             return True
         return normalized in {
+            "new",
             "new project",
             "project",
             "discovery project",
             "demo project",
             "factory project",
+            "новый",
             "новый проект",
             "проект",
         }
@@ -1699,6 +1840,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     )
     architect_question_source = "runtime"
     bridged_from_uploaded_examples = False
+    bridged_repeat_ack = False
+    skip_adaptive_architect = False
     if access_granted and not download_artifacts:
         next_topic, next_question, bridged_from_uploaded_examples = bridge_input_examples_topic(
             runtime_state,
@@ -1707,6 +1850,23 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             uploaded_files=uploaded_files,
             now=now,
         )
+        (
+            next_topic,
+            next_question,
+            bridged_repeat_ack,
+            skip_adaptive_architect,
+            repeat_source,
+        ) = bridge_repeat_answer(
+            runtime_state,
+            next_topic=next_topic,
+            next_question=next_question,
+            envelope=envelope,
+            now=now,
+        )
+        if bridged_repeat_ack:
+            architect_question_source = repeat_source
+        elif bridged_from_uploaded_examples:
+            architect_question_source = "uploaded_examples_bridge"
     if access_granted and low_signal_submission and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}:
         next_action = "ask_next_question"
         if not next_topic:
@@ -1719,6 +1879,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         and not download_artifacts
         and next_question
         and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}
+        and not skip_adaptive_architect
     ):
         adaptive_question, architect_question_source = adaptive_architect_question(
             next_question=next_question,
@@ -1729,9 +1890,16 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             force_low_signal_guard=low_signal_submission,
         )
         next_question = normalize_text(adaptive_question) or next_question
-        patch_runtime_next_question(runtime_state, next_question=next_question, next_topic=next_topic)
-        if bridged_from_uploaded_examples:
-            architect_question_source = "uploaded_examples_bridge"
+    if access_granted and not download_artifacts:
+        patch_runtime_next_question(
+            runtime_state,
+            next_question=next_question,
+            next_topic=next_topic,
+            next_action=next_action,
+        )
+        discovery_session = runtime_state.get("discovery_session", {}) if isinstance(runtime_state.get("discovery_session"), dict) else {}
+    else:
+        discovery_session = runtime_state.get("discovery_session", {}) if isinstance(runtime_state.get("discovery_session"), dict) else {}
     status_snapshot = build_web_demo_status_snapshot(
         web_demo_session.get("web_demo_session_id"),
         pointer.get("project_key"),

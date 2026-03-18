@@ -1128,6 +1128,33 @@
     ].join("|");
   }
 
+  function isDuplicateAgentQuestion(project, message) {
+    if (!project || !Array.isArray(project.timeline) || !message || typeof message !== "object") {
+      return false;
+    }
+    if (normalizeText(message.role) !== "agent") {
+      return false;
+    }
+    const body = normalizeText(message.body);
+    if (!body) {
+      return false;
+    }
+    const lookbackLimit = Math.max(0, project.timeline.length - 14);
+    for (let index = project.timeline.length - 1; index >= lookbackLimit; index -= 1) {
+      const existing = project.timeline[index];
+      if (!existing || typeof existing !== "object") {
+        continue;
+      }
+      if (normalizeText(existing.role) !== "agent") {
+        continue;
+      }
+      if (normalizeText(existing.body) === body) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function appendTimelineMessagesWithoutContiguousDuplicates(project, incomingMessages) {
     if (!project || !Array.isArray(project.timeline) || !Array.isArray(incomingMessages) || incomingMessages.length === 0) {
       return;
@@ -1135,6 +1162,9 @@
     for (const message of incomingMessages) {
       const last = project.timeline[project.timeline.length - 1];
       if (messageSignature(last) && messageSignature(last) === messageSignature(message)) {
+        continue;
+      }
+      if (isDuplicateAgentQuestion(project, message)) {
         continue;
       }
       project.timeline.push(message);
@@ -1482,6 +1512,7 @@
     if (
       normalized === "new project"
       || normalized === "новый проект"
+      || normalized === "новый"
       || normalized === "project"
       || normalized === "проект"
       || normalized === "discovery project"
