@@ -32,7 +32,8 @@
 | `primary-feature-023` | `023-full-moltis-codex-update-skill` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-024` | `024-clawdiy-oauth-store-drift-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-024` | `024-web-factory-demo-adapter` | `dedicated-feature-worktree` | Needs decision |
-| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
+| `primary-feature-026` | `026-clawteam-framework-research` | `dedicated-feature-worktree` | Needs decision |
+| `primary-root` | `DETACHED` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
 
@@ -47,6 +48,7 @@
 | `023-full-moltis-codex-update-skill` | `origin/023-full-moltis-codex-update-skill` | Needs decision |
 | `024-clawdiy-oauth-store-drift-fix` | `origin/024-clawdiy-oauth-store-drift-fix` | Needs decision |
 | `024-web-factory-demo-adapter` | `origin/024-web-factory-demo-adapter` | Needs decision |
+| `026-clawteam-framework-research` | `origin/main` | Needs decision |
 | `chore/topology-registry-after-cleanup-20260312` | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `chore/topology-registry-publish` | `none` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
@@ -92,6 +94,7 @@
 | `codex/remote-uat-hardening` | `none` | Needs decision |
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
+| `feat/exploration-clawteam-framework-research` | `none` | Needs decision |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
 | `feat/openclaw-control-plane` | `none` | Needs decision |
