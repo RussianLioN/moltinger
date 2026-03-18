@@ -186,6 +186,10 @@
 - [x] T056 [US1] Surface `Агент-архитектор Moltis` identity in `ui_projection` and browser shell (`web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.js`) with updated discovery/integration tests
 - [x] T057 [US1] Extend low-signal validation to `start_project` and prevent auto-naming from weak first inputs in `scripts/agent-factory-web-adapter.py`, `web/agent-factory-demo/app.js`, and `tests/integration_local/test_agent_factory_web_flow.sh`
 - [x] T058 [US1] Tighten `start_project` adequacy validation (business-context threshold, not only stop-words) in `scripts/agent-factory-web-adapter.py` with additional integration coverage
+- [x] T059 [US1] Add OpenAI-compatible LLM decision layer with strict topic guard and fail-soft fallback in `scripts/agent_factory_llm.py` and `scripts/agent-factory-web-adapter.py`
+- [x] T060 [US1] Expose asc-demo LLM runtime env anchors in `docker-compose.asc.yml`, `.env.asc.example`, and `scripts/deploy.sh`
+- [x] T061 [US4] Document LLM orchestration flow and deployment contract in `docs/architecture/agent-factory-web-demo-llm-orchestration.md` and `docs/runbooks/agent-factory-web-demo.md`
+- [x] T062 [US1] Extend component/integration coverage for LLM state flags and unconfigured-provider fallback in `tests/component/test_agent_factory_web_discovery.sh` and `tests/integration_local/test_agent_factory_web_flow.sh`
 
 ---
 
