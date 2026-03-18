@@ -265,7 +265,8 @@ add_json_services() {
     JSON_SERVICES=()
     JSON_SERVICES+=("\"$TARGET_SERVICE\"")
 
-    for service in "${TARGET_AUXILIARY_SERVICES[@]}"; do
+    for service in "${TARGET_AUXILIARY_SERVICES[@]-}"; do
+        [[ -z "$service" ]] && continue
         JSON_SERVICES+=("\"$service\"")
     done
 }
