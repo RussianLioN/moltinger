@@ -51,6 +51,13 @@ services:
       ASC_DEMO_SHARED_TOKEN_HASH: ${ASC_DEMO_SHARED_TOKEN_HASH:-}
       ASC_DEMO_OPERATOR_LABEL: ${ASC_DEMO_OPERATOR_LABEL:-factory-demo-operator}
       ASC_DEMO_INTERNAL_PORT: ${ASC_DEMO_INTERNAL_PORT:-18791}
+      ASC_DEMO_LLM_ENABLED: ${ASC_DEMO_LLM_ENABLED:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.fireworks.ai/inference/v1}
+      MODEL_NAME: ${MODEL_NAME:-accounts/fireworks/models/glm-5}
+      ASC_DEMO_LLM_TIMEOUT_SECONDS: ${ASC_DEMO_LLM_TIMEOUT_SECONDS:-18}
+      ASC_DEMO_LLM_TEMPERATURE: ${ASC_DEMO_LLM_TEMPERATURE:-0.1}
+      ASC_DEMO_LLM_MAX_TOKENS: ${ASC_DEMO_LLM_MAX_TOKENS:-350}
       ASC_DEMO_DATA_ROOT: /workspace/data/agent-factory/web-demo
       ASC_DISCOVERY_ROOT: /workspace/data/agent-factory/discovery
       ASC_CONCEPT_ROOT: /workspace/data/agent-factory/concepts

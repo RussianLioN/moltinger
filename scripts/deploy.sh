@@ -1002,6 +1002,8 @@ show_usage() {
     echo "  CLAWDIY_ENV_FILE     - Optional env file for target=clawdiy"
     echo "  ASC_DEMO_ENV_FILE    - Optional env file for target=asc-demo"
     echo "  ASC_DEMO_SHARED_TOKEN_HASH - Shared demo access token hash for target=asc-demo"
+    echo "  ASC_DEMO_LLM_ENABLED - Enable LLM decision layer in target=asc-demo"
+    echo "  OPENAI_API_KEY / OPENAI_BASE_URL / MODEL_NAME - OpenAI-compatible provider config for target=asc-demo"
     echo ""
     echo "Contract: specs/001-docker-deploy-improvements/contracts/scripts.md"
 }

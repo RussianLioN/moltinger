@@ -21,6 +21,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 from xml.etree import ElementTree
 
+from agent_factory_llm import (
+    LLMError,
+    chat_completion_json,
+    llm_settings_from_env,
+)
 from agent_factory_common import (
     build_web_reply_card,
     build_web_demo_status_snapshot,
@@ -189,6 +194,27 @@ ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
         "example": "Например: время обработки, точность классификации и доля ручных эскалаций.",
     },
 }
+ARCHITECT_TOPIC_ORDER = list(ARCHITECT_TOPIC_FRAMES.keys())
+LLM_DECISION_PROMPT = """Ты фабричный агент-архитектор Moltis.
+Текущий этап: discovery требований.
+
+Верни строго JSON-объект следующего формата:
+{
+  "decision": "accept|clarify|rephrase|advance",
+  "next_topic": "problem|target_users|current_workflow|desired_outcome|user_story|input_examples|expected_outputs|constraints|success_metrics|",
+  "next_question": "один следующий вопрос пользователю",
+  "low_signal": false,
+  "topic_summary": "краткое подтверждение зафиксированного ответа"
+}
+
+Ограничения:
+1. Не используй markdown и не добавляй текст вне JSON.
+2. Не выходи за список allowed_topics, который передан во входе.
+3. Если пользователь пишет "уже отвечал", "перефразируй" или аналог — используй decision=rephrase.
+4. Если ответ недостаточно конкретный для текущей темы — decision=clarify и оставь ту же тему.
+5. Если тема закрыта, можно переходить к следующей теме по цепочке через decision=advance.
+6. Не добавляй "Например:" и не пиши служебные статусы в next_question.
+"""
 
 
 def parse_args() -> argparse.Namespace:
@@ -800,6 +826,162 @@ def next_architect_topic(current_topic: str) -> str:
     if index + 1 >= len(ordered_topics):
         return ""
     return ordered_topics[index + 1]
+
+
+def topic_position(topic_name: str) -> int:
+    topic = normalize_text(topic_name)
+    if not topic:
+        return -1
+    try:
+        return ARCHITECT_TOPIC_ORDER.index(topic)
+    except ValueError:
+        return -1
+
+
+def sanitize_architect_question_text(value: Any) -> str:
+    text = normalize_text(value)
+    if not text:
+        return ""
+    text = re.sub(r"(?im)^\s*следующий\s+вопрос\s*[:\-]*\s*", "", text).strip()
+    lines: list[str] = []
+    for line in text.splitlines():
+        compact = normalize_text(line)
+        if not compact:
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+        if re.match(r"(?i)^например[:\s]", compact):
+            continue
+        lines.append(compact)
+    while lines and lines[0] == "":
+        lines.pop(0)
+    while lines and lines[-1] == "":
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+def llm_upload_context(uploaded_files: list[dict[str, Any]]) -> list[dict[str, str]]:
+    context: list[dict[str, str]] = []
+    for item in normalize_uploaded_files(uploaded_files):
+        name = normalize_text(item.get("name"))
+        excerpt = shorten_text(item.get("excerpt"), 220)
+        if not name and not excerpt:
+            continue
+        context.append(
+            {
+                "name": name,
+                "excerpt": excerpt,
+            }
+        )
+    return context[:3]
+
+
+def llm_topic_summary_context(runtime_state: dict[str, Any]) -> dict[str, str]:
+    summaries = requirement_topic_summaries(runtime_state)
+    normalized: dict[str, str] = {}
+    for key, value in summaries.items():
+        compact = shorten_text(value, 180)
+        if compact:
+            normalized[key] = compact
+    return normalized
+
+
+def llm_adaptive_architect_question(
+    *,
+    current_topic: str,
+    runtime_next_topic: str,
+    runtime_next_question: str,
+    runtime_state: dict[str, Any],
+    envelope: dict[str, Any],
+    uploaded_files: list[dict[str, Any]],
+) -> tuple[str, str, str]:
+    settings = llm_settings_from_env()
+    if not settings.enabled:
+        return "", "", "llm_disabled"
+    if not settings.configured:
+        return "", "", "llm_not_configured"
+
+    topic_now = normalize_text(current_topic) or normalize_text(runtime_next_topic)
+    if not topic_now:
+        return "", "", "llm_no_topic"
+    expected_next = normalize_text(runtime_next_topic) or topic_now
+    user_text = normalize_text(envelope.get("user_text"))
+    if not user_text and not normalize_uploaded_files(uploaded_files):
+        return "", "", "llm_no_user_input"
+
+    prompt_payload = {
+        "allowed_topics": ARCHITECT_TOPIC_ORDER,
+        "current_topic": topic_now,
+        "runtime_next_topic": expected_next,
+        "runtime_next_question": sanitize_architect_question_text(runtime_next_question),
+        "next_topic_by_order": normalize_text(next_architect_topic(topic_now)),
+        "repeat_marker_detected": has_repeat_ack_marker(user_text),
+        "low_signal_heuristic": is_low_signal_reply(user_text, uploaded_files),
+        "user_reply": user_text,
+        "topic_summaries": llm_topic_summary_context(runtime_state),
+        "uploaded_files": llm_upload_context(uploaded_files),
+    }
+    user_prompt = (
+        "Сформируй решение по следующему ходу discovery.\n"
+        f"{json.dumps(prompt_payload, ensure_ascii=False, indent=2)}"
+    )
+    try:
+        decision_data = chat_completion_json(
+            system_prompt=LLM_DECISION_PROMPT,
+            user_prompt=user_prompt,
+            settings=settings,
+        )
+    except LLMError:
+        return "", "", "llm_error"
+
+    decision = normalize_text(decision_data.get("decision")).lower()
+    if decision not in {"accept", "clarify", "rephrase", "advance"}:
+        decision = "accept"
+    returned_topic = normalize_text(decision_data.get("next_topic"))
+    returned_question = sanitize_architect_question_text(decision_data.get("next_question"))
+    returned_low_signal = bool(decision_data.get("low_signal"))
+    summary = normalize_text(decision_data.get("topic_summary"))
+
+    current_pos = topic_position(topic_now)
+    expected_pos = topic_position(expected_next)
+    next_by_order = normalize_text(next_architect_topic(topic_now))
+    allowed_transition = {
+        topic_now,
+        expected_next,
+        next_by_order,
+    }
+    allowed_transition = {topic for topic in allowed_transition if topic}
+
+    if decision in {"clarify", "rephrase"} or returned_low_signal:
+        target_topic = topic_now
+    elif decision == "advance":
+        target_topic = returned_topic or next_by_order or expected_next
+    else:
+        target_topic = returned_topic or expected_next
+
+    if target_topic not in ARCHITECT_TOPIC_FRAMES:
+        target_topic = expected_next or topic_now
+    if target_topic not in allowed_transition:
+        target_topic = expected_next or topic_now
+
+    if current_pos >= 0 and expected_pos >= 0 and expected_pos < current_pos:
+        target_topic = topic_now
+
+    target_question = returned_question
+    if not target_question:
+        target_question = normalize_text(ARCHITECT_TOPIC_FRAMES.get(target_topic, {}).get("question")) or sanitize_architect_question_text(
+            runtime_next_question
+        )
+    if not target_question:
+        return "", "", "llm_empty_question"
+
+    if summary and decision in {"accept", "advance"} and not returned_low_signal:
+        target_question = f"Зафиксировал: {shorten_text(summary, 120)}.\n\n{target_question}"
+
+    source = f"llm_{decision}"
+    if returned_low_signal:
+        source = "llm_low_signal"
+    return target_question, target_topic, source
 
 
 def has_repeat_ack_marker(user_text: str) -> bool:
@@ -1746,6 +1928,7 @@ def persist_adapter_state(state_root: Path, response: dict[str, Any], access_gat
 def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[str, Any]:
     now = utc_now()
     ensure_state_layout(state_root)
+    llm_settings = llm_settings_from_env()
 
     hinted_session = payload.get("web_demo_session", {})
     hinted_session_id = normalize_text(hinted_session.get("web_demo_session_id")) if isinstance(hinted_session, dict) else ""
@@ -1758,6 +1941,14 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         saved_state = saved_session.get("discovery_runtime_state", {})
         if isinstance(saved_state, dict):
             discovery_state = deepcopy(saved_state)
+    seeded_discovery_session = (
+        discovery_state.get("discovery_session", {})
+        if isinstance(discovery_state.get("discovery_session"), dict)
+        else {}
+    )
+    current_topic_before_turn = normalize_text(seeded_discovery_session.get("current_topic")) or normalize_text(
+        discovery_state.get("next_topic")
+    )
 
     requester_identity = normalize_requester_identity(payload, discovery_state)
     envelope = normalize_web_conversation_envelope(payload, discovery_state, now)
@@ -1881,15 +2072,31 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}
         and not skip_adaptive_architect
     ):
-        adaptive_question, architect_question_source = adaptive_architect_question(
-            next_question=next_question,
-            next_topic=next_topic,
-            runtime_state=runtime_state,
-            envelope=envelope,
-            uploaded_files=uploaded_files,
-            force_low_signal_guard=low_signal_submission,
-        )
-        next_question = normalize_text(adaptive_question) or next_question
+        llm_question = ""
+        llm_topic = ""
+        if not low_signal_submission:
+            llm_question, llm_topic, llm_source = llm_adaptive_architect_question(
+                current_topic=current_topic_before_turn,
+                runtime_next_topic=next_topic,
+                runtime_next_question=next_question,
+                runtime_state=runtime_state,
+                envelope=envelope,
+                uploaded_files=uploaded_files,
+            )
+            if llm_question:
+                next_question = normalize_text(llm_question) or next_question
+                next_topic = normalize_text(llm_topic) or next_topic
+                architect_question_source = llm_source
+        if not llm_question:
+            adaptive_question, architect_question_source = adaptive_architect_question(
+                next_question=next_question,
+                next_topic=next_topic,
+                runtime_state=runtime_state,
+                envelope=envelope,
+                uploaded_files=uploaded_files,
+                force_low_signal_guard=low_signal_submission,
+            )
+            next_question = normalize_text(adaptive_question) or next_question
     if access_granted and not download_artifacts:
         patch_runtime_next_question(
             runtime_state,
@@ -2035,6 +2242,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "brief_version": normalize_text(requirement_brief.get("version")),
             "brief_status": normalize_text(requirement_brief.get("status")) or adapter_status,
             "uploaded_file_count": len(uploaded_files),
+            "llm_enabled": llm_settings.enabled,
+            "llm_configured": llm_settings.configured,
         },
     }
     if access_granted:
@@ -2095,6 +2304,7 @@ def render_download(handler: BaseHTTPRequestHandler, path: Path, download_name: 
 
 def render_health(handler: BaseHTTPRequestHandler, state_root: Path) -> None:
     settings = access_gate_settings()
+    llm_settings = llm_settings_from_env()
     operator_status = build_operator_status_publication(state_root)
     payload = {
         "status": "ok",
@@ -2104,6 +2314,10 @@ def render_health(handler: BaseHTTPRequestHandler, state_root: Path) -> None:
         "access_gate_mode": normalize_text(settings.get("access_gate_mode")),
         "access_gate_configured": bool(settings.get("access_gate_configured")),
         "access_gate_ready": bool(settings.get("access_gate_ready")),
+        "llm_enabled": llm_settings.enabled,
+        "llm_configured": llm_settings.configured,
+        "llm_model": llm_settings.model_name if llm_settings.configured else "",
+        "llm_base_url": llm_settings.base_url if llm_settings.configured else "",
         "operator_status": operator_status,
     }
     render_json(handler, payload)

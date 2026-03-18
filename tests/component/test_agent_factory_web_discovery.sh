@@ -42,6 +42,7 @@ run_component_agent_factory_web_discovery_tests() {
         assert_eq "status_update,discovery_question" "$card_kinds" "US1 should render a status card plus the next discovery question"
         assert_eq "Сбор требований продолжается | Ответить на следующий вопрос" "$label_text" "Status snapshot should project browser-readable discovery labels"
         assert_eq "Агент-архитектор Moltis" "$(jq -r '.ui_projection.agent_display_name' "$tmpdir/session-new.json")" "UI projection should expose the architect agent identity"
+        assert_eq "boolean:boolean" "$(jq -r '(.ui_projection.llm_enabled | type) + ":" + (.ui_projection.llm_configured | type)' "$tmpdir/session-new.json")" "UI projection should expose LLM state flags for adapter diagnostics"
         assert_eq "adaptive_architect" "$(jq -r '.ui_projection.question_source' "$tmpdir/session-new.json")" "First follow-up question should come from adaptive architect composer"
         assert_contains "$card_text" "Кто будет основным пользователем" "The first browser follow-up must stay business-readable"
         assert_contains "$card_text" "Сбор требований продолжается" "Status copy should explain the live discovery state in plain language"

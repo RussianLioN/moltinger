@@ -103,6 +103,18 @@ run_integration_local_agent_factory_web_flow_tests() {
         test_fail "Browser adapter should keep the same discovery topic when the user sends low-signal input"
     fi
 
+    test_start "integration_local_agent_factory_web_flow_falls_back_when_llm_enabled_but_not_configured"
+    if ASC_DEMO_LLM_ENABLED=true OPENAI_API_KEY= OPENAI_BASE_URL= MODEL_NAME= \
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$SESSION_NEW_FIXTURE" --state-root "$tmpdir/state-llm-unconfigured" --output "$tmpdir/start-llm-unconfigured-out.json" >/dev/null; then
+        assert_eq "awaiting_user_reply" "$(jq -r '.status' "$tmpdir/start-llm-unconfigured-out.json")" "Unconfigured LLM mode must not break discovery flow"
+        assert_eq "adaptive_architect" "$(jq -r '.ui_projection.question_source' "$tmpdir/start-llm-unconfigured-out.json")" "Adapter should fall back to deterministic adaptive question when LLM config is incomplete"
+        assert_eq "true" "$(jq -r '.ui_projection.llm_enabled' "$tmpdir/start-llm-unconfigured-out.json")" "UI projection should expose that LLM mode is enabled"
+        assert_eq "false" "$(jq -r '.ui_projection.llm_configured' "$tmpdir/start-llm-unconfigured-out.json")" "UI projection should expose missing provider configuration"
+        test_pass
+    else
+        test_fail "Browser adapter should stay operational when LLM mode is enabled without provider credentials"
+    fi
+
     test_start "integration_local_agent_factory_web_flow_syncs_topic_after_upload_bridge_and_handles_repeat_meta_reply"
     if jq '.web_conversation_envelope = {
           "web_conversation_envelope_id": "web-envelope-claims-routing-005",

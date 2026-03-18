@@ -450,6 +450,22 @@ Current behavior:
 - если hash не настроен, `/api/health` показывает `publication_status=degraded`
 - локальные fixture-прогоны могут жить в `fixture_trust`, не ломая hermetic validation
 
+### LLM decision layer configuration
+
+Web adapter поддерживает LLM-orchestrated discovery decision layer с fail-soft fallback.
+
+Используй `.env.asc` (пример: [.env.asc.example](/Users/rl/coding/moltinger/moltinger-019-asc-fabrique-prototype/.env.asc.example)):
+
+- `ASC_DEMO_LLM_ENABLED=true`
+- `OPENAI_API_KEY=<provider key>`
+- `OPENAI_BASE_URL=https://api.fireworks.ai/inference/v1`
+- `MODEL_NAME=accounts/fireworks/models/glm-5`
+- `ASC_DEMO_LLM_TIMEOUT_SECONDS=18`
+
+Если LLM выключен или недоступен, adapter продолжает работать на deterministic question composer.
+
+Архитектура decision layer и flowchart: [agent-factory-web-demo-llm-orchestration.md](/Users/rl/coding/moltinger/moltinger-019-asc-fabrique-prototype/docs/architecture/agent-factory-web-demo-llm-orchestration.md)
+
 ### Operator-safe health publication
 
 Published demo surface now exposes:
@@ -464,6 +480,8 @@ Published demo surface now exposes:
 - `public_base_url`
 - `access_gate_mode`
 - `access_gate_configured`
+- `llm_enabled`
+- `llm_configured`
 - `operator_status.publication_status`
 - `operator_status.needs_operator_attention`
 - session/access/history/download counters
