@@ -1,4 +1,5 @@
 import { chatCompletion, isLLMConfigured } from "./llm.js";
+import { normalizeText } from "./utils.js";
 
 const BRIEF_SECTION_ORDER = [
   ["problem", "Бизнес-проблема"],
@@ -9,17 +10,6 @@ const BRIEF_SECTION_ORDER = [
   ["branching_rules", "Правила ветвления и исключения"],
   ["success_metrics", "Метрики успеха"],
 ];
-
-function normalizeText(value, fallback = "") {
-  if (typeof value === "string") {
-    const text = value.trim();
-    return text || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return fallback;
-}
 
 function fallbackBrief(session) {
   const lines = ["# Brief проекта", ""];
@@ -83,7 +73,8 @@ export async function generateBrief(session) {
   try {
     const completion = await chatCompletion(messages, { temperature: 0.15, maxTokens: 1800 });
     return normalizeBrief(completion) || fallbackBrief(session);
-  } catch (_error) {
+  } catch (error) {
+    console.error("[asc-demo] brief.generateBrief:", error?.message || error);
     return fallbackBrief(session);
   }
 }
@@ -125,7 +116,8 @@ export async function reviseBrief(session, correctionText) {
   try {
     const completion = await chatCompletion(messages, { temperature: 0.1, maxTokens: 2000 });
     return normalizeBrief(completion) || fallback;
-  } catch (_error) {
+  } catch (error) {
+    console.error("[asc-demo] brief.reviseBrief:", error?.message || error);
     return fallback;
   }
 }

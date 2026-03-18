@@ -1,3 +1,5 @@
+import { normalizeText } from "./utils.js";
+
 const STATUS_LABELS = {
   gate_pending: "Нужен доступ",
   awaiting_user_reply: "Сбор требований продолжается",
@@ -10,17 +12,6 @@ const DEFAULT_AGENT_NAME = "Агент-архитектор Moltis";
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function normalizeText(value, fallback = "") {
-  if (typeof value === "string") {
-    const text = value.trim();
-    return text || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return fallback;
 }
 
 function safeArray(value) {

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatCompletionJSON, isLLMConfigured } from "./llm.js";
+import { normalizeText } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,17 +57,6 @@ const REQUIRED_TOPICS = ["problem", "target_users", "expected_outputs"];
 const LOW_SIGNAL_MARKERS = new Set(["ok", "okay", "test", "ping", "да", "нет", "ага", "понял"]);
 
 let cachedSystemPrompt = null;
-
-function normalizeText(value, fallback = "") {
-  if (typeof value === "string") {
-    const text = value.trim();
-    return text || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return fallback;
-}
 
 function toWordList(text) {
   return normalizeText(text)
@@ -256,7 +246,8 @@ export async function processDiscoveryTurn(session, userText, uploadedFiles = []
     try {
       step = await llmDiscoveryStep(session, userText, uploadedFiles);
       step.lowSignal = Boolean(step.lowSignal);
-    } catch (_error) {
+    } catch (error) {
+      console.error("[asc-demo] discovery.llmDiscoveryStep:", error?.message || error);
       step = fallbackDiscoveryStep(session, userText, uploadedFiles, false);
     }
   }

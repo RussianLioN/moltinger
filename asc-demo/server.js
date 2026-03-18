@@ -39,6 +39,7 @@ app.post("/api/turn", async (req, res) => {
     const response = await handleTurn(payload);
     res.json(response);
   } catch (error) {
+    console.error("[asc-demo] server.api.turn:", error?.message || error);
     const sessionId = payload?.web_demo_session?.web_demo_session_id || "web-demo-session-fallback";
     const fallbackSession = {
       sessionId,
@@ -54,7 +55,7 @@ app.post("/api/turn", async (req, res) => {
       payload,
       `backend_error: ${error?.message || "unknown_error"}`,
     );
-    res.status(200).json(fallback);
+    res.status(500).json(fallback);
   }
 });
 

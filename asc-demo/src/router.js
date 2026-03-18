@@ -1,19 +1,18 @@
-import { buildAwaitingConfirmationResponse, buildDiscoveryResponse, buildDownloadsReadyResponse, buildErrorFallbackResponse, buildGatePendingResponse, buildHandoffRunningResponse, normalizeBrowserUploads } from "./response-builder.js";
+import { timingSafeEqual } from "node:crypto";
+import {
+  buildAwaitingConfirmationResponse,
+  buildDiscoveryResponse,
+  buildDownloadsReadyResponse,
+  buildErrorFallbackResponse,
+  buildGatePendingResponse,
+  buildHandoffRunningResponse,
+  normalizeBrowserUploads,
+} from "./response-builder.js";
 import { generateBrief, reviseBrief } from "./brief.js";
 import { getDiscoveryTopics, processDiscoveryTurn } from "./discovery.js";
 import { generateArtifacts } from "./summary-generator.js";
 import { getOrCreateSession, setSessionArtifacts, setSessionResponse, setSessionSummaryPromise, updateSession } from "./sessions.js";
-
-function normalizeText(value, fallback = "") {
-  if (typeof value === "string") {
-    const text = value.trim();
-    return text || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return fallback;
-}
+import { normalizeText } from "./utils.js";
 
 function slugify(input) {
   const text = normalizeText(input, "demo-project")
@@ -62,7 +61,11 @@ function getAccessToken(payload) {
 
 function validAccessToken(token) {
   const expected = normalizeText(process.env.DEMO_ACCESS_TOKEN, "demo-access-token");
-  return token && token === expected;
+  const candidate = normalizeText(token);
+  if (!candidate || !expected || candidate.length !== expected.length) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
 }
 
 function decodeBase64Excerpt(value) {
@@ -159,7 +162,10 @@ function pushAssistantMessage(session, text) {
 }
 
 async function runSummaryGeneration(session) {
-  session.summaryState = "running";
+  if (session.summaryState === "running" && session.summaryPromise) {
+    return session.summaryPromise;
+  }
+
   const promise = (async () => {
     const artifacts = await generateArtifacts(session);
     setSessionArtifacts(session, artifacts);
@@ -170,6 +176,7 @@ async function runSummaryGeneration(session) {
     });
     return artifacts;
   })().catch((error) => {
+    console.error("[asc-demo] router.runSummaryGeneration:", error?.message || error);
     const fallbackArtifacts = [
       {
         artifact_kind: "one_page_summary",
@@ -215,6 +222,7 @@ async function runSummaryGeneration(session) {
     return fallbackArtifacts;
   });
 
+  session.summaryState = "running";
   setSessionSummaryPromise(session, promise);
   return promise;
 }
@@ -325,7 +333,8 @@ export async function handleTurn(payload = {}) {
     if (action === "confirm_brief") {
       await ensureBriefReady(session);
       session.stage = "confirmed";
-      if (!session.summaryPromise && session.summaryState !== "running") {
+      if (session.summaryState !== "running" && session.summaryState !== "ready") {
+        session.summaryState = "running";
         void runSummaryGeneration(session);
       }
       response = buildHandoffRunningResponse(session, payload);
@@ -356,6 +365,7 @@ export async function handleTurn(payload = {}) {
     updateSession(session, { stage: session.stage, uploadedFiles });
     return response;
   } catch (error) {
+    console.error("[asc-demo] router.handleTurn:", error?.message || error);
     const fallback = buildErrorFallbackResponse(session, payload, normalizeText(error?.message));
     setSessionResponse(session, fallback);
     return fallback;

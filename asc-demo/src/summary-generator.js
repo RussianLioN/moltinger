@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatCompletion, isLLMConfigured } from "./llm.js";
+import { normalizeText } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,17 +33,6 @@ const SECTION_CONFIG = [
     dataSelector: (data) => ({ cooperation: data.cooperation || {}, potential: data.potential || {} }),
   },
 ];
-
-function normalizeText(value, fallback = "") {
-  if (typeof value === "string") {
-    const text = value.trim();
-    return text || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return fallback;
-}
 
 async function loadPrompt(promptFile) {
   const promptPath = path.join(__dirname, "prompts", promptFile);
@@ -95,7 +85,8 @@ async function generateSection(config, demoData) {
     return normalized.includes(config.title)
       ? normalized
       : [`## ${config.title}`, "", normalized].join("\n");
-  } catch (_error) {
+  } catch (error) {
+    console.error("[asc-demo] summary.generateSection:", error?.message || error);
     return fallbackSection(config.title, sectionData);
   }
 }
