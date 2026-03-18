@@ -5,8 +5,11 @@
 
 set -e
 
-PROJECT_ROOT="/Users/rl/coding/moltinger"
+PROJECT_ROOT="/Users/rl/coding/moltinger/moltinger-main"
 SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
+
+# Change to project root for git commands
+cd "$PROJECT_ROOT"
 
 # Skip if SESSION_SUMMARY.md doesn't exist
 if [ ! -f "$SESSION_FILE" ]; then

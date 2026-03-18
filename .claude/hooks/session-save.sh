@@ -5,7 +5,7 @@
 
 set -e
 
-PROJECT_ROOT="/Users/rl/coding/moltinger"
+PROJECT_ROOT="/Users/rl/coding/moltinger/moltinger-main"
 SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 
