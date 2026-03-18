@@ -45,8 +45,8 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       MOLTIS_CONFIG_PATH: /workspace/config/moltis.toml
-      ASC_DEMO_DOMAIN: ${ASC_DEMO_DOMAIN:-asc.ainetic.tech}
-      ASC_DEMO_PUBLIC_BASE_URL: ${ASC_DEMO_PUBLIC_BASE_URL:-https://asc.ainetic.tech}
+      ASC_DEMO_DOMAIN: ${ASC_DEMO_DOMAIN:-demo.ainetic.tech}
+      ASC_DEMO_PUBLIC_BASE_URL: ${ASC_DEMO_PUBLIC_BASE_URL:-https://demo.ainetic.tech}
       ASC_DEMO_ACCESS_MODE: ${ASC_DEMO_ACCESS_MODE:-shared_token_hash}
       ASC_DEMO_SHARED_TOKEN_HASH: ${ASC_DEMO_SHARED_TOKEN_HASH:-}
       ASC_DEMO_OPERATOR_LABEL: ${ASC_DEMO_OPERATOR_LABEL:-factory-demo-operator}
@@ -77,19 +77,19 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-net"
-      - "traefik.http.routers.asc-demo-http.rule=Host(`${ASC_DEMO_DOMAIN:-asc.ainetic.tech}`)"
+      - "traefik.http.routers.asc-demo-http.rule=Host(`${ASC_DEMO_DOMAIN:-demo.ainetic.tech}`)"
       - "traefik.http.routers.asc-demo-http.entrypoints=web"
       - "traefik.http.routers.asc-demo-http.middlewares=asc-demo-https-redirect@docker"
       - "traefik.http.middlewares.asc-demo-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.middlewares.asc-demo-https-redirect.redirectscheme.permanent=true"
-      - "traefik.http.routers.asc-demo.rule=Host(`${ASC_DEMO_DOMAIN:-asc.ainetic.tech}`)"
+      - "traefik.http.routers.asc-demo.rule=Host(`${ASC_DEMO_DOMAIN:-demo.ainetic.tech}`)"
       - "traefik.http.routers.asc-demo.entrypoints=websecure"
       - "traefik.http.routers.asc-demo.tls=true"
       - "traefik.http.routers.asc-demo.tls.certresolver=letsencrypt"
       - "traefik.http.routers.asc-demo.service=asc-demo"
       - "traefik.http.routers.asc-demo.middlewares=asc-demo-proxy-headers@docker"
       - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Host=${ASC_DEMO_DOMAIN:-asc.ainetic.tech}"
+      - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Host=${ASC_DEMO_DOMAIN:-demo.ainetic.tech}"
       - "traefik.http.middlewares.asc-demo-proxy-headers.headers.customrequestheaders.X-Forwarded-Port=443"
       - "traefik.http.services.asc-demo.loadbalancer.server.port=${ASC_DEMO_INTERNAL_PORT:-18791}"
       - "traefik.http.services.asc-demo.loadbalancer.healthcheck.path=/health"

@@ -489,7 +489,7 @@ Component access + health projection:
 Remote smoke for the published demo:
 
 ```bash
-TEST_LIVE=1 LIVE_ASC_DEMO_URL=https://asc.ainetic.tech \
+TEST_LIVE=1 LIVE_ASC_DEMO_URL=https://demo.ainetic.tech \
 ./tests/run.sh --lane web_demo_live --json --live
 ```
 
