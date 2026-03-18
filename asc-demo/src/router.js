@@ -14,6 +14,18 @@ import { generateArtifacts } from "./summary-generator.js";
 import { getOrCreateSession, setSessionArtifacts, setSessionResponse, setSessionSummaryPromise, updateSession } from "./sessions.js";
 import { normalizeText } from "./utils.js";
 
+function withTimeout(promise, ms, fallback = null) {
+  if (!promise || typeof promise.then !== "function") {
+    return Promise.resolve(fallback);
+  }
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(() => resolve(fallback), ms);
+    }),
+  ]);
+}
+
 function slugify(input) {
   const text = normalizeText(input, "demo-project")
     .toLowerCase()
@@ -273,7 +285,7 @@ async function statusFlow(session, payload) {
     return buildDownloadsReadyResponse(session, payload);
   }
   if (session.stage === "confirmed" && session.summaryPromise) {
-    await session.summaryPromise;
+    await withTimeout(session.summaryPromise, 90_000, null);
     if (session.stage === "downloads_ready") {
       return buildDownloadsReadyResponse(session, payload);
     }

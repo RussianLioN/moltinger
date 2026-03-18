@@ -22,7 +22,7 @@ function getClient() {
     throw new Error("LLM_CONFIG_MISSING_API_KEY");
   }
   if (!cachedClient) {
-    cachedClient = new OpenAI({ apiKey, baseURL });
+    cachedClient = new OpenAI({ apiKey, baseURL, timeout: 30_000 });
   }
   return cachedClient;
 }
@@ -75,6 +75,8 @@ export async function chatCompletion(messages, opts = {}) {
     messages,
     temperature: typeof opts.temperature === "number" ? opts.temperature : 0.2,
     max_tokens: typeof opts.maxTokens === "number" ? opts.maxTokens : 1400,
+  }, {
+    timeout: typeof opts.timeout === "number" ? opts.timeout : 30_000,
   });
   const message = response?.choices?.[0]?.message;
   const content = normalizeContent(message?.content);

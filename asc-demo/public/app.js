@@ -4,6 +4,7 @@
   const DEFAULT_ACCESS_TOKEN = "demo-access-token";
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
+  const TURN_TIMEOUT_MS = 90_000;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -978,13 +979,7 @@
 
   function renderAttachmentList(project) {
     const pending = uniqueUploads(project?.pendingUploads || []);
-    const sessionUploads = uniqueUploads(activeSessionUploads(project));
-    const items = [
-      ...pending.map((item) => ({ ...item, scope: "pending" })),
-      ...sessionUploads
-        .filter((item) => !pending.some((pendingItem) => pendingItem.upload_id === item.upload_id))
-        .map((item) => ({ ...item, scope: "session" })),
-    ];
+    const items = pending.map((item) => ({ ...item, scope: "pending" }));
     dom.attachmentList.innerHTML = "";
     dom.attachmentList.hidden = items.length === 0;
     items.forEach((upload) => {
@@ -1068,7 +1063,7 @@
   function timelineMessagesFromResponse(response) {
     const architectName = normalizeText(response?.ui_projection?.agent_display_name, "Агент-архитектор Moltis");
     return (response?.reply_cards || [])
-      .filter((card) => ["discovery_question", "clarification_prompt"].includes(card.card_kind))
+      .filter((card) => ["discovery_question", "clarification_prompt", "confirmation_prompt"].includes(card.card_kind))
       .map((card) => ({
         role: "agent",
         author: architectName,
@@ -1815,13 +1810,49 @@
     };
   }
 
+  function buildTurnSignal(signal) {
+    const timeoutSignal = (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function")
+      ? AbortSignal.timeout(TURN_TIMEOUT_MS)
+      : null;
+    if (signal && timeoutSignal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+      return { signal: AbortSignal.any([signal, timeoutSignal]), timeoutSignal };
+    }
+    if (signal && timeoutSignal && typeof AbortController !== "undefined") {
+      const linkedController = new AbortController();
+      const abortLinked = () => linkedController.abort();
+      if (signal.aborted || timeoutSignal.aborted) {
+        linkedController.abort();
+      } else {
+        signal.addEventListener("abort", abortLinked, { once: true });
+        timeoutSignal.addEventListener("abort", abortLinked, { once: true });
+      }
+      return { signal: linkedController.signal, timeoutSignal };
+    }
+    return { signal: signal || timeoutSignal || undefined, timeoutSignal };
+  }
+
   async function postTurn(payload, options = {}) {
-    const response = await fetch("/api/turn", {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify(payload),
-      signal: options.signal,
-    });
+    const requestSignal = buildTurnSignal(options.signal);
+    let response;
+    try {
+      response = await fetch("/api/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: requestSignal.signal,
+      });
+    } catch (error) {
+      if (
+        error?.name === "AbortError"
+        && requestSignal.timeoutSignal?.aborted
+        && !(options.signal?.aborted)
+      ) {
+        const timeoutError = new Error("Превышено время ожидания");
+        timeoutError.name = "TimeoutError";
+        throw timeoutError;
+      }
+      throw error;
+    }
     if (!response.ok) {
       throw new Error(`adapter_http_${response.status}`);
     }
@@ -2147,7 +2178,16 @@
 
     const replyMessages = appendReplyMessages ? timelineMessagesFromResponse(response) : [];
     if (replyMessages.length) {
-      project.timeline.push(...replyMessages);
+      replyMessages.forEach((message) => {
+        const last = project.timeline[project.timeline.length - 1];
+        const duplicate = last
+          && last.role === message.role
+          && normalizeText(last.kind) === normalizeText(message.kind)
+          && normalizeText(last.body) === normalizeText(message.body);
+        if (!duplicate) {
+          project.timeline.push(message);
+        }
+      });
     }
 
     maybeAutonameProject(project, project.timeline.find((message) => message.role === "user")?.body || "", response);
@@ -2198,6 +2238,7 @@
     const requestId = normalizeText(payload?.web_conversation_envelope?.request_id);
     const abortController = new AbortController();
     let abortedByUser = false;
+    let timedOut = false;
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
       project.timeline.push({
@@ -2236,13 +2277,15 @@
       const response = await postTurn(payload, { signal: abortController.signal });
       applyResponse(project, response, "live");
     } catch (error) {
-      if (error?.name === "AbortError") {
+      if (error?.name === "TimeoutError") {
+        timedOut = true;
+      } else if (error?.name === "AbortError") {
         abortedByUser = true;
       } else {
         applyResponse(project, mockAdapterTurn(project, payload), "mock");
       }
     } finally {
-      if (abortedByUser) {
+      if (abortedByUser || timedOut) {
         const activeProject = state.projects.find((item) => item.id === project.id);
         if (activeProject) {
           const last = activeProject.timeline[activeProject.timeline.length - 1];
@@ -2257,13 +2300,18 @@
           }
           activeProject.updatedAt = nowIso();
         }
-        showComposerNotice("Ответ остановлен. Можно отредактировать сообщение и отправить снова.", "info");
+        showComposerNotice(
+          timedOut
+            ? "Превышено время ожидания. Проверь соединение и отправь сообщение повторно."
+            : "Ответ остановлен. Можно отредактировать сообщение и отправить снова.",
+          timedOut ? "warning" : "info",
+        );
       } else if (queuedUploads.length) {
         project.pendingUploads = project.pendingUploads.filter(
           (item) => !queuedUploads.some((queued) => queued.upload_id === item.upload_id),
         );
       }
-      if (!abortedByUser) {
+      if (!abortedByUser && !timedOut) {
         project.draftText = "";
       }
       state.awaitingResponse = false;
