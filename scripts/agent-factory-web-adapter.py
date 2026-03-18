@@ -48,7 +48,7 @@ INTAKE_SCRIPT = SCRIPT_ROOT / "agent-factory-intake.py"
 ARTIFACT_SCRIPT = SCRIPT_ROOT / "agent-factory-artifacts.py"
 DEFAULT_STATE_ROOT = PROJECT_ROOT / "data/agent-factory/web-demo"
 DEFAULT_ASSET_ROOT = PROJECT_ROOT / "web/agent-factory-demo"
-STATE_DIRS = ("sessions", "pointers", "resume", "access", "history", "downloads", "uploads")
+STATE_DIRS = ("sessions", "pointers", "resume", "access", "history", "downloads", "uploads", "employees")
 DISCOVERY_STATE_KEYS = (
     "project_key",
     "raw_idea",
@@ -66,10 +66,12 @@ DISCOVERY_STATE_KEYS = (
     "discovery_answers",
     "requirement_brief",
     "brief_revisions",
+    "brief_feedback_history",
     "confirmation_snapshot",
     "confirmation_history",
     "factory_handoff_record",
     "handoff_history",
+    "production_simulation",
     "status",
     "next_action",
     "next_topic",
@@ -111,6 +113,23 @@ LOW_SIGNAL_MARKERS = {
     "лол",
     "+",
 }
+CONFIRM_BRIEF_TEXT_MARKERS = (
+    "подтверждаю",
+    "подтверждено",
+    "подтвердить",
+    "confirm brief",
+    "confirmed brief",
+    "approve brief",
+    "согласен",
+    "согласна",
+    "ок подтверждаю",
+)
+CONFIRM_BRIEF_NEGATION_MARKERS = (
+    "не подтверж",
+    "не готов подтверж",
+    "not confirm",
+    "don't confirm",
+)
 REPEAT_ACK_MARKERS = (
     "уже отвечал",
     "уже отвечала",
@@ -121,6 +140,36 @@ REPEAT_ACK_MARKERS = (
     "перефразируй",
     "неправильно понимаю",
     "already answered",
+)
+REDACTION_ACK_MARKERS = (
+    "обезлич",
+    "без реквизит",
+    "без реальных",
+    "без назван",
+    "синтетич",
+    "synthetic",
+    "anonym",
+    "redact",
+    "masked",
+)
+REDACTION_NEGATION_MARKERS = (
+    "не обезлич",
+    "без обезлич",
+    "не могу обезлич",
+)
+UPLOAD_REFERENCE_MARKERS = (
+    "файл",
+    "файлы",
+    "влож",
+    "прикреп",
+    "прилож",
+    "attached",
+    "attachment",
+    "upload",
+)
+SENSITIVE_DIGIT_PATTERN = re.compile(r"\b\d{6,}\b")
+STRUCTURED_EXAMPLE_RECORD_PATTERN = re.compile(
+    r"[0-9A-Za-zА-Яа-я_<>.\-]+(?:[,;|\t][0-9A-Za-zА-Яа-я_<>.\-]+){1,8}"
 )
 BUSINESS_IDEA_SIGNALS = (
     "автомат",
@@ -470,6 +519,221 @@ def load_delivery_entry(state_root: Path, web_demo_session_id: str, download_tok
     return {}
 
 
+def employee_registry_path(state_root: Path) -> Path:
+    return state_root / "employees" / "digital-employees-registry.json"
+
+
+def employee_execution_dir(state_root: Path) -> Path:
+    return state_root / "employees" / "executions"
+
+
+def load_employee_registry(state_root: Path) -> dict[str, Any]:
+    registry_path = employee_registry_path(state_root)
+    if registry_path.is_file():
+        payload = load_json(registry_path)
+        if isinstance(payload, dict):
+            employees = payload.get("employees")
+            return {
+                "schema_version": normalize_text(payload.get("schema_version")) or "v1",
+                "updated_at": normalize_text(payload.get("updated_at")),
+                "employees": [dict(item) for item in employees if isinstance(item, dict)] if isinstance(employees, list) else [],
+            }
+    return {
+        "schema_version": "v1",
+        "updated_at": "",
+        "employees": [],
+    }
+
+
+def starter_request_from_runtime_state(runtime_state: dict[str, Any], requirement_brief: dict[str, Any]) -> str:
+    raw_idea = normalize_text(runtime_state.get("raw_idea"))
+    if raw_idea:
+        return raw_idea
+    turns = runtime_state.get("conversation_turns")
+    if isinstance(turns, list):
+        for turn in turns:
+            if not isinstance(turn, dict):
+                continue
+            if normalize_text(turn.get("actor")) != "user":
+                continue
+            turn_type = normalize_text(turn.get("turn_type"))
+            if turn_type not in {"idea_statement", "browser_reply"}:
+                continue
+            text = normalize_text(turn.get("raw_text"))
+            if text:
+                return text
+    return normalize_text(requirement_brief.get("problem_statement")) or "Собери one-page по текущему клиентскому кейсу."
+
+
+def upsert_registry_employee(registry: dict[str, Any], employee_entry: dict[str, Any]) -> None:
+    employees = registry.get("employees")
+    if not isinstance(employees, list):
+        employees = []
+    employee_id = normalize_text(employee_entry.get("digital_employee_id"))
+    if not employee_id:
+        return
+    for index, item in enumerate(employees):
+        if not isinstance(item, dict):
+            continue
+        if normalize_text(item.get("digital_employee_id")) == employee_id:
+            merged = dict(item)
+            merged.update(employee_entry)
+            employees[index] = merged
+            registry["employees"] = employees
+            return
+    employees.append(employee_entry)
+    registry["employees"] = employees
+
+
+def simulate_post_handoff_production(
+    state_root: Path,
+    web_demo_session_id: str,
+    runtime_state: dict[str, Any],
+    uploaded_files: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    existing = runtime_state.get("production_simulation")
+    if isinstance(existing, dict):
+        execution_ref = Path(normalize_text(existing.get("execution_ref")))
+        registry_ref = Path(normalize_text(existing.get("registry_ref")))
+        if normalize_text(existing.get("status")) == "completed" and execution_ref.is_file() and registry_ref.is_file():
+            return existing
+
+    now = utc_now()
+    requirement_brief = (
+        runtime_state.get("requirement_brief", {})
+        if isinstance(runtime_state.get("requirement_brief"), dict)
+        else {}
+    )
+    project_key = normalize_text(requirement_brief.get("project_key")) or normalize_text(runtime_state.get("project_key")) or "project"
+    brief_id = normalize_text(requirement_brief.get("brief_id")) or f"brief-{slugify(project_key, 'brief')}"
+    brief_version = normalize_text(requirement_brief.get("version")) or "1.0"
+    employee_id = f"digital-employee-{slugify(f'{project_key}-{brief_version}', 'employee')}"
+    employee_name = f"Цифровой сотрудник: {compact_display_title(requirement_brief.get('problem_statement'), runtime_state.get('raw_idea'))}"
+    starter_request = starter_request_from_runtime_state(runtime_state, requirement_brief)
+
+    normalized_uploads = normalize_uploaded_files(uploaded_files)
+    upload_names = [normalize_text(item.get("name")) for item in normalized_uploads if normalize_text(item.get("name"))]
+    data_profile = "live_user_data" if upload_names else "live_user_dialog_context"
+    data_profile_summary = (
+        f"боевые данные пользователя из вложений: {', '.join(upload_names[:3])}"
+        if upload_names
+        else "боевой контекст из пользовательского диалога без вложений"
+    )
+    expected_outputs = requirement_brief.get("expected_outputs")
+    expected_output_hint = ""
+    if isinstance(expected_outputs, list) and expected_outputs:
+        expected_output_hint = normalize_text(expected_outputs[0])
+    elif expected_outputs is not None:
+        expected_output_hint = normalize_text(expected_outputs)
+    if not expected_output_hint:
+        expected_output_hint = "one-page PDF с рекомендацией"
+
+    execution_summary = (
+        f"Стартовый запрос выполнен в имитации production: «{starter_request}». "
+        f"Использован источник данных: {data_profile_summary}. "
+        f"Результат: сформирован прототипный выходной артефакт ({expected_output_hint}) и подготовлен для пользовательской проверки."
+    )
+
+    executions_dir = employee_execution_dir(state_root)
+    executions_dir.mkdir(parents=True, exist_ok=True)
+    execution_stamp = now.replace(":", "").replace("-", "").replace("T", "_")
+    execution_id = f"execution-{slugify(web_demo_session_id, 'session')}-{execution_stamp}"
+    execution_path = executions_dir / f"{execution_id}.json"
+    execution_payload = {
+        "execution_id": execution_id,
+        "digital_employee_id": employee_id,
+        "web_demo_session_id": web_demo_session_id,
+        "starter_request": starter_request,
+        "data_profile": data_profile,
+        "data_profile_summary": data_profile_summary,
+        "status": "completed",
+        "output_summary": execution_summary,
+        "started_at": now,
+        "completed_at": now,
+    }
+    write_json(execution_payload, execution_path)
+
+    registry = load_employee_registry(state_root)
+    employee_entry = {
+        "digital_employee_id": employee_id,
+        "display_name": employee_name,
+        "lifecycle_state": "prototype_simulated",
+        "project_key": project_key,
+        "source_brief_id": brief_id,
+        "source_brief_version": brief_version,
+        "registered_at": normalize_text(now),
+        "updated_at": normalize_text(now),
+        "last_execution_id": execution_id,
+        "capabilities": [
+            "onepage.generation",
+            "requirements.aligned-output",
+            "initial_live_data_execution",
+        ],
+    }
+    upsert_registry_employee(registry, employee_entry)
+    registry["updated_at"] = now
+    registry_path = employee_registry_path(state_root)
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(registry, registry_path)
+
+    return {
+        "status": "completed",
+        "digital_employee_id": employee_id,
+        "digital_employee_name": employee_name,
+        "starter_request": starter_request,
+        "data_profile": data_profile,
+        "data_profile_summary": data_profile_summary,
+        "execution_summary": execution_summary,
+        "execution_ref": str(execution_path),
+        "registry_ref": str(registry_path),
+        "completed_at": now,
+    }
+
+
+def write_production_simulation_download(
+    state_root: Path,
+    web_demo_session_id: str,
+    simulation: dict[str, Any],
+    requirement_brief: dict[str, Any],
+) -> dict[str, Any]:
+    session_root = delivery_root(state_root, web_demo_session_id)
+    downloads_root = session_root / "downloads"
+    downloads_root.mkdir(parents=True, exist_ok=True)
+    download_name = "digital-employee-demo.md"
+    download_path = downloads_root / download_name
+    markdown = "\n".join(
+        [
+            "# Имитация production цифрового сотрудника",
+            "",
+            f"- `digital_employee_id`: `{normalize_text(simulation.get('digital_employee_id'))}`",
+            f"- `name`: {normalize_text(simulation.get('digital_employee_name'))}",
+            f"- `source_brief_id`: {normalize_text(requirement_brief.get('brief_id'))}",
+            f"- `source_brief_version`: {normalize_text(requirement_brief.get('version'))}",
+            f"- `data_profile`: {normalize_text(simulation.get('data_profile'))}",
+            f"- `registry_ref`: {normalize_text(simulation.get('registry_ref'))}",
+            f"- `execution_ref`: {normalize_text(simulation.get('execution_ref'))}",
+            "",
+            "## Стартовый запрос пользователя",
+            normalize_text(simulation.get("starter_request")) or "Не указан",
+            "",
+            "## Результат имитации исполнения",
+            normalize_text(simulation.get("execution_summary")) or "Не указан",
+            "",
+            "_Примечание: это MVP0-имитация production path. Фактический deployment остаётся в MVP1._",
+            "",
+        ]
+    )
+    download_path.write_text(markdown, encoding="utf-8")
+    return {
+        "artifact_kind": "production_simulation",
+        "download_name": download_name,
+        "download_ref": str(download_path),
+        "download_status": "available",
+        "project_key": normalize_text(requirement_brief.get("project_key")),
+        "brief_version": normalize_text(requirement_brief.get("version")),
+    }
+
+
 def load_payload(path: str) -> dict[str, Any]:
     payload = load_json(path)
     if not isinstance(payload, dict):
@@ -642,11 +906,11 @@ def materialize_uploaded_files(
     state_root: Path,
     session_id: str,
     now: str,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     existing = normalize_uploaded_files(saved_session.get("uploaded_files"))
     raw_uploads = payload.get("uploaded_files")
     if not isinstance(raw_uploads, list) or not raw_uploads:
-        return existing
+        return existing, []
 
     upload_root = upload_session_root(state_root, session_id)
     upload_root.mkdir(parents=True, exist_ok=True)
@@ -689,14 +953,17 @@ def materialize_uploaded_files(
                 "uploaded_at": now,
             }
         )
-    return merge_uploaded_files(existing, materialized)
+    return merge_uploaded_files(existing, materialized), materialized
 
 
 def uploaded_files_context(uploaded_files: list[dict[str, Any]]) -> str:
     normalized = normalize_uploaded_files(uploaded_files)
     if not normalized:
         return ""
-    parts = ["Контекст из прикреплённых файлов:"]
+    parts = [
+        "Контекст из прикреплённых файлов:",
+        "Важно: данные в прикреплённых файлах считаются синтетически сгенерированными и не имеют ничего общего с реальными; любые совпадения случайны.",
+    ]
     for item in normalized:
         header = f"- {normalize_text(item.get('name'))} ({normalize_text(item.get('content_type')) or 'file'})"
         if bool(item.get("truncated")):
@@ -762,6 +1029,225 @@ def is_adequate_start_idea(user_text: str, uploaded_files: list[dict[str, Any]] 
     return len(normalized) >= 48 and len(words) >= 6
 
 
+def is_text_brief_confirmation(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    if any(marker in normalized for marker in CONFIRM_BRIEF_NEGATION_MARKERS):
+        return False
+    return any(marker in normalized for marker in CONFIRM_BRIEF_TEXT_MARKERS)
+
+
+def has_redaction_acknowledgement(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    if any(marker in normalized for marker in REDACTION_NEGATION_MARKERS):
+        return False
+    return any(marker in normalized for marker in REDACTION_ACK_MARKERS)
+
+
+def mentions_upload_reference(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in UPLOAD_REFERENCE_MARKERS)
+
+
+def looks_like_structured_example_record(user_text: str) -> bool:
+    normalized = normalize_text(user_text)
+    if not normalized:
+        return False
+    compact = re.sub(r"\s+", "", normalized)
+    if len(compact) < 5 or len(compact) > 180:
+        return False
+    if not re.search(r"[,;|\t]", compact):
+        return False
+    return bool(STRUCTURED_EXAMPLE_RECORD_PATTERN.fullmatch(compact))
+
+
+def has_sensitive_identifiers(user_text: str) -> bool:
+    normalized = normalize_text(user_text)
+    if not normalized:
+        return False
+    if SENSITIVE_DIGIT_PATTERN.search(normalized):
+        return True
+    lowered = normalized.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "инн",
+            "кпп",
+            "р/с",
+            "расчетный счет",
+            "расчётный счёт",
+            "бик",
+            "огрн",
+            "паспорт",
+            "снилс",
+        )
+    )
+
+
+def unsafe_clarification_retry_hint(user_text: str, *, turn_uploaded_files: list[dict[str, Any]] | None = None) -> str:
+    if normalize_uploaded_files(turn_uploaded_files):
+        return (
+            "Похоже, в примере всё ещё есть реальные реквизиты. "
+            "Пришли 1 обезличенную строку (например: `<ИНН_КЛИЕНТА>,<РЕЙТИНГ>,<СУММА_СДЕЛКИ>`) "
+            "или явно напиши, что реквизиты в файле замаскированы."
+        )
+    if has_sensitive_identifiers(user_text):
+        return (
+            "В этом ответе выглядят как реальные реквизиты. "
+            "Замени их на маски вида `<ИНН_КЛИЕНТА>`, `<НОМЕР_ДОГОВОРА>`, `<СУММА_СДЕЛКИ>`."
+        )
+    if is_low_signal_reply(user_text, turn_uploaded_files):
+        return "Нужен конкретный обезличенный пример входных данных в 1-2 строках."
+    return ""
+
+
+def is_confirmation_stage(
+    *,
+    status: str,
+    next_action: str,
+    current_topic: str,
+    next_topic: str,
+) -> bool:
+    normalized_status = normalize_text(status)
+    if normalized_status in {"awaiting_confirmation", "reopened"}:
+        return True
+    if normalize_text(next_action) in {"request_explicit_confirmation", "await_for_confirmation", "confirm_brief"}:
+        return True
+    return normalize_text(current_topic) == "brief_confirmation" or normalize_text(next_topic) == "brief_confirmation"
+
+
+def should_auto_resolve_unsafe_clarification(
+    user_text: str,
+    *,
+    turn_uploaded_files: list[dict[str, Any]] | None = None,
+) -> bool:
+    normalized = normalize_text(user_text)
+    if not normalized:
+        return False
+    if has_redaction_acknowledgement(normalized):
+        return True
+    if has_sensitive_identifiers(normalized):
+        return False
+    if mentions_upload_reference(normalized):
+        return True
+    if looks_like_structured_example_record(normalized):
+        return True
+    if has_repeat_ack_marker(normalized):
+        return True
+    return False
+
+
+def redact_sensitive_example_summary(value: Any) -> str:
+    text = normalize_text(value)
+    if not text:
+        return "Обезличенный пример входных данных (реквизиты удалены)."
+    redacted = SENSITIVE_DIGIT_PATTERN.sub("<скрыто>", text)
+    return redacted or "Обезличенный пример входных данных (реквизиты удалены)."
+
+
+def has_open_unsafe_input_clarification(discovery_request: dict[str, Any]) -> bool:
+    clarification_items = discovery_request.get("clarification_items")
+    if not isinstance(clarification_items, list):
+        return False
+    for item in clarification_items:
+        if not isinstance(item, dict):
+            continue
+        if normalize_text(item.get("topic_name")) != "input_examples":
+            continue
+        if normalize_text(item.get("reason")) != "unsafe_data_example":
+            continue
+        if normalize_text(item.get("status")) == "open":
+            return True
+    return False
+
+
+def resolve_unsafe_input_clarification(discovery_request: dict[str, Any], *, user_text: str, now: str) -> None:
+    safe_input_example = (
+        normalize_text(user_text) or "Пользователь подтвердил, что входные примеры обезличены."
+    )
+
+    clarification_items = discovery_request.get("clarification_items")
+    if isinstance(clarification_items, list):
+        for item in clarification_items:
+            if not isinstance(item, dict):
+                continue
+            if normalize_text(item.get("topic_name")) != "input_examples":
+                continue
+            if normalize_text(item.get("reason")) != "unsafe_data_example":
+                continue
+            if normalize_text(item.get("status")) != "open":
+                continue
+            item["status"] = "resolved"
+            item["resolved_at"] = now
+
+    example_cases = discovery_request.get("example_cases")
+    if isinstance(example_cases, list):
+        for case in example_cases:
+            if not isinstance(case, dict):
+                continue
+            case["input_summary"] = redact_sensitive_example_summary(case.get("input_summary"))
+            case["data_safety_status"] = "safe"
+
+    captured_answers = discovery_request.get("captured_answers")
+    if not isinstance(captured_answers, dict):
+        captured_answers = {}
+    captured_answers["input_examples"] = safe_input_example
+    discovery_request["captured_answers"] = captured_answers
+
+    discovery_answers = discovery_request.get("discovery_answers")
+    if not isinstance(discovery_answers, dict):
+        discovery_answers = {}
+    discovery_answers["input_examples"] = safe_input_example
+    discovery_request["discovery_answers"] = discovery_answers
+
+    normalized_answers = discovery_request.get("normalized_answers")
+    if not isinstance(normalized_answers, dict):
+        normalized_answers = {}
+    normalized_answers["input_examples"] = safe_input_example
+    discovery_request["normalized_answers"] = normalized_answers
+
+    brief_section_updates = discovery_request.get("brief_section_updates")
+    if not isinstance(brief_section_updates, dict):
+        brief_section_updates = {}
+    brief_section_updates["input_examples"] = [safe_input_example]
+    discovery_request["brief_section_updates"] = brief_section_updates
+
+    requirement_brief = discovery_request.get("requirement_brief")
+    if isinstance(requirement_brief, dict):
+        requirement_brief["input_examples"] = [safe_input_example]
+        discovery_request["requirement_brief"] = requirement_brief
+
+    discovery_request.pop("_web_clarification_retry_hint", None)
+
+
+def hydrate_runtime_input_examples_answer(runtime_state: dict[str, Any], discovery_request: dict[str, Any]) -> None:
+    captured_from_request = discovery_request.get("captured_answers")
+    if not isinstance(captured_from_request, dict):
+        return
+    input_examples_answer = normalize_text(captured_from_request.get("input_examples"))
+    if not input_examples_answer:
+        return
+
+    captured_answers = runtime_state.get("captured_answers")
+    if not isinstance(captured_answers, dict):
+        captured_answers = {}
+    if not normalize_text(captured_answers.get("input_examples")):
+        captured_answers["input_examples"] = input_examples_answer
+    runtime_state["captured_answers"] = captured_answers
+
+    normalized_answers = runtime_state.get("normalized_answers")
+    if not isinstance(normalized_answers, dict):
+        normalized_answers = {}
+    if not normalize_text(normalized_answers.get("input_examples")):
+        normalized_answers["input_examples"] = input_examples_answer
+    runtime_state["normalized_answers"] = normalized_answers
+
+
 def requirement_topic_summaries(runtime_state: dict[str, Any]) -> dict[str, str]:
     summaries: dict[str, str] = {}
     topics = runtime_state.get("requirement_topics")
@@ -795,8 +1281,11 @@ def context_hint_for_topic(
         return "Пользователей и выгодоприобретателей зафиксировал."
     if next_topic == "desired_outcome" and current_workflow:
         return "Текущий процесс зафиксировал."
-    if next_topic == "user_story" and target_users:
-        return "Роли пользователей зафиксировал."
+    if next_topic == "user_story":
+        if desired_outcome:
+            return "Бизнес-эффект зафиксировал."
+        if target_users:
+            return "Роли пользователей зафиксировал."
     if next_topic == "input_examples" and upload_names:
         listed = ", ".join(upload_names[:2])
         suffix = " и ещё файлы" if len(upload_names) > 2 else ""
@@ -1473,11 +1962,12 @@ def build_discovery_request(
     web_demo_session: dict[str, Any],
     pointer: dict[str, Any],
     uploaded_files: list[dict[str, Any]],
+    turn_uploaded_files: list[dict[str, Any]],
     now: str,
 ) -> tuple[dict[str, Any], bool, bool]:
     ui_action = normalize_text(envelope.get("ui_action"))
     user_text = normalize_text(envelope.get("user_text"))
-    attachment_context = uploaded_files_context(uploaded_files)
+    attachment_context = uploaded_files_context(turn_uploaded_files)
     combined_text = "\n\n".join(part for part in (user_text, attachment_context) if part)
     request = seed_discovery_request(payload, discovery_state, requester_identity)
     current_topic = normalize_text(
@@ -1485,8 +1975,11 @@ def build_discovery_request(
         if isinstance(request.get("discovery_session"), dict)
         else ""
     ) or normalize_text(request.get("next_topic"))
+    current_next_action = normalize_text(request.get("next_action"))
+    runtime_next_topic = normalize_text(request.get("next_topic"))
     request["project_key"] = normalize_text(pointer.get("project_key")) or normalize_text(web_demo_session.get("active_project_key"))
     low_signal_submission = False
+    current_status = normalize_text(request.get("status"))
 
     if ui_action == "request_status" and discovery_state:
         return request, True, low_signal_submission
@@ -1495,12 +1988,34 @@ def build_discovery_request(
         return request, True, low_signal_submission
 
     if ui_action == "start_project":
-        low_signal_submission = not is_adequate_start_idea(combined_text, uploaded_files)
+        low_signal_submission = not is_adequate_start_idea(combined_text, turn_uploaded_files)
         if not low_signal_submission:
             request["raw_idea"] = combined_text or normalize_text(payload.get("raw_idea"))
     elif ui_action == "submit_turn":
+        if is_confirmation_stage(
+            status=current_status,
+            next_action=current_next_action,
+            current_topic=current_topic,
+            next_topic=runtime_next_topic,
+        ) and is_text_brief_confirmation(combined_text):
+            request["confirmation_reply"] = build_confirmation_reply(combined_text, requester_identity)
+            append_user_turn(request, combined_text, "brief_confirmation", now)
+            return request, False, low_signal_submission
+
+        unsafe_clarification_open = has_open_unsafe_input_clarification(request)
+        if unsafe_clarification_open:
+            append_user_turn(request, combined_text, current_topic or "input_examples", now)
+            if should_auto_resolve_unsafe_clarification(combined_text, turn_uploaded_files=turn_uploaded_files):
+                resolve_unsafe_input_clarification(request, user_text=combined_text, now=now)
+            else:
+                request["_web_clarification_retry_hint"] = unsafe_clarification_retry_hint(
+                    combined_text,
+                    turn_uploaded_files=turn_uploaded_files,
+                )
+            return request, False, low_signal_submission
+
         repeat_ack_submission = has_repeat_ack_marker(combined_text)
-        low_signal_submission = False if repeat_ack_submission else is_low_signal_reply(combined_text, uploaded_files)
+        low_signal_submission = False if repeat_ack_submission else is_low_signal_reply(combined_text, turn_uploaded_files)
         captured_answers = request.get("captured_answers", {})
         if not isinstance(captured_answers, dict):
             captured_answers = {}
@@ -1631,6 +2146,7 @@ def generate_browser_downloads(
     web_demo_session_id: str,
     runtime_state: dict[str, Any],
     requester_identity: dict[str, Any],
+    uploaded_files: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     ready_state = ensure_ready_handoff(runtime_state, requester_identity)
     handoff = ready_state.get("factory_handoff_record", {}) if isinstance(ready_state.get("factory_handoff_record"), dict) else {}
@@ -1646,7 +2162,30 @@ def generate_browser_downloads(
     if normalize_text(artifact_manifest.get("status")) != "generated":
         return ready_state, [], "Concept pack generation did not complete successfully."
 
-    return ready_state, write_delivery_index(state_root, web_demo_session_id, artifact_manifest), ""
+    normalized_manifest_items = normalize_download_artifacts(artifact_manifest)
+    requirement_brief = (
+        ready_state.get("requirement_brief", {})
+        if isinstance(ready_state.get("requirement_brief"), dict)
+        else {}
+    )
+    production_simulation = simulate_post_handoff_production(
+        state_root,
+        web_demo_session_id,
+        ready_state,
+        uploaded_files,
+    )
+    if production_simulation:
+        ready_state["production_simulation"] = production_simulation
+        normalized_manifest_items.append(
+            write_production_simulation_download(
+                state_root,
+                web_demo_session_id,
+                production_simulation,
+                requirement_brief,
+            )
+        )
+
+    return ready_state, write_delivery_index(state_root, web_demo_session_id, normalized_manifest_items), ""
 
 
 def build_audit_record(
@@ -1752,12 +2291,21 @@ def bridge_input_examples_topic(
     *,
     next_topic: str,
     next_question: str,
+    adapter_status: str,
+    next_action: str,
     uploaded_files: list[dict[str, Any]],
     now: str,
 ) -> tuple[str, str, bool]:
     topic = normalize_text(next_topic)
+    status = normalize_text(adapter_status)
+    action = normalize_text(next_action)
     normalized_uploads = normalize_uploaded_files(uploaded_files)
-    if topic != "input_examples" or not normalized_uploads:
+    if (
+        topic != "input_examples"
+        or not normalized_uploads
+        or status == "awaiting_clarification"
+        or action == "resolve_clarification"
+    ):
         return next_topic, next_question, False
 
     upload_names = [normalize_text(item.get("name")) for item in normalized_uploads if normalize_text(item.get("name"))]
@@ -1979,7 +2527,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     envelope = normalize_web_conversation_envelope(payload, discovery_state, now)
     web_demo_session = normalize_web_demo_session(payload, saved_session, discovery_state, requester_identity, now)
     pointer = normalize_project_pointer(payload, saved_session, discovery_state, web_demo_session, envelope, now)
-    uploaded_files = materialize_uploaded_files(
+    uploaded_files, turn_uploaded_files = materialize_uploaded_files(
         payload,
         saved_session,
         state_root=state_root,
@@ -2004,10 +2552,12 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             web_demo_session,
             pointer,
             uploaded_files,
+            turn_uploaded_files,
             now,
         )
         runtime_state = discovery_state if skip_runtime and discovery_state else run_discovery_runtime(discovery_request)
         runtime_state = sanitize_discovery_runtime_state(runtime_state)
+        hydrate_runtime_input_examples_answer(runtime_state, discovery_request)
         if reuse_saved_downloads:
             download_artifacts = sanitize_download_artifacts(
                 payload.get("download_artifacts"),
@@ -2025,6 +2575,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                     normalize_text(web_demo_session.get("web_demo_session_id")),
                     runtime_state,
                     requester_identity,
+                    uploaded_files,
                 )
             except Exception as exc:  # noqa: BLE001
                 delivery_error = normalize_text(exc) or "Concept pack generation failed."
@@ -2049,41 +2600,71 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     adapter_status = "download_ready" if download_artifacts else (normalize_text(runtime_state.get("status")) or "active")
     next_action = "download_artifact" if download_artifacts else normalize_text(runtime_state.get("next_action"))
     next_topic = normalize_text(runtime_state.get("next_topic"))
+    production_simulation = (
+        runtime_state.get("production_simulation", {})
+        if isinstance(runtime_state.get("production_simulation"), dict)
+        else {}
+    )
     next_question = (
-        "Concept pack готов. Можно скачать project doc, agent spec и presentation из этой browser session."
+        (
+            "Concept pack готов. Цифровой сотрудник зарегистрирован в реестре, "
+            "стартовый запрос пользователя выполнен в имитации production. "
+            "Можно скачать project doc, agent spec, presentation и отчёт по имитации."
+            if normalize_text(production_simulation.get("status")) == "completed"
+            else "Concept pack готов. Можно скачать project doc, agent spec и presentation из этой browser session."
+        )
         if download_artifacts
         else normalize_text(runtime_state.get("next_question"))
     )
+    clarification_retry_hint = (
+        normalize_text(discovery_request.get("_web_clarification_retry_hint"))
+        if access_granted and isinstance(discovery_request, dict)
+        else ""
+    )
+    if (
+        clarification_retry_hint
+        and adapter_status == "awaiting_clarification"
+        and next_action == "resolve_clarification"
+        and normalize_text(next_topic) == "input_examples"
+    ):
+        if next_question:
+            if clarification_retry_hint not in next_question:
+                next_question = f"{next_question}\n\n{clarification_retry_hint}"
+        else:
+            next_question = clarification_retry_hint
     architect_question_source = "runtime"
     bridged_from_uploaded_examples = False
     bridged_repeat_ack = False
     skip_adaptive_architect = False
     if access_granted and not download_artifacts:
-        next_topic, next_question, bridged_from_uploaded_examples = bridge_input_examples_topic(
-            runtime_state,
-            next_topic=next_topic,
-            next_question=next_question,
-            uploaded_files=uploaded_files,
-            now=now,
-        )
-        (
-            next_topic,
-            next_question,
-            bridged_repeat_ack,
-            skip_adaptive_architect,
-            repeat_source,
-        ) = bridge_repeat_answer(
-            runtime_state,
-            next_topic=next_topic,
-            next_question=next_question,
-            envelope=envelope,
-            now=now,
-        )
-        if bridged_repeat_ack:
-            architect_question_source = repeat_source
-        elif bridged_from_uploaded_examples:
-            architect_question_source = "uploaded_examples_bridge"
-    if access_granted and low_signal_submission and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}:
+        if adapter_status == "awaiting_user_reply":
+            next_topic, next_question, bridged_from_uploaded_examples = bridge_input_examples_topic(
+                runtime_state,
+                next_topic=next_topic,
+                next_question=next_question,
+                adapter_status=adapter_status,
+                next_action=next_action,
+                uploaded_files=turn_uploaded_files,
+                now=now,
+            )
+            (
+                next_topic,
+                next_question,
+                bridged_repeat_ack,
+                skip_adaptive_architect,
+                repeat_source,
+            ) = bridge_repeat_answer(
+                runtime_state,
+                next_topic=next_topic,
+                next_question=next_question,
+                envelope=envelope,
+                now=now,
+            )
+            if bridged_repeat_ack:
+                architect_question_source = repeat_source
+            elif bridged_from_uploaded_examples:
+                architect_question_source = "uploaded_examples_bridge"
+    if access_granted and low_signal_submission and adapter_status == "awaiting_user_reply":
         next_action = "ask_next_question"
         if not next_topic:
             next_topic = (
@@ -2094,7 +2675,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         access_granted
         and not download_artifacts
         and next_question
-        and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}
+        and adapter_status == "awaiting_user_reply"
         and not skip_adaptive_architect
     ):
         llm_question = ""
@@ -2122,7 +2703,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 force_low_signal_guard=low_signal_submission,
             )
             next_question = normalize_text(adaptive_question) or next_question
-    if access_granted and not download_artifacts and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}:
+    if access_granted and not download_artifacts and adapter_status == "awaiting_user_reply":
         if not normalize_text(next_question):
             fallback_topic = normalize_text(next_topic) or normalize_text(discovery_session.get("current_topic")) or "problem"
             fallback_frame = ARCHITECT_TOPIC_FRAMES.get(fallback_topic, {})
@@ -2201,6 +2782,25 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         download_artifacts=download_artifacts,
         uploaded_files=uploaded_files,
     )
+    if download_artifacts and normalize_text(production_simulation.get("status")) == "completed":
+        reply_cards.append(
+            build_web_reply_card(
+                "status_update",
+                title="Production-имитация выполнена",
+                body_text=(
+                    f"Цифровой сотрудник `{normalize_text(production_simulation.get('digital_employee_id'))}` "
+                    "зарегистрирован в реестре и выполнил стартовый запрос пользователя на боевом контексте данных."
+                ),
+                web_demo_session_id=web_demo_session.get("web_demo_session_id"),
+                action_hints=["download_artifact", "request_status"],
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=runtime_state.get("factory_handoff_record", {}).get("factory_handoff_id")
+                if isinstance(runtime_state.get("factory_handoff_record"), dict)
+                else "",
+                now=now,
+            )
+        )
     if delivery_error:
         reply_cards.append(
             build_web_reply_card(
@@ -2278,10 +2878,13 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             "uploaded_file_count": len(uploaded_files),
             "llm_enabled": llm_settings.enabled,
             "llm_configured": llm_settings.configured,
+            "production_simulation_status": normalize_text(production_simulation.get("status")),
         },
     }
     if access_granted:
         response["discovery_runtime_state"] = runtime_state
+    if normalize_text(production_simulation.get("status")):
+        response["production_simulation"] = production_simulation
     if download_artifacts:
         response["download_artifacts"] = download_artifacts
     if delivery_error:

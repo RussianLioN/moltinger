@@ -258,9 +258,13 @@ def apply_clarifications_to_topics(requirement_topics: list[dict[str, Any]], cla
         if normalize_text(item.get("status")) == "open"
     }
     for topic in requirement_topics:
-        if canonical_discovery_topic_name(topic.get("topic_name")) not in open_topics:
+        canonical = canonical_discovery_topic_name(topic.get("topic_name"))
+        if canonical in open_topics:
+            topic["status"] = "unresolved"
             continue
-        topic["status"] = "unresolved"
+        if normalize_text(topic.get("status")) == "unresolved" and normalize_text(topic.get("summary")):
+            # Release stale unresolved status once clarification items are resolved.
+            topic["status"] = "clarified"
 
 
 def first_open_clarification(clarification_items: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -436,6 +440,82 @@ def normalize_confirmation_history(payload: dict[str, Any]) -> list[dict[str, An
 
 def normalize_handoff_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return normalize_dict_list(payload.get("handoff_history"))
+
+
+def normalize_brief_feedback_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return normalize_dict_list(payload.get("brief_feedback_history"))
+
+
+def feedback_requested_by(requester_identity: dict[str, Any]) -> str:
+    return (
+        normalize_text(requester_identity.get("display_name"))
+        or normalize_text(requester_identity.get("telegram_user_id"))
+        or "unknown-requester"
+    )
+
+
+def append_feedback_history_entry(
+    feedback_history: list[dict[str, Any]],
+    *,
+    brief_id: str,
+    source_brief_version: str,
+    feedback_text: str,
+    requested_by: str,
+    now: str,
+) -> list[dict[str, Any]]:
+    text = normalize_text(feedback_text)
+    if not text:
+        return feedback_history
+    if feedback_history:
+        last = feedback_history[-1]
+        if (
+            normalize_text(last.get("feedback_text")) == text
+            and normalize_text(last.get("source_brief_version")) == normalize_text(source_brief_version)
+            and normalize_text(last.get("status")) in {"recorded", "applied"}
+        ):
+            return feedback_history
+    updated = list(feedback_history)
+    updated.append(
+        {
+            "brief_feedback_id": next_numbered_id(updated, "brief_feedback_id", "brief-feedback-"),
+            "brief_id": brief_id,
+            "source_brief_version": normalize_text(source_brief_version),
+            "feedback_text": text,
+            "requested_by": requested_by,
+            "requested_at": now,
+            "status": "recorded",
+            "applied_in_brief_version": "",
+        }
+    )
+    return updated
+
+
+def mark_feedback_applied(
+    feedback_history: list[dict[str, Any]],
+    *,
+    source_brief_version: str,
+    applied_in_brief_version: str,
+    now: str,
+) -> list[dict[str, Any]]:
+    source_version = normalize_text(source_brief_version)
+    applied_version = normalize_text(applied_in_brief_version)
+    if not source_version or not applied_version:
+        return feedback_history
+    updated: list[dict[str, Any]] = []
+    for item in feedback_history:
+        if not isinstance(item, dict):
+            continue
+        cloned = dict(item)
+        if (
+            normalize_text(cloned.get("status")) == "recorded"
+            and normalize_text(cloned.get("source_brief_version")) == source_version
+            and not normalize_text(cloned.get("applied_in_brief_version"))
+        ):
+            cloned["status"] = "applied"
+            cloned["applied_in_brief_version"] = applied_version
+            cloned["applied_at"] = now
+        updated.append(cloned)
+    return updated
 
 
 def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, Any]) -> list[dict[str, Any]]:
@@ -763,8 +843,8 @@ def build_requirement_brief_candidate(
     constraints = normalize_brief_section_value(
         "constraints",
         brief_value_from_payload(payload, "constraints")
-        or topic_summary_by_name(requirement_topics, "constraints")
-        or existing_brief.get("constraints"),
+        or existing_brief.get("constraints")
+        or topic_summary_by_name(requirement_topics, "constraints"),
     )
 
     return {
@@ -778,24 +858,24 @@ def build_requirement_brief_candidate(
         "version": normalize_text(existing_brief.get("version")),
         "problem_statement": (
             brief_value_from_payload(payload, "problem_statement")
-            or topic_summary_by_name(requirement_topics, "problem")
             or normalize_text(existing_brief.get("problem_statement"))
+            or topic_summary_by_name(requirement_topics, "problem")
         ),
         "target_users": normalize_brief_section_value(
             "target_users",
             brief_value_from_payload(payload, "target_users")
+            or existing_brief.get("target_users")
             or topic_summary_by_name(requirement_topics, "target_users")
-            or existing_brief.get("target_users"),
         ),
         "current_process": (
             brief_value_from_payload(payload, "current_process")
-            or topic_summary_by_name(requirement_topics, "current_workflow")
             or normalize_text(existing_brief.get("current_process"))
+            or topic_summary_by_name(requirement_topics, "current_workflow")
         ),
         "desired_outcome": (
             brief_value_from_payload(payload, "desired_outcome")
-            or topic_summary_by_name(requirement_topics, "desired_outcome")
             or normalize_text(existing_brief.get("desired_outcome"))
+            or topic_summary_by_name(requirement_topics, "desired_outcome")
         ),
         "scope_boundaries": normalize_brief_section_value(
             "scope_boundaries",
@@ -805,21 +885,21 @@ def build_requirement_brief_candidate(
         ),
         "user_story": (
             brief_value_from_payload(payload, "user_story")
-            or topic_summary_by_name(requirement_topics, "user_story")
             or normalize_text(existing_brief.get("user_story"))
+            or topic_summary_by_name(requirement_topics, "user_story")
         ),
         "input_examples": normalize_brief_section_value(
             "input_examples",
             brief_value_from_payload(payload, "input_examples")
-            or topic_summary_by_name(requirement_topics, "input_examples")
             or existing_brief.get("input_examples")
+            or topic_summary_by_name(requirement_topics, "input_examples")
             or example_case_brief_values(example_cases, "input_examples"),
         ),
         "expected_outputs": normalize_brief_section_value(
             "expected_outputs",
             brief_value_from_payload(payload, "expected_outputs")
-            or topic_summary_by_name(requirement_topics, "expected_outputs")
             or existing_brief.get("expected_outputs")
+            or topic_summary_by_name(requirement_topics, "expected_outputs")
             or example_case_brief_values(example_cases, "expected_outputs"),
         ),
         "business_rules": normalize_brief_section_value(
@@ -838,8 +918,8 @@ def build_requirement_brief_candidate(
         "success_metrics": normalize_brief_section_value(
             "success_metrics",
             brief_value_from_payload(payload, "success_metrics")
+            or existing_brief.get("success_metrics")
             or topic_summary_by_name(requirement_topics, "success_metrics")
-            or existing_brief.get("success_metrics"),
         ),
         "open_risks": normalize_brief_section_value(
             "open_risks",
@@ -1195,6 +1275,7 @@ def process_brief_stage(
 ) -> dict[str, Any]:
     existing_brief = normalize_requirement_brief(payload)
     existing_revisions = normalize_brief_revisions(payload)
+    existing_feedback_history = normalize_brief_feedback_history(payload)
     existing_snapshot = normalize_confirmation_snapshot(payload)
     existing_confirmation_history = normalize_confirmation_history(payload)
     existing_handoff_record = normalize_factory_handoff_record(payload)
@@ -1206,6 +1287,7 @@ def process_brief_stage(
     if not can_prepare_brief:
         return {
             "conversation_turns": conversation_turns,
+            "brief_feedback_history": existing_feedback_history,
         }
 
     candidate_brief = build_requirement_brief_candidate(
@@ -1223,8 +1305,18 @@ def process_brief_stage(
     reopening_from_confirmed = existing_brief_status == "confirmed" and bool(changed_sections)
     confirmation_history = list(existing_confirmation_history)
     handoff_history = list(existing_handoff_history)
+    feedback_history = list(existing_feedback_history)
+    requested_by = feedback_requested_by(requester_identity)
 
     if correction_text:
+        feedback_history = append_feedback_history_entry(
+            feedback_history,
+            brief_id=normalize_text(existing_brief.get("brief_id")) or normalize_text(candidate_brief.get("brief_id")),
+            source_brief_version=normalize_text(existing_brief.get("version")) or normalize_text(candidate_brief.get("version")),
+            feedback_text=correction_text,
+            requested_by=requested_by,
+            now=now,
+        )
         conversation_turns = append_turn_if_missing(
             conversation_turns,
             actor="user",
@@ -1244,6 +1336,12 @@ def process_brief_stage(
             current_brief["version"] = next_brief_version(normalize_text(existing_brief.get("version")))
             current_brief["created_at"] = now
             current_brief["updated_at"] = now
+            feedback_history = mark_feedback_applied(
+                feedback_history,
+                source_brief_version=normalize_text(existing_brief.get("version")),
+                applied_in_brief_version=normalize_text(current_brief.get("version")),
+                now=now,
+            )
             revisions.append(
                 build_brief_revision(
                     current_brief["brief_id"],
@@ -1281,6 +1379,7 @@ def process_brief_stage(
             "next_question": next_question,
             "requirement_brief": current_brief,
             "brief_revisions": revisions,
+            "brief_feedback_history": feedback_history,
             "confirmation_snapshot": {},
             "confirmation_history": confirmation_history,
             "handoff_history": handoff_history,
@@ -1331,6 +1430,7 @@ def process_brief_stage(
             "next_question": next_question,
             "requirement_brief": candidate_brief,
             "brief_revisions": revisions,
+            "brief_feedback_history": feedback_history,
             "confirmation_snapshot": {},
             "conversation_turns": conversation_turns,
             "brief_markdown": render_requirement_brief_markdown(payload, candidate_brief, discovery_session, open_questions),
@@ -1343,6 +1443,12 @@ def process_brief_stage(
         candidate_brief["status"] = "reopened" if reopening_from_confirmed else "awaiting_confirmation"
         candidate_brief["created_at"] = now
         candidate_brief["updated_at"] = now
+        feedback_history = mark_feedback_applied(
+            feedback_history,
+            source_brief_version=normalize_text(existing_brief.get("version")),
+            applied_in_brief_version=normalize_text(candidate_brief.get("version")),
+            now=now,
+        )
         revisions = list(existing_revisions)
         revisions.append(
             build_brief_revision(
@@ -1394,6 +1500,7 @@ def process_brief_stage(
             "next_question": next_question,
             "requirement_brief": candidate_brief,
             "brief_revisions": revisions,
+            "brief_feedback_history": feedback_history,
             "confirmation_snapshot": {},
             "confirmation_history": confirmation_history,
             "handoff_history": handoff_history,
@@ -1424,6 +1531,7 @@ def process_brief_stage(
             "next_question": "",
             "requirement_brief": current_brief,
             "brief_revisions": existing_revisions,
+            "brief_feedback_history": feedback_history,
             "confirmation_snapshot": build_confirmation_snapshot(
                 current_brief,
                 existing_snapshot,
@@ -1461,6 +1569,7 @@ def process_brief_stage(
         "next_question": next_question,
         "requirement_brief": current_brief,
         "brief_revisions": existing_revisions,
+        "brief_feedback_history": feedback_history,
         "confirmation_snapshot": existing_snapshot if brief_status == "confirmed" else {},
         "confirmation_history": confirmation_history,
         "handoff_history": handoff_history,
@@ -1559,6 +1668,9 @@ def main() -> int:
     confirmation_history = brief_state.get("confirmation_history")
     if not isinstance(confirmation_history, list):
         confirmation_history = normalize_confirmation_history(payload)
+    brief_feedback_history = brief_state.get("brief_feedback_history")
+    if not isinstance(brief_feedback_history, list):
+        brief_feedback_history = normalize_brief_feedback_history(payload)
     handoff_history = brief_state.get("handoff_history")
     if not isinstance(handoff_history, list):
         handoff_history = normalize_handoff_history(payload)
@@ -1604,6 +1716,8 @@ def main() -> int:
     brief_revisions = brief_state.get("brief_revisions")
     if isinstance(brief_revisions, list) and brief_revisions:
         response["brief_revisions"] = brief_revisions
+    if isinstance(brief_feedback_history, list) and brief_feedback_history:
+        response["brief_feedback_history"] = brief_feedback_history
     if isinstance(confirmation_snapshot, dict) and confirmation_snapshot:
         response["confirmation_snapshot"] = confirmation_snapshot
     if isinstance(confirmation_history, list) and confirmation_history:

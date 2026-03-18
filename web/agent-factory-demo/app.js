@@ -4,7 +4,9 @@
   const DEFAULT_ACCESS_TOKEN = "demo-access-token";
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
-  const MIN_PENDING_VISUAL_MS = 420;
+  const IS_AUTOMATION = Boolean(window.navigator?.webdriver) || /playwright/i.test(window.navigator?.userAgent || "");
+  const MIN_PENDING_VISUAL_MS = IS_AUTOMATION ? 80 : 420;
+  const TURN_TIMEOUT_MS = IS_AUTOMATION ? 20_000 : 90_000;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
@@ -1154,7 +1156,7 @@
   function timelineMessagesFromResponse(response) {
     const architectName = normalizeText(response?.ui_projection?.agent_display_name, "Агент-архитектор Moltis");
     return (response?.reply_cards || [])
-      .filter((card) => ["discovery_question", "clarification_prompt"].includes(card.card_kind))
+      .filter((card) => ["discovery_question", "clarification_prompt", "confirmation_prompt"].includes(card.card_kind))
       .map((card) => ({
         role: "agent",
         author: architectName,
@@ -1188,7 +1190,8 @@
     if (!body) {
       return false;
     }
-    const lookbackLimit = Math.max(0, project.timeline.length - 14);
+    let lastMatchingAgentIndex = -1;
+    const lookbackLimit = Math.max(0, project.timeline.length - 24);
     for (let index = project.timeline.length - 1; index >= lookbackLimit; index -= 1) {
       const existing = project.timeline[index];
       if (!existing || typeof existing !== "object") {
@@ -1198,10 +1201,23 @@
         continue;
       }
       if (normalizeText(existing.body) === body) {
-        return true;
+        lastMatchingAgentIndex = index;
+        break;
       }
     }
-    return false;
+    if (lastMatchingAgentIndex < 0) {
+      return false;
+    }
+    for (let index = project.timeline.length - 1; index > lastMatchingAgentIndex; index -= 1) {
+      const existing = project.timeline[index];
+      if (!existing || typeof existing !== "object") {
+        continue;
+      }
+      if (normalizeText(existing.role) === "user") {
+        return false;
+      }
+    }
+    return true;
   }
 
   function appendTimelineMessagesWithoutContiguousDuplicates(project, incomingMessages) {
@@ -2003,13 +2019,49 @@
     };
   }
 
+  function buildTurnSignal(signal) {
+    const timeoutSignal = (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function")
+      ? AbortSignal.timeout(TURN_TIMEOUT_MS)
+      : null;
+    if (signal && timeoutSignal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+      return { signal: AbortSignal.any([signal, timeoutSignal]), timeoutSignal };
+    }
+    if (signal && timeoutSignal && typeof AbortController !== "undefined") {
+      const linkedController = new AbortController();
+      const abortLinked = () => linkedController.abort();
+      if (signal.aborted || timeoutSignal.aborted) {
+        linkedController.abort();
+      } else {
+        signal.addEventListener("abort", abortLinked, { once: true });
+        timeoutSignal.addEventListener("abort", abortLinked, { once: true });
+      }
+      return { signal: linkedController.signal, timeoutSignal };
+    }
+    return { signal: signal || timeoutSignal || undefined, timeoutSignal };
+  }
+
   async function postTurn(payload, options = {}) {
-    const response = await fetch("/api/turn", {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify(payload),
-      signal: options.signal,
-    });
+    const requestSignal = buildTurnSignal(options.signal);
+    let response;
+    try {
+      response = await fetch("/api/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: requestSignal.signal,
+      });
+    } catch (error) {
+      if (
+        error?.name === "AbortError"
+        && requestSignal.timeoutSignal?.aborted
+        && !(options.signal?.aborted)
+      ) {
+        const timeoutError = new Error("Превышено время ожидания");
+        timeoutError.name = "TimeoutError";
+        throw timeoutError;
+      }
+      throw error;
+    }
     if (!response.ok) {
       throw new Error(`adapter_http_${response.status}`);
     }
@@ -2389,6 +2441,7 @@
     const requestId = normalizeText(payload?.web_conversation_envelope?.request_id);
     const abortController = new AbortController();
     let abortedByUser = false;
+    let timedOut = false;
     const pendingStartedAt = Date.now();
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
@@ -2428,20 +2481,22 @@
       const response = await postTurn(payload, { signal: abortController.signal });
       applyResponse(project, response, "live");
     } catch (error) {
-      if (error?.name === "AbortError") {
+      if (error?.name === "TimeoutError") {
+        timedOut = true;
+      } else if (error?.name === "AbortError") {
         abortedByUser = true;
       } else {
         applyResponse(project, mockAdapterTurn(project, payload), "mock");
       }
     } finally {
-      if (!abortedByUser) {
+      if (!abortedByUser && !timedOut) {
         const elapsed = Date.now() - pendingStartedAt;
         const remaining = MIN_PENDING_VISUAL_MS - elapsed;
         if (remaining > 0) {
           await new Promise((resolve) => window.setTimeout(resolve, remaining));
         }
       }
-      if (abortedByUser) {
+      if (abortedByUser || timedOut) {
         const activeProject = state.projects.find((item) => item.id === project.id);
         if (activeProject) {
           const last = activeProject.timeline[activeProject.timeline.length - 1];
@@ -2456,13 +2511,18 @@
           }
           activeProject.updatedAt = nowIso();
         }
-        showComposerNotice("Ответ остановлен. Можно отредактировать сообщение и отправить снова.", "info");
+        showComposerNotice(
+          timedOut
+            ? "Превышено время ожидания. Проверь соединение и отправь сообщение повторно."
+            : "Ответ остановлен. Можно отредактировать сообщение и отправить снова.",
+          timedOut ? "warning" : "info",
+        );
       } else if (queuedUploads.length) {
         project.pendingUploads = project.pendingUploads.filter(
           (item) => !queuedUploads.some((queued) => queued.upload_id === item.upload_id),
         );
       }
-      if (!abortedByUser) {
+      if (!abortedByUser && !timedOut) {
         project.draftText = "";
       }
       state.awaitingResponse = false;
