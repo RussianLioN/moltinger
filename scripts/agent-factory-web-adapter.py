@@ -790,13 +790,13 @@ def context_hint_for_topic(
     upload_names = [normalize_text(item.get("name")) for item in normalized_uploads if normalize_text(item.get("name"))]
 
     if next_topic == "target_users" and problem:
-        return f"Понял проблему: {shorten_text(problem, 90)}."
+        return "Проблему зафиксировал."
     if next_topic == "current_workflow" and target_users:
-        return f"Зафиксировал пользователей: {shorten_text(target_users, 80)}."
+        return "Пользователей и выгодоприобретателей зафиксировал."
     if next_topic == "desired_outcome" and current_workflow:
-        return f"Принял текущий процесс: {shorten_text(current_workflow, 90)}."
+        return "Текущий процесс зафиксировал."
     if next_topic == "user_story" and target_users:
-        return f"Роли уже понятны: {shorten_text(target_users, 80)}."
+        return "Роли пользователей зафиксировал."
     if next_topic == "input_examples" and upload_names:
         listed = ", ".join(upload_names[:2])
         suffix = " и ещё файлы" if len(upload_names) > 2 else ""
@@ -806,7 +806,7 @@ def context_hint_for_topic(
         suffix = " и ещё файлы" if len(upload_names) > 2 else ""
         return f"Входные примеры уже приложены файлами: {listed}{suffix}."
     if next_topic == "expected_outputs" and desired_outcome:
-        return f"Целевой бизнес-эффект уже зафиксирован: {shorten_text(desired_outcome, 90)}."
+        return "Бизнес-эффект уже зафиксирован."
     if next_topic == "constraints" and desired_outcome:
         return "Чтобы решение было безопасным и выполнимым, уточним ограничения."
     if next_topic == "success_metrics" and desired_outcome:
@@ -826,6 +826,18 @@ def next_architect_topic(current_topic: str) -> str:
     if index + 1 >= len(ordered_topics):
         return ""
     return ordered_topics[index + 1]
+
+
+def next_uncovered_topic_after(runtime_state: dict[str, Any], topic_name: str) -> str:
+    topic = normalize_text(topic_name)
+    if topic not in ARCHITECT_TOPIC_ORDER:
+        return ""
+    summaries = requirement_topic_summaries(runtime_state)
+    start_index = ARCHITECT_TOPIC_ORDER.index(topic)
+    for candidate in ARCHITECT_TOPIC_ORDER[start_index + 1:]:
+        if not normalize_text(summaries.get(candidate)):
+            return candidate
+    return ""
 
 
 def topic_position(topic_name: str) -> int:
@@ -967,16 +979,29 @@ def llm_adaptive_architect_question(
     if current_pos >= 0 and expected_pos >= 0 and expected_pos < current_pos:
         target_topic = topic_now
 
-    target_question = returned_question
-    if not target_question:
-        target_question = normalize_text(ARCHITECT_TOPIC_FRAMES.get(target_topic, {}).get("question")) or sanitize_architect_question_text(
-            runtime_next_question
-        )
+    canonical_question = normalize_text(ARCHITECT_TOPIC_FRAMES.get(target_topic, {}).get("question")) or sanitize_architect_question_text(
+        runtime_next_question
+    )
+    if decision in {"clarify", "rephrase"} or returned_low_signal:
+        target_question = returned_question or canonical_question
+    else:
+        target_question = canonical_question
     if not target_question:
         return "", "", "llm_empty_question"
 
     if summary and decision in {"accept", "advance"} and not returned_low_signal:
-        target_question = f"Зафиксировал: {shorten_text(summary, 120)}.\n\n{target_question}"
+        topic_ack = {
+            "problem": "Проблему зафиксировал.",
+            "target_users": "Пользователей и выгодоприобретателей зафиксировал.",
+            "current_workflow": "Текущий процесс зафиксировал.",
+            "desired_outcome": "Бизнес-эффект зафиксировал.",
+            "user_story": "Приоритетный сценарий зафиксировал.",
+            "input_examples": "Входные примеры зафиксировал.",
+            "expected_outputs": "Ожидаемый выход зафиксировал.",
+            "constraints": "Ограничения зафиксировал.",
+            "success_metrics": "Метрики успеха зафиксировал.",
+        }.get(topic_now, "Ответ зафиксировал.")
+        target_question = f"{topic_ack}\n\n{target_question}"
 
     source = f"llm_{decision}"
     if returned_low_signal:
@@ -1773,7 +1798,7 @@ def bridge_input_examples_topic(
             )
         runtime_state["requirement_topics"] = requirement_topics
 
-    next_topic_key = "expected_outputs"
+    next_topic_key = normalize_text(next_uncovered_topic_after(runtime_state, "input_examples")) or "expected_outputs"
     next_topic_frame = ARCHITECT_TOPIC_FRAMES.get(next_topic_key, {})
     bridged_question = normalize_text(next_topic_frame.get("question")) or next_question
     return next_topic_key, bridged_question, True
@@ -2097,6 +2122,15 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 force_low_signal_guard=low_signal_submission,
             )
             next_question = normalize_text(adaptive_question) or next_question
+    if access_granted and not download_artifacts and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}:
+        if not normalize_text(next_question):
+            fallback_topic = normalize_text(next_topic) or normalize_text(discovery_session.get("current_topic")) or "problem"
+            fallback_frame = ARCHITECT_TOPIC_FRAMES.get(fallback_topic, {})
+            fallback_question = normalize_text(fallback_frame.get("question"))
+            if fallback_question:
+                next_topic = fallback_topic
+                next_question = fallback_question
+                architect_question_source = "fallback_question_guard"
     if access_granted and not download_artifacts:
         patch_runtime_next_question(
             runtime_state,
