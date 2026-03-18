@@ -650,7 +650,13 @@ pull_images() {
 
 deploy_containers() {
     log_info "Deploying containers for target $TARGET..."
-    compose_cmd normal up -d --remove-orphans
+    if [[ "$TARGET" == "asc-demo" ]]; then
+        # ASC demo serves bind-mounted source code; force recreate ensures Python
+        # process reloads latest adapter/frontend after git pull.
+        compose_cmd normal up -d --force-recreate --remove-orphans "$TARGET_SERVICE"
+    else
+        compose_cmd normal up -d --remove-orphans
+    fi
     log_success "Containers deployed for target $TARGET"
 }
 
