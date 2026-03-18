@@ -181,6 +181,8 @@
       x: 0,
       y: 0,
     },
+    composerDragDepth: 0,
+    composerDropActive: false,
   };
 
   function safeJsonParse(value, fallback) {
@@ -311,6 +313,76 @@
 
   function clearComposerNotice() {
     state.composerNotice = { text: "", tone: "info" };
+  }
+
+  function hasFileTransfer(event) {
+    const transfer = event?.dataTransfer;
+    if (!transfer) {
+      return false;
+    }
+    const types = Array.from(transfer.types || []);
+    return types.includes("Files") || Boolean(transfer.files?.length);
+  }
+
+  function setComposerDropActive(active) {
+    state.composerDropActive = Boolean(active);
+    if (dom.composerForm) {
+      dom.composerForm.dataset.dropActive = state.composerDropActive ? "true" : "false";
+    }
+  }
+
+  function resetComposerDropState() {
+    state.composerDragDepth = 0;
+    setComposerDropActive(false);
+  }
+
+  async function queueSelectedUploads(project, selectedFiles) {
+    if (!project || !Array.isArray(selectedFiles) || !selectedFiles.length) {
+      return;
+    }
+
+    const unsupported = selectedFiles.filter((file) => !isSupportedUploadFile(file));
+    const supported = selectedFiles.filter((file) => isSupportedUploadFile(file));
+    const unsupportedNames = unsupported.slice(0, 3).map((file) => file.name || "без имени");
+    const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - project.pendingUploads.length);
+    const acceptedFiles = supported.slice(0, remainingSlots);
+    const skippedCount = Math.max(0, supported.length - acceptedFiles.length);
+    const loadedUploads = [];
+    const failedUploads = [];
+
+    for (const file of acceptedFiles) {
+      try {
+        loadedUploads.push(await readLocalUpload(file));
+      } catch (_error) {
+        failedUploads.push(file.name || "без имени");
+      }
+    }
+
+    if (loadedUploads.length) {
+      project.pendingUploads = uniqueUploads([...project.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
+      project.updatedAt = nowIso();
+      renderAttachmentList(project);
+      renderStatus(project);
+      persist();
+      focusComposerSoon();
+    }
+
+    const warnings = [];
+    if (unsupported.length) {
+      warnings.push(`Не добавлены неподдерживаемые файлы: ${unsupportedNames.join(", ")}${unsupported.length > unsupportedNames.length ? "..." : ""}`);
+    }
+    if (skippedCount) {
+      warnings.push(`Превышен лимит: максимум ${MAX_LOCAL_UPLOAD_FILES} файла за один ответ.`);
+    }
+    if (failedUploads.length) {
+      warnings.push(`Не удалось прочитать: ${failedUploads.slice(0, 3).join(", ")}${failedUploads.length > 3 ? "..." : ""}`);
+    }
+    if (warnings.length) {
+      showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info");
+    } else if (loadedUploads.length) {
+      clearComposerNotice();
+    }
+    renderComposer(project);
   }
 
   function shorten(value, limit = 96) {
@@ -1263,6 +1335,7 @@
     dom.composerNotice.hidden = !dom.composerNotice.textContent;
     dom.composerNotice.dataset.tone = normalizeText(state.composerNotice?.tone, "info");
     dom.composerInput.value = normalizeText(project?.draftText);
+    dom.composerForm.dataset.dropActive = state.composerDropActive ? "true" : "false";
     resizeComposerInput();
   }
 
@@ -2419,49 +2492,50 @@
       if (!project || !selectedFiles.length) {
         return;
       }
+      await queueSelectedUploads(project, selectedFiles);
+    });
 
-      const unsupported = selectedFiles.filter((file) => !isSupportedUploadFile(file));
-      const supported = selectedFiles.filter((file) => isSupportedUploadFile(file));
-      const unsupportedNames = unsupported.slice(0, 3).map((file) => file.name || "без имени");
-      const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - project.pendingUploads.length);
-      const acceptedFiles = supported.slice(0, remainingSlots);
-      const skippedCount = Math.max(0, supported.length - acceptedFiles.length);
-      const loadedUploads = [];
-      const failedUploads = [];
+    dom.composerForm.addEventListener("dragenter", (event) => {
+      if (state.awaitingResponse || !hasFileTransfer(event)) {
+        return;
+      }
+      event.preventDefault();
+      state.composerDragDepth += 1;
+      setComposerDropActive(true);
+    });
 
-      for (const file of acceptedFiles) {
-        try {
-          loadedUploads.push(await readLocalUpload(file));
-        } catch (_error) {
-          failedUploads.push(file.name || "без имени");
-        }
+    dom.composerForm.addEventListener("dragover", (event) => {
+      if (state.awaitingResponse || !hasFileTransfer(event)) {
+        return;
       }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setComposerDropActive(true);
+    });
 
-      if (loadedUploads.length) {
-        project.pendingUploads = uniqueUploads([...project.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
-        project.updatedAt = nowIso();
-        renderAttachmentList(project);
-        renderStatus(project);
-        persist();
-        focusComposerSoon();
+    dom.composerForm.addEventListener("dragleave", (event) => {
+      if (!state.composerDropActive) {
+        return;
       }
+      event.preventDefault();
+      state.composerDragDepth = Math.max(0, state.composerDragDepth - 1);
+      if (state.composerDragDepth === 0 || !dom.composerForm.contains(event.relatedTarget)) {
+        resetComposerDropState();
+      }
+    });
 
-      const warnings = [];
-      if (unsupported.length) {
-        warnings.push(`Не добавлены неподдерживаемые файлы: ${unsupportedNames.join(", ")}${unsupported.length > unsupportedNames.length ? "..." : ""}`);
+    dom.composerForm.addEventListener("drop", (event) => {
+      if (state.awaitingResponse || !hasFileTransfer(event)) {
+        return;
       }
-      if (skippedCount) {
-        warnings.push(`Превышен лимит: максимум ${MAX_LOCAL_UPLOAD_FILES} файла за один ответ.`);
+      event.preventDefault();
+      const project = getActiveProject();
+      const droppedFiles = Array.from(event.dataTransfer?.files || []);
+      resetComposerDropState();
+      if (!project || !droppedFiles.length) {
+        return;
       }
-      if (failedUploads.length) {
-        warnings.push(`Не удалось прочитать: ${failedUploads.slice(0, 3).join(", ")}${failedUploads.length > 3 ? "..." : ""}`);
-      }
-      if (warnings.length) {
-        showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info");
-      } else if (loadedUploads.length) {
-        clearComposerNotice();
-      }
-      renderComposer(project);
+      void queueSelectedUploads(project, droppedFiles);
     });
 
     if (dom.accessForm) {

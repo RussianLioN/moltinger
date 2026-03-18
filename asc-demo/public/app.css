@@ -608,6 +608,19 @@ code {
   gap: 14px;
   padding: 18px;
   background: rgba(22, 22, 22, 0.95);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.composer[data-drop-active="true"] {
+  border-color: rgba(151, 177, 255, 0.52);
+  box-shadow: 0 0 0 1px rgba(151, 177, 255, 0.38), 0 16px 36px rgba(85, 105, 196, 0.22);
+  background: rgba(24, 24, 26, 0.98);
+}
+
+.composer[data-drop-active="true"] .attach-button {
+  border-color: rgba(151, 177, 255, 0.62);
+  color: rgba(240, 244, 255, 0.96);
+  background: rgba(121, 150, 255, 0.16);
 }
 
 .composer__lead {
