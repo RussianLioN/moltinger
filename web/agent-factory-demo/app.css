@@ -580,6 +580,30 @@ code {
   line-height: 1.55;
 }
 
+.message__body--split {
+  display: grid;
+  gap: 10px;
+}
+
+.message__context-line {
+  display: block;
+  color: var(--muted-strong);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.message__question-line {
+  display: block;
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .message--user {
   align-self: flex-end;
   border-color: rgba(151, 177, 255, 0.16);
@@ -608,6 +632,11 @@ code {
   gap: 14px;
   padding: 18px;
   background: rgba(22, 22, 22, 0.95);
+}
+
+.composer.is-dragover {
+  border-color: rgba(157, 211, 183, 0.52);
+  box-shadow: 0 0 0 1px rgba(157, 211, 183, 0.24), var(--shadow-md);
 }
 
 .composer__lead {

@@ -313,6 +313,65 @@
     state.composerNotice = { text: "", tone: "info" };
   }
 
+  function hasFilePayload(dataTransfer) {
+    if (!dataTransfer) {
+      return false;
+    }
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      return true;
+    }
+    return Array.from(dataTransfer.types || []).includes("Files");
+  }
+
+  async function ingestSelectedFiles(project, selectedFiles) {
+    if (!project || !selectedFiles.length) {
+      return;
+    }
+
+    const unsupported = selectedFiles.filter((file) => !isSupportedUploadFile(file));
+    const supported = selectedFiles.filter((file) => isSupportedUploadFile(file));
+    const unsupportedNames = unsupported.slice(0, 3).map((file) => file.name || "без имени");
+    const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - project.pendingUploads.length);
+    const acceptedFiles = supported.slice(0, remainingSlots);
+    const skippedCount = Math.max(0, supported.length - acceptedFiles.length);
+    const loadedUploads = [];
+    const failedUploads = [];
+
+    for (const file of acceptedFiles) {
+      try {
+        loadedUploads.push(await readLocalUpload(file));
+      } catch (_error) {
+        failedUploads.push(file.name || "без имени");
+      }
+    }
+
+    if (loadedUploads.length) {
+      project.pendingUploads = uniqueUploads([...project.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
+      project.updatedAt = nowIso();
+      renderAttachmentList(project);
+      renderStatus(project);
+      persist();
+      focusComposerSoon();
+    }
+
+    const warnings = [];
+    if (unsupported.length) {
+      warnings.push(`Не добавлены неподдерживаемые файлы: ${unsupportedNames.join(", ")}${unsupported.length > unsupportedNames.length ? "..." : ""}`);
+    }
+    if (skippedCount) {
+      warnings.push(`Превышен лимит: максимум ${MAX_LOCAL_UPLOAD_FILES} файла за один ответ.`);
+    }
+    if (failedUploads.length) {
+      warnings.push(`Не удалось прочитать: ${failedUploads.slice(0, 3).join(", ")}${failedUploads.length > 3 ? "..." : ""}`);
+    }
+    if (warnings.length) {
+      showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info");
+    } else if (loadedUploads.length) {
+      clearComposerNotice();
+    }
+    renderComposer(project);
+  }
+
   function shorten(value, limit = 96) {
     const text = normalizeText(value);
     if (!text) {
@@ -475,7 +534,7 @@
         if (!firstUserMessage) {
           return;
         }
-        if (looksLikeExcerpt(project.title, firstUserMessage.body)) {
+        if (looksLikeExcerpt(project.title, firstUserMessage.body) || isGenericProjectTitle(project.title)) {
           const repaired = prettifyTitle(firstUserMessage.body);
           if (repaired) {
             project.title = repaired;
@@ -614,7 +673,6 @@
       return "Введи access token";
     }
     const action = project?.currentAction || "start_project";
-    const question = currentQuestion(project);
     const topic = currentTopic(project);
     const status = currentStatus(project);
     if (!hasConversationActivity(project)) {
@@ -632,17 +690,32 @@
     if (status === "playground_ready") {
       return "Если нужны правки, опиши их, и я переоткрою brief.";
     }
-    if (topic === "input_examples" || /пример|входн/i.test(question)) {
+    if (topic === "problem") {
+      return "Опиши ключевую бизнес-проблему и почему это важно сейчас.";
+    }
+    if (topic === "target_users") {
+      return "Укажи, кто будет основным пользователем или выгодоприобретателем.";
+    }
+    if (topic === "current_workflow") {
+      return "Опиши текущий процесс и где сейчас теряется время.";
+    }
+    if (topic === "desired_outcome") {
+      return "Опиши, какой бизнес-результат нужен после автоматизации.";
+    }
+    if (topic === "user_story") {
+      return "Опиши, кому и в какой рабочей ситуации агент помогает в первую очередь.";
+    }
+    if (topic === "input_examples") {
       return "Приведи 1-2 примера или прикрепи файл с примерами.";
     }
-    if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
+    if (topic === "expected_outputs") {
       return "Опиши ожидаемый результат на выходе.";
     }
-    if (topic === "current_workflow" || /как этот процесс/i.test(question)) {
-      return "Опиши, как процесс работает сейчас и где теряется время.";
+    if (topic === "constraints") {
+      return "Перечисли ограничения, запреты и исключения, которые обязательно учитывать.";
     }
-    if (question) {
-      return shorten(`Ответь на вопрос: ${question}`, 110);
+    if (topic === "success_metrics") {
+      return "Укажи метрики успеха: время, качество, SLA и другие критерии.";
     }
     return "Опиши, какой процесс нужно автоматизировать.";
   }
@@ -942,6 +1015,33 @@
     });
   }
 
+  function splitAgentQuestionBody(value) {
+    const text = normalizeText(value);
+    if (!text) {
+      return null;
+    }
+    const blocks = text
+      .replace(/\r\n/g, "\n")
+      .split(/\n{2,}/)
+      .map((part) => normalizeText(part))
+      .filter(Boolean);
+    if (blocks.length < 2) {
+      return null;
+    }
+    const question = blocks[blocks.length - 1];
+    if (
+      !/[?]$/.test(question)
+      && !/^(кто|что|как|какой|какие|какому|по каким|приведи|опиши|перечисли)\b/i.test(question)
+    ) {
+      return null;
+    }
+    const acknowledgement = blocks.slice(0, -1).join(" ");
+    if (!acknowledgement) {
+      return null;
+    }
+    return { acknowledgement, question };
+  }
+
   function createMessageNode(message) {
     const fragment = dom.messageTemplate.content.cloneNode(true);
     const article = fragment.querySelector(".message");
@@ -973,7 +1073,22 @@
     title.textContent = titleText;
     title.hidden = !titleText || hideRedundantTitle;
     meta.hidden = true;
-    body.textContent = message.body || "";
+    const bodyText = normalizeText(message.body);
+    const splitBody = message.role === "agent" ? splitAgentQuestionBody(bodyText) : null;
+    if (splitBody) {
+      body.textContent = "";
+      body.classList.add("message__body--split");
+      const contextLine = document.createElement("span");
+      contextLine.className = "message__context-line";
+      contextLine.textContent = splitBody.acknowledgement;
+      const questionLine = document.createElement("span");
+      questionLine.className = "message__question-line";
+      questionLine.textContent = splitBody.question;
+      body.append(contextLine, questionLine);
+    } else {
+      body.classList.remove("message__body--split");
+      body.textContent = bodyText;
+    }
     attachments.innerHTML = "";
     (message.attachments || []).forEach((upload) => {
       const chip = document.createElement("span");
@@ -1254,7 +1369,10 @@
   function renderComposer(project) {
     dom.composerLeadLabel.textContent = leadLabelFor(project);
     dom.composerMode.textContent = modeTextFor(project);
-    dom.composerHelperExample.textContent = helperExampleFor(project);
+    if (dom.composerHelperExample) {
+      dom.composerHelperExample.textContent = helperExampleFor(project);
+      dom.composerHelperExample.hidden = true;
+    }
     dom.composerInput.placeholder = placeholderFor(project);
     dom.composerSubmit.textContent = state.awaitingResponse ? "■" : "↑";
     dom.composerSubmit.dataset.mode = state.awaitingResponse ? "stop" : "send";
@@ -1287,9 +1405,10 @@
     if (!dom.composerInput) {
       return;
     }
+    const minHeight = 44;
     const maxHeight = 220;
     dom.composerInput.style.height = "auto";
-    const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, 52), maxHeight);
+    const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, minHeight), maxHeight);
     dom.composerInput.style.height = `${nextHeight}px`;
     dom.composerInput.style.overflowY = dom.composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
   }
@@ -1326,6 +1445,35 @@
     }
     const normalizedTitle = title.toLowerCase().replace(/[.…]+$/, "");
     return normalizedTitle.length >= 18 && source.startsWith(normalizedTitle);
+  }
+
+  function isGenericProjectTitle(value) {
+    const normalized = normalizeText(value)
+      .toLowerCase()
+      .replace(/[.…]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) {
+      return true;
+    }
+    if (
+      normalized === "new project"
+      || normalized === "новый проект"
+      || normalized === "project"
+      || normalized === "проект"
+      || normalized === "discovery project"
+      || normalized === "factory project"
+      || normalized === "demo project"
+    ) {
+      return true;
+    }
+    if (/^(discovery|demo|new)\s+project\s*\d*$/i.test(normalized)) {
+      return true;
+    }
+    if (/^проект\s*\d*$/i.test(normalized)) {
+      return true;
+    }
+    return false;
   }
 
   function titleCaseFromWords(words, maxWords = 5) {
@@ -1424,16 +1572,22 @@
       return;
     }
     const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
-    const uiCandidate = !looksLikeSlug(uiTitle) && !looksLikeExcerpt(uiTitle, userText) ? prettifyTitle(uiTitle) : "";
-    const userCandidate = prettifyTitle(userText);
+    const rawUiCandidate = !looksLikeSlug(uiTitle) && !looksLikeExcerpt(uiTitle, userText) ? prettifyTitle(uiTitle) : "";
+    const uiCandidate = !isGenericProjectTitle(rawUiCandidate) ? rawUiCandidate : "";
+    const rawUserCandidate = prettifyTitle(userText);
+    const userCandidate = !isGenericProjectTitle(rawUserCandidate) ? rawUserCandidate : "";
     const candidate = userCandidate || uiCandidate;
     if (!candidate) {
       return;
     }
-    if (
+    const canOverrideExisting = (
       project.title === DEFAULT_PROJECT_TITLE
       || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} `)
       || looksLikeExcerpt(project.title, userText)
+      || isGenericProjectTitle(project.title)
+    );
+    if (
+      canOverrideExisting
     ) {
       project.title = candidate;
     }
@@ -2077,7 +2231,10 @@
       project.timeline.push(...replyMessages);
     }
 
-    maybeAutonameProject(project, project.timeline.find((message) => message.role === "user")?.body || "", response);
+    const firstMeaningfulUserMessage = project.timeline.find(
+      (message) => message.role === "user" && !isLowSignalInput(message.body),
+    );
+    maybeAutonameProject(project, firstMeaningfulUserMessage?.body || "", response);
 
     const preferredAction = normalizeText(response.ui_projection?.preferred_ui_action);
     project.currentAction = preferredAction || ACTION_PRIORITY.find((action) => availableActions(project).includes(action)) || "submit_turn";
@@ -2419,49 +2576,74 @@
       if (!project || !selectedFiles.length) {
         return;
       }
+      await ingestSelectedFiles(project, selectedFiles);
+    });
 
-      const unsupported = selectedFiles.filter((file) => !isSupportedUploadFile(file));
-      const supported = selectedFiles.filter((file) => isSupportedUploadFile(file));
-      const unsupportedNames = unsupported.slice(0, 3).map((file) => file.name || "без имени");
-      const remainingSlots = Math.max(0, MAX_LOCAL_UPLOAD_FILES - project.pendingUploads.length);
-      const acceptedFiles = supported.slice(0, remainingSlots);
-      const skippedCount = Math.max(0, supported.length - acceptedFiles.length);
-      const loadedUploads = [];
-      const failedUploads = [];
+    let composerDragDepth = 0;
+    const clearComposerDragState = () => {
+      composerDragDepth = 0;
+      dom.composerForm.classList.remove("is-dragover");
+    };
 
-      for (const file of acceptedFiles) {
-        try {
-          loadedUploads.push(await readLocalUpload(file));
-        } catch (_error) {
-          failedUploads.push(file.name || "без имени");
-        }
+    dom.composerForm.addEventListener("dragenter", (event) => {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
+        return;
       }
+      event.preventDefault();
+      composerDragDepth += 1;
+      dom.composerForm.classList.add("is-dragover");
+    });
 
-      if (loadedUploads.length) {
-        project.pendingUploads = uniqueUploads([...project.pendingUploads, ...loadedUploads]).slice(0, MAX_LOCAL_UPLOAD_FILES);
-        project.updatedAt = nowIso();
-        renderAttachmentList(project);
-        renderStatus(project);
-        persist();
-        focusComposerSoon();
+    dom.composerForm.addEventListener("dragover", (event) => {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
+        return;
       }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      dom.composerForm.classList.add("is-dragover");
+    });
 
-      const warnings = [];
-      if (unsupported.length) {
-        warnings.push(`Не добавлены неподдерживаемые файлы: ${unsupportedNames.join(", ")}${unsupported.length > unsupportedNames.length ? "..." : ""}`);
+    dom.composerForm.addEventListener("dragleave", (event) => {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
+        return;
       }
-      if (skippedCount) {
-        warnings.push(`Превышен лимит: максимум ${MAX_LOCAL_UPLOAD_FILES} файла за один ответ.`);
+      event.preventDefault();
+      composerDragDepth = Math.max(0, composerDragDepth - 1);
+      if (composerDragDepth === 0) {
+        dom.composerForm.classList.remove("is-dragover");
       }
-      if (failedUploads.length) {
-        warnings.push(`Не удалось прочитать: ${failedUploads.slice(0, 3).join(", ")}${failedUploads.length > 3 ? "..." : ""}`);
+    });
+
+    dom.composerForm.addEventListener("drop", async (event) => {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
+        return;
       }
-      if (warnings.length) {
-        showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info");
-      } else if (loadedUploads.length) {
-        clearComposerNotice();
+      event.preventDefault();
+      clearComposerDragState();
+      const project = getActiveProject();
+      const droppedFiles = Array.from(event.dataTransfer?.files || []);
+      if (!project || !droppedFiles.length) {
+        return;
       }
-      renderComposer(project);
+      await ingestSelectedFiles(project, droppedFiles);
+    });
+
+    document.addEventListener("dragover", (event) => {
+      if (!hasFilePayload(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+    });
+
+    document.addEventListener("drop", (event) => {
+      if (!hasFilePayload(event.dataTransfer)) {
+        return;
+      }
+      if (dom.composerForm.contains(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      clearComposerDragState();
     });
 
     if (dom.accessForm) {

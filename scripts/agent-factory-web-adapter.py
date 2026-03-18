@@ -764,6 +764,10 @@ def context_hint_for_topic(
         listed = ", ".join(upload_names[:2])
         suffix = " и ещё файлы" if len(upload_names) > 2 else ""
         return f"Вижу приложенные файлы: {listed}{suffix}."
+    if next_topic == "expected_outputs" and upload_names and not desired_outcome:
+        listed = ", ".join(upload_names[:2])
+        suffix = " и ещё файлы" if len(upload_names) > 2 else ""
+        return f"Входные примеры уже приложены файлами: {listed}{suffix}."
     if next_topic == "expected_outputs" and desired_outcome:
         return f"Целевой бизнес-эффект уже зафиксирован: {shorten_text(desired_outcome, 90)}."
     if next_topic == "constraints" and desired_outcome:
@@ -787,8 +791,6 @@ def adaptive_architect_question(
     base_question = normalize_text(frame.get("question")) or normalize_text(next_question)
     if not base_question:
         base_question = "Опиши, пожалуйста, подробнее рабочий контекст, чтобы я корректно зафиксировал требования."
-    example = normalize_text(frame.get("example"))
-    example_hint = example if example.lower().startswith("например") else (f"Например: {example}" if example else "")
     lead = normalize_text(frame.get("lead"))
     user_text = normalize_text(envelope.get("user_text"))
     low_signal = force_low_signal_guard or is_low_signal_reply(user_text, uploaded_files)
@@ -798,17 +800,14 @@ def adaptive_architect_question(
             if topic == "problem"
             else "Ответ пока слишком общий, из него нельзя зафиксировать требование в brief."
         )
-        question = f"{reprompt} {base_question}"
-        if example_hint:
-            question = f"{question} {example_hint}"
+        question = "\n\n".join((reprompt, base_question))
         return question, "low_signal_guard"
 
     summaries = requirement_topic_summaries(runtime_state)
     context_hint = context_hint_for_topic(topic, summaries, uploaded_files)
-    parts = [context_hint or lead, base_question]
-    if example_hint:
-        parts.append(example_hint)
-    question = " ".join(part for part in parts if normalize_text(part))
+    intro = normalize_text(context_hint) or lead
+    parts = [part for part in (intro, base_question) if normalize_text(part)]
+    question = "\n\n".join(parts)
     return question, "adaptive_architect"
 
 
@@ -1374,6 +1373,20 @@ def preferred_ui_action(reply_cards: list[dict[str, Any]], *, fallback: str = ""
 
 
 def compact_display_title(*candidates: Any) -> str:
+    def is_generic_title(value: str) -> bool:
+        normalized = re.sub(r"\s+", " ", normalize_text(value).lower()).strip(" .-")
+        if not normalized:
+            return True
+        return normalized in {
+            "new project",
+            "project",
+            "discovery project",
+            "demo project",
+            "factory project",
+            "новый проект",
+            "проект",
+        }
+
     for candidate in candidates:
         text = normalize_text(candidate)
         if not text:
@@ -1381,9 +1394,66 @@ def compact_display_title(*candidates: Any) -> str:
         first_sentence = re.split(r"[.!?\n]", text, maxsplit=1)[0].strip()
         cleaned = re.sub(r"^(нужен агент[,]?\s*|который\s+|хочу автоматизировать\s*|нужно автоматизировать\s*|нужна автоматизация\s*)", "", first_sentence, flags=re.IGNORECASE)
         normalized = re.sub(r"\s+", " ", cleaned).strip(" -")
-        if normalized:
+        if normalized and not is_generic_title(normalized):
             return normalized[:72].rstrip()
     return "Новый проект"
+
+
+def bridge_input_examples_topic(
+    runtime_state: dict[str, Any],
+    *,
+    next_topic: str,
+    next_question: str,
+    uploaded_files: list[dict[str, Any]],
+    now: str,
+) -> tuple[str, str, bool]:
+    topic = normalize_text(next_topic)
+    normalized_uploads = normalize_uploaded_files(uploaded_files)
+    if topic != "input_examples" or not normalized_uploads:
+        return next_topic, next_question, False
+
+    upload_names = [normalize_text(item.get("name")) for item in normalized_uploads if normalize_text(item.get("name"))]
+    listed = ", ".join(upload_names[:2]) if upload_names else "прикреплённые файлы"
+    suffix = " и ещё файлы" if len(upload_names) > 2 else ""
+    summary = f"Примеры входов получены через файлы: {listed}{suffix}."
+
+    captured_answers = runtime_state.get("captured_answers")
+    if not isinstance(captured_answers, dict):
+        captured_answers = {}
+    captured_answers["input_examples"] = summary
+    runtime_state["captured_answers"] = captured_answers
+
+    requirement_topics = runtime_state.get("requirement_topics")
+    if isinstance(requirement_topics, list):
+        updated = False
+        for item in requirement_topics:
+            if not isinstance(item, dict):
+                continue
+            if normalize_text(item.get("topic_name")) != "input_examples":
+                continue
+            item["summary"] = summary
+            item["status"] = "clarified"
+            item["last_updated_at"] = now
+            updated = True
+            break
+        if not updated:
+            requirement_topics.append(
+                {
+                    "topic_id": "topic-input_examples-uploaded",
+                    "topic_name": "input_examples",
+                    "category": "functional",
+                    "status": "clarified",
+                    "summary": summary,
+                    "source_turn_ids": [],
+                    "last_updated_at": now,
+                }
+            )
+        runtime_state["requirement_topics"] = requirement_topics
+
+    next_topic_key = "expected_outputs"
+    next_topic_frame = ARCHITECT_TOPIC_FRAMES.get(next_topic_key, {})
+    bridged_question = normalize_text(next_topic_frame.get("question")) or next_question
+    return next_topic_key, bridged_question, True
 
 
 def side_panel_mode(reply_cards: list[dict[str, Any]], download_artifacts: list[dict[str, Any]] | None) -> str:
@@ -1628,6 +1698,15 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         else normalize_text(runtime_state.get("next_question"))
     )
     architect_question_source = "runtime"
+    bridged_from_uploaded_examples = False
+    if access_granted and not download_artifacts:
+        next_topic, next_question, bridged_from_uploaded_examples = bridge_input_examples_topic(
+            runtime_state,
+            next_topic=next_topic,
+            next_question=next_question,
+            uploaded_files=uploaded_files,
+            now=now,
+        )
     if access_granted and low_signal_submission and adapter_status in {"awaiting_user_reply", "awaiting_clarification"}:
         next_action = "ask_next_question"
         if not next_topic:
@@ -1651,6 +1730,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         )
         next_question = normalize_text(adaptive_question) or next_question
         patch_runtime_next_question(runtime_state, next_question=next_question, next_topic=next_topic)
+        if bridged_from_uploaded_examples:
+            architect_question_source = "uploaded_examples_bridge"
     status_snapshot = build_web_demo_status_snapshot(
         web_demo_session.get("web_demo_session_id"),
         pointer.get("project_key"),
