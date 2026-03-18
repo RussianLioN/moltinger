@@ -6,6 +6,10 @@
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
   const MIN_PENDING_VISUAL_MS = 420;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
+  const SIDEBAR_WIDTH_DEFAULT = 264;
+  const SIDEBAR_WIDTH_MIN = 220;
+  const SIDEBAR_WIDTH_MAX = 560;
+  const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
     "md",
@@ -110,6 +114,8 @@
   ];
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
+    appFrame: document.querySelector(".app-frame"),
+    sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
     accessForm: document.querySelector('[data-role="access-form"]'),
@@ -168,6 +174,7 @@
     accessToken: "",
     connectionMode: "booting",
     requestCounter: 0,
+    sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
     activeProjectId: "",
     projects: [],
     gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
@@ -403,6 +410,46 @@
     return `${days} д назад`;
   }
 
+  function isMobileLayout() {
+    return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+  }
+
+  function sidebarMaxByViewport() {
+    const viewport = Math.max(0, window.innerWidth || 0);
+    const roomForWorkspace = Math.max(SIDEBAR_WIDTH_MIN, viewport - 560);
+    return Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, roomForWorkspace));
+  }
+
+  function clampSidebarWidth(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return SIDEBAR_WIDTH_DEFAULT;
+    }
+    const max = sidebarMaxByViewport();
+    return Math.min(Math.max(Math.round(parsed), SIDEBAR_WIDTH_MIN), max);
+  }
+
+  function applySidebarWidth() {
+    const nextWidth = clampSidebarWidth(state.sidebarWidth);
+    state.sidebarWidth = nextWidth;
+    if (dom.root) {
+      dom.root.style.setProperty("--sidebar-width", `${nextWidth}px`);
+    }
+    if (dom.sidebarResizer) {
+      dom.sidebarResizer.setAttribute("aria-valuemin", String(SIDEBAR_WIDTH_MIN));
+      dom.sidebarResizer.setAttribute("aria-valuemax", String(sidebarMaxByViewport()));
+      dom.sidebarResizer.setAttribute("aria-valuenow", String(nextWidth));
+    }
+  }
+
+  function updateSidebarWidth(nextWidth, options = {}) {
+    state.sidebarWidth = clampSidebarWidth(nextWidth);
+    applySidebarWidth();
+    if (options.persist) {
+      persist();
+    }
+  }
+
   function selectionModeFor(action) {
     const map = {
       start_project: "new_project",
@@ -506,6 +553,7 @@
     const payload = {
       connectionMode: state.connectionMode,
       requestCounter: state.requestCounter,
+      sidebarWidth: state.sidebarWidth,
       activeProjectId: state.activeProjectId,
       projects: state.projects.map((project) => projectSnapshot(project)),
     };
@@ -523,6 +571,7 @@
     if (saved && typeof saved === "object") {
       state.connectionMode = normalizeText(saved.connectionMode, "booting");
       state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
+      state.sidebarWidth = clampSidebarWidth(saved.sidebarWidth);
       state.projects = Array.isArray(saved.projects) && saved.projects.length
         ? saved.projects.map((project) => normalizeProjectRecord(project))
         : [];
@@ -1439,6 +1488,7 @@
 
   function renderAll() {
     const project = getActiveProject();
+    applySidebarWidth();
     renderGateNote();
     renderConnection();
     renderSessionBadge(project);
@@ -2512,6 +2562,72 @@
   }
 
   function bindEvents() {
+    if (dom.sidebarResizer) {
+      let resizeSession = null;
+
+      const finishResize = (persistWidth) => {
+        if (!resizeSession) {
+          return;
+        }
+        resizeSession = null;
+        dom.root.classList.remove("is-resizing");
+        window.removeEventListener("pointermove", handleResizeMove);
+        window.removeEventListener("pointerup", handleResizeEnd);
+        window.removeEventListener("pointercancel", handleResizeEnd);
+        if (persistWidth) {
+          persist();
+        }
+      };
+
+      const handleResizeMove = (event) => {
+        if (!resizeSession) {
+          return;
+        }
+        const delta = event.clientX - resizeSession.startX;
+        updateSidebarWidth(resizeSession.startWidth + delta);
+      };
+
+      const handleResizeEnd = () => {
+        finishResize(true);
+      };
+
+      dom.sidebarResizer.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || isMobileLayout()) {
+          return;
+        }
+        event.preventDefault();
+        resizeSession = {
+          startX: event.clientX,
+          startWidth: state.sidebarWidth,
+        };
+        dom.root.classList.add("is-resizing");
+        window.addEventListener("pointermove", handleResizeMove);
+        window.addEventListener("pointerup", handleResizeEnd);
+        window.addEventListener("pointercancel", handleResizeEnd);
+      });
+
+      dom.sidebarResizer.addEventListener("keydown", (event) => {
+        if (isMobileLayout()) {
+          return;
+        }
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          return;
+        }
+        event.preventDefault();
+        const delta = event.key === "ArrowRight" ? 24 : -24;
+        updateSidebarWidth(state.sidebarWidth + delta, { persist: true });
+      });
+
+      window.addEventListener("resize", () => {
+        const clamped = clampSidebarWidth(state.sidebarWidth);
+        if (clamped !== state.sidebarWidth) {
+          updateSidebarWidth(clamped, { persist: true });
+          return;
+        }
+        applySidebarWidth();
+      });
+    }
+
     dom.newProject.addEventListener("click", () => {
       createNewProject({ activate: true });
       focusComposerSoon();

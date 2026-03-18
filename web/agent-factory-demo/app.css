@@ -24,6 +24,7 @@
   --shadow-lg: 0 26px 70px rgba(0, 0, 0, 0.28);
   --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.18);
   --sidebar-width: 264px;
+  --sidebar-divider-width: 12px;
   --panel-width: 380px;
   --font-body: "Avenir Next", "SF Pro Display", "Segoe UI Variable", "Helvetica Neue", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", "Menlo", monospace;
@@ -311,9 +312,53 @@ code {
 
 .app-frame {
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: var(--sidebar-width) var(--sidebar-divider-width) minmax(0, 1fr);
+  gap: 10px;
   min-height: calc(100vh - 32px);
+}
+
+.app-frame__divider {
+  position: relative;
+  min-height: 0;
+  border-radius: 999px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.app-frame__divider::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.app-frame__divider::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 50%;
+  width: 2px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.06);
+  transition: background-color 0.14s ease;
+}
+
+.app-frame__divider:hover::after,
+.app-frame__divider:focus-visible::after {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.app-frame__divider:focus-visible {
+  outline: none;
+}
+
+.shell.is-resizing,
+.shell.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .sidebar {
@@ -920,6 +965,10 @@ code {
 
   .app-frame {
     grid-template-columns: 1fr;
+  }
+
+  .app-frame__divider {
+    display: none;
   }
 
   .sidebar {
