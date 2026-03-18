@@ -981,38 +981,30 @@
 
   function renderAttachmentList(project) {
     const pending = uniqueUploads(project?.pendingUploads || []);
-    const sessionUploads = uniqueUploads(activeSessionUploads(project));
-    const items = [
-      ...pending.map((item) => ({ ...item, scope: "pending" })),
-      ...sessionUploads
-        .filter((item) => !pending.some((pendingItem) => pendingItem.upload_id === item.upload_id))
-        .map((item) => ({ ...item, scope: "session" })),
-    ];
+    const items = pending.map((item) => ({ ...item, scope: "pending" }));
     dom.attachmentList.innerHTML = "";
     dom.attachmentList.hidden = items.length === 0;
     items.forEach((upload) => {
       const pill = document.createElement("div");
-      pill.className = `attachment-pill${upload.scope === "session" ? " attachment-pill--session" : ""}`;
+      pill.className = "attachment-pill";
       const label = document.createElement("span");
       label.className = "attachment-pill__label";
       label.textContent = upload.name || "Файл";
       const meta = document.createElement("span");
       meta.className = "attachment-pill__meta";
-      meta.textContent = summarizeUploadMeta(upload) || (upload.scope === "pending" ? "к отправке" : "в сессии");
+      meta.textContent = summarizeUploadMeta(upload) || "к отправке";
       pill.append(label, meta);
-      if (upload.scope === "pending") {
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "attachment-pill__remove";
-        remove.textContent = "×";
-        remove.setAttribute("aria-label", `Убрать файл ${upload.name || ""}`.trim());
-        remove.addEventListener("click", () => {
-          project.pendingUploads = project.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
-          renderAttachmentList(project);
-          renderStatus(project);
-        });
-        pill.appendChild(remove);
-      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "attachment-pill__remove";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `Убрать файл ${upload.name || ""}`.trim());
+      remove.addEventListener("click", () => {
+        project.pendingUploads = project.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
+        renderAttachmentList(project);
+        renderStatus(project);
+      });
+      pill.appendChild(remove);
       dom.attachmentList.appendChild(pill);
     });
   }
