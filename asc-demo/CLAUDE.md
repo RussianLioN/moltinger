@@ -124,6 +124,8 @@ OPENAI_API_KEY=fw_...
 OPENAI_BASE_URL=https://api.fireworks.ai/inference/v1
 MODEL_NAME=accounts/fireworks/models/glm-5
 DEMO_ACCESS_TOKEN=demo-access-token
+DEMO_DOMAIN=demo.ainetic.tech
+DEMO_PUBLIC_BASE_URL=https://demo.ainetic.tech
 PORT=3000
 ```
 

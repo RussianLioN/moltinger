@@ -13,7 +13,7 @@ Implement standalone Node backend inside `asc-demo/` that matches existing front
 **Primary Dependencies**: `express`, `openai`, `dotenv`, `cors`, `uuid`  
 **Storage**: In-memory sessions + runtime artifact payloads in process memory  
 **Testing**: local smoke via node checks + scripted API scenario  
-**Target Platform**: local demo service on `PORT` (default 3000)
+**Target Platform**: local demo service on `PORT` (default 3000), target public domain `demo.ainetic.tech`
 
 ## Project Structure
 

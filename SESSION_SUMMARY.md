@@ -55,6 +55,7 @@ GitOps Compliance: Enforced ✅
 - Восстановлена корректная привязка ворктри `moltinger-019-asc-fabrique-prototype` к canonical gitdir (`/Users/rl/coding/moltinger/moltinger-main/.git/worktrees/moltinger-019-asc-fabrique-prototype`) и обновлён guard через `scripts/git-session-guard.sh --refresh`.
 - Зафиксированы и запушены добавленные пользователем материалы по ASC demo и BPMN (commit `bfa46db`): `asc-demo/*`, `docs/concept/asc-ai-fabrique-2-0-user-story-q-and-a.md`, `docs/concept/specs/001-approval-level-user-story-bpmn/*`.
 - Поднят новый Speckit-пакет backend-среза: `specs/025-asc-demo-llm-backend/{spec.md,plan.md,tasks.md}` на базе `asc-demo/docs/plans/sleepy-munching-turing.md`.
+- Входные параметры от пользователя зафиксированы в конфигурации и Speckit-пакете: `DEMO_ACCESS_TOKEN=demo-access-token`, целевой публичный домен `demo.ainetic.tech` (`DEMO_DOMAIN`, `DEMO_PUBLIC_BASE_URL`).
 - Реализован standalone Node backend для `asc-demo`:
   - runtime bootstrap: `asc-demo/package.json`, `asc-demo/.env.example`, `asc-demo/server.js`
   - core/domain modules: `asc-demo/src/llm.js`, `sessions.js`, `response-builder.js`, `discovery.js`, `brief.js`, `summary-generator.js`, `router.js`

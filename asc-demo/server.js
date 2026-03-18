@@ -21,11 +21,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/health", (_req, res) => {
+  const demoDomain = process.env.DEMO_DOMAIN || "demo.ainetic.tech";
+  const publicBaseUrl = process.env.DEMO_PUBLIC_BASE_URL || `https://${demoDomain}`;
   res.json({
     status: "ok",
     service: "asc-demo-backend",
     llm_configured: Boolean(process.env.OPENAI_API_KEY),
     model: process.env.MODEL_NAME || "accounts/fireworks/models/glm-5",
+    demo_domain: demoDomain,
+    public_base_url: publicBaseUrl,
   });
 });
 

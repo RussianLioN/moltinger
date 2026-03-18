@@ -23,6 +23,8 @@ This slice introduces a real Node.js backend that serves the same UI contract an
 - Fireworks API credentials were provided by user for runtime usage; repository must keep only placeholders/examples.
 - If provider is unavailable or credentials are invalid, backend must fail soft (fallback content), not crash.
 - Missing product decisions should be implemented with safe placeholders and explicitly listed at handoff.
+- Demo access token fixed by user: `DEMO_ACCESS_TOKEN=demo-access-token`.
+- Target public demo domain fixed by user: `demo.ainetic.tech`.
 
 ## Scope
 
