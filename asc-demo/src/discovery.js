@@ -12,13 +12,13 @@ export const DISCOVERY_TOPICS = [
     id: "problem",
     question: "Какую бизнес-проблему должен решить будущий агент?",
     why: "Нужно зафиксировать ценность автоматизации и целевой эффект.",
-    signals: ["проблем", "боль", "долго", "ошиб", "срок", "узкое место", "автомат"],
+    signals: ["проблем", "боль", "долго", "ошиб", "срок", "узкое место", "автомат", "сократ", "ускор", "уходит"],
   },
   {
     id: "target_users",
     question: "Кто основной пользователь или выгодоприобретатель результата?",
     why: "Нужно понимать, для кого проектируем сценарий и интерфейс.",
-    signals: ["пользоват", "клиент", "комитет", "отдел", "команда", "роль"],
+    signals: ["пользоват", "клиент", "комитет", "отдел", "команда", "роль", "менеджер", "выгодоприобрет"],
   },
   {
     id: "current_workflow",
@@ -30,13 +30,13 @@ export const DISCOVERY_TOPICS = [
     id: "input_examples",
     question: "Какие входные данные или кейсы агент получает на вход?",
     why: "Нужно понять формат входов для корректной обработки и тестов.",
-    signals: ["вход", "данн", "файл", "заявк", "документ", "пример"],
+    signals: ["вход", "данн", "файл", "заявк", "документ", "пример", "csv", "выгруз", "excel"],
   },
   {
     id: "expected_outputs",
     question: "Какой результат должен быть на выходе и в каком формате?",
     why: "Нужно зафиксировать ожидаемый output будущего агента.",
-    signals: ["выход", "результ", "отчет", "карточк", "summary", "рекомендац"],
+    signals: ["выход", "результ", "отчет", "карточк", "summary", "рекомендац", "pdf", "презентац", "материал"],
   },
   {
     id: "branching_rules",
@@ -55,6 +55,15 @@ export const DISCOVERY_TOPICS = [
 const MIN_TOPICS_FOR_COMPLETION = 5;
 const REQUIRED_TOPICS = ["problem", "target_users", "expected_outputs"];
 const LOW_SIGNAL_MARKERS = new Set(["ok", "okay", "test", "ping", "да", "нет", "ага", "понял"]);
+const TOPIC_ACKS = {
+  problem: "Проблему зафиксировал.",
+  target_users: "Пользователей и выгодоприобретателей зафиксировал.",
+  current_workflow: "Текущий процесс зафиксировал.",
+  input_examples: "Входные данные зафиксировал.",
+  expected_outputs: "Ожидаемый результат зафиксировал.",
+  branching_rules: "Правила и исключения зафиксировал.",
+  success_metrics: "Метрики успеха зафиксировал.",
+};
 
 let cachedSystemPrompt = null;
 
@@ -149,6 +158,61 @@ function syncTopicAnswers(session, userText, newCoverage) {
       session.topicAnswers[topicId] = text;
     }
   });
+}
+
+function topicMatchesText(topic, lowerText) {
+  if (!topic || !lowerText) {
+    return false;
+  }
+  return topic.signals.some((signal) => lowerText.includes(signal));
+}
+
+function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
+  const normalizedText = normalizeText(userText);
+  const lowerText = normalizedText.toLowerCase();
+  const hasText = Boolean(normalizedText);
+  const hasFiles = Array.isArray(uploadedFiles) && uploadedFiles.length > 0;
+  const activeTopic = getTopicById(session.currentTopic);
+  const activeTopicCoveredByText = topicMatchesText(activeTopic, lowerText);
+  const activeTopicCoveredByFiles = Boolean(activeTopic && activeTopic.id === "input_examples" && hasFiles);
+  const activeTopicCovered = activeTopicCoveredByText || activeTopicCoveredByFiles;
+
+  if (hasFiles) {
+    step.coveredTopics.add("input_examples");
+  }
+
+  if (!step.lowSignal && activeTopic && activeTopicCovered) {
+    step.coveredTopics.add(activeTopic.id);
+  }
+
+  const fallback = defaultQuestion(step.coveredTopics);
+  let nextTopic = getTopicById(step.nextTopic) ? step.nextTopic : fallback.nextTopic;
+
+  if (step.lowSignal) {
+    if (activeTopic) {
+      nextTopic = activeTopic.id;
+    }
+  } else if (nextTopic && step.coveredTopics.has(nextTopic)) {
+    nextTopic = fallback.nextTopic;
+  }
+
+  const nextTopicMeta = getTopicById(nextTopic);
+  const whyAskingNow = nextTopicMeta?.why || fallback.whyAskingNow;
+  const nextQuestion = step.lowSignal
+    ? `Ответ пока слишком общий. Уточни, пожалуйста: ${nextTopicMeta?.question || fallback.nextQuestion}`
+    : (nextTopicMeta?.question || fallback.nextQuestion);
+
+  return {
+    ...step,
+    nextTopic,
+    nextQuestion,
+    whyAskingNow,
+    missingCoverage: computeMissing(step.coveredTopics).map((item) => item.id),
+    acknowledgedTopic: !step.lowSignal && activeTopic && activeTopicCovered ? activeTopic.id : "",
+    acknowledgementText: !step.lowSignal && activeTopic && activeTopicCovered
+      ? (TOPIC_ACKS[activeTopic.id] || "Ответ зафиксировал.")
+      : "",
+  };
 }
 
 async function getArchitectSystemPrompt() {
@@ -252,25 +316,29 @@ export async function processDiscoveryTurn(session, userText, uploadedFiles = []
     }
   }
 
-  session.coveredTopics = step.coveredTopics;
-  syncTopicAnswers(session, userText, step.coveredTopics);
-  session.currentQuestion = step.nextQuestion;
-  session.currentTopic = step.nextTopic;
-  session.whyAskingNow = step.whyAskingNow;
-  session.missingCoverage = step.missingCoverage;
+  const finalized = finalizeDiscoveryStep(session, step, userText, uploadedFiles);
 
-  const complete = !step.lowSignal && completionReached(step.coveredTopics);
-  const coveredCount = step.coveredTopics.size;
+  session.coveredTopics = finalized.coveredTopics;
+  syncTopicAnswers(session, userText, finalized.coveredTopics);
+  session.currentQuestion = finalized.nextQuestion;
+  session.currentTopic = finalized.nextTopic;
+  session.whyAskingNow = finalized.whyAskingNow;
+  session.missingCoverage = finalized.missingCoverage;
+
+  const complete = !finalized.lowSignal && completionReached(finalized.coveredTopics);
+  const coveredCount = finalized.coveredTopics.size;
 
   return {
     complete,
     coveredCount,
     totalCount: DISCOVERY_TOPICS.length,
-    nextTopic: step.nextTopic,
-    nextQuestion: step.nextQuestion,
-    whyAskingNow: step.whyAskingNow,
-    missingCoverage: step.missingCoverage,
-    lowSignal: step.lowSignal,
-    helperExample: getTopicById(step.nextTopic)?.question || "",
+    nextTopic: finalized.nextTopic,
+    nextQuestion: finalized.nextQuestion,
+    whyAskingNow: finalized.whyAskingNow,
+    missingCoverage: finalized.missingCoverage,
+    lowSignal: finalized.lowSignal,
+    helperExample: getTopicById(finalized.nextTopic)?.question || "",
+    acknowledgedTopic: finalized.acknowledgedTopic,
+    acknowledgementText: finalized.acknowledgementText,
   };
 }

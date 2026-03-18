@@ -130,8 +130,14 @@ function responseBase(session, payload, overrides = {}) {
     "",
   );
   const uiAction = currentAction(payload);
-  const nextQuestion = normalizeText(overrides.nextQuestion, session.currentQuestion);
-  const nextTopic = normalizeText(overrides.nextTopic, session.currentTopic);
+  const hasExplicitNextQuestion = Object.prototype.hasOwnProperty.call(overrides, "nextQuestion");
+  const hasExplicitNextTopic = Object.prototype.hasOwnProperty.call(overrides, "nextTopic");
+  const nextQuestion = hasExplicitNextQuestion
+    ? normalizeText(overrides.nextQuestion)
+    : normalizeText(session.currentQuestion);
+  const nextTopic = hasExplicitNextTopic
+    ? normalizeText(overrides.nextTopic)
+    : normalizeText(session.currentTopic);
   const uploadedFiles = normalizeUploadedFiles(overrides.uploadedFiles || session.uploadedFiles || []);
 
   return {

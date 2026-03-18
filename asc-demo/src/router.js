@@ -235,6 +235,10 @@ async function discoveryFlow(session, payload, userText, uploadedFiles) {
   if (discovery.complete) {
     await ensureBriefReady(session);
     session.stage = "awaiting_confirmation";
+    session.currentTopic = "";
+    session.currentQuestion = "";
+    session.whyAskingNow = "";
+    session.missingCoverage = [];
     const response = buildAwaitingConfirmationResponse(session, payload, {
       theatreMessage: "Discovery завершён. Формирование brief...",
       uploadedFiles,
@@ -244,8 +248,11 @@ async function discoveryFlow(session, payload, userText, uploadedFiles) {
   }
 
   session.stage = "discovery";
+  const nextQuestionForUser = discovery.acknowledgementText
+    ? `${discovery.acknowledgementText}\n\n${discovery.nextQuestion}`
+    : discovery.nextQuestion;
   const response = buildDiscoveryResponse(session, payload, {
-    nextQuestion: discovery.nextQuestion,
+    nextQuestion: nextQuestionForUser,
     nextTopic: discovery.nextTopic,
     whyAskingNow: discovery.whyAskingNow,
     missingCoverage: discovery.missingCoverage,
@@ -280,11 +287,15 @@ async function statusFlow(session, payload) {
   const defaultTopic = getDiscoveryTopics()[0];
   const nextQuestion = normalizeText(session.currentQuestion, defaultTopic.question);
   const nextTopic = normalizeText(session.currentTopic, defaultTopic.id);
+  session.currentQuestion = nextQuestion;
+  session.currentTopic = nextTopic;
+  session.whyAskingNow = normalizeText(session.whyAskingNow, defaultTopic.why);
+  session.missingCoverage = session.missingCoverage || getDiscoveryTopics().map((topic) => topic.id);
   return buildDiscoveryResponse(session, payload, {
     nextQuestion,
     nextTopic,
-    whyAskingNow: normalizeText(session.whyAskingNow, defaultTopic.why),
-    missingCoverage: session.missingCoverage || getDiscoveryTopics().map((topic) => topic.id),
+    whyAskingNow: session.whyAskingNow,
+    missingCoverage: session.missingCoverage,
     lowSignal: false,
     uploadedFiles: session.uploadedFiles || [],
     coveredCount: (session.coveredTopics || new Set()).size,
