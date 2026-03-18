@@ -4,6 +4,7 @@
   const DEFAULT_ACCESS_TOKEN = "demo-access-token";
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
+  const MIN_PENDING_VISUAL_MS = 420;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -138,6 +139,7 @@
     composerForm: document.querySelector('[data-role="composer-form"]'),
     composerLeadLabel: document.querySelector('[data-role="composer-lead-label"]'),
     composerMode: document.querySelector('[data-role="composer-mode"]'),
+    composerThinking: document.querySelector('[data-role="composer-thinking"]'),
     composerInput: document.querySelector('[data-role="composer-input"]'),
     composerSubmit: document.querySelector('[data-role="composer-submit"]'),
     composerNotice: document.querySelector('[data-role="composer-notice"]'),
@@ -1369,6 +1371,10 @@
   function renderComposer(project) {
     dom.composerLeadLabel.textContent = leadLabelFor(project);
     dom.composerMode.textContent = modeTextFor(project);
+    if (dom.composerThinking) {
+      dom.composerThinking.hidden = !state.awaitingResponse;
+    }
+    dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
       dom.composerHelperExample.textContent = helperExampleFor(project);
       dom.composerHelperExample.hidden = true;
@@ -2282,6 +2288,7 @@
     const requestId = normalizeText(payload?.web_conversation_envelope?.request_id);
     const abortController = new AbortController();
     let abortedByUser = false;
+    const pendingStartedAt = Date.now();
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
       project.timeline.push({
@@ -2326,6 +2333,13 @@
         applyResponse(project, mockAdapterTurn(project, payload), "mock");
       }
     } finally {
+      if (!abortedByUser) {
+        const elapsed = Date.now() - pendingStartedAt;
+        const remaining = MIN_PENDING_VISUAL_MS - elapsed;
+        if (remaining > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, remaining));
+        }
+      }
       if (abortedByUser) {
         const activeProject = state.projects.find((item) => item.id === project.id);
         if (activeProject) {

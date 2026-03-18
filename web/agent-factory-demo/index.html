@@ -122,7 +122,12 @@
               <form class="composer" data-role="composer-form">
                 <div class="composer__lead">
                   <span class="composer__lead-label" data-role="composer-lead-label">Сообщение</span>
-                  <strong class="composer__question" data-role="composer-mode">Ответ агенту-архитектору</strong>
+                  <div class="composer__lead-row">
+                    <strong class="composer__question" data-role="composer-mode">Ответ агенту-архитектору</strong>
+                    <span class="composer-thinking" data-role="composer-thinking" hidden aria-label="Агент формирует ответ">
+                      <span></span><span></span><span></span>
+                    </span>
+                  </div>
                 </div>
                 <p class="composer__example" data-role="composer-helper-example" hidden></p>
 
