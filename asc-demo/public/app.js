@@ -11,6 +11,9 @@
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
   const SIDEBAR_WIDTH_MAX = 560;
+  const PANEL_WIDTH_DEFAULT = 400;
+  const PANEL_WIDTH_MIN = 320;
+  const PANEL_WIDTH_MAX = 560;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -121,6 +124,7 @@
     appFrame: document.querySelector(".app-frame"),
     sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
+    panelResizer: document.querySelector('[data-role="panel-resizer"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
     accessForm: document.querySelector('[data-role="access-form"]'),
     accessTokenInput: document.querySelector('[data-role="access-token-input"]'),
@@ -138,6 +142,12 @@
     sidePanelEyebrow: document.querySelector('[data-role="side-panel-eyebrow"]'),
     sidePanelTitle: document.querySelector('[data-role="side-panel-title"]'),
     sidePanelSummary: document.querySelector('[data-role="side-panel-summary"]'),
+    sidePanelBody: document.querySelector('[data-role="side-panel-body"]'),
+    briefEditToggle: document.querySelector('[data-role="brief-edit-toggle"]'),
+    briefEditSection: document.querySelector('[data-role="brief-edit"]'),
+    briefEditInput: document.querySelector('[data-role="brief-edit-input"]'),
+    briefEditApply: document.querySelector('[data-role="brief-edit-apply"]'),
+    briefConfirm: document.querySelector('[data-role="brief-confirm"]'),
     panelCardList: document.querySelector('[data-role="panel-card-list"]'),
     primaryArtifactSection: document.querySelector('[data-role="primary-artifact-section"]'),
     primaryArtifactHeading: document.querySelector('[data-role="primary-artifact-heading"]'),
@@ -166,6 +176,7 @@
     composerInput: document.querySelector('[data-role="composer-input"]'),
     composerSubmit: document.querySelector('[data-role="composer-submit"]'),
     composerNotice: document.querySelector('[data-role="composer-notice"]'),
+    attachmentTrigger: document.querySelector('[data-role="attachment-trigger"]'),
     attachmentInput: document.querySelector('[data-role="attachment-input"]'),
     attachmentList: document.querySelector('[data-role="attachment-list"]'),
     quickActions: document.querySelector('[data-role="quick-actions"]'),
@@ -192,6 +203,7 @@
     connectionMode: "booting",
     requestCounter: 0,
     sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
+    panelWidth: PANEL_WIDTH_DEFAULT,
     activeProjectId: "",
     projects: [],
     gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
@@ -437,6 +449,12 @@
     return Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, roomForWorkspace));
   }
 
+  function panelMaxByViewport() {
+    const viewport = Math.max(0, window.innerWidth || 0);
+    const roomForWorkspace = Math.max(PANEL_WIDTH_MIN, viewport - 560);
+    return Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, roomForWorkspace));
+  }
+
   function clampSidebarWidth(value) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
@@ -462,6 +480,36 @@
   function updateSidebarWidth(nextWidth, options = {}) {
     state.sidebarWidth = clampSidebarWidth(nextWidth);
     applySidebarWidth();
+    if (options.persist) {
+      persist();
+    }
+  }
+
+  function clampPanelWidth(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return PANEL_WIDTH_DEFAULT;
+    }
+    const max = panelMaxByViewport();
+    return Math.min(Math.max(Math.round(parsed), PANEL_WIDTH_MIN), max);
+  }
+
+  function applyPanelWidth() {
+    const nextWidth = clampPanelWidth(state.panelWidth);
+    state.panelWidth = nextWidth;
+    if (dom.root) {
+      dom.root.style.setProperty("--panel-width", `${nextWidth}px`);
+    }
+    if (dom.panelResizer) {
+      dom.panelResizer.setAttribute("aria-valuemin", String(PANEL_WIDTH_MIN));
+      dom.panelResizer.setAttribute("aria-valuemax", String(panelMaxByViewport()));
+      dom.panelResizer.setAttribute("aria-valuenow", String(nextWidth));
+    }
+  }
+
+  function updatePanelWidth(nextWidth, options = {}) {
+    state.panelWidth = clampPanelWidth(nextWidth);
+    applyPanelWidth();
     if (options.persist) {
       persist();
     }
@@ -507,6 +555,8 @@
       mockStage: normalizeText(project.mockStage, "gate_pending"),
       lastAutoFollowupSource: normalizeText(project.lastAutoFollowupSource),
       lastResumeFingerprint: normalizeText(project.lastResumeFingerprint),
+      briefEditOpen: Boolean(project.briefEditOpen),
+      briefDraft: normalizeText(project.briefDraft),
     };
   }
 
@@ -543,6 +593,8 @@
       mockStage: normalizeText(record.mockStage, "gate_pending"),
       lastAutoFollowupSource: normalizeText(record.lastAutoFollowupSource),
       lastResumeFingerprint: normalizeText(record.lastResumeFingerprint),
+      briefEditOpen: Boolean(record.briefEditOpen),
+      briefDraft: normalizeText(record.briefDraft),
       pendingUploads: [],
     };
   }
@@ -565,6 +617,8 @@
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
+      briefEditOpen: true,
+      briefDraft: "",
     });
   }
 
@@ -577,6 +631,7 @@
       connectionMode: state.connectionMode,
       requestCounter: state.requestCounter,
       sidebarWidth: state.sidebarWidth,
+      panelWidth: state.panelWidth,
       activeProjectId: state.activeProjectId,
       projects: state.projects.map((project) => projectSnapshot(project)),
     };
@@ -595,6 +650,7 @@
       state.connectionMode = normalizeText(saved.connectionMode, "booting");
       state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
       state.sidebarWidth = clampSidebarWidth(saved.sidebarWidth);
+      state.panelWidth = clampPanelWidth(saved.panelWidth);
       state.projects = Array.isArray(saved.projects) && saved.projects.length
         ? saved.projects.map((project) => normalizeProjectRecord(project))
         : [];
@@ -638,6 +694,9 @@
     dom.composerSubmit.disabled = isBusy && !state.awaitingResponse;
     dom.composerInput.disabled = false;
     dom.attachmentInput.disabled = state.awaitingResponse;
+    if (dom.attachmentTrigger) {
+      dom.attachmentTrigger.disabled = state.awaitingResponse;
+    }
     dom.refreshSession.disabled = isBusy;
     dom.accessSubmit.disabled = isBusy;
     dom.accessTokenInput.disabled = isBusy && !state.accessToken;
@@ -1317,17 +1376,42 @@
     return `/api/preview/${encodeURIComponent(sessionId)}/${encodeURIComponent(artifactKind)}`;
   }
 
-  function triggerArtifactDownload(project, artifact) {
+  async function triggerArtifactDownload(project, artifact) {
     if (!artifact || !artifactIsReady(artifact)) {
       return;
     }
-    const href = artifactDownloadUrl(project, artifact) || createMockDownload(project, artifact);
-    const link = document.createElement("a");
-    link.href = href;
-    link.download = artifact.download_name || "artifact.txt";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    let objectUrl = "";
+    try {
+      const href = artifactDownloadUrl(project, artifact);
+      if (href) {
+        const response = await fetch(href, { headers: { Accept: "*/*" } });
+        if (!response.ok) {
+          throw new Error(`download_http_${response.status}`);
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+      } else {
+        objectUrl = createMockDownload(project, artifact);
+      }
+
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = artifact.download_name || "artifact.txt";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showComposerNotice("Файл подготовлен к скачиванию.", "info");
+    } catch (error) {
+      showComposerNotice(
+        `Не удалось скачать артефакт: ${normalizeText(error?.message, "unknown_error")}.`,
+        "error",
+      );
+    } finally {
+      if (objectUrl) {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      }
+      renderComposer(getActiveProject());
+    }
   }
 
   function openPanelMode(project, mode, artifactKind = "") {
@@ -1401,7 +1485,12 @@
     if (!acknowledgement) {
       return null;
     }
-    return { acknowledgement, question };
+    const normalizedAck = acknowledgement.replace(/\s+/g, " ").trim();
+    const looksTruncatedSummary = /[:]\s*.+[….]{3,}$/.test(normalizedAck) || /…/.test(normalizedAck);
+    const cleanedAck = looksTruncatedSummary
+      ? "Ответ зафиксировал."
+      : normalizedAck;
+    return { acknowledgement: cleanedAck, question };
   }
 
   function createMessageNode(message) {
@@ -1472,7 +1561,7 @@
 
   function timelineMessagesFromResponse(response) {
     const architectName = normalizeText(response?.ui_projection?.agent_display_name, "Агент-архитектор Moltis");
-    return (response?.reply_cards || [])
+    const messages = (response?.reply_cards || [])
       .filter((card) => ["discovery_question", "clarification_prompt", "confirmation_prompt"].includes(card.card_kind))
       .map((card) => ({
         role: "agent",
@@ -1482,6 +1571,21 @@
         body: card.body_text || "",
         actions: [],
       }));
+    if (messages.length) {
+      return messages;
+    }
+    const fallbackBody = normalizeText(response?.ui_projection?.current_question || response?.next_question);
+    if (!fallbackBody) {
+      return [];
+    }
+    return [{
+      role: "agent",
+      author: architectName,
+      kind: "status_update",
+      title: "",
+      body: fallbackBody,
+      actions: [],
+    }];
   }
 
   function messageSignature(message) {
@@ -1856,12 +1960,25 @@
     row.appendChild(copy);
 
     if (ready) {
-      const action = document.createElement("button");
-      action.type = "button";
-      action.className = "artifact-link-row__action";
-      action.textContent = "Скачать";
-      action.addEventListener("click", () => triggerArtifactDownload(project, artifact));
-      row.appendChild(action);
+      const actions = document.createElement("div");
+      actions.className = "artifact-link-row__actions";
+
+      const previewAction = document.createElement("button");
+      previewAction.type = "button";
+      previewAction.className = "artifact-link-row__action";
+      previewAction.textContent = "Preview";
+      previewAction.addEventListener("click", () => openPanelMode(project, "preview", artifact?.artifact_kind));
+
+      const downloadAction = document.createElement("button");
+      downloadAction.type = "button";
+      downloadAction.className = "artifact-link-row__action";
+      downloadAction.textContent = "Скачать";
+      downloadAction.addEventListener("click", () => {
+        void triggerArtifactDownload(project, artifact);
+      });
+
+      actions.append(previewAction, downloadAction);
+      row.appendChild(actions);
     } else {
       const stateLabel = document.createElement("span");
       stateLabel.className = "artifact-link-row__state";
@@ -1889,13 +2006,17 @@
     dom.primaryArtifactPreview.disabled = !ready;
     dom.primaryArtifactDownload.disabled = !ready;
     dom.primaryArtifactPreview.onclick = () => openPanelMode(project, "preview", artifact?.artifact_kind);
-    dom.primaryArtifactDownload.onclick = () => triggerArtifactDownload(project, artifact);
+    dom.primaryArtifactDownload.onclick = () => {
+      void triggerArtifactDownload(project, artifact);
+    };
   }
 
   function renderPreviewPanel(project, artifact) {
     dom.previewHeading.textContent = artifact.download_name || artifactKindLabel(artifact?.artifact_kind);
     dom.previewDownload.disabled = !artifactIsReady(artifact);
-    dom.previewDownload.onclick = () => triggerArtifactDownload(project, artifact);
+    dom.previewDownload.onclick = () => {
+      void triggerArtifactDownload(project, artifact);
+    };
 
     if (!artifactIsReady(artifact)) {
       dom.previewFrame.hidden = true;
@@ -1941,18 +2062,7 @@
     title.textContent = card.title || "Раздел brief";
     body.textContent = card.body_text || "";
     actions.innerHTML = "";
-    (card.action_hints || [])
-      .filter((action) => ["request_brief_correction", "confirm_brief", "reopen_brief"].includes(action))
-      .forEach((action) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "chip";
-        button.dataset.uiAction = action;
-        button.textContent = ACTION_LABELS[action] || action;
-        button.addEventListener("click", () => handleActionShortcut(action));
-        actions.appendChild(button);
-      });
-    actions.hidden = actions.children.length === 0;
+    actions.hidden = true;
     return fragment;
   }
 
@@ -1962,6 +2072,9 @@
     dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
     dom.sidePanel.hidden = !open;
     dom.sidePanel.dataset.mode = mode;
+    if (dom.panelResizer) {
+      dom.panelResizer.hidden = !(open && !isMobileLayout());
+    }
     if (!open) {
       return;
     }
@@ -1988,8 +2101,27 @@
       dom.sidePanelSummary.textContent = "Здесь появятся brief на review и пользовательские артефакты.";
     }
 
+    const isBriefReview = mode === "brief_review";
+    if (dom.briefEditToggle) {
+      dom.briefEditToggle.hidden = !isBriefReview;
+      dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Внести правку";
+    }
+    if (dom.briefEditSection) {
+      dom.briefEditSection.hidden = !isBriefReview || !project?.briefEditOpen;
+    }
+    if (dom.briefEditInput) {
+      dom.briefEditInput.value = normalizeText(project?.briefDraft);
+      dom.briefEditInput.disabled = state.awaitingResponse;
+    }
+    if (dom.briefEditApply) {
+      dom.briefEditApply.disabled = state.awaitingResponse;
+    }
+    if (dom.briefConfirm) {
+      dom.briefConfirm.disabled = state.awaitingResponse;
+    }
+
     dom.panelCardList.innerHTML = "";
-    if (mode === "brief_review") {
+    if (isBriefReview) {
       detailCards(project).forEach((card) => {
         dom.panelCardList.appendChild(createPanelCard(card));
       });
@@ -2082,6 +2214,7 @@
   function renderAll() {
     const project = getActiveProject();
     applySidebarWidth();
+    applyPanelWidth();
     renderGateNote();
     renderConnection();
     renderSessionBadge(project);
@@ -2390,7 +2523,7 @@
     );
     const hasDraftText = Boolean(normalizeText(project.draftText));
     const hasUploads = uniqueUploads(project.pendingUploads || []).length > 0;
-    return !hasUserMessages && !hasConversationActivity(project) && !hasDraftText && !hasUploads;
+    return !hasUserMessages && !hasDraftText && !hasUploads;
   }
 
   function switchProject(projectId) {
@@ -2997,6 +3130,14 @@
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
     }
+    if (panelMode === "brief_review" && typeof project.briefEditOpen !== "boolean") {
+      project.briefEditOpen = true;
+    }
+    if (panelMode !== "brief_review") {
+      project.briefEditOpen = false;
+    } else if (!project.briefEditOpen) {
+      project.briefEditOpen = true;
+    }
     project.lastPanelMode = panelMode;
     project.lastResumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint, project.lastResumeFingerprint);
 
@@ -3278,12 +3419,82 @@
       });
 
       window.addEventListener("resize", () => {
+        let persisted = false;
         const clamped = clampSidebarWidth(state.sidebarWidth);
         if (clamped !== state.sidebarWidth) {
           updateSidebarWidth(clamped, { persist: true });
+          persisted = true;
+        } else {
+          applySidebarWidth();
+        }
+        const panelClamped = clampPanelWidth(state.panelWidth);
+        if (panelClamped !== state.panelWidth) {
+          updatePanelWidth(panelClamped, { persist: true });
+          persisted = true;
+        } else {
+          applyPanelWidth();
+        }
+        if (!persisted) {
+          persist();
+        }
+        renderAll();
+      });
+    }
+
+    if (dom.panelResizer) {
+      let resizeSession = null;
+
+      const finishResize = (persistWidth) => {
+        if (!resizeSession) {
           return;
         }
-        applySidebarWidth();
+        resizeSession = null;
+        dom.root.classList.remove("is-resizing");
+        window.removeEventListener("pointermove", handleResizeMove);
+        window.removeEventListener("pointerup", handleResizeEnd);
+        window.removeEventListener("pointercancel", handleResizeEnd);
+        if (persistWidth) {
+          persist();
+        }
+      };
+
+      const handleResizeMove = (event) => {
+        if (!resizeSession) {
+          return;
+        }
+        const delta = resizeSession.startX - event.clientX;
+        updatePanelWidth(resizeSession.startWidth + delta);
+      };
+
+      const handleResizeEnd = () => {
+        finishResize(true);
+      };
+
+      dom.panelResizer.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || isMobileLayout()) {
+          return;
+        }
+        event.preventDefault();
+        resizeSession = {
+          startX: event.clientX,
+          startWidth: state.panelWidth,
+        };
+        dom.root.classList.add("is-resizing");
+        window.addEventListener("pointermove", handleResizeMove);
+        window.addEventListener("pointerup", handleResizeEnd);
+        window.addEventListener("pointercancel", handleResizeEnd);
+      });
+
+      dom.panelResizer.addEventListener("keydown", (event) => {
+        if (isMobileLayout()) {
+          return;
+        }
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          return;
+        }
+        event.preventDefault();
+        const delta = event.key === "ArrowRight" ? 24 : -24;
+        updatePanelWidth(state.panelWidth + delta, { persist: true });
       });
     }
 
@@ -3339,6 +3550,61 @@
       persist();
       renderAll();
     });
+
+    if (dom.briefEditToggle) {
+      dom.briefEditToggle.addEventListener("click", () => {
+        const project = getActiveProject();
+        if (!project) {
+          return;
+        }
+        project.briefEditOpen = !project.briefEditOpen;
+        persist();
+        renderAll();
+      });
+    }
+
+    if (dom.briefEditInput) {
+      dom.briefEditInput.addEventListener("input", () => {
+        const project = getActiveProject();
+        if (!project) {
+          return;
+        }
+        project.briefDraft = dom.briefEditInput.value;
+        persist();
+      });
+    }
+
+    if (dom.briefEditApply) {
+      dom.briefEditApply.addEventListener("click", () => {
+        const project = getActiveProject();
+        if (!project || state.awaitingResponse) {
+          return;
+        }
+        const correctionText = normalizeText(project.briefDraft || dom.briefEditInput?.value);
+        if (!correctionText) {
+          showComposerNotice("Опиши правку brief, затем нажми «Применить правку».", "warning");
+          renderComposer(project);
+          dom.briefEditInput?.focus();
+          return;
+        }
+        clearComposerNotice();
+        project.briefDraft = "";
+        if (dom.briefEditInput) {
+          dom.briefEditInput.value = "";
+        }
+        void dispatchTurn("request_brief_correction", correctionText, { skipUserMessage: true });
+      });
+    }
+
+    if (dom.briefConfirm) {
+      dom.briefConfirm.addEventListener("click", () => {
+        if (state.awaitingResponse) {
+          return;
+        }
+        clearComposerNotice();
+        void dispatchTurn("confirm_brief", "", { skipUserMessage: true });
+      });
+    }
 
     dom.homeExamples.addEventListener("click", (event) => {
       const target = event.target.closest("[data-example-prompt]");
@@ -3409,6 +3675,15 @@
       }
       focusComposerSoon();
     });
+
+    if (dom.attachmentTrigger) {
+      dom.attachmentTrigger.addEventListener("click", () => {
+        if (!state.accessToken || state.awaitingResponse) {
+          return;
+        }
+        dom.attachmentInput.click();
+      });
+    }
 
     dom.attachmentInput.addEventListener("change", async () => {
       const project = getActiveProject();

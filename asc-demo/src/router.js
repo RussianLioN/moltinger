@@ -102,6 +102,45 @@ function normalizeIncomingUploads(rawUploads = []) {
   });
 }
 
+function uploadFingerprint(upload = {}) {
+  const id = normalizeText(upload.upload_id);
+  if (id) {
+    return `id:${id}`;
+  }
+  const name = normalizeText(upload.name).toLowerCase();
+  const size = Number(upload.original_size_bytes || upload.size_bytes || 0);
+  if (name || size) {
+    return `file:${name}:${size}`;
+  }
+  return "";
+}
+
+function mergeIncomingUploads(session, incomingUploads = []) {
+  const merged = new Map();
+  const push = (upload) => {
+    const fingerprint = uploadFingerprint(upload);
+    if (!fingerprint) {
+      return;
+    }
+    if (!merged.has(fingerprint)) {
+      merged.set(fingerprint, { ...upload });
+      return;
+    }
+    const existing = merged.get(fingerprint);
+    const existingExcerpt = normalizeText(existing.excerpt);
+    const nextExcerpt = normalizeText(upload.excerpt);
+    if (!existingExcerpt && nextExcerpt) {
+      existing.excerpt = nextExcerpt;
+      existing.ingest_status = upload.ingest_status || existing.ingest_status;
+    }
+    existing.uploaded_at = normalizeText(upload.uploaded_at, existing.uploaded_at);
+  };
+
+  (session.uploadedFiles || []).forEach(push);
+  incomingUploads.forEach(push);
+  return Array.from(merged.values());
+}
+
 function shouldAutoname(session, userText) {
   const text = normalizeText(userText);
   if (!text) {
@@ -133,6 +172,43 @@ function maybeAutonameProject(session, userText) {
     compact.push(word);
   }
   session.displayProjectTitle = compact.join(" ") || text.slice(0, 66);
+}
+
+const BRIEF_CORRECTION_MARKERS = [
+  "правк",
+  "исправ",
+  "уточни",
+  "доработ",
+  "переоткрой",
+  "переоткры",
+  "измени",
+  "обнови brief",
+  "нужно изменить",
+];
+
+const PRODUCTION_SIMULATION_MARKERS = [
+  "имитац",
+  "симуляц",
+  "запусти цифров",
+  "цифровой сущности",
+  "production simulation",
+  "стартовый результат",
+];
+
+function isLikelyBriefCorrectionText(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return BRIEF_CORRECTION_MARKERS.some((marker) => normalized.includes(marker));
+}
+
+function isProductionSimulationRequest(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return PRODUCTION_SIMULATION_MARKERS.some((marker) => normalized.includes(marker));
 }
 
 async function ensureBriefReady(session) {
@@ -240,6 +316,19 @@ async function runSummaryGeneration(session) {
 }
 
 async function discoveryFlow(session, payload, userText, uploadedFiles) {
+  if (Array.isArray(session.uploadedFiles) && session.uploadedFiles.length > 0) {
+    session.coveredTopics.add("input_examples");
+    if (!session.topicAnswers || typeof session.topicAnswers !== "object") {
+      session.topicAnswers = {};
+    }
+    if (!session.topicAnswers?.input_examples) {
+      const names = session.uploadedFiles
+        .map((file) => normalizeText(file?.name))
+        .filter(Boolean)
+        .join(", ");
+      session.topicAnswers.input_examples = `Приложены файлы: ${names || "вложения пользователя"}. Данные считаются синтетическими и обезличенными.`;
+    }
+  }
   maybeAutonameProject(session, userText);
   pushUserMessage(session, userText, uploadedFiles);
 
@@ -321,7 +410,7 @@ export async function handleTurn(payload = {}) {
   const action = getAction(payload);
   const userText = getUserText(payload);
   const sessionId = sessionIdFromPayload(payload);
-  const uploadedFiles = normalizeIncomingUploads(payload.uploaded_files || []);
+  const incomingUploads = normalizeIncomingUploads(payload.uploaded_files || []);
   const token = getAccessToken(payload);
 
   const session = getOrCreateSession(sessionId, {
@@ -329,7 +418,7 @@ export async function handleTurn(payload = {}) {
     displayProjectTitle: "Новый проект",
   });
   session.projectKey = session.projectKey || projectKeyFromPayload(payload, userText);
-  session.uploadedFiles = uploadedFiles;
+  session.uploadedFiles = mergeIncomingUploads(session, incomingUploads);
 
   try {
     if (!session.accessGranted || action === "request_demo_access") {
@@ -346,13 +435,20 @@ export async function handleTurn(payload = {}) {
         return denied;
       }
       session.accessGranted = true;
-      session.stage = session.stage === "downloads_ready" ? "downloads_ready" : "discovery";
+      if (!normalizeText(session.stage) || session.stage === "gate_pending") {
+        session.stage = "discovery";
+      }
       const initial = await statusFlow(session, payload);
       setSessionResponse(session, initial);
       return initial;
     }
 
     let response;
+    const hasUserText = Boolean(normalizeText(userText));
+    const correctionIntent = hasUserText && isLikelyBriefCorrectionText(userText);
+    const simulationIntent = hasUserText && isProductionSimulationRequest(userText);
+    const downloadsMode = ["downloads_ready", "confirmed"].includes(normalizeText(session.stage));
+
     if (action === "confirm_brief") {
       await ensureBriefReady(session);
       session.stage = "confirmed";
@@ -361,30 +457,41 @@ export async function handleTurn(payload = {}) {
         void runSummaryGeneration(session);
       }
       response = buildHandoffRunningResponse(session, payload);
-    } else if (action === "preview_one_page" && userText) {
-      session.stage = "awaiting_confirmation";
-      session.summaryPromise = null;
-      session.summaryState = "idle";
-      response = buildAwaitingConfirmationResponse(session, payload, {
-        theatreMessage: "Brief переоткрыт для доработки. Внеси изменения и подтверди новую версию.",
-        uploadedFiles,
-      });
-    } else if (action === "request_brief_correction") {
+    } else if (downloadsMode && simulationIntent) {
+      pushUserMessage(session, userText, incomingUploads);
+      response = buildDownloadsReadyResponse(
+        session,
+        payload,
+        "Имитация запуска цифрового сотрудника готова. Открой production simulation и проверь стартовый результат.",
+        { primaryArtifactKind: "production_simulation" },
+      );
+      pushAssistantMessage(session, response.next_question);
+    } else if (action === "request_brief_correction" || (downloadsMode && correctionIntent)) {
+      pushUserMessage(session, userText, incomingUploads);
       const revised = await reviseBrief(session, userText);
       session.briefText = revised;
       session.briefVersion = Math.max(1, Number(session.briefVersion || 0) + 1);
       session.stage = "awaiting_confirmation";
       response = buildAwaitingConfirmationResponse(session, payload, {
         theatreMessage: "Правки применены. Проверь обновлённый brief и подтверди версию.",
-        uploadedFiles,
+        uploadedFiles: session.uploadedFiles,
       });
+      pushAssistantMessage(session, response.next_question);
+    } else if (downloadsMode && hasUserText) {
+      pushUserMessage(session, userText, incomingUploads);
+      response = buildDownloadsReadyResponse(
+        session,
+        payload,
+        "Материалы уже готовы. Если хочешь доработать brief, напиши конкретную правку, и я переоткрою его.",
+      );
+      pushAssistantMessage(session, response.next_question);
     } else if (action === "reopen_brief") {
       session.stage = "awaiting_confirmation";
       session.summaryPromise = null;
       session.summaryState = "idle";
       response = buildAwaitingConfirmationResponse(session, payload, {
         theatreMessage: "Brief переоткрыт для доработки. Внеси изменения и подтверди новую версию.",
-        uploadedFiles,
+        uploadedFiles: session.uploadedFiles,
       });
     } else if (
       action === "request_status"
@@ -394,11 +501,11 @@ export async function handleTurn(payload = {}) {
     ) {
       response = await statusFlow(session, payload);
     } else {
-      response = await discoveryFlow(session, payload, userText, uploadedFiles);
+      response = await discoveryFlow(session, payload, userText, incomingUploads);
     }
 
     setSessionResponse(session, response);
-    updateSession(session, { stage: session.stage, uploadedFiles });
+    updateSession(session, { stage: session.stage, uploadedFiles: session.uploadedFiles });
     return response;
   } catch (error) {
     console.error("[asc-demo] router.handleTurn:", error?.message || error);

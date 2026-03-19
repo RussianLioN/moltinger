@@ -55,7 +55,49 @@ export const DISCOVERY_TOPICS = [
 const MIN_TOPICS_FOR_COMPLETION = 5;
 const REQUIRED_TOPICS = ["problem", "target_users", "expected_outputs"];
 const LOW_SIGNAL_MARKERS = new Set(["ok", "okay", "test", "ping", "да", "нет", "ага", "понял"]);
+const NON_ANSWER_MARKERS = [
+  "давай продолжим",
+  "продолжим",
+  "дальше",
+  "не понял",
+  "не поняла",
+  "перефразируй",
+  "я уже отвечал",
+  "это уже было",
+  "пример чего",
+  "уже прикрепил",
+  "уже приложил",
+  "файл уже прикреп",
+  "файл уже прилож",
+  "во вложении",
+];
 const SYNTHETIC_DATA_NOTE = "Все данные во вложениях считаются синтетическими: не относятся к реальным лицам/контрагентам, любые совпадения случайны.";
+const SYNTHETIC_AFFIRMATION_MARKERS = [
+  "синтет",
+  "обезлич",
+  "аноним",
+  "без реальных реквизит",
+  "без реальных данных",
+  "совпадения случайны",
+];
+const FILE_ACK_MARKERS = [
+  "уже прикреп",
+  "уже прилож",
+  "файл прикреп",
+  "файл прилож",
+  "во вложени",
+  "прикрепил файл",
+  "добавил файл",
+  "см. влож",
+];
+const ALREADY_ANSWERED_MARKERS = [
+  "уже отвечал",
+  "уже отвечала",
+  "дублирую",
+  "повторяю",
+  "ответ выше",
+  "это уже было",
+];
 const TOPIC_ACKS = {
   problem: "Проблему зафиксировал.",
   target_users: "Пользователей и выгодоприобретателей зафиксировал.",
@@ -172,11 +214,54 @@ function syncTopicAnswers(session, userText, newCoverage, uploadedFiles = []) {
   });
 }
 
-function topicMatchesText(topic, lowerText) {
-  if (!topic || !lowerText) {
+function isLikelyNonAnswerText(lowerText) {
+  if (!lowerText) {
     return false;
   }
-  return topic.signals.some((signal) => lowerText.includes(signal));
+  return NON_ANSWER_MARKERS.some((marker) => lowerText.includes(marker));
+}
+
+function hasSyntheticAffirmation(lowerText) {
+  if (!lowerText) {
+    return false;
+  }
+  return SYNTHETIC_AFFIRMATION_MARKERS.some((marker) => lowerText.includes(marker));
+}
+
+function hasFileAcknowledgement(lowerText) {
+  if (!lowerText) {
+    return false;
+  }
+  return FILE_ACK_MARKERS.some((marker) => lowerText.includes(marker));
+}
+
+function hasAlreadyAnsweredMarker(lowerText) {
+  if (!lowerText) {
+    return false;
+  }
+  return ALREADY_ANSWERED_MARKERS.some((marker) => lowerText.includes(marker));
+}
+
+function sanitizeNextQuestion(rawQuestion, fallbackQuestion) {
+  const fallback = normalizeText(fallbackQuestion);
+  const text = normalizeText(rawQuestion, fallback);
+  if (!text) {
+    return fallback;
+  }
+
+  const lines = text.split("\n").map((line) => normalizeText(line)).filter(Boolean);
+  let candidate = lines.length ? lines[lines.length - 1] : text;
+  const questionSentence = candidate
+    .split(/(?<=[.?!])\s+/)
+    .map((part) => normalizeText(part))
+    .filter(Boolean)
+    .reverse()
+    .find((part) => part.includes("?"));
+  if (questionSentence) {
+    candidate = questionSentence;
+  }
+
+  return candidate.includes("?") ? candidate : fallback;
 }
 
 function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
@@ -185,7 +270,20 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   const hasText = Boolean(normalizedText);
   const hasFiles = Array.isArray(uploadedFiles) && uploadedFiles.length > 0;
   const activeTopic = getTopicById(session.currentTopic);
-  const activeTopicCoveredByText = topicMatchesText(activeTopic, lowerText);
+  const alreadyAnsweredCurrentTopic = Boolean(
+    activeTopic
+    && session.topicAnswers?.[activeTopic.id]
+    && hasAlreadyAnsweredMarker(lowerText),
+  );
+  const meaningfulTextForCurrentTopic = hasText && !isLikelyNonAnswerText(lowerText);
+  const activeTopicCoveredByText = meaningfulTextForCurrentTopic
+    || alreadyAnsweredCurrentTopic
+    || Boolean(
+      activeTopic
+      && activeTopic.id === "input_examples"
+      && hasText
+      && (hasFileAcknowledgement(lowerText) || hasSyntheticAffirmation(lowerText)),
+    );
   const activeTopicCoveredByFiles = Boolean(activeTopic && activeTopic.id === "input_examples" && hasFiles);
   const activeTopicCovered = activeTopicCoveredByText || activeTopicCoveredByFiles;
 
@@ -208,11 +306,20 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
     nextTopic = fallback.nextTopic;
   }
 
+  const shouldSkipInputExamplesReask = nextTopic === "input_examples"
+    && step.coveredTopics.has("input_examples")
+    && !hasFiles;
+  if (shouldSkipInputExamplesReask) {
+    const forced = forceNextUncoveredTopic("input_examples", step.coveredTopics);
+    nextTopic = forced.nextTopic;
+  }
+
   const nextTopicMeta = getTopicById(nextTopic);
   const whyAskingNow = nextTopicMeta?.why || fallback.whyAskingNow;
+  const fallbackQuestion = nextTopicMeta?.question || fallback.nextQuestion;
   const nextQuestion = step.lowSignal
-    ? `Ответ пока слишком общий. Уточни, пожалуйста: ${nextTopicMeta?.question || fallback.nextQuestion}`
-    : (nextTopicMeta?.question || fallback.nextQuestion);
+    ? `Ответ пока слишком общий. Уточни, пожалуйста: ${fallbackQuestion}`
+    : sanitizeNextQuestion(step.nextQuestion, fallbackQuestion);
 
   return {
     ...step,
@@ -250,21 +357,21 @@ function forceNextUncoveredTopic(currentTopicId, coveredTopics) {
 }
 
 function applyAntiLoopGuard(session, finalized) {
-  if (finalized.lowSignal) {
-    return finalized;
-  }
-
   const previousTopic = normalizeText(session.currentTopic);
   const previousQuestion = normalizeText(session.currentQuestion).toLowerCase();
   const nextQuestion = normalizeText(finalized.nextQuestion).toLowerCase();
   const repeatedTopic = previousTopic && finalized.nextTopic === previousTopic;
   const repeatedQuestion = previousQuestion && nextQuestion === previousQuestion;
+  const reaskingInputExamples = finalized.nextTopic === "input_examples"
+    && finalized.coveredTopics.has("input_examples");
+  const anonymizedLoopQuestion = /обезлич|аноним|реквизит|контрагент|example-case/i.test(nextQuestion)
+    && finalized.coveredTopics.has("input_examples");
 
-  if (!repeatedTopic && !repeatedQuestion) {
+  if (!repeatedTopic && !repeatedQuestion && !reaskingInputExamples && !anonymizedLoopQuestion) {
     return finalized;
   }
 
-  const forced = forceNextUncoveredTopic(previousTopic, finalized.coveredTopics);
+  const forced = forceNextUncoveredTopic(previousTopic || finalized.nextTopic, finalized.coveredTopics);
   const forcedQuestion = normalizeText(forced.nextQuestion).toLowerCase();
   if (!forced.nextTopic || (forced.nextTopic === finalized.nextTopic && forcedQuestion === nextQuestion)) {
     return finalized;
@@ -370,8 +477,16 @@ export function getDiscoveryTopics() {
 
 export async function processDiscoveryTurn(session, userText, uploadedFiles = []) {
   const lowSignal = isLowSignal(userText, uploadedFiles);
+  const activeTopic = normalizeText(session.currentTopic);
+  const lowerText = normalizeText(userText).toLowerCase();
+  const canTreatAsInputExamplesFollowup = lowSignal
+    && activeTopic === "input_examples"
+    && session.coveredTopics.has("input_examples")
+    && (hasFileAcknowledgement(lowerText) || hasSyntheticAffirmation(lowerText));
   let step;
-  if (lowSignal) {
+  if (canTreatAsInputExamplesFollowup) {
+    step = fallbackDiscoveryStep(session, userText, uploadedFiles, false);
+  } else if (lowSignal) {
     step = fallbackDiscoveryStep(session, userText, uploadedFiles, true);
   } else {
     try {
