@@ -53,14 +53,14 @@ run_component_moltis_version_helper_tests() {
     local tagged_main tagged_prod tagged_version tagged_image
     tagged_main="${project_dir}/docker-compose.yml"
     tagged_prod="${project_dir}/docker-compose.prod.yml"
-    write_compose_fixture "$tagged_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-v0.10.18}'
-    write_compose_fixture "$tagged_prod" 'ghcr.io/moltis-org/moltis:v0.10.18'
+    write_compose_fixture "$tagged_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-0.10.18}'
+    write_compose_fixture "$tagged_prod" 'ghcr.io/moltis-org/moltis:0.10.18'
 
     tagged_version="$("$helper_copy" version)"
     tagged_image="$("$helper_copy" image)"
 
-    if [[ "$tagged_version" == "v0.10.18" ]] && \
-       [[ "$tagged_image" == "ghcr.io/moltis-org/moltis:v0.10.18" ]] && \
+    if [[ "$tagged_version" == "0.10.18" ]] && \
+       [[ "$tagged_image" == "ghcr.io/moltis-org/moltis:0.10.18" ]] && \
        "$helper_copy" assert-tracked >/dev/null 2>&1; then
         test_pass
     else
@@ -71,14 +71,14 @@ run_component_moltis_version_helper_tests() {
     local quoted_main quoted_prod quoted_version quoted_image
     quoted_main="${project_dir}/docker-compose.yml"
     quoted_prod="${project_dir}/docker-compose.prod.yml"
-    write_compose_fixture "$quoted_main" '"ghcr.io/moltis-org/moltis:${MOLTIS_VERSION-v0.10.18}" # pinned via default'
-    write_compose_fixture "$quoted_prod" "'ghcr.io/moltis-org/moltis:v0.10.18' # explicit prod image"
+    write_compose_fixture "$quoted_main" '"ghcr.io/moltis-org/moltis:${MOLTIS_VERSION-0.10.18}" # pinned via default'
+    write_compose_fixture "$quoted_prod" "'ghcr.io/moltis-org/moltis:0.10.18' # explicit prod image"
 
     quoted_version="$("$helper_copy" version)"
     quoted_image="$("$helper_copy" image)"
 
-    if [[ "$quoted_version" == "v0.10.18" ]] && \
-       [[ "$quoted_image" == "ghcr.io/moltis-org/moltis:v0.10.18" ]]; then
+    if [[ "$quoted_version" == "0.10.18" ]] && \
+       [[ "$quoted_image" == "ghcr.io/moltis-org/moltis:0.10.18" ]]; then
         test_pass
     else
         test_fail "Helper should normalize quoted compose image lines, comments, and ${MOLTIS_VERSION-...} defaults"
@@ -102,7 +102,7 @@ run_component_moltis_version_helper_tests() {
     mismatch_main="${project_dir}/docker-compose.yml"
     mismatch_prod="${project_dir}/docker-compose.prod.yml"
     write_compose_fixture "$mismatch_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}'
-    write_compose_fixture "$mismatch_prod" 'ghcr.io/moltis-org/moltis:v0.10.18'
+    write_compose_fixture "$mismatch_prod" 'ghcr.io/moltis-org/moltis:0.10.18'
 
     if "$helper_copy" version >/dev/null 2>&1; then
         test_fail "Helper must fail when dev/prod compose contracts disagree"
