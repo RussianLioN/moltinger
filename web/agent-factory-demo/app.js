@@ -652,7 +652,9 @@
     const response = project.lastResponse || {};
     const visibleStatus = normalizeText(response.status_snapshot?.user_visible_status || response.status);
     const transcriptSize = Array.isArray(project.timeline) ? project.timeline.length : 0;
-    return Boolean(project.sessionId && response.web_demo_session?.status) || transcriptSize > 0 || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "reopened"].includes(visibleStatus);
+    return Boolean(project.sessionId && response.web_demo_session?.status)
+      || transcriptSize > 0
+      || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "downloads_ready", "download_ready", "reopened"].includes(visibleStatus);
   }
 
   function currentResponse(project) {
@@ -679,6 +681,64 @@
   function currentStatus(project) {
     const response = currentResponse(project) || {};
     return normalizeText(response.status_snapshot?.user_visible_status || response.status || "gate_pending");
+  }
+
+  function isDownloadsReadyStatus(status) {
+    return ["playground_ready", "downloads_ready", "download_ready"].includes(normalizeText(status));
+  }
+
+  function isLikelyBriefConfirmationText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    const negationMarkers = ["не подтверж", "не готов подтверж", "not confirm", "don't confirm"];
+    if (negationMarkers.some((marker) => normalized.includes(marker))) {
+      return false;
+    }
+    const confirmationMarkers = [
+      "подтверждаю",
+      "подтверждено",
+      "подтвердить",
+      "confirm brief",
+      "confirmed brief",
+      "approve brief",
+      "согласен",
+      "согласна",
+      "ок подтверждаю",
+    ];
+    return confirmationMarkers.some((marker) => normalized.includes(marker));
+  }
+
+  function resolveComposerAction(project, text) {
+    const requestedAction = normalizeText(project?.currentAction, "submit_turn");
+    const normalizedText = normalizeText(text);
+    if (!normalizedText) {
+      return requestedAction;
+    }
+    const status = currentStatus(project);
+    if (requestedAction === "confirm_brief") {
+      return isLikelyBriefConfirmationText(normalizedText) ? "confirm_brief" : "request_brief_correction";
+    }
+    if (requestedAction === "request_status") {
+      if (["awaiting_confirmation", "reopened"].includes(status)) {
+        return isLikelyBriefConfirmationText(normalizedText) ? "confirm_brief" : "request_brief_correction";
+      }
+      if (isDownloadsReadyStatus(status) || status === "confirmed") {
+        return "reopen_brief";
+      }
+      return "submit_turn";
+    }
+    if (requestedAction === "request_brief_review") {
+      if (["awaiting_confirmation", "reopened"].includes(status)) {
+        return "request_brief_correction";
+      }
+      if (isDownloadsReadyStatus(status) || status === "confirmed") {
+        return "reopen_brief";
+      }
+      return "submit_turn";
+    }
+    return requestedAction;
   }
 
   function statusLabel(project) {
@@ -740,7 +800,7 @@
     if (action === "reopen_brief") {
       return "Опиши, что нужно доуточнить, чтобы переоткрыть brief.";
     }
-    if (status === "playground_ready") {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Если нужны правки, опиши их, и я переоткрою brief.";
     }
     if (topic === "problem") {
@@ -794,7 +854,7 @@
     if (action === "reopen_brief") {
       return "Например: нужно доуточнить входные данные и сценарии исключений.";
     }
-    if (status === "playground_ready") {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Например: нужно доработать brief перед повторной генерацией материалов.";
     }
     if (topic === "target_users" || /пользовател/i.test(question)) {
@@ -856,7 +916,7 @@
     if (status === "awaiting_confirmation") {
       return "Brief собран. Открой правую панель, чтобы проверить summary, внести правки или подтвердить версию.";
     }
-    if (status === "playground_ready" || status === "confirmed") {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Материалы готовы. Открой правую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
     return "Продолжай диалог с агентом-архитектором и при необходимости прикладывай файлы с примерами.";
@@ -893,7 +953,7 @@
     if (["awaiting_confirmation", "reopened"].includes(status)) {
       return "attention";
     }
-    if (["playground_ready", "confirmed"].includes(status)) {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "success";
     }
     return "neutral";
@@ -2794,17 +2854,18 @@
       }
       const text = normalizeText(dom.composerInput.value);
       const queuedUploads = uniqueUploads(project.pendingUploads);
-      const allowWithoutText = ["request_status", "request_brief_review", "confirm_brief"].includes(project.currentAction);
+      const effectiveAction = resolveComposerAction(project, text);
+      const allowWithoutText = ["request_status", "request_brief_review", "confirm_brief"].includes(effectiveAction);
       if (!text && !queuedUploads.length && !allowWithoutText) {
         dom.composerInput.focus();
         return;
       }
       clearComposerNotice();
       project.draftText = "";
-      dispatchTurn(project.currentAction, text, { queuedUploads });
+      dispatchTurn(effectiveAction, text, { queuedUploads });
       dom.composerInput.value = "";
       resizeComposerInput();
-      if (project.currentAction !== "submit_turn") {
+      if (effectiveAction !== "submit_turn") {
         setProjectAction(project, "submit_turn");
       }
       focusComposerSoon();

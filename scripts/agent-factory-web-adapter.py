@@ -1954,6 +1954,24 @@ def append_user_turn(discovery_request: dict[str, Any], user_text: str, topic_na
     discovery_request["conversation_turns"] = turns
 
 
+def infer_brief_section_updates_from_feedback(feedback_text: str) -> dict[str, Any]:
+    text = normalize_text(feedback_text)
+    lowered = text.lower()
+    if not text:
+        return {}
+    if any(marker in lowered for marker in ("огранич", "запрет", "исключ", "compliance", "policy")):
+        return {"constraints": [text]}
+    if any(marker in lowered for marker in ("метрик", "kpi", "sla", "критери")):
+        return {"success_metrics": [text]}
+    if any(marker in lowered for marker in ("пользоват", "роль", "выгодоприобрет")):
+        return {"target_users": [text]}
+    if any(marker in lowered for marker in ("процесс", "workflow", "как сейчас", "current process")):
+        return {"current_process": text}
+    if any(marker in lowered for marker in ("выход", "результат", "pdf", "one-page", "onepage", "презентац")):
+        return {"expected_outputs": [text]}
+    return {"scope_boundaries": [text]}
+
+
 def build_discovery_request(
     payload: dict[str, Any],
     discovery_state: dict[str, Any],
@@ -1982,6 +2000,21 @@ def build_discovery_request(
     current_status = normalize_text(request.get("status"))
 
     if ui_action == "request_status" and discovery_state:
+        if combined_text and (
+            is_confirmation_stage(
+                status=current_status,
+                next_action=current_next_action,
+                current_topic=current_topic,
+                next_topic=runtime_next_topic,
+            )
+            or current_status in {"confirmed", "download_ready"}
+        ):
+            request["brief_feedback_text"] = combined_text
+            inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
+            if inferred_updates:
+                request["brief_section_updates"] = inferred_updates
+            append_user_turn(request, combined_text, "brief_confirmation", now)
+            return request, False, low_signal_submission
         return request, True, low_signal_submission
 
     if ui_action in {"request_brief_review"} and discovery_state:
@@ -2029,12 +2062,27 @@ def build_discovery_request(
         request["brief_feedback_text"] = combined_text or normalize_text(payload.get("brief_feedback_text"))
         if isinstance(payload.get("brief_section_updates"), dict):
             request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
+        elif request["brief_feedback_text"]:
+            inferred_updates = infer_brief_section_updates_from_feedback(request["brief_feedback_text"])
+            if inferred_updates:
+                request["brief_section_updates"] = inferred_updates
     elif ui_action == "confirm_brief":
-        request["confirmation_reply"] = build_confirmation_reply(combined_text, requester_identity)
+        if combined_text and not is_text_brief_confirmation(combined_text):
+            request["brief_feedback_text"] = combined_text
+            inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
+            if inferred_updates:
+                request["brief_section_updates"] = inferred_updates
+            append_user_turn(request, combined_text, "brief_confirmation", now)
+        else:
+            request["confirmation_reply"] = build_confirmation_reply(combined_text, requester_identity)
     elif ui_action == "reopen_brief":
         request["brief_feedback_text"] = combined_text or "Нужно переоткрыть brief и уточнить детали."
         if isinstance(payload.get("brief_section_updates"), dict):
             request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
+        else:
+            inferred_updates = infer_brief_section_updates_from_feedback(request["brief_feedback_text"])
+            if inferred_updates:
+                request["brief_section_updates"] = inferred_updates
 
     return request, False, low_signal_submission
 
