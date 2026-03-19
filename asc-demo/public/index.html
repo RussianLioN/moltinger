@@ -56,6 +56,15 @@
           <div class="project-list" data-role="project-list"></div>
         </aside>
 
+        <div
+          class="app-frame__divider"
+          data-role="sidebar-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Изменить ширину списка проектов"
+          tabindex="0"
+        ></div>
+
         <div class="workspace-shell" data-role="workspace-shell" data-panel-open="false">
           <main class="workspace">
             <header class="workspace-topbar">
@@ -122,12 +131,14 @@
               <form class="composer" data-role="composer-form">
                 <div class="composer__lead">
                   <span class="composer__lead-label" data-role="composer-lead-label">Сообщение</span>
-                  <strong class="composer__question" data-role="composer-mode">Ответ агенту-архитектору</strong>
+                  <div class="composer__lead-row">
+                    <strong class="composer__question" data-role="composer-mode">Ответ агенту-архитектору</strong>
+                    <span class="composer-thinking" data-role="composer-thinking" hidden aria-label="Агент формирует ответ">
+                      <span></span><span></span><span></span>
+                    </span>
+                  </div>
                 </div>
-                <p class="composer__example" data-role="composer-helper-example">
-                  Например: автоматизировать подготовку one-page summary по клиенту для кредитного
-                  комитета.
-                </p>
+                <p class="composer__example" data-role="composer-helper-example" hidden></p>
 
                 <textarea
                   id="chatInput"
@@ -187,10 +198,71 @@
 
             <div class="panel-card-list" data-role="panel-card-list"></div>
 
+            <section class="side-panel__section" data-role="primary-artifact-section" hidden>
+              <div class="side-panel__section-head">
+                <p class="side-panel__section-eyebrow">Главный результат</p>
+                <h3 data-role="primary-artifact-heading">One-page summary</h3>
+              </div>
+              <article class="primary-artifact">
+                <div class="primary-artifact__meta">
+                  <span class="primary-artifact__kind" data-role="primary-artifact-kind">one_page_summary</span>
+                  <span class="primary-artifact__state" data-role="primary-artifact-state">pending</span>
+                </div>
+                <p class="primary-artifact__body" data-role="primary-artifact-body">
+                  Здесь появится главный артефакт фабрики после confirm brief.
+                </p>
+                <div class="primary-artifact__actions">
+                  <button
+                    class="button button--ghost button--compact"
+                    type="button"
+                    data-role="primary-artifact-preview"
+                  >
+                    Просмотреть
+                  </button>
+                  <button
+                    class="button button--ghost button--compact"
+                    type="button"
+                    data-role="primary-artifact-download"
+                  >
+                    Скачать
+                  </button>
+                </div>
+              </article>
+            </section>
+
+            <section class="side-panel__section" data-role="preview-section" hidden>
+              <div class="side-panel__section-head">
+                <p class="side-panel__section-eyebrow">Preview</p>
+                <h3 data-role="preview-heading">One-page summary</h3>
+              </div>
+              <div class="preview-panel">
+                <p class="preview-panel__status" data-role="preview-status">
+                  Выбери артефакт, чтобы открыть preview.
+                </p>
+                <iframe
+                  class="preview-panel__frame"
+                  data-role="preview-frame"
+                  title="Preview артефакта"
+                  loading="lazy"
+                  sandbox=""
+                  hidden
+                ></iframe>
+              </div>
+              <div class="preview-panel__actions">
+                <button
+                  class="button button--ghost button--compact"
+                  type="button"
+                  data-role="preview-download"
+                >
+                  Скачать
+                </button>
+              </div>
+            </section>
+
             <section class="side-panel__section" data-role="artifact-section" hidden>
               <div class="side-panel__section-head">
-                <p class="side-panel__section-eyebrow">Артефакты</p>
-                <h3>Материалы проекта</h3>
+                <p class="side-panel__section-eyebrow">Дополнительно</p>
+                <h3 data-role="artifact-section-heading">Остальные артефакты</h3>
               </div>
               <div class="artifact-empty" data-role="artifact-empty">
                 Артефакты появятся после confirmed brief и downstream handoff.

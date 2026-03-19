@@ -20,6 +20,126 @@ app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderInlineMarkdown(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderMarkdownToHtml(markdown) {
+  const lines = String(markdown ?? "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let listItems = [];
+  let listTag = "";
+
+  const flushParagraph = () => {
+    const text = paragraph.join(" ").trim();
+    if (!text) {
+      paragraph = [];
+      return;
+    }
+    blocks.push(`<p>${renderInlineMarkdown(text)}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listItems.length || !listTag) {
+      listItems = [];
+      listTag = "";
+      return;
+    }
+    blocks.push(`<${listTag}>${listItems.join("")}</${listTag}>`);
+    listItems = [];
+    listTag = "";
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(headingMatch[1].length, 3);
+      blocks.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    const unorderedMatch = line.match(/^[-*]\s+(.+)$/);
+    const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
+    if (unorderedMatch || orderedMatch) {
+      flushParagraph();
+      const nextTag = unorderedMatch ? "ul" : "ol";
+      if (listTag && listTag !== nextTag) {
+        flushList();
+      }
+      listTag = nextTag;
+      listItems.push(`<li>${renderInlineMarkdown((unorderedMatch || orderedMatch)[1])}</li>`);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+
+  if (!blocks.length) {
+    return "<p>Артефакт пока пуст.</p>";
+  }
+
+  return blocks.join("\n");
+}
+
+function buildPreviewHtml(artifact) {
+  const title = escapeHtml(artifact?.download_name || artifact?.artifact_kind || "Artifact preview");
+  const body = renderMarkdownToHtml(artifact?.content || "");
+  return [
+    "<!doctype html>",
+    "<html lang=\"ru\">",
+    "<head>",
+    "  <meta charset=\"utf-8\">",
+    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+    `  <title>${title}</title>`,
+    "  <style>",
+    "    :root { color-scheme: light; }",
+    "    body { max-width: 880px; margin: 0 auto; padding: 32px 20px 48px; font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #172033; background: #f7f8fb; }",
+    "    main { background: #fff; border: 1px solid #d8deeb; border-radius: 16px; padding: 24px; box-shadow: 0 16px 40px rgba(23, 32, 51, 0.08); }",
+    "    h1, h2, h3 { line-height: 1.25; color: #0f172a; margin: 1.4em 0 0.6em; }",
+    "    h1 { margin-top: 0; font-size: 2rem; }",
+    "    h2 { font-size: 1.4rem; }",
+    "    h3 { font-size: 1.1rem; }",
+    "    p { margin: 0 0 1em; }",
+    "    ul, ol { margin: 0 0 1em 1.3em; padding: 0; }",
+    "    li { margin: 0.2em 0; }",
+    "    code { font-family: 'SFMono-Regular', ui-monospace, monospace; font-size: 0.95em; background: #eef2ff; border-radius: 6px; padding: 0.1em 0.35em; }",
+    "  </style>",
+    "</head>",
+    "<body>",
+    "  <main>",
+    body,
+    "  </main>",
+    "</body>",
+    "</html>",
+  ].join("\n");
+}
+
 app.get("/health", (_req, res) => {
   const demoDomain = process.env.DEMO_DOMAIN || "demo.ainetic.tech";
   const publicBaseUrl = process.env.DEMO_PUBLIC_BASE_URL || `https://${demoDomain}`;
@@ -109,6 +229,17 @@ app.get("/api/download/:sessionId/:artifactKind", (req, res) => {
   res.setHeader("Content-Type", "text/markdown; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   return res.status(200).send(artifact.content || "");
+});
+
+app.get("/api/preview/:sessionId/:artifactKind", (req, res) => {
+  const { sessionId, artifactKind } = req.params;
+  const artifact = getArtifact(sessionId, artifactKind);
+  if (!artifact) {
+    return res.status(404).json({ error: "artifact_not_found" });
+  }
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  return res.status(200).send(buildPreviewHtml(artifact));
 });
 
 app.get("*", (_req, res) => {

@@ -361,6 +361,14 @@ export async function handleTurn(payload = {}) {
         void runSummaryGeneration(session);
       }
       response = buildHandoffRunningResponse(session, payload);
+    } else if (action === "preview_one_page" && userText) {
+      session.stage = "awaiting_confirmation";
+      session.summaryPromise = null;
+      session.summaryState = "idle";
+      response = buildAwaitingConfirmationResponse(session, payload, {
+        theatreMessage: "Brief переоткрыт для доработки. Внеси изменения и подтверди новую версию.",
+        uploadedFiles,
+      });
     } else if (action === "request_brief_correction") {
       const revised = await reviseBrief(session, userText);
       session.briefText = revised;
@@ -378,7 +386,12 @@ export async function handleTurn(payload = {}) {
         theatreMessage: "Brief переоткрыт для доработки. Внеси изменения и подтверди новую версию.",
         uploadedFiles,
       });
-    } else if (action === "request_status" || action === "download_artifact" || action === "request_brief_review") {
+    } else if (
+      action === "request_status"
+      || action === "download_artifact"
+      || action === "request_brief_review"
+      || action === "preview_one_page"
+    ) {
       response = await statusFlow(session, payload);
     } else {
       response = await discoveryFlow(session, payload, userText, uploadedFiles);

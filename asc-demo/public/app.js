@@ -4,8 +4,14 @@
   const DEFAULT_ACCESS_TOKEN = "demo-access-token";
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
-  const TURN_TIMEOUT_MS = 90_000;
+  const IS_AUTOMATION = Boolean(window.navigator?.webdriver) || /playwright/i.test(window.navigator?.userAgent || "");
+  const MIN_PENDING_VISUAL_MS = IS_AUTOMATION ? 80 : 420;
+  const TURN_TIMEOUT_MS = IS_AUTOMATION ? 20_000 : 90_000;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
+  const SIDEBAR_WIDTH_DEFAULT = 264;
+  const SIDEBAR_WIDTH_MIN = 220;
+  const SIDEBAR_WIDTH_MAX = 560;
+  const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
     "md",
@@ -43,6 +49,8 @@
     request_brief_correction: "Внести правки",
     confirm_brief: "Подтвердить brief",
     reopen_brief: "Переоткрыть brief",
+    preview_one_page: "Просмотреть one-page",
+    test_asset: "Посмотреть результат",
     download_artifact: "Открыть файлы",
     submit_access_token: "Открыть demo",
   };
@@ -110,6 +118,8 @@
   ];
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
+    appFrame: document.querySelector(".app-frame"),
+    sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
     accessForm: document.querySelector('[data-role="access-form"]'),
@@ -129,7 +139,20 @@
     sidePanelTitle: document.querySelector('[data-role="side-panel-title"]'),
     sidePanelSummary: document.querySelector('[data-role="side-panel-summary"]'),
     panelCardList: document.querySelector('[data-role="panel-card-list"]'),
+    primaryArtifactSection: document.querySelector('[data-role="primary-artifact-section"]'),
+    primaryArtifactHeading: document.querySelector('[data-role="primary-artifact-heading"]'),
+    primaryArtifactKind: document.querySelector('[data-role="primary-artifact-kind"]'),
+    primaryArtifactState: document.querySelector('[data-role="primary-artifact-state"]'),
+    primaryArtifactBody: document.querySelector('[data-role="primary-artifact-body"]'),
+    primaryArtifactPreview: document.querySelector('[data-role="primary-artifact-preview"]'),
+    primaryArtifactDownload: document.querySelector('[data-role="primary-artifact-download"]'),
+    previewSection: document.querySelector('[data-role="preview-section"]'),
+    previewHeading: document.querySelector('[data-role="preview-heading"]'),
+    previewStatus: document.querySelector('[data-role="preview-status"]'),
+    previewFrame: document.querySelector('[data-role="preview-frame"]'),
+    previewDownload: document.querySelector('[data-role="preview-download"]'),
     artifactSection: document.querySelector('[data-role="artifact-section"]'),
+    artifactSectionHeading: document.querySelector('[data-role="artifact-section-heading"]'),
     composerHelperExample: document.querySelector('[data-role="composer-helper-example"]'),
     connectionState: document.querySelector('[data-role="connection-state"]'),
     sessionBadge: document.querySelector('[data-role="session-badge"]'),
@@ -139,6 +162,7 @@
     composerForm: document.querySelector('[data-role="composer-form"]'),
     composerLeadLabel: document.querySelector('[data-role="composer-lead-label"]'),
     composerMode: document.querySelector('[data-role="composer-mode"]'),
+    composerThinking: document.querySelector('[data-role="composer-thinking"]'),
     composerInput: document.querySelector('[data-role="composer-input"]'),
     composerSubmit: document.querySelector('[data-role="composer-submit"]'),
     composerNotice: document.querySelector('[data-role="composer-notice"]'),
@@ -167,6 +191,7 @@
     accessToken: "",
     connectionMode: "booting",
     requestCounter: 0,
+    sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
     activeProjectId: "",
     projects: [],
     gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
@@ -182,8 +207,6 @@
       x: 0,
       y: 0,
     },
-    composerDragDepth: 0,
-    composerDropActive: false,
   };
 
   function safeJsonParse(value, fallback) {
@@ -316,29 +339,18 @@
     state.composerNotice = { text: "", tone: "info" };
   }
 
-  function hasFileTransfer(event) {
-    const transfer = event?.dataTransfer;
-    if (!transfer) {
+  function hasFilePayload(dataTransfer) {
+    if (!dataTransfer) {
       return false;
     }
-    const types = Array.from(transfer.types || []);
-    return types.includes("Files") || Boolean(transfer.files?.length);
-  }
-
-  function setComposerDropActive(active) {
-    state.composerDropActive = Boolean(active);
-    if (dom.composerForm) {
-      dom.composerForm.dataset.dropActive = state.composerDropActive ? "true" : "false";
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      return true;
     }
+    return Array.from(dataTransfer.types || []).includes("Files");
   }
 
-  function resetComposerDropState() {
-    state.composerDragDepth = 0;
-    setComposerDropActive(false);
-  }
-
-  async function queueSelectedUploads(project, selectedFiles) {
-    if (!project || !Array.isArray(selectedFiles) || !selectedFiles.length) {
+  async function ingestSelectedFiles(project, selectedFiles) {
+    if (!project || !selectedFiles.length) {
       return;
     }
 
@@ -415,6 +427,46 @@
     return `${days} д назад`;
   }
 
+  function isMobileLayout() {
+    return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+  }
+
+  function sidebarMaxByViewport() {
+    const viewport = Math.max(0, window.innerWidth || 0);
+    const roomForWorkspace = Math.max(SIDEBAR_WIDTH_MIN, viewport - 560);
+    return Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, roomForWorkspace));
+  }
+
+  function clampSidebarWidth(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return SIDEBAR_WIDTH_DEFAULT;
+    }
+    const max = sidebarMaxByViewport();
+    return Math.min(Math.max(Math.round(parsed), SIDEBAR_WIDTH_MIN), max);
+  }
+
+  function applySidebarWidth() {
+    const nextWidth = clampSidebarWidth(state.sidebarWidth);
+    state.sidebarWidth = nextWidth;
+    if (dom.root) {
+      dom.root.style.setProperty("--sidebar-width", `${nextWidth}px`);
+    }
+    if (dom.sidebarResizer) {
+      dom.sidebarResizer.setAttribute("aria-valuemin", String(SIDEBAR_WIDTH_MIN));
+      dom.sidebarResizer.setAttribute("aria-valuemax", String(sidebarMaxByViewport()));
+      dom.sidebarResizer.setAttribute("aria-valuenow", String(nextWidth));
+    }
+  }
+
+  function updateSidebarWidth(nextWidth, options = {}) {
+    state.sidebarWidth = clampSidebarWidth(nextWidth);
+    applySidebarWidth();
+    if (options.persist) {
+      persist();
+    }
+  }
+
   function selectionModeFor(action) {
     const map = {
       start_project: "new_project",
@@ -424,6 +476,8 @@
       request_brief_correction: "review_brief",
       confirm_brief: "review_brief",
       reopen_brief: "reopen_brief",
+      preview_one_page: "preview_ready",
+      test_asset: "preview_ready",
       download_artifact: "download_ready",
     };
     return map[action] || "continue_active";
@@ -441,6 +495,8 @@
       titleEdited: Boolean(project.titleEdited),
       sidePanelOpen: Boolean(project.sidePanelOpen),
       lastPanelMode: normalizeText(project.lastPanelMode),
+      panelModeOverride: normalizeText(project.panelModeOverride),
+      previewArtifactKind: normalizeText(project.previewArtifactKind),
       sessionId: project.sessionId,
       timeline: Array.isArray(project.timeline) ? project.timeline : [],
       lastResponse: project.lastResponse && typeof project.lastResponse === "object" ? project.lastResponse : null,
@@ -475,6 +531,8 @@
       titleEdited: Boolean(record.titleEdited),
       sidePanelOpen: Boolean(record.sidePanelOpen),
       lastPanelMode: normalizeText(record.lastPanelMode),
+      panelModeOverride: normalizeText(record.panelModeOverride),
+      previewArtifactKind: normalizeText(record.previewArtifactKind),
       sessionId: normalizeText(record.sessionId, defaultSessionId(id)),
       timeline: sanitizeTimeline(record.timeline),
       lastResponse: record.lastResponse && typeof record.lastResponse === "object" ? record.lastResponse : null,
@@ -518,6 +576,7 @@
     const payload = {
       connectionMode: state.connectionMode,
       requestCounter: state.requestCounter,
+      sidebarWidth: state.sidebarWidth,
       activeProjectId: state.activeProjectId,
       projects: state.projects.map((project) => projectSnapshot(project)),
     };
@@ -535,6 +594,7 @@
     if (saved && typeof saved === "object") {
       state.connectionMode = normalizeText(saved.connectionMode, "booting");
       state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
+      state.sidebarWidth = clampSidebarWidth(saved.sidebarWidth);
       state.projects = Array.isArray(saved.projects) && saved.projects.length
         ? saved.projects.map((project) => normalizeProjectRecord(project))
         : [];
@@ -548,7 +608,7 @@
         if (!firstUserMessage) {
           return;
         }
-        if (looksLikeExcerpt(project.title, firstUserMessage.body)) {
+        if (looksLikeExcerpt(project.title, firstUserMessage.body) || isGenericProjectTitle(project.title)) {
           const repaired = prettifyTitle(firstUserMessage.body);
           if (repaired) {
             project.title = repaired;
@@ -613,7 +673,9 @@
     const response = project.lastResponse || {};
     const visibleStatus = normalizeText(response.status_snapshot?.user_visible_status || response.status);
     const transcriptSize = Array.isArray(project.timeline) ? project.timeline.length : 0;
-    return Boolean(project.sessionId && response.web_demo_session?.status) || transcriptSize > 0 || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "reopened"].includes(visibleStatus);
+    return Boolean(project.sessionId && response.web_demo_session?.status)
+      || transcriptSize > 0
+      || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "downloads_ready", "download_ready", "reopened"].includes(visibleStatus);
   }
 
   function currentResponse(project) {
@@ -640,6 +702,64 @@
   function currentStatus(project) {
     const response = currentResponse(project) || {};
     return normalizeText(response.status_snapshot?.user_visible_status || response.status || "gate_pending");
+  }
+
+  function isDownloadsReadyStatus(status) {
+    return ["playground_ready", "downloads_ready", "download_ready"].includes(normalizeText(status));
+  }
+
+  function isLikelyBriefConfirmationText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    const negationMarkers = ["не подтверж", "не готов подтверж", "not confirm", "don't confirm"];
+    if (negationMarkers.some((marker) => normalized.includes(marker))) {
+      return false;
+    }
+    const confirmationMarkers = [
+      "подтверждаю",
+      "подтверждено",
+      "подтвердить",
+      "confirm brief",
+      "confirmed brief",
+      "approve brief",
+      "согласен",
+      "согласна",
+      "ок подтверждаю",
+    ];
+    return confirmationMarkers.some((marker) => normalized.includes(marker));
+  }
+
+  function resolveComposerAction(project, text) {
+    const requestedAction = normalizeText(project?.currentAction, "submit_turn");
+    const normalizedText = normalizeText(text);
+    if (!normalizedText) {
+      return requestedAction;
+    }
+    const status = currentStatus(project);
+    if (requestedAction === "confirm_brief") {
+      return isLikelyBriefConfirmationText(normalizedText) ? "confirm_brief" : "request_brief_correction";
+    }
+    if (requestedAction === "request_status") {
+      if (["awaiting_confirmation", "reopened"].includes(status)) {
+        return isLikelyBriefConfirmationText(normalizedText) ? "confirm_brief" : "request_brief_correction";
+      }
+      if (isDownloadsReadyStatus(status) || status === "confirmed") {
+        return "reopen_brief";
+      }
+      return "submit_turn";
+    }
+    if (requestedAction === "request_brief_review") {
+      if (["awaiting_confirmation", "reopened"].includes(status)) {
+        return "request_brief_correction";
+      }
+      if (isDownloadsReadyStatus(status) || status === "confirmed") {
+        return "reopen_brief";
+      }
+      return "submit_turn";
+    }
+    return requestedAction;
   }
 
   function statusLabel(project) {
@@ -687,7 +807,6 @@
       return "Введи access token";
     }
     const action = project?.currentAction || "start_project";
-    const question = currentQuestion(project);
     const topic = currentTopic(project);
     const status = currentStatus(project);
     if (!hasConversationActivity(project)) {
@@ -702,20 +821,35 @@
     if (action === "reopen_brief") {
       return "Опиши, что нужно доуточнить, чтобы переоткрыть brief.";
     }
-    if (status === "playground_ready") {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Если нужны правки, опиши их, и я переоткрою brief.";
     }
-    if (topic === "input_examples" || /пример|входн/i.test(question)) {
+    if (topic === "problem") {
+      return "Опиши ключевую бизнес-проблему и почему это важно сейчас.";
+    }
+    if (topic === "target_users") {
+      return "Укажи, кто будет основным пользователем или выгодоприобретателем.";
+    }
+    if (topic === "current_workflow") {
+      return "Опиши текущий процесс и где сейчас теряется время.";
+    }
+    if (topic === "desired_outcome") {
+      return "Опиши, какой бизнес-результат нужен после автоматизации.";
+    }
+    if (topic === "user_story") {
+      return "Опиши, кому и в какой рабочей ситуации агент помогает в первую очередь.";
+    }
+    if (topic === "input_examples") {
       return "Приведи 1-2 примера или прикрепи файл с примерами.";
     }
-    if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
+    if (topic === "expected_outputs") {
       return "Опиши ожидаемый результат на выходе.";
     }
-    if (topic === "current_workflow" || /как этот процесс/i.test(question)) {
-      return "Опиши, как процесс работает сейчас и где теряется время.";
+    if (topic === "constraints") {
+      return "Перечисли ограничения, запреты и исключения, которые обязательно учитывать.";
     }
-    if (question) {
-      return shorten(`Ответь на вопрос: ${question}`, 110);
+    if (topic === "success_metrics") {
+      return "Укажи метрики успеха: время, качество, SLA и другие критерии.";
     }
     return "Опиши, какой процесс нужно автоматизировать.";
   }
@@ -741,7 +875,7 @@
     if (action === "reopen_brief") {
       return "Например: нужно доуточнить входные данные и сценарии исключений.";
     }
-    if (status === "playground_ready") {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Например: нужно доработать brief перед повторной генерацией материалов.";
     }
     if (topic === "target_users" || /пользовател/i.test(question)) {
@@ -803,7 +937,7 @@
     if (status === "awaiting_confirmation") {
       return "Brief собран. Открой правую панель, чтобы проверить summary, внести правки или подтвердить версию.";
     }
-    if (status === "playground_ready" || status === "confirmed") {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Материалы готовы. Открой правую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
     return "Продолжай диалог с агентом-архитектором и при необходимости прикладывай файлы с примерами.";
@@ -840,7 +974,7 @@
     if (["awaiting_confirmation", "reopened"].includes(status)) {
       return "attention";
     }
-    if (["playground_ready", "confirmed"].includes(status)) {
+    if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "success";
     }
     return "neutral";
@@ -973,6 +1107,178 @@
     renderSidePanelToggle(project);
   }
 
+  function isPanelOnlyAction(action) {
+    return ["preview_one_page", "test_asset", "download_artifact"].includes(normalizeText(action));
+  }
+
+  function isKnownAction(action) {
+    return Object.prototype.hasOwnProperty.call(ACTION_LABELS, normalizeText(action));
+  }
+
+  function isComposerAction(action) {
+    const normalized = normalizeText(action);
+    return Boolean(normalized) && isKnownAction(normalized) && !isPanelOnlyAction(normalized) && normalized !== "submit_access_token";
+  }
+
+  function normalizeArtifactKind(value) {
+    return normalizeText(value)
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+  }
+
+  function artifactKindLabel(artifactKind) {
+    const labels = {
+      one_page_summary: "One-page summary",
+      project_doc: "Project doc",
+      agent_spec: "Agent spec",
+      presentation: "Presentation",
+    };
+    return labels[normalizeArtifactKind(artifactKind)] || normalizeText(artifactKind, "artifact").replace(/_/g, " ");
+  }
+
+  function artifactDescription(artifact) {
+    if (normalizeText(artifact?.description)) {
+      return artifact.description;
+    }
+    const descriptions = {
+      one_page_summary: "Главный one-page результат фабрики для быстрого просмотра и проверки.",
+      project_doc: "Проектная рамка и бизнес-контекст для защиты концепции.",
+      agent_spec: "Спецификация будущего агента, сценарии и интерфейсы.",
+      presentation: "Материал для защиты идеи и последующего feedback loop.",
+    };
+    return descriptions[normalizeArtifactKind(artifact?.artifact_kind)] || "Артефакт проекта.";
+  }
+
+  function artifactIsReady(artifact) {
+    return ["ready", "available"].includes(normalizeText(artifact?.download_status));
+  }
+
+  function artifactPlaceholders() {
+    return [
+      {
+        artifact_kind: "one_page_summary",
+        download_name: "one-page-summary.md",
+        download_status: "pending",
+        description: "Главный one-page результат фабрики для быстрого просмотра и проверки.",
+      },
+      {
+        artifact_kind: "project_doc",
+        download_name: "project-doc.md",
+        download_status: "pending",
+        description: "Проектная рамка и бизнес-контекст для защиты концепции.",
+      },
+      {
+        artifact_kind: "agent_spec",
+        download_name: "agent-spec.md",
+        download_status: "pending",
+        description: "Спецификация будущего агента, сценарии и интерфейсы.",
+      },
+      {
+        artifact_kind: "presentation",
+        download_name: "presentation.md",
+        download_status: "pending",
+        description: "Материал для защиты идеи и последующего feedback loop.",
+      },
+    ];
+  }
+
+  function projectArtifacts(project) {
+    const responseArtifacts = Array.isArray(project?.lastResponse?.download_artifacts)
+      ? project.lastResponse.download_artifacts
+      : [];
+    if (responseArtifacts.length) {
+      return responseArtifacts;
+    }
+    if (isDownloadsReadyStatus(currentStatus(project))) {
+      return artifactPlaceholders();
+    }
+    return [];
+  }
+
+  function primaryArtifactKind(project, artifacts = projectArtifacts(project)) {
+    const explicit = normalizeArtifactKind(project?.lastResponse?.ui_projection?.primary_artifact);
+    if (explicit && artifacts.some((artifact) => normalizeArtifactKind(artifact.artifact_kind) === explicit)) {
+      return explicit;
+    }
+    const onePage = artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === "one_page_summary");
+    if (onePage) {
+      return "one_page_summary";
+    }
+    return normalizeArtifactKind(artifacts[0]?.artifact_kind);
+  }
+
+  function primaryArtifact(project, artifacts = projectArtifacts(project)) {
+    const kind = primaryArtifactKind(project, artifacts);
+    return artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === kind) || artifacts[0] || null;
+  }
+
+  function secondaryArtifacts(project, artifacts = projectArtifacts(project)) {
+    const primary = primaryArtifact(project, artifacts);
+    const primaryKind = normalizeArtifactKind(primary?.artifact_kind);
+    return artifacts.filter((artifact) => normalizeArtifactKind(artifact.artifact_kind) !== primaryKind);
+  }
+
+  function selectedPreviewArtifact(project, artifacts = projectArtifacts(project)) {
+    const requestedKind = normalizeArtifactKind(project?.previewArtifactKind);
+    if (requestedKind) {
+      const selected = artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === requestedKind);
+      if (selected) {
+        return selected;
+      }
+    }
+    return primaryArtifact(project, artifacts);
+  }
+
+  function artifactDownloadUrl(project, artifact) {
+    if (!artifact) {
+      return "";
+    }
+    if (normalizeText(artifact.download_url)) {
+      return artifact.download_url;
+    }
+    const sessionId = normalizeText(project?.lastResponse?.web_demo_session?.web_demo_session_id || project?.sessionId);
+    const artifactKind = normalizeText(artifact.artifact_kind);
+    if (sessionId && artifactKind && state.connectionMode === "live") {
+      return `/api/download/${encodeURIComponent(sessionId)}/${encodeURIComponent(artifactKind)}`;
+    }
+    return "";
+  }
+
+  function artifactPreviewUrl(project, artifact) {
+    const sessionId = normalizeText(project?.lastResponse?.web_demo_session?.web_demo_session_id || project?.sessionId);
+    const artifactKind = normalizeText(artifact?.artifact_kind);
+    if (!sessionId || !artifactKind) {
+      return "";
+    }
+    return `/api/preview/${encodeURIComponent(sessionId)}/${encodeURIComponent(artifactKind)}`;
+  }
+
+  function triggerArtifactDownload(project, artifact) {
+    if (!artifact || !artifactIsReady(artifact)) {
+      return;
+    }
+    const href = artifactDownloadUrl(project, artifact) || createMockDownload(project, artifact);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = artifact.download_name || "artifact.txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  function openPanelMode(project, mode, artifactKind = "") {
+    if (!project) {
+      return;
+    }
+    project.sidePanelOpen = mode !== "hidden";
+    project.panelModeOverride = mode === "preview" || mode === "downloads" ? mode : "";
+    project.previewArtifactKind = mode === "preview"
+      ? normalizeArtifactKind(artifactKind || primaryArtifact(project)?.artifact_kind)
+      : "";
+    persist();
+    renderAll();
+  }
+
   function activeSessionUploads(project) {
     return Array.isArray(project?.lastResponse?.uploaded_files) ? project.lastResponse.uploaded_files : [];
   }
@@ -984,29 +1290,54 @@
     dom.attachmentList.hidden = items.length === 0;
     items.forEach((upload) => {
       const pill = document.createElement("div");
-      pill.className = `attachment-pill${upload.scope === "session" ? " attachment-pill--session" : ""}`;
+      pill.className = "attachment-pill";
       const label = document.createElement("span");
       label.className = "attachment-pill__label";
       label.textContent = upload.name || "Файл";
       const meta = document.createElement("span");
       meta.className = "attachment-pill__meta";
-      meta.textContent = summarizeUploadMeta(upload) || (upload.scope === "pending" ? "к отправке" : "в сессии");
+      meta.textContent = summarizeUploadMeta(upload) || "к отправке";
       pill.append(label, meta);
-      if (upload.scope === "pending") {
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "attachment-pill__remove";
-        remove.textContent = "×";
-        remove.setAttribute("aria-label", `Убрать файл ${upload.name || ""}`.trim());
-        remove.addEventListener("click", () => {
-          project.pendingUploads = project.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
-          renderAttachmentList(project);
-          renderStatus(project);
-        });
-        pill.appendChild(remove);
-      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "attachment-pill__remove";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `Убрать файл ${upload.name || ""}`.trim());
+      remove.addEventListener("click", () => {
+        project.pendingUploads = project.pendingUploads.filter((item) => item.upload_id !== upload.upload_id);
+        renderAttachmentList(project);
+        renderStatus(project);
+      });
+      pill.appendChild(remove);
       dom.attachmentList.appendChild(pill);
     });
+  }
+
+  function splitAgentQuestionBody(value) {
+    const text = normalizeText(value);
+    if (!text) {
+      return null;
+    }
+    const blocks = text
+      .replace(/\r\n/g, "\n")
+      .split(/\n{2,}/)
+      .map((part) => normalizeText(part))
+      .filter(Boolean);
+    if (blocks.length < 2) {
+      return null;
+    }
+    const question = blocks[blocks.length - 1];
+    if (
+      !/[?]$/.test(question)
+      && !/^(кто|что|как|какой|какие|какому|по каким|приведи|опиши|перечисли)\b/i.test(question)
+    ) {
+      return null;
+    }
+    const acknowledgement = blocks.slice(0, -1).join(" ");
+    if (!acknowledgement) {
+      return null;
+    }
+    return { acknowledgement, question };
   }
 
   function createMessageNode(message) {
@@ -1040,7 +1371,22 @@
     title.textContent = titleText;
     title.hidden = !titleText || hideRedundantTitle;
     meta.hidden = true;
-    body.textContent = message.body || "";
+    const bodyText = normalizeText(message.body);
+    const splitBody = message.role === "agent" ? splitAgentQuestionBody(bodyText) : null;
+    if (splitBody) {
+      body.textContent = "";
+      body.classList.add("message__body--split");
+      const contextLine = document.createElement("span");
+      contextLine.className = "message__context-line";
+      contextLine.textContent = splitBody.acknowledgement;
+      const questionLine = document.createElement("span");
+      questionLine.className = "message__question-line";
+      questionLine.textContent = splitBody.question;
+      body.append(contextLine, questionLine);
+    } else {
+      body.classList.remove("message__body--split");
+      body.textContent = bodyText;
+    }
     attachments.innerHTML = "";
     (message.attachments || []).forEach((upload) => {
       const chip = document.createElement("span");
@@ -1074,6 +1420,75 @@
       }));
   }
 
+  function messageSignature(message) {
+    if (!message || typeof message !== "object") {
+      return "";
+    }
+    return [
+      normalizeText(message.role),
+      normalizeText(message.kind),
+      normalizeText(message.title),
+      normalizeText(message.body),
+    ].join("|");
+  }
+
+  function isDuplicateAgentQuestion(project, message) {
+    if (!project || !Array.isArray(project.timeline) || !message || typeof message !== "object") {
+      return false;
+    }
+    if (normalizeText(message.role) !== "agent") {
+      return false;
+    }
+    const body = normalizeText(message.body);
+    if (!body) {
+      return false;
+    }
+    let lastMatchingAgentIndex = -1;
+    const lookbackLimit = Math.max(0, project.timeline.length - 24);
+    for (let index = project.timeline.length - 1; index >= lookbackLimit; index -= 1) {
+      const existing = project.timeline[index];
+      if (!existing || typeof existing !== "object") {
+        continue;
+      }
+      if (normalizeText(existing.role) !== "agent") {
+        continue;
+      }
+      if (normalizeText(existing.body) === body) {
+        lastMatchingAgentIndex = index;
+        break;
+      }
+    }
+    if (lastMatchingAgentIndex < 0) {
+      return false;
+    }
+    for (let index = project.timeline.length - 1; index > lastMatchingAgentIndex; index -= 1) {
+      const existing = project.timeline[index];
+      if (!existing || typeof existing !== "object") {
+        continue;
+      }
+      if (normalizeText(existing.role) === "user") {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function appendTimelineMessagesWithoutContiguousDuplicates(project, incomingMessages) {
+    if (!project || !Array.isArray(project.timeline) || !Array.isArray(incomingMessages) || incomingMessages.length === 0) {
+      return;
+    }
+    for (const message of incomingMessages) {
+      const last = project.timeline[project.timeline.length - 1];
+      if (messageSignature(last) && messageSignature(last) === messageSignature(message)) {
+        continue;
+      }
+      if (isDuplicateAgentQuestion(project, message)) {
+        continue;
+      }
+      project.timeline.push(message);
+    }
+  }
+
   function renderTimeline(project) {
     dom.chatLog.innerHTML = "";
     const items = project?.timeline?.length ? project.timeline : [];
@@ -1084,6 +1499,15 @@
   }
 
   function sidePanelMode(project) {
+    const status = currentStatus(project);
+    const canUseArtifactOverride = isDownloadsReadyStatus(status) || status === "confirmed";
+    const localOverride = normalizeText(project?.panelModeOverride);
+    if (canUseArtifactOverride && localOverride === "preview" && selectedPreviewArtifact(project)) {
+      return "preview";
+    }
+    if (canUseArtifactOverride && localOverride === "downloads" && projectArtifacts(project).length) {
+      return "downloads";
+    }
     const response = currentResponse(project) || {};
     const explicit = normalizeText(response.ui_projection?.side_panel_mode);
     if (explicit) {
@@ -1109,8 +1533,8 @@
   function panelPromptCard(project) {
     const response = currentResponse(project) || {};
     const cards = Array.isArray(response.reply_cards) ? response.reply_cards : [];
-    if (sidePanelMode(project) === "downloads") {
-      return cards.find((card) => card.card_kind === "download_prompt") || null;
+    if (["downloads", "preview"].includes(sidePanelMode(project))) {
+      return cards.find((card) => ["factory_result", "factory_result_prompt", "download_prompt"].includes(card.card_kind)) || null;
     }
     return cards.find((card) => card.card_kind === "confirmation_prompt") || null;
   }
@@ -1125,39 +1549,40 @@
     dom.sidePanelToggle.hidden = mode === "hidden";
     if (mode === "brief_review") {
       dom.sidePanelToggle.textContent = "Проверить brief";
-    } else if (mode === "downloads") {
-      dom.sidePanelToggle.textContent = "Файлы проекта";
+    } else if (["downloads", "preview"].includes(mode)) {
+      dom.sidePanelToggle.textContent = "Результат фабрики";
     } else {
       dom.sidePanelToggle.textContent = "Brief и файлы";
     }
   }
 
-  function artifactPlaceholders() {
-    return [
-      {
-        artifact_kind: "project_doc",
-        download_name: "project-doc.md",
-        download_status: "pending",
-        description: "Проектная рамка и бизнес-контекст для защиты концепции.",
-      },
-      {
-        artifact_kind: "agent_spec",
-        download_name: "agent-spec.md",
-        download_status: "pending",
-        description: "Спецификация будущего агента, сценарии и интерфейсы.",
-      },
-      {
-        artifact_kind: "presentation",
-        download_name: "presentation.md",
-        download_status: "pending",
-        description: "Материал для защиты идеи и последующего feedback loop.",
-      },
-    ];
-  }
-
-  function createMockDownload(project, artifact) {
+  function mockArtifactMarkdown(project, artifact) {
     const briefVersion = project?.lastResponse?.status_snapshot?.brief_version || "draft";
-    const body = [
+    if (normalizeArtifactKind(artifact?.artifact_kind) === "one_page_summary") {
+      return [
+        "# One-page summary",
+        "",
+        `Проект: ${project?.title || "Demo project"}`,
+        `Brief version: ${briefVersion}`,
+        "",
+        "## Клиент",
+        "- ООО Боку до манж",
+        "- Сегмент: средний корпоративный бизнес",
+        "",
+        "## Сделка",
+        "- Цель: оборотное финансирование",
+        "- Сумма: 120 млн RUB",
+        "",
+        "## Цена",
+        "- Базовая ставка подтверждена",
+        "- Нужна финальная защита на кредитном комитете",
+        "",
+        "## Сотрудничество",
+        "- История обслуживания положительная",
+        "- Требуется финальное one-page решение",
+      ].join("\n");
+    }
+    return [
       `# ${artifact.download_name}`,
       "",
       "Mock download из browser shell.",
@@ -1167,51 +1592,278 @@
       "",
       "Этот файл нужен только как placeholder до live delivery layer.",
     ].join("\n");
+  }
+
+  function createMockDownload(project, artifact) {
+    const body = mockArtifactMarkdown(project, artifact);
     return URL.createObjectURL(new Blob([body], { type: "text/markdown;charset=utf-8" }));
   }
 
-  function renderArtifacts(project) {
-    const responseArtifacts = Array.isArray(project?.lastResponse?.download_artifacts)
-      ? project.lastResponse.download_artifacts
-      : [];
-    const artifacts = responseArtifacts.length ? responseArtifacts : artifactPlaceholders();
+  function escapeHtml(value) {
+    return normalizeText(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function renderMarkdownInline(text) {
+    return escapeHtml(text)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+  }
+
+  function markdownToPreviewHtml(markdown) {
+    const lines = normalizeText(markdown).replace(/\r\n/g, "\n").split("\n");
+    const chunks = [];
+    let paragraph = [];
+    let listItems = [];
+
+    const flushParagraph = () => {
+      if (!paragraph.length) {
+        return;
+      }
+      chunks.push(`<p>${paragraph.join(" ")}</p>`);
+      paragraph = [];
+    };
+
+    const flushList = () => {
+      if (!listItems.length) {
+        return;
+      }
+      chunks.push(`<ul>${listItems.join("")}</ul>`);
+      listItems = [];
+    };
+
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        flushParagraph();
+        flushList();
+        return;
+      }
+      const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+      if (headingMatch) {
+        flushParagraph();
+        flushList();
+        const level = headingMatch[1].length;
+        chunks.push(`<h${level}>${renderMarkdownInline(headingMatch[2])}</h${level}>`);
+        return;
+      }
+      const listMatch = trimmed.match(/^[-*]\s+(.+)$/);
+      if (listMatch) {
+        flushParagraph();
+        listItems.push(`<li>${renderMarkdownInline(listMatch[1])}</li>`);
+        return;
+      }
+      paragraph.push(renderMarkdownInline(trimmed));
+    });
+
+    flushParagraph();
+    flushList();
+    return chunks.join("\n");
+  }
+
+  function wrapPreviewDocument(bodyHtml, title) {
+    const safeTitle = escapeHtml(title || "Preview");
+    return [
+      "<!doctype html>",
+      '<html lang="ru">',
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<title>${safeTitle}</title>`,
+      "<style>",
+      "body{margin:0;padding:28px;background:#f6f1e8;color:#181512;font:15px/1.65 \"Georgia\",\"Times New Roman\",serif;}",
+      "main{max-width:860px;margin:0 auto;}",
+      "h1,h2,h3{font-family:\"Inter\",\"Segoe UI\",sans-serif;line-height:1.15;color:#14110f;}",
+      "h1{font-size:2rem;margin:0 0 1rem;}",
+      "h2{font-size:1.2rem;margin:1.6rem 0 0.7rem;}",
+      "h3{font-size:1rem;margin:1.2rem 0 0.55rem;}",
+      "p{margin:0 0 0.9rem;}",
+      "ul{margin:0 0 1rem;padding-left:1.2rem;}",
+      "li+li{margin-top:0.35rem;}",
+      "code{padding:0.12rem 0.35rem;background:rgba(20,17,15,0.08);border-radius:0.3rem;font-size:0.92em;}",
+      "</style>",
+      "</head>",
+      "<body>",
+      `<main>${bodyHtml}</main>`,
+      "</body>",
+      "</html>",
+    ].join("");
+  }
+
+  function mockPreviewDocument(project, artifact) {
+    return wrapPreviewDocument(
+      markdownToPreviewHtml(mockArtifactMarkdown(project, artifact)),
+      artifact?.download_name || artifactKindLabel(artifact?.artifact_kind),
+    );
+  }
+
+  function previewStateFor(project, artifact) {
+    const previewKey = [
+      project?.id,
+      normalizeText(project?.lastResponse?.web_demo_session?.web_demo_session_id || project?.sessionId),
+      normalizeArtifactKind(artifact?.artifact_kind),
+    ].join(":");
+    if (!project.previewState || project.previewState.key !== previewKey) {
+      project.previewState = {
+        key: previewKey,
+        status: "idle",
+        html: "",
+        error: "",
+      };
+    }
+    return project.previewState;
+  }
+
+  async function fetchArtifactPreviewHtml(project, artifact) {
+    if (state.connectionMode !== "live") {
+      return mockPreviewDocument(project, artifact);
+    }
+
+    const previewUrl = artifactPreviewUrl(project, artifact);
+    if (previewUrl) {
+      const previewResponse = await fetch(previewUrl, {
+        headers: { Accept: "text/html" },
+      });
+      if (previewResponse.ok) {
+        return await previewResponse.text();
+      }
+    }
+
+    const downloadUrl = artifactDownloadUrl(project, artifact);
+    if (downloadUrl) {
+      const downloadResponse = await fetch(downloadUrl, {
+        headers: { Accept: "text/markdown,text/plain;q=0.9,*/*;q=0.1" },
+      });
+      if (downloadResponse.ok) {
+        const markdown = await downloadResponse.text();
+        return wrapPreviewDocument(
+          markdownToPreviewHtml(markdown),
+          artifact?.download_name || artifactKindLabel(artifact?.artifact_kind),
+        );
+      }
+    }
+
+    throw new Error("Preview недоступен. Backend endpoint /api/preview/... ещё не отвечает.");
+  }
+
+  async function loadArtifactPreview(project, artifact) {
+    const previewState = previewStateFor(project, artifact);
+    const requestKey = previewState.key;
+    try {
+      const html = await fetchArtifactPreviewHtml(project, artifact);
+      if (!project.previewState || project.previewState.key !== requestKey) {
+        return;
+      }
+      project.previewState.status = "ready";
+      project.previewState.html = html;
+      project.previewState.error = "";
+    } catch (error) {
+      if (!project.previewState || project.previewState.key !== requestKey) {
+        return;
+      }
+      project.previewState.status = "error";
+      project.previewState.html = "";
+      project.previewState.error = normalizeText(error?.message, "Не удалось загрузить preview.");
+    }
+    renderAll();
+  }
+
+  function createSecondaryArtifactRow(project, artifact) {
+    const ready = artifactIsReady(artifact);
+    const row = document.createElement("div");
+    row.className = "artifact-link-row";
+
+    const copy = document.createElement("div");
+    copy.className = "artifact-link-row__copy";
+
+    const title = document.createElement("span");
+    title.className = "artifact-link-row__title";
+    title.textContent = artifact.download_name || artifactKindLabel(artifact.artifact_kind);
+
+    const meta = document.createElement("span");
+    meta.className = "artifact-link-row__meta";
+    meta.textContent = `${artifactKindLabel(artifact.artifact_kind)} · ${normalizeText(artifact.download_status, "pending")}`;
+
+    copy.append(title, meta);
+    row.appendChild(copy);
+
+    if (ready) {
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "artifact-link-row__action";
+      action.textContent = "Скачать";
+      action.addEventListener("click", () => triggerArtifactDownload(project, artifact));
+      row.appendChild(action);
+    } else {
+      const stateLabel = document.createElement("span");
+      stateLabel.className = "artifact-link-row__state";
+      stateLabel.textContent = normalizeText(artifact.download_status, "pending");
+      row.appendChild(stateLabel);
+    }
+
+    return row;
+  }
+
+  function renderSecondaryArtifacts(project, artifacts) {
     dom.artifactList.innerHTML = "";
     dom.artifactEmpty.hidden = artifacts.length > 0;
-
     artifacts.forEach((artifact) => {
-      const fragment = dom.artifactTemplate.content.cloneNode(true);
-      const card = fragment.querySelector(".artifact-card");
-      const kind = fragment.querySelector(".artifact-card__kind");
-      const stateLabel = fragment.querySelector(".artifact-card__state");
-      const title = fragment.querySelector(".artifact-card__title");
-      const body = fragment.querySelector(".artifact-card__body");
-      const button = fragment.querySelector(".artifact-card__button");
-      const ready = ["ready", "available"].includes(normalizeText(artifact.download_status));
-
-      card.dataset.artifactKind = artifact.artifact_kind || "artifact";
-      kind.textContent = artifact.artifact_kind || "artifact";
-      stateLabel.textContent = artifact.download_status || "pending";
-      title.textContent = artifact.download_name || "Без имени";
-      body.textContent = artifact.description
-        || (ready ? "Артефакт готов к скачиванию из этой browser session." : "Появится после confirmed brief и downstream handoff.");
-      button.disabled = !ready;
-      button.textContent = ready ? "Скачать" : "Пока не готов";
-
-      button.addEventListener("click", () => {
-        if (!ready) {
-          return;
-        }
-        const href = artifact.download_url || createMockDownload(project, artifact);
-        const link = document.createElement("a");
-        link.href = href;
-        link.download = artifact.download_name || "artifact.txt";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      });
-
-      dom.artifactList.appendChild(fragment);
+      dom.artifactList.appendChild(createSecondaryArtifactRow(project, artifact));
     });
+  }
+
+  function renderPrimaryArtifactCard(project, artifact) {
+    const ready = artifactIsReady(artifact);
+    dom.primaryArtifactHeading.textContent = artifact.download_name || artifactKindLabel(artifact?.artifact_kind);
+    dom.primaryArtifactKind.textContent = artifactKindLabel(artifact?.artifact_kind);
+    dom.primaryArtifactState.textContent = normalizeText(artifact?.download_status, "pending");
+    dom.primaryArtifactBody.textContent = artifactDescription(artifact);
+    dom.primaryArtifactPreview.disabled = !ready;
+    dom.primaryArtifactDownload.disabled = !ready;
+    dom.primaryArtifactPreview.onclick = () => openPanelMode(project, "preview", artifact?.artifact_kind);
+    dom.primaryArtifactDownload.onclick = () => triggerArtifactDownload(project, artifact);
+  }
+
+  function renderPreviewPanel(project, artifact) {
+    dom.previewHeading.textContent = artifact.download_name || artifactKindLabel(artifact?.artifact_kind);
+    dom.previewDownload.disabled = !artifactIsReady(artifact);
+    dom.previewDownload.onclick = () => triggerArtifactDownload(project, artifact);
+
+    if (!artifactIsReady(artifact)) {
+      dom.previewFrame.hidden = true;
+      dom.previewFrame.srcdoc = "";
+      dom.previewStatus.hidden = false;
+      dom.previewStatus.textContent = "Preview появится, когда артефакт будет готов к скачиванию.";
+      return;
+    }
+
+    const previewState = previewStateFor(project, artifact);
+    if (previewState.status === "idle") {
+      previewState.status = "loading";
+      previewState.html = "";
+      previewState.error = "";
+      void loadArtifactPreview(project, artifact);
+    }
+
+    if (previewState.status === "ready" && previewState.html) {
+      dom.previewStatus.hidden = true;
+      dom.previewFrame.hidden = false;
+      if (dom.previewFrame.srcdoc !== previewState.html) {
+        dom.previewFrame.srcdoc = previewState.html;
+      }
+      return;
+    }
+
+    dom.previewFrame.hidden = true;
+    dom.previewFrame.srcdoc = "";
+    dom.previewStatus.hidden = false;
+    dom.previewStatus.textContent = previewState.status === "error"
+      ? previewState.error
+      : "Загружаю preview one-page…";
   }
 
   function createPanelCard(card) {
@@ -1250,15 +1902,22 @@
       return;
     }
 
+    const artifacts = projectArtifacts(project);
+    const primary = primaryArtifact(project, artifacts);
+    const secondary = secondaryArtifacts(project, artifacts);
     const promptCard = panelPromptCard(project);
     if (mode === "brief_review") {
       dom.sidePanelEyebrow.textContent = "Brief на проверке";
       dom.sidePanelTitle.textContent = "Проверь summary";
       dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь разделы brief, внеси правки или подтверди текущую версию.";
+    } else if (mode === "preview") {
+      dom.sidePanelEyebrow.textContent = "Результат фабрики";
+      dom.sidePanelTitle.textContent = primary?.download_name || "Preview one-page";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Просмотри one-page summary и при необходимости скачай его из этой сессии.";
     } else if (mode === "downloads") {
-      dom.sidePanelEyebrow.textContent = "Материалы проекта";
-      dom.sidePanelTitle.textContent = "Артефакты готовы";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Скачай project doc, agent spec и presentation из этой сессии.";
+      dom.sidePanelEyebrow.textContent = "Результат фабрики";
+      dom.sidePanelTitle.textContent = "One-page и материалы";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Главный one-page summary доступен для preview и скачивания, остальные артефакты собраны ниже.";
     } else {
       dom.sidePanelEyebrow.textContent = "Детали проекта";
       dom.sidePanelTitle.textContent = "Brief и файлы";
@@ -1272,8 +1931,24 @@
       });
     }
 
-    dom.artifactSection.hidden = mode !== "downloads";
-    renderArtifacts(project);
+    dom.primaryArtifactSection.hidden = mode !== "downloads" || !primary;
+    if (!dom.primaryArtifactSection.hidden) {
+      renderPrimaryArtifactCard(project, primary);
+    }
+
+    dom.previewSection.hidden = mode !== "preview" || !primary;
+    if (!dom.previewSection.hidden) {
+      renderPreviewPanel(project, selectedPreviewArtifact(project, artifacts) || primary);
+    } else if (dom.previewFrame) {
+      dom.previewFrame.hidden = true;
+      dom.previewFrame.srcdoc = "";
+      dom.previewStatus.hidden = false;
+      dom.previewStatus.textContent = "Выбери артефакт, чтобы открыть preview.";
+    }
+
+    dom.artifactSection.hidden = !["downloads", "preview"].includes(mode);
+    dom.artifactSectionHeading.textContent = "Остальные артефакты";
+    renderSecondaryArtifacts(project, secondary);
   }
 
   function renderStatus(project) {
@@ -1321,7 +1996,14 @@
   function renderComposer(project) {
     dom.composerLeadLabel.textContent = leadLabelFor(project);
     dom.composerMode.textContent = modeTextFor(project);
-    dom.composerHelperExample.textContent = helperExampleFor(project);
+    if (dom.composerThinking) {
+      dom.composerThinking.hidden = !state.awaitingResponse;
+    }
+    dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
+    if (dom.composerHelperExample) {
+      dom.composerHelperExample.textContent = helperExampleFor(project);
+      dom.composerHelperExample.hidden = true;
+    }
     dom.composerInput.placeholder = placeholderFor(project);
     dom.composerSubmit.textContent = state.awaitingResponse ? "■" : "↑";
     dom.composerSubmit.dataset.mode = state.awaitingResponse ? "stop" : "send";
@@ -1330,12 +2012,12 @@
     dom.composerNotice.hidden = !dom.composerNotice.textContent;
     dom.composerNotice.dataset.tone = normalizeText(state.composerNotice?.tone, "info");
     dom.composerInput.value = normalizeText(project?.draftText);
-    dom.composerForm.dataset.dropActive = state.composerDropActive ? "true" : "false";
     resizeComposerInput();
   }
 
   function renderAll() {
     const project = getActiveProject();
+    applySidebarWidth();
     renderGateNote();
     renderConnection();
     renderSessionBadge(project);
@@ -1355,9 +2037,10 @@
     if (!dom.composerInput) {
       return;
     }
+    const minHeight = 44;
     const maxHeight = 220;
     dom.composerInput.style.height = "auto";
-    const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, 52), maxHeight);
+    const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, minHeight), maxHeight);
     dom.composerInput.style.height = `${nextHeight}px`;
     dom.composerInput.style.overflowY = dom.composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
   }
@@ -1394,6 +2077,36 @@
     }
     const normalizedTitle = title.toLowerCase().replace(/[.…]+$/, "");
     return normalizedTitle.length >= 18 && source.startsWith(normalizedTitle);
+  }
+
+  function isGenericProjectTitle(value) {
+    const normalized = normalizeText(value)
+      .toLowerCase()
+      .replace(/[.…]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) {
+      return true;
+    }
+    if (
+      normalized === "new project"
+      || normalized === "новый проект"
+      || normalized === "новый"
+      || normalized === "project"
+      || normalized === "проект"
+      || normalized === "discovery project"
+      || normalized === "factory project"
+      || normalized === "demo project"
+    ) {
+      return true;
+    }
+    if (/^(discovery|demo|new)\s+project\s*\d*$/i.test(normalized)) {
+      return true;
+    }
+    if (/^проект\s*\d*$/i.test(normalized)) {
+      return true;
+    }
+    return false;
   }
 
   function titleCaseFromWords(words, maxWords = 5) {
@@ -1492,16 +2205,22 @@
       return;
     }
     const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
-    const uiCandidate = !looksLikeSlug(uiTitle) && !looksLikeExcerpt(uiTitle, userText) ? prettifyTitle(uiTitle) : "";
-    const userCandidate = prettifyTitle(userText);
+    const rawUiCandidate = !looksLikeSlug(uiTitle) && !looksLikeExcerpt(uiTitle, userText) ? prettifyTitle(uiTitle) : "";
+    const uiCandidate = !isGenericProjectTitle(rawUiCandidate) ? rawUiCandidate : "";
+    const rawUserCandidate = prettifyTitle(userText);
+    const userCandidate = !isGenericProjectTitle(rawUserCandidate) ? rawUserCandidate : "";
     const candidate = userCandidate || uiCandidate;
     if (!candidate) {
       return;
     }
-    if (
+    const canOverrideExisting = (
       project.title === DEFAULT_PROJECT_TITLE
       || project.title.startsWith(`${DEFAULT_PROJECT_TITLE} `)
       || looksLikeExcerpt(project.title, userText)
+      || isGenericProjectTitle(project.title)
+    );
+    if (
+      canOverrideExisting
     ) {
       project.title = candidate;
     }
@@ -1729,7 +2448,10 @@
       }
       state.accessToken = provided;
       setGateNote("Доступ открыт. Теперь можно начинать диалог и переключаться между проектами.", "success");
-      applyResponse(project, response, "live");
+      applyResponse(project, response, "live", {
+        appendReplyMessages: !hasConversationActivity(project),
+        syncReason: "unlock_access",
+      });
       persist();
       renderAll();
       focusComposerSoon();
@@ -1961,14 +2683,14 @@
         {
           card_kind: "status_update",
           title: "Статус проекта",
-          body_text: "Confirmed brief передан в фабрику. Concept pack готовится к выдаче пользователю.",
+          body_text: "Confirmed brief передан в фабрику. Главный one-page summary уже можно проверить прямо в правой панели.",
           action_hints: ["request_status"],
         },
         {
-          card_kind: "download_prompt",
-          title: "Артефакты готовы",
-          body_text: `Проект ${projectKey} может отдать project doc, agent spec и presentation из той же сессии.`,
-          action_hints: ["download_artifact"],
+          card_kind: "factory_result",
+          title: "Цифровой актив создан",
+          body_text: `Фабрика завершила one-page summary для проекта ${projectKey}. Открой preview, затем при необходимости скачай остальные материалы.`,
+          action_hints: ["preview_one_page", "download_artifact"],
         },
       ];
     }
@@ -2003,6 +2725,7 @@
       return [];
     }
     return [
+      { artifact_kind: "one_page_summary", download_name: "one-page-summary.md", download_status: "ready" },
       { artifact_kind: "project_doc", download_name: "project-doc.md", download_status: "ready" },
       { artifact_kind: "agent_spec", download_name: "agent-spec.md", download_status: "ready" },
       { artifact_kind: "presentation", download_name: "presentation.md", download_status: "ready" },
@@ -2098,7 +2821,7 @@
     const nextQuestion = mode === "awaiting_confirmation"
       ? confirmationPrompt
       : mode === "downloads_ready"
-        ? "Brief подтверждён. Можно скачать concept pack и при необходимости переоткрыть brief."
+        ? "Brief подтверждён. Открой one-page summary в preview, затем скачай нужные материалы или переоткрой brief."
         : discoveryStep.nextQuestion;
     const nextTopic = mode === "discovery" ? discoveryStep.nextTopic : "";
 
@@ -2128,7 +2851,7 @@
       },
       status_snapshot: {
         user_visible_status: mode === "downloads_ready" ? "playground_ready" : mode === "awaiting_confirmation" ? "awaiting_confirmation" : "awaiting_user_reply",
-        user_visible_status_label: mode === "downloads_ready" ? "Артефакты готовы" : mode === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
+        user_visible_status_label: mode === "downloads_ready" ? "One-page готов" : mode === "awaiting_confirmation" ? "Brief ждёт подтверждения" : "Сбор требований продолжается",
         next_recommended_action: mode === "downloads_ready" ? "start_concept_pack_handoff" : mode === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
         next_recommended_action_label: mode === "downloads_ready" ? "Передать brief в фабрику" : mode === "awaiting_confirmation" ? "Проверить и подтвердить brief" : "Ответить на следующий вопрос",
         brief_version: brief.version || "",
@@ -2144,14 +2867,15 @@
         missing_coverage: discoveryStep.missing.map((topic) => topic.id),
       },
       ui_projection: {
-        preferred_ui_action: mode === "downloads_ready" ? "request_status" : mode === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
+        preferred_ui_action: mode === "downloads_ready" ? "preview_one_page" : mode === "awaiting_confirmation" ? "confirm_brief" : "submit_turn",
         current_question: nextQuestion,
         current_topic: nextTopic,
         why_asking_now: mode === "discovery" ? discoveryStep.whyAskingNow : "",
         missing_coverage: discoveryStep.missing.map((topic) => topic.id),
         side_panel_mode: mode === "downloads_ready" ? "downloads" : mode === "awaiting_confirmation" ? "brief_review" : "hidden",
+        primary_artifact: mode === "downloads_ready" ? "one_page_summary" : "",
         composer_helper_example: helperExampleFor(project),
-        project_stage_label: mode === "downloads_ready" ? "Артефакты готовы" : mode === "awaiting_confirmation" ? "Brief на проверке" : "Сбор требований",
+        project_stage_label: mode === "downloads_ready" ? "One-page готов" : mode === "awaiting_confirmation" ? "Brief на проверке" : "Сбор требований",
         display_project_title: project.title,
         project_title: project.title,
         uploaded_file_count: uploadedFiles.length,
@@ -2178,27 +2902,36 @@
 
     const replyMessages = appendReplyMessages ? timelineMessagesFromResponse(response) : [];
     if (replyMessages.length) {
-      replyMessages.forEach((message) => {
-        const last = project.timeline[project.timeline.length - 1];
-        const duplicate = last
-          && last.role === message.role
-          && normalizeText(last.kind) === normalizeText(message.kind)
-          && normalizeText(last.body) === normalizeText(message.body);
-        if (!duplicate) {
-          project.timeline.push(message);
-        }
-      });
+      appendTimelineMessagesWithoutContiguousDuplicates(project, replyMessages);
     }
 
-    maybeAutonameProject(project, project.timeline.find((message) => message.role === "user")?.body || "", response);
+    const firstMeaningfulUserMessage = project.timeline.find(
+      (message) => message.role === "user" && !isLowSignalInput(message.body),
+    );
+    maybeAutonameProject(project, firstMeaningfulUserMessage?.body || "", response);
 
     const preferredAction = normalizeText(response.ui_projection?.preferred_ui_action);
-    project.currentAction = preferredAction || ACTION_PRIORITY.find((action) => availableActions(project).includes(action)) || "submit_turn";
+    const supportedAvailableActions = availableActions(project).filter((action) => isComposerAction(action));
+    const suggestedComposerAction = [
+      preferredAction,
+      normalizeText(response.status_snapshot?.next_recommended_action),
+      normalizeText(response.next_action),
+      ACTION_PRIORITY.find((action) => supportedAvailableActions.includes(action)),
+      supportedAvailableActions[0],
+      "submit_turn",
+    ].find((action) => isComposerAction(action));
+    project.currentAction = suggestedComposerAction || "submit_turn";
     const panelMode = sidePanelMode(project);
     if (panelMode === "hidden") {
       project.sidePanelOpen = false;
+      project.panelModeOverride = "";
+      project.previewArtifactKind = "";
     } else if (panelMode !== normalizeText(project.lastPanelMode)) {
       project.sidePanelOpen = true;
+    }
+    if (!["downloads", "preview"].includes(panelMode)) {
+      project.panelModeOverride = "";
+      project.previewArtifactKind = "";
     }
     project.lastPanelMode = panelMode;
     project.lastResumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint, project.lastResumeFingerprint);
@@ -2239,6 +2972,7 @@
     const abortController = new AbortController();
     let abortedByUser = false;
     let timedOut = false;
+    const pendingStartedAt = Date.now();
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
       project.timeline.push({
@@ -2285,6 +3019,13 @@
         applyResponse(project, mockAdapterTurn(project, payload), "mock");
       }
     } finally {
+      if (!abortedByUser && !timedOut) {
+        const elapsed = Date.now() - pendingStartedAt;
+        const remaining = MIN_PENDING_VISUAL_MS - elapsed;
+        if (remaining > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, remaining));
+        }
+      }
       if (abortedByUser || timedOut) {
         const activeProject = state.projects.find((item) => item.id === project.id);
         if (activeProject) {
@@ -2378,11 +3119,16 @@
       return;
     }
 
+    if (action === "preview_one_page" || action === "test_asset") {
+      if (project) {
+        openPanelMode(project, "preview", primaryArtifact(project)?.artifact_kind);
+      }
+      return;
+    }
+
     if (action === "download_artifact") {
       if (project) {
-        project.sidePanelOpen = true;
-        persist();
-        renderAll();
+        openPanelMode(project, "downloads");
       }
       return;
     }
@@ -2411,6 +3157,72 @@
   }
 
   function bindEvents() {
+    if (dom.sidebarResizer) {
+      let resizeSession = null;
+
+      const finishResize = (persistWidth) => {
+        if (!resizeSession) {
+          return;
+        }
+        resizeSession = null;
+        dom.root.classList.remove("is-resizing");
+        window.removeEventListener("pointermove", handleResizeMove);
+        window.removeEventListener("pointerup", handleResizeEnd);
+        window.removeEventListener("pointercancel", handleResizeEnd);
+        if (persistWidth) {
+          persist();
+        }
+      };
+
+      const handleResizeMove = (event) => {
+        if (!resizeSession) {
+          return;
+        }
+        const delta = event.clientX - resizeSession.startX;
+        updateSidebarWidth(resizeSession.startWidth + delta);
+      };
+
+      const handleResizeEnd = () => {
+        finishResize(true);
+      };
+
+      dom.sidebarResizer.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || isMobileLayout()) {
+          return;
+        }
+        event.preventDefault();
+        resizeSession = {
+          startX: event.clientX,
+          startWidth: state.sidebarWidth,
+        };
+        dom.root.classList.add("is-resizing");
+        window.addEventListener("pointermove", handleResizeMove);
+        window.addEventListener("pointerup", handleResizeEnd);
+        window.addEventListener("pointercancel", handleResizeEnd);
+      });
+
+      dom.sidebarResizer.addEventListener("keydown", (event) => {
+        if (isMobileLayout()) {
+          return;
+        }
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          return;
+        }
+        event.preventDefault();
+        const delta = event.key === "ArrowRight" ? 24 : -24;
+        updateSidebarWidth(state.sidebarWidth + delta, { persist: true });
+      });
+
+      window.addEventListener("resize", () => {
+        const clamped = clampSidebarWidth(state.sidebarWidth);
+        if (clamped !== state.sidebarWidth) {
+          updateSidebarWidth(clamped, { persist: true });
+          return;
+        }
+        applySidebarWidth();
+      });
+    }
+
     dom.newProject.addEventListener("click", () => {
       createNewProject({ activate: true });
       focusComposerSoon();
@@ -2517,17 +3329,18 @@
       }
       const text = normalizeText(dom.composerInput.value);
       const queuedUploads = uniqueUploads(project.pendingUploads);
-      const allowWithoutText = ["request_status", "request_brief_review", "confirm_brief"].includes(project.currentAction);
+      const effectiveAction = resolveComposerAction(project, text);
+      const allowWithoutText = ["request_status", "request_brief_review", "confirm_brief"].includes(effectiveAction);
       if (!text && !queuedUploads.length && !allowWithoutText) {
         dom.composerInput.focus();
         return;
       }
       clearComposerNotice();
       project.draftText = "";
-      dispatchTurn(project.currentAction, text, { queuedUploads });
+      dispatchTurn(effectiveAction, text, { queuedUploads });
       dom.composerInput.value = "";
       resizeComposerInput();
-      if (project.currentAction !== "submit_turn") {
+      if (effectiveAction !== "submit_turn") {
         setProjectAction(project, "submit_turn");
       }
       focusComposerSoon();
@@ -2540,50 +3353,74 @@
       if (!project || !selectedFiles.length) {
         return;
       }
-      await queueSelectedUploads(project, selectedFiles);
+      await ingestSelectedFiles(project, selectedFiles);
     });
 
+    let composerDragDepth = 0;
+    const clearComposerDragState = () => {
+      composerDragDepth = 0;
+      dom.composerForm.classList.remove("is-dragover");
+    };
+
     dom.composerForm.addEventListener("dragenter", (event) => {
-      if (state.awaitingResponse || !hasFileTransfer(event)) {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
-      state.composerDragDepth += 1;
-      setComposerDropActive(true);
+      composerDragDepth += 1;
+      dom.composerForm.classList.add("is-dragover");
     });
 
     dom.composerForm.addEventListener("dragover", (event) => {
-      if (state.awaitingResponse || !hasFileTransfer(event)) {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
-      setComposerDropActive(true);
+      dom.composerForm.classList.add("is-dragover");
     });
 
     dom.composerForm.addEventListener("dragleave", (event) => {
-      if (!state.composerDropActive) {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
-      state.composerDragDepth = Math.max(0, state.composerDragDepth - 1);
-      if (state.composerDragDepth === 0 || !dom.composerForm.contains(event.relatedTarget)) {
-        resetComposerDropState();
+      composerDragDepth = Math.max(0, composerDragDepth - 1);
+      if (composerDragDepth === 0) {
+        dom.composerForm.classList.remove("is-dragover");
       }
     });
 
-    dom.composerForm.addEventListener("drop", (event) => {
-      if (state.awaitingResponse || !hasFileTransfer(event)) {
+    dom.composerForm.addEventListener("drop", async (event) => {
+      if (!state.accessToken || !hasFilePayload(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
+      clearComposerDragState();
       const project = getActiveProject();
       const droppedFiles = Array.from(event.dataTransfer?.files || []);
-      resetComposerDropState();
       if (!project || !droppedFiles.length) {
         return;
       }
-      void queueSelectedUploads(project, droppedFiles);
+      await ingestSelectedFiles(project, droppedFiles);
+    });
+
+    document.addEventListener("dragover", (event) => {
+      if (!hasFilePayload(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+    });
+
+    document.addEventListener("drop", (event) => {
+      if (!hasFilePayload(event.dataTransfer)) {
+        return;
+      }
+      if (dom.composerForm.contains(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      clearComposerDragState();
     });
 
     if (dom.accessForm) {

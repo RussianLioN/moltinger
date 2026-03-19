@@ -55,6 +55,7 @@ export const DISCOVERY_TOPICS = [
 const MIN_TOPICS_FOR_COMPLETION = 5;
 const REQUIRED_TOPICS = ["problem", "target_users", "expected_outputs"];
 const LOW_SIGNAL_MARKERS = new Set(["ok", "okay", "test", "ping", "да", "нет", "ага", "понял"]);
+const SYNTHETIC_DATA_NOTE = "Все данные во вложениях считаются синтетическими: не относятся к реальным лицам/контрагентам, любые совпадения случайны.";
 const TOPIC_ACKS = {
   problem: "Проблему зафиксировал.",
   target_users: "Пользователей и выгодоприобретателей зафиксировал.",
@@ -148,14 +149,25 @@ function lowSignalQuestion(coveredTopics) {
   return `${lead} ${fallback.nextQuestion}`;
 }
 
-function syncTopicAnswers(session, userText, newCoverage) {
+function buildUploadedFilesAnswer(uploadedFiles = []) {
+  const files = (uploadedFiles || [])
+    .map((file) => normalizeText(file?.name))
+    .filter(Boolean);
+  if (!files.length) {
+    return "";
+  }
+  return `Приложены файлы: ${files.join(", ")}. ${SYNTHETIC_DATA_NOTE}`;
+}
+
+function syncTopicAnswers(session, userText, newCoverage, uploadedFiles = []) {
   const text = normalizeText(userText);
-  if (!text) {
+  const effectiveText = text || buildUploadedFilesAnswer(uploadedFiles);
+  if (!effectiveText) {
     return;
   }
   newCoverage.forEach((topicId) => {
     if (!session.topicAnswers[topicId]) {
-      session.topicAnswers[topicId] = text;
+      session.topicAnswers[topicId] = effectiveText;
     }
   });
 }
@@ -215,6 +227,58 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   };
 }
 
+function forceNextUncoveredTopic(currentTopicId, coveredTopics) {
+  const covered = coveredTopics instanceof Set ? coveredTopics : new Set(coveredTopics || []);
+  const currentIndex = DISCOVERY_TOPICS.findIndex((topic) => topic.id === currentTopicId);
+  if (currentIndex === -1) {
+    return defaultQuestion(covered);
+  }
+
+  for (let offset = 1; offset <= DISCOVERY_TOPICS.length; offset += 1) {
+    const topic = DISCOVERY_TOPICS[(currentIndex + offset) % DISCOVERY_TOPICS.length];
+    if (!covered.has(topic.id)) {
+      return {
+        nextTopic: topic.id,
+        nextQuestion: topic.question,
+        whyAskingNow: topic.why,
+        missingCoverage: computeMissing(covered).map((item) => item.id),
+      };
+    }
+  }
+
+  return defaultQuestion(covered);
+}
+
+function applyAntiLoopGuard(session, finalized) {
+  if (finalized.lowSignal) {
+    return finalized;
+  }
+
+  const previousTopic = normalizeText(session.currentTopic);
+  const previousQuestion = normalizeText(session.currentQuestion).toLowerCase();
+  const nextQuestion = normalizeText(finalized.nextQuestion).toLowerCase();
+  const repeatedTopic = previousTopic && finalized.nextTopic === previousTopic;
+  const repeatedQuestion = previousQuestion && nextQuestion === previousQuestion;
+
+  if (!repeatedTopic && !repeatedQuestion) {
+    return finalized;
+  }
+
+  const forced = forceNextUncoveredTopic(previousTopic, finalized.coveredTopics);
+  const forcedQuestion = normalizeText(forced.nextQuestion).toLowerCase();
+  if (!forced.nextTopic || (forced.nextTopic === finalized.nextTopic && forcedQuestion === nextQuestion)) {
+    return finalized;
+  }
+
+  return {
+    ...finalized,
+    nextTopic: forced.nextTopic,
+    nextQuestion: forced.nextQuestion,
+    whyAskingNow: forced.whyAskingNow,
+    missingCoverage: forced.missingCoverage,
+  };
+}
+
 async function getArchitectSystemPrompt() {
   if (cachedSystemPrompt) {
     return cachedSystemPrompt;
@@ -259,6 +323,7 @@ async function llmDiscoveryStep(session, userText, uploadedFiles = []) {
   const uploadContext = (uploadedFiles || [])
     .map((file) => `${file.name}: ${normalizeText(file.excerpt, "").slice(0, 300)}`)
     .join("\n");
+  const uploadSafetyNote = uploadContext ? SYNTHETIC_DATA_NOTE : "Вложения не переданы.";
 
   const messages = [
     { role: "system", content: systemPrompt },
@@ -274,6 +339,8 @@ async function llmDiscoveryStep(session, userText, uploadedFiles = []) {
         `Ответ пользователя: ${normalizeText(userText) || "(пусто)"}`,
         "",
         `Файлы (excerpt): ${uploadContext || "(нет файлов)"}`,
+        "",
+        `Комментарий по данным: ${uploadSafetyNote}`,
       ].join("\n"),
     },
   ];
@@ -316,10 +383,13 @@ export async function processDiscoveryTurn(session, userText, uploadedFiles = []
     }
   }
 
-  const finalized = finalizeDiscoveryStep(session, step, userText, uploadedFiles);
+  const finalized = applyAntiLoopGuard(
+    session,
+    finalizeDiscoveryStep(session, step, userText, uploadedFiles),
+  );
 
   session.coveredTopics = finalized.coveredTopics;
-  syncTopicAnswers(session, userText, finalized.coveredTopics);
+  syncTopicAnswers(session, userText, finalized.coveredTopics, uploadedFiles);
   session.currentQuestion = finalized.nextQuestion;
   session.currentTopic = finalized.nextTopic;
   session.whyAskingNow = finalized.whyAskingNow;

@@ -185,6 +185,8 @@ function responseBase(session, payload, overrides = {}) {
       why_asking_now: normalizeText(overrides.whyAskingNow, session.whyAskingNow),
       missing_coverage: safeArray(overrides.missingCoverage),
       side_panel_mode: overrides.sidePanelMode || "hidden",
+      primary_artifact: normalizeText(overrides.primaryArtifact),
+      primary_artifact_preview_url: normalizeText(overrides.primaryArtifactPreviewUrl),
       composer_helper_example: normalizeText(overrides.helperExample),
       project_stage_label: normalizeText(overrides.projectStageLabel),
       display_project_title: normalizeText(session.displayProjectTitle, "Новый проект"),
@@ -383,27 +385,41 @@ export function buildHandoffRunningResponse(session, payload, theatreMessage = "
 }
 
 export function buildDownloadsReadyResponse(session, payload, theatreMessage = "") {
-  const artifacts = safeArray(session.artifacts).map((item) => ({
-    artifact_kind: item.artifact_kind,
-    download_name: item.download_name,
-    download_status: item.download_status || "ready",
-    description: normalizeText(item.description),
-    download_url: `/api/download/${encodeURIComponent(session.sessionId)}/${encodeURIComponent(item.artifact_kind)}`,
-  }));
-  const nextQuestion = "Производство завершено. Артефакты готовы к скачиванию.";
+  const preferredKind = "one_page_summary";
+  const artifacts = safeArray(session.artifacts)
+    .map((item) => ({
+      artifact_kind: item.artifact_kind,
+      download_name: item.download_name,
+      download_status: item.download_status || "ready",
+      description: normalizeText(item.description),
+      download_url: `/api/download/${encodeURIComponent(session.sessionId)}/${encodeURIComponent(item.artifact_kind)}`,
+      preview_url: `/api/preview/${encodeURIComponent(session.sessionId)}/${encodeURIComponent(item.artifact_kind)}`,
+      is_primary: item.artifact_kind === preferredKind,
+    }))
+    .sort((left, right) => Number(Boolean(right.is_primary)) - Number(Boolean(left.is_primary)));
+  const primaryArtifact = artifacts.find((item) => item.is_primary) || artifacts[0] || null;
+  const secondaryArtifacts = artifacts.filter((item) => item.artifact_kind !== primaryArtifact?.artifact_kind);
+  const nextQuestion = primaryArtifact
+    ? "Фабрика создала цифровой актив. Открой one-page summary в preview и при необходимости скачай остальные материалы."
+    : "Производство завершено. Артефакты готовы к скачиванию.";
+  const secondarySummary = secondaryArtifacts.length
+    ? ` Дополнительно доступны: ${secondaryArtifacts.map((item) => item.download_name).join(", ")}.`
+    : "";
   return responseBase(session, payload, {
     status: "confirmed",
-    nextAction: "start_concept_pack_handoff",
+    nextAction: "download_artifact",
     nextTopic: "",
     nextQuestion,
-    preferredAction: "request_status",
+    preferredAction: "preview_one_page",
     sidePanelMode: "downloads",
-    projectStageLabel: "Артефакты готовы",
+    primaryArtifact: primaryArtifact?.artifact_kind || preferredKind,
+    primaryArtifactPreviewUrl: primaryArtifact?.preview_url || "",
+    projectStageLabel: "Цифровой актив готов",
     statusSnapshot: statusSnapshot(session, {
       userVisibleStatus: "playground_ready",
       userVisibleStatusLabel: "Артефакты готовы",
-      nextRecommendedAction: "start_concept_pack_handoff",
-      nextRecommendedActionLabel: "Открыть файлы",
+      nextRecommendedAction: "download_artifact",
+      nextRecommendedActionLabel: "Открыть результат",
       uploadedFileCount: safeArray(session.uploadedFiles).length,
       downloadReadiness: "ready",
     }),
@@ -411,14 +427,16 @@ export function buildDownloadsReadyResponse(session, payload, theatreMessage = "
       {
         card_kind: "status_update",
         title: "Статус проекта",
-        body_text: (theatreMessage || "Производство завершено. Артефакты готовы.").trim(),
+        body_text: (theatreMessage || "Производство завершено. Цифровой актив готов к просмотру и скачиванию.").trim(),
         action_hints: ["request_status"],
       },
       {
-        card_kind: "download_prompt",
-        title: "Артефакты готовы",
-        body_text: `Проект ${session.projectKey || "factory-demo"} может отдать project doc, agent spec, presentation и one-page summary.`,
-        action_hints: ["download_artifact"],
+        card_kind: "factory_result",
+        title: "Цифровой актив создан",
+        body_text: primaryArtifact
+          ? `Фабрика завершила работу. Основной результат: ${primaryArtifact.download_name}.${secondarySummary}`
+          : `Фабрика завершила работу. Материалы доступны в панели загрузок.${secondarySummary}`,
+        action_hints: ["preview_one_page", "download_artifact", "request_status"],
       },
     ],
     downloadArtifacts: artifacts,
