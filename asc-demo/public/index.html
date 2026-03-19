@@ -59,6 +59,7 @@
         <div
           class="app-frame__divider"
           data-role="sidebar-resizer"
+          data-divider="sidebar"
           role="separator"
           aria-orientation="vertical"
           aria-label="Изменить ширину списка проектов"
@@ -88,6 +89,14 @@
               </div>
 
               <div class="workspace-topbar__actions">
+                <button
+                  class="button button--ghost button--compact"
+                  type="button"
+                  data-role="sidebar-toggle"
+                  aria-label="Показать или скрыть список проектов"
+                >
+                  Проекты
+                </button>
                 <button
                   class="button button--ghost button--compact"
                   type="button"
@@ -159,7 +168,7 @@
                       data-role="attachment-trigger"
                       aria-label="Прикрепить файлы"
                     >
-                      📎
+                      +
                     </button>
                     <input
                       id="fileInput"
@@ -186,6 +195,7 @@
           <div
             class="workspace-shell__divider"
             data-role="panel-resizer"
+            data-divider="panel"
             role="separator"
             aria-orientation="vertical"
             aria-label="Изменить ширину правой панели"
@@ -207,6 +217,14 @@
                   hidden
                 >
                   Редактировать brief
+                </button>
+                <button
+                  class="button button--ghost button--compact"
+                  type="button"
+                  data-role="side-panel-fullscreen"
+                  aria-label="Развернуть правую панель на весь экран"
+                >
+                  Развернуть
                 </button>
                 <button
                   class="button button--ghost button--compact"

@@ -1421,16 +1421,16 @@ def should_auto_resolve_unsafe_clarification(
     has_any_uploads = bool(normalize_uploaded_files(all_uploaded_files))
     if not normalized and not has_turn_uploads:
         return False
-    if normalized and has_sensitive_identifiers(normalized):
-        return False
     if has_turn_uploads:
         return True
+    if normalized and has_sensitive_identifiers(normalized):
+        return False
     if has_redaction_acknowledgement(normalized):
         return True
     if mentions_upload_reference(normalized):
-        return True
+        return not is_low_signal_reply(normalized)
     if has_any_uploads and has_continue_marker(normalized):
-        return True
+        return not is_low_signal_reply(normalized)
     return False
 
 
@@ -1478,7 +1478,8 @@ def resolve_unsafe_input_clarification(discovery_request: dict[str, Any], *, use
                 continue
             if normalize_text(item.get("topic_name")) != "input_examples":
                 continue
-            if normalize_text(item.get("reason")) != "unsafe_data_example":
+            reason = normalize_text(item.get("reason"))
+            if reason != "unsafe_data_example" and "unsafe" not in reason:
                 continue
             if normalize_text(item.get("status")) != "open":
                 continue
@@ -1653,6 +1654,14 @@ def sanitize_architect_question_text(value: Any) -> str:
             continue
         if re.match(r"(?i)^например[:\s]", compact):
             continue
+        if re.search(r"example-case-\d+", compact, re.IGNORECASE):
+            continue
+        if re.match(r"(?i)^можешь\s+прислать\s+обезличенн", compact):
+            continue
+        if re.match(r"(?i)^(вижу\s+приложенн|входные\s+примеры\s+уже\s+прилож|примеры\s+входов\s+получен)", compact):
+            continue
+        if re.match(r"(?i)^(зафиксировал|принял|понял)\b", compact):
+            continue
         if re.match(r"(?i)^(бизнес-эффект|проблему|роли|пользователей|текущий процесс|ожидаемый выход|ограничения|метрики)\s+.*зафикс", compact):
             continue
         lines.append(compact)
@@ -1668,6 +1677,8 @@ def sanitize_architect_question_text(value: Any) -> str:
         for segment in reversed(segments):
             if "?" in segment:
                 return segment
+    if normalize_text(cleaned).lower().startswith("можешь прислать"):
+        return ""
     return cleaned
 
 

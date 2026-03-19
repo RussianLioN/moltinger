@@ -12,9 +12,8 @@
   const SIDEBAR_WIDTH_MIN = 220;
   const SIDEBAR_WIDTH_MAX = 560;
   const PANEL_WIDTH_DEFAULT = 460;
-  const PANEL_WIDTH_MIN = 360;
+  const PANEL_WIDTH_MIN = 320;
   const PANEL_WIDTH_MAX = 720;
-  const PANEL_WIDTH_BRIEF_REVIEW = 600;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -120,10 +119,29 @@
       signals: ["метрик", "kpi", "sla", "успех", "точност", "время"],
     },
   ];
+  const BUSINESS_IDEA_SIGNAL_MARKERS = [
+    "автомат",
+    "процесс",
+    "заявк",
+    "клиент",
+    "кредит",
+    "комитет",
+    "one-page",
+    "summary",
+    "отчет",
+    "документ",
+    "согласован",
+    "маршрут",
+    "проверк",
+    "анализ",
+    "decision",
+    "approval",
+  ];
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
     appFrame: document.querySelector(".app-frame"),
     sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
+    sidebarToggle: document.querySelector('[data-role="sidebar-toggle"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
     panelResizer: document.querySelector('[data-role="panel-resizer"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
@@ -139,6 +157,7 @@
     homeExamples: document.querySelector('[data-role="home-examples"]'),
     sidePanel: document.querySelector('[data-role="side-panel"]'),
     sidePanelToggle: document.querySelector('[data-role="side-panel-toggle"]'),
+    sidePanelFullscreen: document.querySelector('[data-role="side-panel-fullscreen"]'),
     sidePanelClose: document.querySelector('[data-role="side-panel-close"]'),
     sidePanelEyebrow: document.querySelector('[data-role="side-panel-eyebrow"]'),
     sidePanelTitle: document.querySelector('[data-role="side-panel-title"]'),
@@ -203,6 +222,7 @@
     accessToken: "",
     connectionMode: "booting",
     requestCounter: 0,
+    sidebarVisible: true,
     sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
     panelWidth: PANEL_WIDTH_DEFAULT,
     activeProjectId: "",
@@ -451,9 +471,15 @@
   }
 
   function panelMaxByViewport() {
-    const viewport = Math.max(0, window.innerWidth || 0);
-    const roomForWorkspace = Math.max(PANEL_WIDTH_MIN, viewport - 560);
-    return Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, roomForWorkspace));
+    const occupiedSidebar = state.sidebarVisible === false ? 0 : state.sidebarWidth;
+    const shellWidth = Math.max(
+      0,
+      dom.workspaceShell?.clientWidth || 0,
+      window.innerWidth - occupiedSidebar - 48,
+    );
+    const minCenterWidth = 300;
+    const available = Math.max(PANEL_WIDTH_MIN, shellWidth - minCenterWidth - 20);
+    return Math.max(PANEL_WIDTH_MIN, Math.min(Math.max(PANEL_WIDTH_MAX, 1040), available));
   }
 
   function clampSidebarWidth(value) {
@@ -475,6 +501,25 @@
       dom.sidebarResizer.setAttribute("aria-valuemin", String(SIDEBAR_WIDTH_MIN));
       dom.sidebarResizer.setAttribute("aria-valuemax", String(sidebarMaxByViewport()));
       dom.sidebarResizer.setAttribute("aria-valuenow", String(nextWidth));
+    }
+  }
+
+  function applySidebarVisibility() {
+    const visible = state.sidebarVisible !== false;
+    state.sidebarVisible = visible;
+    if (dom.appFrame) {
+      dom.appFrame.dataset.sidebarOpen = visible ? "true" : "false";
+    }
+    if (dom.sidebarResizer) {
+      dom.sidebarResizer.hidden = !visible || isMobileLayout();
+    }
+    if (dom.sidebarToggle) {
+      dom.sidebarToggle.textContent = visible ? "Скрыть проекты" : "Проекты";
+      dom.sidebarToggle.setAttribute("aria-pressed", visible ? "true" : "false");
+      dom.sidebarToggle.setAttribute(
+        "aria-label",
+        visible ? "Скрыть список проектов" : "Показать список проектов",
+      );
     }
   }
 
@@ -543,6 +588,7 @@
       title: project.title,
       titleEdited: Boolean(project.titleEdited),
       sidePanelOpen: Boolean(project.sidePanelOpen),
+      sidePanelFullscreen: Boolean(project.sidePanelFullscreen),
       lastPanelMode: normalizeText(project.lastPanelMode),
       panelModeOverride: normalizeText(project.panelModeOverride),
       previewArtifactKind: normalizeText(project.previewArtifactKind),
@@ -581,6 +627,7 @@
       title: normalizeText(record.title, DEFAULT_PROJECT_TITLE),
       titleEdited: Boolean(record.titleEdited),
       sidePanelOpen: Boolean(record.sidePanelOpen),
+      sidePanelFullscreen: Boolean(record.sidePanelFullscreen),
       lastPanelMode: normalizeText(record.lastPanelMode),
       panelModeOverride: normalizeText(record.panelModeOverride),
       previewArtifactKind: normalizeText(record.previewArtifactKind),
@@ -615,10 +662,11 @@
       currentAction: "start_project",
       mockStage: "gate_pending",
       sidePanelOpen: false,
+      sidePanelFullscreen: false,
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
-      briefEditOpen: true,
+      briefEditOpen: false,
       briefDraft: "",
     });
   }
@@ -631,6 +679,7 @@
     const payload = {
       connectionMode: state.connectionMode,
       requestCounter: state.requestCounter,
+      sidebarVisible: state.sidebarVisible,
       sidebarWidth: state.sidebarWidth,
       panelWidth: state.panelWidth,
       activeProjectId: state.activeProjectId,
@@ -650,6 +699,7 @@
     if (saved && typeof saved === "object") {
       state.connectionMode = normalizeText(saved.connectionMode, "booting");
       state.requestCounter = Number.isFinite(saved.requestCounter) ? saved.requestCounter : 0;
+      state.sidebarVisible = typeof saved.sidebarVisible === "boolean" ? saved.sidebarVisible : true;
       state.sidebarWidth = clampSidebarWidth(saved.sidebarWidth);
       state.panelWidth = clampPanelWidth(saved.panelWidth);
       state.projects = Array.isArray(saved.projects) && saved.projects.length
@@ -672,6 +722,7 @@
           }
         }
       });
+      dedupeProjectTitles();
       state.activeProjectId = normalizeText(saved.activeProjectId);
     }
     if (!state.projects.length) {
@@ -703,6 +754,9 @@
     dom.accessTokenInput.disabled = isBusy && !state.accessToken;
     dom.projectMenu.disabled = isBusy;
     dom.newProject.disabled = isBusy;
+    if (dom.sidebarToggle) {
+      dom.sidebarToggle.disabled = isBusy;
+    }
   }
 
   function focusComposerSoon() {
@@ -934,10 +988,10 @@
     const topic = currentTopic(project);
     const status = currentStatus(project);
     if (!hasConversationActivity(project)) {
-      return "Коротко опиши процесс, который хочешь автоматизировать.";
+      return "Опиши задачу автоматизации простыми словами.";
     }
     if (action === "confirm_brief") {
-      return "Подтверди brief кнопкой или коротко опиши, что нужно исправить.";
+      return "Подтверди brief или напиши, что нужно исправить.";
     }
     if (action === "request_brief_correction") {
       return "Опиши, что поправить в brief.";
@@ -946,88 +1000,16 @@
       return "Опиши, что нужно доуточнить, чтобы переоткрыть brief.";
     }
     if (isDownloadsReadyStatus(status) || status === "confirmed") {
-      return "Опиши правку для brief или попроси имитацию запуска цифрового сотрудника.";
-    }
-    if (topic === "problem") {
-      return "Опиши ключевую бизнес-проблему и почему это важно сейчас.";
-    }
-    if (topic === "target_users") {
-      return "Укажи, кто будет основным пользователем или выгодоприобретателем.";
-    }
-    if (topic === "current_workflow") {
-      return "Опиши текущий процесс и где сейчас теряется время.";
-    }
-    if (topic === "desired_outcome") {
-      return "Опиши, какую пользу агент должен дать бизнесу после автоматизации.";
-    }
-    if (topic === "user_story") {
-      return "Опиши, кому и в какой рабочей ситуации агент помогает в первую очередь.";
+      return "Опиши правку brief или запроси имитацию запуска.";
     }
     if (topic === "input_examples") {
-      return "Приведи 1-2 примера или прикрепи файл с примерами.";
+      return "Приведи 1–2 примера или прикрепи файл.";
     }
-    if (topic === "expected_outputs") {
-      return "Опиши ожидаемый результат на выходе.";
-    }
-    if (topic === "branching_rules") {
-      return "Опиши правила, исключения и условия эскалации (если/иначе).";
-    }
-    if (topic === "constraints") {
-      return "Перечисли ограничения, запреты и исключения, которые обязательно учитывать.";
-    }
-    if (topic === "success_metrics") {
-      return "Укажи метрики успеха: время, качество, SLA и другие критерии.";
-    }
-    return "Опиши, какой процесс нужно автоматизировать.";
+    return "Ответь на вопрос агента.";
   }
 
   function helperExampleFor(project) {
-    if (!state.accessToken) {
-      return "Введи access token, и после этого откроется рабочее пространство проекта.";
-    }
-    const action = project?.currentAction || "start_project";
-    const question = currentQuestion(project);
-    const topic = currentTopic(project);
-    const status = currentStatus(project);
-
-    if (!hasConversationActivity(project)) {
-      return "Например: автоматизировать подготовку one-page summary по клиенту для кредитного комитета.";
-    }
-    if (action === "confirm_brief") {
-      return "Например: подтверждаю brief. Или: добавь отдельные правила для срочных заявок.";
-    }
-    if (action === "request_brief_correction") {
-      return "Например: добавь ограничения по роли пользователя и уточни метрики успеха.";
-    }
-    if (action === "reopen_brief") {
-      return "Например: нужно доуточнить входные данные и сценарии исключений.";
-    }
-    if (isDownloadsReadyStatus(status) || status === "confirmed") {
-      return "Например: нужно доработать brief по блоку рисков. Или: запусти имитацию цифрового сотрудника на текущих данных.";
-    }
-    if (topic === "target_users" || /пользовател/i.test(question)) {
-      return "Например: пользователи — члены кредитного комитета и клиентская служба.";
-    }
-    if (topic === "current_workflow" || /как этот процесс/i.test(question)) {
-      return "Например: сотрудник вручную собирает данные из трёх систем и сравнивает их в Excel.";
-    }
-    if (topic === "input_examples" || /пример|входн/i.test(question)) {
-      return "Например: можно приложить файл с образцом заявки, отчёта или one-page summary.";
-    }
-    if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
-      return "Например: на выходе нужна аналитическая карточка, рекомендация и краткое заключение.";
-    }
-    if (topic === "branching_rules" || /исключ|правил|эскалац|если|иначе/i.test(question)) {
-      return "Например: если данных недостаточно, кейс уходит на ручную проверку с эскалацией ответственному.";
-    }
-    if (topic === "problem" || /бизнес-проблем/i.test(question)) {
-      return "Например: нужно сократить время согласования и повысить число рассмотренных кейсов.";
-    }
-    const projected = normalizeText(project?.lastResponse?.ui_projection?.composer_helper_example);
-    if (projected) {
-      return projected;
-    }
-    return "Отвечай простыми рабочими формулировками. Если есть примеры в файлах, прикрепи их прямо сюда.";
+    return "";
   }
 
   function submitLabelFor(project) {
@@ -1204,6 +1186,7 @@
     const title = document.createElement("span");
     title.className = "project-card__title";
     title.textContent = project.title;
+    title.title = project.title;
     main.append(title);
     main.addEventListener("click", () => {
       switchProject(project.id);
@@ -1232,7 +1215,9 @@
   }
 
   function renderTopbar(project) {
-    dom.projectTitle.textContent = project?.title || DEFAULT_PROJECT_TITLE;
+    const title = project?.title || DEFAULT_PROJECT_TITLE;
+    dom.projectTitle.textContent = title;
+    dom.projectTitle.title = title;
     dom.projectSubtitle.textContent = projectSubtitle(project);
     renderSidePanelToggle(project);
   }
@@ -1430,6 +1415,7 @@
       return;
     }
     project.sidePanelOpen = mode !== "hidden";
+    project.sidePanelFullscreen = mode === "hidden" ? false : Boolean(project.sidePanelFullscreen);
     project.panelModeOverride = mode === "preview" || mode === "downloads" ? mode : "";
     project.previewArtifactKind = mode === "preview"
       ? normalizeArtifactKind(artifactKind || primaryArtifact(project)?.artifact_kind)
@@ -1497,7 +1483,7 @@
       return null;
     }
     const normalizedAck = acknowledgement.replace(/\s+/g, " ").trim();
-    const looksTruncatedSummary = /[:]\s*.+[….]{3,}$/.test(normalizedAck) || /…/.test(normalizedAck);
+    const looksTruncatedSummary = /[:]\s*.+[.…]+$/.test(normalizedAck) || /…/.test(normalizedAck);
     const cleanedAck = looksTruncatedSummary
       ? "Ответ зафиксировал."
       : normalizedAck;
@@ -1566,7 +1552,25 @@
     });
     attachments.hidden = (message.attachments || []).length === 0;
 
-    actions.hidden = true;
+    actions.innerHTML = "";
+    if (bodyText) {
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "message__action";
+      copy.textContent = "Copy";
+      copy.setAttribute("aria-label", "Скопировать сообщение");
+      copy.addEventListener("click", async () => {
+        try {
+          await window.navigator.clipboard.writeText(bodyText);
+          showComposerNotice("Сообщение скопировано.", "info");
+        } catch (_error) {
+          showComposerNotice("Не удалось скопировать сообщение.", "warning");
+        }
+        renderComposer(getActiveProject());
+      });
+      actions.appendChild(copy);
+    }
+    actions.hidden = actions.childElementCount === 0;
     return fragment;
   }
 
@@ -1661,6 +1665,17 @@
       if (messageSignature(last) && messageSignature(last) === messageSignature(message)) {
         continue;
       }
+      if (normalizeText(message.role) === "agent") {
+        const body = normalizeText(message.body);
+        if (body) {
+          const hasRecentSameAgentBody = project.timeline
+            .slice(Math.max(0, project.timeline.length - 10))
+            .some((existing) => normalizeText(existing.role) === "agent" && normalizeText(existing.body) === body);
+          if (hasRecentSameAgentBody) {
+            continue;
+          }
+        }
+      }
       if (isDuplicateAgentQuestion(project, message)) {
         continue;
       }
@@ -1706,12 +1721,21 @@
   }
 
   function detailCards(project) {
-    return (currentResponse(project)?.reply_cards || []).filter((card) => card.card_kind === "brief_summary_section");
+    return (currentResponse(project)?.reply_cards || []).filter((card) => {
+      if (!card || card.card_kind !== "brief_summary_section") {
+        return false;
+      }
+      const title = normalizeText(card.title).toLowerCase();
+      return !(title.startsWith("версия brief") || title === "brief summary");
+    });
   }
 
   function panelPromptCard(project) {
     const response = currentResponse(project) || {};
     const cards = Array.isArray(response.reply_cards) ? response.reply_cards : [];
+    if (sidePanelMode(project) === "brief_review") {
+      return null;
+    }
     if (["downloads", "preview"].includes(sidePanelMode(project))) {
       return cards.find((card) => ["factory_result", "factory_result_prompt", "download_prompt"].includes(card.card_kind)) || null;
     }
@@ -1727,11 +1751,11 @@
     const mode = sidePanelMode(project);
     dom.sidePanelToggle.hidden = mode === "hidden";
     if (mode === "brief_review") {
-      dom.sidePanelToggle.textContent = "Проверить brief";
+      dom.sidePanelToggle.textContent = "Brief";
     } else if (["downloads", "preview"].includes(mode)) {
-      dom.sidePanelToggle.textContent = "Результат фабрики";
+      dom.sidePanelToggle.textContent = "Результаты";
     } else {
-      dom.sidePanelToggle.textContent = "Brief и файлы";
+      dom.sidePanelToggle.textContent = "Детали";
     }
   }
 
@@ -2072,7 +2096,8 @@
     kind.textContent = "";
     kind.hidden = true;
     title.textContent = card.title || "Раздел brief";
-    body.textContent = card.body_text || "";
+    const bodyText = normalizeText(card.body_text);
+    body.textContent = bodyText.length > 520 ? `${bodyText.slice(0, 517).trimEnd()}…` : bodyText;
     actions.innerHTML = "";
     actions.hidden = true;
     return fragment;
@@ -2081,7 +2106,9 @@
   function renderSidePanel(project) {
     const mode = sidePanelMode(project);
     const open = Boolean(project?.sidePanelOpen) && mode !== "hidden";
+    const fullscreen = open && Boolean(project?.sidePanelFullscreen);
     dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
+    dom.workspaceShell.dataset.panelFullscreen = fullscreen ? "true" : "false";
     dom.sidePanel.hidden = !open;
     dom.sidePanel.dataset.mode = mode;
     if (dom.panelResizer) {
@@ -2098,7 +2125,7 @@
     if (mode === "brief_review") {
       dom.sidePanelEyebrow.textContent = "Проверка brief";
       dom.sidePanelTitle.textContent = "Проверка brief";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь brief и выбери действие: исправить или подтвердить.";
+      dom.sidePanelSummary.textContent = "Проверь summary brief, внеси правки при необходимости и подтверди версию.";
     } else if (mode === "preview") {
       dom.sidePanelEyebrow.textContent = "Результат";
       dom.sidePanelTitle.textContent = primary?.download_name || "Просмотр one-page";
@@ -2114,9 +2141,6 @@
     }
 
     const isBriefReview = mode === "brief_review";
-    if (isBriefReview && !isMobileLayout() && state.panelWidth < PANEL_WIDTH_BRIEF_REVIEW) {
-      updatePanelWidth(PANEL_WIDTH_BRIEF_REVIEW);
-    }
     if (dom.briefEditToggle) {
       dom.briefEditToggle.hidden = !isBriefReview;
       dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Исправить";
@@ -2133,6 +2157,14 @@
     }
     if (dom.briefConfirm) {
       dom.briefConfirm.disabled = state.awaitingResponse;
+    }
+    if (dom.sidePanelFullscreen) {
+      dom.sidePanelFullscreen.hidden = false;
+      dom.sidePanelFullscreen.textContent = fullscreen ? "Свернуть" : "Развернуть";
+      dom.sidePanelFullscreen.setAttribute(
+        "aria-label",
+        fullscreen ? "Свернуть правую панель" : "Развернуть правую панель на весь экран",
+      );
     }
 
     dom.panelCardList.innerHTML = "";
@@ -2213,7 +2245,7 @@
     dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
       dom.composerHelperExample.textContent = helperExampleFor(project);
-      dom.composerHelperExample.hidden = true;
+      dom.composerHelperExample.hidden = !dom.composerHelperExample.textContent;
     }
     dom.composerInput.placeholder = placeholderFor(project);
     dom.composerSubmit.textContent = state.awaitingResponse ? "■" : "↑";
@@ -2228,6 +2260,7 @@
 
   function renderAll() {
     const project = getActiveProject();
+    applySidebarVisibility();
     applySidebarWidth();
     applyPanelWidth();
     renderGateNote();
@@ -2304,6 +2337,7 @@
       normalized === "new project"
       || normalized === "новый проект"
       || normalized === "новый"
+      || normalized === "новый."
       || normalized === "project"
       || normalized === "проект"
       || normalized === "discovery project"
@@ -2331,6 +2365,14 @@
       return "";
     }
     return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function hasBusinessIdeaSignal(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    return BUSINESS_IDEA_SIGNAL_MARKERS.some((marker) => normalized.includes(marker));
   }
 
   function semanticTitleFromText(text) {
@@ -2432,11 +2474,34 @@
     return `${normalizedBase} ${Date.now()}`;
   }
 
+  function dedupeProjectTitles() {
+    const used = new Set();
+    state.projects.forEach((project) => {
+      if (!project || typeof project !== "object") {
+        return;
+      }
+      const base = normalizeText(project.title, DEFAULT_PROJECT_TITLE);
+      let candidate = base;
+      let suffix = 2;
+      while (used.has(candidate.toLowerCase())) {
+        candidate = `${base} ${suffix}`;
+        suffix += 1;
+      }
+      project.title = candidate;
+      used.add(candidate.toLowerCase());
+    });
+  }
+
   function maybeAutonameProject(project, userText, response) {
     if (!project || project.titleEdited) {
       return;
     }
     if (isLowSignalInput(userText)) {
+      return;
+    }
+    const words = normalizeText(userText).split(/\s+/).filter(Boolean);
+    const adequateStart = hasBusinessIdeaSignal(userText) || (normalizeText(userText).length >= 48 && words.length >= 6);
+    if (!adequateStart) {
       return;
     }
     const uiTitle = normalizeText(response?.ui_projection?.display_project_title || response?.ui_projection?.project_title);
@@ -2458,6 +2523,7 @@
       canOverrideExisting
     ) {
       project.title = candidate;
+      dedupeProjectTitles();
     }
   }
 
@@ -2476,6 +2542,7 @@
     }
     project.title = normalized;
     project.titleEdited = true;
+    dedupeProjectTitles();
     project.updatedAt = nowIso();
     persist();
     renderAll();
@@ -2842,7 +2909,7 @@
     if (/^[0-9\s.,!?-]+$/.test(normalized)) {
       return true;
     }
-    if (/^(ок|ага|угу|да|нет|норм|понял|поняла|хз|лол|test|123+|qwe+)$/i.test(normalized)) {
+    if (/^(ок|ага|угу|да|нет|норм|понял|поняла|хз|лол|test|ping|123+|qwe+)$/i.test(normalized)) {
       return true;
     }
     const words = normalized.split(/\s+/).filter(Boolean);
@@ -3159,6 +3226,7 @@
     const panelMode = sidePanelMode(project);
     if (panelMode === "hidden") {
       project.sidePanelOpen = false;
+      project.sidePanelFullscreen = false;
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
     } else if (panelMode !== normalizeText(project.lastPanelMode)) {
@@ -3168,13 +3236,14 @@
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
     }
+    if (panelMode === "hidden") {
+      project.sidePanelFullscreen = false;
+    }
     if (panelMode === "brief_review" && typeof project.briefEditOpen !== "boolean") {
-      project.briefEditOpen = true;
+      project.briefEditOpen = false;
     }
     if (panelMode !== "brief_review") {
       project.briefEditOpen = false;
-    } else if (!project.briefEditOpen) {
-      project.briefEditOpen = true;
     }
     project.lastPanelMode = panelMode;
     project.lastResumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint, project.lastResumeFingerprint);
@@ -3379,6 +3448,7 @@
     if (action === "request_brief_review") {
       if (project && hasPanelContent(project)) {
         project.sidePanelOpen = true;
+        project.briefEditOpen = false;
         project.currentAction = action;
         persist();
         renderAll();
@@ -3386,6 +3456,20 @@
       }
       setProjectAction(project, action);
       dispatchTurn(action, "", { skipUserMessage: true });
+      return;
+    }
+
+    if (action === "request_brief_correction") {
+      if (project) {
+        project.sidePanelOpen = true;
+        project.briefEditOpen = true;
+        persist();
+        renderAll();
+      }
+      setProjectAction(project, action);
+      window.setTimeout(() => {
+        dom.briefEditInput?.focus();
+      }, 0);
       return;
     }
 
@@ -3449,11 +3533,23 @@
           return;
         }
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            updateSidebarWidth(SIDEBAR_WIDTH_DEFAULT, { persist: true });
+          }
           return;
         }
         event.preventDefault();
         const delta = event.key === "ArrowRight" ? 24 : -24;
         updateSidebarWidth(state.sidebarWidth + delta, { persist: true });
+      });
+
+      dom.sidebarResizer.addEventListener("dblclick", (event) => {
+        if (event.button !== 0 || isMobileLayout()) {
+          return;
+        }
+        event.preventDefault();
+        updateSidebarWidth(SIDEBAR_WIDTH_DEFAULT, { persist: true });
       });
 
       window.addEventListener("resize", () => {
@@ -3528,11 +3624,23 @@
           return;
         }
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+          }
           return;
         }
         event.preventDefault();
         const delta = event.key === "ArrowRight" ? 24 : -24;
         updatePanelWidth(state.panelWidth + delta, { persist: true });
+      });
+
+      dom.panelResizer.addEventListener("dblclick", (event) => {
+        if (event.button !== 0 || isMobileLayout()) {
+          return;
+        }
+        event.preventDefault();
+        updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
       });
     }
 
@@ -3540,6 +3648,17 @@
       createNewProject({ activate: true });
       focusComposerSoon();
     });
+
+    if (dom.sidebarToggle) {
+      dom.sidebarToggle.addEventListener("click", () => {
+        state.sidebarVisible = !state.sidebarVisible;
+        if (!state.sidebarVisible) {
+          closeProjectActionsMenu();
+        }
+        persist();
+        renderAll();
+      });
+    }
 
     dom.projectMenu.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -3575,9 +3694,24 @@
         return;
       }
       project.sidePanelOpen = !project.sidePanelOpen;
+      if (!project.sidePanelOpen) {
+        project.sidePanelFullscreen = false;
+      }
       persist();
       renderAll();
     });
+
+    if (dom.sidePanelFullscreen) {
+      dom.sidePanelFullscreen.addEventListener("click", () => {
+        const project = getActiveProject();
+        if (!project || !project.sidePanelOpen || !hasPanelContent(project)) {
+          return;
+        }
+        project.sidePanelFullscreen = !project.sidePanelFullscreen;
+        persist();
+        renderAll();
+      });
+    }
 
     dom.sidePanelClose.addEventListener("click", () => {
       const project = getActiveProject();
@@ -3585,6 +3719,7 @@
         return;
       }
       project.sidePanelOpen = false;
+      project.sidePanelFullscreen = false;
       persist();
       renderAll();
     });
@@ -3674,7 +3809,11 @@
     });
 
     dom.composerInput.addEventListener("keydown", (event) => {
-      if (state.awaitingResponse || event.key !== "Enter" || event.shiftKey || event.isComposing) {
+      if (state.awaitingResponse || event.key !== "Enter" || event.isComposing) {
+        return;
+      }
+      if (!event.shiftKey) {
+        // Enter добавляет новую строку (нативное поведение textarea).
         return;
       }
       event.preventDefault();
