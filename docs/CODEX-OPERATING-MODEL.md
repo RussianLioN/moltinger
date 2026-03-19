@@ -92,12 +92,12 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 
 ## Worktree Naming Policy
 
-1. `/Users/rl/coding/moltinger` remains the canonical `main` worktree.
+1. `/Users/rl/coding/moltinger/moltinger-main` is the canonical `main` worktree.
 2. Any substantial change should use a dedicated worktree and branch.
 3. Preferred worktree path pattern:
 
 ```bash
-/Users/rl/coding/moltinger-<branch-slug>
+/Users/rl/coding/moltinger/moltinger-<branch-slug>
 ```
 
 4. `branch-slug` should be the branch name with `/` replaced by `-`.
@@ -107,6 +107,16 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 8. Do not treat canonical `main` or an ordinary feature branch as the default publish path for topology snapshots.
 9. `/tmp` worktrees are acceptable for disposable or emergency lanes, but the preferred long-lived pattern is the sibling path above.
 10. If the topology registry disagrees with live `git` state, live `git` state wins.
+
+### Path Relocation Recovery
+
+If main/worktree directories were moved manually and `codex resume` stops showing expected sessions without `--all`, run:
+
+```bash
+scripts/codex-session-path-repair.sh --apply --repair-git-worktrees
+```
+
+This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived session headers) and repairs git worktree links for the relocated directories.
 
 ## Beads Ownership Policy
 

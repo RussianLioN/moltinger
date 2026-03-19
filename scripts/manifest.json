@@ -90,6 +90,20 @@
         "codex-hotfix"
       ]
     },
+    "codex-session-path-repair.sh": {
+      "version": "1.0.0",
+      "description": "Repair Codex resume path filtering after manual repository/worktree relocation",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "git",
+        "jq",
+        "sqlite3"
+      ],
+      "provides": [
+        "codex-session-path-repair"
+      ]
+    },
     "beads-resolve-db.sh": {
       "version": "1.0.0",
       "description": "Resolve whether plain bd may use the current worktree-local tracker, pass through, or fail closed before root fallback",
