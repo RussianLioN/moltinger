@@ -2394,6 +2394,29 @@
     return candidate;
   }
 
+  function ensureUniqueProjectTitle(baseTitle, projectId) {
+    const normalizedBase = normalizeText(baseTitle);
+    if (!normalizedBase) {
+      return normalizedBase;
+    }
+    const taken = new Set(
+      state.projects
+        .filter((item) => item.id !== projectId)
+        .map((item) => normalizeText(item.title).toLowerCase())
+        .filter(Boolean),
+    );
+    if (!taken.has(normalizedBase.toLowerCase())) {
+      return normalizedBase;
+    }
+    for (let suffix = 2; suffix <= 99; suffix += 1) {
+      const candidate = `${normalizedBase} ${suffix}`;
+      if (!taken.has(candidate.toLowerCase())) {
+        return candidate;
+      }
+    }
+    return `${normalizedBase} ${Date.now()}`;
+  }
+
   function maybeAutonameProject(project, userText, response) {
     if (!project || project.titleEdited) {
       return;
@@ -2406,7 +2429,7 @@
     const uiCandidate = !isGenericProjectTitle(rawUiCandidate) ? rawUiCandidate : "";
     const rawUserCandidate = prettifyTitle(userText);
     const userCandidate = !isGenericProjectTitle(rawUserCandidate) ? rawUserCandidate : "";
-    const candidate = userCandidate || uiCandidate;
+    const candidate = ensureUniqueProjectTitle(userCandidate || uiCandidate, project.id);
     if (!candidate) {
       return;
     }
