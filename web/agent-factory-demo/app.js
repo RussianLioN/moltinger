@@ -1665,17 +1665,6 @@
       if (messageSignature(last) && messageSignature(last) === messageSignature(message)) {
         continue;
       }
-      if (normalizeText(message.role) === "agent") {
-        const body = normalizeText(message.body);
-        if (body) {
-          const hasRecentSameAgentBody = project.timeline
-            .slice(Math.max(0, project.timeline.length - 10))
-            .some((existing) => normalizeText(existing.role) === "agent" && normalizeText(existing.body) === body);
-          if (hasRecentSameAgentBody) {
-            continue;
-          }
-        }
-      }
       if (isDuplicateAgentQuestion(project, message)) {
         continue;
       }
