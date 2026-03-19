@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-14
-**Total Lessons**: 29
+**Generated**: 2026-03-20
+**Total Lessons**: 31
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (8 lessons)
+#### P1 (9 lessons)
+- [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
 - [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
 - [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
@@ -38,7 +39,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (7 lessons)
+#### P3 (8 lessons)
+- [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
@@ -54,7 +56,9 @@
 ### By Category
 
 
-#### cicd (7 lessons)
+#### cicd (9 lessons)
+- [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
+- [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
 - [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
@@ -99,10 +103,10 @@
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `clawdiy` (8 lessons)
+- `gitops` (7 lessons)
 - `openclaw` (6 lessons)
-- `gitops` (6 lessons)
+- `github-actions` (6 lessons)
 - `rca` (5 lessons)
-- `github-actions` (5 lessons)
 - `docker` (5 lessons)
 - `deploy` (5 lessons)
 - `topology-registry` (4 lessons)
@@ -114,10 +118,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 29 |
-| Critical (P0/P1) | 9 |
+| Total Lessons | 31 |
+| Critical (P0/P1) | 10 |
 | Categories | 5 |
-| Unique Tags | 74 |
+| Unique Tags | 80 |
 
 ---
 
