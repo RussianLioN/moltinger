@@ -94,6 +94,16 @@ BRIEF_CONFIRMATION_PROMPT = (
 )
 HANDOFF_DOWNSTREAM_TARGET = "specs/020-agent-factory-prototype"
 HANDOFF_NEXT_STAGE = "concept_pack_generation"
+EXPECTED_OUTPUT_HINT_MARKERS = (
+    "pdf",
+    "one-page",
+    "onepage",
+    "summary",
+    "презентац",
+    "документ",
+    "файл",
+    "карточк",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -226,6 +236,13 @@ def normalized_answers_from_payload(payload: dict[str, Any], raw_idea: str) -> d
 
     if raw_idea and "problem" not in answers:
         answers["problem"] = raw_idea
+
+    if "expected_outputs" not in answers:
+        desired_outcome = normalize_text(answers.get("desired_outcome"))
+        if desired_outcome:
+            lowered = desired_outcome.lower()
+            if any(marker in lowered for marker in EXPECTED_OUTPUT_HINT_MARKERS):
+                answers["expected_outputs"] = [desired_outcome]
 
     return answers
 

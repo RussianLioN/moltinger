@@ -710,6 +710,41 @@
     return confirmationMarkers.some((marker) => normalized.includes(marker));
   }
 
+  function isLikelyBriefCorrectionText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    const markers = [
+      "правк",
+      "исправ",
+      "уточни",
+      "доработ",
+      "переоткрой",
+      "переоткры",
+      "измени",
+      "обнови brief",
+      "нужно изменить",
+    ];
+    return markers.some((marker) => normalized.includes(marker));
+  }
+
+  function isLikelyProductionSimulationRequestText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    const markers = [
+      "имитац",
+      "симуляц",
+      "запусти цифров",
+      "цифровой сущности",
+      "production simulation",
+      "стартовый результат",
+    ];
+    return markers.some((marker) => normalized.includes(marker));
+  }
+
   function resolveComposerAction(project, text) {
     const requestedAction = normalizeText(project?.currentAction, "submit_turn");
     const normalizedText = normalizeText(text);
@@ -717,26 +752,55 @@
       return requestedAction;
     }
     const status = currentStatus(project);
+    const response = currentResponse(project) || {};
+    const hasDownloadArtifacts = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
+    const postBriefMode = hasDownloadArtifacts || isDownloadsReadyStatus(status) || status === "confirmed";
+    const simulationRequest = isLikelyProductionSimulationRequestText(normalizedText);
+    const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
+    const knownComposerActions = new Set([
+      "submit_turn",
+      "request_status",
+      "request_brief_review",
+      "request_brief_correction",
+      "confirm_brief",
+      "reopen_brief",
+    ]);
+
+    if (simulationRequest && postBriefMode) {
+      return "request_status";
+    }
+    if (postBriefMode && !knownComposerActions.has(requestedAction)) {
+      return correctionRequest ? "reopen_brief" : "request_status";
+    }
     if (requestedAction === "confirm_brief") {
-      return isLikelyBriefConfirmationText(normalizedText) ? "confirm_brief" : "request_brief_correction";
+      if (isLikelyBriefConfirmationText(normalizedText)) {
+        return "confirm_brief";
+      }
+      return correctionRequest ? "request_brief_correction" : "request_status";
     }
     if (requestedAction === "request_status") {
       if (["awaiting_confirmation", "reopened"].includes(status)) {
-        return isLikelyBriefConfirmationText(normalizedText) ? "confirm_brief" : "request_brief_correction";
+        if (isLikelyBriefConfirmationText(normalizedText)) {
+          return "confirm_brief";
+        }
+        return correctionRequest ? "request_brief_correction" : "request_status";
       }
       if (isDownloadsReadyStatus(status) || status === "confirmed") {
-        return "reopen_brief";
+        return correctionRequest ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
     }
     if (requestedAction === "request_brief_review") {
       if (["awaiting_confirmation", "reopened"].includes(status)) {
-        return "request_brief_correction";
+        return correctionRequest ? "request_brief_correction" : "request_status";
       }
       if (isDownloadsReadyStatus(status) || status === "confirmed") {
-        return "reopen_brief";
+        return correctionRequest ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
+    }
+    if (requestedAction === "submit_turn" && (isDownloadsReadyStatus(status) || status === "confirmed")) {
+      return correctionRequest ? "reopen_brief" : "request_status";
     }
     return requestedAction;
   }
@@ -801,7 +865,7 @@
       return "Опиши, что нужно доуточнить, чтобы переоткрыть brief.";
     }
     if (isDownloadsReadyStatus(status) || status === "confirmed") {
-      return "Если нужны правки, опиши их, и я переоткрою brief.";
+      return "Опиши правку для brief или попроси имитацию запуска цифрового сотрудника.";
     }
     if (topic === "problem") {
       return "Опиши ключевую бизнес-проблему и почему это важно сейчас.";
@@ -855,7 +919,7 @@
       return "Например: нужно доуточнить входные данные и сценарии исключений.";
     }
     if (isDownloadsReadyStatus(status) || status === "confirmed") {
-      return "Например: нужно доработать brief перед повторной генерацией материалов.";
+      return "Например: нужно доработать brief по блоку рисков. Или: запусти имитацию цифрового сотрудника на текущих данных.";
     }
     if (topic === "target_users" || /пользовател/i.test(question)) {
       return "Например: пользователи — члены кредитного комитета и клиентская служба.";

@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from copy import deepcopy
 from html import unescape
@@ -141,6 +142,25 @@ REPEAT_ACK_MARKERS = (
     "неправильно понимаю",
     "already answered",
 )
+BRIEF_CORRECTION_TEXT_MARKERS = (
+    "правк",
+    "исправ",
+    "уточни",
+    "доработ",
+    "переоткрой",
+    "переоткры",
+    "измени",
+    "обнови brief",
+    "нужно изменить",
+)
+PRODUCTION_SIMULATION_TEXT_MARKERS = (
+    "имитац",
+    "симуляц",
+    "запусти цифров",
+    "цифровой сущности",
+    "production simulation",
+    "стартовый результат",
+)
 REDACTION_ACK_MARKERS = (
     "обезлич",
     "без реквизит",
@@ -244,6 +264,18 @@ ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
     },
 }
 ARCHITECT_TOPIC_ORDER = list(ARCHITECT_TOPIC_FRAMES.keys())
+VALID_WEB_UI_ACTIONS = {
+    "start_project",
+    "submit_turn",
+    "request_status",
+    "request_brief_review",
+    "request_brief_correction",
+    "confirm_brief",
+    "reopen_brief",
+    "download_artifact",
+    "request_demo_access",
+    "submit_access_token",
+}
 LLM_DECISION_PROMPT = """Ты фабричный агент-архитектор Moltis.
 Текущий этап: discovery требований.
 
@@ -1038,6 +1070,20 @@ def is_text_brief_confirmation(user_text: str) -> bool:
     return any(marker in normalized for marker in CONFIRM_BRIEF_TEXT_MARKERS)
 
 
+def is_likely_brief_correction_text(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in BRIEF_CORRECTION_TEXT_MARKERS)
+
+
+def is_production_simulation_request_text(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in PRODUCTION_SIMULATION_TEXT_MARKERS)
+
+
 def has_redaction_acknowledgement(user_text: str) -> bool:
     normalized = normalize_text(user_text).lower()
     if not normalized:
@@ -1295,7 +1341,7 @@ def context_hint_for_topic(
         suffix = " и ещё файлы" if len(upload_names) > 2 else ""
         return f"Входные примеры уже приложены файлами: {listed}{suffix}."
     if next_topic == "expected_outputs" and desired_outcome:
-        return "Бизнес-эффект уже зафиксирован."
+        return "Уточним финальный формат результата для пользователя."
     if next_topic == "constraints" and desired_outcome:
         return "Чтобы решение было безопасным и выполнимым, уточним ограничения."
     if next_topic == "success_metrics" and desired_outcome:
@@ -1353,12 +1399,22 @@ def sanitize_architect_question_text(value: Any) -> str:
             continue
         if re.match(r"(?i)^например[:\s]", compact):
             continue
+        if re.match(r"(?i)^(бизнес-эффект|проблему|роли|пользователей|текущий процесс|ожидаемый выход|ограничения|метрики)\s+.*зафикс", compact):
+            continue
         lines.append(compact)
     while lines and lines[0] == "":
         lines.pop(0)
     while lines and lines[-1] == "":
         lines.pop()
-    return "\n".join(lines).strip()
+    cleaned = "\n".join(lines).strip()
+    if not cleaned:
+        return ""
+    if "?" in cleaned:
+        segments = [segment.strip() for segment in re.split(r"(?<=[.?!])\s+", cleaned) if normalize_text(segment)]
+        for segment in reversed(segments):
+            if "?" in segment:
+                return segment
+    return cleaned
 
 
 def llm_upload_context(uploaded_files: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -1442,6 +1498,12 @@ def llm_adaptive_architect_question(
     returned_question = sanitize_architect_question_text(decision_data.get("next_question"))
     returned_low_signal = bool(decision_data.get("low_signal"))
     summary = normalize_text(decision_data.get("topic_summary"))
+    if re.search(r"example-case-\d+", returned_question, re.IGNORECASE) and not re.search(
+        r"example-case-\d+",
+        user_text,
+        re.IGNORECASE,
+    ):
+        returned_question = ""
 
     current_pos = topic_position(topic_now)
     expected_pos = topic_position(expected_next)
@@ -1567,8 +1629,8 @@ def bridge_repeat_answer(
             business_effect = normalize_text(summaries.get("desired_outcome"))
             if business_effect:
                 rephrased = (
-                    f"Понял. Бизнес-эффект уже зафиксирован: {shorten_text(business_effect, 90)}.\n\n"
-                    "Теперь нужен именно выход для пользователя: какой конкретный файл, материал или экран агент должен выдавать после обработки?"
+                    f"Понял. Зафиксировал целевой эффект: {shorten_text(business_effect, 90)}.\n\n"
+                    "Уточни именно формат выхода для пользователя: какой конкретный файл, материал или экран агент должен выдавать после обработки?"
                 )
                 return topic, rephrased, True, True, "repeat_marker_rephrase"
             rephrased = (
@@ -1998,26 +2060,42 @@ def build_discovery_request(
     request["project_key"] = normalize_text(pointer.get("project_key")) or normalize_text(web_demo_session.get("active_project_key"))
     low_signal_submission = False
     current_status = normalize_text(request.get("status"))
+    if ui_action not in VALID_WEB_UI_ACTIONS:
+        ui_action = "request_status" if current_status in {"confirmed", "download_ready"} else "submit_turn"
 
     if ui_action == "request_status" and discovery_state:
-        if combined_text and (
-            is_confirmation_stage(
-                status=current_status,
-                next_action=current_next_action,
-                current_topic=current_topic,
-                next_topic=runtime_next_topic,
-            )
-            or current_status in {"confirmed", "download_ready"}
-        ):
+        in_confirmation = is_confirmation_stage(
+            status=current_status,
+            next_action=current_next_action,
+            current_topic=current_topic,
+            next_topic=runtime_next_topic,
+        )
+        in_download_ready = current_status in {"confirmed", "download_ready"}
+        if combined_text and (in_confirmation or in_download_ready):
+            if in_confirmation and is_text_brief_confirmation(combined_text):
+                request["confirmation_reply"] = build_confirmation_reply(combined_text, requester_identity)
+                append_user_turn(request, combined_text, "brief_confirmation", now)
+                return request, False, low_signal_submission
+            if is_likely_brief_correction_text(combined_text):
+                request["brief_feedback_text"] = combined_text
+                inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
+                if inferred_updates:
+                    request["brief_section_updates"] = inferred_updates
+                append_user_turn(request, combined_text, "brief_feedback", now)
+                return request, False, low_signal_submission
+        return request, True, low_signal_submission
+
+    if ui_action in {"request_brief_review"} and discovery_state:
+        return request, True, low_signal_submission
+
+    if ui_action == "submit_turn" and discovery_state and current_status in {"confirmed", "download_ready"}:
+        if combined_text and is_likely_brief_correction_text(combined_text):
             request["brief_feedback_text"] = combined_text
             inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
             if inferred_updates:
                 request["brief_section_updates"] = inferred_updates
-            append_user_turn(request, combined_text, "brief_confirmation", now)
+            append_user_turn(request, combined_text, "brief_feedback", now)
             return request, False, low_signal_submission
-        return request, True, low_signal_submission
-
-    if ui_action in {"request_brief_review"} and discovery_state:
         return request, True, low_signal_submission
 
     if ui_action == "start_project":
@@ -2418,7 +2496,10 @@ def composer_helper_example(*, next_question: str, current_topic: str, adapter_s
     if status in {"awaiting_confirmation", "reopened"}:
         return "Например: подтверждаю brief. Или: добавь отдельные правила для срочных заявок."
     if status in {"confirmed", "download_ready"}:
-        return "Например: материалы готовы, но нужно уточнить ограничения и вернуть brief на доработку."
+        return (
+            "Например: запусти имитацию цифрового сотрудника на моих данных. "
+            "Или: нужно доработать brief по ограничениям."
+        )
     if topic == "target_users" or "пользоват" in question.lower():
         return "Например: пользователи — члены кредитного комитета и клиентская служба."
     if topic == "current_workflow" or "как этот процесс" in question.lower():
@@ -2558,10 +2639,13 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     discovery_state = payload.get("discovery_runtime_state", {})
     if not isinstance(discovery_state, dict):
         discovery_state = {}
+    saved_discovery_state = (
+        saved_session.get("discovery_runtime_state", {})
+        if isinstance(saved_session.get("discovery_runtime_state"), dict)
+        else {}
+    )
     if not discovery_state:
-        saved_state = saved_session.get("discovery_runtime_state", {})
-        if isinstance(saved_state, dict):
-            discovery_state = deepcopy(saved_state)
+        discovery_state = deepcopy(saved_discovery_state)
     seeded_discovery_session = (
         discovery_state.get("discovery_session", {})
         if isinstance(discovery_state.get("discovery_session"), dict)
@@ -2573,6 +2657,24 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
 
     requester_identity = normalize_requester_identity(payload, discovery_state)
     envelope = normalize_web_conversation_envelope(payload, discovery_state, now)
+    action_hint = normalize_text(envelope.get("ui_action"))
+    user_text_hint = normalize_text(envelope.get("user_text"))
+    saved_status_hint = normalize_text(saved_discovery_state.get("status"))
+    if saved_discovery_state:
+        prefer_saved_runtime = action_hint in {"request_status", "download_artifact", "request_brief_review"}
+        prefer_saved_runtime = prefer_saved_runtime or (
+            action_hint in {"submit_turn", "confirm_brief", "reopen_brief"}
+            and saved_status_hint in {"awaiting_confirmation", "reopened", "confirmed", "download_ready"}
+        )
+        if prefer_saved_runtime:
+            discovery_state = deepcopy(saved_discovery_state)
+            if (
+                action_hint == "submit_turn"
+                and saved_status_hint in {"confirmed", "download_ready"}
+                and not is_likely_brief_correction_text(user_text_hint)
+                and not is_text_brief_confirmation(user_text_hint)
+            ):
+                envelope["ui_action"] = "request_status"
     web_demo_session = normalize_web_demo_session(payload, saved_session, discovery_state, requester_identity, now)
     pointer = normalize_project_pointer(payload, saved_session, discovery_state, web_demo_session, envelope, now)
     uploaded_files, turn_uploaded_files = materialize_uploaded_files(
@@ -2653,13 +2755,26 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         if isinstance(runtime_state.get("production_simulation"), dict)
         else {}
     )
+    simulation_requested = is_production_simulation_request_text(normalize_text(envelope.get("user_text")))
+    primary_artifact_kind = "one_page_summary"
+    if simulation_requested and any(normalize_text(item.get("artifact_kind")) == "production_simulation" for item in download_artifacts):
+        primary_artifact_kind = "production_simulation"
     next_question = (
         (
-            "Concept pack готов. Цифровой сотрудник зарегистрирован в реестре, "
-            "стартовый запрос пользователя выполнен в имитации production. "
-            "Можно скачать project doc, agent spec, presentation и отчёт по имитации."
+            (
+                "Имитация запуска выполнена. Открой отчёт production simulation: там есть регистрация цифрового сотрудника "
+                "в реестре и результат выполнения стартового запроса на боевых данных."
+                if simulation_requested and primary_artifact_kind == "production_simulation"
+                else "Concept pack готов. Цифровой сотрудник зарегистрирован в реестре, "
+                "стартовый запрос пользователя выполнен в имитации production. "
+                "Можно скачать project doc, agent spec, presentation и отчёт по имитации."
+            )
             if normalize_text(production_simulation.get("status")) == "completed"
-            else "Concept pack готов. Можно скачать project doc, agent spec и presentation из этой browser session."
+            else (
+                "Запрос на имитацию принят. Открой отчёт production simulation, как только он станет доступен."
+                if simulation_requested and primary_artifact_kind == "production_simulation"
+                else "Concept pack готов. Можно скачать project doc, agent spec и presentation из этой browser session."
+            )
         )
         if download_artifacts
         else normalize_text(runtime_state.get("next_question"))
@@ -2916,6 +3031,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             ),
             "project_stage_label": normalize_text(status_snapshot.get("user_visible_status_label")),
             "side_panel_mode": side_panel_mode(reply_cards, download_artifacts),
+            "primary_artifact": primary_artifact_kind if download_artifacts else "",
             "composer_helper_example": composer_helper_example(
                 next_question=next_question,
                 current_topic=envelope["normalized_payload"]["current_topic"],
@@ -3081,7 +3197,27 @@ def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
                 if not session:
                     render_json(self, {"status": "error", "error": "session_not_found"}, status_code=404)
                     return
-                render_json(self, hydrate_saved_session_response(state_root, session))
+                pointer = load_saved_pointer(state_root, session_id)
+                status_payload = {
+                    "web_demo_session": {
+                        "web_demo_session_id": session_id,
+                    },
+                    "browser_project_pointer": {
+                        "project_key": normalize_text(pointer.get("project_key")) or normalize_text(
+                            session.get("browser_project_pointer", {}).get("project_key")
+                        ),
+                    },
+                    "web_conversation_envelope": {
+                        "request_id": f"session-fetch-{int(time.time() * 1000)}",
+                        "ui_action": "request_status",
+                        "user_text": "",
+                        "linked_discovery_session_id": session_id,
+                    },
+                }
+                try:
+                    render_json(self, handle_turn_payload(status_payload, state_root=state_root))
+                except Exception:
+                    render_json(self, hydrate_saved_session_response(state_root, session))
                 return
             if parsed.path == "/api/download":
                 session_id = normalize_text(parse_qs(parsed.query).get("session_id", [""])[0])

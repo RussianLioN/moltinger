@@ -115,6 +115,54 @@ run_integration_local_agent_factory_web_flow_tests() {
         test_fail "Browser adapter should stay operational when LLM mode is enabled without provider credentials"
     fi
 
+    test_start "integration_local_agent_factory_web_flow_skips_duplicate_expected_outputs_when_already_captured_in_business_effect"
+    if jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-101",
+          "request_id": "web-request-claims-routing-101",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Оператор первой линии и руководитель смены."
+        } | del(.demo_access_grant)' "$tmpdir/start-out.json" >"$tmpdir/dedupe-turn-1.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/dedupe-turn-1.json" --state-root "$tmpdir/state-dedupe" --output "$tmpdir/dedupe-turn-1-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-102",
+          "request_id": "web-request-claims-routing-102",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Сейчас данные собираются вручную, one-page готовится в Word, затем экспортируется в PDF."
+        } | del(.demo_access_grant)' "$tmpdir/dedupe-turn-1-out.json" >"$tmpdir/dedupe-turn-2.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/dedupe-turn-2.json" --state-root "$tmpdir/state-dedupe" --output "$tmpdir/dedupe-turn-2-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-103",
+          "request_id": "web-request-claims-routing-103",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "На выходе нужен готовый one-page PDF с рекомендацией по решению для кредитного комитета."
+        } | del(.demo_access_grant)' "$tmpdir/dedupe-turn-2-out.json" >"$tmpdir/dedupe-turn-3.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/dedupe-turn-3.json" --state-root "$tmpdir/state-dedupe" --output "$tmpdir/dedupe-turn-3-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-104",
+          "request_id": "web-request-claims-routing-104",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Агент должен помогать клиентскому менеджеру перед заседанием комитета."
+        } | del(.demo_access_grant)' "$tmpdir/dedupe-turn-3-out.json" >"$tmpdir/dedupe-turn-4.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/dedupe-turn-4.json" --state-root "$tmpdir/state-dedupe" --output "$tmpdir/dedupe-turn-4-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-105",
+          "request_id": "web-request-claims-routing-105",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Типовой вход: CSV-выгрузка по клиенту."
+        } | del(.demo_access_grant)' "$tmpdir/dedupe-turn-4-out.json" >"$tmpdir/dedupe-turn-5.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/dedupe-turn-5.json" --state-root "$tmpdir/state-dedupe" --output "$tmpdir/dedupe-turn-5-out.json" >/dev/null; then
+        assert_eq "constraints" "$(jq -r '.next_topic' "$tmpdir/dedupe-turn-5-out.json")" "Expected outputs question should be skipped when business effect already captured explicit output format"
+        assert_contains "$(jq -r '.discovery_runtime_state.requirement_topics[] | select(.topic_name == "expected_outputs") | .summary' "$tmpdir/dedupe-turn-5-out.json")" "one-page PDF" "Expected outputs summary should be auto-filled from explicit business effect output"
+        test_pass
+    else
+        test_fail "Browser adapter should dedupe expected outputs when desired outcome already includes concrete output artifact"
+    fi
+
     test_start "integration_local_agent_factory_web_flow_syncs_topic_after_upload_bridge_and_handles_repeat_meta_reply"
     if jq '.web_conversation_envelope = {
           "web_conversation_envelope_id": "web-envelope-claims-routing-005",
@@ -173,17 +221,38 @@ run_integration_local_agent_factory_web_flow_tests() {
           "ui_action": "submit_turn",
           "user_text": "PDF с рекомендацией."
         } | del(.demo_access_grant)' "$tmpdir/turn-repeat-meta-out.json" >"$tmpdir/turn-expected-output-answer.json" &&
-        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-expected-output-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-expected-output-answer-out.json" >/dev/null; then
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-expected-output-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-expected-output-answer-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-011",
+          "request_id": "web-request-claims-routing-011",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Нельзя использовать персональные данные и нужно сохранять аудит изменений."
+        } | del(.demo_access_grant)' "$tmpdir/turn-expected-output-answer-out.json" >"$tmpdir/turn-constraints-answer.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-constraints-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-constraints-answer-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-claims-routing-012",
+          "request_id": "web-request-claims-routing-012",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Сократить время подготовки на 50% и снизить долю ошибок в one-page до 2%."
+        } | del(.demo_access_grant)' "$tmpdir/turn-constraints-answer-out.json" >"$tmpdir/turn-success-metrics-answer.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-success-metrics-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-success-metrics-answer-out.json" >/dev/null; then
         assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/turn-upload-out.json")" "Upload bridge should move discovery to expected outputs topic"
         assert_eq "expected_outputs" "$(jq -r '.web_conversation_envelope.normalized_payload.current_topic' "$tmpdir/turn-upload-out.json")" "Normalized payload topic should stay synchronized after upload bridge"
         assert_eq "expected_outputs" "$(jq -r '.discovery_runtime_state.discovery_session.current_topic' "$tmpdir/turn-upload-out.json")" "Discovery session current topic should stay synchronized after upload bridge"
-        assert_contains "$(jq -r '.next_question' "$tmpdir/turn-repeat-meta-out.json")" "Бизнес-эффект уже зафиксирован" "Repeat marker for expected outputs should produce a semantic rephrase instead of looping back"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/turn-repeat-meta-out.json")" "Зафиксировал целевой эффект" "Repeat marker for expected outputs should produce a semantic rephrase instead of looping back"
         assert_eq "repeat_marker_rephrase" "$(jq -r '.ui_projection.question_source' "$tmpdir/turn-repeat-meta-out.json")" "Repeat marker branch should be visible in UI projection source"
         assert_eq "constraints" "$(jq -r '.next_topic' "$tmpdir/turn-expected-output-answer-out.json")" "Short but valid expected output answer should advance to constraints"
         assert_contains "$(jq -r '.discovery_runtime_state.requirement_topics[] | select(.topic_name == "expected_outputs") | .summary' "$tmpdir/turn-expected-output-answer-out.json")" "PDF с рекомендацией." "Expected outputs topic should capture the short valid answer without regressing to partial status"
+        assert_eq "success_metrics" "$(jq -r '.next_topic' "$tmpdir/turn-constraints-answer-out.json")" "Constraints answer should move flow to success metrics"
+        assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/turn-success-metrics-answer-out.json")" "Success metrics answer should advance flow to brief confirmation stage"
+        assert_eq "request_explicit_confirmation" "$(jq -r '.next_action' "$tmpdir/turn-success-metrics-answer-out.json")" "After success metrics the next action should request explicit brief confirmation"
+        assert_true "$(jq -r '[.reply_cards[] | select(.card_kind == "confirmation_prompt")] | length == 1' "$tmpdir/turn-success-metrics-answer-out.json")" "Confirmation stage should include explicit confirmation prompt card"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/turn-success-metrics-answer-out.json")" "подтверди" "Confirmation stage question should explicitly ask for brief confirmation"
         test_pass
     else
-        test_fail "Browser adapter should bridge uploads, handle repeat meta-replies, and accept short valid expected output answers"
+        test_fail "Browser adapter should bridge uploads, handle repeat meta-replies, and complete discovery flow up to explicit brief confirmation"
     fi
 
     generate_report

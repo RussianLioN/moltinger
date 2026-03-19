@@ -88,6 +88,52 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Browser reopen should preserve confirmation history and return the user to a new reviewable brief version"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_accepts_text_confirmation_from_submit_turn"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/state" --output "$tmpdir/text-confirm-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005",
+          "request_id": "web-request-brief-review-005",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Подтверждаю brief, можно передавать дальше."
+        } | del(.demo_access_grant)' "$tmpdir/text-confirm-review-out.json" >"$tmpdir/text-confirm-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/text-confirm-source.json" --state-root "$tmpdir/state" --output "$tmpdir/text-confirmed-out.json" >/dev/null; then
+        assert_eq "confirmed" "$(jq -r '.status' "$tmpdir/text-confirmed-out.json")" "Text confirmation from submit_turn should finalize the brief"
+        assert_eq "confirmed" "$(jq -r '.discovery_runtime_state.requirement_brief.status' "$tmpdir/text-confirmed-out.json")" "Runtime brief should be marked confirmed after text confirmation"
+        assert_eq "start_concept_pack_handoff" "$(jq -r '.next_action' "$tmpdir/text-confirmed-out.json")" "Text confirmation should move flow to handoff action"
+        assert_contains "$(jq -r '.discovery_runtime_state.confirmation_snapshot.confirmation_text' "$tmpdir/text-confirmed-out.json")" "Подтверждаю brief" "Confirmation snapshot should keep the textual user confirmation"
+        test_pass
+    else
+        test_fail "Browser flow should map submit_turn text confirmation to confirm_brief behavior"
+    fi
+
+    test_start "integration_local_agent_factory_web_confirmation_keeps_download_mode_for_simulation_requests_after_confirm"
+    if jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-006",
+          "request_id": "web-request-brief-review-006",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_status",
+          "user_text": ""
+        } | del(.demo_access_grant)' "$tmpdir/confirmed-out.json" >"$tmpdir/download-ready-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/download-ready-source.json" --state-root "$tmpdir/state" --output "$tmpdir/download-ready-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-007",
+          "request_id": "web-request-brief-review-007",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Запусти имитацию производства цифровой сущности и покажи стартовый результат."
+        } | del(.demo_access_grant)' "$tmpdir/download-ready-out.json" >"$tmpdir/simulation-request-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/simulation-request-source.json" --state-root "$tmpdir/state" --output "$tmpdir/simulation-request-out.json" >/dev/null; then
+        assert_eq "download_ready" "$(jq -r '.status' "$tmpdir/simulation-request-out.json")" "Simulation request after confirmation should stay in download-ready mode"
+        assert_eq "download_artifact" "$(jq -r '.next_action' "$tmpdir/simulation-request-out.json")" "Simulation request should keep artifact download action as the next step"
+        assert_eq "downloads" "$(jq -r '.ui_projection.side_panel_mode' "$tmpdir/simulation-request-out.json")" "Side panel should remain in downloads mode after simulation request"
+        assert_eq "$(jq -r '.discovery_runtime_state.requirement_brief.version' "$tmpdir/download-ready-out.json")" "$(jq -r '.discovery_runtime_state.requirement_brief.version' "$tmpdir/simulation-request-out.json")" "Simulation request should not reopen brief or bump brief version"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/simulation-request-out.json")" "Имитация" "Simulation request response should return simulation-focused status message"
+        test_pass
+    else
+        test_fail "Simulation request in post-handoff mode should not reopen brief review"
+    fi
+
     generate_report
 }
 
