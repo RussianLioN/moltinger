@@ -24,7 +24,6 @@ on:
         type: choice
         options:
           - production
-          - staging
       repair_server_checkout:
         description: 'Capture evidence and reconcile a dirty /opt/moltinger checkout before deploy (workflow_dispatch only)'
         required: false
@@ -334,7 +333,8 @@ jobs:
 
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_VERSION="${GITHUB_REF#refs/tags/}"
-            if [ "$TAG_VERSION" != "$VERSION" ]; then
+            NORMALIZED_TAG_VERSION="${TAG_VERSION#v}"
+            if [ "$NORMALIZED_TAG_VERSION" != "$VERSION" ]; then
               echo "::error::Git tag $TAG_VERSION does not match tracked Moltis version $VERSION"
               exit 1
             fi
@@ -357,7 +357,12 @@ jobs:
             exit 0
           fi
 
-          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+          if [ "$TARGET_ENV" != "production" ]; then
+            echo "::error::Deploy Moltis workflow supports production target only."
+            exit 1
+          fi
+
+          if [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
             echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
             exit 1
           fi

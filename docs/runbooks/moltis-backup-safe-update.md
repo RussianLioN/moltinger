@@ -29,6 +29,7 @@ Operational policy in this repository:
 - Do not update Moltis by editing files directly on the server.
 - Do not use `sed` on the server to bump image tags.
 - Do not pin a GitHub release tag unless the matching GHCR container tag is actually published.
+- Do not keep a leading `v` in tracked GHCR tags (use `0.10.18`, not `v0.10.18`).
 - Do not pull or restart a new Moltis image without a fresh pre-update backup.
 - Do not continue rollout if restore-check fails for that fresh backup.
 - Do not treat "previous image exists" as sufficient rollback evidence by itself.
@@ -111,6 +112,8 @@ Preferred helper:
 GitHub Actions path:
 
 - `.github/workflows/deploy.yml`
+- `workflow_dispatch` target is production-only
+- manual version input defaults to blank and must equal tracked git version if provided
 - backup step must finish successfully
 - restore-readiness validation must finish successfully
 - only then may the new Moltis image be pulled and started
