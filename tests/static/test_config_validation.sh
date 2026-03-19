@@ -132,10 +132,10 @@ PY
     test_start "static_moltis_version_contract_stays_git_tracked_and_pinned"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
         test_pass
     else
-        test_fail "Tracked Moltis version must stay git-managed and pinned for the backup-safe branch contract"
+        test_fail "Tracked Moltis version must resolve to an explicit GHCR tag without leading v and be validated by scripts/moltis-version.sh"
     fi
 
     test_start "static_fixture_disables_openai_for_pr_gate"
@@ -195,6 +195,61 @@ PY
         test_pass
     else
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
+    fi
+
+    test_start "static_deploy_compliance_checks_prod_compose_hash"
+    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
+    fi
+
+    test_start "static_deploy_supports_gitops_checkout_repair_for_managed_drift"
+    if rg -q 'repair_server_checkout:' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'gitops-drift' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must offer an auditable checkout repair path for deploy-managed server drift"
+    fi
+
+    test_start "static_deploy_checkout_repair_avoids_inline_ssh_heredoc_parser_hazards"
+    if rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -Fq "ssh \${{ env.SSH_USER }}@\${{ env.SSH_HOST }} <<'EOF'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must not embed the managed checkout repair as an inline SSH heredoc inside the run block"
+    fi
+
+    test_start "static_deploy_checkout_repair_keeps_snapshot_stdout_clean"
+    if rg -q 'git fetch --depth=1 origin "\$TARGET_REF" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'git checkout --force "\$TARGET_REF" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'git reset --hard "\$TARGET_SHA" >&2' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh"; then
+        test_pass
+    else
+        test_fail "Managed checkout repair must redirect git progress to stderr so stdout stays reserved for the drift snapshot path"
+    fi
+
+    test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
+    if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -q ' - staging' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -q '^[[:space:]]+version:[[:space:]]*$' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'supports production target only' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must resolve tracked Moltis version, remove ad-hoc version input, forbid staging bypass, and block feature-branch production deploys"
+    fi
+
+    test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"
+    if rg -q 'Check post-upgrade web protocol skew' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'stale browser tabs' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'not a rollback trigger' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q '## Post-upgrade stale web client' "$PROJECT_ROOT/docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md"; then
+        test_pass
+    else
+        test_fail "Deploy verification and runbook must classify post-upgrade protocol skew as an operator signal before rollback"
     fi
 
     test_start "static_moltis_workflow_validates_restore_readiness"

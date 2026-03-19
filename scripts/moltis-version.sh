@@ -114,9 +114,20 @@ assert_tracked_contract() {
     fi
 
     if [[ "$version" == "latest" ]]; then
-        echo "Tracked Moltis version must be pinned in git; 'latest' is forbidden" >&2
+        echo "Tracked Moltis version must be an explicit GHCR release tag, not 'latest'" >&2
         return 1
     fi
+
+    if [[ "$version" == v* ]]; then
+        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 0.10.18)" >&2
+        return 1
+    fi
+
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
+        echo "Tracked Moltis version is not a valid explicit release tag: $version" >&2
+        return 1
+    fi
+
 }
 
 main() {
