@@ -1414,6 +1414,9 @@
     if (!project) {
       return;
     }
+    if (mode !== "hidden" && state.panelWidth < 420) {
+      updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+    }
     project.sidePanelOpen = mode !== "hidden";
     project.sidePanelFullscreen = mode === "hidden" ? false : Boolean(project.sidePanelFullscreen);
     project.panelModeOverride = mode === "preview" || mode === "downloads" ? mode : "";
@@ -2095,6 +2098,9 @@
   function renderSidePanel(project) {
     const mode = sidePanelMode(project);
     const open = Boolean(project?.sidePanelOpen) && mode !== "hidden";
+    if (open && state.panelWidth < 420) {
+      updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+    }
     const fullscreen = open && Boolean(project?.sidePanelFullscreen);
     dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
     dom.workspaceShell.dataset.panelFullscreen = fullscreen ? "true" : "false";
