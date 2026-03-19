@@ -122,10 +122,10 @@ PY
     test_start "static_moltis_version_contract_uses_explicit_release_tag"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
         test_pass
     else
-        test_fail "Tracked Moltis version must resolve to an explicit release tag in git and be validated by scripts/moltis-version.sh"
+        test_fail "Tracked Moltis version must resolve to an explicit GHCR tag without leading v and be validated by scripts/moltis-version.sh"
     fi
 
     test_start "static_fixture_disables_openai_for_pr_gate"
@@ -210,12 +210,15 @@ PY
 
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q "default: ''" "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       ! rg -q ' - staging' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'supports production target only' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'Production workflow_dispatch must use tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q "default: 'latest'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+       rg -q 'Production workflow_dispatch must use tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass
     else
-        test_fail "Deploy workflow must resolve the tracked Moltis version, stay on the official latest channel, and block feature-branch production deploys"
+        test_fail "Deploy workflow must resolve tracked Moltis version, forbid staging bypass, require blank version default, and block feature-branch production deploys"
     fi
 
     test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"

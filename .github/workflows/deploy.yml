@@ -24,11 +24,10 @@ on:
         type: choice
         options:
           - production
-          - staging
       version:
-        description: 'Moltis image version (leave blank to use tracked git version, typically latest per official Docker docs)'
+        description: 'Moltis image version (optional; leave blank to use tracked git version)'
         required: false
-        default: 'latest'
+        default: ''
         type: string
       repair_server_checkout:
         description: 'Capture evidence and reconcile a dirty /opt/moltinger checkout before deploy (workflow_dispatch only)'
@@ -341,9 +340,12 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
             if [ -z "$VERSION" ]; then
               VERSION="$TRACKED_VERSION"
+            else
+              VERSION="${VERSION#v}"
             fi
           elif [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
+            TAG_VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG_VERSION#v}"
           else
             VERSION="$TRACKED_VERSION"
           fi
@@ -357,6 +359,11 @@ jobs:
         run: |
           TARGET_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}"
           TRACKED_VERSION="${{ steps.version.outputs.tracked_version }}"
+          NORMALIZED_TRACKED_VERSION="${TRACKED_VERSION#v}"
+          DISPATCH_VERSION="${{ github.event.inputs.version }}"
+          NORMALIZED_DISPATCH_VERSION="${DISPATCH_VERSION#v}"
+          DEPLOY_VERSION="${{ steps.version.outputs.version }}"
+          NORMALIZED_DEPLOY_VERSION="${DEPLOY_VERSION#v}"
 
           # Check if this is a rollback
           if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
@@ -365,17 +372,22 @@ jobs:
             exit 0
           fi
 
-          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+          if [ "$TARGET_ENV" != "production" ]; then
+            echo "::error::Deploy Moltis workflow supports production target only."
+            exit 1
+          fi
+
+          if [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
             echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
             exit 1
           fi
 
-          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ] && [ "${{ github.event.inputs.version }}" != "$TRACKED_VERSION" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$DISPATCH_VERSION" ] && [ "$NORMALIZED_DISPATCH_VERSION" != "$NORMALIZED_TRACKED_VERSION" ]; then
             echo "::error::Production workflow_dispatch must use tracked Moltis version $TRACKED_VERSION or leave version blank."
             exit 1
           fi
 
-          if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_type }}" = "tag" ] && [ "${{ steps.version.outputs.version }}" != "$TRACKED_VERSION" ]; then
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "$NORMALIZED_DEPLOY_VERSION" != "$NORMALIZED_TRACKED_VERSION" ]; then
             echo "::error::Production tag deploy version must match tracked Moltis version $TRACKED_VERSION."
             exit 1
           fi
@@ -952,9 +964,6 @@ jobs:
 
           # Domain
           MOLTIS_DOMAIN=moltis.ainetic.tech
-
-          # Deployment
-          MOLTIS_VERSION=$VERSION
           EOF
 
           # Copy to server

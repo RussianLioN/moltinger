@@ -16,6 +16,7 @@ make version-check
 Production Moltis updates are git-based and backup-safe only.
 
 The tracked version must point to a published GHCR container tag, not only to a GitHub release tag.
+Use GHCR tag format without a leading `v` (for example `0.10.18`, not `v0.10.18`).
 
 Allowed:
 
@@ -59,6 +60,8 @@ BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 - create a fresh pre-update backup
 - validate restore readiness of that backup
 - deploy the git-tracked version only
+- allow only production target in workflow_dispatch
+- keep manual version input blank by default (tracked git version is source of truth)
 - block deploy if restore readiness fails
 
 `.github/workflows/uat-gate.yml` is expected to:
