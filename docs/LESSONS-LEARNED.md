@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-18
-**Total Lessons**: 21
+**Generated**: 2026-03-20
+**Total Lessons**: 22
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (2 lessons)
+#### P1 (3 lessons)
+- [Повторное подтверждение brief скрывалось из ленты после второй правки](../docs/rca/2026-03-20-brief-correction-dedup-drop.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
@@ -59,7 +60,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (7 lessons)
+#### process (8 lessons)
+- [Повторное подтверждение brief скрывалось из ленты после второй правки](../docs/rca/2026-03-20-brief-correction-dedup-drop.md)
 - [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
 - [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
 - [Диагностика remote rollout началась без повторного применения Traefik-first уроков](../docs/rca/2026-03-09-remote-rollout-diagnosis-skipped-traefik-lessons.md)
@@ -82,9 +84,9 @@
 
 - `process` (6 lessons)
 - `rca` (5 lessons)
+- `ux` (4 lessons)
 - `topology-registry` (4 lessons)
 - `git-worktree` (4 lessons)
-- `ux` (3 lessons)
 - `github-actions` (3 lessons)
 - `drift-detection` (3 lessons)
 - `sandbox` (2 lessons)
@@ -98,10 +100,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 21 |
-| Critical (P0/P1) | 3 |
+| Total Lessons | 22 |
+| Critical (P0/P1) | 4 |
 | Categories | 5 |
-| Unique Tags | 51 |
+| Unique Tags | 55 |
 
 ---
 
