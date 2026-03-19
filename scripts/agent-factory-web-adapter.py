@@ -15,7 +15,7 @@ import tempfile
 import time
 import zipfile
 from copy import deepcopy
-from html import unescape
+from html import escape, unescape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -146,12 +146,21 @@ BRIEF_CORRECTION_TEXT_MARKERS = (
     "правк",
     "исправ",
     "уточни",
+    "уточн",
+    "добав",
     "доработ",
+    "скоррект",
+    "перефраз",
     "переоткрой",
     "переоткры",
     "измени",
+    "поменя",
+    "перепиши",
     "обнови brief",
     "нужно изменить",
+    "хочу изменить",
+    "нужно исправить",
+    "надо исправить",
 )
 PRODUCTION_SIMULATION_TEXT_MARKERS = (
     "имитац",
@@ -187,6 +196,14 @@ UPLOAD_REFERENCE_MARKERS = (
     "attachment",
     "upload",
 )
+CONTINUE_MARKERS = (
+    "продолж",
+    "идем дальше",
+    "идём дальше",
+    "go ahead",
+    "continue",
+    "next",
+)
 SENSITIVE_DIGIT_PATTERN = re.compile(r"\b\d{6,}\b")
 STRUCTURED_EXAMPLE_RECORD_PATTERN = re.compile(
     r"[0-9A-Za-zА-Яа-я_<>.\-]+(?:[,;|\t][0-9A-Za-zА-Яа-я_<>.\-]+){1,8}"
@@ -216,6 +233,23 @@ BUSINESS_IDEA_SIGNALS = (
     "эскалац",
     "workflow",
 )
+EXPECTED_OUTPUT_SIGNAL_MARKERS = (
+    "на выход",
+    "результат",
+    "pdf",
+    "one-page",
+    "onepage",
+    "summary",
+    "карточк",
+    "заключен",
+    "отчет",
+    "отчёт",
+    "документ",
+    "презентац",
+    "рекомендац",
+    "файл",
+    "экран",
+)
 ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
     "problem": {
         "lead": "Начинаем с контекста задачи.",
@@ -234,7 +268,7 @@ ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
     },
     "desired_outcome": {
         "lead": "Дальше уточним целевое состояние после автоматизации.",
-        "question": "Какой результат должен получать бизнес после автоматизации?",
+        "question": "Какую пользу должен дать агент бизнесу после автоматизации?",
         "example": "Например: время обработки сокращено вдвое, а исключения автоматически эскалируются.",
     },
     "user_story": {
@@ -249,7 +283,7 @@ ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
     },
     "expected_outputs": {
         "lead": "Фиксируем ожидаемый результат работы агента.",
-        "question": "Что пользователь должен получить на выходе по итогам обработки?",
+        "question": "Что агент должен выдать на выходе и в каком формате?",
         "example": "Например: решение, пояснение причин и список шагов для исполнения.",
     },
     "constraints": {
@@ -481,6 +515,21 @@ def sanitize_download_artifacts(
     return sanitized
 
 
+def has_reusable_download_artifacts(download_artifacts: list[dict[str, Any]] | None) -> bool:
+    normalized = normalize_download_artifacts(download_artifacts or [])
+    if not normalized:
+        return False
+    has_ready_items = False
+    has_ready_one_page = False
+    for item in normalized:
+        status = normalize_text(item.get("download_status")).lower()
+        if status in {"ready", "available"}:
+            has_ready_items = True
+            if normalize_text(item.get("artifact_kind")) == "one_page_summary":
+                has_ready_one_page = True
+    return has_ready_items and has_ready_one_page
+
+
 def delivery_root(state_root: Path, web_demo_session_id: str) -> Path:
     return state_root / "downloads" / (web_demo_session_id or "anonymous-session")
 
@@ -551,6 +600,72 @@ def load_delivery_entry(state_root: Path, web_demo_session_id: str, download_tok
     return {}
 
 
+def load_delivery_entry_by_artifact_kind(state_root: Path, web_demo_session_id: str, artifact_kind: str) -> dict[str, Any]:
+    normalized_kind = normalize_text(artifact_kind)
+    if not normalized_kind:
+        return {}
+    index_path = delivery_index_path(state_root, web_demo_session_id)
+    if not index_path.is_file():
+        return {}
+    index = load_json(index_path)
+    if not isinstance(index, dict):
+        return {}
+    items = index.get("items", [])
+    if not isinstance(items, list):
+        return {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if normalize_text(item.get("artifact_kind")) == normalized_kind:
+            return item
+    return {}
+
+
+def preview_html_from_text(text: str, *, title: str) -> str:
+    safe_title = escape(normalize_text(title) or "Artifact preview")
+    escaped = escape(text or "")
+    return (
+        "<!doctype html><html lang='ru'><head>"
+        "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{safe_title}</title>"
+        "<style>"
+        "body{margin:0;background:#f6f1e8;color:#181512;font:15px/1.6 'SF Pro Text','Avenir Next','Segoe UI',sans-serif;}"
+        "main{max-width:980px;margin:0 auto;padding:28px 24px 36px;}"
+        "h1{margin:0 0 14px;font-size:1.35rem;line-height:1.2;}"
+        "pre{margin:0;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid rgba(0,0,0,0.08);"
+        "border-radius:12px;padding:16px;font:14px/1.55 'JetBrains Mono','SFMono-Regular',monospace;}"
+        "</style></head><body>"
+        f"<main><h1>{safe_title}</h1><pre>{escaped}</pre></main>"
+        "</body></html>"
+    )
+
+
+def render_preview(handler: BaseHTTPRequestHandler, path: Path, title: str) -> None:
+    if not path.is_file():
+        render_json(handler, {"status": "error", "error": "preview_not_found"}, status_code=404)
+        return
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        content = path.read_bytes()
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/pdf")
+        handler.send_header("Content-Disposition", f'inline; filename="{normalize_text(title) or path.name}"')
+        handler.send_header("Cache-Control", "no-store")
+        handler.send_header("Content-Length", str(len(content)))
+        handler.end_headers()
+        handler.wfile.write(content)
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = path.read_bytes().decode("utf-8", errors="replace")
+    render_text(
+        handler,
+        preview_html_from_text(text, title=title or path.name),
+        content_type="text/html; charset=utf-8",
+    )
+
+
 def employee_registry_path(state_root: Path) -> Path:
     return state_root / "employees" / "digital-employees-registry.json"
 
@@ -595,6 +710,109 @@ def starter_request_from_runtime_state(runtime_state: dict[str, Any], requiremen
             if text:
                 return text
     return normalize_text(requirement_brief.get("problem_statement")) or "Собери one-page по текущему клиентскому кейсу."
+
+
+def normalize_string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [item for item in (normalize_text(entry) for entry in value) if item]
+    normalized = normalize_text(value)
+    return [normalized] if normalized else []
+
+
+def render_one_page_markdown(
+    runtime_state: dict[str, Any],
+    requirement_brief: dict[str, Any],
+    uploaded_files: list[dict[str, Any]] | None,
+) -> str:
+    problem = normalize_text(requirement_brief.get("problem_statement")) or normalize_text(runtime_state.get("raw_idea"))
+    target_users = normalize_string_list(requirement_brief.get("target_users"))
+    current_process = normalize_text(requirement_brief.get("current_process"))
+    desired_outcome = normalize_text(requirement_brief.get("desired_outcome"))
+    expected_outputs = normalize_string_list(requirement_brief.get("expected_outputs"))
+    business_rules = normalize_string_list(requirement_brief.get("business_rules"))
+    exceptions = normalize_string_list(requirement_brief.get("exceptions"))
+    constraints = normalize_string_list(requirement_brief.get("constraints"))
+    success_metrics = normalize_string_list(requirement_brief.get("success_metrics"))
+    input_examples = normalize_string_list(requirement_brief.get("input_examples"))
+    upload_names = [
+        normalize_text(item.get("name"))
+        for item in normalize_uploaded_files(uploaded_files)
+        if normalize_text(item.get("name"))
+    ]
+    recommendation = expected_outputs[0] if expected_outputs else (desired_outcome or "Сформировать итоговую рекомендацию для коллегиального органа.")
+    if upload_names:
+        input_examples.extend([f"Вложение: {name}" for name in upload_names[:3]])
+    if not input_examples:
+        input_examples.append("Входные примеры зафиксированы в discovery-диалоге.")
+    if upload_names:
+        input_examples.append("Все входные данные считаются синтетическими/обезличенными; любые совпадения случайны.")
+
+    def as_bullets(items: list[str], fallback: str) -> str:
+        normalized = [item for item in items if normalize_text(item)]
+        if not normalized:
+            normalized = [fallback]
+        return "\n".join(f"- {item}" for item in normalized)
+
+    title = compact_display_title(problem, runtime_state.get("raw_idea"))
+    return "\n".join(
+        [
+            f"# One-page summary: {title}",
+            "",
+            "## 1. Проблема и цель",
+            normalize_text(problem) or "Проблема будет уточнена на следующем шаге.",
+            "",
+            "## 2. Для кого и где применяется",
+            as_bullets(target_users, "Пользователи будут уточнены."),
+            "",
+            "## 3. Текущий процесс и потери",
+            normalize_text(current_process) or "Текущий процесс будет уточнён.",
+            "",
+            "## 4. Входные данные",
+            as_bullets(input_examples, "Входные данные будут уточнены."),
+            "",
+            "## 5. Ожидаемый результат",
+            as_bullets(expected_outputs, desired_outcome or "Ожидаемый результат будет уточнён."),
+            "",
+            "## 6. Ограничения и правила",
+            as_bullets(constraints + business_rules, "Ограничения будут уточнены."),
+            "",
+            "## 7. Исключения и риски",
+            as_bullets(exceptions, "Исключения не зафиксированы."),
+            "",
+            "## 8. Критерии успеха",
+            as_bullets(success_metrics, "Метрики успеха будут уточнены."),
+            "",
+            "## 9. Рекомендация",
+            normalize_text(recommendation),
+            "",
+            "_Сгенерировано фабричным агентом-архитектором Moltis на основе confirmed brief._",
+            "",
+        ]
+    )
+
+
+def write_one_page_summary_download(
+    state_root: Path,
+    web_demo_session_id: str,
+    runtime_state: dict[str, Any],
+    requirement_brief: dict[str, Any],
+    uploaded_files: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    session_root = delivery_root(state_root, web_demo_session_id)
+    downloads_root = session_root / "downloads"
+    downloads_root.mkdir(parents=True, exist_ok=True)
+    download_name = "one-page-summary.md"
+    download_path = downloads_root / download_name
+    markdown = render_one_page_markdown(runtime_state, requirement_brief, uploaded_files)
+    download_path.write_text(markdown, encoding="utf-8")
+    return {
+        "artifact_kind": "one_page_summary",
+        "download_name": download_name,
+        "download_ref": str(download_path),
+        "download_status": "available",
+        "project_key": normalize_text(requirement_brief.get("project_key")),
+        "brief_version": normalize_text(requirement_brief.get("version")),
+    }
 
 
 def upsert_registry_employee(registry: dict[str, Any], employee_entry: dict[str, Any]) -> None:
@@ -1047,6 +1265,23 @@ def has_business_idea_signal(user_text: str) -> bool:
     return any(token in normalized for token in BUSINESS_IDEA_SIGNALS)
 
 
+def has_expected_output_signal(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(token in normalized for token in EXPECTED_OUTPUT_SIGNAL_MARKERS)
+
+
+def is_topic_semantically_low_signal(topic_name: str, user_text: str) -> bool:
+    topic = normalize_text(topic_name)
+    text = normalize_text(user_text)
+    if not topic or not text:
+        return False
+    if topic == "expected_outputs":
+        return not has_expected_output_signal(text)
+    return False
+
+
 def is_adequate_start_idea(user_text: str, uploaded_files: list[dict[str, Any]] | None = None) -> bool:
     if normalize_uploaded_files(uploaded_files):
         return True
@@ -1100,6 +1335,13 @@ def mentions_upload_reference(user_text: str) -> bool:
     return any(marker in normalized for marker in UPLOAD_REFERENCE_MARKERS)
 
 
+def has_continue_marker(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in CONTINUE_MARKERS)
+
+
 def looks_like_structured_example_record(user_text: str) -> bool:
     normalized = normalize_text(user_text)
     if not normalized:
@@ -1116,9 +1358,10 @@ def has_sensitive_identifiers(user_text: str) -> bool:
     normalized = normalize_text(user_text)
     if not normalized:
         return False
-    if SENSITIVE_DIGIT_PATTERN.search(normalized):
+    sanitized_placeholders = re.sub(r"<[^>]+>", " ", normalized)
+    if SENSITIVE_DIGIT_PATTERN.search(sanitized_placeholders):
         return True
-    lowered = normalized.lower()
+    lowered = sanitized_placeholders.lower()
     return any(
         marker in lowered
         for marker in (
@@ -1171,19 +1414,22 @@ def should_auto_resolve_unsafe_clarification(
     user_text: str,
     *,
     turn_uploaded_files: list[dict[str, Any]] | None = None,
+    all_uploaded_files: list[dict[str, Any]] | None = None,
 ) -> bool:
     normalized = normalize_text(user_text)
-    if not normalized:
+    has_turn_uploads = bool(normalize_uploaded_files(turn_uploaded_files))
+    has_any_uploads = bool(normalize_uploaded_files(all_uploaded_files))
+    if not normalized and not has_turn_uploads:
         return False
+    if normalized and has_sensitive_identifiers(normalized):
+        return False
+    if has_turn_uploads:
+        return True
     if has_redaction_acknowledgement(normalized):
         return True
-    if has_sensitive_identifiers(normalized):
-        return False
     if mentions_upload_reference(normalized):
         return True
-    if looks_like_structured_example_record(normalized):
-        return True
-    if has_repeat_ack_marker(normalized):
+    if has_any_uploads and has_continue_marker(normalized):
         return True
     return False
 
@@ -1205,7 +1451,8 @@ def has_open_unsafe_input_clarification(discovery_request: dict[str, Any]) -> bo
             continue
         if normalize_text(item.get("topic_name")) != "input_examples":
             continue
-        if normalize_text(item.get("reason")) != "unsafe_data_example":
+        reason = normalize_text(item.get("reason"))
+        if reason != "unsafe_data_example" and "unsafe" not in reason:
             continue
         if normalize_text(item.get("status")) == "open":
             return True
@@ -1213,9 +1460,16 @@ def has_open_unsafe_input_clarification(discovery_request: dict[str, Any]) -> bo
 
 
 def resolve_unsafe_input_clarification(discovery_request: dict[str, Any], *, user_text: str, now: str) -> None:
-    safe_input_example = (
-        normalize_text(user_text) or "Пользователь подтвердил, что входные примеры обезличены."
-    )
+    normalized_user_text = normalize_text(user_text)
+    if normalized_user_text and not is_low_signal_reply(normalized_user_text):
+        safe_input_example = normalized_user_text
+    else:
+        safe_input_example = "Входные примеры приложены файлами. Пользователь подтвердил, что данные обезличены."
+    if "синтетич" not in safe_input_example.lower():
+        safe_input_example = (
+            f"{safe_input_example}\n\n"
+            "Данные в примерах синтетически сгенерированы и не имеют ничего общего с реальными; любые совпадения случайны."
+        )
 
     clarification_items = discovery_request.get("clarification_items")
     if isinstance(clarification_items, list):
@@ -1236,8 +1490,8 @@ def resolve_unsafe_input_clarification(discovery_request: dict[str, Any], *, use
         for case in example_cases:
             if not isinstance(case, dict):
                 continue
-            case["input_summary"] = redact_sensitive_example_summary(case.get("input_summary"))
-            case["data_safety_status"] = "safe"
+            case["input_summary"] = safe_input_example
+            case["data_safety_status"] = "synthetic"
 
     captured_answers = discovery_request.get("captured_answers")
     if not isinstance(captured_answers, dict):
@@ -1543,12 +1797,12 @@ def llm_adaptive_architect_question(
     if summary and decision in {"accept", "advance"} and not returned_low_signal:
         topic_ack = {
             "problem": "Проблему зафиксировал.",
-            "target_users": "Пользователей и выгодоприобретателей зафиксировал.",
-            "current_workflow": "Текущий процесс зафиксировал.",
-            "desired_outcome": "Бизнес-эффект зафиксировал.",
+            "target_users": "Зафиксировал пользователей.",
+            "current_workflow": "Зафиксировал текущий процесс.",
+            "desired_outcome": "Зафиксировал пользу для бизнеса.",
             "user_story": "Приоритетный сценарий зафиксировал.",
             "input_examples": "Входные примеры зафиксировал.",
-            "expected_outputs": "Ожидаемый выход зафиксировал.",
+            "expected_outputs": "Зафиксировал формат выхода.",
             "constraints": "Ограничения зафиксировал.",
             "success_metrics": "Метрики успеха зафиксировал.",
         }.get(topic_now, "Ответ зафиксировал.")
@@ -1565,6 +1819,34 @@ def has_repeat_ack_marker(user_text: str) -> bool:
     if not normalized:
         return False
     return any(marker in normalized for marker in REPEAT_ACK_MARKERS)
+
+
+def extract_substantive_reply(user_text: str) -> str:
+    text = normalize_text(user_text)
+    if not text:
+        return ""
+    lowered = text.lower()
+    if not has_repeat_ack_marker(lowered):
+        return text
+    candidate = re.sub(
+        r"(?is)\b(я\s+уже\s+отвечал(?:а)?|уже\s+отвечал(?:а)?|дублирую\s+ответ|дублирую|перефразируй|already answered)\b[:\s-]*",
+        " ",
+        text,
+    )
+    candidate = re.sub(r"(?is)\bна\s+этот\s+вопрос\b[:\s,.-]*", " ", candidate)
+    candidate = normalize_text(candidate)
+    if not candidate:
+        return ""
+    lowered_candidate = candidate.lower()
+    if lowered_candidate.startswith("на этот вопрос"):
+        return ""
+    if not re.search(r"[A-Za-zА-Яа-я0-9]", candidate):
+        return ""
+    if len(candidate) < 6:
+        return ""
+    if is_low_signal_reply(candidate):
+        return ""
+    return candidate
 
 
 def upsert_topic_summary(runtime_state: dict[str, Any], *, topic_name: str, summary: str, now: str) -> None:
@@ -1611,19 +1893,39 @@ def upsert_topic_summary(runtime_state: dict[str, Any], *, topic_name: str, summ
 def bridge_repeat_answer(
     runtime_state: dict[str, Any],
     *,
+    current_topic_before_turn: str,
     next_topic: str,
     next_question: str,
     envelope: dict[str, Any],
     now: str,
 ) -> tuple[str, str, bool, bool, str]:
-    topic = normalize_text(next_topic)
+    user_text = normalize_text(envelope.get("user_text"))
+    if not has_repeat_ack_marker(user_text):
+        return next_topic, next_question, False, False, "runtime"
+    topic = normalize_text(current_topic_before_turn) or normalize_text(next_topic)
     if not topic:
         return next_topic, next_question, False, False, "runtime"
-    if not has_repeat_ack_marker(normalize_text(envelope.get("user_text"))):
-        return next_topic, next_question, False, False, "runtime"
+    substantive_repeat_answer = extract_substantive_reply(user_text)
 
     summaries = requirement_topic_summaries(runtime_state)
     topic_summary = normalize_text(summaries.get(topic))
+    if not topic_summary and substantive_repeat_answer:
+        upsert_topic_summary(runtime_state, topic_name=topic, summary=substantive_repeat_answer, now=now)
+        topic_summary = substantive_repeat_answer
+    if topic == "expected_outputs" and not substantive_repeat_answer:
+        business_effect = normalize_text(summaries.get("desired_outcome"))
+        if business_effect:
+            rephrased = (
+                f"Понял. Зафиксировал целевой эффект: {shorten_text(business_effect, 90)}.\n\n"
+                "Уточни именно формат выхода для пользователя: какой конкретный файл, материал или экран агент должен выдавать после обработки?"
+            )
+            return topic, rephrased, True, True, "repeat_marker_rephrase"
+        rephrased = (
+            "Понял, что ты уже отвечал. Уточню формулировку: "
+            "какой конкретный артефакт должен получить пользователь на выходе "
+            "(например, PDF, one-page summary, карточка клиента или письмо-рекомендация)?"
+        )
+        return topic, rephrased, True, True, "repeat_marker_rephrase"
     if not topic_summary:
         if topic == "expected_outputs":
             business_effect = normalize_text(summaries.get("desired_outcome"))
@@ -1685,6 +1987,62 @@ def adaptive_architect_question(
     parts = [part for part in (intro, base_question) if normalize_text(part)]
     question = "\n\n".join(parts)
     return question, "adaptive_architect"
+
+
+def has_open_clarification_for_topic(runtime_state: dict[str, Any], topic_name: str) -> bool:
+    topic = normalize_text(topic_name)
+    if not topic:
+        return False
+    clarification_items = runtime_state.get("clarification_items")
+    if not isinstance(clarification_items, list):
+        return False
+    for item in clarification_items:
+        if not isinstance(item, dict):
+            continue
+        if normalize_text(item.get("topic_name")) != topic:
+            continue
+        if normalize_text(item.get("status")) == "open":
+            return True
+    return False
+
+
+def break_stalled_question_loop(
+    *,
+    runtime_state: dict[str, Any],
+    current_topic_before_turn: str,
+    previous_next_question: str,
+    next_topic: str,
+    next_question: str,
+    next_action: str,
+    user_text: str,
+    turn_uploaded_files: list[dict[str, Any]],
+) -> tuple[str, str, bool]:
+    current_topic = normalize_text(current_topic_before_turn)
+    candidate_topic = normalize_text(next_topic)
+    if not current_topic or candidate_topic != current_topic:
+        return next_topic, next_question, False
+    has_open_topic_clarification = has_open_clarification_for_topic(runtime_state, current_topic)
+    if normalize_text(next_action) == "resolve_clarification" and has_open_topic_clarification:
+        return next_topic, next_question, False
+    if has_open_topic_clarification:
+        return next_topic, next_question, False
+    if not normalize_text(user_text) and not normalize_uploaded_files(turn_uploaded_files):
+        return next_topic, next_question, False
+    summaries = requirement_topic_summaries(runtime_state)
+    current_summary = normalize_text(summaries.get(current_topic))
+    if not current_summary:
+        return next_topic, next_question, False
+    previous_question = sanitize_architect_question_text(previous_next_question)
+    current_question = sanitize_architect_question_text(next_question)
+    if previous_question and current_question and previous_question != current_question:
+        return next_topic, next_question, False
+    forced_topic = normalize_text(next_uncovered_topic_after(runtime_state, current_topic))
+    if not forced_topic:
+        return next_topic, next_question, False
+    forced_question = normalize_text(ARCHITECT_TOPIC_FRAMES.get(forced_topic, {}).get("question"))
+    if not forced_question:
+        return next_topic, next_question, False
+    return forced_topic, forced_question, True
 
 
 def patch_runtime_next_question(
@@ -2021,15 +2379,17 @@ def infer_brief_section_updates_from_feedback(feedback_text: str) -> dict[str, A
     lowered = text.lower()
     if not text:
         return {}
-    if any(marker in lowered for marker in ("огранич", "запрет", "исключ", "compliance", "policy")):
-        return {"constraints": [text]}
-    if any(marker in lowered for marker in ("метрик", "kpi", "sla", "критери")):
-        return {"success_metrics": [text]}
+    if any(marker in lowered for marker in ("one-page", "onepage", "формат one-page", "формат onepage", "pdf", "презентац", "рекомендац")):
+        return {"expected_outputs": [text]}
     if any(marker in lowered for marker in ("пользоват", "роль", "выгодоприобрет")):
         return {"target_users": [text]}
     if any(marker in lowered for marker in ("процесс", "workflow", "как сейчас", "current process")):
         return {"current_process": text}
-    if any(marker in lowered for marker in ("выход", "результат", "pdf", "one-page", "onepage", "презентац")):
+    if any(marker in lowered for marker in ("огранич", "запрет", "исключ", "compliance", "policy")):
+        return {"constraints": [text]}
+    if any(marker in lowered for marker in ("метрик успех", "kpi", "sla", "критери успех", "критерии успех")):
+        return {"success_metrics": [text]}
+    if any(marker in lowered for marker in ("выход", "результат")):
         return {"expected_outputs": [text]}
     return {"scope_boundaries": [text]}
 
@@ -2085,6 +2445,11 @@ def build_discovery_request(
                 return request, False, low_signal_submission
         return request, True, low_signal_submission
 
+    if ui_action == "request_demo_access" and discovery_state:
+        # Access token probe after page reload should not re-run discovery logic
+        # and must preserve current progress/download state.
+        return request, True, low_signal_submission
+
     if ui_action in {"request_brief_review"} and discovery_state:
         return request, True, low_signal_submission
 
@@ -2115,27 +2480,44 @@ def build_discovery_request(
 
         unsafe_clarification_open = has_open_unsafe_input_clarification(request)
         if unsafe_clarification_open:
-            append_user_turn(request, combined_text, current_topic or "input_examples", now)
-            if should_auto_resolve_unsafe_clarification(combined_text, turn_uploaded_files=turn_uploaded_files):
+            append_user_turn(request, user_text or combined_text, current_topic or "input_examples", now)
+            if should_auto_resolve_unsafe_clarification(
+                combined_text,
+                turn_uploaded_files=turn_uploaded_files,
+                all_uploaded_files=uploaded_files,
+            ):
                 resolve_unsafe_input_clarification(request, user_text=combined_text, now=now)
             else:
                 request["_web_clarification_retry_hint"] = unsafe_clarification_retry_hint(
                     combined_text,
                     turn_uploaded_files=turn_uploaded_files,
                 )
+                request["_web_force_awaiting_clarification"] = True
+                return request, True, low_signal_submission
             return request, False, low_signal_submission
 
-        repeat_ack_submission = has_repeat_ack_marker(combined_text)
-        low_signal_submission = False if repeat_ack_submission else is_low_signal_reply(combined_text, turn_uploaded_files)
+        answer_input_text = combined_text if current_topic == "input_examples" else user_text
+        if current_topic == "input_examples" and not answer_input_text:
+            answer_input_text = combined_text
+
+        repeat_ack_submission = has_repeat_ack_marker(answer_input_text)
+        substantive_reply = extract_substantive_reply(answer_input_text) if repeat_ack_submission else ""
+        effective_answer_text = substantive_reply or answer_input_text
+        low_signal_submission = is_low_signal_reply(
+            effective_answer_text,
+            turn_uploaded_files if current_topic == "input_examples" else None,
+        )
+        if not low_signal_submission and is_topic_semantically_low_signal(current_topic, effective_answer_text):
+            low_signal_submission = True
         captured_answers = request.get("captured_answers", {})
         if not isinstance(captured_answers, dict):
             captured_answers = {}
-        if current_topic and combined_text and not low_signal_submission and not repeat_ack_submission:
-            captured_answers[current_topic] = combined_text
-        elif combined_text and not normalize_text(request.get("raw_idea")) and not low_signal_submission and not repeat_ack_submission:
-            request["raw_idea"] = combined_text
+        if current_topic and effective_answer_text and not low_signal_submission:
+            captured_answers[current_topic] = effective_answer_text
+        elif effective_answer_text and not normalize_text(request.get("raw_idea")) and not low_signal_submission:
+            request["raw_idea"] = effective_answer_text
         request["captured_answers"] = captured_answers
-        append_user_turn(request, combined_text, current_topic, now)
+        append_user_turn(request, user_text or effective_answer_text or combined_text, current_topic, now)
     elif ui_action == "request_brief_correction":
         request["brief_feedback_text"] = combined_text or normalize_text(payload.get("brief_feedback_text"))
         if isinstance(payload.get("brief_section_updates"), dict):
@@ -2294,6 +2676,21 @@ def generate_browser_downloads(
         if isinstance(ready_state.get("requirement_brief"), dict)
         else {}
     )
+    normalized_manifest_items = [
+        item
+        for item in normalized_manifest_items
+        if normalize_text(item.get("artifact_kind")) != "one_page_summary"
+    ]
+    normalized_manifest_items.insert(
+        0,
+        write_one_page_summary_download(
+            state_root,
+            web_demo_session_id,
+            ready_state,
+            requirement_brief,
+            uploaded_files,
+        ),
+    )
     production_simulation = simulate_post_handoff_production(
         state_root,
         web_demo_session_id,
@@ -2405,10 +2802,29 @@ def compact_display_title(*candidates: Any) -> str:
         if not text:
             continue
         first_sentence = re.split(r"[.!?\n]", text, maxsplit=1)[0].strip()
-        cleaned = re.sub(r"^(нужен агент[,]?\s*|который\s+|хочу автоматизировать\s*|нужно автоматизировать\s*|нужна автоматизация\s*)", "", first_sentence, flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^(нужен агент[,]?\s*|который\s+|хочу автоматизировать\s*|нужно автоматизировать\s*|нужна автоматизация\s*|автоматизировать\s*|ускорить\s*)",
+            "",
+            first_sentence,
+            flags=re.IGNORECASE,
+        )
         normalized = re.sub(r"\s+", " ", cleaned).strip(" -")
-        if normalized and not is_generic_title(normalized):
-            return normalized[:72].rstrip()
+        if not normalized or is_generic_title(normalized):
+            continue
+        semantic_aliases = (
+            (r"кредит.*(one[\s-]?page|summary|саммери)", "Кредитный one-page summary"),
+            (r"кредит.*(комитет|кпки|ссуд)", "Подготовка материалов к кредитному комитету"),
+            (r"(invoice|сч[её]т).*согласован", "Согласование счетов"),
+        )
+        lowered = normalized.lower()
+        for pattern, alias in semantic_aliases:
+            if re.search(pattern, lowered):
+                return alias
+        words = [word for word in re.split(r"\s+", normalized) if word]
+        concise = " ".join(words[:6]).strip()
+        concise = concise.rstrip(",:;.")
+        if concise:
+            return concise
     return "Новый проект"
 
 
@@ -2654,12 +3070,24 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     current_topic_before_turn = normalize_text(seeded_discovery_session.get("current_topic")) or normalize_text(
         discovery_state.get("next_topic")
     )
+    previous_next_question_before_turn = normalize_text(
+        seeded_discovery_session.get("pending_question")
+    ) or normalize_text(discovery_state.get("next_question"))
 
     requester_identity = normalize_requester_identity(payload, discovery_state)
     envelope = normalize_web_conversation_envelope(payload, discovery_state, now)
     action_hint = normalize_text(envelope.get("ui_action"))
     user_text_hint = normalize_text(envelope.get("user_text"))
     saved_status_hint = normalize_text(saved_discovery_state.get("status"))
+    likely_brief_correction_submission = (
+        action_hint == "request_brief_correction"
+        or (
+            action_hint == "submit_turn"
+            and is_likely_brief_correction_text(user_text_hint)
+            and not is_text_brief_confirmation(user_text_hint)
+            and saved_status_hint in {"awaiting_confirmation", "reopened", "confirmed", "download_ready"}
+        )
+    )
     if saved_discovery_state:
         prefer_saved_runtime = action_hint in {"request_status", "download_artifact", "request_brief_review"}
         prefer_saved_runtime = prefer_saved_runtime or (
@@ -2694,6 +3122,8 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     if access_granted:
         ui_action = normalize_text(envelope.get("ui_action"))
         reuse_saved_downloads = ui_action in {"request_status", "download_artifact"}
+        if ui_action == "request_demo_access" and discovery_state:
+            reuse_saved_downloads = True
         discovery_request, skip_runtime, low_signal_submission = build_discovery_request(
             payload,
             discovery_state,
@@ -2709,16 +3139,25 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         runtime_state = sanitize_discovery_runtime_state(runtime_state)
         hydrate_runtime_input_examples_answer(runtime_state, discovery_request)
         if reuse_saved_downloads:
-            download_artifacts = sanitize_download_artifacts(
+            candidate_download_artifacts = sanitize_download_artifacts(
                 payload.get("download_artifacts"),
                 web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
             )
-            if not download_artifacts:
-                download_artifacts = sanitize_download_artifacts(
+            if not has_reusable_download_artifacts(candidate_download_artifacts):
+                candidate_download_artifacts = sanitize_download_artifacts(
                     saved_session.get("download_artifacts"),
                     web_demo_session_id=normalize_text(web_demo_session.get("web_demo_session_id")),
                 )
-        if not download_artifacts and ui_action in {"request_status", "download_artifact"}:
+            if has_reusable_download_artifacts(candidate_download_artifacts):
+                download_artifacts = candidate_download_artifacts
+        should_generate_downloads = ui_action in {"request_status", "download_artifact"}
+        if (
+            ui_action == "request_demo_access"
+            and discovery_state
+            and normalize_text(runtime_state.get("status")) in {"confirmed", "download_ready"}
+        ):
+            should_generate_downloads = True
+        if not download_artifacts and should_generate_downloads:
             try:
                 runtime_state, download_artifacts, delivery_error = generate_browser_downloads(
                     state_root,
@@ -2767,13 +3206,13 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 if simulation_requested and primary_artifact_kind == "production_simulation"
                 else "Concept pack готов. Цифровой сотрудник зарегистрирован в реестре, "
                 "стартовый запрос пользователя выполнен в имитации production. "
-                "Можно скачать project doc, agent spec, presentation и отчёт по имитации."
+                "Можно скачать one-page summary, project doc, agent spec, presentation и отчёт по имитации."
             )
             if normalize_text(production_simulation.get("status")) == "completed"
             else (
                 "Запрос на имитацию принят. Открой отчёт production simulation, как только он станет доступен."
                 if simulation_requested and primary_artifact_kind == "production_simulation"
-                else "Concept pack готов. Можно скачать project doc, agent spec и presentation из этой browser session."
+                else "Concept pack готов. Можно скачать one-page summary, project doc, agent spec и presentation из этой browser session."
             )
         )
         if download_artifacts
@@ -2784,6 +3223,25 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         if access_granted and isinstance(discovery_request, dict)
         else ""
     )
+    force_awaiting_clarification = (
+        bool(discovery_request.get("_web_force_awaiting_clarification"))
+        if access_granted and isinstance(discovery_request, dict)
+        else False
+    )
+    if force_awaiting_clarification and not download_artifacts:
+        adapter_status = "awaiting_clarification"
+        next_action = "resolve_clarification"
+        if normalize_text(next_topic) != "input_examples":
+            next_topic = "input_examples"
+    if (
+        not force_awaiting_clarification
+        and adapter_status == "awaiting_clarification"
+        and next_action == "resolve_clarification"
+        and normalize_text(next_topic) == "input_examples"
+        and not has_open_unsafe_input_clarification(runtime_state)
+    ):
+        adapter_status = "awaiting_user_reply"
+        next_action = "ask_next_question"
     if (
         clarification_retry_hint
         and adapter_status == "awaiting_clarification"
@@ -2795,6 +3253,21 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 next_question = f"{next_question}\n\n{clarification_retry_hint}"
         else:
             next_question = clarification_retry_hint
+
+    user_text_hint = normalize_text(envelope.get("user_text"))
+    if (
+        access_granted
+        and not download_artifacts
+        and adapter_status in {"awaiting_confirmation", "reopened"}
+        and user_text_hint
+        and is_likely_brief_correction_text(user_text_hint)
+        and not is_text_brief_confirmation(user_text_hint)
+    ):
+        brief_version = normalize_text(requirement_brief.get("version")) or "без версии"
+        next_question = (
+            f"Правку применил. Проверь обновлённый brief версии {brief_version} в правой панели: "
+            "если всё ок — подтверди, если нет — дай следующую правку."
+        )
     architect_question_source = "runtime"
     bridged_from_uploaded_examples = False
     bridged_repeat_ack = False
@@ -2818,6 +3291,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 repeat_source,
             ) = bridge_repeat_answer(
                 runtime_state,
+                current_topic_before_turn=current_topic_before_turn,
                 next_topic=next_topic,
                 next_question=next_question,
                 envelope=envelope,
@@ -2866,6 +3340,20 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 force_low_signal_guard=low_signal_submission,
             )
             next_question = normalize_text(adaptive_question) or next_question
+    if access_granted and not download_artifacts and adapter_status == "awaiting_user_reply" and not low_signal_submission:
+        next_topic, next_question, forced_advance = break_stalled_question_loop(
+            runtime_state=runtime_state,
+            current_topic_before_turn=current_topic_before_turn,
+            previous_next_question=previous_next_question_before_turn,
+            next_topic=next_topic,
+            next_question=next_question,
+            next_action=next_action,
+            user_text=normalize_text(envelope.get("user_text")),
+            turn_uploaded_files=turn_uploaded_files,
+        )
+        if forced_advance:
+            architect_question_source = "stalled_loop_guard"
+            next_action = "ask_next_question"
     if access_granted and not download_artifacts and adapter_status == "awaiting_user_reply":
         if not normalize_text(next_question):
             fallback_topic = normalize_text(next_topic) or normalize_text(discovery_session.get("current_topic")) or "problem"
@@ -2885,6 +3373,23 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         discovery_session = runtime_state.get("discovery_session", {}) if isinstance(runtime_state.get("discovery_session"), dict) else {}
     else:
         discovery_session = runtime_state.get("discovery_session", {}) if isinstance(runtime_state.get("discovery_session"), dict) else {}
+    if (
+        access_granted
+        and not download_artifacts
+        and likely_brief_correction_submission
+        and adapter_status in {"awaiting_confirmation", "reopened"}
+    ):
+        next_question = (
+            "Правку применил. Проверь обновлённый brief в правой панели: "
+            "если всё корректно — подтверди версию, иначе отправь следующую правку."
+        )
+        patch_runtime_next_question(
+            runtime_state,
+            next_question=next_question,
+            next_topic=next_topic,
+            next_action=next_action,
+        )
+        architect_question_source = "brief_correction_ack"
     status_snapshot = build_web_demo_status_snapshot(
         web_demo_session.get("web_demo_session_id"),
         pointer.get("project_key"),
@@ -3231,6 +3736,47 @@ def serve(host: str, port: int, *, state_root: Path, assets_root: Path) -> int:
                     render_json(self, {"status": "error", "error": "download_not_found"}, status_code=404)
                     return
                 render_download(self, download_ref, normalize_text(entry.get("download_name")) or download_ref.name)
+                return
+            download_path_match = re.fullmatch(r"/api/download/([^/]+)/([^/]+)", parsed.path)
+            if download_path_match:
+                session_id = normalize_text(download_path_match.group(1))
+                artifact_kind = normalize_text(download_path_match.group(2))
+                if not session_id or not artifact_kind:
+                    render_json(self, {"status": "error", "error": "missing_download_locator"}, status_code=400)
+                    return
+                entry = load_delivery_entry_by_artifact_kind(state_root, session_id, artifact_kind)
+                download_ref = Path(normalize_text(entry.get("download_ref")))
+                if not entry or not download_ref.is_file():
+                    render_json(self, {"status": "error", "error": "download_not_found"}, status_code=404)
+                    return
+                render_download(self, download_ref, normalize_text(entry.get("download_name")) or download_ref.name)
+                return
+            if parsed.path == "/api/preview":
+                session_id = normalize_text(parse_qs(parsed.query).get("session_id", [""])[0])
+                download_token = normalize_text(parse_qs(parsed.query).get("token", [""])[0])
+                if not session_id or not download_token:
+                    render_json(self, {"status": "error", "error": "missing_preview_locator"}, status_code=400)
+                    return
+                entry = load_delivery_entry(state_root, session_id, download_token)
+                preview_ref = Path(normalize_text(entry.get("download_ref")))
+                if not entry or not preview_ref.is_file():
+                    render_json(self, {"status": "error", "error": "preview_not_found"}, status_code=404)
+                    return
+                render_preview(self, preview_ref, normalize_text(entry.get("download_name")) or preview_ref.name)
+                return
+            preview_path_match = re.fullmatch(r"/api/preview/([^/]+)/([^/]+)", parsed.path)
+            if preview_path_match:
+                session_id = normalize_text(preview_path_match.group(1))
+                artifact_kind = normalize_text(preview_path_match.group(2))
+                if not session_id or not artifact_kind:
+                    render_json(self, {"status": "error", "error": "missing_preview_locator"}, status_code=400)
+                    return
+                entry = load_delivery_entry_by_artifact_kind(state_root, session_id, artifact_kind)
+                preview_ref = Path(normalize_text(entry.get("download_ref")))
+                if not entry or not preview_ref.is_file():
+                    render_json(self, {"status": "error", "error": "preview_not_found"}, status_code=404)
+                    return
+                render_preview(self, preview_ref, normalize_text(entry.get("download_name")) or preview_ref.name)
                 return
             if parsed.path in {"/", "/index.html"}:
                 render_file(self, assets_root / "index.html")

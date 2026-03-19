@@ -24,9 +24,9 @@
   --shadow-lg: 0 26px 70px rgba(0, 0, 0, 0.28);
   --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.18);
   --sidebar-width: 264px;
-  --sidebar-divider-width: 8px;
+  --sidebar-divider-width: 4px;
   --panel-width: 400px;
-  --panel-divider-width: 8px;
+  --panel-divider-width: 4px;
   --font-body: "Avenir Next", "SF Pro Display", "Segoe UI Variable", "Helvetica Neue", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", "Menlo", monospace;
 }
@@ -140,6 +140,14 @@ code {
   margin: 0;
   color: var(--text-strong);
   letter-spacing: -0.04em;
+}
+
+.side-panel h2,
+.panel-card h3,
+.artifact-card h3,
+.side-panel__summary {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .gate-screen h1 {
@@ -606,7 +614,7 @@ code {
   gap: 10px;
   align-content: start;
   min-height: 0;
-  max-height: min(52vh, 760px);
+  max-height: none;
   overflow-y: auto;
   padding: 6px 0 12px;
 }
@@ -628,9 +636,9 @@ code {
   align-self: flex-start;
   width: fit-content;
   max-width: min(70ch, 82%);
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 22px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.035);
   box-shadow: none;
 }
@@ -673,12 +681,12 @@ code {
 .message__context-line {
   display: block;
   color: var(--muted-strong);
-  font-size: 0.92rem;
-  line-height: 1.45;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .message__question-line {
@@ -809,8 +817,8 @@ code {
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   cursor: pointer;
-  font-size: 1.8rem;
-  font-weight: 300;
+  font-size: 1.1rem;
+  font-weight: 500;
   line-height: 1;
 }
 

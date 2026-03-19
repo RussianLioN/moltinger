@@ -11,9 +11,9 @@
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
   const SIDEBAR_WIDTH_MAX = 560;
-  const PANEL_WIDTH_DEFAULT = 400;
+  const PANEL_WIDTH_DEFAULT = 460;
   const PANEL_WIDTH_MIN = 320;
-  const PANEL_WIDTH_MAX = 560;
+  const PANEL_WIDTH_MAX = 720;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -47,15 +47,15 @@
   const ACTION_LABELS = {
     start_project: "Новый проект",
     submit_turn: "Ответить",
-    request_status: "Обновить проект",
-    request_brief_review: "Открыть brief",
-    request_brief_correction: "Внести правки",
-    confirm_brief: "Подтвердить brief",
-    reopen_brief: "Переоткрыть brief",
-    preview_one_page: "Просмотреть one-page",
+    request_status: "Обновить",
+    request_brief_review: "Проверить brief",
+    request_brief_correction: "Исправить",
+    confirm_brief: "Подтвердить",
+    reopen_brief: "Переоткрыть",
+    preview_one_page: "Просмотр",
     test_asset: "Посмотреть результат",
-    download_artifact: "Открыть файлы",
-    submit_access_token: "Открыть demo",
+    download_artifact: "Материалы",
+    submit_access_token: "Войти",
   };
   const ACTION_PRIORITY = [
     "submit_turn",
@@ -617,7 +617,7 @@
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
-      briefEditOpen: true,
+      briefEditOpen: false,
       briefDraft: "",
     });
   }
@@ -671,6 +671,7 @@
           }
         }
       });
+      dedupeProjectTitles();
       state.activeProjectId = normalizeText(saved.activeProjectId);
     }
     if (!state.projects.length) {
@@ -914,7 +915,7 @@
 
   function modeTextFor(project) {
     if (!state.accessToken) {
-      return "Открыть demo";
+      return "Войти";
     }
     if (state.awaitingResponse) {
       return "Нажми ■ чтобы остановить";
@@ -957,7 +958,7 @@
       return "Опиши текущий процесс и где сейчас теряется время.";
     }
     if (topic === "desired_outcome") {
-      return "Опиши, какой бизнес-результат нужен после автоматизации.";
+      return "Опиши, какую пользу агент должен дать бизнесу после автоматизации.";
     }
     if (topic === "user_story") {
       return "Опиши, кому и в какой рабочей ситуации агент помогает в первую очередь.";
@@ -967,6 +968,9 @@
     }
     if (topic === "expected_outputs") {
       return "Опиши ожидаемый результат на выходе.";
+    }
+    if (topic === "branching_rules") {
+      return "Опиши правила, исключения и условия эскалации (если/иначе).";
     }
     if (topic === "constraints") {
       return "Перечисли ограничения, запреты и исключения, которые обязательно учитывать.";
@@ -1012,6 +1016,9 @@
     }
     if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
       return "Например: на выходе нужна аналитическая карточка, рекомендация и краткое заключение.";
+    }
+    if (topic === "branching_rules" || /исключ|правил|эскалац|если|иначе/i.test(question)) {
+      return "Например: если данных недостаточно, кейс уходит на ручную проверку с эскалацией ответственному.";
     }
     if (topic === "problem" || /бизнес-проблем/i.test(question)) {
       return "Например: нужно сократить время согласования и повысить число рассмотренных кейсов.";
@@ -1197,6 +1204,7 @@
     const title = document.createElement("span");
     title.className = "project-card__title";
     title.textContent = project.title;
+    title.title = project.title;
     main.append(title);
     main.addEventListener("click", () => {
       switchProject(project.id);
@@ -1225,7 +1233,9 @@
   }
 
   function renderTopbar(project) {
-    dom.projectTitle.textContent = project?.title || DEFAULT_PROJECT_TITLE;
+    const title = project?.title || DEFAULT_PROJECT_TITLE;
+    dom.projectTitle.textContent = title;
+    dom.projectTitle.title = title;
     dom.projectSubtitle.textContent = projectSubtitle(project);
     renderSidePanelToggle(project);
   }
@@ -1320,10 +1330,14 @@
 
   function primaryArtifactKind(project, artifacts = projectArtifacts(project)) {
     const explicit = normalizeArtifactKind(project?.lastResponse?.ui_projection?.primary_artifact);
+    const onePage = artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === "one_page_summary");
+    // One-page всегда главный артефакт, кроме явного переключения на production simulation.
+    if (onePage && explicit !== "production_simulation") {
+      return "one_page_summary";
+    }
     if (explicit && artifacts.some((artifact) => normalizeArtifactKind(artifact.artifact_kind) === explicit)) {
       return explicit;
     }
-    const onePage = artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === "one_page_summary");
     if (onePage) {
       return "one_page_summary";
     }
@@ -1695,12 +1709,21 @@
   }
 
   function detailCards(project) {
-    return (currentResponse(project)?.reply_cards || []).filter((card) => card.card_kind === "brief_summary_section");
+    return (currentResponse(project)?.reply_cards || []).filter((card) => {
+      if (!card || card.card_kind !== "brief_summary_section") {
+        return false;
+      }
+      const title = normalizeText(card.title).toLowerCase();
+      return !(title.startsWith("версия brief") || title === "brief summary");
+    });
   }
 
   function panelPromptCard(project) {
     const response = currentResponse(project) || {};
     const cards = Array.isArray(response.reply_cards) ? response.reply_cards : [];
+    if (sidePanelMode(project) === "brief_review") {
+      return null;
+    }
     if (["downloads", "preview"].includes(sidePanelMode(project))) {
       return cards.find((card) => ["factory_result", "factory_result_prompt", "download_prompt"].includes(card.card_kind)) || null;
     }
@@ -2058,9 +2081,11 @@
     const body = fragment.querySelector(".panel-card__body");
     const actions = fragment.querySelector(".panel-card__actions");
 
-    kind.textContent = "Раздел brief";
+    kind.textContent = "";
+    kind.hidden = true;
     title.textContent = card.title || "Раздел brief";
-    body.textContent = card.body_text || "";
+    const bodyText = normalizeText(card.body_text);
+    body.textContent = bodyText.length > 520 ? `${bodyText.slice(0, 517).trimEnd()}…` : bodyText;
     actions.innerHTML = "";
     actions.hidden = true;
     return fragment;
@@ -2084,17 +2109,17 @@
     const secondary = secondaryArtifacts(project, artifacts);
     const promptCard = panelPromptCard(project);
     if (mode === "brief_review") {
-      dom.sidePanelEyebrow.textContent = "Brief на проверке";
-      dom.sidePanelTitle.textContent = "Проверь summary";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь разделы brief, внеси правки или подтверди текущую версию.";
+      dom.sidePanelEyebrow.textContent = "Проверка brief";
+      dom.sidePanelTitle.textContent = "Проверка brief";
+      dom.sidePanelSummary.textContent = "Проверь summary brief, внеси правки при необходимости и подтверди версию.";
     } else if (mode === "preview") {
-      dom.sidePanelEyebrow.textContent = "Результат фабрики";
-      dom.sidePanelTitle.textContent = primary?.download_name || "Preview one-page";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Просмотри one-page summary и при необходимости скачай его из этой сессии.";
+      dom.sidePanelEyebrow.textContent = "Результат";
+      dom.sidePanelTitle.textContent = primary?.download_name || "Просмотр one-page";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь one-page и при необходимости скачай файл.";
     } else if (mode === "downloads") {
-      dom.sidePanelEyebrow.textContent = "Результат фабрики";
+      dom.sidePanelEyebrow.textContent = "Результат";
       dom.sidePanelTitle.textContent = "One-page и материалы";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Главный one-page summary доступен для preview и скачивания, остальные артефакты собраны ниже.";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Сначала проверь one-page, затем при необходимости скачай остальные материалы.";
     } else {
       dom.sidePanelEyebrow.textContent = "Детали проекта";
       dom.sidePanelTitle.textContent = "Brief и файлы";
@@ -2104,7 +2129,7 @@
     const isBriefReview = mode === "brief_review";
     if (dom.briefEditToggle) {
       dom.briefEditToggle.hidden = !isBriefReview;
-      dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Внести правку";
+      dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Исправить";
     }
     if (dom.briefEditSection) {
       dom.briefEditSection.hidden = !isBriefReview || !project?.briefEditOpen;
@@ -2417,6 +2442,24 @@
     return `${normalizedBase} ${Date.now()}`;
   }
 
+  function dedupeProjectTitles() {
+    const used = new Set();
+    state.projects.forEach((project) => {
+      if (!project || typeof project !== "object") {
+        return;
+      }
+      const base = normalizeText(project.title, DEFAULT_PROJECT_TITLE);
+      let candidate = base;
+      let suffix = 2;
+      while (used.has(candidate.toLowerCase())) {
+        candidate = `${base} ${suffix}`;
+        suffix += 1;
+      }
+      project.title = candidate;
+      used.add(candidate.toLowerCase());
+    });
+  }
+
   function maybeAutonameProject(project, userText, response) {
     if (!project || project.titleEdited) {
       return;
@@ -2443,6 +2486,7 @@
       canOverrideExisting
     ) {
       project.title = candidate;
+      dedupeProjectTitles();
     }
   }
 
@@ -2461,6 +2505,7 @@
     }
     project.title = normalized;
     project.titleEdited = true;
+    dedupeProjectTitles();
     project.updatedAt = nowIso();
     persist();
     renderAll();
@@ -3154,12 +3199,10 @@
       project.previewArtifactKind = "";
     }
     if (panelMode === "brief_review" && typeof project.briefEditOpen !== "boolean") {
-      project.briefEditOpen = true;
+      project.briefEditOpen = false;
     }
     if (panelMode !== "brief_review") {
       project.briefEditOpen = false;
-    } else if (!project.briefEditOpen) {
-      project.briefEditOpen = true;
     }
     project.lastPanelMode = panelMode;
     project.lastResumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint, project.lastResumeFingerprint);
@@ -3173,7 +3216,7 @@
       connectionMode === "live"
       && sourceAction === "confirm_brief"
       && response.next_action === "start_concept_pack_handoff"
-      && !Array.isArray(response.download_artifacts)
+      && (!Array.isArray(response.download_artifacts) || response.download_artifacts.length === 0)
       && sourceRequestId
       && project.lastAutoFollowupSource !== sourceRequestId
     ) {
@@ -3364,6 +3407,7 @@
     if (action === "request_brief_review") {
       if (project && hasPanelContent(project)) {
         project.sidePanelOpen = true;
+        project.briefEditOpen = false;
         project.currentAction = action;
         persist();
         renderAll();
@@ -3371,6 +3415,20 @@
       }
       setProjectAction(project, action);
       dispatchTurn(action, "", { skipUserMessage: true });
+      return;
+    }
+
+    if (action === "request_brief_correction") {
+      if (project) {
+        project.sidePanelOpen = true;
+        project.briefEditOpen = true;
+        persist();
+        renderAll();
+      }
+      setProjectAction(project, action);
+      window.setTimeout(() => {
+        dom.briefEditInput?.focus();
+      }, 0);
       return;
     }
 

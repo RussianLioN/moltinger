@@ -301,6 +301,7 @@ Operational rule:
 
 Each concept pack must contain:
 
+- `one_page_summary`
 - `project_doc`
 - `agent_spec`
 - `presentation`

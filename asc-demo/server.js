@@ -179,7 +179,7 @@ app.post("/api/turn", async (req, res) => {
   }
 });
 
-app.get("/api/session", (req, res) => {
+app.get("/api/session", async (req, res) => {
   const sessionId = String(req.query.session_id || "").trim();
   if (!sessionId) {
     const fallbackSession = {
@@ -216,7 +216,27 @@ app.get("/api/session", (req, res) => {
       ),
     );
   }
-  return res.json(session.lastResponse);
+  try {
+    const statusPayload = {
+      web_demo_session: {
+        web_demo_session_id: sessionId,
+      },
+      browser_project_pointer: {
+        project_key: session.projectKey || "",
+      },
+      web_conversation_envelope: {
+        request_id: `session-fetch-${Date.now()}`,
+        ui_action: "request_status",
+        user_text: "",
+        linked_discovery_session_id: sessionId,
+      },
+    };
+    const response = await handleTurn(statusPayload);
+    return res.json(response);
+  } catch (error) {
+    console.error("[asc-demo] server.api.session:", error?.message || error);
+    return res.json(session.lastResponse);
+  }
 });
 
 app.get("/api/download/:sessionId/:artifactKind", (req, res) => {

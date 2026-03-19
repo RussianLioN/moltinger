@@ -16,6 +16,7 @@ from agent_factory_common import (
     dedupe_preserve_order,
     discovery_example_contradictions,
     discovery_example_data_safety_status,
+    discovery_text_blob,
     discovery_next_topic,
     discovery_topic_names,
     discovery_topic_question,
@@ -535,8 +536,32 @@ def mark_feedback_applied(
     return updated
 
 
+def resolve_example_data_safety_status(explicit_status: Any, *values: Any) -> str:
+    allowed_statuses = {"synthetic", "sanitized", "needs_redaction"}
+    explicit = normalize_text(explicit_status).lower()
+    if explicit == "safe":
+        explicit = "sanitized"
+    source_blob = discovery_text_blob(*values).lower()
+    computed = normalize_text(discovery_example_data_safety_status(*values)).lower()
+    if computed not in allowed_statuses:
+        computed = "sanitized"
+    if explicit in {"synthetic", "sanitized"}:
+        return explicit
+    if explicit == "needs_redaction":
+        if any(marker in source_blob for marker in ("совпадения случайны", "не имеют ничего общего с реальными")):
+            return "synthetic"
+        if computed in {"synthetic", "sanitized"}:
+            return computed
+        return explicit
+    return computed
+
+
 def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, Any]) -> list[dict[str, Any]]:
     explicit_cases = payload.get("example_cases", [])
+    fresh_input_examples = normalize_brief_section_value(
+        "input_examples",
+        brief_value_from_payload(payload, "input_examples"),
+    )
     business_rules = normalize_brief_section_value(
         "business_rules",
         brief_value_from_payload(payload, "business_rules") or existing_brief.get("business_rules"),
@@ -556,11 +581,13 @@ def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, A
                 raw_case.get("linked_rules") or business_rules,
             )
             exception_notes = normalize_text(raw_case.get("exception_notes"))
-            data_safety_status = normalize_text(raw_case.get("data_safety_status")) or discovery_example_data_safety_status(
+            data_safety_status = resolve_example_data_safety_status(
+                raw_case.get("data_safety_status"),
                 raw_case.get("input_summary"),
                 raw_case.get("expected_output_summary"),
                 linked_rules,
                 exception_notes,
+                brief_value_from_payload(payload, "input_examples"),
             )
             normalized_cases.append(
                 {
@@ -573,6 +600,28 @@ def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, A
                     "data_safety_status": data_safety_status,
                 }
             )
+        if fresh_input_examples:
+            for index, case in enumerate(normalized_cases):
+                if not isinstance(case, dict):
+                    continue
+                fresh_input_summary = (
+                    fresh_input_examples[index]
+                    if index < len(fresh_input_examples)
+                    else fresh_input_examples[-1]
+                )
+                if not fresh_input_summary:
+                    continue
+                fresh_status = resolve_example_data_safety_status(
+                    "",
+                    fresh_input_summary,
+                    case.get("expected_output_summary"),
+                    case.get("linked_rules"),
+                    case.get("exception_notes"),
+                    fresh_input_examples,
+                )
+                if fresh_status in {"synthetic", "sanitized"}:
+                    case["input_summary"] = fresh_input_summary
+                    case["data_safety_status"] = fresh_status
         return normalized_cases
 
     input_examples = normalize_brief_section_value(
@@ -661,13 +710,15 @@ def generated_example_clarifications(
         exception_notes = normalize_text(case.get("exception_notes"))
         if normalize_text(case.get("data_safety_status")) == "needs_redaction":
             clarification_id = f"clarification-unsafe-{case_id}"
+            safe_case_ref = case_id if re.fullmatch(r"example-case-\d{3}", case_id) else "пример"
             generated.append(
                 clarification_item_from_example_case(
                     clarification_id=clarification_id,
                     topic_name="input_examples",
                     reason="unsafe_data_example",
                     question_text=(
-                        f"Можешь прислать пример '{input_summary or case_id}' без реальных реквизитов, номеров и названий контрагентов?"
+                        "Можешь прислать обезличенный пример входных данных "
+                        f"({safe_case_ref}) без реальных реквизитов, номеров и названий контрагентов?"
                     ),
                     existing_item=existing_by_id.get(clarification_id),
                     now=now,

@@ -30,6 +30,7 @@ from agent_factory_common import (
 
 
 ARTIFACT_SPECS = {
+    "one_page_summary": "one-page-summary.md",
     "project_doc": "project-doc.md",
     "agent_spec": "agent-spec.md",
     "presentation": "presentation.md",
@@ -232,6 +233,68 @@ def build_render_context(concept_record: dict[str, Any], artifact_context: dict[
             "Подготовка к defense gate и следующему production path.",
         ]),
     }
+
+
+def render_one_page_summary(concept_record: dict[str, Any], artifact_context: dict[str, Any]) -> str:
+    problem_statement = normalize_text(concept_record.get("problem_statement")) or "Проблема не зафиксирована."
+    target_users = normalize_list(concept_record.get("target_users"))
+    current_process = normalize_text(concept_record.get("current_process")) or "Текущий процесс не описан."
+    desired_outcome = normalize_text(concept_record.get("desired_outcome")) or "Ожидаемый результат не описан."
+    input_examples = normalize_list(concept_record.get("input_examples"))
+    business_rules = normalize_list(concept_record.get("business_rules"))
+    constraints = normalize_list(concept_record.get("constraints"))
+    success_metrics = normalize_list(concept_record.get("success_metrics"))
+    open_risks = normalize_list(concept_record.get("open_risks"))
+    owner = normalize_text(artifact_context.get("owner")) or "Команда проекта"
+
+    expected_outputs_raw = concept_record.get("expected_outputs")
+    if isinstance(expected_outputs_raw, list) and expected_outputs_raw:
+        recommendation_line = normalize_text(expected_outputs_raw[0])
+    else:
+        recommendation_line = normalize_text(expected_outputs_raw)
+    if not recommendation_line:
+        recommendation_line = "Выпустить one-page PDF с рекомендацией для принятия решения по кейсу."
+
+    return "\n".join(
+        [
+            "# One-page summary",
+            "",
+            "## 1. Контекст",
+            f"Инициатор: {owner}.",
+            f"Бизнес-проблема: {problem_statement}",
+            "Пользователи и выгодоприобретатели:",
+            to_bullets(target_users, "- Пользователи будут уточнены."),
+            "",
+            "## 2. Текущий процесс и потери",
+            current_process,
+            "",
+            "## 3. Что должен выдавать агент",
+            desired_outcome,
+            "",
+            "Ключевая рекомендация для коллегиального органа:",
+            recommendation_line,
+            "",
+            "## 4. Входы, правила и ограничения",
+            "Типовые входы:",
+            to_bullets(input_examples, "- Примеры входных данных будут уточнены."),
+            "",
+            "Бизнес-правила:",
+            to_bullets(business_rules, "- Бизнес-правила не зафиксированы."),
+            "",
+            "Ограничения:",
+            to_bullets(constraints, "- Ограничения не зафиксированы."),
+            "",
+            "## 5. Метрики и риски",
+            "Метрики успеха:",
+            to_bullets(success_metrics, "- Метрики будут уточнены."),
+            "",
+            "Открытые риски:",
+            to_bullets(open_risks, "- Открытые риски не зафиксированы."),
+            "",
+            "_Документ подготовлен как preview-версия результата цифрового сотрудника для проверки пользователем._",
+            "",
+        ]
+    )
 
 
 def normalize_dict_list(value: Any) -> list[dict[str, Any]]:
@@ -506,8 +569,11 @@ def generate_pack(args: argparse.Namespace) -> int:
     }
 
     for artifact_type, filename in ARTIFACT_SPECS.items():
-        template_path = Path(args.template_root) / filename
-        rendered = render_template(template_path, render_context)
+        if artifact_type == "one_page_summary":
+            rendered = render_one_page_summary(concept_record, artifact_context)
+        else:
+            template_path = Path(args.template_root) / filename
+            rendered = render_template(template_path, render_context)
         rendered = rendered.rstrip() + "\n\n" + alignment_comment(artifact_type, alignment_payload)
 
         working_path = working_dir / filename
@@ -544,6 +610,11 @@ def check_alignment(args: argparse.Namespace) -> int:
     expected_snapshot = manifest.get("alignment_snapshot", {})
     expected_hash = normalize_text(manifest.get("sync_hash"))
     required_content_by_artifact = {
+        "one_page_summary": [
+            normalize_text(expected_snapshot.get("concept_id")),
+            normalize_text(expected_snapshot.get("concept_version")),
+            normalize_text(expected_snapshot.get("problem_statement")),
+        ],
         "project_doc": [
             normalize_text(expected_snapshot.get("concept_id")),
             normalize_text(expected_snapshot.get("concept_version")),

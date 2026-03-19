@@ -27,15 +27,17 @@ run_component_agent_factory_artifacts_tests() {
         && python3 "$ARTIFACT_SCRIPT" generate --input "$tmpdir/intake.json" --output-dir "$tmpdir/pack" --output "$tmpdir/generate.json" >/dev/null
     then
         assert_file_exists "$tmpdir/pack/concept-pack.json" "Concept pack manifest should exist"
+        assert_file_exists "$tmpdir/pack/working/one-page-summary.md" "Working one-page summary should exist"
         assert_file_exists "$tmpdir/pack/working/project-doc.md" "Working project doc should exist"
         assert_file_exists "$tmpdir/pack/working/agent-spec.md" "Working agent spec should exist"
         assert_file_exists "$tmpdir/pack/working/presentation.md" "Working presentation should exist"
+        assert_file_exists "$tmpdir/pack/downloads/one-page-summary.md" "Download one-page summary should exist"
         assert_file_exists "$tmpdir/pack/downloads/project-doc.md" "Download project doc should exist"
         assert_file_exists "$tmpdir/pack/downloads/agent-spec.md" "Download agent spec should exist"
         assert_file_exists "$tmpdir/pack/downloads/presentation.md" "Download presentation should exist"
         assert_eq "generated" "$(jq -r '.status' "$tmpdir/generate.json")" "Generation status should be generated"
         assert_eq "aligned" "$(jq -r '.sync_status' "$tmpdir/generate.json")" "Generation should start aligned"
-        assert_eq "3" "$(jq -r '.artifacts | length' "$tmpdir/generate.json")" "Manifest should contain three artifacts"
+        assert_eq "4" "$(jq -r '.artifacts | length' "$tmpdir/generate.json")" "Manifest should contain four artifacts"
         test_pass
     else
         test_fail "Concept pack generation should succeed for the fixture intake"

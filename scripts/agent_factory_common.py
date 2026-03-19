@@ -61,7 +61,7 @@ DISCOVERY_TOPIC_SPECS = [
     {
         "name": "desired_outcome",
         "category": "goal",
-        "question": "Какой результат должен получать бизнес после автоматизации?",
+        "question": "Какую пользу должен дать агент бизнесу после автоматизации?",
         "blocking": True,
         "aliases": ["desired_outcome", "goal", "desired_result"],
     },
@@ -82,7 +82,7 @@ DISCOVERY_TOPIC_SPECS = [
     {
         "name": "expected_outputs",
         "category": "output",
-        "question": "Что пользователь должен получить на выходе по итогам обработки?",
+        "question": "Что агент должен выдать на выходе и в каком формате?",
         "blocking": False,
         "aliases": ["expected_outputs", "output_examples", "desired_outputs"],
     },
@@ -123,7 +123,13 @@ DISCOVERY_UNSAFE_EXAMPLE_PATTERNS = (
     re.compile(r"\b(?:iban|swift|bik|инн|кпп|огрн|снилс|паспорт)\b", re.I),
     re.compile(r"\b(?:р/с|расчетный счет|расч[её]тный сч[её]т|номер карты|банковск(?:ие|ий) реквизит)\b", re.I),
 )
-DISCOVERY_SYNTHETIC_EXAMPLE_MARKERS = ("synthetic", "синтетич", "тестов")
+DISCOVERY_SYNTHETIC_EXAMPLE_MARKERS = (
+    "synthetic",
+    "синтетич",
+    "тестов",
+    "совпадения случайны",
+    "не имеют ничего общего с реальными",
+)
 DISCOVERY_SANITIZED_EXAMPLE_MARKERS = ("sanitized", "обезлич", "без реальных", "маскиров")
 DISCOVERY_CONTRADICTION_RULESETS = [
     {
@@ -1121,11 +1127,16 @@ def build_web_reply_cards(
     artifacts = normalize_download_artifacts(download_artifacts or [])
     if artifacts:
         artifact_names = ", ".join(item["download_name"] for item in artifacts if normalize_text(item.get("download_name")))
+        has_one_page = any(normalize_text(item.get("artifact_kind")) == "one_page_summary" for item in artifacts)
         cards.append(
             build_web_reply_card(
                 "download_prompt",
-                title="Артефакты готовы",
-                body_text=f"Можно скачать: {artifact_names}.",
+                title="One-page и артефакты готовы" if has_one_page else "Артефакты готовы",
+                body_text=(
+                    f"Главный результат фабрики готов. Можно скачать: {artifact_names}."
+                    if has_one_page
+                    else f"Можно скачать: {artifact_names}."
+                ),
                 web_demo_session_id=session_id,
                 action_hints=["download_artifact"],
                 linked_discovery_session_id=discovery_session.get("discovery_session_id"),

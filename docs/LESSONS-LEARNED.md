@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-12
-**Total Lessons**: 20
+**Generated**: 2026-03-18
+**Total Lessons**: 21
 
 ---
 
@@ -29,7 +29,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (7 lessons)
+#### P3 (8 lessons)
+- [2026-03-18-playwright-session-instability-and-fallback](../docs/rca/2026-03-18-playwright-session-instability-and-fallback.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
@@ -50,7 +51,8 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### generic (5 lessons)
+#### generic (6 lessons)
+- [2026-03-18-playwright-session-instability-and-fallback](../docs/rca/2026-03-18-playwright-session-instability-and-fallback.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
 - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
@@ -96,7 +98,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 20 |
+| Total Lessons | 21 |
 | Critical (P0/P1) | 3 |
 | Categories | 5 |
 | Unique Tags | 51 |

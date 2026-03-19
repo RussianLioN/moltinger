@@ -250,8 +250,12 @@ run_integration_local_agent_factory_web_full_cycle_tests() {
     assert_eq "live_user_data" "$(jq -r '.production_simulation.data_profile' "$tmpdir/download-ready-out.json")" "Production simulation should classify execution as live user data when uploads are present"
     assert_contains "$(jq -r '.production_simulation.data_profile_summary' "$tmpdir/download-ready-out.json")" "demo-client-data.csv" "Production simulation summary should reference the uploaded input file"
     assert_true "$(jq -r '.download_artifacts | length >= 4' "$tmpdir/download-ready-out.json")" "Full cycle should expose concept-pack artifacts and production simulation report"
+    assert_true "$(jq -r '[.download_artifacts[] | select(.artifact_kind == "one_page_summary")] | length == 1' "$tmpdir/download-ready-out.json")" "Download list should contain one-page summary artifact"
     assert_true "$(jq -r '[.download_artifacts[] | select(.artifact_kind == "production_simulation")] | length == 1' "$tmpdir/download-ready-out.json")" "Download list should contain production simulation report artifact"
     assert_file_exists "$tmpdir/state/employees/digital-employees-registry.json" "Digital employee registry should be persisted"
+    local download_session_id
+    download_session_id="$(jq -r '.web_demo_session.web_demo_session_id' "$tmpdir/download-ready-out.json")"
+    assert_file_exists "$tmpdir/state/downloads/$download_session_id/downloads/one-page-summary.md" "One-page summary should be persisted in web-demo downloads"
     if compgen -G "$tmpdir/state/employees/executions/*.json" >/dev/null; then
         :
     else
@@ -267,4 +271,3 @@ run_integration_local_agent_factory_web_full_cycle_tests() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     run_integration_local_agent_factory_web_full_cycle_tests
 fi
-

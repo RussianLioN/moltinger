@@ -12,7 +12,8 @@
 4. хранить отдельные pointer/resume snapshots для устойчивого browser resume
 5. отрисовывать безопасные user-facing reply cards вместо raw runtime JSON
 6. автоматически запускать downstream `handoff -> intake -> concept pack`
-7. публиковать browser-safe downloads для `project doc`, `agent spec`, и `presentation`
+7. публиковать browser-safe downloads для `one-page summary`, `project doc`, `agent spec`, и `presentation`
+8. сразу после handoff запускать production-имитацию: регистрировать цифрового сотрудника, выполнять стартовый запрос пользователя и публиковать отчёт имитации
 
 ## Current Scope
 
@@ -39,6 +40,7 @@
 - принимать файлы прямо из browser composer и безопасно извлекать excerpt для `txt/csv/json/md/docx`
 - после `confirm_brief` автоматически запускать downstream handoff chain через `scripts/agent-factory-intake.py` и `scripts/agent-factory-artifacts.py`
 - публиковать browser-safe `download_artifacts` и HTTP download endpoint `/api/download`
+- сразу после downstream generation выполнять production-имитацию (`registry + starter request execution`) и добавлять downloadable отчёт `digital-employee-demo.md`
 - хранить отдельные `pointers/` и `resume/` snapshots, чтобы refresh/resume не зависели только от localStorage
 - перечитывать `GET /api/session` после refresh и показывать browser-safe `resume_context` вместо потери активного проекта
 - возвращать reopened brief в новый reviewable loop без потери `confirmation_history` и `handoff_history`
@@ -138,6 +140,7 @@ Stores per-session browser delivery state:
 - `concept-pack.json`
 - `downloads/project-doc.md`
 - `downloads/agent-spec.md`
+- `downloads/one-page-summary.md`
 - `downloads/presentation.md`
 - `delivery-index.json` with private `download_ref -> token` resolution
 
@@ -351,7 +354,11 @@ Expected result:
    - `scripts/agent-factory-intake.py`
    - `scripts/agent-factory-artifacts.py generate`
 5. Browser response переходит в `status=download_ready`.
-6. Пользователь получает 3 артефакта через `download_artifacts[]` с browser-safe `/api/download` URL.
+6. Adapter запускает production-имитацию:
+   - регистрирует цифрового сотрудника в `data/agent-factory/web-demo/employees/digital-employees-registry.json`
+   - выполняет стартовый запрос пользователя на боевом контексте данных (вложения/диалог)
+   - сохраняет execution record в `data/agent-factory/web-demo/employees/executions/`
+7. Пользователь получает 5 артефактов через `download_artifacts[]` с browser-safe `/api/download` URL (`one-page summary`, `project doc`, `agent spec`, `presentation`, `digital-employee-demo`).
 
 ### Delivery contract
 
@@ -387,7 +394,8 @@ Expected result:
 
 - `status=download_ready`
 - `next_action=download_artifact`
-- 3 browser downloads are exposed
+- 4 browser downloads are exposed (включая `production_simulation`)
+- `production_simulation.status=completed`
 - `status_snapshot.download_readiness=ready`
 
 Full browser handoff chain:
@@ -399,8 +407,9 @@ Full browser handoff chain:
 Expected result:
 
 - confirmed browser brief triggers downstream concept-pack generation
+- post-handoff production simulation registers digital employee and writes starter execution record
 - manifest keeps discovery provenance and `delivery_channel=web`
-- `/api/download` serves the generated `project-doc.md`, `agent-spec.md`, and `presentation.md`
+- `/api/download` serves the generated `one-page-summary.md`, `project-doc.md`, `agent-spec.md`, `presentation.md`, and `digital-employee-demo.md`
 
 ### Failure messaging
 
@@ -529,6 +538,7 @@ Expected smoke result:
 2. при `GET /api/session` shell перечитывает текущий server-side snapshot и восстанавливает активный проект без JSON/CLI шага
 3. после refresh shell не сбрасывается в `Новый проект`, а возвращается в правильный action mode (`submit_turn`, `confirm_brief`, `download_artifact`)
 4. reopened brief публикует новую version chain, но сохраняет `confirmation_history` и `handoff_history`
+5. каждое замечание пользователя по brief сохраняется в `brief_feedback_history` и связывается с версией, в которой оно было применено
 
 ### Browser-safe resume contract
 

@@ -42,6 +42,28 @@ const CORRECTION_TOPIC_HINTS = [
     keywords: ["метрик", "kpi", "sla", "точност", "время", "сократ", "успех"],
   },
 ];
+const OUTPUT_CONTEXT_MARKERS = [
+  "на выход",
+  "ожидаемый результат",
+  "в one-page",
+  "в onepage",
+  "в pdf",
+  "в документ",
+  "в отч",
+  "блок",
+  "раздел",
+  "подпункт",
+  "рекомендац",
+];
+const SUCCESS_METRICS_SECTION_MARKERS = [
+  "метрики успех",
+  "kpi",
+  "sla",
+  "время подготовки",
+  "время обработки",
+  "уровень ошибок",
+  "точность",
+];
 
 function fallbackBrief(session) {
   const lines = ["# Brief проекта", ""];
@@ -139,9 +161,19 @@ function inferCorrectionTargets(correctionText) {
   if (!normalized) {
     return [];
   }
-  return CORRECTION_TOPIC_HINTS
+  const targets = CORRECTION_TOPIC_HINTS
     .filter((hint) => hint.keywords.some((keyword) => normalized.includes(keyword)))
     .map((hint) => hint.topicId);
+
+  if (targets.includes("expected_outputs") && targets.includes("success_metrics")) {
+    const outputContext = OUTPUT_CONTEXT_MARKERS.some((marker) => normalized.includes(marker));
+    const explicitMetricsSection = SUCCESS_METRICS_SECTION_MARKERS.some((marker) => normalized.includes(marker));
+    if (outputContext && !explicitMetricsSection) {
+      return targets.filter((topicId) => topicId !== "success_metrics");
+    }
+  }
+
+  return targets;
 }
 
 function buildCorrectionGuidance(session, correctionText) {

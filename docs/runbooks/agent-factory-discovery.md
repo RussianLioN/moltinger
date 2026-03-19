@@ -44,6 +44,7 @@ The command currently returns:
 - `open_questions`
 - optional `requirement_brief`
 - optional `brief_revisions`
+- optional `brief_feedback_history`
 - optional `confirmation_snapshot`
 - optional `confirmation_history`
 - optional `factory_handoff_record`
@@ -111,6 +112,7 @@ This lets the runtime keep the same conversation while the user:
 - reviews the current brief
 - asks for corrections in normal language
 - explicitly confirms one exact version
+- сохраняет feedback по каждой версии (`brief_feedback_history`) и помечает, в какую новую версию этот feedback был применен
 
 ### 4. Existing confirmed handoff state
 

@@ -409,6 +409,7 @@ async function statusFlow(session, payload) {
 export async function handleTurn(payload = {}) {
   const action = getAction(payload);
   const userText = getUserText(payload);
+  const hasUserText = Boolean(normalizeText(userText));
   const sessionId = sessionIdFromPayload(payload);
   const incomingUploads = normalizeIncomingUploads(payload.uploaded_files || []);
   const token = getAccessToken(payload);
@@ -438,13 +439,18 @@ export async function handleTurn(payload = {}) {
       if (!normalizeText(session.stage) || session.stage === "gate_pending") {
         session.stage = "discovery";
       }
-      const initial = await statusFlow(session, payload);
-      setSessionResponse(session, initial);
-      return initial;
+      const hasTurnPayload = hasUserText || incomingUploads.length > 0;
+      const continueWithTurn = hasTurnPayload && !["submit_access_token", "request_demo_access"].includes(action);
+      if (continueWithTurn) {
+        updateSession(session, { stage: session.stage, uploadedFiles: session.uploadedFiles });
+      } else {
+        const initial = await statusFlow(session, payload);
+        setSessionResponse(session, initial);
+        return initial;
+      }
     }
 
     let response;
-    const hasUserText = Boolean(normalizeText(userText));
     const correctionIntent = hasUserText && isLikelyBriefCorrectionText(userText);
     const simulationIntent = hasUserText && isProductionSimulationRequest(userText);
     const downloadsMode = ["downloads_ready", "confirmed"].includes(normalizeText(session.stage));

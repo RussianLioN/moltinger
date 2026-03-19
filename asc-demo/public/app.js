@@ -11,9 +11,10 @@
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
   const SIDEBAR_WIDTH_MAX = 560;
-  const PANEL_WIDTH_DEFAULT = 400;
-  const PANEL_WIDTH_MIN = 320;
-  const PANEL_WIDTH_MAX = 560;
+  const PANEL_WIDTH_DEFAULT = 460;
+  const PANEL_WIDTH_MIN = 360;
+  const PANEL_WIDTH_MAX = 720;
+  const PANEL_WIDTH_BRIEF_REVIEW = 600;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -47,15 +48,15 @@
   const ACTION_LABELS = {
     start_project: "Новый проект",
     submit_turn: "Ответить",
-    request_status: "Обновить проект",
-    request_brief_review: "Открыть brief",
-    request_brief_correction: "Внести правки",
-    confirm_brief: "Подтвердить brief",
-    reopen_brief: "Переоткрыть brief",
-    preview_one_page: "Просмотреть one-page",
+    request_status: "Обновить",
+    request_brief_review: "Проверить brief",
+    request_brief_correction: "Исправить",
+    confirm_brief: "Подтвердить",
+    reopen_brief: "Переоткрыть",
+    preview_one_page: "Просмотр",
     test_asset: "Посмотреть результат",
-    download_artifact: "Открыть файлы",
-    submit_access_token: "Открыть demo",
+    download_artifact: "Материалы",
+    submit_access_token: "Войти",
   };
   const ACTION_PRIORITY = [
     "submit_turn",
@@ -914,7 +915,7 @@
 
   function modeTextFor(project) {
     if (!state.accessToken) {
-      return "Открыть demo";
+      return "Войти";
     }
     if (state.awaitingResponse) {
       return "Нажми ■ чтобы остановить";
@@ -957,7 +958,7 @@
       return "Опиши текущий процесс и где сейчас теряется время.";
     }
     if (topic === "desired_outcome") {
-      return "Опиши, какой бизнес-результат нужен после автоматизации.";
+      return "Опиши, какую пользу агент должен дать бизнесу после автоматизации.";
     }
     if (topic === "user_story") {
       return "Опиши, кому и в какой рабочей ситуации агент помогает в первую очередь.";
@@ -967,6 +968,9 @@
     }
     if (topic === "expected_outputs") {
       return "Опиши ожидаемый результат на выходе.";
+    }
+    if (topic === "branching_rules") {
+      return "Опиши правила, исключения и условия эскалации (если/иначе).";
     }
     if (topic === "constraints") {
       return "Перечисли ограничения, запреты и исключения, которые обязательно учитывать.";
@@ -1012,6 +1016,9 @@
     }
     if (topic === "expected_outputs" || /результат|выход/i.test(question)) {
       return "Например: на выходе нужна аналитическая карточка, рекомендация и краткое заключение.";
+    }
+    if (topic === "branching_rules" || /исключ|правил|эскалац|если|иначе/i.test(question)) {
+      return "Например: если данных недостаточно, кейс уходит на ручную проверку с эскалацией ответственному.";
     }
     if (topic === "problem" || /бизнес-проблем/i.test(question)) {
       return "Например: нужно сократить время согласования и повысить число рассмотренных кейсов.";
@@ -1320,10 +1327,14 @@
 
   function primaryArtifactKind(project, artifacts = projectArtifacts(project)) {
     const explicit = normalizeArtifactKind(project?.lastResponse?.ui_projection?.primary_artifact);
+    const onePage = artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === "one_page_summary");
+    // One-page всегда главный артефакт, кроме явного переключения на production simulation.
+    if (onePage && explicit !== "production_simulation") {
+      return "one_page_summary";
+    }
     if (explicit && artifacts.some((artifact) => normalizeArtifactKind(artifact.artifact_kind) === explicit)) {
       return explicit;
     }
-    const onePage = artifacts.find((artifact) => normalizeArtifactKind(artifact.artifact_kind) === "one_page_summary");
     if (onePage) {
       return "one_page_summary";
     }
@@ -2058,7 +2069,8 @@
     const body = fragment.querySelector(".panel-card__body");
     const actions = fragment.querySelector(".panel-card__actions");
 
-    kind.textContent = "Раздел brief";
+    kind.textContent = "";
+    kind.hidden = true;
     title.textContent = card.title || "Раздел brief";
     body.textContent = card.body_text || "";
     actions.innerHTML = "";
@@ -2084,17 +2096,17 @@
     const secondary = secondaryArtifacts(project, artifacts);
     const promptCard = panelPromptCard(project);
     if (mode === "brief_review") {
-      dom.sidePanelEyebrow.textContent = "Brief на проверке";
-      dom.sidePanelTitle.textContent = "Проверь summary";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь разделы brief, внеси правки или подтверди текущую версию.";
+      dom.sidePanelEyebrow.textContent = "Проверка brief";
+      dom.sidePanelTitle.textContent = "Проверка brief";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь brief и выбери действие: исправить или подтвердить.";
     } else if (mode === "preview") {
-      dom.sidePanelEyebrow.textContent = "Результат фабрики";
-      dom.sidePanelTitle.textContent = primary?.download_name || "Preview one-page";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Просмотри one-page summary и при необходимости скачай его из этой сессии.";
+      dom.sidePanelEyebrow.textContent = "Результат";
+      dom.sidePanelTitle.textContent = primary?.download_name || "Просмотр one-page";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Проверь one-page и при необходимости скачай файл.";
     } else if (mode === "downloads") {
-      dom.sidePanelEyebrow.textContent = "Результат фабрики";
+      dom.sidePanelEyebrow.textContent = "Результат";
       dom.sidePanelTitle.textContent = "One-page и материалы";
-      dom.sidePanelSummary.textContent = promptCard?.body_text || "Главный one-page summary доступен для preview и скачивания, остальные артефакты собраны ниже.";
+      dom.sidePanelSummary.textContent = promptCard?.body_text || "Сначала проверь one-page, затем при необходимости скачай остальные материалы.";
     } else {
       dom.sidePanelEyebrow.textContent = "Детали проекта";
       dom.sidePanelTitle.textContent = "Brief и файлы";
@@ -2102,9 +2114,12 @@
     }
 
     const isBriefReview = mode === "brief_review";
+    if (isBriefReview && !isMobileLayout() && state.panelWidth < PANEL_WIDTH_BRIEF_REVIEW) {
+      updatePanelWidth(PANEL_WIDTH_BRIEF_REVIEW);
+    }
     if (dom.briefEditToggle) {
       dom.briefEditToggle.hidden = !isBriefReview;
-      dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Внести правку";
+      dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Исправить";
     }
     if (dom.briefEditSection) {
       dom.briefEditSection.hidden = !isBriefReview || !project?.briefEditOpen;
@@ -3173,7 +3188,7 @@
       connectionMode === "live"
       && sourceAction === "confirm_brief"
       && response.next_action === "start_concept_pack_handoff"
-      && !Array.isArray(response.download_artifacts)
+      && (!Array.isArray(response.download_artifacts) || response.download_artifacts.length === 0)
       && sourceRequestId
       && project.lastAutoFollowupSource !== sourceRequestId
     ) {

@@ -40,6 +40,7 @@ run_integration_local_agent_factory_intake_tests() {
     if python3 "$ARTIFACT_SCRIPT" generate --input "$tmpdir/intake.json" --output-dir "$tmpdir/pack" --output "$tmpdir/generate.json" >/dev/null
     then
         assert_eq "telegram" "$(jq -r '.delivery_channel' "$tmpdir/generate.json")" "Concept pack should target Telegram delivery"
+        assert_file_exists "$tmpdir/pack/downloads/one-page-summary.md" "One-page summary download should exist"
         assert_file_exists "$tmpdir/pack/downloads/project-doc.md" "Project doc download should exist"
         assert_file_exists "$tmpdir/pack/downloads/agent-spec.md" "Agent spec download should exist"
         assert_file_exists "$tmpdir/pack/downloads/presentation.md" "Presentation download should exist"

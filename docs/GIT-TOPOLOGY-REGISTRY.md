@@ -33,7 +33,7 @@
 | `primary-feature-024` | `024-clawdiy-oauth-store-drift-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-024` | `024-web-factory-demo-adapter` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-026` | `026-clawteam-framework-research` | `dedicated-feature-worktree` | Needs decision |
-| `primary-root` | `DETACHED` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
+| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
 

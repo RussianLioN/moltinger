@@ -52,8 +52,8 @@ export const DISCOVERY_TOPICS = [
   },
 ];
 
-const MIN_TOPICS_FOR_COMPLETION = 5;
-const REQUIRED_TOPICS = ["problem", "target_users", "expected_outputs"];
+const MIN_TOPICS_FOR_COMPLETION = DISCOVERY_TOPICS.length;
+const REQUIRED_TOPICS = DISCOVERY_TOPICS.map((topic) => topic.id);
 const LOW_SIGNAL_MARKERS = new Set(["ok", "okay", "test", "ping", "да", "нет", "ага", "понял"]);
 const NON_ANSWER_MARKERS = [
   "давай продолжим",
@@ -269,7 +269,13 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   const lowerText = normalizedText.toLowerCase();
   const hasText = Boolean(normalizedText);
   const hasFiles = Array.isArray(uploadedFiles) && uploadedFiles.length > 0;
-  const activeTopic = getTopicById(session.currentTopic);
+  const currentTopicId = normalizeText(session.currentTopic);
+  const coveredCount = session.coveredTopics instanceof Set
+    ? session.coveredTopics.size
+    : new Set(session.coveredTopics || []).size;
+  const noCoveredTopics = coveredCount === 0;
+  const inferredInitialTopicId = !currentTopicId && noCoveredTopics ? "problem" : "";
+  const activeTopic = getTopicById(currentTopicId || inferredInitialTopicId);
   const alreadyAnsweredCurrentTopic = Boolean(
     activeTopic
     && session.topicAnswers?.[activeTopic.id]
@@ -296,14 +302,11 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   }
 
   const fallback = defaultQuestion(step.coveredTopics);
-  let nextTopic = getTopicById(step.nextTopic) ? step.nextTopic : fallback.nextTopic;
-
-  if (step.lowSignal) {
-    if (activeTopic) {
-      nextTopic = activeTopic.id;
-    }
-  } else if (nextTopic && step.coveredTopics.has(nextTopic)) {
-    nextTopic = fallback.nextTopic;
+  let nextTopic = fallback.nextTopic;
+  if (step.lowSignal && activeTopic) {
+    nextTopic = activeTopic.id;
+  } else if (!nextTopic && getTopicById(step.nextTopic)) {
+    nextTopic = step.nextTopic;
   }
 
   const shouldSkipInputExamplesReask = nextTopic === "input_examples"
@@ -319,7 +322,7 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   const fallbackQuestion = nextTopicMeta?.question || fallback.nextQuestion;
   const nextQuestion = step.lowSignal
     ? `Ответ пока слишком общий. Уточни, пожалуйста: ${fallbackQuestion}`
-    : sanitizeNextQuestion(step.nextQuestion, fallbackQuestion);
+    : fallbackQuestion;
 
   return {
     ...step,
@@ -397,12 +400,6 @@ async function getArchitectSystemPrompt() {
 
 function sanitizeLLMAnswer(data, coveredTopics) {
   const mergedCoverage = new Set(coveredTopics);
-  const llmCovered = Array.isArray(data?.covered_topics) ? data.covered_topics : [];
-  llmCovered.forEach((topicId) => {
-    if (getTopicById(topicId)) {
-      mergedCoverage.add(topicId);
-    }
-  });
 
   const defaultNext = defaultQuestion(mergedCoverage);
   const nextTopic = getTopicById(data?.next_topic) ? data.next_topic : defaultNext.nextTopic;
@@ -458,8 +455,9 @@ async function llmDiscoveryStep(session, userText, uploadedFiles = []) {
 
 function fallbackDiscoveryStep(session, userText, uploadedFiles = [], lowSignal) {
   const mergedCoverage = new Set(session.coveredTopics);
-  const inferred = heuristicCoverage(userText, uploadedFiles);
-  inferred.forEach((topicId) => mergedCoverage.add(topicId));
+  if ((uploadedFiles || []).length > 0) {
+    mergedCoverage.add("input_examples");
+  }
   const fallback = defaultQuestion(mergedCoverage);
   return {
     coveredTopics: mergedCoverage,

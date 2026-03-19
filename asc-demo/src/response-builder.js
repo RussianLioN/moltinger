@@ -9,6 +9,16 @@ const STATUS_LABELS = {
 };
 
 const DEFAULT_AGENT_NAME = "Агент-архитектор Moltis";
+const BRIEF_REVIEW_HIDDEN_SECTION_MARKERS = [
+  "входные данные и примеры",
+  "примеры входов и выходов",
+  "входные примеры",
+];
+
+function shouldHideBriefReviewSection(title) {
+  const normalized = normalizeText(title).toLowerCase();
+  return BRIEF_REVIEW_HIDDEN_SECTION_MARKERS.some((marker) => normalized.includes(marker));
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -91,11 +101,14 @@ function splitBriefToCards(briefText) {
     if (!body) {
       return;
     }
+    if (shouldHideBriefReviewSection(currentTitle)) {
+      return;
+    }
     cards.push({
       card_kind: "brief_summary_section",
       title: currentTitle,
       body_text: body,
-      action_hints: ["request_brief_correction", "confirm_brief", "reopen_brief"],
+      action_hints: [],
     });
   };
 
@@ -117,7 +130,7 @@ function splitBriefToCards(briefText) {
         card_kind: "brief_summary_section",
         title: "Черновик brief",
         body_text: normalized,
-        action_hints: ["request_brief_correction", "confirm_brief", "reopen_brief"],
+        action_hints: [],
       },
     ];
   }
@@ -310,7 +323,7 @@ export function buildAwaitingConfirmationResponse(
   payload,
   {
     theatreMessage = "",
-    nextQuestion = "Я собрал черновой brief. Проверь summary, попроси правки или явно подтверди текущую версию.",
+    nextQuestion = "Проверь brief. Если всё верно — подтверди. Если нужны изменения — опиши правку.",
     uploadedFiles = [],
   } = {},
 ) {
@@ -324,7 +337,7 @@ export function buildAwaitingConfirmationResponse(
     ...splitBriefToCards(session.briefText),
     {
       card_kind: "confirmation_prompt",
-      title: "Подтверждение brief",
+      title: "Проверка brief",
       body_text: nextQuestion,
       action_hints: ["request_brief_correction", "confirm_brief", "reopen_brief"],
     },
@@ -353,7 +366,7 @@ export function buildAwaitingConfirmationResponse(
 }
 
 export function buildHandoffRunningResponse(session, payload, theatreMessage = "") {
-  const nextQuestion = "Brief подтверждён. Запущен производственный контур. Подожди и нажми «Обновить проект».";
+  const nextQuestion = "Brief подтвержден. Фабрика готовит материалы. Нажми «Обновить», чтобы проверить готовность.";
   return responseBase(session, payload, {
     status: "confirmed",
     nextAction: "start_concept_pack_handoff",
@@ -373,8 +386,8 @@ export function buildHandoffRunningResponse(session, payload, theatreMessage = "
     replyCards: [
       {
         card_kind: "status_update",
-        title: "Статус проекта",
-        body_text: (theatreMessage || "Brief подтверждён. Передача в производственный контур фабрики...").trim(),
+        title: "Готовлю материалы",
+        body_text: (theatreMessage || "Фабрика собирает project doc, agent spec, presentation и демо цифрового сотрудника.").trim(),
         action_hints: ["request_status"],
       },
     ],
@@ -384,8 +397,8 @@ export function buildHandoffRunningResponse(session, payload, theatreMessage = "
   });
 }
 
-export function buildDownloadsReadyResponse(session, payload, theatreMessage = "") {
-  const preferredKind = "one_page_summary";
+export function buildDownloadsReadyResponse(session, payload, theatreMessage = "", options = {}) {
+  const preferredKind = normalizeText(options.primaryArtifactKind, "one_page_summary");
   const artifacts = safeArray(session.artifacts)
     .map((item) => ({
       artifact_kind: item.artifact_kind,
@@ -400,7 +413,9 @@ export function buildDownloadsReadyResponse(session, payload, theatreMessage = "
   const primaryArtifact = artifacts.find((item) => item.is_primary) || artifacts[0] || null;
   const secondaryArtifacts = artifacts.filter((item) => item.artifact_kind !== primaryArtifact?.artifact_kind);
   const nextQuestion = primaryArtifact
-    ? "Фабрика создала цифровой актив. Открой one-page summary в preview и при необходимости скачай остальные материалы."
+    ? (preferredKind === "production_simulation"
+      ? "Имитация запуска цифрового сотрудника готова. Открой artefact production simulation в preview и проверь стартовый результат."
+      : "Фабрика создала цифровой актив. Открой one-page summary в preview и при необходимости скачай остальные материалы.")
     : "Производство завершено. Артефакты готовы к скачиванию.";
   const secondarySummary = secondaryArtifacts.length
     ? ` Дополнительно доступны: ${secondaryArtifacts.map((item) => item.download_name).join(", ")}.`

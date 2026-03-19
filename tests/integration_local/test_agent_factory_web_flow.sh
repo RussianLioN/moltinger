@@ -188,23 +188,23 @@ run_integration_local_agent_factory_web_flow_tests() {
           "user_text": "Агент помогает клиентскому менеджеру перед заседанием коллегиального органа."
         } | del(.demo_access_grant)' "$tmpdir/turn-four-out.json" >"$tmpdir/turn-five.json" &&
         python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-five.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-five-out.json" >/dev/null &&
-        jq '.web_conversation_envelope = {
-          "web_conversation_envelope_id": "web-envelope-claims-routing-008",
-          "request_id": "web-request-claims-routing-008",
-          "transport_mode": "synthetic_fixture",
-          "ui_action": "submit_turn",
-          "user_text": "Во вложении типовой CSV по клиенту."
-        }
-        | .uploaded_files = [{
-          "upload_id": "upload-csv-01",
-          "name": "demo-client-data.csv",
-          "content_type": "text/csv",
-          "content_base64": "aWQsc2NvcmUKMSw3NDIK",
-          "size_bytes": 14,
-          "original_size_bytes": 14,
-          "truncated": false
-        }]
-        | del(.demo_access_grant)' "$tmpdir/turn-five-out.json" >"$tmpdir/turn-upload.json" &&
+	        jq '.web_conversation_envelope = {
+	          "web_conversation_envelope_id": "web-envelope-claims-routing-008",
+	          "request_id": "web-request-claims-routing-008",
+	          "transport_mode": "synthetic_fixture",
+	          "ui_action": "submit_turn",
+	          "user_text": "Во вложении синтетический CSV по клиенту. Данные полностью синтетически сгенерированы, не имеют ничего общего с реальными; любые совпадения случайны."
+	        }
+	        | .uploaded_files = [{
+	          "upload_id": "upload-csv-01",
+	          "name": "demo-client-data.csv",
+	          "content_type": "text/csv",
+	          "content_base64": "Y2xpZW50X2lkLHNjb3JlLGxpbWl0CjEyMzQ1Njc4OTAsNzQyLDUwMDAwMAo=",
+	          "size_bytes": 44,
+	          "original_size_bytes": 44,
+	          "truncated": false
+	        }]
+	        | del(.demo_access_grant)' "$tmpdir/turn-five-out.json" >"$tmpdir/turn-upload.json" &&
         python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-upload.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-upload-out.json" >/dev/null &&
         jq '.web_conversation_envelope = {
           "web_conversation_envelope_id": "web-envelope-claims-routing-009",
@@ -237,10 +237,12 @@ run_integration_local_agent_factory_web_flow_tests() {
           "ui_action": "submit_turn",
           "user_text": "Сократить время подготовки на 50% и снизить долю ошибок в one-page до 2%."
         } | del(.demo_access_grant)' "$tmpdir/turn-constraints-answer-out.json" >"$tmpdir/turn-success-metrics-answer.json" &&
-        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-success-metrics-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-success-metrics-answer-out.json" >/dev/null; then
-        assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/turn-upload-out.json")" "Upload bridge should move discovery to expected outputs topic"
-        assert_eq "expected_outputs" "$(jq -r '.web_conversation_envelope.normalized_payload.current_topic' "$tmpdir/turn-upload-out.json")" "Normalized payload topic should stay synchronized after upload bridge"
-        assert_eq "expected_outputs" "$(jq -r '.discovery_runtime_state.discovery_session.current_topic' "$tmpdir/turn-upload-out.json")" "Discovery session current topic should stay synchronized after upload bridge"
+	        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/turn-success-metrics-answer.json" --state-root "$tmpdir/state" --output "$tmpdir/turn-success-metrics-answer-out.json" >/dev/null; then
+	        assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/turn-upload-out.json")" "Upload bridge should move discovery to expected outputs topic"
+	        assert_true "$(jq -r '((.next_question // "") | contains("Можешь прислать пример") | not)' "$tmpdir/turn-upload-out.json")" "Synthetic upload bridge should not leak raw-file excerpts into generated clarification prompts"
+	        assert_true "$(jq -r '((.next_question // "") | contains("demo-client-data.csv (text/csv)") | not)' "$tmpdir/turn-upload-out.json")" "Upload bridge question should remain business-readable and must not expose file fragment metadata"
+	        assert_eq "expected_outputs" "$(jq -r '.web_conversation_envelope.normalized_payload.current_topic' "$tmpdir/turn-upload-out.json")" "Normalized payload topic should stay synchronized after upload bridge"
+	        assert_eq "expected_outputs" "$(jq -r '.discovery_runtime_state.discovery_session.current_topic' "$tmpdir/turn-upload-out.json")" "Discovery session current topic should stay synchronized after upload bridge"
         assert_contains "$(jq -r '.next_question' "$tmpdir/turn-repeat-meta-out.json")" "Зафиксировал целевой эффект" "Repeat marker for expected outputs should produce a semantic rephrase instead of looping back"
         assert_eq "repeat_marker_rephrase" "$(jq -r '.ui_projection.question_source' "$tmpdir/turn-repeat-meta-out.json")" "Repeat marker branch should be visible in UI projection source"
         assert_eq "constraints" "$(jq -r '.next_topic' "$tmpdir/turn-expected-output-answer-out.json")" "Short but valid expected output answer should advance to constraints"

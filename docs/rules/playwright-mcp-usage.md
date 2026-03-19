@@ -61,6 +61,62 @@ then:
 2. state clearly that MCP Playwright is blocked by browser-session state
 3. either switch to the Playwright CLI skill workflow or ask the user whether to continue with explicit browser repair
 
+## Mandatory Incident Response
+
+If MCP Playwright fails (including `Transport closed`, launch failure, or stale session symptoms), it must be treated as an incident, not ignored.
+
+Required actions:
+
+1. perform a short RCA in the same session:
+   - collect local evidence (active processes, Codex logs, MCP config)
+   - collect at least one official/public source (Playwright MCP/Codex docs or issue tracker)
+2. propose a concrete remediation plan (what will be changed, how success will be verified)
+3. execute the remediation (or explicitly state why execution is blocked)
+4. report outcome with pass/fail and next step
+
+Never silently bypass MCP failures without diagnosis and an explicit mitigation path.
+
+## CLI Fallback Protocol (RCA-2026-03-18)
+
+When switching from MCP to Playwright CLI:
+
+1. Use a short session id (recommended: up to 12 characters).
+2. Always run `open` first for a new session before `run-code`.
+3. Keep one session per regression scenario to avoid cross-test contamination.
+4. Store artifacts under `output/playwright/<label>/` and reference exact log files in backlog notes.
+
+If CLI returns `listen EINVAL ... .sock`, treat it as a session/path bootstrap issue:
+- shorten session id,
+- reopen session,
+- rerun.
+
+## Transport Closed Recovery Checklist
+
+When `playwright/*` MCP tools fail with `Transport closed`, run this exact recovery sequence:
+
+1. Validate MCP config:
+
+```bash
+codex mcp get playwright
+```
+
+2. Prefer direct binary instead of `npx` wrapper:
+
+```bash
+npm install -g @playwright/mcp@0.0.68
+codex mcp remove playwright
+codex mcp add playwright -- playwright-mcp --isolated --headless
+```
+
+3. Verify configuration changed:
+
+```bash
+codex mcp get playwright
+```
+
+4. If transport is still closed in the same Codex session, restart Codex session once.
+   Reason: connection manager can keep a broken MCP transport handle and does not always hot-reload stdio server process changes.
+
 ## Sandbox Rule
 
 If the task also requires a local server, local port bind, or a GUI/browser process outside the sandbox:

@@ -66,9 +66,12 @@ run_web_factory_demo_smoke_tests() {
     local operator_health_file
     operator_health_file="$(mktemp)"
     if curl_with_test_client_ip -fsS --max-time "$TEST_TIMEOUT" "${LIVE_WEB_DEMO_URL%/}/api/health" -o "$operator_health_file"; then
+        local expected_public_base_url actual_public_base_url
+        expected_public_base_url="$(normalize_base_url "$LIVE_WEB_DEMO_URL")"
+        actual_public_base_url="$(normalize_base_url "$(jq -r '.operator_status.public_base_url // .public_base_url // ""' "$operator_health_file")")"
         assert_eq "agent-factory-web-adapter" "$(jq -r '.service' "$operator_health_file")" "Operator health endpoint should identify the web adapter service"
         assert_eq "shared_token_hash" "$(jq -r '.access_gate_mode' "$operator_health_file")" "Operator health endpoint should expose the configured shared-token access gate"
-        assert_contains "$(jq -r '.operator_status.public_base_url' "$operator_health_file")" "asc." "Operator health endpoint should expose the public demo base URL"
+        assert_eq "$expected_public_base_url" "$actual_public_base_url" "Operator health endpoint should expose the expected public demo base URL"
         test_pass
     else
         test_fail "Operator health endpoint should be reachable on the live web demo"
@@ -79,9 +82,14 @@ run_web_factory_demo_smoke_tests() {
     local shell_file
     shell_file="$(mktemp)"
     if curl_with_test_client_ip -fsS --max-time "$TEST_TIMEOUT" "${LIVE_WEB_DEMO_URL%/}/" -o "$shell_file"; then
-        assert_contains "$(cat "$shell_file")" "ASC AI Fabrique Demo" "Live web demo root should render the browser shell"
-        assert_contains "$(cat "$shell_file")" "Фабричный агент-бизнес-аналитик" "Live web demo root should expose the business-facing shell content"
-        test_pass
+        local shell_body
+        shell_body="$(cat "$shell_file")"
+        assert_contains "$shell_body" "ASC AI Fabrique Demo" "Live web demo root should render the browser shell"
+        if [[ "$shell_body" == *"Фабричный агент-бизнес-аналитик"* || "$shell_body" == *"Открой доступ к фабрике"* ]]; then
+            test_pass
+        else
+            test_fail "Live web demo root should expose business-facing shell content"
+        fi
     else
         test_fail "Live web demo root should serve the browser shell"
     fi
