@@ -11,6 +11,7 @@ COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
+MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
@@ -355,6 +356,24 @@ PY
         test_pass
     else
         test_fail "Deploy verification and runbook must classify post-upgrade protocol skew as an operator signal before rollback"
+    fi
+
+    test_start "static_moltis_update_proposal_workflow_is_safe_and_non_deploying"
+    if [[ -f "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" ]] && \
+       rg -q '^name: Moltis Update Proposal$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q '^  schedule:$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q '^  workflow_dispatch:$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q '^  contents: write$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q '^  pull-requests: write$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'group: moltis-update-proposal' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'scripts/moltis-version\.sh version' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'gh api repos/moltis-org/moltis/releases/latest' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'docker manifest inspect "ghcr\.io/moltis-org/moltis:' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'gh pr create --base main' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       ! rg -q 'gh workflow run "Deploy Moltis"|deploy\.sh --json moltis deploy|docker compose -f docker-compose\.prod\.yml up -d moltis' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Moltis update proposal workflow must stay isolated (schedule/dispatch PR-only flow) and must not perform direct deploy actions"
     fi
 
     test_start "static_clawdiy_workflow_exists"

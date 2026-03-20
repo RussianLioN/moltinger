@@ -92,6 +92,34 @@ BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 - avoid manual version input
 - deploy only through `./scripts/deploy.sh --json moltis deploy`
 
+## Regular Safe Update With User Confirmation
+
+Use `.github/workflows/moltis-update-proposal.yml` for regular update checks.
+
+Workflow contract:
+
+1. Runs on schedule or manual dispatch.
+2. Reads official latest release from `moltis-org/moltis`.
+3. Normalizes release tag to GHCR runtime tag (`vX.Y.Z -> X.Y.Z`).
+4. Verifies `ghcr.io/moltis-org/moltis:<tag>` is pullable.
+5. Creates or updates a PR against `main` with pinned compose changes only.
+6. Does not deploy directly.
+
+User flow:
+
+1. Receive notification with PR link.
+2. Approve and merge PR when ready.
+3. Existing hardened `Deploy Moltis` pipeline handles backup-safe rollout.
+
+Optional email delivery secrets for proposal workflow:
+
+- `SMTP_SERVER`
+- `SMTP_PORT` (optional, default `465`)
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `MOLTIS_UPDATE_NOTIFY_EMAIL`
+- `MOLTIS_UPDATE_NOTIFY_FROM` (optional)
+
 ## Rollback Expectations
 
 If the update regresses, rollback must preserve:
