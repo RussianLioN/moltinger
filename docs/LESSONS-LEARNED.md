@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 46
+**Total Lessons**: 47
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (17 lessons)
+#### P1 (18 lessons)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
+- [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
 - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
@@ -71,8 +72,9 @@
 ### By Category
 
 
-#### cicd (21 lessons)
+#### cicd (22 lessons)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
+- [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
 - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
@@ -131,12 +133,12 @@
 ### Popular Tags
 
 - `gitops` (15 lessons)
+- `deploy` (13 lessons)
 - `github-actions` (12 lessons)
-- `deploy` (12 lessons)
+- `cicd` (10 lessons)
 - `process` (9 lessons)
+- `moltis` (9 lessons)
 - `lessons` (9 lessons)
-- `cicd` (9 lessons)
-- `moltis` (8 lessons)
 - `clawdiy` (8 lessons)
 - `rca` (7 lessons)
 - `openclaw` (6 lessons)
@@ -148,10 +150,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 46 |
-| Critical (P0/P1) | 18 |
+| Total Lessons | 47 |
+| Critical (P0/P1) | 19 |
 | Categories | 5 |
-| Unique Tags | 106 |
+| Unique Tags | 109 |
 
 ---
 

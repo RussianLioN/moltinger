@@ -755,11 +755,12 @@ PY
     test_start "static_deploy_script_keeps_json_stdout_clean"
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 80 >&2' "$DEPLOY_SCRIPT" && \
+       rg -q '"\$BACKUP_SCRIPT" restore-check "\$backup_path" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'if \[\[ "\$OUTPUT_JSON" != "true" \]\]; then' "$DEPLOY_SCRIPT" && \
        rg -q 'echo -n "\."' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "deploy.sh must keep docker compose progress, docker logs, and wait dots out of JSON stdout"
+        test_fail "deploy.sh must keep restore-check logs, docker compose progress, docker logs, and wait dots out of JSON stdout"
     fi
 
     test_start "static_clawdiy_workflow_validates_auth_rendering_rules"

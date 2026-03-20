@@ -1046,7 +1046,11 @@ backup_current_state() {
             fi
 
             log_info "Running restore-readiness check for Moltis backup..."
-            "$BACKUP_SCRIPT" restore-check "$backup_path"
+            if [[ "$OUTPUT_JSON" == "true" ]]; then
+                "$BACKUP_SCRIPT" restore-check "$backup_path" 1>&2
+            else
+                "$BACKUP_SCRIPT" restore-check "$backup_path"
+            fi
             write_moltis_restore_check_evidence "$backup_path" >/dev/null
             log_success "Restore-readiness evidence recorded: $DEPLOY_RESTORE_CHECK_FILE"
         fi
