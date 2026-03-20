@@ -16,6 +16,7 @@ CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 TEST_WORKFLOW="$PROJECT_ROOT/.github/workflows/test.yml"
+TEST_RUNNER_DOCKERFILE="$PROJECT_ROOT/tests/Dockerfile.runner"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
 PREFLIGHT_SCRIPT="$PROJECT_ROOT/scripts/preflight-check.sh"
@@ -377,12 +378,13 @@ PY
         test_fail "Moltis update proposal workflow must stay isolated (schedule/dispatch PR-only flow) and must not perform direct deploy actions"
     fi
 
-    test_start "static_test_workflow_installs_sqlite3_for_component_lane"
+    test_start "static_ci_runtime_installs_sqlite3_for_codex_session_path_repair_suite"
     if rg -q 'Install OS dependencies' "$TEST_WORKFLOW" && \
-       rg -q 'apt-get install -y -qq jq sqlite3' "$TEST_WORKFLOW"; then
+       rg -q 'apt-get install -y -qq jq sqlite3' "$TEST_WORKFLOW" && \
+       rg -q 'apt-get install -y --no-install-recommends .*sqlite3' "$TEST_RUNNER_DOCKERFILE"; then
         test_pass
     else
-        test_fail "Test workflow must install sqlite3 because component_codex_session_path_repair depends on sqlite3 in CI"
+        test_fail "CI host and test-runner container must both provide sqlite3 because pr lane executes component_codex_session_path_repair inside test-runner"
     fi
 
     test_start "static_clawdiy_workflow_exists"

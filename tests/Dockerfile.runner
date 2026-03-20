@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/playwright:v1.52.0-jammy
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash curl jq coreutils ca-certificates python3 python3-tomli ripgrep docker.io docker-compose-v2 \
+    && apt-get install -y --no-install-recommends bash curl jq sqlite3 coreutils ca-certificates python3 python3-tomli ripgrep docker.io docker-compose-v2 \
     && npm install -g @playwright/test@1.52.0 \
     && rm -rf /var/lib/apt/lists/*
 
