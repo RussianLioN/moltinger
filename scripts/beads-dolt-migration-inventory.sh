@@ -660,6 +660,18 @@ inventory_collect_file_surfaces() {
     "plain-bd" 'plain `bd`' \
     "bd-sync" "bd sync"
 
+  inventory_add_file_surface \
+    "script.beads_dolt_rollout" \
+    "script" \
+    "scripts/beads-dolt-rollout.sh" \
+    "false" \
+    "can-bridge" \
+    "warning" \
+    "false" \
+    "Staged rollout/rollback orchestrator" \
+    "The repo now carries a dedicated staged rollout/rollback helper for the target Beads contract." \
+    "No staged rollout helper was found."
+
   inventory_add_pilot_aware_surface \
     "hook.pre_commit" \
     "hook" \
@@ -672,7 +684,9 @@ inventory_collect_file_surfaces() {
     "issues-jsonl" ".beads/issues.jsonl" "legacy" \
     "worktree-audit" "beads-worktree-audit.sh" "legacy" \
     "pilot-mode-file" "pilot-mode.json" "pilot" \
-    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot" \
+    "cutover-mode-file" "cutover-mode.json" "pilot" \
+    "cutover-verify" "beads-dolt-rollout.sh verify" "pilot"
 
   inventory_add_file_surface \
     "hook.post_checkout" \
@@ -915,6 +929,8 @@ inventory_classify_worktree() {
   local issues_path=""
   local db_path=""
   local redirect_path=""
+  local cutover_mode_path=""
+  local rollback_state_path=""
   local envrc_path=""
   local bin_bd_path=""
   local resolve_path=""
@@ -936,6 +952,8 @@ inventory_classify_worktree() {
   issues_path="${beads_dir}/issues.jsonl"
   db_path="${beads_dir}/beads.db"
   redirect_path="${beads_dir}/redirect"
+  cutover_mode_path="${beads_dir}/cutover-mode.json"
+  rollback_state_path="${beads_dir}/rollback-state.json"
   envrc_path="${worktree_path}/.envrc"
   bin_bd_path="${worktree_path}/bin/bd"
   resolve_path="${worktree_path}/scripts/beads-resolve-db.sh"
@@ -944,6 +962,8 @@ inventory_classify_worktree() {
   [[ -f "${issues_path}" ]] && signals+=("issues-jsonl")
   [[ -f "${db_path}" ]] && signals+=("beads-db")
   [[ -f "${redirect_path}" ]] && signals+=("redirect")
+  [[ -f "${cutover_mode_path}" ]] && signals+=("cutover-mode")
+  [[ -f "${rollback_state_path}" ]] && signals+=("rollback-state")
   [[ -f "${envrc_path}" ]] && signals+=("envrc")
   [[ -f "${bin_bd_path}" ]] && signals+=("bin-bd")
   [[ -f "${resolve_path}" ]] && signals+=("resolver")
@@ -974,6 +994,18 @@ inventory_classify_worktree() {
     readiness="blocked"
     blocking="true"
     reason="This worktree still combines tracked issues.jsonl with a local sqlite Beads database."
+  elif [[ -f "${cutover_mode_path}" && -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
+    state="cutover_active"
+    classification="already-compatible"
+    readiness="ready"
+    blocking="false"
+    reason="This worktree already carries the cutover marker and does not expose tracked JSONL residue."
+  elif [[ -f "${rollback_state_path}" && ! -f "${cutover_mode_path}" ]]; then
+    state="rolled_back"
+    classification="can-bridge"
+    readiness="warning"
+    blocking="false"
+    reason="This worktree has rollback evidence and should be re-verified before a new cutover attempt."
   elif [[ -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
     state="pilot_ready_candidate"
     classification="already-compatible"

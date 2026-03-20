@@ -1,23 +1,23 @@
 # Beads Dolt-Native Cutover Notes
 
+## Current Boundary
+
+- The live repository is still blocked for pilot and cutover.
+- No live-repo pilot enable, staged cutover, or rollback was executed from this worktree.
+- Pilot and rollout behavior below is validated in hermetic fixture worktrees only.
+- Canonical-root cleanup remains out of scope.
+
 ## Initial Inventory Baseline
 
-This document records the first report-only baseline for `029-beads-dolt-native-migration`. It exists to capture readiness evidence before any pilot or rollout work starts.
+This is the report-only baseline captured from the real `029-beads-dolt-native-migration` worktree before any live cutover.
 
-## Boundary
-
-- This is not a pilot run.
-- This is not a cutover run.
-- This is not a rollback run.
-- The baseline is only the inventory/readiness verdict plus the initial blocker set.
-
-## Baseline Command
+### Baseline Command
 
 ```bash
 ./scripts/beads-dolt-migration-inventory.sh --format json
 ```
 
-## Baseline Summary
+### Baseline Summary
 
 - Verdict: `blocked`
 - Pilot Gate: `blocked`
@@ -26,7 +26,7 @@ This document records the first report-only baseline for `029-beads-dolt-native-
 - Blocking items: `32`
 - Warning items: `14`
 
-## Baseline Findings
+### Baseline Findings
 
 - `bd --no-daemon info` already resolves to the current worktree-local database at `/Users/rl/coding/moltinger/029-beads-dolt-native-migration/.beads/beads.db`.
 - `bd backend show` still reports `sqlite` and points at the canonical root `/Users/rl/coding/moltinger/moltinger-main/.beads`.
@@ -35,7 +35,7 @@ This document records the first report-only baseline for `029-beads-dolt-native-
 - Root `AGENTS.md`, `.beads/AGENTS.md`, Beads quickstarts, and Beads skill resources still prescribe legacy sync behavior.
 - Every currently discovered live worktree classifies as `legacy_jsonl_first`, so the pilot gate remains blocked even before cutover logic exists.
 
-## Initial Blocker Classes
+### Initial Blocker Classes
 
 - runtime backend mismatch and canonical-root coupling
 - tracked `.beads/issues.jsonl`
@@ -43,12 +43,57 @@ This document records the first report-only baseline for `029-beads-dolt-native-
 - legacy docs, AGENTS, and skill guidance
 - live worktrees still in `legacy_jsonl_first`
 
+## Pilot Contract
+
+Pilot mode is an isolated single-worktree bridge, not a repo-wide cutover.
+
+Commands:
+
+```bash
+./scripts/beads-dolt-pilot.sh status --format json
+./scripts/beads-dolt-pilot.sh enable
+./scripts/beads-dolt-pilot.sh review
+```
+
+Pilot guarantees:
+
+- `.beads/pilot-mode.json` is the explicit local marker.
+- `bd sync` fails closed while pilot mode is active.
+- staged `.beads/issues.jsonl` is blocked in pre-commit.
+- the documented review surface is `./scripts/beads-dolt-pilot.sh review`.
+
+Current live-repo status:
+
+- `pilot_gate=blocked`
+- `pilot_mode_enabled=false`
+
+## Hermetic Rollout And Rollback Proof
+
+Validated through `bash tests/unit/test_beads_dolt_rollout.sh`.
+
+Covered outcomes:
+
+- `report-only` shows both ready and blocked worktrees in one deterministic report.
+- `cutover` writes `.beads/cutover-mode.json` only for eligible worktrees and emits a rollback package manifest.
+- blocked worktrees remain visible and do not silently enter mixed mode.
+- `verify` fails when mixed mode is reintroduced and expects legacy `bd sync` to stay blocked.
+- `rollback` restores the saved snapshot, removes cutover-only state, and writes `.beads/rollback-state.json`.
+
+Operator commands:
+
+```bash
+./scripts/beads-dolt-rollout.sh report-only --format json
+./scripts/beads-dolt-rollout.sh cutover --worktree .
+./scripts/beads-dolt-rollout.sh verify --worktree .
+./scripts/beads-dolt-rollout.sh rollback --package-id <id> --worktree .
+```
+
 ## Review Use
 
-Use this baseline to answer only:
+Use this document to answer:
 
-- what legacy surfaces still exist
-- which blockers prevent pilot cutover
-- whether repeated report-only runs remain deterministic
+- what still blocks live pilot and cutover in the real repo
+- what review surface applies in inventory, pilot, and cutover modes
+- what the hermetic rollout and rollback proof already covers
 
-Do not interpret this baseline as permission to start pilot or rollout.
+Do not interpret the hermetic rollout proof as permission to start live repo cutover.

@@ -72,6 +72,10 @@ Use the file that matches the real defect:
   - `bin/bd`
   - `scripts/beads-resolve-db.sh`
   - `scripts/beads-worktree-localize.sh`
+- Beads migration mode guards and staged rollout:
+  - `scripts/beads-dolt-pilot.sh`
+  - `scripts/beads-dolt-rollout.sh`
+  - `scripts/beads-normalize-issues-jsonl.sh`
 - deterministic create/start execution:
   - `scripts/worktree-phase-a.sh`
 - topology reconcile, stale state, locks:
@@ -123,6 +127,13 @@ git status
 
 If the hotfix also requires publishing a tracked topology snapshot, do that as a separate explicit step from a dedicated non-main topology-publish worktree/branch.
 
+If the hotfix touches Beads migration modes, also run:
+
+```bash
+bash tests/unit/test_beads_dolt_pilot.sh
+bash tests/unit/test_beads_dolt_rollout.sh
+```
+
 ## Step 7: Land the Fix
 
 ```bash
@@ -135,6 +146,10 @@ git status
 ```
 
 `git status` must show that the branch is up to date with origin.
+
+If the affected worktree is in pilot mode, replace the sync step with `./scripts/beads-dolt-pilot.sh review`.
+If the affected worktree is in cutover mode, replace the sync step with `./scripts/beads-dolt-rollout.sh verify --worktree .`.
+If the ordinary repo-local wrapper sync path hangs, fall back to direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync`.
 
 ## What Not To Do
 

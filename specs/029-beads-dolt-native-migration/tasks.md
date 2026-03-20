@@ -100,15 +100,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] Add staged rollout and rollback coverage in `tests/unit/test_beads_dolt_rollout.sh`
-- [ ] T022 [P] [US3] Add blocked-worktree and no-mixed-mode coverage in `tests/unit/test_beads_dolt_rollout.sh`
+- [x] T021 [P] [US3] Add staged rollout and rollback coverage in `tests/unit/test_beads_dolt_rollout.sh`
+- [x] T022 [P] [US3] Add blocked-worktree and no-mixed-mode coverage in `tests/unit/test_beads_dolt_rollout.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Implement staged report-only, cutover, verification, and rollback orchestration in `scripts/beads-dolt-rollout.sh`
-- [ ] T024 [US3] Align bootstrap and handoff flows with the active contract in `.envrc` and `scripts/worktree-ready.sh`
-- [ ] T025 [US3] Retire or demote legacy JSONL-first surfaces in `scripts/beads-normalize-issues-jsonl.sh`, `scripts/beads-worktree-localize.sh`, and related compatibility paths where the new contract requires it
-- [ ] T026 [US3] Update repo-local docs, skills, and rules to the final operator workflow in `AGENTS.md`, `.claude/skills/beads/resources/COMMANDS_QUICKREF.md`, `.claude/skills/beads/resources/WORKFLOWS.md`, `docs/WORKTREE-HOTFIX-PLAYBOOK.md`, and `docs/migration/beads-dolt-native-cutover.md`
+- [x] T023 [US3] Implement staged report-only, cutover, verification, and rollback orchestration in `scripts/beads-dolt-rollout.sh`
+- [x] T024 [US3] Align bootstrap and handoff flows with the active contract in `.envrc` and `scripts/worktree-ready.sh`
+- [x] T025 [US3] Retire or demote legacy JSONL-first surfaces in `scripts/beads-normalize-issues-jsonl.sh`, `scripts/beads-worktree-localize.sh`, and related compatibility paths where the new contract requires it
+- [x] T026 [US3] Update repo-local docs, skills, and rules to the final operator workflow in `AGENTS.md`, `.claude/skills/beads/resources/COMMANDS_QUICKREF.md`, `.claude/skills/beads/resources/WORKFLOWS.md`, `docs/WORKTREE-HOTFIX-PLAYBOOK.md`, and `docs/migration/beads-dolt-native-cutover.md`
 
 **Checkpoint**: The repo can transition from pilot to full cutover without hidden mixed mode and with a separate rollback package.
 
@@ -118,8 +118,8 @@
 
 **Purpose**: Final consistency, docs alignment, and focused validation.
 
-- [ ] T027 [P] Refresh migration references in `docs/beads-dolt-native-migration.md` and `specs/029-beads-dolt-native-migration/quickstart.md`
-- [ ] T028 Run focused validation and capture final inventory/pilot/rollout results in `specs/029-beads-dolt-native-migration/quickstart.md`
+- [x] T027 [P] Refresh migration references in `docs/beads-dolt-native-migration.md` and `specs/029-beads-dolt-native-migration/quickstart.md`
+- [x] T028 Run focused validation and capture final inventory/pilot/rollout results in `specs/029-beads-dolt-native-migration/quickstart.md`
 
 ---
 

@@ -3,6 +3,7 @@
 In this repository, these commands assume the repo-local plain `bd` shim is active through `.envrc` or the managed worktree/Codex bootstrap path.
 
 If `.beads/pilot-mode.json` exists in the current worktree, do not use `bd sync` as the ordinary review path. Use `./scripts/beads-dolt-pilot.sh review` for pilot review instead.
+If `.beads/cutover-mode.json` exists in the current worktree, do not use `bd sync` as the ordinary review path. Use `./scripts/beads-dolt-rollout.sh verify --worktree .` for cutover verification instead.
 
 ## View Issues
 
@@ -69,12 +70,25 @@ bd label remove ID label-name
 ## Sync & Diagnostics
 
 ```bash
-bd sync                     # Sync DB ↔ JSONL ↔ Git
+bd sync                     # Sync DB ↔ JSONL ↔ Git (ordinary non-migration worktree only)
 bd sync --force             # Force from JSONL
 bd info                     # Project status
 bd doctor                   # Health check
 bd prime                    # Context injection
 bd prime --full             # Full context
+```
+
+## Migration Review Surfaces
+
+```bash
+./scripts/beads-dolt-migration-inventory.sh              # Readiness and blocker inventory
+./scripts/beads-dolt-pilot.sh status                     # Pilot gate and local marker state
+./scripts/beads-dolt-pilot.sh enable                     # Enable isolated pilot mode
+./scripts/beads-dolt-pilot.sh review                     # Pilot review surface
+./scripts/beads-dolt-rollout.sh report-only --format json  # Rollout staging report
+./scripts/beads-dolt-rollout.sh cutover --worktree .       # Staged cutover for ready worktree
+./scripts/beads-dolt-rollout.sh verify --worktree .        # Cutover verification surface
+./scripts/beads-dolt-rollout.sh rollback --package-id <id> --worktree .  # Explicit rollback
 ```
 
 ## Daemon

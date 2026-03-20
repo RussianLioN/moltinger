@@ -36,6 +36,11 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+If the current worktree is in a Beads migration mode:
+- `.beads/pilot-mode.json` means use `./scripts/beads-dolt-pilot.sh review` instead of `bd sync`
+- `.beads/cutover-mode.json` means use `./scripts/beads-dolt-rollout.sh verify --worktree .` instead of `bd sync`
+- if no migration mode is active but the repo-local wrapper path hangs, use direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync`
+
 ## Beads Worktree Ownership
 
 Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
@@ -43,6 +48,16 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 - The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
 - If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
 - Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
+
+## Beads Migration Modes
+
+When a dedicated worktree enters the Beads Dolt-native migration flow:
+
+- `.beads/pilot-mode.json` enables the isolated pilot contract for one worktree
+- `.beads/cutover-mode.json` enables the staged cutover contract for an already-ready worktree
+- in either mode, treat legacy JSONL-first paths and ordinary `bd sync` as blocked unless the active migration script explicitly says otherwise
+- use `./scripts/beads-dolt-pilot.sh review` for pilot review
+- use `./scripts/beads-dolt-rollout.sh verify --worktree .` for cutover verification
 
 ## Speckit Artifact Guard
 
@@ -115,6 +130,9 @@ Forbidden:
    git push
    git status  # MUST show "up to date with origin"
    ```
+   If pilot mode is active, replace `bd sync` with `./scripts/beads-dolt-pilot.sh review`.
+   If cutover mode is active, replace `bd sync` with `./scripts/beads-dolt-rollout.sh verify --worktree .`.
+   If no migration mode is active but repo-local `bd sync` hangs, fall back to direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync`.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session

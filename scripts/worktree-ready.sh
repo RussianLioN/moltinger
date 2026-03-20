@@ -627,6 +627,26 @@ build_finish_close_command() {
   printf 'bd close %s --reason %s || bd close --no-db %s --reason %s\n' "${quoted_issue}" "${quoted_reason}" "${quoted_issue}" "${quoted_reason}"
 }
 
+build_finish_review_command() {
+  local worktree_path="${1:-}"
+
+  if [[ -z "${worktree_path}" || "${worktree_path}" == "n/a" ]]; then
+    return 1
+  fi
+
+  if [[ -f "${worktree_path}/.beads/cutover-mode.json" ]]; then
+    printf './scripts/beads-dolt-rollout.sh verify --worktree .\n'
+    return 0
+  fi
+
+  if [[ -f "${worktree_path}/.beads/pilot-mode.json" ]]; then
+    printf './scripts/beads-dolt-pilot.sh review\n'
+    return 0
+  fi
+
+  return 1
+}
+
 discover_issue_context() {
   local resolved_issue=""
   local issues_file=""
@@ -2204,6 +2224,7 @@ set_finish_next_steps() {
   local worktree_target="${report_worktree_path}"
   local plain_bd_bootstrap=""
   local close_command=""
+  local review_command=""
   local refspec=""
 
   if [[ "${branch_resolution_state}" == "missing" ]]; then
@@ -2251,10 +2272,18 @@ set_finish_next_steps() {
     add_next_step "${plain_bd_bootstrap}"
   fi
   add_next_step "bd preflight --check"
-  add_next_step "bd sync"
+  if review_command="$(build_finish_review_command "${worktree_target}")"; then
+    add_next_step "${review_command}"
+  else
+    add_next_step "bd sync"
+  fi
   add_next_step "$(build_finish_commit_command)"
   add_next_step "git pull --rebase"
-  add_next_step "bd sync"
+  if [[ -n "${review_command}" ]]; then
+    add_next_step "${review_command}"
+  else
+    add_next_step "bd sync"
+  fi
   add_next_step "git push -u origin $(shell_quote "${report_branch_name}")"
 
   if close_command="$(build_finish_close_command)"; then

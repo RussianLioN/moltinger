@@ -161,10 +161,9 @@
       ]
     },
     "beads-dolt-rollout.sh": {
-      "version": "0.0.0",
-      "description": "Planned staged rollout and separate rollback orchestration for the Beads Dolt-native migration",
-      "entrypoint": false,
-      "planned": true,
+      "version": "1.0.0",
+      "description": "Orchestrate staged report-only, cutover, verification, and rollback flows for the Beads Dolt-native migration",
+      "entrypoint": true,
       "requires": [
         "bash",
         "bd",

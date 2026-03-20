@@ -2,9 +2,15 @@
 
 ## Status
 
-Phase B, iteration 1 is intentionally limited to the inventory/readiness path. This step is report-only: it inventories legacy Beads surfaces, emits a deterministic readiness report, and places a blocking gate in front of pilot cutover.
+Phase B now covers three bounded layers:
 
-Do not start pilot or rollout from this step. Pilot, controlled cutover, and rollback remain separate later phases after the inventory gate is clean.
+- live-repo inventory/readiness and an explicit blocking gate
+- one-worktree pilot-prep contract and review surface
+- hermetic staged rollout/rollback proof
+
+The live repository is still blocked. No live pilot enable or live rollout was executed from this worktree.
+
+Do not start pilot or rollout from this step unless the readiness gate is explicitly clean for the target worktree.
 
 ## Target Contract Summary
 
@@ -15,9 +21,9 @@ Do not start pilot or rollout from this step. Pilot, controlled cutover, and rol
 
 ## Current Boundary
 
-- Inventory/readiness is the only active migration path in this phase.
-- Full cutover is out of scope here.
-- Rollout and rollback are out of scope here.
+- Live inventory/readiness is the only active path on the real repository state.
+- Pilot and rollout logic exist, but live execution stays blocked until the readiness gate clears.
+- Rollout and rollback proof currently comes from hermetic fixtures, not from the shared repo state.
 - Canonical-root cleanup is out of scope here.
 - The existing `.beads/issues.jsonl` RCA stream remains separate.
 
@@ -77,15 +83,26 @@ Pilot status / enable / review:
 ./scripts/beads-dolt-pilot.sh review
 ```
 
-## Pilot Review Surface
+Rollout report / cutover / verify / rollback:
 
-The pilot review surface is command-first, not JSONL-first.
+```bash
+./scripts/beads-dolt-rollout.sh report-only --format json
+./scripts/beads-dolt-rollout.sh cutover --worktree .
+./scripts/beads-dolt-rollout.sh verify --worktree .
+./scripts/beads-dolt-rollout.sh rollback --package-id <id> --worktree .
+```
+
+## Migration Review Surfaces
+
+The migration review surfaces are command-first, not JSONL-first.
 
 - Enable pilot mode only in one isolated dedicated worktree.
 - When `.beads/pilot-mode.json` exists, legacy-only paths such as `bd sync` are expected to fail closed.
 - Review pilot state through `./scripts/beads-dolt-pilot.sh review`.
+- When `.beads/cutover-mode.json` exists, legacy-only paths such as `bd sync`, JSONL normalization, and localization helpers are expected to fail closed.
+- Verify cutover state through `./scripts/beads-dolt-rollout.sh verify --worktree .`.
 
-The review command is meant to stay:
+These commands are meant to stay:
 
 - human-readable
 - agent-readable
@@ -96,3 +113,4 @@ The review command is meant to stay:
 
 - Keep this phase report-only even if local `bd` exposes `migrate dolt`, `backend`, `branch`, or `vc`.
 - Known local divergence matters: repo-local wrapper `bd sync` may hang, while direct system `bd --no-daemon` behavior differs. The inventory flow therefore inspects `bd --no-daemon info` and `bd backend show`, but does not call `sync`.
+- For ordinary non-migration sync on this branch, use direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync` if the repo-local wrapper path hangs.
