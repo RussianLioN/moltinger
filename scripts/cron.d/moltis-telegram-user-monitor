@@ -18,5 +18,6 @@ TELEGRAM_MONITOR_POLL_INTERVAL=2
 TELEGRAM_MONITOR_MIN_REPLY_LEN=2
 TELEGRAM_SESSION=/opt/moltinger-active/data/.telegram-user
 
-# Every 10 minutes run user-level monitor and append JSON report.
-*/10 * * * * root mkdir -p /var/log/moltis && /opt/moltinger-active/scripts/telegram-user-monitor.sh >> /var/log/moltis/telegram-user-monitor.log 2>&1
+# Disabled by default to avoid unsolicited user-facing Telegram traffic.
+# Enable only for short-lived diagnostics windows.
+# */10 * * * * root mkdir -p /var/log/moltis && /opt/moltinger-active/scripts/telegram-user-monitor.sh >> /var/log/moltis/telegram-user-monitor.log 2>&1

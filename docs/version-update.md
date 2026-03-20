@@ -148,5 +148,6 @@ Current rollback contract:
 
 ## References
 
+- [research/moltis-official-version-update-channel-2026-03-20.md](research/moltis-official-version-update-channel-2026-03-20.md)
 - [deployment-strategy.md](deployment-strategy.md)
 - [disaster-recovery.md](disaster-recovery.md)

@@ -8,14 +8,17 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-# Force webhook mode for production quality gate.
+# Keep webhook readiness checks enabled.
+# Probe message stays passive-by-default (no required chat target).
 TELEGRAM_REQUIRE_WEBHOOK=true
 TELEGRAM_REQUIRE_HTTPS_WEBHOOK=true
-TELEGRAM_REQUIRE_TEST_USER=true
+TELEGRAM_REQUIRE_TEST_USER=false
+TELEGRAM_PROBE_DISABLE_NOTIFICATION=true
 TELEGRAM_MAX_PENDING_UPDATES=3
 MONITOR_VALIDATE_PREVIEW=true
 MOLTIS_BASE_URL=http://localhost:13131
 MOLTIS_ENV_FILE=/opt/moltinger-active/.env
 
 # Every 15 minutes run monitor and append JSON report.
+# Active sendMessage probe runs only when TELEGRAM_TEST_USER is set explicitly.
 */15 * * * * root mkdir -p /var/log/moltis && /opt/moltinger-active/scripts/telegram-webhook-monitor.sh --json >> /var/log/moltis/telegram-webhook-monitor.log 2>&1
