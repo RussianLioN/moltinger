@@ -105,14 +105,22 @@ Workflow contract:
 2. Reads official latest release from `moltis-org/moltis`.
 3. Normalizes release tag to GHCR runtime tag (`vX.Y.Z -> X.Y.Z`).
 4. Verifies `ghcr.io/moltis-org/moltis:<tag>` is pullable.
-5. Creates or updates a PR against `main` with pinned compose changes only.
-6. Does not deploy directly.
+5. Tries to create or update a PR against `main` with pinned compose changes only.
+6. If GitHub Actions cannot create PRs (`createPullRequest` restricted), workflow stays successful and emits a compare URL (`.../compare/main...<branch>?expand=1`) for manual PR creation.
+7. Does not deploy directly.
+
+Approval modes (contract):
+
+- `auto_pr`: workflow produced a direct PR URL.
+- `manual_compare_url`: workflow produced compare URL; operator clicks `Create pull request`, then approve/merge.
+- `manual_compare_url` is a supported permanent contract and not a failure state.
 
 User flow:
 
-1. Receive notification with PR link.
-2. Approve and merge PR when ready.
-3. Existing hardened `Deploy Moltis` pipeline handles backup-safe rollout.
+1. Receive notification with PR URL or compare URL.
+2. If compare URL is provided, click `Create pull request`.
+3. Approve and merge PR when ready.
+4. Existing hardened `Deploy Moltis` pipeline handles backup-safe rollout.
 
 Optional email delivery secrets for proposal workflow:
 

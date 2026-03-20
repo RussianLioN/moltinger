@@ -180,8 +180,8 @@ jobs:
               PR_MODE="pr_created"
             elif grep -qi 'not permitted to create or approve pull requests' <<<"$CREATE_OUTPUT"; then
               PR_URL="https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
-              PR_MODE="manual_pr_required_actions_permission"
-              echo "::notice::GitHub Actions token cannot create PR in this repository; using compare URL fallback"
+              PR_MODE="manual_compare_url"
+              echo "::notice::GitHub Actions token cannot create PR in this repository; using supported manual compare URL approval path"
             else
               echo "::error::Failed to create proposal PR: $CREATE_OUTPUT"
               exit "$CREATE_RC"
@@ -234,16 +234,29 @@ jobs:
           body: |
             Доступно обновление Moltis до версии ${{ steps.pr.outputs.candidate_version }}.
 
-            Для подтверждения откройте PR и выполните approve/merge:
+            Для подтверждения используйте ссылку ниже:
             ${{ steps.pr.outputs.pr_url }}
 
-            Если ссылка открывает compare-страницу вместо готового PR, нажмите "Create pull request", затем approve/merge.
+            Поддерживаются два штатных режима:
+            1) ссылка уже ведёт на готовый PR -> approve/merge;
+            2) ссылка ведёт на compare-страницу -> нажмите "Create pull request", затем approve/merge.
+
+            Compare URL mode является поддерживаемым контрактом (это не failure state).
 
             Это безопасный proposal workflow: деплой напрямую не запускался.
 
       - name: Proposal summary
         if: always()
         run: |
+          PR_MODE="${{ steps.pr.outputs.pr_mode || 'n/a' }}"
+          APPROVAL_MODE="auto_pr"
+          OPERATOR_ACTION="Review, approve, and merge the PR link."
+
+          if [[ "$PR_MODE" == "manual_compare_url" ]]; then
+            APPROVAL_MODE="manual_compare_url"
+            OPERATOR_ACTION="Open compare URL, click 'Create pull request', then approve and merge."
+          fi
+
           {
             echo "## Moltis Update Proposal"
             echo ""
@@ -256,9 +269,12 @@ jobs:
             echo "| Skip reason | \`${{ steps.version.outputs.skip_reason || 'n/a' }}\` |"
             echo "| Proposal branch | \`${{ steps.branch.outputs.branch || 'n/a' }}\` |"
             echo "| PR URL | ${{ steps.pr.outputs.pr_url || 'n/a' }} |"
-            echo "| PR mode | \`${{ steps.pr.outputs.pr_mode || 'n/a' }}\` |"
+            echo "| PR mode (raw) | \`$PR_MODE\` |"
+            echo "| Approval mode (contract) | \`$APPROVAL_MODE\` |"
+            echo "| Operator action | $OPERATOR_ACTION |"
             echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
             echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
             echo ""
+            echo "> Manual compare URL mode is a supported contract when Actions cannot create PRs."
             echo "> This workflow only prepares/updates a PR. It does not deploy to production."
           } >> "$GITHUB_STEP_SUMMARY"
