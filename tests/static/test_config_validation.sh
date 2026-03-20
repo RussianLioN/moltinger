@@ -593,11 +593,22 @@ PY
 
     test_start "static_moltis_update_proposal_falls_back_to_compare_url_when_pr_create_is_forbidden"
     if rg -Fq 'not permitted to create or approve pull requests' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -Fq 'manual_pr_required_actions_permission' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -Fq 'compare/main...${BRANCH}?expand=1' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+       rg -Fq 'manual_compare_url' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq 'compare/main...${BRANCH}?expand=1' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq 'supported manual compare URL approval path' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
         test_pass
     else
         test_fail "Moltis update proposal workflow must fall back to a compare URL when GitHub token cannot create PRs"
+    fi
+
+    test_start "static_version_update_docs_fix_manual_compare_url_contract"
+    if rg -Fq 'manual_compare_url' "$PROJECT_ROOT/docs/version-update.md" && \
+       rg -Fq 'supported permanent contract' "$PROJECT_ROOT/docs/version-update.md" && \
+       rg -Fq 'not a failure state' "$PROJECT_ROOT/docs/version-update.md" && \
+       rg -Fq 'compare URL' "$PROJECT_ROOT/docs/version-update.md"; then
+        test_pass
+    else
+        test_fail "Version update docs must explicitly treat manual compare URL mode as a supported non-failure contract"
     fi
 
     test_start "static_moltis_update_proposal_email_action_uses_node24_compatible_major"
