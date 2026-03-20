@@ -7,10 +7,6 @@ name: UAT Gate
 on:
   workflow_dispatch:
     inputs:
-      target_version:
-        description: 'Target version to promote (e.g., v1.7.0)'
-        required: true
-        type: string
       skip_smoke_tests:
         description: 'Skip smoke tests (emergency only)'
         required: false
@@ -21,8 +17,6 @@ env:
   SSH_HOST: ainetic.tech
   SSH_USER: root
   DEPLOY_PATH: /opt/moltinger
-  DEPLOY_ACTIVE_PATH: /opt/moltinger-active
-  COMPOSE_PROJECT_NAME: moltinger
 
 jobs:
   # ===========================================
@@ -33,37 +27,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      all_passed: ${{ steps.summary.outputs.all_passed }}
       preflight_status: ${{ steps.preflight_local.outputs.status }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate target version
+      - name: Determine tracked Moltis version
         id: version
         run: |
-          VERSION="${{ github.event.inputs.target_version }}"
-
-          if [[ -z "$VERSION" ]]; then
-            echo "::error::Target version is required"
-            exit 1
-          fi
-
-          # Verify version format
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Invalid version format: $VERSION (expected vX.Y.Z)"
-            exit 1
-          fi
-
-          # Verify tag exists
-          if ! git tag | grep -q "^${VERSION}$"; then
-            echo "::error::Version tag not found: $VERSION"
-            exit 1
-          fi
+          VERSION="$(bash ./scripts/moltis-version.sh version)"
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "::notice::Target version validated: $VERSION"
+          echo "::notice::Tracked Moltis version from git: $VERSION"
 
       - name: Run local preflight checks
         id: preflight_local
@@ -98,8 +74,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.preflight.outputs.version }}
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -117,8 +91,22 @@ jobs:
           echo "::group::GitOps Compliance Gate"
           PASSED=true
 
-          # Check 1: docker-compose.prod.yml
-          echo "### Check 1: docker-compose.prod.yml"
+          # Check 1: docker-compose.yml
+          echo "### Check 1: docker-compose.yml"
+          LOCAL_HASH=$(sha256sum docker-compose.yml | cut -d' ' -f1)
+          SERVER_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum ${{ env.DEPLOY_PATH }}/docker-compose.yml 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
+
+          if [[ "$LOCAL_HASH" == "$SERVER_HASH" ]]; then
+            echo "✅ docker-compose.yml matches"
+          else
+            echo "❌ docker-compose.yml MISMATCH"
+            echo "  Git:    $LOCAL_HASH"
+            echo "  Server: $SERVER_HASH"
+            PASSED=false
+          fi
+
+          # Check 2: docker-compose.prod.yml
+          echo "### Check 2: docker-compose.prod.yml"
           LOCAL_HASH=$(sha256sum docker-compose.prod.yml | cut -d' ' -f1)
           SERVER_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum ${{ env.DEPLOY_PATH }}/docker-compose.prod.yml 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
 
@@ -131,8 +119,8 @@ jobs:
             PASSED=false
           fi
 
-          # Check 2: No manual modifications marker
-          echo "### Check 2: Manual modifications"
+          # Check 3: No manual modifications marker
+          echo "### Check 3: Manual modifications"
           if ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "[ -f ${{ env.DEPLOY_PATH }}/.manual-modifications ]"; then
             echo "❌ Manual modifications detected on server"
             ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat ${{ env.DEPLOY_PATH }}/.manual-modifications"
@@ -141,8 +129,8 @@ jobs:
             echo "✅ No manual modifications"
           fi
 
-          # Check 3: Traefik labels present
-          echo "### Check 3: Traefik configuration"
+          # Check 4: Traefik labels present
+          echo "### Check 4: Traefik configuration"
           if ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "grep -q 'traefik.enable=true' ${{ env.DEPLOY_PATH }}/docker-compose.prod.yml"; then
             echo "✅ Traefik labels present"
           else
@@ -150,8 +138,8 @@ jobs:
             PASSED=false
           fi
 
-          # Check 4: Scripts integrity
-          echo "### Check 4: Scripts integrity"
+          # Check 5: Scripts integrity
+          echo "### Check 5: Scripts integrity"
           if [ -f "scripts/manifest.json" ]; then
             SCRIPTS_OK=true
             while IFS= read -r script; do
@@ -245,9 +233,9 @@ jobs:
           echo "- ✅ Smoke tests" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Ready for Promotion" >> $GITHUB_STEP_SUMMARY
-          echo "**Target Version:** ${{ needs.preflight.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tracked Version From Git:** ${{ needs.preflight.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Approve to deploy to production." >> $GITHUB_STEP_SUMMARY
+          echo "Approve to deploy the tracked git version through the backup-safe rollout path." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
   # Gate 5: Deploy to Production
@@ -264,8 +252,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.preflight.outputs.version }}
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -286,7 +272,6 @@ jobs:
       # ===========================================
       - name: Sync configuration files (GitOps)
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
           echo "::group::Syncing configuration files to server"
 
           # Sync docker-compose.yml from git to server
@@ -300,70 +285,115 @@ jobs:
           # Sync config directory (moltis.toml, mcp-servers.json, etc.)
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
           scp -r config/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/ 2>/dev/null || echo "No config files to sync"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "rm -f ${{ env.DEPLOY_PATH }}/config/provider_keys.json ${{ env.DEPLOY_PATH }}/config/oauth_tokens.json ${{ env.DEPLOY_PATH }}/config/credentials.json"
 
           # Sync scripts directory (GitOps compliance)
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
           scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
 
-          # Sync systemd units to keep active-root automation consistent
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/systemd"
-          scp -r systemd/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/systemd/ 2>/dev/null || echo "No systemd units to sync"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "chmod +x ${{ env.DEPLOY_PATH }}/scripts/deploy.sh ${{ env.DEPLOY_PATH }}/scripts/backup-moltis-enhanced.sh ${{ env.DEPLOY_PATH }}/scripts/moltis-version.sh 2>/dev/null || true"
 
-          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/ + systemd/)"
+          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/)"
           echo "::endgroup::"
 
-      - name: Update active deploy root symlink
+      - name: Generate .env from Secrets
         run: |
-          echo "::group::Updating active deploy root"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
-            set -e
-            ln -sfn "${{ env.DEPLOY_PATH }}" "${{ env.DEPLOY_ACTIVE_PATH }}"
-            test -L "${{ env.DEPLOY_ACTIVE_PATH }}"
-            test "$(readlink "${{ env.DEPLOY_ACTIVE_PATH }}")" = "${{ env.DEPLOY_PATH }}"
+          echo "::group::Generating .env file from GitHub Secrets"
+
+          cat > /tmp/moltis.env << EOF
+          # Auto-generated by CI/CD from GitHub Secrets
+          # DO NOT EDIT MANUALLY - changes will be overwritten
+
+          # Authentication
+          MOLTIS_PASSWORD=${{ secrets.MOLTIS_PASSWORD }}
+
+          # LLM Provider - GLM (Zhipu AI)
+          GLM_API_KEY=${{ secrets.GLM_API_KEY }}
+
+          # LLM Fallback - Ollama Cloud (optional, for cloud models)
+          OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}
+
+          # Web Search - Tavily
+          TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
+
+          # Telegram Bot
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_USERS=${{ secrets.TELEGRAM_ALLOWED_USERS }}
+          TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
+          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+
+          # Domain
+          MOLTIS_DOMAIN=moltis.ainetic.tech
           EOF
-          echo "::notice::Active deploy root -> ${{ env.DEPLOY_PATH }}"
+
+          scp /tmp/moltis.env ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/.env
+          rm /tmp/moltis.env
+
+          echo ".env file generated and synced successfully"
           echo "::endgroup::"
 
-      - name: Prepare writable Moltis runtime config
+      - name: Validate tracked remote configuration
         run: |
-          echo "::group::Preparing writable Moltis runtime config"
+          echo "::group::Validating tracked remote configuration"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            if [ -f "${{ env.DEPLOY_PATH }}/.env" ]; then
-              set -a
-              . "${{ env.DEPLOY_PATH }}/.env"
-              set +a
-            fi
-            RUNTIME_CONFIG_DIR="${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
-            mkdir -p "$RUNTIME_CONFIG_DIR"
-            bash "${{ env.DEPLOY_PATH }}/scripts/prepare-moltis-runtime-config.sh" "${{ env.DEPLOY_PATH }}/config" "$RUNTIME_CONFIG_DIR"
-            test -f "$RUNTIME_CONFIG_DIR/moltis.toml"
-          EOF
-          echo "::endgroup::"
-
-      - name: Deploy version ${{ needs.preflight.outputs.version }}
-        run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
-          echo "::group::Deploying $VERSION to production"
-
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
             set -e
             cd ${{ env.DEPLOY_PATH }}
 
-            # Pull specific version
-            docker pull ghcr.io/moltis-org/moltis:$VERSION
+            if grep -q '^MOLTIS_VERSION=' .env 2>/dev/null; then
+              echo "::error::MOLTIS_VERSION override is forbidden in /opt/moltinger/.env"
+              exit 1
+            fi
 
-            # Validate configuration before deploy (GitOps)
-            docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml config --quiet
+            ./scripts/moltis-version.sh assert-tracked
+            env -u MOLTIS_VERSION docker compose -f docker-compose.prod.yml config --quiet
+          EOF
+          echo "::endgroup::"
 
-            # Stop current container
-            docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml stop moltis || true
+      - name: Deploy tracked version ${{ needs.preflight.outputs.version }}
+        run: |
+          echo "::group::Deploying tracked git version to production"
 
-            # Start new version (uses synced docker-compose.prod.yml from git)
-            MOLTIS_VERSION="$VERSION" docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml up -d moltis
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
 
-            echo "Deployed $VERSION successfully"
+            OUTPUT=$(./scripts/deploy.sh --json moltis deploy)
+            echo "$OUTPUT"
+
+            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
+            if [ "$STATUS" != "success" ]; then
+              echo "::error::deploy.sh deploy failed"
+              exit 1
+            fi
+          EOF
+          echo "::endgroup::"
+
+      - name: Record deployed git SHA (GitOps audit)
+        if: success()
+        run: |
+          echo "::group::Recording deployed git SHA"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            mkdir -p data
+            echo "${{ github.sha }}" > data/.deployed-sha
+            cat > data/.deployment-info << INFO
+          deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          git_sha=${{ github.sha }}
+          workflow_run=${{ github.run_id }}
+          version=${{ needs.preflight.outputs.version }}
+          INFO
+          EOF
+          echo "::endgroup::"
+
+      - name: Align server git checkout to deployed commit
+        if: success()
+        run: |
+          echo "::group::Aligning server git checkout"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            git fetch --depth=1 origin "${{ github.ref_name }}"
+            git checkout --force "${{ github.ref_name }}"
+            git reset --hard "${{ github.sha }}"
+            git status --short
           EOF
           echo "::endgroup::"
 
@@ -389,6 +419,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | \`${{ needs.preflight.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tracked Version | \`${{ needs.preflight.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | https://moltis.ainetic.tech |" >> $GITHUB_STEP_SUMMARY

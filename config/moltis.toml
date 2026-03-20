@@ -27,6 +27,68 @@ disabled = false                  # true = disable auth entirely (DANGEROUS if e
                                   # When disabled, anyone with network access can use moltis
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ENV
+# ══════════════════════════════════════════════════════════════════════════════
+# Fleet handoff metadata is exported as env vars so hooks, smoke scripts, and
+# later runtime integrations can share one authoritative contract without
+# inventing an unsupported Moltis-specific config section.
+
+[env]
+MOLTIS_FLEET_AGENT_ID = "moltinger"
+MOLTIS_FLEET_INTERNAL_ENDPOINT = "http://moltis:13131/internal/v1"
+MOLTIS_FLEET_REPLY_TO = "agent://moltinger"
+MOLTIS_FLEET_HANDOFF_SUBMIT_PATH = "/internal/v1/agent-handoffs"
+MOLTIS_FLEET_HANDOFF_ACK_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}/acks"
+MOLTIS_FLEET_HANDOFF_STATUS_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}"
+MOLTIS_FLEET_HANDOFF_CANCEL_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}/cancel"
+MOLTIS_FLEET_AUTHORIZATION_HEADER = "Authorization"
+MOLTIS_FLEET_AGENT_HEADER = "X-Agent-Id"
+MOLTIS_FLEET_CORRELATION_HEADER = "X-Correlation-Id"
+MOLTIS_FLEET_IDEMPOTENCY_HEADER = "Idempotency-Key"
+MOLTIS_FLEET_SERVICE_AUTH_MODE = "bearer"
+MOLTIS_FLEET_SERVICE_TOKEN_ENV = "MOLTINGER_SERVICE_TOKEN"
+MOLTIS_FLEET_ALLOWED_RECIPIENTS = "clawdiy"
+MOLTIS_FLEET_PROVIDER_AUTH_CHECK_CAPABILITY = "provider.auth.check"
+MOLTIS_FLEET_FAIL_CLOSED_ON_AUTH_ERROR = "true"
+MOLTIS_FLEET_ACK_CALLBACK_PATH_TEMPLATE = "/internal/v1/agent-handoffs/{correlation_id}/acks"
+MOLTIS_FLEET_REQUIRED_ACKS = "delivery,accept,start,terminal"
+MOLTIS_FLEET_DELIVERY_ACK_DEADLINE_SECONDS = "10"
+MOLTIS_FLEET_START_ACK_DEADLINE_SECONDS = "60"
+MOLTIS_FLEET_PROGRESS_HEARTBEAT_SECONDS = "300"
+MOLTIS_FLEET_TERMINAL_TIMEOUT_SECONDS = "900"
+# Legacy migration-only Codex advisory surfaces.
+# Keep these for transition/reference paths; they are no longer canonical.
+MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
+MOLTIS_CODEX_ADVISORY_INTAKE_SCRIPT = "./scripts/moltis-codex-advisory-intake.sh"
+MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
+MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
+MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE = "one_way_only"
+MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT = "./scripts/codex-advisory-session-store.sh"
+MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR = "/opt/moltinger/.tmp/current/codex-advisory-session-store"
+MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
+MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
+MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS = "24"
+MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND = "/codex-advisory-followup"
+# Canonical Moltis-native Codex update skill runtime.
+# Live Moltis must see the repo through /server; writable skill state lives under ~/.moltis.
+MOLTIS_CODEX_UPDATE_STATE_FILE = "/home/moltis/.moltis/codex-update/state.json"
+MOLTIS_CODEX_UPDATE_STATE_SCRIPT = "/server/scripts/moltis-codex-update-state.sh"
+MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT = "/server/scripts/moltis-codex-update-profile.sh"
+MOLTIS_CODEX_UPDATE_AUDIT_DIR = "/home/moltis/.moltis/codex-update/audit"
+MOLTIS_CODEX_UPDATE_PROFILE_SCHEMA = "/server/specs/023-full-moltis-codex-update-skill/contracts/project-profile.schema.json"
+MOLTIS_CODEX_UPDATE_RELEASE_URL = "https://developers.openai.com/codex/changelog"
+MOLTIS_CODEX_UPDATE_ISSUE_SIGNALS_URL = "https://api.github.com/repos/openai/codex/issues?state=open&per_page=20"
+MOLTIS_CODEX_UPDATE_MAX_RELEASES = "3"
+MOLTIS_CODEX_UPDATE_PROFILE_FILE = ""
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENABLED = "false"
+MOLTIS_CODEX_UPDATE_TELEGRAM_CHAT_ID = ""
+MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT = "/server/scripts/telegram-bot-send.sh"
+MOLTIS_CODEX_UPDATE_TELEGRAM_ENV_FILE = ""
+MOLTIS_CODEX_UPDATE_TELEGRAM_SILENT = "false"
+
+# ══════════════════════════════════════════════════════════════════════════════
 # TLS / HTTPS
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -35,7 +97,7 @@ enabled = true                    # Enable HTTPS (recommended)
 auto_generate = true              # Auto-generate local CA and server certificate
 
 [providers.ollama]
-enabled = true                    # First fallback via Ollama sidecar
+enabled = true                    # Fallback LLM provider via Ollama sidecar
 base_url = "http://ollama:11434"  # Docker service name
 model = "gemini-3-flash-preview:cloud"  # Cloud model via Ollama
 alias = "ollama"
@@ -73,9 +135,9 @@ soul = """
 - Формат: используй [OK]/[WARN]/[ERR] статусы для результатов
 - Действия: предлагай конкретные команды и решения
 - Код: давай готовые примеры, которые можно скопировать
-- Live Moltis видит repo через `/server`, а writable runtime state живет под `/home/moltis/.moltis`.
-- Если пользователь просит проверить обновления Codex CLI, используй канонический runtime `bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary`.
-- Telegram helper для этих сценариев должен идти через `/server/scripts/telegram-bot-send.sh`.
+- Если пользователь просит проверить обновления Codex CLI, не делай старые shell-пробы вроде `npm list -g @openai/codex` или `codex --version` по умолчанию.
+- Для такого запроса сразу используй навык `codex-update` и его канонический runtime `bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary`.
+- Локальную установленную версию Codex CLI проверяй только если пользователь явно спрашивает именно про локальную установку.
 """                                # Freeform personality text injected into system prompt
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -139,7 +201,7 @@ api_key = "${GLM_API_KEY}"                          # Use GLM_API_KEY from .env
 model = "glm-5"                                     # Default model
 base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
 alias = "zai"
-models = ["glm-5"]                                  # Keep GLM-5 only as last fallback
+models = ["glm-5"]                                  # Keep GLM-5 as third step in chain
 
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
@@ -147,9 +209,10 @@ models = ["glm-5"]                                  # Keep GLM-5 only as last fa
 enabled = false
 
 # ── Google Gemini ─────────────────────────────────────────────
-# Direct Gemini path is intentionally out of the preferred chain.
+# Direct Gemini provider stays disabled to keep one explicit fallback path
+# through Ollama in the canonical chain.
 [providers.gemini]
-enabled = false                         # Disabled to keep the preferred chain unambiguous
+enabled = false                         # Keep disabled unless direct Gemini is explicitly required
 api_key = "${GOOGLE_API_KEY}"           # Or set GOOGLE_API_KEY env var
 model = "gemini-2.0-flash-exp"          # Experimental flash model (free tier available)
 alias = "gemini"
@@ -201,7 +264,7 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.4", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.4", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# Preferred chain: OpenAI Codex GPT-5.4 -> Ollama Gemini 3 Flash Preview -> GLM-5
+# Preferred chain: GPT-5.4 (OAuth) -> Ollama Gemini 3 Flash Preview -> GLM-5
 allowed_models = [
     "openai-codex::gpt-5.4",                 # Primary
     "ollama::gemini-3-flash-preview:cloud",  # Fallback 1
@@ -210,7 +273,7 @@ allowed_models = [
 priority_models = [
     "openai-codex::gpt-5.4",
     "ollama::gemini-3-flash-preview:cloud",
-    "zai::glm-5"
+    "zai::glm-5",
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -439,7 +502,7 @@ sandbox_image = "browserless/chrome"
 enabled = true                    # Enable skills system
 search_paths = ["/server/skills"] # Additional directories to search for skills
                                   # Default locations: ~/.config/moltis/skills/, ./skills/
-auto_load = ["telegram-learner"]  # Skills to always load without explicit activation
+auto_load = ["telegram-learner", "codex-update"]  # Skills to always load without explicit activation
                                   # Example: ["code-review", "commit"]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -668,6 +731,45 @@ rate_limit_window_secs = 60
 # HOOKS
 # ══════════════════════════════════════════════════════════════════════════════
 # Shell commands triggered by events.
+
+[hooks]
+# Historical repo-side consent routing is intentionally not enabled here.
+# The old `/codex_*` and `/codex-followup ...` user-facing flow is retired.
+# Codex advisories now move through a producer contract plus a Moltis-native
+# intake surface. Safe default remains `one_way_only` until Moltis core owns
+# callback routing end-to-end. The repo now contains advisory-native session
+# store and router helpers; once Moltis confirms callback ingress, the mode can
+# be switched from `one_way_only` to `inline_callbacks`.
+#
+# Future Moltis-native intake example:
+#
+# [[hooks.hooks]]
+# name = "codex-advisory-intake"
+# command = "./scripts/moltis-codex-advisory-intake.sh"
+# events = ["MessageSending"]
+# timeout = 10
+# [hooks.hooks.env]
+# MOLTIS_CODEX_ADVISORY_EVENT_SCHEMA = "./specs/021-moltis-native-codex-update-advisory/contracts/advisory-event.schema.json"
+# MOLTIS_CODEX_ADVISORY_AUDIT_DIR = "/opt/moltinger/.tmp/current/codex-advisory-intake-audit"
+# MOLTIS_CODEX_ADVISORY_TELEGRAM_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+# MOLTIS_CODEX_ADVISORY_TELEGRAM_ENV_FILE = "/opt/moltinger/.env"
+# MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE = "one_way_only"
+#
+# Future callback-routing example after Moltis webhook/polling path confirms
+# `callback_query` delivery to hooks:
+#
+# [[hooks.hooks]]
+# name = "codex-advisory-router"
+# command = "./scripts/moltis-codex-advisory-router.sh"
+# events = ["MessageReceived"]
+# timeout = 10
+# [hooks.hooks.env]
+# MOLTIS_CODEX_ADVISORY_SESSION_STORE_SCRIPT = "./scripts/codex-advisory-session-store.sh"
+# MOLTIS_CODEX_ADVISORY_SESSION_STORE_DIR = "/opt/moltinger/.tmp/current/codex-advisory-session-store"
+# MOLTIS_CODEX_ADVISORY_ROUTER_SEND_SCRIPT = "./scripts/telegram-bot-send.sh"
+# MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
+# MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
+# MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX = "codex-advisory"
 
 # [hooks]
 # [[hooks.hooks]]

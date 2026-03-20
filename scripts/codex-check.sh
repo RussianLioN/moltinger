@@ -135,9 +135,16 @@ check_instruction_references() {
 check_deprecated_references() {
   log_info "Checking for deprecated Codex/model references..."
 
-  local pattern='gpt-5\.2(-codex)?|gpt 5\.2|openai-codex|providers\.openai-codex'
+  # OpenAI/GPT-5.* model names are intentionally allowed in this repository.
+  # Keep this pattern empty unless we have an explicitly approved deprecation.
+  local pattern=''
   local matches
   local filtered_matches
+
+  if [[ -z "${pattern}" ]]; then
+    log_warn "No deprecated model patterns configured; skipping deprecated-reference scan"
+    return 0
+  fi
 
   if command -v rg >/dev/null 2>&1; then
     matches="$(cd "${REPO_ROOT}" && rg -n -S "${pattern}" . -g '!scripts/codex-check.sh' || true)"
