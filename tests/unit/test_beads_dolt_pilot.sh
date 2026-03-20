@@ -87,6 +87,10 @@ case "${args[*]}" in
     exit 0
     ;;
   "info")
+    if [[ "${mode}" == "modern" && "${readonly_flag}" == "true" ]]; then
+      printf 'Error: unknown flag: --no-daemon\n' >&2
+      exit 1
+    fi
     cat <<EOT
 Beads Database Information
 ===========================
@@ -346,6 +350,32 @@ test_pilot_review_emits_review_surface() {
     test_pass
 }
 
+test_pilot_review_falls_back_to_bd_info_for_modern_cli() {
+    test_start "pilot_review_falls_back_to_bd_info_for_modern_cli"
+
+    local fixture_root repo_dir worktree_dir fake_bin review_json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-pilot.XXXXXX)"
+    mapfile -t fixture_paths < <(
+        create_isolated_pilot_worktree_fixture \
+            "${fixture_root}" \
+            pilot-ready \
+            pilot-ready \
+            "fixture: seed ready pilot state for modern cli"
+    )
+    repo_dir="${fixture_paths[0]}"
+    worktree_dir="${fixture_paths[1]}"
+    fake_bin="$(create_fake_pilot_bd_bin "${fixture_root}")"
+
+    run_pilot_script "${worktree_dir}" "${fake_bin}" pilot-ready enable >/dev/null
+    review_json="$(run_pilot_script "${worktree_dir}" "${fake_bin}" modern review --format json)"
+
+    assert_json_value "${review_json}" '.review_surface.info.rc' "0" "Pilot review must fall back to bd info when --no-daemon is unsupported"
+    assert_json_value "${review_json}" '.review_surface.info.command' "bd info" "Pilot review must record the modern fallback command"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_plain_bd_blocks_sync_when_pilot_mode_is_enabled() {
     test_start "plain_bd_blocks_sync_when_pilot_mode_is_enabled"
 
@@ -450,6 +480,7 @@ run_test_beads_dolt_pilot() {
     test_pilot_enable_ignores_blocked_siblings_when_current_worktree_is_ready
     test_pilot_enable_writes_mode_file_when_gate_passes
     test_pilot_review_emits_review_surface
+    test_pilot_review_falls_back_to_bd_info_for_modern_cli
     test_plain_bd_blocks_sync_when_pilot_mode_is_enabled
     test_pre_commit_blocks_staged_jsonl_in_pilot_mode
     test_pilot_enable_rejects_canonical_root
