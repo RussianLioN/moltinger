@@ -124,3 +124,11 @@ Forbidden:
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
+
+## Completion Report Format
+
+For every task-completion report to the user, include:
+
+- A brief plain-language summary of what was done and what outcome was achieved.
+- A current checklist or status snapshot showing what is done, what remains, and any blocked items.
+- A proposed next step and why it is the right next move. If no next step is needed, say that explicitly.
