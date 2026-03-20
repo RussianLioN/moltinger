@@ -211,6 +211,25 @@ NODE
         test_fail "Probe must export a stable failure taxonomy for all required authoritative Telegram Web failure classes"
     fi
 
+    test_start "component_telegram_web_probe_marks_model_not_found_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReply = "model 'openai-codex::gpt-5.4' not found. available: [\"zai::glm-5\"]";
+const goodReply = "Статус: Online | Модель: zai::glm-5";
+if (!isReplyErrorSignature(badReply)) {
+  throw new Error("expected model-not-found reply to be treated as error signature");
+}
+if (isReplyErrorSignature(goodReply)) {
+  throw new Error("expected healthy status reply to remain clean");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Model-not-found responses must be rejected by reply-quality checks"
+    fi
+
     generate_report
 }
 
