@@ -2,6 +2,8 @@
 
 In this repository, run these workflows with plain `bd`; the safe repo-local dispatch path should come from `.envrc` or the managed worktree/Codex bootstrap flow rather than a separate wrapper command.
 
+If `.beads/pilot-mode.json` exists in the current worktree, use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface and treat `bd sync` as a blocked legacy-only path for that worktree.
+
 ## Daily Session
 
 ```bash

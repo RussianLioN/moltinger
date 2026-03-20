@@ -4,6 +4,8 @@
 
 > **Moltinger repo note**: внутри этого репо для обычной работы используйте plain `bd`. Безопасный repo-local dispatch приходит через `.envrc` или managed worktree/Codex handoff; отдельную wrapper-команду выбирать не нужно.
 
+> **Pilot mode note**: если в текущей worktree есть `.beads/pilot-mode.json`, не используйте `bd sync` как обычный review path. Для pilot используйте `./scripts/beads-dolt-pilot.sh review`; попытки legacy-only sync path должны считаться ошибкой.
+
 ---
 
 ## SESSION CLOSE PROTOCOL (ОБЯЗАТЕЛЬНО!)

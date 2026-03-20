@@ -10,6 +10,14 @@ This directory stores Beads tracker state for the repository.
 4. Keep issue state aligned with repository reality. After meaningful issue lifecycle changes, run `bd sync`.
 5. Do not use `.beads/` for notes, drafts, or scratch artifacts.
 
+## Pilot Mode
+
+If `.beads/pilot-mode.json` exists in the current worktree:
+
+1. Do not use `bd sync` as the normal operator path.
+2. Use `./scripts/beads-dolt-pilot.sh review` for the documented pilot review surface.
+3. Do not stage `.beads/issues.jsonl` as part of pilot review reasoning.
+
 ## Validation
 
 Use the narrowest relevant `bd` command:

@@ -23,6 +23,10 @@ Description:
   should pass through unchanged, or must fail closed before a root fallback.
   The `localize` subcommand materializes a local beads.db from the current
   worktree's tracked `.beads/issues.jsonl`.
+
+  When `.beads/pilot-mode.json` exists in a dedicated worktree, legacy-only
+  operator paths such as `bd sync` fail closed and must be replaced by the
+  pilot review surface.
 EOF
 }
 
@@ -294,6 +298,34 @@ beads_resolve_extract_command() {
   fi
 }
 
+beads_resolve_pilot_mode_file() {
+  local repo_root="$1"
+  printf '%s/.beads/pilot-mode.json\n' "${repo_root}"
+}
+
+beads_resolve_pilot_mode_enabled() {
+  local repo_root="$1"
+  [[ -f "$(beads_resolve_pilot_mode_file "${repo_root}")" ]]
+}
+
+beads_resolve_is_pilot_legacy_command() {
+  local command=""
+  local subcommand=""
+
+  beads_resolve_extract_command "$@"
+  command="${BEADS_RESOLVE_COMMAND}"
+  subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
+
+  case "${command}" in
+    sync)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 beads_resolve_is_canonical_root_read_only_command() {
   local command=""
   local subcommand=""
@@ -305,6 +337,10 @@ beads_resolve_is_canonical_root_read_only_command() {
   case "${command}" in
     ""|activity|blocked|children|completion|count|diff|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
       return 0
+      ;;
+    backend)
+      [[ "${subcommand}" == "show" ]]
+      return
       ;;
     branch)
       [[ "${subcommand}" == "list" ]]
@@ -355,6 +391,7 @@ beads_resolve_dispatch() {
   local root_db_path=""
   local recovery_hint=""
   local root_cleanup_notice=""
+  local pilot_mode_enabled="false"
 
   beads_resolve_reset
 
@@ -411,6 +448,20 @@ beads_resolve_dispatch() {
   root_db_path="${canonical_root}/.beads/beads.db"
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
 
+  if beads_resolve_pilot_mode_enabled "${repo_root}"; then
+    pilot_mode_enabled="true"
+  fi
+
+  if beads_resolve_pilot_mode_enabled "${repo_root}" && beads_resolve_is_pilot_legacy_command "$@"; then
+    beads_resolve_set_decision \
+      "block_pilot_legacy_command" \
+      "dedicated_worktree" \
+      27 \
+      "bd: pilot mode is enabled in ${repo_root}, so legacy-only commands such as ${BEADS_RESOLVE_COMMAND} are blocked." \
+      "Use ./scripts/beads-dolt-pilot.sh review for the pilot review surface, and keep JSONL export/sync out of the everyday operator path."
+    return 0
+  fi
+
   if [[ -f "${redirect_path}" ]]; then
     redirect_target="$(cat "${redirect_path}")"
     if [[ -n "${redirect_target}" ]]; then
@@ -426,7 +477,50 @@ beads_resolve_dispatch() {
     return 0
   fi
 
-  if [[ ! -f "${config_path}" || ! -f "${issues_path}" ]]; then
+  if [[ ! -f "${config_path}" ]]; then
+    if [[ -f "${root_db_path}" ]]; then
+      beads_resolve_set_decision \
+        "block_root_fallback" \
+        "dedicated_worktree" \
+        24 \
+        "bd: local Beads foundation is incomplete in ${repo_root}, and falling back to the canonical root tracker is blocked." \
+        "${recovery_hint}" \
+        "Residual canonical-root cleanup must be handled separately; this command will not repair root state."
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "dedicated_worktree" \
+      25 \
+      "bd: local Beads foundation is incomplete in ${repo_root}. Required files: .beads/config.yaml and .beads/issues.jsonl." \
+      "${recovery_hint}"
+    return 0
+  fi
+
+  if [[ -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
+    if [[ "${pilot_mode_enabled}" == "true" ]]; then
+      BEADS_RESOLVE_DB_PATH="${db_path}"
+      beads_resolve_set_decision "execute_local" "pilot_worktree" 0
+      return 0
+    fi
+
+    if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
+      BEADS_RESOLVE_DB_PATH="${db_path}"
+      beads_resolve_set_decision "execute_local" "pilot_candidate_readonly" 0
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "dedicated_worktree" \
+      25 \
+      "bd: ${repo_root} has a pilot-ready local config/database foundation, but pilot mode is not enabled yet for mutating commands." \
+      "./scripts/beads-dolt-pilot.sh enable"
+    return 0
+  fi
+
+  if [[ ! -f "${issues_path}" ]]; then
     if [[ -f "${root_db_path}" ]]; then
       beads_resolve_set_decision \
         "block_root_fallback" \
