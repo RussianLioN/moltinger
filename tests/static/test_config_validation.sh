@@ -24,6 +24,9 @@ DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/deploy.sh"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
+TELEGRAM_WEBHOOK_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/telegram-webhook-monitor.sh"
+TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webhook-monitor"
+TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
 
 validate_toml() {
     local file_path="$1"
@@ -123,6 +126,31 @@ PY
         test_pass
     else
         test_fail "Moltis version helper must exist, validate compose alignment, and forbid latest as the tracked default"
+    fi
+
+    test_start "static_telegram_webhook_monitor_never_falls_back_to_allowed_users"
+    if rg -Fq 'TELEGRAM_REQUIRE_TEST_USER="${TELEGRAM_REQUIRE_TEST_USER:-false}"' "$TELEGRAM_WEBHOOK_MONITOR_SCRIPT" && \
+       rg -Fq 'TELEGRAM_PROBE_DISABLE_NOTIFICATION="${TELEGRAM_PROBE_DISABLE_NOTIFICATION:-true}"' "$TELEGRAM_WEBHOOK_MONITOR_SCRIPT" && \
+       ! rg -Fq 'TELEGRAM_TEST_USER="${TELEGRAM_ALLOWED_USERS%%,*}"' "$TELEGRAM_WEBHOOK_MONITOR_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Webhook monitor must not infer TELEGRAM_TEST_USER from allowlist and should keep probe notification policy explicit"
+    fi
+
+    test_start "static_telegram_webhook_cron_defaults_to_passive_probe_mode"
+    if rg -q '^TELEGRAM_REQUIRE_TEST_USER=false$' "$TELEGRAM_WEBHOOK_MONITOR_CRON" && \
+       rg -q '^TELEGRAM_PROBE_DISABLE_NOTIFICATION=true$' "$TELEGRAM_WEBHOOK_MONITOR_CRON"; then
+        test_pass
+    else
+        test_fail "Webhook cron defaults must keep active Telegram probe opt-in and quiet"
+    fi
+
+    test_start "static_telegram_user_monitor_cron_is_disabled_by_default"
+    if rg -q '^# \*/10 .*telegram-user-monitor\.sh' "$TELEGRAM_USER_MONITOR_CRON" && \
+       ! rg -q '^\*/10 .*telegram-user-monitor\.sh' "$TELEGRAM_USER_MONITOR_CRON"; then
+        test_pass
+    else
+        test_fail "MTProto user-monitor cron should be opt-in and disabled by default to avoid unsolicited chat noise"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"

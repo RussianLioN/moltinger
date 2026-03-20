@@ -7,7 +7,7 @@
 - `scripts/telegram-user-send.py` — ручная отправка как пользователь (MTProto)
 - `scripts/telegram-user-probe.py` — одноразовый probe + валидация ответа
 - `scripts/telegram-user-monitor.sh` — обёртка для cron/systemd
-- `scripts/cron.d/moltis-telegram-user-monitor` — периодический запуск каждые 10 минут
+- `scripts/cron.d/moltis-telegram-user-monitor` — opt-in cron (по умолчанию выключен)
 
 ## Обязательные переменные
 
@@ -48,8 +48,25 @@ Cron-файл:
 scripts/cron.d/moltis-telegram-user-monitor
 ```
 
+По умолчанию cron-строка в этом файле закомментирована, чтобы не создавать лишний Telegram-шум в production.
+Включайте только на ограниченный период диагностики.
+
+Чтобы временно включить:
+
+1. Раскомментировать строку `*/10 ... telegram-user-monitor.sh` в `scripts/cron.d/moltis-telegram-user-monitor`
+2. Задеплоить через GitOps
+3. После диагностики вернуть строку обратно в комментарий
+
 Лог:
 
 ```bash
 /var/log/moltis/telegram-user-monitor.log
+```
+
+Для регулярной пост-деплой проверки используйте on-demand workflow:
+
+```bash
+gh workflow run telegram-e2e-on-demand.yml \
+  -f message='/status' \
+  -f operator_intent='post_deploy_verification'
 ```

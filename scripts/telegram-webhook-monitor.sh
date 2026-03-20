@@ -25,11 +25,11 @@ Environment:
   MOLTIS_BASE_URL                  Moltis base URL (default: http://localhost:13131)
   MOLTIS_PASSWORD                  Auth password for Moltis UI/API (optional for preview checks)
   TELEGRAM_BOT_TOKEN               Telegram bot token (required)
-  TELEGRAM_ALLOWED_USERS           Comma-separated Telegram user IDs (optional)
-  TELEGRAM_TEST_USER               Telegram user ID for probe message (optional)
+  TELEGRAM_TEST_USER               Telegram user ID for probe message (optional; no auto-fallback)
   TELEGRAM_REQUIRE_WEBHOOK         true|false (default: true)
   TELEGRAM_REQUIRE_HTTPS_WEBHOOK   true|false (default: true)
-  TELEGRAM_REQUIRE_TEST_USER       true|false (default: true)
+  TELEGRAM_REQUIRE_TEST_USER       true|false (default: false)
+  TELEGRAM_PROBE_DISABLE_NOTIFICATION true|false (default: true)
   TELEGRAM_MAX_PENDING_UPDATES     Non-negative integer (default: 3)
   TELEGRAM_TIMEOUT_SECONDS         HTTP timeout in seconds (default: 20)
   MONITOR_VALIDATE_PREVIEW         true|false (default: true)
@@ -95,7 +95,8 @@ MOLTIS_ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 MOLTIS_BASE_URL="${MOLTIS_BASE_URL:-http://localhost:13131}"
 TELEGRAM_REQUIRE_WEBHOOK="${TELEGRAM_REQUIRE_WEBHOOK:-true}"
 TELEGRAM_REQUIRE_HTTPS_WEBHOOK="${TELEGRAM_REQUIRE_HTTPS_WEBHOOK:-true}"
-TELEGRAM_REQUIRE_TEST_USER="${TELEGRAM_REQUIRE_TEST_USER:-true}"
+TELEGRAM_REQUIRE_TEST_USER="${TELEGRAM_REQUIRE_TEST_USER:-false}"
+TELEGRAM_PROBE_DISABLE_NOTIFICATION="${TELEGRAM_PROBE_DISABLE_NOTIFICATION:-true}"
 TELEGRAM_MAX_PENDING_UPDATES="${TELEGRAM_MAX_PENDING_UPDATES:-3}"
 TELEGRAM_TIMEOUT_SECONDS="${TELEGRAM_TIMEOUT_SECONDS:-20}"
 MONITOR_VALIDATE_PREVIEW="${MONITOR_VALIDATE_PREVIEW:-true}"
@@ -111,12 +112,7 @@ fi
 
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 MOLTIS_PASSWORD="${MOLTIS_PASSWORD:-}"
-TELEGRAM_ALLOWED_USERS="${TELEGRAM_ALLOWED_USERS:-}"
 TELEGRAM_TEST_USER="${TELEGRAM_TEST_USER:-}"
-
-if [[ -z "$TELEGRAM_TEST_USER" && -n "$TELEGRAM_ALLOWED_USERS" ]]; then
-    TELEGRAM_TEST_USER="${TELEGRAM_ALLOWED_USERS%%,*}"
-fi
 
 if ! [[ "$TELEGRAM_MAX_PENDING_UPDATES" =~ ^[0-9]+$ ]]; then
     add_failure "TELEGRAM_MAX_PENDING_UPDATES must be a non-negative integer"
@@ -141,7 +137,9 @@ telegram_ok=false
 webhook_configured=false
 webhook_https=false
 send_probe_ok=false
+send_probe_attempted=false
 preview_clean=true
+probe_skipped_reason=""
 
 bot_username=""
 bot_id=""
@@ -209,16 +207,27 @@ fi
 
 if [[ -z "$TELEGRAM_TEST_USER" ]]; then
     if is_true "$TELEGRAM_REQUIRE_TEST_USER"; then
-        add_failure "TELEGRAM_TEST_USER not set (and TELEGRAM_ALLOWED_USERS is empty)"
+        add_failure "TELEGRAM_TEST_USER not set"
     else
-        add_warning "TELEGRAM_TEST_USER not set: probe message skipped"
+        probe_skipped_reason="test_user_not_configured"
     fi
 else
     if ! [[ "$TELEGRAM_TEST_USER" =~ ^[0-9]+$ ]]; then
         add_failure "TELEGRAM_TEST_USER must be numeric"
     elif [[ "$telegram_ok" == "true" ]]; then
+        send_probe_attempted=true
+        probe_disable_notification=false
+        if is_true "$TELEGRAM_PROBE_DISABLE_NOTIFICATION"; then
+            probe_disable_notification=true
+        fi
         probe_text="[monitor] telegram/webhook probe $(timestamp_utc)"
-        probe_payload="$(jq -cn --arg chat_id "$TELEGRAM_TEST_USER" --arg text "$probe_text" '{chat_id:$chat_id,text:$text}')"
+        probe_payload="$(
+            jq -cn \
+                --arg chat_id "$TELEGRAM_TEST_USER" \
+                --arg text "$probe_text" \
+                --argjson disable_notification "$probe_disable_notification" \
+                '{chat_id:$chat_id,text:$text,disable_notification:$disable_notification}'
+        )"
         probe_resp="$(telegram_api "sendMessage" "$probe_payload" || true)"
 
         if ! echo "$probe_resp" | jq -e '.' >/dev/null 2>&1; then
@@ -320,11 +329,13 @@ report_json="$(
         --arg inbound_mode "$inbound_mode" \
         --arg telegram_preview "$telegram_preview" \
         --arg probe_message_id "$probe_message_id" \
+        --arg probe_skipped_reason "$probe_skipped_reason" \
         --argjson pending_updates "${pending_updates:-0}" \
         --argjson telegram_ok "$telegram_ok" \
         --argjson webhook_configured "$webhook_configured" \
         --argjson webhook_https "$webhook_https" \
         --argjson send_probe_ok "$send_probe_ok" \
+        --argjson send_probe_attempted "$send_probe_attempted" \
         --argjson preview_clean "$preview_clean" \
         --argjson failures "$failures_json" \
         --argjson warnings "$warnings_json" \
@@ -336,6 +347,7 @@ report_json="$(
                 webhook_configured: $webhook_configured,
                 webhook_https: $webhook_https,
                 pending_updates: $pending_updates,
+                send_probe_attempted: $send_probe_attempted,
                 send_probe_ok: $send_probe_ok,
                 preview_clean: $preview_clean
             },
@@ -345,6 +357,7 @@ report_json="$(
                 webhook_url: $webhook_url,
                 inbound_mode: $inbound_mode,
                 probe_message_id: $probe_message_id,
+                probe_skipped_reason: $probe_skipped_reason,
                 telegram_preview: $telegram_preview
             },
             failures: $failures,

@@ -45,21 +45,31 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 ./scripts/telegram-webhook-monitor.sh --json
 
 # Server-side cron (GitOps): scripts/cron.d/moltis-telegram-webhook-monitor
-# CI schedule: .github/workflows/telegram-webhook-monitor.yml
+# Контракт по умолчанию: пассивный check (без sendMessage probe, пока не задан TELEGRAM_TEST_USER)
+# .github/workflows/telegram-webhook-monitor.yml запускается вручную (workflow_dispatch)
+```
+
+### Канонический post-deploy UAT (без постоянного спама)
+
+```bash
+gh workflow run telegram-e2e-on-demand.yml \
+  -f message='/status' \
+  -f operator_intent='post_deploy_verification'
 ```
 
 ### Standalone Telegram CLI (без Moltis)
 
 ```bash
-# User-level UAT probe (главный режим)
+# User-level UAT probe (MTProto, opt-in)
 ./scripts/telegram-user-monitor.sh --env-file .env
+# Cron для этого probe выключен по умолчанию: scripts/cron.d/moltis-telegram-user-monitor
 
 # Альтернатива без API_HASH: Telegram Web
 ./scripts/setup-telegram-web-user-monitor.sh --project-dir /opt/moltinger-active
 node scripts/telegram-web-user-login.mjs --state /opt/moltinger-active/data/.telegram-web-state.json
 TELEGRAM_WEB_PROBE_PROFILE=echo_ping TELEGRAM_WEB_MESSAGE=test2 ./scripts/telegram-web-user-monitor.sh
 
-# Primary scheduler (systemd timer)
+# Legacy scheduler (systemd timer, держать выключенным вне диагностики)
 systemctl enable --now moltis-telegram-web-user-monitor.timer
 
 # Поднять webhook endpoint (Traefik + echo)
