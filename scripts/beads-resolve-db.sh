@@ -24,9 +24,9 @@ Description:
   The `localize` subcommand materializes a local beads.db from the current
   worktree's tracked `.beads/issues.jsonl`.
 
-  When `.beads/pilot-mode.json` exists in a dedicated worktree, legacy-only
-  operator paths such as `bd sync` fail closed and must be replaced by the
-  pilot review surface.
+  When `.beads/pilot-mode.json` or `.beads/cutover-mode.json` exists in a
+  dedicated worktree, legacy-only operator paths such as `bd sync` fail
+  closed and must be replaced by the active migration review surface.
 EOF
 }
 
@@ -308,13 +308,53 @@ beads_resolve_pilot_mode_enabled() {
   [[ -f "$(beads_resolve_pilot_mode_file "${repo_root}")" ]]
 }
 
-beads_resolve_is_pilot_legacy_command() {
+beads_resolve_cutover_mode_file() {
+  local repo_root="$1"
+  printf '%s/.beads/cutover-mode.json\n' "${repo_root}"
+}
+
+beads_resolve_cutover_mode_enabled() {
+  local repo_root="$1"
+  [[ -f "$(beads_resolve_cutover_mode_file "${repo_root}")" ]]
+}
+
+beads_resolve_active_migration_mode() {
+  local repo_root="$1"
+
+  if beads_resolve_cutover_mode_enabled "${repo_root}"; then
+    printf 'cutover\n'
+    return 0
+  fi
+
+  if beads_resolve_pilot_mode_enabled "${repo_root}"; then
+    printf 'pilot\n'
+    return 0
+  fi
+
+  return 1
+}
+
+beads_resolve_migration_review_command() {
+  local migration_mode="$1"
+
+  case "${migration_mode}" in
+    cutover)
+      printf './scripts/beads-dolt-rollout.sh verify --worktree .\n'
+      ;;
+    pilot)
+      printf './scripts/beads-dolt-pilot.sh review\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+beads_resolve_is_migration_legacy_command() {
   local command=""
-  local subcommand=""
 
   beads_resolve_extract_command "$@"
   command="${BEADS_RESOLVE_COMMAND}"
-  subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
 
   case "${command}" in
     sync)
@@ -391,7 +431,8 @@ beads_resolve_dispatch() {
   local root_db_path=""
   local recovery_hint=""
   local root_cleanup_notice=""
-  local pilot_mode_enabled="false"
+  local migration_mode=""
+  local migration_review_command=""
 
   beads_resolve_reset
 
@@ -448,17 +489,18 @@ beads_resolve_dispatch() {
   root_db_path="${canonical_root}/.beads/beads.db"
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
 
-  if beads_resolve_pilot_mode_enabled "${repo_root}"; then
-    pilot_mode_enabled="true"
+  migration_mode="$(beads_resolve_active_migration_mode "${repo_root}" 2>/dev/null || true)"
+  if [[ -n "${migration_mode}" ]]; then
+    migration_review_command="$(beads_resolve_migration_review_command "${migration_mode}" 2>/dev/null || true)"
   fi
 
-  if beads_resolve_pilot_mode_enabled "${repo_root}" && beads_resolve_is_pilot_legacy_command "$@"; then
+  if [[ -n "${migration_mode}" ]] && beads_resolve_is_migration_legacy_command "$@"; then
     beads_resolve_set_decision \
       "block_pilot_legacy_command" \
       "dedicated_worktree" \
       27 \
-      "bd: pilot mode is enabled in ${repo_root}, so legacy-only commands such as ${BEADS_RESOLVE_COMMAND} are blocked." \
-      "Use ./scripts/beads-dolt-pilot.sh review for the pilot review surface, and keep JSONL export/sync out of the everyday operator path."
+      "bd: ${migration_mode} mode is enabled in ${repo_root}, so legacy-only commands such as ${BEADS_RESOLVE_COMMAND} are blocked." \
+      "Use ${migration_review_command:-./scripts/beads-dolt-pilot.sh review} for the active migration review surface, and keep JSONL export/sync out of the everyday operator path."
     return 0
   fi
 
@@ -499,9 +541,9 @@ beads_resolve_dispatch() {
   fi
 
   if [[ -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
-    if [[ "${pilot_mode_enabled}" == "true" ]]; then
+    if [[ -n "${migration_mode}" ]]; then
       BEADS_RESOLVE_DB_PATH="${db_path}"
-      beads_resolve_set_decision "execute_local" "pilot_worktree" 0
+      beads_resolve_set_decision "execute_local" "${migration_mode}_worktree" 0
       return 0
     fi
 

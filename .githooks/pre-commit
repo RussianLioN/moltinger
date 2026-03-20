@@ -8,7 +8,9 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/_repo-local-path.sh"
 GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
 NORMALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-normalize-issues-jsonl.sh"
 PILOT_MODE_FILE="$PROJECT_ROOT/.beads/pilot-mode.json"
+CUTOVER_MODE_FILE="$PROJECT_ROOT/.beads/cutover-mode.json"
 PILOT_REVIEW_SCRIPT="$PROJECT_ROOT/scripts/beads-dolt-pilot.sh"
+ROLLOUT_VERIFY_SCRIPT="$PROJECT_ROOT/scripts/beads-dolt-rollout.sh"
 BEADS_AUDIT_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-audit.sh"
 SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
@@ -20,10 +22,20 @@ if [[ -x "$GUARD_SCRIPT" ]]; then
     fi
 fi
 
-if [[ -f "$PILOT_MODE_FILE" ]]; then
+ACTIVE_MIGRATION_REVIEW_COMMAND=""
+ACTIVE_MIGRATION_LABEL=""
+if [[ -f "$CUTOVER_MODE_FILE" ]]; then
+    ACTIVE_MIGRATION_LABEL="Cutover mode"
+    ACTIVE_MIGRATION_REVIEW_COMMAND="./scripts/beads-dolt-rollout.sh verify --worktree ."
+elif [[ -f "$PILOT_MODE_FILE" ]]; then
+    ACTIVE_MIGRATION_LABEL="Pilot mode"
+    ACTIVE_MIGRATION_REVIEW_COMMAND="./scripts/beads-dolt-pilot.sh review"
+fi
+
+if [[ -n "$ACTIVE_MIGRATION_LABEL" ]]; then
     if git diff --cached --name-only -- .beads/issues.jsonl | grep -q '^.beads/issues.jsonl$'; then
-        echo "✗ Pilot mode blocks staged .beads/issues.jsonl." >&2
-        echo "  Use ./scripts/beads-dolt-pilot.sh review instead of committing JSONL-first review artifacts." >&2
+        echo "✗ ${ACTIVE_MIGRATION_LABEL} blocks staged .beads/issues.jsonl." >&2
+        echo "  Use ${ACTIVE_MIGRATION_REVIEW_COMMAND} instead of committing JSONL-first review artifacts." >&2
         exit 1
     fi
 fi
@@ -36,7 +48,7 @@ if [[ -x "$BEADS_AUDIT_SCRIPT" ]]; then
     fi
 fi
 
-if [[ ! -f "$PILOT_MODE_FILE" ]] && [[ -x "$NORMALIZE_SCRIPT" ]] && git ls-files --error-unmatch .beads/issues.jsonl >/dev/null 2>&1; then
+if [[ -z "$ACTIVE_MIGRATION_LABEL" ]] && [[ -x "$NORMALIZE_SCRIPT" ]] && git ls-files --error-unmatch .beads/issues.jsonl >/dev/null 2>&1; then
     if git diff --cached --quiet -- .beads/issues.jsonl; then
         :
     elif ! git diff --quiet -- .beads/issues.jsonl; then

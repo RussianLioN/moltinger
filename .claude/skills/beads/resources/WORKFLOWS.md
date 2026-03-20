@@ -3,8 +3,14 @@
 In this repository, run these workflows with plain `bd`; the safe repo-local dispatch path should come from `.envrc` or the managed worktree/Codex bootstrap flow rather than a separate wrapper command.
 
 If `.beads/pilot-mode.json` exists in the current worktree, use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface and treat `bd sync` as a blocked legacy-only path for that worktree.
+If `.beads/cutover-mode.json` exists in the current worktree, use `./scripts/beads-dolt-rollout.sh verify --worktree .` as the documented cutover verification surface and treat `bd sync` as a blocked legacy-only path for that worktree.
 
 ## Daily Session
+
+For the end-of-session sync step, use exactly one path:
+- `bd sync` for an ordinary non-migration worktree
+- `./scripts/beads-dolt-pilot.sh review` for a pilot worktree
+- `./scripts/beads-dolt-rollout.sh verify --worktree .` for a cutover worktree
 
 ```bash
 # === START ===
@@ -20,9 +26,14 @@ bd close PREFIX-xxx --reason "Implemented feature"
 # === END (MANDATORY!) ===
 git status
 git add <files>
+# Choose the active review/sync surface for this worktree:
 bd sync
+# OR
+./scripts/beads-dolt-pilot.sh review
+# OR
+./scripts/beads-dolt-rollout.sh verify --worktree .
 git commit -m "feat: description (PREFIX-xxx)"
-bd sync
+# Repeat the same active review/sync surface after commit
 git push
 ```
 

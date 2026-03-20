@@ -44,6 +44,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+mode_probe_root="$(dirname "$issues_path")"
+if repo_root="$(git -C "${mode_probe_root}" rev-parse --show-toplevel 2>/dev/null)"; then
+  if [[ -f "${repo_root}/.beads/cutover-mode.json" ]]; then
+    printf '%s\n' "Cutover mode retires tracked .beads/issues.jsonl normalization; use ./scripts/beads-dolt-rollout.sh verify --worktree . instead." >&2
+    exit 24
+  fi
+  if [[ -f "${repo_root}/.beads/pilot-mode.json" ]]; then
+    printf '%s\n' "Pilot mode retires tracked .beads/issues.jsonl normalization; use ./scripts/beads-dolt-pilot.sh review instead." >&2
+    exit 24
+  fi
+fi
+
 [[ -f "$issues_path" ]] || die "Beads issues file not found: $issues_path"
 command -v python3 >/dev/null 2>&1 || die "python3 is required to normalize $issues_path"
 

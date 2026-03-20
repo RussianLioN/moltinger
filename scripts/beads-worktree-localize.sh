@@ -91,16 +91,48 @@ ensure_worktree_context() {
   report_worktree="${target_path}"
 }
 
+detect_active_migration_mode() {
+  local pilot_mode_file="${target_path}/.beads/pilot-mode.json"
+  local cutover_mode_file="${target_path}/.beads/cutover-mode.json"
+
+  if [[ -f "${cutover_mode_file}" ]]; then
+    printf 'cutover\n'
+    return 0
+  fi
+
+  if [[ -f "${pilot_mode_file}" ]]; then
+    printf 'pilot\n'
+    return 0
+  fi
+
+  return 1
+}
+
 classify_state() {
   local beads_dir="${target_path}/.beads"
   local config_path="${beads_dir}/config.yaml"
   local issues_path="${beads_dir}/issues.jsonl"
   local db_path="${beads_dir}/beads.db"
   local redirect_path="${beads_dir}/redirect"
+  local active_migration_mode=""
 
   report_db_path="${db_path}"
   report_notice=""
   report_bootstrap_source=""
+
+  active_migration_mode="$(detect_active_migration_mode 2>/dev/null || true)"
+  if [[ -n "${active_migration_mode}" ]]; then
+    report_state="${active_migration_mode}_mode_active"
+    report_action="stop_and_report"
+    if [[ "${active_migration_mode}" == "cutover" ]]; then
+      report_message="Cutover mode is already active for this worktree; the localization helper is a retired compatibility path."
+      report_notice="Use ./scripts/beads-dolt-rollout.sh verify --worktree . for the active cutover review surface."
+    else
+      report_message="Pilot mode is already active for this worktree; the localization helper is a retired compatibility path."
+      report_notice="Use ./scripts/beads-dolt-pilot.sh review for the active pilot review surface."
+    fi
+    return 0
+  fi
 
   if [[ -f "${redirect_path}" ]]; then
     if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
