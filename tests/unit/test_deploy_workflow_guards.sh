@@ -61,12 +61,12 @@ test_active_root_symlink_step_handles_legacy_directory() {
     local uat_guard=false
 
     if grep -Fq "Detected legacy non-symlink active root" "$DEPLOY_WORKFLOW" && \
-       grep -Fq 'mv "${{ env.DEPLOY_ACTIVE_PATH }}" "$LEGACY_BACKUP"' "$DEPLOY_WORKFLOW"; then
+       grep -Fq 'mv "$ACTIVE_PATH" "$LEGACY_BACKUP"' "$DEPLOY_WORKFLOW"; then
         deploy_guard=true
     fi
 
     if grep -Fq "Detected legacy non-symlink active root" "$UAT_WORKFLOW" && \
-       grep -Fq 'mv "${{ env.DEPLOY_ACTIVE_PATH }}" "$LEGACY_BACKUP"' "$UAT_WORKFLOW"; then
+       grep -Fq 'mv "$ACTIVE_PATH" "$LEGACY_BACKUP"' "$UAT_WORKFLOW"; then
         uat_guard=true
     fi
 
@@ -75,6 +75,56 @@ test_active_root_symlink_step_handles_legacy_directory() {
     else
         test_fail "Legacy directory migration guard missing in deploy.yml and/or uat-gate.yml"
     fi
+}
+
+workflow_symlink_step_uses_quoted_heredoc() {
+    local workflow_file="$1"
+    local in_step=false
+    local saw_quoted=false
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*-[[:space:]]name:[[:space:]]Update[[:space:]]active[[:space:]]deploy[[:space:]]root[[:space:]]symlink[[:space:]]*$ ]]; then
+            in_step=true
+            continue
+        fi
+
+        if [[ "$in_step" == "true" && "$line" =~ ^[[:space:]]*-[[:space:]]name:[[:space:]] ]]; then
+            break
+        fi
+
+        if [[ "$in_step" == "true" ]]; then
+            if [[ "$line" == *"<< 'EOF'"* ]]; then
+                saw_quoted=true
+            fi
+
+            if [[ "$line" == *"<< EOF"* ]]; then
+                return 1
+            fi
+        fi
+    done < "$workflow_file"
+
+    [[ "$in_step" == "true" && "$saw_quoted" == "true" ]]
+}
+
+test_active_root_symlink_step_uses_quoted_heredoc() {
+    test_start "Symlink update should use quoted heredoc to avoid runner-side expansion"
+
+    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" ]]; then
+        test_skip "Workflow files missing for heredoc quoting guard check"
+        return
+    fi
+
+    if ! workflow_symlink_step_uses_quoted_heredoc "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml symlink update step must use << 'EOF' (quoted heredoc)"
+        return
+    fi
+
+    if ! workflow_symlink_step_uses_quoted_heredoc "$UAT_WORKFLOW"; then
+        test_fail "uat-gate.yml symlink update step must use << 'EOF' (quoted heredoc)"
+        return
+    fi
+
+    test_pass
 }
 
 run_all_tests() {
@@ -91,6 +141,7 @@ run_all_tests() {
     test_deploy_workflow_uses_shared_production_lock
     test_uat_deploy_job_uses_shared_production_lock
     test_active_root_symlink_step_handles_legacy_directory
+    test_active_root_symlink_step_uses_quoted_heredoc
 
     generate_report
 }
