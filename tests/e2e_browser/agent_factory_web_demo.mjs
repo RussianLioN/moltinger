@@ -159,8 +159,8 @@ async function run() {
         await page.locator('[data-role="access-submit"]').click();
         await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         await page.locator('[data-role="project-list"]').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-        await page.locator('[data-role="home-panel"] h2').filter({ hasText: 'Что нужно автоматизировать?' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
-        assert(await page.locator('[data-role="home-panel"]').isVisible(), 'Home screen should stay visible right after access is granted');
+        await page.locator('#messages .message').filter({ hasText: 'Какую конкретную бизнес-проблему должен решить будущий агент?' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        assert(!(await page.locator('[data-role="home-panel"]').isVisible().catch(() => false)), 'Home screen should stay hidden when the default project already started');
         assert(!(await page.getByText('Подключен live adapter').isVisible().catch(() => false)), 'Primary workspace should not expose live adapter noise');
       } finally {
         await context.close();
@@ -174,11 +174,11 @@ async function run() {
         await sendFirstIdea(page);
 
         const composerMode = (await page.locator('[data-role="composer-mode"]').textContent()) || '';
-        const helperExample = (await page.locator('[data-role="composer-helper-example"]').textContent()) || '';
+        const composerPlaceholder = (await page.locator('#chatInput').getAttribute('placeholder')) || '';
         const projectTitle = ((await page.locator('[data-role="project-title"]').textContent()) || '').trim();
 
-        assert(/Кто будет основным пользователем/i.test(composerMode), `Composer should surface the current discovery question, got: ${composerMode}`);
-        assert(/Например|пользователи/i.test(helperExample), `Composer helper should suggest a business-readable answer example, got: ${helperExample}`);
+        assert(/Ответ агенту-архитектору/i.test(composerMode), `Composer label should stay stable and concise, got: ${composerMode}`);
+        assert(/Ответь на вопрос агента/i.test(composerPlaceholder), `Composer placeholder should prompt the next reply, got: ${composerPlaceholder}`);
         assert(projectTitle !== 'Новый проект', `Project title should be auto-generated after the first turn, got: ${projectTitle}`);
         assert(await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().isVisible(), 'Chat transcript should render the first discovery follow-up question');
         assert(!(await page.locator('[data-role="home-panel"]').isVisible().catch(() => false)), 'Landing home screen should collapse after the first user turn');
@@ -222,14 +222,14 @@ async function run() {
         assert(projectTitleBeforeReload && projectTitleBeforeReload !== 'Новый проект', `Expected a generated project title before reload, got: ${projectTitleBeforeReload}`);
 
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.locator('#messages .message__title').filter({ hasText: 'Сессия восстановлена' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        assert(!(await page.locator('#messages .message').filter({ hasText: 'Сессия восстановлена' }).first().isVisible().catch(() => false)), 'Resume should not inject extra system banners into chat feed');
 
         const projectTitleAfterReload = ((await page.locator('[data-role="project-title"]').textContent()) || '').trim();
         const composerModeAfterReload = ((await page.locator('[data-role="composer-mode"]').textContent()) || '').trim();
 
         assert(projectTitleAfterReload === projectTitleBeforeReload, `Expected the same project title after reload, got: ${projectTitleAfterReload}`);
-        assert(/Кто будет основным пользователем/i.test(composerModeAfterReload), `Composer should keep the active discovery question after resume, got: ${composerModeAfterReload}`);
+        assert(/Ответ агенту-архитектору/i.test(composerModeAfterReload), `Composer should keep stable label after resume, got: ${composerModeAfterReload}`);
 
         await page.locator('#chatInput').fill('Оператор первой линии и руководитель смены.');
         await page.locator('#sendBtn').click();

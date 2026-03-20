@@ -7,6 +7,9 @@
   const IS_AUTOMATION = Boolean(window.navigator?.webdriver) || /playwright/i.test(window.navigator?.userAgent || "");
   const MIN_PENDING_VISUAL_MS = IS_AUTOMATION ? 80 : 420;
   const TURN_TIMEOUT_MS = IS_AUTOMATION ? 20_000 : 90_000;
+  const ARTIFACT_FETCH_TIMEOUT_MS = IS_AUTOMATION ? 10_000 : 40_000;
+  const HANDOFF_POLL_MAX_ATTEMPTS = IS_AUTOMATION ? 4 : 8;
+  const HANDOFF_POLL_INTERVAL_MS = IS_AUTOMATION ? 320 : 1400;
   const DEFAULT_PROJECT_TITLE = "Новый проект";
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
@@ -70,8 +73,10 @@
     gate_pending: "Нужен доступ",
     discovery_in_progress: "В работе",
     awaiting_user_reply: "В работе",
+    awaiting_clarification: "Нужно уточнение",
     awaiting_confirmation: "Нужно внимание",
     confirmed: "Готово",
+    handoff_running: "Фабрика обрабатывает",
     playground_ready: "Готово",
     reopened: "Нужно внимание",
   };
@@ -789,7 +794,17 @@
     const transcriptSize = Array.isArray(project.timeline) ? project.timeline.length : 0;
     return Boolean(project.sessionId && response.web_demo_session?.status)
       || transcriptSize > 0
-      || ["awaiting_user_reply", "awaiting_confirmation", "confirmed", "playground_ready", "downloads_ready", "download_ready", "reopened"].includes(visibleStatus);
+      || [
+        "awaiting_user_reply",
+        "awaiting_clarification",
+        "awaiting_confirmation",
+        "confirmed",
+        "handoff_running",
+        "playground_ready",
+        "downloads_ready",
+        "download_ready",
+        "reopened",
+      ].includes(visibleStatus);
   }
 
   function currentResponse(project) {
@@ -864,6 +879,27 @@
     return markers.some((marker) => normalized.includes(marker));
   }
 
+  function isLikelyStatusRefreshText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    if (isLikelyBriefConfirmationText(normalized)) {
+      return false;
+    }
+    if (isLikelyBriefCorrectionText(normalized)) {
+      return false;
+    }
+    if (isLikelyProductionSimulationRequestText(normalized)) {
+      return false;
+    }
+    if (normalized.length > 96) {
+      return false;
+    }
+    const markers = ["обнов", "статус", "продолж", "что дальше", "refresh", "continue", "request status"];
+    return markers.some((marker) => normalized.includes(marker));
+  }
+
   function isLikelyProductionSimulationRequestText(text) {
     const normalized = normalizeText(text).toLowerCase();
     if (!normalized) {
@@ -891,7 +927,10 @@
     const hasDownloadArtifacts = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const postBriefMode = hasDownloadArtifacts || isDownloadsReadyStatus(status) || status === "confirmed";
     const simulationRequest = isLikelyProductionSimulationRequestText(normalizedText);
+    const confirmationRequest = isLikelyBriefConfirmationText(normalizedText);
     const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
+    const explicitRefresh = isLikelyStatusRefreshText(normalizedText);
+    const freeformFeedback = Boolean(normalizedText) && !simulationRequest && !confirmationRequest && !explicitRefresh;
     const knownComposerActions = new Set([
       "submit_turn",
       "request_status",
@@ -905,37 +944,37 @@
       return "request_status";
     }
     if (postBriefMode && !knownComposerActions.has(requestedAction)) {
-      return correctionRequest ? "reopen_brief" : "request_status";
+      return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
     }
     if (requestedAction === "confirm_brief") {
-      if (isLikelyBriefConfirmationText(normalizedText)) {
+      if (confirmationRequest) {
         return "confirm_brief";
       }
-      return correctionRequest ? "request_brief_correction" : "request_status";
+      return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
     }
     if (requestedAction === "request_status") {
       if (["awaiting_confirmation", "reopened"].includes(status)) {
-        if (isLikelyBriefConfirmationText(normalizedText)) {
+        if (confirmationRequest) {
           return "confirm_brief";
         }
-        return correctionRequest ? "request_brief_correction" : "request_status";
+        return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
       }
       if (isDownloadsReadyStatus(status) || status === "confirmed") {
-        return correctionRequest ? "reopen_brief" : "request_status";
+        return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
     }
     if (requestedAction === "request_brief_review") {
       if (["awaiting_confirmation", "reopened"].includes(status)) {
-        return correctionRequest ? "request_brief_correction" : "request_status";
+        return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
       }
       if (isDownloadsReadyStatus(status) || status === "confirmed") {
-        return correctionRequest ? "reopen_brief" : "request_status";
+        return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
     }
     if (requestedAction === "submit_turn" && (isDownloadsReadyStatus(status) || status === "confirmed")) {
-      return correctionRequest ? "reopen_brief" : "request_status";
+      return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
     }
     return requestedAction;
   }
@@ -998,6 +1037,9 @@
     }
     if (action === "reopen_brief") {
       return "Опиши, что нужно доуточнить, чтобы переоткрыть brief.";
+    }
+    if (status === "handoff_running") {
+      return "Фабрика готовит материалы. Можно дождаться обновления статуса или отправить правку brief.";
     }
     if (isDownloadsReadyStatus(status) || status === "confirmed") {
       return "Опиши правку brief или запроси имитацию запуска.";
@@ -1380,7 +1422,14 @@
     try {
       const href = artifactDownloadUrl(project, artifact);
       if (href) {
-        const response = await fetch(href, { headers: { Accept: "*/*" } });
+        const response = await fetchWithTimeout(
+          href,
+          {
+            headers: { Accept: "*/*" },
+            cache: "no-store",
+          },
+          ARTIFACT_FETCH_TIMEOUT_MS,
+        );
         if (!response.ok) {
           throw new Error(`download_http_${response.status}`);
         }
@@ -1901,6 +1950,9 @@
       project?.id,
       normalizeText(project?.lastResponse?.web_demo_session?.web_demo_session_id || project?.sessionId),
       normalizeArtifactKind(artifact?.artifact_kind),
+      normalizeText(artifact?.download_token),
+      normalizeText(artifact?.brief_version),
+      normalizeText(project?.lastResponse?.status_snapshot?.brief_version),
     ].join(":");
     if (!project.previewState || project.previewState.key !== previewKey) {
       project.previewState = {
@@ -1920,9 +1972,14 @@
 
     const previewUrl = artifactPreviewUrl(project, artifact);
     if (previewUrl) {
-      const previewResponse = await fetch(previewUrl, {
-        headers: { Accept: "text/html" },
-      });
+      const previewResponse = await fetchWithTimeout(
+        previewUrl,
+        {
+          headers: { Accept: "text/html" },
+          cache: "no-store",
+        },
+        ARTIFACT_FETCH_TIMEOUT_MS,
+      );
       if (previewResponse.ok) {
         return await previewResponse.text();
       }
@@ -1930,9 +1987,14 @@
 
     const downloadUrl = artifactDownloadUrl(project, artifact);
     if (downloadUrl) {
-      const downloadResponse = await fetch(downloadUrl, {
-        headers: { Accept: "text/markdown,text/plain;q=0.9,*/*;q=0.1" },
-      });
+      const downloadResponse = await fetchWithTimeout(
+        downloadUrl,
+        {
+          headers: { Accept: "text/markdown,text/plain;q=0.9,*/*;q=0.1" },
+          cache: "no-store",
+        },
+        ARTIFACT_FETCH_TIMEOUT_MS,
+      );
       if (downloadResponse.ok) {
         const markdown = await downloadResponse.text();
         return wrapPreviewDocument(
@@ -2226,6 +2288,7 @@
       button.dataset.uiAction = action;
       button.textContent = ACTION_LABELS[action] || action;
       button.classList.toggle("is-active", action === (project?.currentAction || "start_project"));
+      button.disabled = state.awaitingResponse;
       button.addEventListener("click", () => handleActionShortcut(action));
       dom.quickActions.appendChild(button);
     });
@@ -2551,6 +2614,7 @@
     if (!target) {
       return;
     }
+    clearHandoffPollTimer(target);
     const remaining = state.projects.filter((item) => item.id !== projectId);
     const deletedActive = projectId === state.activeProjectId;
     if (deletedActive) {
@@ -2829,9 +2893,9 @@
     };
   }
 
-  function buildTurnSignal(signal) {
+  function buildRequestSignal(timeoutMs, signal) {
     const timeoutSignal = (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function")
-      ? AbortSignal.timeout(TURN_TIMEOUT_MS)
+      ? AbortSignal.timeout(timeoutMs)
       : null;
     if (signal && timeoutSignal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
       return { signal: AbortSignal.any([signal, timeoutSignal]), timeoutSignal };
@@ -2850,14 +2914,11 @@
     return { signal: signal || timeoutSignal || undefined, timeoutSignal };
   }
 
-  async function postTurn(payload, options = {}) {
-    const requestSignal = buildTurnSignal(options.signal);
-    let response;
+  async function fetchWithTimeout(url, options = {}, timeoutMs = TURN_TIMEOUT_MS) {
+    const requestSignal = buildRequestSignal(timeoutMs, options.signal);
     try {
-      response = await fetch("/api/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify(payload),
+      return await fetch(url, {
+        ...options,
         signal: requestSignal.signal,
       });
     } catch (error) {
@@ -2872,6 +2933,20 @@
       }
       throw error;
     }
+  }
+
+  async function postTurn(payload, options = {}) {
+    const response = await fetchWithTimeout(
+      "/api/turn",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: options.signal,
+        cache: "no-store",
+      },
+      TURN_TIMEOUT_MS,
+    );
     if (!response.ok) {
       throw new Error(`adapter_http_${response.status}`);
     }
@@ -2879,7 +2954,11 @@
   }
 
   async function fetchSession(sessionId) {
-    const response = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`);
+    const response = await fetchWithTimeout(
+      `/api/session?session_id=${encodeURIComponent(sessionId)}`,
+      { cache: "no-store" },
+      TURN_TIMEOUT_MS,
+    );
     if (!response.ok) {
       throw new Error(`session_http_${response.status}`);
     }
@@ -3180,6 +3259,79 @@
     };
   }
 
+  function clearHandoffPollTimer(project) {
+    if (project?.handoffPollTimer) {
+      window.clearTimeout(project.handoffPollTimer);
+      project.handoffPollTimer = 0;
+    }
+  }
+
+  function stopHandoffPolling(project) {
+    if (!project) {
+      return;
+    }
+    clearHandoffPollTimer(project);
+    project.handoffPollAttempt = 0;
+    project.lastAutoFollowupSource = "";
+  }
+
+  function startHandoffPolling(project, sourceRequestId) {
+    if (!project || !sourceRequestId) {
+      return;
+    }
+    clearHandoffPollTimer(project);
+    project.lastAutoFollowupSource = sourceRequestId;
+    project.handoffPollAttempt = 0;
+
+    const projectId = project.id;
+    const tick = () => {
+      const active = state.projects.find((item) => item.id === projectId);
+      if (!active || active.lastAutoFollowupSource !== sourceRequestId) {
+        return;
+      }
+      const response = currentResponse(active) || {};
+      const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
+      const status = currentStatus(active);
+      if (hasDownloads || isDownloadsReadyStatus(status)) {
+        clearHandoffPollTimer(active);
+        active.handoffPollAttempt = 0;
+        active.lastAutoFollowupSource = "";
+        persist();
+        return;
+      }
+      const attempt = Number.isFinite(active.handoffPollAttempt) ? active.handoffPollAttempt : 0;
+      if (attempt >= HANDOFF_POLL_MAX_ATTEMPTS) {
+        clearHandoffPollTimer(active);
+        active.handoffPollAttempt = 0;
+        active.lastAutoFollowupSource = "";
+        persist();
+        if (state.activeProjectId === active.id) {
+          showComposerNotice("Фабрика ещё формирует материалы. Нажми «Обновить», чтобы проверить статус позже.", "info");
+          renderComposer(active);
+        }
+        return;
+      }
+      if (state.awaitingResponse) {
+        clearHandoffPollTimer(active);
+        active.handoffPollTimer = window.setTimeout(tick, HANDOFF_POLL_INTERVAL_MS);
+        return;
+      }
+      active.handoffPollAttempt = attempt + 1;
+      persist();
+      dispatchTurn("request_status", "", { skipUserMessage: true }).finally(() => {
+        const latest = state.projects.find((item) => item.id === projectId);
+        if (!latest || latest.lastAutoFollowupSource !== sourceRequestId) {
+          return;
+        }
+        clearHandoffPollTimer(latest);
+        latest.handoffPollTimer = window.setTimeout(tick, HANDOFF_POLL_INTERVAL_MS);
+      });
+    };
+
+    project.handoffPollTimer = window.setTimeout(tick, HANDOFF_POLL_INTERVAL_MS);
+    persist();
+  }
+
   function applyResponse(project, response, connectionMode, options = {}) {
     const appendReplyMessages = options.appendReplyMessages !== false;
     const syncReason = normalizeText(options.syncReason);
@@ -3248,19 +3400,20 @@
 
     const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
     const sourceRequestId = normalizeText(response.web_conversation_envelope?.request_id);
+    const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
+    if (hasDownloads || isDownloadsReadyStatus(currentStatus(project))) {
+      stopHandoffPolling(project);
+      persist();
+      return;
+    }
     if (
       connectionMode === "live"
       && sourceAction === "confirm_brief"
       && response.next_action === "start_concept_pack_handoff"
-      && (!Array.isArray(response.download_artifacts) || response.download_artifacts.length === 0)
       && sourceRequestId
       && project.lastAutoFollowupSource !== sourceRequestId
     ) {
-      project.lastAutoFollowupSource = sourceRequestId;
-      persist();
-      window.setTimeout(() => {
-        dispatchTurn("request_status", "", { skipUserMessage: true });
-      }, 120);
+      startHandoffPolling(project, sourceRequestId);
     }
   }
 
@@ -3272,8 +3425,15 @@
     if (!project) {
       return;
     }
+    if (state.awaitingResponse) {
+      return;
+    }
     const queuedUploads = uniqueUploads(options.queuedUploads || []);
     const normalizedUserText = normalizeText(userText);
+    const isBackgroundStatusPoll = action === "request_status" && options.skipUserMessage && !normalizedUserText && queuedUploads.length === 0;
+    if (!isBackgroundStatusPoll) {
+      stopHandoffPolling(project);
+    }
     const payload = buildTurnPayload(project, action, userText, queuedUploads);
     const requestId = normalizeText(payload?.web_conversation_envelope?.request_id);
     const abortController = new AbortController();
@@ -3413,6 +3573,9 @@
     const project = getActiveProject();
     if (!state.accessToken || action === "submit_access_token") {
       dom.accessTokenInput.focus();
+      return;
+    }
+    if (state.awaitingResponse) {
       return;
     }
 
@@ -3807,8 +3970,8 @@
       if (state.awaitingResponse || event.key !== "Enter" || event.isComposing) {
         return;
       }
-      if (!event.shiftKey) {
-        // Enter добавляет новую строку (нативное поведение textarea).
+      if (event.shiftKey) {
+        // Shift+Enter оставляет нативный перенос строки.
         return;
       }
       event.preventDefault();

@@ -696,12 +696,17 @@ def web_user_visible_status(
         return "awaiting_clarification"
     if status in {"awaiting_confirmation", "reopened"}:
         return "awaiting_confirmation"
+    if status == "handoff_running" or action in {
+        "run_factory_intake",
+        "generate_artifacts",
+        "publish_downloads",
+        "return_to_brief_confirmation",
+    }:
+        return "handoff_running"
     if status == "confirmed":
         return "confirmed"
-    if status == "download_ready" or action in {"generate_artifacts", "publish_downloads"}:
+    if status == "download_ready":
         return "downloads_ready"
-    if action in {"run_factory_intake", "return_to_brief_confirmation"}:
-        return "handoff_running"
     return "discovery_in_progress"
 
 
@@ -770,7 +775,7 @@ def web_download_readiness(
     if artifacts and all(normalize_text(item.get("download_status")) in {"available", "ready"} for item in artifacts):
         return "ready"
     status = normalize_text(adapter_status)
-    if status in {"confirmed", "awaiting_confirmation", "download_ready"}:
+    if status in {"confirmed", "handoff_running", "awaiting_confirmation", "download_ready"}:
         return "pending"
     return "not_ready"
 
@@ -800,7 +805,12 @@ def web_session_runtime_status(
         return "awaiting_confirmation"
     if status in {"awaiting_user_reply", "awaiting_clarification"}:
         return "awaiting_user_reply"
-    if action in {"run_factory_intake", "generate_artifacts", "publish_downloads"}:
+    if status == "handoff_running" or action in {
+        "run_factory_intake",
+        "generate_artifacts",
+        "publish_downloads",
+        "return_to_brief_confirmation",
+    }:
         return "handoff_running"
     if status == "confirmed":
         return "completed"

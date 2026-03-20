@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 22
+**Total Lessons**: 23
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (3 lessons)
+#### P1 (4 lessons)
+- [Handoff lock key TypeError переводил confirmed brief в ложный handoff_running и срывал download-ready](../docs/rca/2026-03-20-handoff-lock-key-typeerror-download-stall.md)
 - [Повторное подтверждение brief скрывалось из ленты после второй правки](../docs/rca/2026-03-20-brief-correction-dedup-drop.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
@@ -60,7 +61,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (8 lessons)
+#### process (9 lessons)
+- [Handoff lock key TypeError переводил confirmed brief в ложный handoff_running и срывал download-ready](../docs/rca/2026-03-20-handoff-lock-key-typeerror-download-stall.md)
 - [Повторное подтверждение brief скрывалось из ленты после второй правки](../docs/rca/2026-03-20-brief-correction-dedup-drop.md)
 - [Hosted Clawdiy Control UI был развернут с password auth вместо token auth](../docs/rca/2026-03-12-clawdiy-hosted-control-ui-password-auth-mismatch.md)
 - [UAT registry snapshots were treated as disposable during UAT maintenance](../docs/rca/2026-03-09-uat-registry-snapshot-loss.md)
@@ -83,15 +85,15 @@
 ### Popular Tags
 
 - `process` (6 lessons)
+- `ux` (5 lessons)
 - `rca` (5 lessons)
-- `ux` (4 lessons)
 - `topology-registry` (4 lessons)
 - `git-worktree` (4 lessons)
 - `github-actions` (3 lessons)
 - `drift-detection` (3 lessons)
+- `web-demo` (2 lessons)
 - `sandbox` (2 lessons)
 - `remote-service` (2 lessons)
-- `permissions` (2 lessons)
 
 
 ---
@@ -100,10 +102,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 22 |
-| Critical (P0/P1) | 4 |
+| Total Lessons | 23 |
+| Critical (P0/P1) | 5 |
 | Categories | 5 |
-| Unique Tags | 55 |
+| Unique Tags | 57 |
 
 ---
 

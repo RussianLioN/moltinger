@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
 from copy import deepcopy
@@ -82,6 +83,10 @@ DISCOVERY_STATE_KEYS = (
 MAX_UPLOADED_FILES = 4
 MAX_UPLOADED_FILE_BYTES = 512 * 1024
 MAX_UPLOADED_EXCERPT_CHARS = 2200
+DISCOVERY_RUNTIME_TIMEOUT_SEC_DEFAULT = 120
+INTAKE_RUNTIME_TIMEOUT_SEC_DEFAULT = 120
+ARTIFACT_RUNTIME_TIMEOUT_SEC_DEFAULT = 180
+SESSION_HANDOFF_LOCK_TIMEOUT_SEC = 0.5
 TEXT_UPLOAD_SUFFIXES = {
     ".txt",
     ".md",
@@ -203,6 +208,17 @@ CONTINUE_MARKERS = (
     "go ahead",
     "continue",
     "next",
+)
+STATUS_REFRESH_TEXT_MARKERS = (
+    "обнови",
+    "обновить",
+    "проверь статус",
+    "статус",
+    "что дальше",
+    "продолжим",
+    "continue",
+    "refresh",
+    "request status",
 )
 SENSITIVE_DIGIT_PATTERN = re.compile(r"\b\d{6,}\b")
 STRUCTURED_EXAMPLE_RECORD_PATTERN = re.compile(
@@ -368,6 +384,48 @@ def ensure_state_layout(state_root: Path) -> None:
 
 def env_text(name: str, default: str = "") -> str:
     return normalize_text(os.environ.get(name)) or default
+
+
+def env_positive_int(name: str, default: int, *, min_value: int = 1) -> int:
+    raw = normalize_text(os.environ.get(name))
+    if not raw:
+        return max(default, min_value)
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        return max(default, min_value)
+    return max(parsed, min_value)
+
+
+def env_positive_float(name: str, default: float, *, min_value: float = 0.1) -> float:
+    raw = normalize_text(os.environ.get(name))
+    if not raw:
+        return max(default, min_value)
+    try:
+        parsed = float(raw)
+    except (TypeError, ValueError):
+        return max(default, min_value)
+    return max(parsed, min_value)
+
+
+DISCOVERY_RUNTIME_TIMEOUT_SEC = env_positive_int(
+    "ASC_DEMO_DISCOVERY_TIMEOUT_SEC",
+    DISCOVERY_RUNTIME_TIMEOUT_SEC_DEFAULT,
+)
+INTAKE_RUNTIME_TIMEOUT_SEC = env_positive_int(
+    "ASC_DEMO_INTAKE_TIMEOUT_SEC",
+    INTAKE_RUNTIME_TIMEOUT_SEC_DEFAULT,
+)
+ARTIFACT_RUNTIME_TIMEOUT_SEC = env_positive_int(
+    "ASC_DEMO_ARTIFACT_TIMEOUT_SEC",
+    ARTIFACT_RUNTIME_TIMEOUT_SEC_DEFAULT,
+)
+HANDOFF_LOCK_TIMEOUT_SEC = max(
+    env_positive_float("ASC_DEMO_HANDOFF_LOCK_TIMEOUT_SEC", SESSION_HANDOFF_LOCK_TIMEOUT_SEC),
+    0.1,
+)
+_SESSION_HANDOFF_LOCKS: dict[str, threading.Lock] = {}
+_SESSION_HANDOFF_LOCKS_GUARD = threading.Lock()
 
 
 def access_gate_settings() -> dict[str, Any]:
@@ -1340,6 +1398,22 @@ def has_continue_marker(user_text: str) -> bool:
     if not normalized:
         return False
     return any(marker in normalized for marker in CONTINUE_MARKERS)
+
+
+def is_explicit_status_refresh_text(user_text: str) -> bool:
+    normalized = normalize_text(user_text).lower()
+    if not normalized:
+        return False
+    if is_text_brief_confirmation(normalized):
+        return False
+    if is_likely_brief_correction_text(normalized):
+        return False
+    if is_production_simulation_request_text(normalized):
+        return False
+    words = [word for word in re.split(r"\s+", normalized) if word]
+    if len(words) > 8:
+        return False
+    return any(marker in normalized for marker in STATUS_REFRESH_TEXT_MARKERS)
 
 
 def looks_like_structured_example_record(user_text: str) -> bool:
@@ -2447,13 +2521,16 @@ def build_discovery_request(
                 request["confirmation_reply"] = build_confirmation_reply(combined_text, requester_identity)
                 append_user_turn(request, combined_text, "brief_confirmation", now)
                 return request, False, low_signal_submission
-            if is_likely_brief_correction_text(combined_text):
-                request["brief_feedback_text"] = combined_text
-                inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
-                if inferred_updates:
-                    request["brief_section_updates"] = inferred_updates
-                append_user_turn(request, combined_text, "brief_feedback", now)
-                return request, False, low_signal_submission
+            if in_download_ready and is_production_simulation_request_text(combined_text):
+                return request, True, low_signal_submission
+            if is_explicit_status_refresh_text(combined_text):
+                return request, True, low_signal_submission
+            request["brief_feedback_text"] = combined_text
+            inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
+            if inferred_updates:
+                request["brief_section_updates"] = inferred_updates
+            append_user_turn(request, combined_text, "brief_feedback", now)
+            return request, False, low_signal_submission
         return request, True, low_signal_submission
 
     if ui_action == "request_demo_access" and discovery_state:
@@ -2465,7 +2542,11 @@ def build_discovery_request(
         return request, True, low_signal_submission
 
     if ui_action == "submit_turn" and discovery_state and current_status in {"confirmed", "download_ready"}:
-        if combined_text and is_likely_brief_correction_text(combined_text):
+        if combined_text:
+            if is_production_simulation_request_text(combined_text):
+                return request, True, low_signal_submission
+            if is_explicit_status_refresh_text(combined_text):
+                return request, True, low_signal_submission
             request["brief_feedback_text"] = combined_text
             inferred_updates = infer_brief_section_updates_from_feedback(combined_text)
             if inferred_updates:
@@ -2558,20 +2639,53 @@ def build_discovery_request(
     return request, False, low_signal_submission
 
 
+def get_session_handoff_lock(web_demo_session_id: str) -> threading.Lock:
+    key = normalize_text(web_demo_session_id) or "anonymous-session"
+    with _SESSION_HANDOFF_LOCKS_GUARD:
+        lock = _SESSION_HANDOFF_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _SESSION_HANDOFF_LOCKS[key] = lock
+    return lock
+
+
+def run_runtime_subprocess(
+    command: list[str],
+    *,
+    label: str,
+    timeout_sec: int,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        proc = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=cwd,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        detail = normalize_text(exc.stderr) or normalize_text(exc.stdout)
+        if detail:
+            raise RuntimeError(f"{label} runtime timed out after {timeout_sec}s: {detail}") from exc
+        raise RuntimeError(f"{label} runtime timed out after {timeout_sec}s") from exc
+    if proc.returncode != 0:
+        detail = normalize_text(proc.stderr) or normalize_text(proc.stdout) or f"{label} runtime failed"
+        raise RuntimeError(detail)
+    return proc
+
+
 def run_discovery_runtime(discovery_request: dict[str, Any]) -> dict[str, Any]:
     with tempfile.TemporaryDirectory() as tmpdir:
         source_path = Path(tmpdir) / "discovery-request.json"
         output_path = Path(tmpdir) / "discovery-response.json"
         source_path.write_text(json.dumps(discovery_request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        proc = subprocess.run(
+        run_runtime_subprocess(
             [sys.executable, str(DISCOVERY_SCRIPT), "run", "--source", str(source_path), "--output", str(output_path)],
-            capture_output=True,
-            text=True,
-            check=False,
+            label="discovery",
+            timeout_sec=DISCOVERY_RUNTIME_TIMEOUT_SEC,
         )
-        if proc.returncode != 0:
-            detail = normalize_text(proc.stderr) or normalize_text(proc.stdout) or "discovery runtime failed"
-            raise RuntimeError(detail)
         response = load_json(output_path)
         if not isinstance(response, dict):
             raise RuntimeError("discovery runtime returned a non-object response")
@@ -2583,16 +2697,12 @@ def run_intake_runtime(source_payload: dict[str, Any]) -> dict[str, Any]:
         source_path = Path(tmpdir) / "intake-request.json"
         output_path = Path(tmpdir) / "intake-response.json"
         source_path.write_text(json.dumps(source_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        proc = subprocess.run(
+        run_runtime_subprocess(
             [sys.executable, str(INTAKE_SCRIPT), "--source", str(source_path), "--output", str(output_path)],
-            capture_output=True,
-            text=True,
-            check=False,
+            label="intake",
+            timeout_sec=INTAKE_RUNTIME_TIMEOUT_SEC,
             cwd=PROJECT_ROOT,
         )
-        if proc.returncode != 0:
-            detail = normalize_text(proc.stderr) or normalize_text(proc.stdout) or "intake runtime failed"
-            raise RuntimeError(detail)
         response = load_json(output_path)
         if not isinstance(response, dict):
             raise RuntimeError("intake runtime returned a non-object response")
@@ -2605,7 +2715,7 @@ def run_artifact_runtime(source_payload: dict[str, Any], *, output_dir: Path) ->
         source_path = Path(tmpdir) / "artifact-request.json"
         output_path = Path(tmpdir) / "artifact-response.json"
         source_path.write_text(json.dumps(source_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        proc = subprocess.run(
+        run_runtime_subprocess(
             [
                 sys.executable,
                 str(ARTIFACT_SCRIPT),
@@ -2617,14 +2727,10 @@ def run_artifact_runtime(source_payload: dict[str, Any], *, output_dir: Path) ->
                 "--output",
                 str(output_path),
             ],
-            capture_output=True,
-            text=True,
-            check=False,
+            label="artifact",
+            timeout_sec=ARTIFACT_RUNTIME_TIMEOUT_SEC,
             cwd=PROJECT_ROOT,
         )
-        if proc.returncode != 0:
-            detail = normalize_text(proc.stderr) or normalize_text(proc.stdout) or "artifact generation failed"
-            raise RuntimeError(detail)
         response = load_json(output_path)
         if not isinstance(response, dict):
             raise RuntimeError("artifact generation returned a non-object response")
@@ -2672,54 +2778,68 @@ def generate_browser_downloads(
     if normalize_text(handoff.get("handoff_status")) != "ready":
         return ready_state, [], ""
 
-    intake_response = run_intake_runtime(ready_state)
-    if normalize_text(intake_response.get("status")) != "ready_for_pack":
-        return ready_state, [], normalize_text(intake_response.get("block_reason")) or "Factory intake did not reach ready_for_pack."
+    handoff_lock = get_session_handoff_lock(web_demo_session_id)
+    acquired = handoff_lock.acquire(timeout=HANDOFF_LOCK_TIMEOUT_SEC)
+    if not acquired:
+        pending_state = copy_discovery_state(ready_state)
+        pending_state["status"] = "handoff_running"
+        pending_state["next_action"] = "request_status"
+        pending_state["next_question"] = (
+            "Фабрика уже обрабатывает этот confirmed brief. Подожди завершения и обнови статус через пару секунд."
+        )
+        return pending_state, [], "Concept pack generation is already running for this session."
 
-    artifact_output_dir = delivery_root(state_root, web_demo_session_id)
-    artifact_manifest = run_artifact_runtime(intake_response, output_dir=artifact_output_dir)
-    if normalize_text(artifact_manifest.get("status")) != "generated":
-        return ready_state, [], "Concept pack generation did not complete successfully."
+    try:
+        intake_response = run_intake_runtime(ready_state)
+        if normalize_text(intake_response.get("status")) != "ready_for_pack":
+            return ready_state, [], normalize_text(intake_response.get("block_reason")) or "Factory intake did not reach ready_for_pack."
 
-    normalized_manifest_items = normalize_download_artifacts(artifact_manifest)
-    requirement_brief = (
-        ready_state.get("requirement_brief", {})
-        if isinstance(ready_state.get("requirement_brief"), dict)
-        else {}
-    )
-    normalized_manifest_items = [
-        item
-        for item in normalized_manifest_items
-        if normalize_text(item.get("artifact_kind")) != "one_page_summary"
-    ]
-    normalized_manifest_items.insert(
-        0,
-        write_one_page_summary_download(
+        artifact_output_dir = delivery_root(state_root, web_demo_session_id)
+        artifact_manifest = run_artifact_runtime(intake_response, output_dir=artifact_output_dir)
+        if normalize_text(artifact_manifest.get("status")) != "generated":
+            return ready_state, [], "Concept pack generation did not complete successfully."
+
+        normalized_manifest_items = normalize_download_artifacts(artifact_manifest)
+        requirement_brief = (
+            ready_state.get("requirement_brief", {})
+            if isinstance(ready_state.get("requirement_brief"), dict)
+            else {}
+        )
+        normalized_manifest_items = [
+            item
+            for item in normalized_manifest_items
+            if normalize_text(item.get("artifact_kind")) != "one_page_summary"
+        ]
+        normalized_manifest_items.insert(
+            0,
+            write_one_page_summary_download(
+                state_root,
+                web_demo_session_id,
+                ready_state,
+                requirement_brief,
+                uploaded_files,
+            ),
+        )
+        production_simulation = simulate_post_handoff_production(
             state_root,
             web_demo_session_id,
             ready_state,
-            requirement_brief,
             uploaded_files,
-        ),
-    )
-    production_simulation = simulate_post_handoff_production(
-        state_root,
-        web_demo_session_id,
-        ready_state,
-        uploaded_files,
-    )
-    if production_simulation:
-        ready_state["production_simulation"] = production_simulation
-        normalized_manifest_items.append(
-            write_production_simulation_download(
-                state_root,
-                web_demo_session_id,
-                production_simulation,
-                requirement_brief,
-            )
         )
+        if production_simulation:
+            ready_state["production_simulation"] = production_simulation
+            normalized_manifest_items.append(
+                write_production_simulation_download(
+                    state_root,
+                    web_demo_session_id,
+                    production_simulation,
+                    requirement_brief,
+                )
+            )
 
-    return ready_state, write_delivery_index(state_root, web_demo_session_id, normalized_manifest_items), ""
+        return ready_state, write_delivery_index(state_root, web_demo_session_id, normalized_manifest_items), ""
+    finally:
+        handoff_lock.release()
 
 
 def build_audit_record(
@@ -3179,6 +3299,12 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 )
             except Exception as exc:  # noqa: BLE001
                 delivery_error = normalize_text(exc) or "Concept pack generation failed."
+                if normalize_text(runtime_state.get("status")) in {"confirmed", "download_ready", "handoff_running"}:
+                    runtime_state["status"] = "handoff_running"
+                    runtime_state["next_action"] = "request_status"
+                    runtime_state["next_question"] = (
+                        "Фабрика ещё обрабатывает confirmed brief. Обнови статус через несколько секунд."
+                    )
     else:
         low_signal_submission = False
         runtime_state = {
@@ -3197,8 +3323,15 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
     pointer["linked_brief_version"] = normalize_text(requirement_brief.get("version"))
     pointer["updated_at"] = now
 
-    adapter_status = "download_ready" if download_artifacts else (normalize_text(runtime_state.get("status")) or "active")
-    next_action = "download_artifact" if download_artifacts else normalize_text(runtime_state.get("next_action"))
+    runtime_status = normalize_text(runtime_state.get("status")) or "active"
+    runtime_next_action = normalize_text(runtime_state.get("next_action"))
+    adapter_status = "download_ready" if download_artifacts else runtime_status
+    next_action = "download_artifact" if download_artifacts else runtime_next_action
+    handoff_pending = (
+        not download_artifacts
+        and runtime_status == "confirmed"
+        and runtime_next_action in {"start_concept_pack_handoff", "run_factory_intake", "generate_artifacts", "publish_downloads"}
+    )
     next_topic = normalize_text(runtime_state.get("next_topic"))
     production_simulation = (
         runtime_state.get("production_simulation", {})
@@ -3229,6 +3362,11 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         if download_artifacts
         else normalize_text(runtime_state.get("next_question"))
     )
+    if handoff_pending:
+        next_question = (
+            normalize_text(runtime_state.get("next_question"))
+            or "Фабрика обрабатывает confirmed brief и готовит материалы. Обнови статус через несколько секунд."
+        )
     clarification_retry_hint = (
         normalize_text(discovery_request.get("_web_clarification_retry_hint"))
         if access_granted and isinstance(discovery_request, dict)
@@ -3614,6 +3752,7 @@ def render_download(handler: BaseHTTPRequestHandler, path: Path, download_name: 
     handler.send_response(200)
     handler.send_header("Content-Type", content_type or "application/octet-stream")
     handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Cache-Control", "no-store")
     handler.send_header("Content-Disposition", f'attachment; filename="{download_name or path.name}"')
     handler.end_headers()
     handler.wfile.write(body)
