@@ -29,7 +29,7 @@
 | `primary-feature-024` | `024-clawdiy-oauth-store-drift-fix` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-024` | `024-web-factory-demo-adapter` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-026` | `026-clawteam-framework-research` | `dedicated-feature-worktree` | Needs decision |
-| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
+| `primary-root` | `fix/main-deploy-lock-symlink-guard` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
 
@@ -53,6 +53,7 @@
 | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
 | `feat/moltis-regular-update-proposal` | `origin/feat/moltis-regular-update-proposal` | Needs decision |
+| `fix/main-deploy-lock-symlink-guard` | `origin/fix/main-deploy-lock-symlink-guard` | Needs decision |
 | `fix/worktree-topology-registry-single-writer-publish` | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
 | `integration/gpt54-main` | `origin/integration/gpt54-main` | Needs decision |
 | `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
@@ -139,6 +140,7 @@
 | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
 | `origin/feat/moltis-regular-update-proposal` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
+| `origin/fix/main-deploy-lock-symlink-guard` | Needs decision |
 | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
