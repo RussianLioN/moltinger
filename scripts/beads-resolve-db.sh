@@ -350,6 +350,14 @@ beads_resolve_migration_review_command() {
   esac
 }
 
+beads_resolve_has_local_runtime() {
+  local beads_dir="$1"
+  local db_path="${beads_dir}/beads.db"
+  local dolt_dir="${beads_dir}/dolt"
+
+  [[ -e "${db_path}" || -d "${dolt_dir}" ]]
+}
+
 beads_resolve_is_migration_legacy_command() {
   local command=""
 
@@ -375,7 +383,7 @@ beads_resolve_is_canonical_root_read_only_command() {
   subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
 
   case "${command}" in
-    ""|activity|blocked|children|completion|count|diff|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
+    ""|activity|blocked|children|completion|count|diff|doctor|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
       return 0
       ;;
     backend)
@@ -426,9 +434,11 @@ beads_resolve_dispatch() {
   local config_path=""
   local issues_path=""
   local db_path=""
+  local dolt_dir=""
   local redirect_path=""
   local redirect_target=""
   local root_db_path=""
+  local has_local_runtime="false"
   local recovery_hint=""
   local root_cleanup_notice=""
   local migration_mode=""
@@ -485,9 +495,13 @@ beads_resolve_dispatch() {
   config_path="${beads_dir}/config.yaml"
   issues_path="${beads_dir}/issues.jsonl"
   db_path="${beads_dir}/beads.db"
+  dolt_dir="${beads_dir}/dolt"
   redirect_path="${beads_dir}/redirect"
   root_db_path="${canonical_root}/.beads/beads.db"
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
+  if beads_resolve_has_local_runtime "${beads_dir}"; then
+    has_local_runtime="true"
+  fi
 
   migration_mode="$(beads_resolve_active_migration_mode "${repo_root}" 2>/dev/null || true)"
   if [[ -n "${migration_mode}" ]]; then
@@ -540,7 +554,7 @@ beads_resolve_dispatch() {
     return 0
   fi
 
-  if [[ -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
+  if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && ! -f "${issues_path}" ]]; then
     if [[ -n "${migration_mode}" ]]; then
       BEADS_RESOLVE_DB_PATH="${db_path}"
       beads_resolve_set_decision "execute_local" "${migration_mode}_worktree" 0
