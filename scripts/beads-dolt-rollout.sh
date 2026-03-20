@@ -49,6 +49,8 @@ rollout_json_array_from_objects() {
 }
 
 rollout_parse_args() {
+  local worktree_arg=""
+
   if [[ $# -gt 0 ]]; then
     case "${1}" in
       status|report-only|cutover|verify|rollback)
@@ -70,8 +72,9 @@ rollout_parse_args() {
         shift 2
         ;;
       --worktree)
-        target_worktrees+=("${2:-}")
-        [[ -n "${target_worktrees[-1]}" ]] || rollout_die "--worktree requires a value"
+        worktree_arg="${2:-}"
+        [[ -n "${worktree_arg}" ]] || rollout_die "--worktree requires a value"
+        target_worktrees+=("${worktree_arg}")
         shift 2
         ;;
       --package-id)
@@ -210,6 +213,23 @@ rollout_worktree_has_local_runtime() {
   else
     printf 'false\n'
   fi
+}
+
+rollout_normalize_worktree_path() {
+  local worktree_path="$1"
+  local repo_root="$2"
+  local normalized_path=""
+
+  normalized_path="$(beads_resolve_normalize_path "${worktree_path}" "${repo_root}")"
+  if [[ -d "${normalized_path}" ]]; then
+    (
+      cd "${normalized_path}"
+      pwd -P
+    )
+    return 0
+  fi
+
+  printf '%s\n' "${normalized_path}"
 }
 
 rollout_inspect_target() {
@@ -353,7 +373,7 @@ rollout_collect_targets() {
     esac
   else
     for worktree_path in "${target_worktrees[@]}"; do
-      normalized_path="$(beads_resolve_normalize_path "${worktree_path}" "${repo_root}")"
+      normalized_path="$(rollout_normalize_worktree_path "${worktree_path}" "${repo_root}")"
       statuses+=("$(rollout_inspect_target "${normalized_path}" "${inventory_json}")")
     done
   fi
@@ -866,7 +886,7 @@ rollout_rollback() {
     [[ -n "${target_json}" ]] || continue
     target_path="$(printf '%s\n' "${target_json}" | jq -r '.path')"
     if [[ "${#target_worktrees[@]}" -gt 0 ]]; then
-      if ! printf '%s\n' "${target_worktrees[@]}" | while IFS= read -r candidate_path; do beads_resolve_normalize_path "${candidate_path}" "${repo_root}"; done | grep -Fxq "${target_path}"; then
+      if ! printf '%s\n' "${target_worktrees[@]}" | while IFS= read -r candidate_path; do rollout_normalize_worktree_path "${candidate_path}" "${repo_root}"; done | grep -Fxq "${target_path}"; then
         continue
       fi
     fi
