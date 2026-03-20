@@ -19,6 +19,11 @@ on:
         required: false
         default: true
         type: boolean
+      send_telegram:
+        description: "Send Telegram notification with approval link (requires Telegram secrets)"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -219,6 +224,29 @@ jobs:
             echo "reason=required SMTP secrets are missing" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Evaluate Telegram prerequisites
+        id: telegram
+        if: steps.pr.outputs.pr_url != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
+          SEND_TELEGRAM_INPUT: ${{ github.event.inputs.send_telegram || 'true' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$SEND_TELEGRAM_INPUT" != "true" ]]; then
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=workflow_dispatch input send_telegram=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]]; then
+            echo "should_send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=required Telegram secrets are missing" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Send approval email (optional)
         if: ${{ steps.email.outputs.should_send == 'true' }}
         uses: dawidd6/action-send-mail@v16
@@ -244,6 +272,36 @@ jobs:
             Compare URL mode является поддерживаемым контрактом (это не failure state).
 
             Это безопасный proposal workflow: деплой напрямую не запускался.
+
+      - name: Send Telegram notification (optional)
+        if: ${{ steps.telegram.outputs.should_send == 'true' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          MESSAGE=$(cat <<EOF
+          [Moltis] Доступно обновление до версии ${{ steps.pr.outputs.candidate_version }}.
+
+          Ссылка для подтверждения:
+          ${{ steps.pr.outputs.pr_url }}
+
+          Режим: ${{ steps.pr.outputs.pr_mode }}
+
+          Если это compare-ссылка, нажмите "Create pull request", затем approve/merge.
+          EOF
+          )
+
+          RESULT="$(bash ./scripts/telegram-bot-send.sh \
+            --chat-id "$TELEGRAM_CHAT_ID" \
+            --text "$MESSAGE")"
+          echo "$RESULT"
+
+          if ! jq -e '.ok == true' >/dev/null 2>&1 <<<"$RESULT"; then
+            echo "::error::Telegram send failed"
+            exit 1
+          fi
 
       - name: Proposal summary
         if: always()
@@ -274,6 +332,8 @@ jobs:
             echo "| Operator action | $OPERATOR_ACTION |"
             echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
             echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
+            echo "| Telegram send | \`${{ steps.telegram.outputs.should_send || 'false' }}\` |"
+            echo "| Telegram skip reason | \`${{ steps.telegram.outputs.reason || 'n/a' }}\` |"
             echo ""
             echo "> Manual compare URL mode is a supported contract when Actions cannot create PRs."
             echo "> This workflow only prepares/updates a PR. It does not deploy to production."

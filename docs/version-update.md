@@ -131,6 +131,11 @@ Optional email delivery secrets for proposal workflow:
 - `MOLTIS_UPDATE_NOTIFY_EMAIL`
 - `MOLTIS_UPDATE_NOTIFY_FROM` (optional)
 
+Optional Telegram delivery secrets for proposal workflow:
+
+- `TELEGRAM_BOT_TOKEN`
+- `MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID`
+
 ## Rollback Expectations
 
 If the update regresses, rollback must preserve:
