@@ -116,7 +116,7 @@ If main/worktree directories were moved manually and `codex resume` stops showin
 scripts/codex-session-path-repair.sh --apply --repair-git-worktrees
 ```
 
-This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived session headers) and repairs git worktree links for the relocated directories.
+This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived session headers + live rollout session headers under `~/.codex/sessions/**`) and repairs git worktree links for the relocated directories.
 
 ## Beads Ownership Policy
 

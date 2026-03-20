@@ -82,6 +82,25 @@ count_archived_for_cwd() {
   printf '%s\n' "$count"
 }
 
+count_rollouts_for_cwd() {
+  local cwd="$1"
+  shift
+  local count=0
+  local file first_line
+
+  for file in "$@"; do
+    first_line="$(head -n 1 "$file" 2>/dev/null || true)"
+    [[ -n "$first_line" ]] || continue
+    if printf '%s\n' "$first_line" | jq -e --arg cwd "$cwd" '
+      .type == "session_meta" and (.payload.cwd // "") == $cwd
+    ' >/dev/null 2>&1; then
+      count=$((count + 1))
+    fi
+  done
+
+  printf '%s\n' "$count"
+}
+
 run_git_worktree_repair() {
   local main_repo="$1"
   local root_dir="$2"
@@ -204,13 +223,16 @@ require_cmd sqlite3
 
 state_db="${codex_home}/state_5.sqlite"
 archived_dir="${codex_home}/archived_sessions"
+sessions_dir="${codex_home}/sessions"
 
 [[ -f "$state_db" ]] || die "Missing Codex DB: $state_db"
 [[ -d "$archived_dir" ]] || die "Missing Codex archived sessions dir: $archived_dir"
+[[ -d "$sessions_dir" ]] || die "Missing Codex sessions dir: $sessions_dir"
 
 shopt -s nullglob
 archived_files=("${archived_dir}"/*.jsonl)
 shopt -u nullglob
+mapfile -t session_rollout_files < <(find "$sessions_dir" -type f -name 'rollout-*.jsonl' | sort)
 
 declare -A path_map=()
 
@@ -224,6 +246,9 @@ mapfile -t all_cwds < <(
   {
     sqlite3 -readonly "$state_db" "SELECT DISTINCT cwd FROM threads;"
     for file in "${archived_files[@]}"; do
+      head -n 1 "$file" 2>/dev/null || true
+    done | jq -r 'select(.type == "session_meta") | .payload.cwd // empty'
+    for file in "${session_rollout_files[@]}"; do
       head -n 1 "$file" 2>/dev/null || true
     done | jq -r 'select(.type == "session_meta") | .payload.cwd // empty'
   } | awk 'NF' | sort -u
@@ -251,10 +276,11 @@ for old_path in "${map_keys[@]}"; do
   new_path="${path_map[$old_path]}"
   threads_count="$(count_threads_for_cwd "$state_db" "$old_path")"
   archived_count="$(count_archived_for_cwd "$old_path" "${archived_files[@]}")"
-  if [[ "$threads_count" != "0" || "$archived_count" != "0" ]]; then
+  rollout_count="$(count_rollouts_for_cwd "$old_path" "${session_rollout_files[@]}")"
+  if [[ "$threads_count" != "0" || "$archived_count" != "0" || "$rollout_count" != "0" ]]; then
     effective_map_keys+=("$old_path")
-    printf '  - %s -> %s (threads=%s, archived=%s)\n' \
-      "$old_path" "$new_path" "$threads_count" "$archived_count"
+    printf '  - %s -> %s (threads=%s, archived=%s, rollouts=%s)\n' \
+      "$old_path" "$new_path" "$threads_count" "$archived_count" "$rollout_count"
   fi
 done
 
@@ -272,8 +298,9 @@ for old_path in "${map_keys[@]}"; do
   new_path="${path_map[$old_path]}"
   threads_count="$(count_threads_for_cwd "$state_db" "$old_path")"
   archived_count="$(count_archived_for_cwd "$old_path" "${archived_files[@]}")"
-  printf '  - %s -> %s (threads=%s, archived=%s)\n' \
-    "$old_path" "$new_path" "$threads_count" "$archived_count"
+  rollout_count="$(count_rollouts_for_cwd "$old_path" "${session_rollout_files[@]}")"
+  printf '  - %s -> %s (threads=%s, archived=%s, rollouts=%s)\n' \
+    "$old_path" "$new_path" "$threads_count" "$archived_count" "$rollout_count"
 done
 
 if [[ "$apply_changes" != "true" ]]; then
@@ -287,7 +314,8 @@ fi
 timestamp="$(date '+%Y%m%d-%H%M%S')"
 backup_dir="${codex_home}/backups/cwd-path-repair-${timestamp}"
 backup_archived_dir="${backup_dir}/archived_sessions"
-mkdir -p "$backup_archived_dir"
+backup_sessions_dir="${backup_dir}/sessions"
+mkdir -p "$backup_archived_dir" "$backup_sessions_dir"
 
 state_backup="${backup_dir}/state_5.sqlite"
 state_backup_esc="$(sql_escape "$state_backup")"
@@ -338,6 +366,33 @@ for file in "${archived_files[@]}"; do
   fi
 done
 log "Updated archived session files: $updated_files"
+
+updated_rollout_files=0
+for file in "${session_rollout_files[@]}"; do
+  first_line="$(head -n 1 "$file" 2>/dev/null || true)"
+  [[ -n "$first_line" ]] || continue
+
+  new_first_line="$(printf '%s\n' "$first_line" | jq -c --argjson mapping "$map_json" '
+    if .type == "session_meta"
+      and (.payload.cwd | type == "string")
+      and ($mapping[.payload.cwd] != null)
+    then .payload.cwd = $mapping[.payload.cwd]
+    else .
+    end
+  ')"
+
+  if [[ "$new_first_line" != "$first_line" ]]; then
+    cp "$file" "${backup_sessions_dir}/$(basename "$file")"
+    temp_file="$(mktemp)"
+    {
+      printf '%s\n' "$new_first_line"
+      tail -n +2 "$file"
+    } > "$temp_file"
+    mv "$temp_file" "$file"
+    updated_rollout_files=$((updated_rollout_files + 1))
+  fi
+done
+log "Updated live rollout session files: $updated_rollout_files"
 
 if [[ "$repair_git_worktrees" == "true" ]]; then
   if run_git_worktree_repair "$new_main" "$moved_root" "$codex_home" false; then
