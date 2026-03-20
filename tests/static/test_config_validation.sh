@@ -330,10 +330,20 @@ PY
        rg -Fq 'resolve_container_name_conflicts' "$DEPLOY_SCRIPT" && \
        rg -Fq 'expected_project="$(basename "$PROJECT_ROOT")"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'docker rm -f "$container_id"' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'echo "prometheus"' "$DEPLOY_SCRIPT"; then
+       rg -Fq 'echo "ollama-fallback"' "$DEPLOY_SCRIPT" && \
+       ! rg -Fq 'echo "prometheus"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "deploy.sh must clean conflicting legacy container names (including prometheus) before compose up to keep tracked deploy idempotent"
+        test_fail "deploy.sh must clean conflicting legacy containers for Moltis managed services only (without touching monitoring-stack container names)"
+    fi
+
+    test_start "static_deploy_script_scopes_moltis_rollout_to_core_and_sidecars"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       rg -Fq 'TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'compose_cmd normal up -d --remove-orphans "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Moltis deploy path must target only moltis + required sidecars so unrelated monitoring services cannot block tracked upgrades"
     fi
 
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"

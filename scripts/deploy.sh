@@ -510,7 +510,9 @@ configure_target() {
             TARGET_NOTIFICATION_NAME="Moltis"
             TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
             TARGET_REQUIRED_NETWORKS=("$TRAEFIK_NETWORK")
-            TARGET_AUXILIARY_SERVICES=("watchtower")
+            # Scope managed rollout to Moltis core + required sidecars only.
+            # Monitoring services must not block Moltis deploys due host-level port conflicts.
+            TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")
             ;;
         clawdiy)
             TARGET_DISPLAY="Clawdiy"
@@ -557,9 +559,6 @@ managed_container_names_for_target() {
         moltis)
             echo "moltis"
             echo "watchtower"
-            echo "cadvisor"
-            echo "prometheus"
-            echo "alertmanager"
             echo "ollama-fallback"
             ;;
         clawdiy)
@@ -1081,7 +1080,15 @@ pull_images() {
 
 deploy_containers() {
     log_info "Deploying containers for target $TARGET..."
-    compose_cmd normal up -d --remove-orphans
+    local -a deploy_services=("$TARGET_SERVICE")
+    local service
+
+    for service in "${TARGET_AUXILIARY_SERVICES[@]}"; do
+        [[ -n "$service" ]] || continue
+        deploy_services+=("$service")
+    done
+
+    compose_cmd normal up -d --remove-orphans "${deploy_services[@]}"
     log_success "Containers deployed for target $TARGET"
 }
 
