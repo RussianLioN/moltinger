@@ -344,7 +344,6 @@ normalize_issue_key() {
 infer_issue_id_from_branch_name() {
   local branch_name="$1"
   local stripped_branch=""
-  local issues_file=""
   local candidate_issue=""
   local normalized_issue=""
   local matched_issue=""
@@ -352,12 +351,6 @@ infer_issue_id_from_branch_name() {
   local seen_matches=":"
 
   if [[ -z "${branch_name}" ]]; then
-    printf '\n'
-    return 0
-  fi
-
-  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
-  if [[ ! -f "${issues_file}" ]]; then
     printf '\n'
     return 0
   fi
@@ -385,7 +378,7 @@ infer_issue_id_from_branch_name() {
       matched_issue_count=$((matched_issue_count + 1))
       matched_issue="${candidate_issue}"
     fi
-  done < <(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "${issues_file}")
+  done < <(iter_known_issue_ids)
 
   if [[ "${matched_issue_count}" -eq 1 ]]; then
     printf '%s\n' "${matched_issue}"
@@ -440,13 +433,13 @@ resolve_issue_jsonl_line() {
   awk -v issue="${requested_issue}" 'index($0, "\"id\":\"" issue "\"") { print; exit }' "${issues_file}"
 }
 
-extract_issue_artifact_paths_from_jsonl_line() {
-  local issue_line="$1"
+extract_issue_artifact_paths_from_text() {
+  local issue_text="$1"
   local candidate_path=""
   local normalized_path=""
   local seen_paths=""
 
-  if [[ -z "${issue_line}" ]]; then
+  if [[ -z "${issue_text}" ]]; then
     return 0
   fi
 
@@ -473,7 +466,7 @@ extract_issue_artifact_paths_from_jsonl_line() {
     seen_paths="${seen_paths}:${normalized_path}"
     printf '%s\n' "${normalized_path}"
   done < <(
-    printf '%s\n' "${issue_line}" \
+    printf '%s\n' "${issue_text}" \
       | grep -oE '([A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+' \
       || true
   )
@@ -486,6 +479,10 @@ target_has_issue_record() {
 
   if [[ -z "${issue_key}" || -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
     return 1
+  fi
+
+  if path_has_live_beads_runtime "${worktree_path}" && resolve_issue_live_object_json_for_path "${worktree_path}" "${issue_key}" >/dev/null 2>&1; then
+    return 0
   fi
 
   target_issues_file="${worktree_path}/.beads/issues.jsonl"
@@ -585,6 +582,120 @@ resolve_bd_command() {
   return 1
 }
 
+resolve_bd_command_for_path() {
+  local worktree_path="${1:-}"
+
+  if [[ -n "${worktree_path}" && -x "${worktree_path}/bin/bd" ]]; then
+    printf '%s\n' "${worktree_path}/bin/bd"
+    return 0
+  fi
+
+  resolve_bd_command
+}
+
+run_bd_json_command_for_path() {
+  local worktree_path="${1:-}"
+  local bd_command=""
+
+  shift || true
+
+  if [[ -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
+    return 1
+  fi
+
+  bd_command="$(resolve_bd_command_for_path "${worktree_path}")" || return 1
+  (
+    cd "${worktree_path}"
+    "${bd_command}" "$@" 2>/dev/null
+  )
+}
+
+path_has_live_beads_runtime() {
+  local worktree_path="${1:-}"
+  local beads_dir=""
+
+  if [[ -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
+    return 1
+  fi
+
+  beads_dir="${worktree_path}/.beads"
+  [[ -d "${beads_dir}/dolt" || -d "${beads_dir}/beads.db" || -f "${beads_dir}/beads.db" || -f "${beads_dir}/dolt-server.port" || -f "${beads_dir}/metadata.json" ]]
+}
+
+iter_known_issue_ids() {
+  local issues_file=""
+  local live_issue_ids=""
+
+  if command -v jq >/dev/null 2>&1; then
+    live_issue_ids="$(run_bd_json_command_for_path "${resolved_repo_root}" list --all --json 2>/dev/null || true)"
+    if [[ -n "${live_issue_ids}" ]]; then
+      printf '%s\n' "${live_issue_ids}" | jq -r '.[]? | .id // empty'
+    fi
+  fi
+
+  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
+  if [[ -f "${issues_file}" ]]; then
+    sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "${issues_file}"
+  fi
+}
+
+resolve_issue_live_object_json_for_path() {
+  local worktree_path="${1:-}"
+  local requested_issue="${2:-}"
+  local issue_json=""
+
+  if [[ -z "${worktree_path}" || -z "${requested_issue}" ]]; then
+    return 1
+  fi
+
+  command -v jq >/dev/null 2>&1 || return 1
+
+  issue_json="$(run_bd_json_command_for_path "${worktree_path}" show "${requested_issue}" --json 2>/dev/null || true)"
+  [[ -n "${issue_json}" ]] || return 1
+
+  printf '%s\n' "${issue_json}" \
+    | jq -ce 'if type == "array" then .[0] else . end | select(type == "object")'
+}
+
+resolve_issue_context_json() {
+  local requested_issue="${1:-}"
+  local issue_object=""
+  local issue_line=""
+
+  if [[ -z "${requested_issue}" ]]; then
+    return 1
+  fi
+
+  issue_object="$(resolve_issue_live_object_json_for_path "${resolved_repo_root}" "${requested_issue}" 2>/dev/null || true)"
+  if [[ -n "${issue_object}" ]]; then
+    printf '%s\n' "${issue_object}" \
+      | jq -c '{
+          source: "live",
+          id: (.id // ""),
+          title: (.title // ""),
+          text: ([.title, .description, .body, .details] | map(select(type == "string" and length > 0)) | join("\n"))
+        }'
+    return 0
+  fi
+
+  issue_line="$(resolve_issue_jsonl_line "${requested_issue}")"
+  if [[ -n "${issue_line}" ]]; then
+    jq -cn \
+      --arg requested_issue "${requested_issue}" \
+      --arg issue_title "$(extract_issue_title_from_jsonl_line "${issue_line}")" \
+      --arg issue_text "${issue_line}" \
+      '{
+        source: "jsonl",
+        id: $requested_issue,
+        title: $issue_title,
+        text: $issue_text
+      }'
+    return 0
+  fi
+
+  return 1
+}
+
 build_plain_bd_bootstrap_command_for_path() {
   local worktree_path="${1:-}"
 
@@ -649,8 +760,9 @@ build_finish_review_command() {
 
 discover_issue_context() {
   local resolved_issue=""
-  local issues_file=""
-  local issue_line=""
+  local issue_context_json=""
+  local issue_context_source=""
+  local issue_text=""
   local artifact_path=""
   local artifact_report=""
   local has_research_artifact=0
@@ -660,22 +772,21 @@ discover_issue_context() {
     return 0
   fi
 
-  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
-  if [[ ! -f "${issues_file}" ]]; then
+  issue_context_json="$(resolve_issue_context_json "${resolved_issue}" 2>/dev/null || true)"
+  if [[ -z "${issue_context_json}" ]]; then
     return 0
   fi
 
-  issue_line="$(resolve_issue_jsonl_line "${resolved_issue}")"
-  if [[ -z "${issue_line}" ]]; then
-    return 0
-  fi
-
-  report_issue_title="$(extract_issue_title_from_jsonl_line "${issue_line}")"
+  report_issue_title="$(printf '%s\n' "${issue_context_json}" | jq -r '.title // empty')"
+  issue_context_source="$(printf '%s\n' "${issue_context_json}" | jq -r '.source // empty')"
+  issue_text="$(printf '%s\n' "${issue_context_json}" | jq -r '.text // empty')"
   report_bootstrap_source_ref="$(resolve_bootstrap_source_ref)"
 
   if report_worktree_path_exists && ! target_has_issue_record "${resolved_issue}" "${report_worktree_path}"; then
-    add_warning "Issue '${resolved_issue}' is not present in target worktree Beads state; rely on the handoff context instead of local bd show."
-    add_bootstrap_path ".beads/issues.jsonl"
+    add_warning "Issue '${resolved_issue}' is not present in target worktree Beads state; rely on the handoff context until local bd bootstrap completes."
+    if [[ "${issue_context_source}" == "jsonl" ]]; then
+      add_bootstrap_path ".beads/issues.jsonl"
+    fi
   fi
 
   while IFS= read -r artifact_path; do
@@ -696,7 +807,7 @@ discover_issue_context() {
     fi
 
     report_issue_artifacts+=("${artifact_report}")
-  done < <(extract_issue_artifact_paths_from_jsonl_line "${issue_line}")
+  done < <(extract_issue_artifact_paths_from_text "${issue_text}")
 
   if [[ "${has_research_artifact}" -eq 1 && -e "${resolved_repo_root}/docs/research/README.md" ]] && ! target_worktree_has_path "docs/research/README.md"; then
     add_bootstrap_path "docs/research/README.md"
@@ -705,7 +816,8 @@ discover_issue_context() {
 
 speckit_branching_enabled() {
   local requested_issue="${issue_id:-}"
-  local issue_line=""
+  local issue_context_json=""
+  local issue_text=""
 
   if [[ "${speckit_mode}" == "true" ]]; then
     return 0
@@ -715,12 +827,13 @@ speckit_branching_enabled() {
     return 1
   fi
 
-  issue_line="$(resolve_issue_jsonl_line "${requested_issue}")"
-  if [[ -z "${issue_line}" ]]; then
+  issue_context_json="$(resolve_issue_context_json "${requested_issue}" 2>/dev/null || true)"
+  if [[ -z "${issue_context_json}" ]]; then
     return 1
   fi
 
-  [[ "${issue_line}" =~ [Ss]peckit|/speckit|spec\.md|plan\.md|tasks\.md|specs/ ]]
+  issue_text="$(printf '%s\n' "${issue_context_json}" | jq -r '.text // empty')"
+  [[ "${issue_text}" =~ [Ss]peckit|/speckit|spec\.md|plan\.md|tasks\.md|specs/ ]]
 }
 
 issue_requests_speckit() {
