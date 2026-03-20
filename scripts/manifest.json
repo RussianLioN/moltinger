@@ -116,6 +116,19 @@
         "beads-worktree-localize"
       ]
     },
+    "beads-worktree-audit.sh": {
+      "version": "1.0.0",
+      "description": "Audit live sibling worktrees for stale Beads ownership and optionally localize safe cases in place",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git"
+      ],
+      "provides": [
+        "beads-worktree-audit"
+      ]
+    },
     "beads-normalize-issues-jsonl.sh": {
       "version": "1.0.0",
       "description": "Normalize tracked .beads/issues.jsonl dependency ordering into one deterministic canonical form",

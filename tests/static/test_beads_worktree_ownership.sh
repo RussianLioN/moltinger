@@ -9,6 +9,7 @@ ENVRC_FILE="$PROJECT_ROOT/.envrc"
 BD_SHIM="$PROJECT_ROOT/bin/bd"
 RESOLVE_SCRIPT="$PROJECT_ROOT/scripts/beads-resolve-db.sh"
 LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
+AUDIT_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-audit.sh"
 NORMALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-normalize-issues-jsonl.sh"
 CODEX_LAUNCHER="$PROJECT_ROOT/scripts/codex-profile-launch.sh"
 WORKTREE_READY_SCRIPT="$PROJECT_ROOT/scripts/worktree-ready.sh"
@@ -60,10 +61,23 @@ run_static_beads_worktree_ownership_tests() {
     test_start "static_localize_helper_exists_for_compatibility_migration"
     if [[ -x "$LOCALIZE_SCRIPT" ]] && \
        rg -q 'migratable_legacy' "$LOCALIZE_SCRIPT" && \
-       rg -q 'partial_foundation' "$LOCALIZE_SCRIPT"; then
+       rg -q 'partial_foundation' "$LOCALIZE_SCRIPT" && \
+       rg -q 'bootstrap_required' "$LOCALIZE_SCRIPT" && \
+       rg -q -- '--bootstrap-source' "$LOCALIZE_SCRIPT"; then
         test_pass
     else
         test_fail "The repo must provide a managed compatibility localization helper"
+    fi
+
+    test_start "static_audit_helper_exists_for_canonical_root_enforcement"
+    if [[ -x "$AUDIT_SCRIPT" ]] && \
+       rg -q 'worktree list --porcelain' "$AUDIT_SCRIPT" && \
+       rg -q 'migratable_legacy' "$AUDIT_SCRIPT" && \
+       rg -q 'partial_foundation' "$AUDIT_SCRIPT" && \
+       rg -q 'Non-canonical worktree' "$AUDIT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "The repo must provide a canonical-root sibling ownership audit helper"
     fi
 
     test_start "static_codex_launcher_bootstraps_repo_local_plain_bd"
@@ -76,10 +90,19 @@ run_static_beads_worktree_ownership_tests() {
     test_start "static_git_hooks_bootstrap_repo_local_plain_bd"
     if [[ -f "$HOOK_BOOTSTRAP" ]] && \
        rg -q 'export PATH="\$\{PROJECT_ROOT\}/bin:\$\{PATH\}"' "$HOOK_BOOTSTRAP" && \
-       rg -q '_repo-local-path\.sh' "$HOOK_PRE_COMMIT" "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" "$HOOK_PRE_PUSH"; then
+       rg -q '_repo-local-path\.sh' "$HOOK_PRE_COMMIT" "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" "$HOOK_PRE_PUSH" && \
+       rg -q 'beads-worktree-localize\.sh' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE"; then
         test_pass
     else
-        test_fail "Tracked git hooks must source the repo-local PATH bootstrap before any bd resolution"
+        test_fail "Tracked git hooks must source the repo-local PATH bootstrap and auto-heal safe Beads ownership residue"
+    fi
+
+    test_start "static_hooks_enforce_sibling_beads_ownership_audit"
+    if rg -q 'beads-worktree-audit\.sh' "$HOOK_PRE_COMMIT" && \
+       rg -q 'beads-worktree-audit\.sh' "$HOOK_PRE_PUSH"; then
+        test_pass
+    else
+        test_fail "Pre-commit and pre-push must run the sibling Beads ownership audit"
     fi
 
     test_start "static_pre_commit_normalizes_branch_local_beads_issues"

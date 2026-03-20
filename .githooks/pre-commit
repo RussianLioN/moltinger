@@ -39,7 +39,6 @@ if [[ -n "$ACTIVE_MIGRATION_LABEL" ]]; then
         exit 1
     fi
 fi
-
 if [[ -x "$BEADS_AUDIT_SCRIPT" ]]; then
     if ! "$BEADS_AUDIT_SCRIPT" >/dev/null; then
         echo "✗ Sibling worktree Beads ownership audit failed." >&2

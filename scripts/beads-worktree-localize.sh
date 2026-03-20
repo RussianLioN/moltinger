@@ -10,12 +10,14 @@ source "${REPO_ROOT}/scripts/beads-resolve-db.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/beads-worktree-localize.sh [--path <worktree>] [--format <human|env>] [--check]
+  scripts/beads-worktree-localize.sh [--path <worktree>] [--format <human|env>] [--check] [--bootstrap-source <ref>]
 
 Description:
   Localize Beads ownership for an existing git worktree by removing legacy
   redirect residue and materializing a worktree-local SQLite DB from the local
-  JSONL/config foundation when that is safe to do.
+  JSONL/config foundation when that is safe to do. For older worktrees that
+  still lack the plain-bd foundation, `--bootstrap-source` can import the
+  tracked recovery files before localization.
 EOF
 }
 
@@ -27,6 +29,7 @@ die() {
 target_path=""
 output_format="human"
 check_only="false"
+bootstrap_source=""
 
 report_state=""
 report_action=""
@@ -34,6 +37,7 @@ report_worktree=""
 report_db_path=""
 report_message=""
 report_notice=""
+report_bootstrap_source=""
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -51,6 +55,11 @@ parse_args() {
       --check)
         check_only="true"
         shift
+        ;;
+      --bootstrap-source)
+        bootstrap_source="${2:-}"
+        [[ -n "${bootstrap_source}" ]] || die "--bootstrap-source requires a value"
+        shift 2
         ;;
       -h|--help)
         usage
@@ -109,6 +118,7 @@ classify_state() {
 
   report_db_path="${db_path}"
   report_notice=""
+  report_bootstrap_source=""
 
   active_migration_mode="$(detect_active_migration_mode 2>/dev/null || true)"
   if [[ -n "${active_migration_mode}" ]]; then
@@ -133,6 +143,15 @@ classify_state() {
       return 0
     fi
 
+    if [[ -n "${bootstrap_source}" ]]; then
+      report_state="bootstrap_required"
+      report_action="bootstrap_and_localize"
+      report_message="Legacy redirect metadata is present and local Beads foundation is incomplete; bootstrap files must be imported before safe localization."
+      report_notice="Bootstrap imports only the plain-bd recovery foundation from the requested source ref."
+      report_bootstrap_source="${bootstrap_source}"
+      return 0
+    fi
+
     report_state="damaged_blocked"
     report_action="stop_and_report"
     report_message="Legacy redirect metadata is present, but local Beads foundation files are incomplete."
@@ -154,9 +173,36 @@ classify_state() {
     return 0
   fi
 
+  if [[ -n "${bootstrap_source}" ]]; then
+    report_state="bootstrap_required"
+    report_action="bootstrap_and_localize"
+    report_message="This worktree does not have enough local Beads foundation files; bootstrap imports are required before safe localization."
+    report_notice="Bootstrap imports only the plain-bd recovery foundation from the requested source ref."
+    report_bootstrap_source="${bootstrap_source}"
+    return 0
+  fi
+
   report_state="damaged_blocked"
   report_action="stop_and_report"
   report_message="This worktree does not have enough local Beads foundation files to localize ownership safely."
+}
+
+bootstrap_foundation() {
+  local -a bootstrap_files=(
+    ".beads/config.yaml"
+    ".beads/issues.jsonl"
+    "bin/bd"
+    "scripts/beads-resolve-db.sh"
+    "scripts/beads-worktree-localize.sh"
+    ".envrc"
+  )
+
+  [[ -n "${bootstrap_source}" ]] || die "bootstrap_foundation requires --bootstrap-source"
+
+  (
+    cd "${target_path}"
+    git checkout "${bootstrap_source}" -- "${bootstrap_files[@]}"
+  )
 }
 
 materialize_local_db() {
@@ -174,12 +220,19 @@ materialize_local_db() {
 
 localize_state() {
   local redirect_path="${target_path}/.beads/redirect"
+  local bootstrap_source_used=""
 
   case "${report_state}" in
     current)
       return 0
       ;;
     migratable_legacy)
+      rm -f "${redirect_path}"
+      materialize_local_db
+      ;;
+    bootstrap_required)
+      bootstrap_source_used="${report_bootstrap_source}"
+      bootstrap_foundation
       rm -f "${redirect_path}"
       materialize_local_db
       ;;
@@ -195,6 +248,9 @@ localize_state() {
   esac
 
   classify_state
+  if [[ -n "${bootstrap_source_used}" ]]; then
+    report_bootstrap_source="${bootstrap_source_used}"
+  fi
 }
 
 render_env() {
@@ -205,6 +261,7 @@ render_env() {
   printf 'db_path=%q\n' "${report_db_path}"
   printf 'message=%q\n' "${report_message}"
   printf 'notice=%q\n' "${report_notice}"
+  printf 'bootstrap_source=%q\n' "${report_bootstrap_source}"
 }
 
 render_human() {
@@ -213,6 +270,9 @@ render_human() {
   printf 'Action: %s\n' "${report_action}"
   printf 'DB Path: %s\n' "${report_db_path}"
   printf 'Message: %s\n' "${report_message}"
+  if [[ -n "${report_bootstrap_source}" ]]; then
+    printf 'Bootstrap Source: %s\n' "${report_bootstrap_source}"
+  fi
   if [[ -n "${report_notice}" ]]; then
     printf 'Notice: %s\n' "${report_notice}"
   fi

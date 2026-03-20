@@ -8,9 +8,14 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/_repo-local-path.sh"
 GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
 REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
+BEADS_AUDIT_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-audit.sh"
 
 if [[ -x "$GUARD_SCRIPT" ]]; then
   "$GUARD_SCRIPT" --check --hook pre-push
+fi
+
+if [[ -x "$BEADS_AUDIT_SCRIPT" ]]; then
+  "$BEADS_AUDIT_SCRIPT" >/dev/null
 fi
 
 if [[ -x "$REGISTRY_SCRIPT" ]]; then
