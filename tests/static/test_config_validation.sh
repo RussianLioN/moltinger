@@ -619,6 +619,26 @@ PY
         test_fail "Moltis update proposal workflow must use a Node24-compatible action-send-mail major to avoid Node20 deprecation failures"
     fi
 
+    test_start "static_moltis_update_proposal_supports_optional_telegram_notification"
+    if rg -Fq 'send_telegram:' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq 'Evaluate Telegram prerequisites' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq 'Send Telegram notification (optional)' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq 'MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq 'scripts/telegram-bot-send.sh' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Moltis update proposal workflow must support optional Telegram notification via dedicated chat-id secret"
+    fi
+
+    test_start "static_version_update_docs_list_optional_telegram_delivery_secrets"
+    if rg -Fq 'Optional Telegram delivery secrets for proposal workflow' "$PROJECT_ROOT/docs/version-update.md" && \
+       rg -Fq 'TELEGRAM_BOT_TOKEN' "$PROJECT_ROOT/docs/version-update.md" && \
+       rg -Fq 'MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID' "$PROJECT_ROOT/docs/version-update.md"; then
+        test_pass
+    else
+        test_fail "Version update docs must list optional Telegram delivery secrets for proposal workflow"
+    fi
+
     test_start "static_ci_runtime_installs_sqlite3_for_codex_session_path_repair_suite"
     if rg -q 'Install OS dependencies' "$TEST_WORKFLOW" && \
        rg -q 'apt-get install -y -qq jq sqlite3' "$TEST_WORKFLOW" && \
