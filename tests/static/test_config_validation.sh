@@ -275,6 +275,15 @@ PY
         test_fail "Deploy workflow must resolve tracked Moltis version, remove ad-hoc version input, forbid staging bypass, and block non-main tag deploys"
     fi
 
+    test_start "static_deploy_blocks_tracked_version_regression_against_running_baseline"
+    if rg -q 'Prevent tracked version regressions against running production baseline' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'Tracked Moltis version regression detected' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'sort -V' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must block tracked version regressions when running production Moltis version is newer"
+    fi
+
     test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"
     if rg -q 'Check post-upgrade web protocol skew' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'stale browser tabs' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \

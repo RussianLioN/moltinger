@@ -43,6 +43,7 @@ Forbidden:
 - `sed -i` edits on the server
 - ad-hoc image pulls without a matching pre-update backup
 - rollout when restore-check has not passed for the same backup
+- tracked-version downgrades through `main` deploy path (use explicit rollback flow instead)
 
 Current tracked-helper contract in this branch:
 
@@ -85,6 +86,7 @@ BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 - allow only production target in workflow_dispatch
 - allow tag-triggered production deploy only when tag SHA equals current `origin/main` HEAD
 - keep manual version input blank by default (tracked git version is source of truth)
+- block deploy when tracked git version is lower than the currently running semver-tagged Moltis image
 - block deploy if restore readiness fails
 
 `.github/workflows/uat-gate.yml` is expected to:
