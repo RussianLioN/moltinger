@@ -365,14 +365,16 @@ code {
   width: 10px;
   border-radius: 999px;
   transform: translateX(-50%);
-  background: transparent;
-  transition: background-color 0.14s ease, color 0.14s ease;
+  background: rgba(255, 255, 255, 0);
+  transition: background-color 0.14s ease, color 0.14s ease, opacity 0.14s ease;
+  opacity: 0;
 }
 
 .app-frame__divider:hover::after,
 .app-frame__divider:focus-visible::after {
   background: rgba(255, 255, 255, 0.16);
   color: rgba(255, 255, 255, 0.72);
+  opacity: 1;
 }
 
 .app-frame__divider:focus-visible {
@@ -399,8 +401,36 @@ code {
   gap: 4px;
 }
 
+.sidebar__brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .sidebar h2 {
   font-size: 1.02rem;
+}
+
+.sidebar__collapse {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted-strong);
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
+}
+
+.sidebar__collapse:hover,
+.sidebar__collapse:focus-visible {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  outline: none;
 }
 
 .sidebar__new {
@@ -459,9 +489,21 @@ code {
 }
 
 .project-card__menu {
-  min-width: 38px;
-  min-height: 38px;
+  min-width: 30px;
+  min-height: 30px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: background-color 0.14s ease, opacity 0.14s ease;
+}
+
+.project-card:hover .project-card__menu,
+.project-card:focus-within .project-card__menu,
+.project-card.is-active .project-card__menu {
+  opacity: 0.9;
+  pointer-events: auto;
 }
 
 .project-card__menu:hover {
@@ -591,6 +633,7 @@ code {
   display: grid;
   gap: 6px;
   min-width: 0;
+  max-width: min(920px, 100%);
 }
 
 .workspace-topbar__title-row {
@@ -609,6 +652,36 @@ code {
   flex: 1;
 }
 
+.workspace-topbar__menu {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 1px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted-strong);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease, opacity 0.14s ease;
+}
+
+.workspace-topbar__title-row:hover .workspace-topbar__menu,
+.workspace-topbar__title-row:focus-within .workspace-topbar__menu {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workspace-topbar__menu:hover,
+.workspace-topbar__menu:focus-visible {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  outline: none;
+}
+
 .workspace-topbar__subtitle {
   font-size: 0.95rem;
   line-height: 1.45;
@@ -624,6 +697,27 @@ code {
   gap: 10px;
   flex-wrap: wrap;
   flex: 0 0 auto;
+}
+
+.sidebar-reopen {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.sidebar-reopen:hover,
+.sidebar-reopen:focus-visible {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
 }
 
 .landing-panel {

@@ -147,6 +147,7 @@
     appFrame: document.querySelector(".app-frame"),
     sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     sidebarToggle: document.querySelector('[data-role="sidebar-toggle"]'),
+    sidebarReopen: document.querySelector('[data-role="sidebar-reopen"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
     panelResizer: document.querySelector('[data-role="panel-resizer"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
@@ -519,12 +520,14 @@
       dom.sidebarResizer.hidden = !visible || isMobileLayout();
     }
     if (dom.sidebarToggle) {
-      dom.sidebarToggle.textContent = visible ? "Скрыть проекты" : "Проекты";
+      dom.sidebarToggle.hidden = !visible;
       dom.sidebarToggle.setAttribute("aria-pressed", visible ? "true" : "false");
-      dom.sidebarToggle.setAttribute(
-        "aria-label",
-        visible ? "Скрыть список проектов" : "Показать список проектов",
-      );
+      dom.sidebarToggle.setAttribute("aria-label", "Скрыть список проектов");
+    }
+    if (dom.sidebarReopen) {
+      dom.sidebarReopen.hidden = visible;
+      dom.sidebarReopen.setAttribute("aria-label", "Показать список проектов");
+      dom.sidebarReopen.setAttribute("aria-pressed", visible ? "false" : "true");
     }
   }
 
@@ -761,6 +764,9 @@
     dom.newProject.disabled = isBusy;
     if (dom.sidebarToggle) {
       dom.sidebarToggle.disabled = isBusy;
+    }
+    if (dom.sidebarReopen) {
+      dom.sidebarReopen.disabled = isBusy;
     }
   }
 
@@ -3809,10 +3815,16 @@
 
     if (dom.sidebarToggle) {
       dom.sidebarToggle.addEventListener("click", () => {
-        state.sidebarVisible = !state.sidebarVisible;
-        if (!state.sidebarVisible) {
-          closeProjectActionsMenu();
-        }
+        state.sidebarVisible = false;
+        closeProjectActionsMenu();
+        persist();
+        renderAll();
+      });
+    }
+
+    if (dom.sidebarReopen) {
+      dom.sidebarReopen.addEventListener("click", () => {
+        state.sidebarVisible = true;
         persist();
         renderAll();
       });

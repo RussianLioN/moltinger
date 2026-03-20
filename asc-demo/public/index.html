@@ -46,7 +46,18 @@
         <aside class="sidebar" aria-label="Проекты">
           <div class="sidebar__brand">
             <p class="sidebar__eyebrow">ASC AI Fabrique</p>
-            <h2>Проекты</h2>
+            <div class="sidebar__brand-row">
+              <h2>Проекты</h2>
+              <button
+                class="sidebar__collapse"
+                type="button"
+                data-role="sidebar-toggle"
+                aria-label="Скрыть список проектов"
+                title="Скрыть проекты"
+              >
+                <span aria-hidden="true">◧</span>
+              </button>
+            </div>
           </div>
 
           <button class="sidebar__new button button--ghost" type="button" data-role="new-project">
@@ -70,14 +81,25 @@
           <main class="workspace">
             <header class="workspace-topbar">
               <div class="workspace-topbar__main">
+                <button
+                  class="sidebar-reopen"
+                  type="button"
+                  data-role="sidebar-reopen"
+                  aria-label="Показать список проектов"
+                  title="Показать проекты"
+                  hidden
+                >
+                  <span aria-hidden="true">◨</span>
+                </button>
                 <p class="workspace-topbar__eyebrow">Агент-архитектор Moltis</p>
                 <div class="workspace-topbar__title-row">
                   <h1 data-role="project-title">Новый проект</h1>
                   <button
-                    class="button button--ghost button--compact"
+                    class="workspace-topbar__menu"
                     type="button"
                     data-role="project-menu"
                     aria-label="Действия с проектом"
+                    title="Действия с проектом"
                   >
                     ⋯
                   </button>
@@ -89,14 +111,6 @@
               </div>
 
               <div class="workspace-topbar__actions">
-                <button
-                  class="button button--ghost button--compact"
-                  type="button"
-                  data-role="sidebar-toggle"
-                  aria-label="Показать или скрыть список проектов"
-                >
-                  Проекты
-                </button>
                 <button
                   class="button button--ghost button--compact"
                   type="button"
