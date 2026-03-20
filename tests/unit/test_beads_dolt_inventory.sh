@@ -45,7 +45,14 @@ repo_root="$(git -C "${cwd}" rev-parse --show-toplevel 2>/dev/null || printf '%s
 canonical_root="$(cd "${repo_root}" && cd "$(git rev-parse --git-common-dir)/.." && pwd -P)"
 
 if [[ "${1:-}" == "--version" ]]; then
-  printf 'bd version 0.49.6 (fixture)\n'
+  case "${mode}" in
+    modern-dolt-missing)
+      printf 'bd version 0.61.0 (fixture)\n'
+      ;;
+    *)
+      printf 'bd version 0.49.6 (fixture)\n'
+      ;;
+  esac
   exit 0
 fi
 
@@ -56,6 +63,9 @@ if [[ "${1:-}" == "--no-daemon" && "${2:-}" == "info" ]]; then
       ;;
     pilot-ready)
       db_path="${repo_root}/.beads/beads.db"
+      ;;
+    modern-dolt-missing)
+      exit 1
       ;;
     *)
       db_path="${repo_root}/.beads/beads.db"
@@ -72,6 +82,19 @@ Daemon Status:
   Reason: flag_no_daemon
 EOT
   exit 0
+fi
+
+if [[ "${1:-}" == "info" ]]; then
+  case "${mode}" in
+    modern-dolt-missing)
+      cat >&2 <<'EOT'
+Error: failed to open database: Dolt server unreachable at 127.0.0.1:0 and auto-start failed: dolt is not installed (not found in PATH)
+
+Install from: https://docs.dolthub.com/introduction/installation
+EOT
+      exit 1
+      ;;
+  esac
 fi
 
 if [[ "${1:-}" == "backend" && "${2:-}" == "show" ]]; then
@@ -92,11 +115,50 @@ Current backend: dolt
   Database: ${repo_root}/.beads/beads.db
 EOT
       ;;
+    modern-dolt-missing)
+      exit 1
+      ;;
     *)
       exit 1
       ;;
   esac
   exit 0
+fi
+
+if [[ "${1:-}" == "doctor" && "${2:-}" == "--json" ]]; then
+  case "${mode}" in
+    modern-dolt-missing)
+      cat <<EOT
+{
+  "checks": [
+    {
+      "name": "Database",
+      "status": "error",
+      "message": "No dolt database found",
+      "detail": "Storage: Dolt"
+    },
+    {
+      "name": "Dolt Connection",
+      "status": "error",
+      "message": "Failed to connect to Dolt server",
+      "detail": "no Dolt server port configured and no server running; run any bd command to auto-start"
+    },
+    {
+      "name": "Classic Artifacts",
+      "status": "warning",
+      "message": "3 SQLite artifact(s)"
+    }
+  ],
+  "platform": {
+    "backend": "dolt",
+    "go_version": "go1.25.8",
+    "os_arch": "darwin/arm64"
+  }
+}
+EOT
+      exit 0
+      ;;
+  esac
 fi
 
 printf 'unsupported fake bd arguments: %s\n' "$*" >&2
@@ -222,6 +284,30 @@ test_inventory_detects_blocked_sibling_and_bootstrap_variance() {
     test_pass
 }
 
+test_inventory_uses_doctor_json_fallback_for_modern_bd() {
+    test_start "inventory_uses_doctor_json_fallback_for_modern_bd"
+
+    local fixture_root repo_dir fake_bin json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-inventory.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    git_topology_fixture_seed_beads_migration_surface_layout "${repo_dir}" legacy
+    git_topology_fixture_seed_legacy_jsonl_first_state "${repo_dir}"
+    seed_inventory_script "${repo_dir}"
+    commit_fixture_state "${repo_dir}" "fixture: seed modern bd fallback state"
+    fake_bin="$(create_fake_inventory_bd_bin "${fixture_root}")"
+
+    json="$(run_inventory "${repo_dir}" "${fake_bin}" modern-dolt-missing --format json)"
+
+    assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.no_daemon_info") | .classification' "blocked" "Modern bd info fallback must still classify missing Dolt runtime as blocked"
+    assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .classification' "blocked" "Modern bd doctor fallback must still classify uninitialized Dolt backend as blocked"
+    assert_json_array_contains "${json}" '.surfaces[] | select(.id == "runtime.no_daemon_info") | .signals' "fallback:bd-info" "Modern bd path must record bd info fallback"
+    assert_json_array_contains "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .signals' "fallback:doctor-json" "Modern bd path must record doctor json fallback"
+    assert_json_array_contains "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .signals' "backend:dolt" "Doctor fallback must preserve Dolt backend identity"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_inventory_machine_readable_report_can_pass_pilot_gate() {
     test_start "inventory_machine_readable_report_can_pass_pilot_gate"
 
@@ -258,6 +344,7 @@ run_test_beads_dolt_inventory() {
     test_inventory_detects_runtime_coupling_and_surface_blockers
     test_inventory_is_deterministic_across_repeated_runs
     test_inventory_detects_blocked_sibling_and_bootstrap_variance
+    test_inventory_uses_doctor_json_fallback_for_modern_bd
     test_inventory_machine_readable_report_can_pass_pilot_gate
     generate_report
 }

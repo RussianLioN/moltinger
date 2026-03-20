@@ -112,5 +112,5 @@ These commands are meant to stay:
 ## Local Runtime Notes
 
 - Keep this phase report-only even if local `bd` exposes `migrate dolt`, `backend`, `branch`, or `vc`.
-- Known local divergence matters: repo-local wrapper `bd sync` may hang, while direct system `bd --no-daemon` behavior differs. The inventory flow therefore inspects `bd --no-daemon info` and `bd backend show`, but does not call `sync`.
+- Known local divergence matters: repo-local wrapper `bd sync` may hang, while direct system `bd --no-daemon` behavior differs. The inventory flow therefore prefers the legacy `bd --no-daemon info` / `bd backend show` probes when available, but falls back to `bd info` and `bd doctor --json` on newer official CLIs. It still does not call `sync`.
 - For ordinary non-migration sync on this branch, use direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync` if the repo-local wrapper path hangs.
