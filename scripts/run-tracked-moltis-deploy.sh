@@ -370,7 +370,14 @@ validate_tracked_contract
 
 log_info "Running tracked Moltis deploy via scripts/deploy.sh"
 set +e
-DEPLOY_OUTPUT="$("$DEPLOY_PATH/scripts/deploy.sh" --json moltis deploy)"
+DEPLOY_OUTPUT="$(
+    env \
+        GITHUB_ACTIONS="${GITHUB_ACTIONS:-true}" \
+        GITHUB_RUN_ID="${GITHUB_RUN_ID:-$WORKFLOW_RUN}" \
+        GITHUB_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}" \
+        GITOPS_CONFIRM_SKIP=true \
+        "$DEPLOY_PATH/scripts/deploy.sh" --json moltis deploy
+)"
 DEPLOY_EXIT=$?
 set -e
 

@@ -298,6 +298,17 @@ PY
         test_fail "Workflows must stay aligned with the tracked deploy JSON contract they parse"
     fi
 
+    test_start "static_tracked_deploy_propagates_ci_context_for_noninteractive_guarded_deploy"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       rg -Fq 'GITHUB_ACTIONS="${GITHUB_ACTIONS:-true}"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'GITHUB_RUN_ID="${GITHUB_RUN_ID:-$WORKFLOW_RUN}"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'GITOPS_CONFIRM_SKIP=true' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq '"$DEPLOY_PATH/scripts/deploy.sh" --json moltis deploy' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy script must propagate CI context and skip interactive GitOps confirmation when invoking deploy.sh over remote SSH orchestration"
+    fi
+
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
     if rg -q 'apply-moltis-host-automation\.sh' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Install cron jobs' "$DEPLOY_WORKFLOW" && \
