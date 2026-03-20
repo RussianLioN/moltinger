@@ -86,15 +86,19 @@
 
 - **Evidence**:
   - Official `README.md` presents Beads as a Dolt-powered tracker and documents env/config concepts like `BEADS_DIR`.
+  - Official `docs/DOLT.md` and `docs/CONFIG.md` describe the current storage/sync model as Dolt-native and document `dolt-native` sync mode.
   - Official `docs/CLI_REFERENCE.md` documents explicit `backend`, `sync`, and `sync.branch` settings and says sandbox direct mode disables automatic background sync.
+  - Official `docs/CONFIG.md` and `docs/CLI_REFERENCE.md` place JSONL mainly under export/backup/import flows, which makes JSONL look like a portability layer rather than the primary sync transport in current upstream docs.
   - Official `docs/PROTECTED_BRANCHES.md` now explicitly says the old protected-branch workflow was removed and that the current solution is Dolt-native sync via `bd dolt push` / `bd dolt pull`; the rest of the page is retained for historical and migration reference.
   - Official release notes in the `0.49.x` line include: `fix(dolt): remove bd sync from AGENTS.md`, `fix(hooks): skip JSONL sync for Dolt backend`, `feat(cli): add bd backend and bd sync mode subcommands`, `fix(sync): respect dolt-native mode in JSONL export paths`, and `fix(sync): disable JSONL sync exports in dolt-native mode`.
+  - Official release notes in `v0.51.0` go further and explicitly say `make bd sync a no-op`, `remove JSONL sync layer`, and `remove daemon compat stub and --no-daemon`.
 - **Implication**: Upstream Beads semantics around `bd sync`, JSONL export, and backend mode have changed materially and may no longer match older repo-local assumptions.
 - **Inference**: Our repo must treat upstream Beads compatibility as a first-class research item before hardening `bd sync` behavior around `.beads/issues.jsonl`.
 
 ### Finding D: Official upstream worktree/sync-branch edges are still an active source of fixes and user confusion
 
 - **Evidence**:
+  - Official `docs/WORKTREES.md` is itself transitional: it marks parts of the sync-branch workflow as removed while still retaining migration/history material about shared DB and sync-branch behavior.
   - Official release notes mention fixes such as ensuring the sync-branch worktree exists on fresh clone, normalizing JSONL paths in sync-branch mode, skipping sync when source and destination JSONL paths are identical, and using `GetGitCommonDir` for worktree creation in bare repo setups.
   - Official issue #519 documents that `bd sync` can fail when `sync.branch` equals the currently checked-out branch; official issue #520 documents that daemon auto-sync to a sync branch can fail when pre-commit hooks are installed and explicitly points users at `bd sync --flush-only` for diagnosis; official issue #510 shows upstream users being surprised by where Beads created a worktree.
 - **Implication**: Our RCA cannot assume that worktree + sync-branch + JSONL behavior is a solved or static part of upstream Beads.
@@ -120,19 +124,30 @@
 
 ### Finding G: Official Beads documentation is in a transition window, so compatibility must be evidence-led
 
-- **Evidence**: The current official `PROTECTED_BRANCHES.md` explicitly says that the documented workflow has been removed and that Beads now uses Dolt-native sync via `bd dolt push` / `bd dolt pull`, while the current official CLI reference still documents sandbox/direct mode, `--no-auto-flush`, `--no-auto-import`, and JSONL bootstrap/backup flows.
+- **Evidence**: The current official `PROTECTED_BRANCHES.md` explicitly says that the documented workflow has been removed and that Beads now uses Dolt-native sync via `bd dolt push` / `bd dolt pull`, while the current official CLI reference still documents sandbox/direct mode, `--no-auto-flush`, `--no-auto-import`, and JSONL bootstrap/backup flows. Official issue `#1860` also documents that `mode: direct` is normal for Dolt even while users still confuse daemon and Dolt-server terminology.
 - **Implication**: There is no single short upstream sentence that cleanly describes all installations of Beads right now; different official docs describe different parts of an ongoing storage/sync transition.
 - **Inference**: Repo-local hardening must target the observed local runtime (`bd 0.49.6`, direct/worktree-safe mode, repo shim, tracked JSONL) and treat newer upstream Dolt-native release notes as a compatibility vector, not as proof that this repo has already migrated away from JSONL-sensitive paths.
+
+### Finding H: Official `0.49.x` issue traffic confirms JSONL/sync drift was still active around the locally installed line
+
+- **Evidence**: Official issues `#1663`, `#1667`, and `#1744` describe stale JSONL checks, pull conflicts, and sync-branch divergence loops around the same general JSONL/sync workflow family as this RCA.
+- **Implication**: Even around the locally installed `0.49.6` line, stock behavior was still evolving in this area.
+- **Inference**: If the repo keeps tracked `.beads/issues.jsonl`, deterministic ownership and rewrite guardrails must be enforced locally rather than delegated to upstream defaults.
 
 ## Official Sources Reviewed
 
 - Official repository / README: <https://github.com/steveyegge/beads>
 - Official releases/changelog: <https://github.com/steveyegge/beads/releases>
+- Official Dolt backend guide: <https://github.com/steveyegge/beads/blob/main/docs/DOLT.md>
 - Official CLI reference: <https://raw.githubusercontent.com/steveyegge/beads/main/docs/CLI_REFERENCE.md>
+- Official config reference: <https://raw.githubusercontent.com/steveyegge/beads/main/docs/CONFIG.md>
 - Official protected-branch / sync-branch migration note: <https://raw.githubusercontent.com/steveyegge/beads/main/docs/PROTECTED_BRANCHES.md>
+- Official worktree note: <https://github.com/steveyegge/beads/blob/main/docs/WORKTREES.md>
+- Official issue `mode: direct` / Dolt docs confusion: <https://github.com/steveyegge/beads/issues/1860>
 - Official issue `bd sync fails when sync.branch is the currently checked-out branch`: <https://github.com/steveyegge/beads/issues/519>
 - Official issue `Daemon auto-sync to sync branch fails when pre-commit hooks are installed`: <https://github.com/steveyegge/beads/issues/520>
 - Official issue `How did beads create a worktree in the main branch?`: <https://github.com/steveyegge/beads/issues/510>
+- Official sync/JSONL issue samples from the `0.49.x` era: <https://github.com/steveyegge/beads/issues/1663>, <https://github.com/steveyegge/beads/issues/1667>, <https://github.com/steveyegge/beads/issues/1744>
 
 ## Rejected Directions
 

@@ -31,6 +31,7 @@
 **Performance Goals**: Sync authority resolution and noise classification complete before write handoff with no noticeable delay in daily `bd sync`; RCA fixtures remain fast enough for local regression usage; repeat safe sync yields byte-stable JSONL
 **Constraints**: No silent canonical-root fallback, no sibling rewrite leakage, no issue loss during migration, no blind cleanup in `main`, no assumption that `direnv` alone guarantees safety, repo-local bootstrap effects must be distinguished from upstream Beads behavior, rollout and rollback must be separate, docs/tests/guardrails are mandatory
 **Scale/Scope**: 3 user stories, 26 functional requirements, one deterministic ownership/sync model, one RCA evidence flow, one migration/rollout/rollback contract, and repo-wide guardrails against nondeterministic JSONL rewrites
+**Upstream Version Scope**: This feature targets the repo-local compatibility envelope around the installed `bd 0.49.6`. It must not assume that later upstream semantics such as `v0.51.0` making `bd sync` a no-op or removing the JSONL sync layer already apply to this repository.
 
 ## Constitution Check
 
@@ -130,6 +131,7 @@ Research outcomes are recorded in [research.md](./research.md). The design direc
 8. Treat `direnv` as a repo-local bootstrap path that changes which `bd` binary wins on `PATH`; do not treat it as direct evidence that `direnv` itself writes `.beads/issues.jsonl`.
 9. Reconcile repo-local tracked-JSONL workflow against current upstream Dolt-native guidance before finalizing execution order, because the local branch is pinned to installed `bd 0.49.6`, not to whatever the latest README now recommends.
 10. Require RCA fixtures and operator docs to log the bootstrap tuple (`direnv status`, `git rev-parse --show-toplevel`, `command -v bd`, `bd --version`, `bd info`) before attributing any cross-worktree JSONL rewrite.
+11. Record the supported upstream version scope explicitly so implementation does not mix local `0.49.6` behavior with later upstream `v0.51+` changes such as `bd sync` becoming a no-op.
 
 ## Phase 1: Design Outcomes
 
