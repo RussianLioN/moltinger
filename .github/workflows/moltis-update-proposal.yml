@@ -181,7 +181,7 @@ jobs:
             elif grep -qi 'not permitted to create or approve pull requests' <<<"$CREATE_OUTPUT"; then
               PR_URL="https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
               PR_MODE="manual_pr_required_actions_permission"
-              echo "::warning::GitHub Actions token cannot create PR in this repository; using compare URL fallback"
+              echo "::notice::GitHub Actions token cannot create PR in this repository; using compare URL fallback"
             else
               echo "::error::Failed to create proposal PR: $CREATE_OUTPUT"
               exit "$CREATE_RC"
