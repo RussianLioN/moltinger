@@ -201,6 +201,17 @@ rollout_inventory_record_for_path() {
   printf '%s\n' "${inventory_json}" | jq -c --arg path "${worktree_path}" '.worktrees[] | select(.path == $path)' | head -1
 }
 
+rollout_worktree_has_local_runtime() {
+  local worktree_path="$1"
+  local beads_dir="${worktree_path}/.beads"
+
+  if [[ -e "${beads_dir}/beads.db" || -d "${beads_dir}/dolt" ]]; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
 rollout_inspect_target() {
   local worktree_path="$1"
   local inventory_json="$2"
@@ -227,7 +238,7 @@ rollout_inspect_target() {
   mode="$(rollout_active_mode "${worktree_path}")"
 
   [[ -f "${worktree_path}/.beads/config.yaml" ]] && config_present="true"
-  [[ -f "${worktree_path}/.beads/beads.db" ]] && db_present="true"
+  db_present="$(rollout_worktree_has_local_runtime "${worktree_path}")"
   [[ -f "${worktree_path}/.beads/issues.jsonl" ]] && issues_present="true"
   [[ -f "${worktree_path}/.beads/redirect" ]] && redirect_present="true"
   [[ -f "$(rollout_pilot_mode_file "${worktree_path}")" ]] && pilot_mode_enabled="true"

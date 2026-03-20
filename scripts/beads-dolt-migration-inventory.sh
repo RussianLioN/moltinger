@@ -1032,6 +1032,18 @@ inventory_add_worktree() {
   )")
 }
 
+inventory_worktree_has_local_runtime() {
+  local beads_dir="$1"
+  local db_path="${beads_dir}/beads.db"
+  local dolt_dir="${beads_dir}/dolt"
+
+  if [[ -e "${db_path}" || -d "${dolt_dir}" ]]; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
 inventory_classify_worktree() {
   local worktree_path="$1"
   local branch_name=""
@@ -1039,12 +1051,14 @@ inventory_classify_worktree() {
   local config_path=""
   local issues_path=""
   local db_path=""
+  local dolt_dir=""
   local redirect_path=""
   local cutover_mode_path=""
   local rollback_state_path=""
   local envrc_path=""
   local bin_bd_path=""
   local resolve_path=""
+  local local_runtime_present="false"
   local state="no_beads"
   local classification="already-compatible"
   local readiness="ready"
@@ -1062,16 +1076,19 @@ inventory_classify_worktree() {
   config_path="${beads_dir}/config.yaml"
   issues_path="${beads_dir}/issues.jsonl"
   db_path="${beads_dir}/beads.db"
+  dolt_dir="${beads_dir}/dolt"
   redirect_path="${beads_dir}/redirect"
   cutover_mode_path="${beads_dir}/cutover-mode.json"
   rollback_state_path="${beads_dir}/rollback-state.json"
   envrc_path="${worktree_path}/.envrc"
   bin_bd_path="${worktree_path}/bin/bd"
   resolve_path="${worktree_path}/scripts/beads-resolve-db.sh"
+  local_runtime_present="$(inventory_worktree_has_local_runtime "${beads_dir}")"
 
   [[ -f "${config_path}" ]] && signals+=("config")
   [[ -f "${issues_path}" ]] && signals+=("issues-jsonl")
-  [[ -f "${db_path}" ]] && signals+=("beads-db")
+  [[ "${local_runtime_present}" == "true" ]] && signals+=("beads-db")
+  [[ -d "${dolt_dir}" ]] && signals+=("dolt-store")
   [[ -f "${redirect_path}" ]] && signals+=("redirect")
   [[ -f "${cutover_mode_path}" ]] && signals+=("cutover-mode")
   [[ -f "${rollback_state_path}" ]] && signals+=("rollback-state")
@@ -1099,13 +1116,13 @@ inventory_classify_worktree() {
       blocking="true"
       reason="This worktree still carries redirect residue and does not have enough local Beads foundation to classify it as safely migratable."
     fi
-  elif [[ -f "${config_path}" && -f "${issues_path}" && -f "${db_path}" ]]; then
+  elif [[ -f "${config_path}" && -f "${issues_path}" && "${local_runtime_present}" == "true" ]]; then
     state="legacy_jsonl_first"
     classification="must-migrate"
     readiness="blocked"
     blocking="true"
-    reason="This worktree still combines tracked issues.jsonl with a local sqlite Beads database."
-  elif [[ -f "${cutover_mode_path}" && -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
+    reason="This worktree still combines tracked issues.jsonl with a local Beads database/runtime."
+  elif [[ -f "${cutover_mode_path}" && -f "${config_path}" && "${local_runtime_present}" == "true" && ! -f "${issues_path}" ]]; then
     state="cutover_active"
     classification="already-compatible"
     readiness="ready"
@@ -1117,12 +1134,12 @@ inventory_classify_worktree() {
     readiness="warning"
     blocking="false"
     reason="This worktree has rollback evidence and should be re-verified before a new cutover attempt."
-  elif [[ -f "${config_path}" && -f "${db_path}" && ! -f "${issues_path}" ]]; then
+  elif [[ -f "${config_path}" && "${local_runtime_present}" == "true" && ! -f "${issues_path}" ]]; then
     state="pilot_ready_candidate"
     classification="already-compatible"
     readiness="ready"
     blocking="false"
-    reason="This worktree has local config plus local database without tracked JSONL residue."
+    reason="This worktree has local config plus a local Beads database/runtime without tracked JSONL residue."
   elif [[ -f "${config_path}" && -f "${issues_path}" ]]; then
     state="partial_foundation"
     classification="can-bridge"
