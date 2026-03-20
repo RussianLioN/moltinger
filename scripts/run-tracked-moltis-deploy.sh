@@ -381,6 +381,15 @@ DEPLOY_OUTPUT="$(
 DEPLOY_EXIT=$?
 set -e
 
+if ! jq empty >/dev/null 2>&1 <<<"$DEPLOY_OUTPUT"; then
+    if [[ "$DEPLOY_EXIT" -ne 0 ]]; then
+        emit_failure_json "deploy.sh exited with code $DEPLOY_EXIT before returning JSON; inspect workflow stderr for root cause"
+    else
+        emit_failure_json "deploy.sh returned non-JSON output despite --json contract"
+    fi
+    exit 1
+fi
+
 DEPLOY_STATUS="$(jq -r '.status // empty' <<<"$DEPLOY_OUTPUT" 2>/dev/null || true)"
 DEPLOY_HEALTH="$(jq -r '.details.health // empty' <<<"$DEPLOY_OUTPUT" 2>/dev/null || true)"
 ROLLBACK_VERIFIED=false

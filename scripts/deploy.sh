@@ -552,6 +552,76 @@ ensure_required_networks() {
     done
 }
 
+managed_container_names_for_target() {
+    case "$TARGET" in
+        moltis)
+            echo "moltis"
+            echo "watchtower"
+            echo "cadvisor"
+            echo "prometheus"
+            echo "alertmanager"
+            echo "ollama-fallback"
+            ;;
+        clawdiy)
+            echo "clawdiy"
+            ;;
+        *)
+            ;;
+    esac
+}
+
+log_json_stderr() {
+    local level="$1"
+    shift
+
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        echo "[$level] $*" >&2
+    else
+        case "$level" in
+            INFO) log_info "$@" ;;
+            WARN) log_warn "$@" ;;
+            ERROR) log_error "$@" ;;
+            *) log_info "$@" ;;
+        esac
+    fi
+}
+
+resolve_container_name_conflicts() {
+    local expected_project="${COMPOSE_PROJECT_NAME:-}"
+    local container_name container_id container_project container_service
+
+    if [[ -z "$expected_project" ]]; then
+        return 0
+    fi
+
+    while IFS= read -r container_name; do
+        [[ -n "$container_name" ]] || continue
+
+        container_id="$(docker ps -aq --filter "name=^/${container_name}$" | head -1 || true)"
+        [[ -n "$container_id" ]] || continue
+
+        container_project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id" 2>/dev/null || true)"
+        container_service="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$container_id" 2>/dev/null || true)"
+
+        if [[ -n "$container_project" && "$container_project" == "$expected_project" ]]; then
+            continue
+        fi
+
+        log_json_stderr WARN "Removing legacy/conflicting container '$container_name' (id=$container_id project=${container_project:-none} service=${container_service:-none}) before deploy"
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            if ! docker rm -f "$container_id" 1>&2; then
+                log_error "Failed to remove conflicting container: $container_name ($container_id)"
+                exit 1
+            fi
+        else
+            if ! docker rm -f "$container_id"; then
+                log_error "Failed to remove conflicting container: $container_name ($container_id)"
+                exit 1
+            fi
+        fi
+    done < <(managed_container_names_for_target)
+}
+
 ensure_clawdiy_runtime_paths() {
     local required_paths=(
         "$PROJECT_ROOT/data/clawdiy"
@@ -880,6 +950,7 @@ check_prerequisites() {
     fi
 
     ensure_required_networks
+    resolve_container_name_conflicts
     log_success "Prerequisites check passed for target $TARGET"
 }
 
