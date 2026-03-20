@@ -7,18 +7,29 @@
 
 Текущее состояние репозитория уже закрывает часть Beads-рисков: plain `bd` роутится через repo-local shim, canonical root mutating path блокируется по умолчанию, legacy redirect residue локализуется отдельным helper’ом, а dependency ordering в `.beads/issues.jsonl` частично нормализуется. Но это не закрывает всю проблему, потому что observed issue касается не только runtime DB routing. В `SESSION_SUMMARY.md` отдельно зафиксирован случай, когда даже после localized ownership `bd sync` из manual hotfix worktree все еще мог экспортировать state в canonical root `.beads/issues.jsonl`.
 
-Следовательно, проблема лежит в missing deterministic ownership/sync contract именно для tracked `.beads/issues.jsonl`. План вводит единый слой sync authority для JSONL rewrites, воспроизводимый RCA/evidence path, noise-vs-semantic classification, bounded migration workflow и отдельные rollout/rollback stages. Implementation останется script-first и reuse-first: существующие resolver, audit, normalization и recovery surfaces расширяются, а не заменяются второй параллельной системой.
+Следовательно, проблема лежит в missing deterministic ownership/sync contract именно для tracked `.beads/issues.jsonl`. Дополнительно появился важный compatibility signal: локально установлен `bd 0.49.6`, а `bd info` в этой worktree сообщает `Mode: direct` и `Reason: worktree_safety`, при том что локальный `.beads/config.yaml` и часть repo-local docs/skills все еще описывают daemon/auto-sync-to-JSONL assumptions. Значит перед implementation нужно отдельно сверить repo-local JSONL workflow с текущей официальной моделью upstream Beads.
+
+План вводит единый слой sync authority для JSONL rewrites, воспроизводимый RCA/evidence path, noise-vs-semantic classification, bounded migration workflow и отдельные rollout/rollback stages. Implementation останется script-first и reuse-first: существующие resolver, audit, normalization и recovery surfaces расширяются, а не заменяются второй параллельной системой. `direnv` рассматривается здесь как repo-local bootstrap factor, который влияет на выбор `bd` через `PATH`, но не считается прямым writer’ом `.beads/issues.jsonl`.
+
+## Observed Local Integration
+
+- User-observed `direnv: loading ~/coding/moltinger/moltinger-main/.envrc` messages are relevant evidence inputs, but they are not standalone proof that canonical-root `bd` handled a rewrite. The current `.envrc` computes `repo_root` dynamically via `git rev-parse --show-toplevel` before prepending `<repo_root>/bin` to `PATH`, so `direnv` affects which `bd` binary wins in the current shell but does not write `.beads/issues.jsonl` by itself.
+- Repo-local `bin/bd` sources `scripts/beads-resolve-db.sh`, then either blocks unsafe commands, passes through read-only/global flows, or execs the installed system `bd` against the current worktree DB.
+- The installed runtime in this worktree is `bd 0.49.6`; `bd info` currently reports `Mode: direct` and `Reason: worktree_safety`, which already diverges from older daemon-centric assumptions in local comments/config.
+- Tracked JSONL can still be rewritten by repo-local mutation surfaces such as `.githooks/pre-commit` and `scripts/beads-normalize-issues-jsonl.sh`, so RCA must distinguish “bootstrap picked a different `bd`” from “a local hook/script rewrote JSONL”.
+- Official upstream Beads docs and release notes now emphasize Dolt-native paths and show active churn around `bd sync`, sync mode, JSONL export, and worktree handling, so this feature must treat upstream behavior as a compatibility boundary, not as a fixed invariant.
+- RCA evidence must therefore capture both bootstrap context and writer context as one tuple: observed `direnv` load path, computed repo root, resolved `bd` binary, installed `bd` version/mode, and the mutation surface that actually touched tracked JSONL.
 
 ## Technical Context
 
-**Language/Version**: Bash/Zsh shell scripts, Markdown artifacts, Python 3 stdlib for deterministic JSONL canonicalization helpers  
-**Primary Dependencies**: `git`, `bd`, existing repo-local `bin/bd`, `scripts/beads-resolve-db.sh`, `scripts/beads-worktree-audit.sh`, `scripts/beads-normalize-issues-jsonl.sh`, tracked git hooks, existing shell test harness  
-**Storage**: Worktree-local `.beads/beads.db`, branch-local tracked `.beads/issues.jsonl`, repo-local RCA evidence/journal artifacts, spec-driven docs/contracts  
-**Testing**: Shell unit tests, static guardrail tests, fixture-based RCA scenario tests, focused quickstart validation for rollout/rollback  
-**Target Platform**: macOS/Linux developer and Codex/App multi-worktree workflows with POSIX-shell-compatible behavior  
-**Project Type**: Repository workflow hardening for multi-worktree Beads state ownership  
-**Performance Goals**: Sync authority resolution and noise classification complete before write handoff with no noticeable delay in daily `bd sync`; RCA fixtures remain fast enough for local regression usage; repeat safe sync yields byte-stable JSONL  
-**Constraints**: No silent canonical-root fallback, no sibling rewrite leakage, no issue loss during migration, no blind cleanup in `main`, no assumption that `direnv` alone guarantees safety, rollout and rollback must be separate, docs/tests/guardrails are mandatory  
+**Language/Version**: Bash/Zsh shell scripts, Markdown artifacts, Python 3 stdlib for deterministic JSONL canonicalization helpers
+**Primary Dependencies**: `git`, installed `bd 0.49.6`, existing repo-local `bin/bd`, `scripts/beads-resolve-db.sh`, `scripts/beads-worktree-audit.sh`, `scripts/beads-normalize-issues-jsonl.sh`, tracked git hooks, existing shell test harness
+**Storage**: Worktree-local `.beads/beads.db`, branch-local tracked `.beads/issues.jsonl`, repo-local RCA evidence/journal artifacts, spec-driven docs/contracts
+**Testing**: Shell unit tests, static guardrail tests, fixture-based RCA scenario tests, focused quickstart validation for rollout/rollback
+**Target Platform**: macOS/Linux developer and Codex/App multi-worktree workflows with POSIX-shell-compatible behavior
+**Project Type**: Repository workflow hardening for multi-worktree Beads state ownership
+**Performance Goals**: Sync authority resolution and noise classification complete before write handoff with no noticeable delay in daily `bd sync`; RCA fixtures remain fast enough for local regression usage; repeat safe sync yields byte-stable JSONL
+**Constraints**: No silent canonical-root fallback, no sibling rewrite leakage, no issue loss during migration, no blind cleanup in `main`, no assumption that `direnv` alone guarantees safety, repo-local bootstrap effects must be distinguished from upstream Beads behavior, rollout and rollback must be separate, docs/tests/guardrails are mandatory
 **Scale/Scope**: 3 user stories, 26 functional requirements, one deterministic ownership/sync model, one RCA evidence flow, one migration/rollout/rollback contract, and repo-wide guardrails against nondeterministic JSONL rewrites
 
 ## Constitution Check
@@ -115,6 +126,10 @@ Research outcomes are recorded in [research.md](./research.md). The design direc
 4. Make RCA evidence reproducible through fixture-driven logs and stable machine-readable verdicts.
 5. Keep migration audit/apply/rollback separate from routine sync and separate from canonical-root cleanup.
 6. Roll out enforcement in stages: observe, enforce, verify, with a separate rollback path.
+7. Before implementation, verify the current official Beads docs/releases/issues for `bd sync`, sync mode, worktree safety, and JSONL export semantics so the repo does not harden a stale upstream assumption.
+8. Treat `direnv` as a repo-local bootstrap path that changes which `bd` binary wins on `PATH`; do not treat it as direct evidence that `direnv` itself writes `.beads/issues.jsonl`.
+9. Reconcile repo-local tracked-JSONL workflow against current upstream Dolt-native guidance before finalizing execution order, because the local branch is pinned to installed `bd 0.49.6`, not to whatever the latest README now recommends.
+10. Require RCA fixtures and operator docs to log the bootstrap tuple (`direnv` load path, `git rev-parse --show-toplevel`, `command -v bd`, `bd --version`, `bd info`) before attributing any cross-worktree JSONL rewrite.
 
 ## Phase 1: Design Outcomes
 
@@ -133,6 +148,8 @@ Phase 1 artifacts define:
 - Guardrails will be added before broad workflow changes so leakage/noise cannot be reintroduced silently.
 - RCA and migration flows will be fixture-driven and must produce machine-readable evidence that reviewers can compare across reruns.
 - High-traffic docs and operating-model guidance must reflect the final deterministic ownership/sync model and keep canonical-root cleanup out of the daily sync path.
+- No implementation task should start until the official Beads review, bootstrap evidence model, and consilium checkpoint are complete and reflected in task ordering.
+- Before Phase B implementation starts, a consilium checkpoint must reconcile official upstream Beads semantics, local bootstrap evidence, and the repo-local JSONL workflow, then refresh task ordering if needed.
 
 ## V1 Scope Freeze
 
@@ -166,6 +183,7 @@ Phase 1 artifacts define:
 
 - Reuse temporary repo/worktree fixtures from the existing shell harness.
 - Model at least one manual hotfix leakage scenario, one noise-only rewrite scenario, one ambiguous owner scenario, and one safe byte-stable sync scenario.
+- Model bootstrap variance explicitly: repo-local shim selected on `PATH` versus system `bd` bypassing the shim.
 - Capture before/after hashes and normalized diff classes for `.beads/issues.jsonl`.
 - Ensure migration fixtures cover current, legacy, partial, duplicate, and blocked worktrees without requiring canonical-root cleanup.
 

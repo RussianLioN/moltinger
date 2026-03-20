@@ -14,7 +14,12 @@
 - [ ] P001 Reconcile `specs/028-beads-issues-jsonl-rca/spec.md`, `specs/028-beads-issues-jsonl-rca/plan.md`, and `specs/028-beads-issues-jsonl-rca/tasks.md` against current Beads ownership code paths
 - [ ] P002 Review baseline incident evidence in `SESSION_SUMMARY.md` and planned RCA output in `specs/028-beads-issues-jsonl-rca/contracts/rca-evidence-contract.md`
 - [ ] P003 Confirm affected implementation surfaces from `specs/028-beads-issues-jsonl-rca/plan.md` and annotate final execution order in `specs/028-beads-issues-jsonl-rca/tasks.md`
-- [ ] P004 Freeze scope boundaries for routine sync, migration, rollout, rollback, and canonical-root cleanup in `specs/028-beads-issues-jsonl-rca/plan.md`
+- [ ] P004 Freeze scope boundaries for routine sync, migration, rollout, rollback, canonical-root cleanup, and repo-local bootstrap factors in `specs/028-beads-issues-jsonl-rca/plan.md`
+- [ ] P005 Research official Beads documentation, CLI/reference docs, release notes, and relevant upstream issue threads for `bd sync`, backend/sync mode, worktree safety, and JSONL export behavior in `specs/028-beads-issues-jsonl-rca/research.md`
+- [ ] P006 Capture the bootstrap evidence matrix (`direnv` load path, computed repo root, `command -v bd`, `bd --version`, `bd info`) and record how it constrains RCA attribution in `specs/028-beads-issues-jsonl-rca/research.md`
+- [ ] P007 Run a consilium checkpoint on upstream Beads semantics vs this repo’s JSONL workflow, then refresh `specs/028-beads-issues-jsonl-rca/plan.md` and `specs/028-beads-issues-jsonl-rca/tasks.md`
+
+**Gate**: Do not start `T001+` until `P005-P007` are complete and task ordering reflects the official Beads review plus bootstrap evidence findings.
 
 ---
 
@@ -22,7 +27,7 @@
 
 **Purpose**: Prepare shared fixtures, docs surface, and manifest plumbing for the implementation.
 
-- [ ] T001 Create multi-worktree JSONL drift fixture support in `tests/lib/git_topology_fixture.sh`
+- [ ] T001 Create multi-worktree JSONL drift fixture support, including repo-shim-vs-system-`bd` bootstrap cases, in `tests/lib/git_topology_fixture.sh`
 - [ ] T002 [P] Create deterministic sync-model operator doc scaffold in `docs/beads-issues-jsonl-sync-model.md`
 - [ ] T003 [P] Register planned RCA and migration scripts in `scripts/manifest.json`
 
@@ -37,8 +42,8 @@
 - [ ] T004 [P] Implement shared sync-authority decision primitives for tracked JSONL rewrites in `scripts/beads-resolve-db.sh`
 - [ ] T005 [P] Implement shared semantic-vs-noise hashing and canonicalization helpers in `scripts/beads-normalize-issues-jsonl.sh`
 - [ ] T006 [P] Add reusable JSONL rewrite assertion helpers in `tests/lib/test_helpers.sh`
-- [ ] T007 Extend static ownership guard expectations for JSONL sync invariants in `tests/static/test_beads_worktree_ownership.sh`
-- [ ] T008 Add foundational unit coverage for new authority decision codes in `tests/unit/test_bd_dispatch.sh`
+- [ ] T007 Extend static ownership guard expectations for JSONL sync invariants and repo-local bootstrap assumptions in `tests/static/test_beads_worktree_ownership.sh`
+- [ ] T008 Add foundational unit coverage for new authority decision codes, shim-selected vs bypassed-system-`bd` PATH/bootstrap resolution, and direct-mode/no-daemon expectations in `tests/unit/test_bd_dispatch.sh`
 
 **Checkpoint**: Shared ownership/sync primitives exist and can support guarded daily sync, RCA evidence, and migration logic.
 
@@ -74,14 +79,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] Add RCA regression scenarios for leakage, noise-only rewrite, and ambiguous ownership in `tests/unit/test_beads_issues_jsonl_rca.sh`
+- [ ] T015 [P] [US2] Add RCA regression scenarios for leakage, noise-only rewrite, ambiguous ownership, bootstrap-context drift, and upstream-mode divergence in `tests/unit/test_beads_issues_jsonl_rca.sh`
 
 ### Implementation for User Story 2
 
 - [ ] T016 [US2] Implement the reproducible RCA and evidence runner in `scripts/beads-issues-jsonl-rca.sh`
-- [ ] T017 [US2] Emit stable machine-readable evidence fields from `scripts/beads-issues-jsonl-rca.sh` and `scripts/beads-resolve-db.sh`
+- [ ] T017 [US2] Emit stable machine-readable evidence fields, including the bootstrap tuple (`direnv` load path, repo root, resolved `bd`, runtime mode/version), from `scripts/beads-issues-jsonl-rca.sh` and `scripts/beads-resolve-db.sh`
 - [ ] T018 [US2] Write the durable RCA incident record in `docs/rca/2026-03-xx-beads-issues-jsonl-drift-ownership-gap.md`
-- [ ] T019 [US2] Publish the deterministic sync-authority rule and RCA usage guidance in `docs/rules/beads-issues-jsonl-deterministic-sync-authority.md`, `docs/WORKTREE-HOTFIX-PLAYBOOK.md`, and `docs/beads-issues-jsonl-sync-model.md`
+- [ ] T019 [US2] Publish the deterministic sync-authority rule, upstream compatibility notes, legacy-vs-current `bd sync` semantics, and RCA usage guidance in `docs/rules/beads-issues-jsonl-deterministic-sync-authority.md`, `docs/WORKTREE-HOTFIX-PLAYBOOK.md`, and `docs/beads-issues-jsonl-sync-model.md`
 
 **Checkpoint**: RCA output is reproducible, reviewable, and clearly distinguishes leakage, noise, and ambiguity.
 
@@ -112,7 +117,7 @@
 
 **Purpose**: Final consistency, docs alignment, and focused validation.
 
-- [ ] T025 [P] Refresh Beads workflow references in `.claude/skills/beads/resources/WORKFLOWS.md` and `.claude/skills/beads/resources/COMMANDS_QUICKREF.md`
+- [ ] T025 [P] Refresh Beads workflow references in `.claude/skills/beads/resources/WORKFLOWS.md`, `.claude/skills/beads/resources/COMMANDS_QUICKREF.md`, and `.beads/config.yaml`, marking repo-local `bd sync`/daemon guidance as compatibility-scoped rather than universal upstream behavior
 - [ ] T026 Run focused validation and capture final results in `specs/028-beads-issues-jsonl-rca/quickstart.md`
 
 ---
@@ -121,7 +126,7 @@
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: Can start immediately
+- **Setup (Phase 1)**: Can start after the Phase 0 planning gate closes
 - **Foundational (Phase 2)**: Depends on Setup completion and blocks all user stories
 - **User Story 1 (Phase 3)**: Depends on Foundational completion
 - **User Story 2 (Phase 4)**: Depends on Foundational completion and benefits from User Story 1 decision codes
@@ -158,10 +163,11 @@ Task: "Add root-leak and sibling-rewrite block coverage in tests/unit/test_beads
 
 ### MVP First (User Story 1 Only)
 
-1. Complete Phase 1: Setup
-2. Complete Phase 2: Foundational
-3. Complete Phase 3: User Story 1
-4. Validate deterministic daily sync before expanding scope
+1. Complete Phase 0 planning gate (official Beads review + bootstrap evidence + consilium)
+2. Complete Phase 1: Setup
+3. Complete Phase 2: Foundational
+4. Complete Phase 3: User Story 1
+5. Validate deterministic daily sync before expanding scope
 
 ### Incremental Delivery
 
