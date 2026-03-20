@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 45
+**Total Lessons**: 46
 
 ---
 
@@ -14,13 +14,14 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (16 lessons)
+#### P1 (17 lessons)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
 - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Deploy workflow allowed tracked-version regression risk against newer running Moltis baseline](../docs/rca/2026-03-20-moltis-tracked-version-regression-guard.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
+- [Moltis deploy blocked by unmanaged host-level Prometheus port conflict during full-stack compose up](../docs/rca/2026-03-20-moltis-deploy-blocked-by-unmanaged-prometheus-host-port-conflict.md)
 - [Push deploy blocked by GitOps drift from exec-bit mismatch on codex-cli-update-delivery.sh](../docs/rca/2026-03-20-gitops-drift-on-codex-delivery-script-exec-bit.md)
 - [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
 - [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
@@ -70,7 +71,7 @@
 ### By Category
 
 
-#### cicd (20 lessons)
+#### cicd (21 lessons)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
 - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
@@ -81,6 +82,7 @@
 - [Moltis update proposal failed on perl replacement ambiguity and GitHub PR permission assumption](../docs/rca/2026-03-20-moltis-update-proposal-perl-backreference-and-pr-permission-fallback.md)
 - [Deploy workflow allowed tracked-version regression risk against newer running Moltis baseline](../docs/rca/2026-03-20-moltis-tracked-version-regression-guard.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
+- [Moltis deploy blocked by unmanaged host-level Prometheus port conflict during full-stack compose up](../docs/rca/2026-03-20-moltis-deploy-blocked-by-unmanaged-prometheus-host-port-conflict.md)
 - [Push deploy blocked by GitOps drift from exec-bit mismatch on codex-cli-update-delivery.sh](../docs/rca/2026-03-20-gitops-drift-on-codex-delivery-script-exec-bit.md)
 - [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
@@ -128,15 +130,15 @@
 
 ### Popular Tags
 
-- `gitops` (14 lessons)
+- `gitops` (15 lessons)
 - `github-actions` (12 lessons)
-- `deploy` (11 lessons)
+- `deploy` (12 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
+- `cicd` (9 lessons)
+- `moltis` (8 lessons)
 - `clawdiy` (8 lessons)
-- `cicd` (8 lessons)
 - `rca` (7 lessons)
-- `moltis` (7 lessons)
 - `openclaw` (6 lessons)
 
 
@@ -146,10 +148,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 45 |
-| Critical (P0/P1) | 17 |
+| Total Lessons | 46 |
+| Critical (P0/P1) | 18 |
 | Categories | 5 |
-| Unique Tags | 105 |
+| Unique Tags | 106 |
 
 ---
 
