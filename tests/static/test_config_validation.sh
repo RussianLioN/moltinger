@@ -496,6 +496,14 @@ PY
         test_fail "Moltis update proposal workflow must stay isolated (schedule/dispatch PR-only flow) and must not perform direct deploy actions"
     fi
 
+    test_start "static_moltis_update_proposal_perl_update_is_unambiguous_for_zero_prefixed_versions"
+    if rg -Fq '#\${1}${CANDIDATE_VERSION}\${2}#g' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       ! rg -Fq '#\\1${CANDIDATE_VERSION}\\2#g' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Moltis update proposal workflow must use braced perl backreferences so 0.x.y candidate versions do not collapse replacement captures"
+    fi
+
     test_start "static_ci_runtime_installs_sqlite3_for_codex_session_path_repair_suite"
     if rg -q 'Install OS dependencies' "$TEST_WORKFLOW" && \
        rg -q 'apt-get install -y -qq jq sqlite3' "$TEST_WORKFLOW" && \

@@ -100,7 +100,7 @@ jobs:
           git checkout -B "$BRANCH"
 
           for compose_file in docker-compose.yml docker-compose.prod.yml; do
-            perl -0pi -e "s#(ghcr\\.io/moltis-org/moltis:\\$\\{MOLTIS_VERSION:-)[^}]+(\\})#\\1${CANDIDATE_VERSION}\\2#g" "$compose_file"
+            perl -0pi -e "s#(ghcr\\.io/moltis-org/moltis:\\$\\{MOLTIS_VERSION:-)[^}]+(\\})#\${1}${CANDIDATE_VERSION}\${2}#g" "$compose_file"
           done
 
           bash ./scripts/moltis-version.sh assert-tracked
