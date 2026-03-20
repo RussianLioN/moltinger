@@ -49,9 +49,11 @@ jobs:
           CANDIDATE_VERSION="${LATEST_RELEASE_TAG#v}"
           FORCE_MODE="${FORCE_INPUT}"
 
-          echo "tracked_version=$TRACKED_VERSION" >> "$GITHUB_OUTPUT"
-          echo "latest_release_tag=$LATEST_RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "candidate_version=$CANDIDATE_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "tracked_version=$TRACKED_VERSION"
+            echo "latest_release_tag=$LATEST_RELEASE_TAG"
+            echo "candidate_version=$CANDIDATE_VERSION"
+          } >> "$GITHUB_OUTPUT"
 
           if [[ ! "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
             echo "::error::Latest release tag '$LATEST_RELEASE_TAG' does not normalize to a valid GHCR runtime tag"
@@ -59,16 +61,20 @@ jobs:
           fi
 
           if [[ "$CANDIDATE_VERSION" == "$TRACKED_VERSION" ]]; then
-            echo "should_update=false" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=tracked version already equals latest release candidate" >> "$GITHUB_OUTPUT"
+            {
+              echo "should_update=false"
+              echo "skip_reason=tracked version already equals latest release candidate"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [[ "$FORCE_MODE" != "true" ]]; then
             NEWEST="$(printf '%s\n%s\n' "$TRACKED_VERSION" "$CANDIDATE_VERSION" | sort -V | tail -n1)"
             if [[ "$NEWEST" != "$CANDIDATE_VERSION" ]]; then
-              echo "should_update=false" >> "$GITHUB_OUTPUT"
-              echo "skip_reason=latest release candidate is not newer than tracked version" >> "$GITHUB_OUTPUT"
+              {
+                echo "should_update=false"
+                echo "skip_reason=latest release candidate is not newer than tracked version"
+              } >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
@@ -166,8 +172,33 @@ jobs:
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "candidate_version=$CANDIDATE_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Evaluate email prerequisites
+        id: email
+        if: steps.pr.outputs.pr_url != ''
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_TO: ${{ secrets.MOLTIS_UPDATE_NOTIFY_EMAIL }}
+          SEND_EMAIL_INPUT: ${{ github.event.inputs.send_email || 'true' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$SEND_EMAIL_INPUT" != "true" ]]; then
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=workflow_dispatch input send_email=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -n "$SMTP_SERVER" && -n "$SMTP_USERNAME" && -n "$SMTP_PASSWORD" && -n "$SMTP_TO" ]]; then
+            echo "should_send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=required SMTP secrets are missing" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Send approval email (optional)
-        if: ${{ steps.pr.outputs.pr_url != '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.send_email == 'true') && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != '' && secrets.MOLTIS_UPDATE_NOTIFY_EMAIL != '' }}
+        if: ${{ steps.email.outputs.should_send == 'true' }}
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
@@ -201,6 +232,8 @@ jobs:
             echo "| Skip reason | \`${{ steps.version.outputs.skip_reason || 'n/a' }}\` |"
             echo "| Proposal branch | \`${{ steps.branch.outputs.branch || 'n/a' }}\` |"
             echo "| PR URL | ${{ steps.pr.outputs.pr_url || 'n/a' }} |"
+            echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
+            echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
             echo ""
             echo "> This workflow only prepares/updates a PR. It does not deploy to production."
           } >> "$GITHUB_STEP_SUMMARY"
