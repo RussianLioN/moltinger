@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 43
+**Total Lessons**: 44
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (14 lessons)
+#### P1 (15 lessons)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
+- [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Deploy workflow allowed tracked-version regression risk against newer running Moltis baseline](../docs/rca/2026-03-20-moltis-tracked-version-regression-guard.md)
@@ -68,8 +69,9 @@
 ### By Category
 
 
-#### cicd (18 lessons)
+#### cicd (19 lessons)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
+- [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
@@ -124,16 +126,16 @@
 
 ### Popular Tags
 
-- `gitops` (12 lessons)
+- `gitops` (13 lessons)
 - `github-actions` (12 lessons)
+- `deploy` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
-- `deploy` (9 lessons)
 - `clawdiy` (8 lessons)
 - `rca` (7 lessons)
+- `cicd` (7 lessons)
 - `openclaw` (6 lessons)
-- `cicd` (6 lessons)
-- `telegram` (5 lessons)
+- `moltis` (6 lessons)
 
 
 ---
@@ -142,10 +144,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 43 |
-| Critical (P0/P1) | 15 |
+| Total Lessons | 44 |
+| Critical (P0/P1) | 16 |
 | Categories | 5 |
-| Unique Tags | 104 |
+| Unique Tags | 105 |
 
 ---
 

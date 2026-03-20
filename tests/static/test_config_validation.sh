@@ -309,6 +309,25 @@ PY
         test_fail "Tracked deploy script must propagate CI context and skip interactive GitOps confirmation when invoking deploy.sh over remote SSH orchestration"
     fi
 
+    test_start "static_tracked_deploy_detects_missing_json_contract_from_deploy_sh"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       rg -Fq "deploy.sh exited with code \$DEPLOY_EXIT before returning JSON" "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq "jq empty >/dev/null 2>&1 <<<\"\$DEPLOY_OUTPUT\"" "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy script must fail with an explicit error when deploy.sh exits before returning JSON"
+    fi
+
+    test_start "static_deploy_script_cleans_legacy_container_name_conflicts_before_rollout"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       rg -Fq 'resolve_container_name_conflicts' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'docker rm -f "$container_id"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'echo "prometheus"' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "deploy.sh must clean conflicting legacy container names (including prometheus) before compose up to keep tracked deploy idempotent"
+    fi
+
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
     if rg -q 'apply-moltis-host-automation\.sh' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Install cron jobs' "$DEPLOY_WORKFLOW" && \
