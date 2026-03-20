@@ -202,6 +202,13 @@ PY
         test_fail "Primary Moltis config must use container-visible /server paths for codex-update skill code and ~/.moltis paths for writable state"
     fi
 
+    test_start "static_codex_cli_update_delivery_script_is_executable"
+    if [[ -x "$PROJECT_ROOT/scripts/codex-cli-update-delivery.sh" ]]; then
+        test_pass
+    else
+        test_fail "scripts/codex-cli-update-delivery.sh must be executable to stay GitOps-clean after managed surface sync applies executable bits"
+    fi
+
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
     if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
        rg -q 'data/\.deployed-sha' "$TRACKED_DEPLOY_SCRIPT" && \
