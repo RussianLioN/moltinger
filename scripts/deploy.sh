@@ -591,7 +591,7 @@ resolve_container_name_conflicts() {
     local container_name container_id container_project container_service
 
     if [[ -z "$expected_project" ]]; then
-        return 0
+        expected_project="$(basename "$PROJECT_ROOT")"
     fi
 
     while IFS= read -r container_name; do
