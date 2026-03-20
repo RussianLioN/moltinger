@@ -130,6 +130,52 @@
       ],
       "ci": true
     },
+    "beads-dolt-migration-inventory.sh": {
+      "version": "1.0.0",
+      "description": "Build a deterministic legacy-surface inventory and machine-readable readiness report before any Beads Dolt-native pilot cutover",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq"
+      ],
+      "provides": [
+        "beads-dolt-inventory",
+        "beads-dolt-readiness-report"
+      ],
+      "ci": true
+    },
+    "beads-dolt-pilot.sh": {
+      "version": "0.0.0",
+      "description": "Planned isolated pilot cutover workflow for the Beads Dolt-native migration",
+      "entrypoint": false,
+      "planned": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq"
+      ],
+      "provides": [
+        "beads-dolt-pilot"
+      ]
+    },
+    "beads-dolt-rollout.sh": {
+      "version": "0.0.0",
+      "description": "Planned staged rollout and separate rollback orchestration for the Beads Dolt-native migration",
+      "entrypoint": false,
+      "planned": true,
+      "requires": [
+        "bash",
+        "bd",
+        "git",
+        "jq"
+      ],
+      "provides": [
+        "beads-dolt-rollout"
+      ]
+    },
     "beads-recover-issue.sh": {
       "version": "1.0.0",
       "description": "Safely recover one leaked Beads issue into the localized tracker of the owner worktree",
