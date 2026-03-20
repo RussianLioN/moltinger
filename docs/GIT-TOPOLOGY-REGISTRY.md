@@ -15,10 +15,11 @@
 | `moltinger-dmi-telegram-webhook-rollout` | `feat/moltinger-dmi-telegram-webhook-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-ewde-codex-advisory-rollout` | `feat/moltinger-ewde-codex-advisory-rollout` | `sibling-worktree` | Needs decision |
 | `moltinger-jb6-gpt54-primary` | `feat/moltinger-jb6-gpt54-primary` | `sibling-worktree` | Active sibling worktree for the GPT-5.4 primary provider-chain task. |
-| `moltinger-moltis-pin-v0-10-18-prod` | `docs/rca-moltis-0-10-18-stabilization` | `sibling-worktree` | Needs decision |
+| `moltinger-main-gpt54-integration` | `integration/gpt54-main` | `sibling-worktree` | Needs decision |
 | `moltinger-worktree-topology-registry-publish` | `fix/worktree-topology-registry-single-writer-publish` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-1-moltis-backup-rollback-baseline` | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `sibling-worktree` | Needs decision |
 | `moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `sibling-worktree` | Needs decision |
+| `moltis-regular-update-proposal` | `feat/moltis-regular-update-proposal` | `sibling-worktree` | Needs decision |
 | `primary-feature-008` | `008-codex-update-advisor` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-009` | `009-codex-update-delivery-ux` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-012` | `012-codex-upstream-watcher` | `dedicated-feature-worktree` | Needs decision |
@@ -45,14 +46,15 @@
 | `024-web-factory-demo-adapter` | `origin/024-web-factory-demo-adapter` | Needs decision |
 | `026-clawteam-framework-research` | `origin/main` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
-| `docs/rca-moltis-0-10-18-stabilization` | `origin/main` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
 | `feat/moltinger-ewde-codex-advisory-rollout` | `origin/feat/moltinger-ewde-codex-advisory-rollout` | Needs decision |
 | `feat/moltinger-jb6-gpt54-primary` | `origin/feat/moltinger-jb6-gpt54-primary` | Active parallel task branch for GPT-5.4 primary provider-chain evaluation. |
 | `feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `feat/moltinger-z8m-2-moltis-skills-subagents-abilities-expansion` | `none` | Needs decision |
+| `feat/moltis-regular-update-proposal` | `origin/feat/moltis-regular-update-proposal` | Needs decision |
 | `fix/worktree-topology-registry-single-writer-publish` | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
+| `integration/gpt54-main` | `origin/integration/gpt54-main` | Needs decision |
 | `001-clawdiy-agent-platform` | `origin/001-clawdiy-agent-platform` | Active permanent-agent platform rollout branch; dedicated worktree exists. |
 | `001-docker-deploy-improvements` | `origin/001-docker-deploy-improvements` | Historical branch. |
 | `001-fallback-llm-ollama` | `origin/001-fallback-llm-ollama` | Historical branch. |
@@ -86,6 +88,7 @@
 | `codex/remote-uat-hardening` | `none` | Needs decision |
 | `codex/webhook-main-backfill` | `origin/codex/webhook-main-backfill` | Needs decision |
 | `codex/webhook-moltinger` | `origin/codex/webhook-moltinger` | Valuable but broad operational branch; extract selectively. |
+| `docs/rca-moltis-0-10-18-stabilization` | `origin/main` | Needs decision |
 | `feat/exploration-clawteam-framework-research` | `none` | Needs decision |
 | `feat/molt-2-codex-update-monitor-new` | `origin/feat/molt-2-codex-update-monitor-new` | Needs decision |
 | `feat/moltis-official-docker-update-v0-10-18` | `origin/feat/moltis-official-docker-update-v0-10-18` | Needs decision |
@@ -94,6 +97,7 @@
 | `feat/openclaw-control-plane` | `none` | Needs decision |
 | `fix/beads-recovery-audit-localization` | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `fix/moltis-prod-0-10-18-gitops-guard` | `gone` | Tracking ref is gone; needs decision |
+| `fix/moltis-workflows-node24-readiness` | `gone` | Tracking ref is gone; needs decision |
 | `test/rca-guard-uat-20260307-0004` | `none` | Local-only test branch. |
 | `test/rca-guard-uat-20260307-0015` | `gone` | Local-only stale test branch with gone upstream. |
 | `tmp-merge-023-main-20260314195036` | `origin/main` | Needs decision |
@@ -133,8 +137,10 @@
 | `origin/feat/moltinger-jb6-gpt54-primary` | Needs decision |
 | `origin/feat/moltinger-z8m-1-moltis-backup-rollback-baseline` | Needs decision |
 | `origin/feat/moltis-pin-v0-10-18-prod` | Needs decision |
+| `origin/feat/moltis-regular-update-proposal` | Needs decision |
 | `origin/fix/beads-recovery-audit-localization` | Needs decision |
 | `origin/fix/worktree-topology-registry-single-writer-publish` | Needs decision |
+| `origin/integration/gpt54-main` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
