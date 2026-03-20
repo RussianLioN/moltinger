@@ -647,6 +647,21 @@
       ],
       "gitops": true
     },
+    "align-server-checkout.sh": {
+      "version": "1.0.0",
+      "description": "Safely align the remote deploy checkout to a target ref/SHA before GitOps sync",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "git",
+        "ssh"
+      ],
+      "provides": [
+        "align-server-checkout"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "apply-moltis-host-automation.sh": {
       "version": "1.0.0",
       "description": "Apply Moltis post-sync host automation from the active deploy root without mutating the git-synced tree",

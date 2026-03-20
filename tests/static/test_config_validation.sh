@@ -31,6 +31,8 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
+SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -217,18 +219,27 @@ PY
         test_pass
     fi
 
-    test_start "static_deploy_server_git_checkout_aligned_after_success"
-    if rg -q 'Align server git checkout before sync' "$DEPLOY_WORKFLOW" && \
-       rg -q 'git clean -fd' "$DEPLOY_WORKFLOW"; then
-        if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
-           rg -q 'git fetch --depth=1 origin "\$GIT_REF" >&2' "$TRACKED_DEPLOY_SCRIPT" && \
-           rg -q 'git reset --hard "\$GIT_SHA" >&2' "$TRACKED_DEPLOY_SCRIPT"; then
-            test_pass
-        else
-            test_fail "Deploy control-plane should align the server checkout after success inside the shared tracked deploy script"
-        fi
+    test_start "static_production_workflows_use_shared_checkout_align_entrypoint"
+    if rg -q 'align-server-checkout\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'align-server-checkout\.sh' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$CHECKOUT_ALIGN_SCRIPT" ]] && \
+       rg -Fq 'emit_remote_script | ssh "$SSH_TARGET" '"'"'bash -seu'"'"'' "$CHECKOUT_ALIGN_SCRIPT" && \
+       rg -q 'git clean -fd >&2' "$CHECKOUT_ALIGN_SCRIPT" && \
+       ! rg -q 'git fetch --depth=1 origin "\$\{\{ github\.ref_name \}\}"' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'git reset --hard "\$\{\{ github\.sha \}\}"' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'git clean -fd$' "$UAT_GATE_WORKFLOW"; then
+        test_pass
     else
-        test_fail "Deploy workflow should align and clean the server git checkout before sync so failed rollouts do not self-create drift"
+        test_fail "Deploy and UAT workflows should align remote checkout through the shared checkout-align script before GitOps sync"
+    fi
+
+    test_start "static_deploy_server_git_checkout_aligned_after_success"
+    if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'git fetch --depth=1 origin "\$GIT_REF" >&2' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'git reset --hard "\$GIT_SHA" >&2' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy control-plane should align the server checkout after success inside the shared tracked deploy script"
     fi
 
     test_start "static_deploy_workflows_use_shared_moltis_env_renderer"
@@ -278,6 +289,15 @@ PY
         test_fail "Tracked deploy script must not source .env as shell code"
     fi
 
+    test_start "static_deploy_workflow_parses_tracked_deploy_json_contract"
+    if rg -Fq "jq -r '.details.health // empty'" "$DEPLOY_WORKFLOW" && \
+       rg -Fq "jq -r '.details.rollback_verified // false'" "$DEPLOY_WORKFLOW" && \
+       rg -Fq "jq -r '.status // empty'" "$UAT_GATE_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Workflows must stay aligned with the tracked deploy JSON contract they parse"
+    fi
+
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
     if rg -q 'apply-moltis-host-automation\.sh' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Install cron jobs' "$DEPLOY_WORKFLOW" && \
@@ -287,6 +307,25 @@ PY
         test_pass
     else
         test_fail "Deploy workflow should delegate host automation to the shared script entrypoint and avoid mutating tracked files under active root"
+    fi
+
+    test_start "static_host_automation_script_converges_managed_cron_and_systemd_surface"
+    if [[ -f "$HOST_AUTOMATION_SCRIPT" ]] && \
+       rg -q 'Removing stale managed cron job' "$HOST_AUTOMATION_SCRIPT" && \
+       rg -q 'Removing stale managed systemd unit' "$HOST_AUTOMATION_SCRIPT" && \
+       rg -q 'Installing systemd unit:' "$HOST_AUTOMATION_SCRIPT" && \
+       rg -q 'systemctl daemon-reload' "$HOST_AUTOMATION_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Host automation should converge managed cron/systemd artifacts instead of only appending files"
+    fi
+
+    test_start "static_gitops_sync_managed_surface_skips_hidden_top_level_entries"
+    if [[ -f "$SYNC_SURFACE_SCRIPT" ]] && \
+       rg -Fq "find \"\$local_dir\" -mindepth 1 -maxdepth 1 ! -name '.*' -print0" "$SYNC_SURFACE_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Managed-surface sync should ignore hidden top-level entries to avoid copying accidental local artifacts"
     fi
 
     test_start "static_deploy_pending_sync_is_not_treated_as_hard_drift"

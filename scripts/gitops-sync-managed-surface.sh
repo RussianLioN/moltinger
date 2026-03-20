@@ -139,7 +139,7 @@ sync_directory_contents() {
 
     while IFS= read -r -d '' entry; do
         entries+=("$entry")
-    done < <(find "$local_dir" -mindepth 1 -maxdepth 1 -print0)
+    done < <(find "$local_dir" -mindepth 1 -maxdepth 1 ! -name '.*' -print0)
 
     if [[ ${#entries[@]} -eq 0 ]]; then
         notice "$empty_notice"

@@ -832,15 +832,13 @@ jobs:
       - name: Align server git checkout before sync
         run: |
           echo "::group::Aligning server git checkout before sync"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            cd ${{ env.DEPLOY_PATH }}
-            git fetch --depth=1 origin "${{ github.ref_name }}"
-            git checkout --force "${{ github.ref_name }}"
-            git reset --hard "${{ github.sha }}"
-            git clean -fd
-            git status --short
-          EOF
+          bash ./scripts/align-server-checkout.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --target-ref "${{ github.ref_name }}" \
+            --target-sha "${{ github.sha }}" \
+            --clean-untracked
           echo "::endgroup::"
 
       # ===========================================
