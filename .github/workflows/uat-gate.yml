@@ -277,28 +277,10 @@ jobs:
       # ===========================================
       - name: Sync configuration files (GitOps)
         run: |
-          echo "::group::Syncing configuration files to server"
-
-          # Sync docker-compose.yml from git to server
-          # This keeps non-prod compose in sync for tooling compatibility
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
-
-          # Sync docker-compose.prod.yml from git to server
-          # Production deploy path uses this file as source of truth
-          scp docker-compose.prod.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.prod.yml
-
-          # Sync config directory (moltis.toml, mcp-servers.json, etc.)
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
-          scp -r config/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/ 2>/dev/null || echo "No config files to sync"
-
-          # Sync scripts directory (GitOps compliance)
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
-          scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
-
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "chmod +x ${{ env.DEPLOY_PATH }}/scripts/deploy.sh ${{ env.DEPLOY_PATH }}/scripts/backup-moltis-enhanced.sh ${{ env.DEPLOY_PATH }}/scripts/moltis-version.sh 2>/dev/null || true"
-
-          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/)"
-          echo "::endgroup::"
+          bash ./scripts/gitops-sync-managed-surface.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}"
 
       - name: Update active deploy root symlink
         run: |

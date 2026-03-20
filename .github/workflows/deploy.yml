@@ -852,34 +852,10 @@ jobs:
       # ===========================================
       - name: Sync configuration files (GitOps)
         run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
-          echo "::group::Syncing configuration files to server"
-
-          # Sync docker-compose.yml from git to server
-          # This ensures ALL configuration (labels, networks, volumes) matches git
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml
-
-          # Sync docker-compose.prod.yml (production configuration)
-          # CRITICAL: This file contains production-specific settings
-          scp docker-compose.prod.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.prod.yml
-
-          # Sync config directory (moltis.toml, mcp-servers.json, etc.)
-          # This ensures MCP servers and all Moltis settings match git
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/config"
-          scp -r config/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/config/
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "rm -f ${{ env.DEPLOY_PATH }}/config/provider_keys.json ${{ env.DEPLOY_PATH }}/config/oauth_tokens.json ${{ env.DEPLOY_PATH }}/config/credentials.json"
-
-          # Sync scripts directory (GitOps compliance - incident #002)
-          # All server scripts must come from git, not manual scp
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/scripts"
-          scp -r scripts/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/ 2>/dev/null || echo "No scripts to sync"
-
-          # Sync systemd units (scheduler as code)
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/systemd"
-          scp -r systemd/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/systemd/ 2>/dev/null || echo "No systemd units to sync"
-
-          echo "Configuration synced successfully (docker-compose.yml + docker-compose.prod.yml + config/ + scripts/ + systemd/)"
-          echo "::endgroup::"
+          bash ./scripts/gitops-sync-managed-surface.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}"
 
       - name: Update active deploy root symlink
         run: |

@@ -708,6 +708,22 @@
       "gitops": true,
       "ci": true
     },
+    "gitops-sync-managed-surface.sh": {
+      "version": "1.0.0",
+      "description": "Sync the GitOps-managed deploy surface from the current checkout to the remote host",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "scp",
+        "ssh"
+      ],
+      "provides": [
+        "gitops-sync-managed-surface"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "gitops-metrics.sh": {
       "version": "1.0.0",
       "description": "Collect and report GitOps compliance metrics",

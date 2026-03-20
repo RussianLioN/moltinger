@@ -70,6 +70,8 @@ root_cause: "Branch-scoped deploy concurrency plus fragile ln -sfn symlink updat
 
 Первый control-plane slice вынес active-root update и safety checks в единый versioned script entrypoint `scripts/update-active-deploy-root.sh`, а workflow оставил тонкими вызовами этого script. Это переводит источник истины из inline YAML в versioned shell contract и снижает вероятность повторного drift.
 
+Следующий slice вынес общий GitOps sync surface в `scripts/gitops-sync-managed-surface.sh`. Это убрало ещё один дублированный YAML-блок, где `deploy.yml` и `uat-gate.yml` уже расходились по реальному поведению: cleanup runtime-managed auth files, `systemd/` sync и remote chmod shell entrypoints.
+
 ## Связанные обновления
 
 - [x] Новый файл правила создан (`docs/rules/production-deploy-single-writer.md`)
