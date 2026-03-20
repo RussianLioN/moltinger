@@ -178,6 +178,20 @@ pilot_capture_command_json() {
     }'
 }
 
+pilot_capture_info_json() {
+  local repo_root="$1"
+  local info_json=""
+  local info_rc=""
+
+  info_json="$(pilot_capture_command_json "${repo_root}" "info" bd --no-daemon info)"
+  info_rc="$(printf '%s\n' "${info_json}" | jq -r '.rc')"
+  if [[ "${info_rc}" != "0" ]]; then
+    info_json="$(pilot_capture_command_json "${repo_root}" "info" bd info)"
+  fi
+
+  printf '%s\n' "${info_json}"
+}
+
 pilot_build_status_json() {
   local repo_root="$1"
   local canonical_root="$2"
@@ -218,7 +232,7 @@ pilot_build_review_json() {
   local ready_json=""
   local list_json=""
 
-  info_json="$(pilot_capture_command_json "${repo_root}" "info" bd --no-daemon info)"
+  info_json="$(pilot_capture_info_json "${repo_root}")"
   ready_json="$(pilot_capture_command_json "${repo_root}" "ready" bd ready)"
   list_json="$(pilot_capture_command_json "${repo_root}" "list_all" bd list --all)"
 
