@@ -91,7 +91,8 @@ run_static_beads_worktree_ownership_tests() {
     if [[ -f "$HOOK_BOOTSTRAP" ]] && \
        rg -q 'export PATH="\$\{PROJECT_ROOT\}/bin:\$\{PATH\}"' "$HOOK_BOOTSTRAP" && \
        rg -q '_repo-local-path\.sh' "$HOOK_PRE_COMMIT" "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" "$HOOK_PRE_PUSH" && \
-       rg -q 'beads-worktree-localize\.sh' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE"; then
+       rg -q 'beads-worktree-localize\.sh' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" && \
+       rg -q -- '--bootstrap-source' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE"; then
         test_pass
     else
         test_fail "Tracked git hooks must source the repo-local PATH bootstrap and auto-heal safe Beads ownership residue"
