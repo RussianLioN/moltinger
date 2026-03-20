@@ -25,7 +25,7 @@ declare -a INVENTORY_WORKTREES=()
 inventory_usage() {
   cat <<'EOF'
 Usage:
-  scripts/beads-dolt-migration-inventory.sh [--repo <path>] [--format <human|json|env>] [--output <path>] [--gate pilot|full-cutover]
+  scripts/beads-dolt-migration-inventory.sh [--repo <path>] [--format <human|json|env>] [--output <path>] [--gate pilot|full-cutover|fleet-residual]
 
 Description:
   Build a deterministic inventory of legacy Beads surfaces and a machine-readable
@@ -158,7 +158,7 @@ inventory_parse_args() {
   esac
 
   case "${gate_name}" in
-    ""|pilot|full-cutover) ;;
+    ""|pilot|full-cutover|fleet-residual) ;;
     *)
       inventory_die "Unsupported gate: ${gate_name}"
       ;;
@@ -1192,6 +1192,24 @@ inventory_build_report_json() {
       --argjson surfaces "${surfaces_json}" \
       --argjson worktrees "${worktrees_json}" \
       '
+      def worktree_view:
+        [
+          $worktrees[] |
+          . + {
+            scope_membership: (if .current then "target" else "observed_only" end),
+            gate_relevance: (
+              if .current then
+                (if .blocking then "blocking" else "advisory" end)
+              else
+                (if .blocking then "advisory" else "ignored" end)
+              end
+            ),
+            legacy_residual: ((.current | not) and .blocking),
+            legacy_residual_reason: (if ((.current | not) and .blocking) then .reason else null end)
+          }
+        ];
+      def current_worktree:
+        ([(worktree_view[]) | select(.current)] | .[0] // null);
       def pilot_blockers:
         (
           [$surfaces[] | select(.blocking) | {
@@ -1201,7 +1219,7 @@ inventory_build_report_json() {
             path: .path,
             reason: .reason
           }] +
-          [$worktrees[] | select(.current and .blocking) | {
+          [(worktree_view[]) | select(.current and .blocking) | {
             id: ("worktree:" + .path),
             source: "worktree",
             classification: .classification,
@@ -1218,7 +1236,7 @@ inventory_build_report_json() {
             path: .path,
             reason: .reason
           }] +
-          [$worktrees[] | select(.blocking) | {
+          [(worktree_view[]) | select(.blocking) | {
             id: ("worktree:" + .path),
             source: "worktree",
             classification: .classification,
@@ -1228,12 +1246,28 @@ inventory_build_report_json() {
         );
       def warning_count:
         ([$surfaces[] | select(.readiness == "warning")] | length) +
-        ([$worktrees[] | select(.readiness == "warning")] | length);
-      def verdict:
+        ([(worktree_view[]) | select(.readiness == "warning")] | length);
+      def target_warning_count:
+        ([$surfaces[] | select(.readiness == "warning")] | length) +
+        ([(worktree_view[]) | select(.current and .readiness == "warning")] | length);
+      def operator_verdict:
+        if (pilot_blockers | length) > 0 then "blocked"
+        elif target_warning_count > 0 then "warning"
+        else "ready"
+        end;
+      def fleet_verdict:
         if (blockers | length) > 0 then "blocked"
         elif warning_count > 0 then "warning"
         else "ready"
         end;
+      def target_gate_stage:
+        if current_worktree == null then "pilot"
+        elif current_worktree.state == "cutover_active" then "steady_state"
+        elif current_worktree.state == "pilot_ready_candidate" then "cutover"
+        else "pilot"
+        end;
+      def fleet_legacy_count:
+        ([(worktree_view[]) | select(.legacy_residual)] | length);
       {
         schema: $schema,
         repo_root: $repo_root,
@@ -1243,18 +1277,29 @@ inventory_build_report_json() {
           summary: $target_contract_summary
         },
         summary: {
-          verdict: verdict,
+          verdict: operator_verdict,
+          operator_verdict: operator_verdict,
+          fleet_verdict: fleet_verdict,
+          target_scope: "current_worktree",
+          target_gate_stage: target_gate_stage,
+          target_gate: (if (pilot_blockers | length) > 0 then "blocked" else "pass" end),
           pilot_gate: (if (pilot_blockers | length) > 0 then "blocked" else "pass" end),
-          full_cutover_gate: (if (blockers | length) > 0 then "blocked" else "pass" end),
+          cohort_gate: (if (pilot_blockers | length) > 0 then "blocked" else "pass" end),
+          full_cutover_gate: (if (pilot_blockers | length) > 0 then "blocked" else "pass" end),
+          fleet_residual_gate: (if fleet_legacy_count > 0 then "blocked" else "pass" end),
           surface_count: ($surfaces | length),
           observed_surface_count: ([$surfaces[] | select(.observed)] | length),
-          worktree_count: ($worktrees | length),
+          worktree_count: (worktree_view | length),
+          target_blocking_count: (pilot_blockers | length),
           pilot_blocking_count: (pilot_blockers | length),
+          cohort_size: (if current_worktree == null then 0 else 1 end),
+          cohort_blocking_count: (pilot_blockers | length),
           blocking_count: (blockers | length),
+          fleet_legacy_count: fleet_legacy_count,
           warning_count: warning_count
         },
         surfaces: $surfaces,
-        worktrees: $worktrees,
+        worktrees: worktree_view,
         pilot_blockers: pilot_blockers,
         blockers: blockers
       }'
@@ -1269,12 +1314,22 @@ inventory_render_human() {
       "Canonical Root: \(.canonical_root)",
       "Target Contract: \(.target_contract.name)",
       "Verdict: \(.summary.verdict)",
+      "Operator Verdict: \(.summary.operator_verdict)",
+      "Fleet Verdict: \(.summary.fleet_verdict)",
+      "Target Scope: \(.summary.target_scope)",
+      "Target Gate Stage: \(.summary.target_gate_stage)",
+      "Target Gate: \(.summary.target_gate)",
       "Pilot Gate: \(.summary.pilot_gate)",
       "Full Cutover Gate: \(.summary.full_cutover_gate)",
+      "Fleet Residual Gate: \(.summary.fleet_residual_gate)",
       "Observed Surfaces: \(.summary.observed_surface_count)/\(.summary.surface_count)",
       "Worktrees: \(.summary.worktree_count)",
+      "Target Blocking Items: \(.summary.target_blocking_count)",
       "Pilot Blocking Items: \(.summary.pilot_blocking_count)",
+      "Cohort Size: \(.summary.cohort_size)",
+      "Cohort Blocking Items: \(.summary.cohort_blocking_count)",
       "Blocking Items: \(.summary.blocking_count)",
+      "Fleet Legacy Worktrees: \(.summary.fleet_legacy_count)",
       "Warnings: \(.summary.warning_count)",
       "",
       "Pilot Blockers:"
@@ -1323,13 +1378,23 @@ inventory_render_env() {
       "repo_root=\(.repo_root | @sh)",
       "canonical_root=\(.canonical_root | @sh)",
       "verdict=\(.summary.verdict)",
+      "operator_verdict=\(.summary.operator_verdict)",
+      "fleet_verdict=\(.summary.fleet_verdict)",
+      "target_scope=\(.summary.target_scope)",
+      "target_gate_stage=\(.summary.target_gate_stage)",
+      "target_gate=\(.summary.target_gate)",
       "pilot_gate=\(.summary.pilot_gate)",
       "full_cutover_gate=\(.summary.full_cutover_gate)",
+      "fleet_residual_gate=\(.summary.fleet_residual_gate)",
       "surface_count=\(.summary.surface_count)",
       "observed_surface_count=\(.summary.observed_surface_count)",
       "worktree_count=\(.summary.worktree_count)",
+      "target_blocking_count=\(.summary.target_blocking_count)",
       "pilot_blocking_count=\(.summary.pilot_blocking_count)",
+      "cohort_size=\(.summary.cohort_size)",
+      "cohort_blocking_count=\(.summary.cohort_blocking_count)",
       "blocking_count=\(.summary.blocking_count)",
+      "fleet_legacy_count=\(.summary.fleet_legacy_count)",
       "warning_count=\(.summary.warning_count)",
       "pilot_blocking_ids=\(([.pilot_blockers[].id] | join(",")) | @sh)",
       "blocking_ids=\(([.blockers[].id] | join(",")) | @sh)"
@@ -1371,6 +1436,10 @@ inventory_apply_gate() {
       ;;
     full-cutover)
       gate_status="$(printf '%s\n' "${report_json}" | jq -r '.summary.full_cutover_gate')"
+      [[ "${gate_status}" == "pass" ]] || return 20
+      ;;
+    fleet-residual)
+      gate_status="$(printf '%s\n' "${report_json}" | jq -r '.summary.fleet_residual_gate')"
       [[ "${gate_status}" == "pass" ]] || return 20
       ;;
   esac

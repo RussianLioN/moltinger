@@ -206,7 +206,11 @@ test_inventory_reports_blocked_legacy_baseline() {
     json="$(run_inventory "${repo_dir}" "${fake_bin}" legacy --format json)"
 
     assert_json_value "${json}" '.summary.verdict' "blocked" "Legacy inventory baseline must be blocked"
+    assert_json_value "${json}" '.summary.operator_verdict' "blocked" "Legacy inventory baseline must expose a blocked operator verdict"
+    assert_json_value "${json}" '.summary.fleet_verdict' "blocked" "Legacy inventory baseline must expose a blocked fleet verdict"
     assert_json_value "${json}" '.summary.pilot_gate' "blocked" "Pilot gate must stay blocked on legacy baseline"
+    assert_json_value "${json}" '.summary.full_cutover_gate' "blocked" "Current-worktree cutover gate must stay blocked on legacy baseline"
+    assert_json_value "${json}" '.summary.fleet_residual_gate' "pass" "Fleet residual gate must ignore the current worktree when no sibling residue exists"
     assert_json_value "${json}" '.surfaces[] | select(.id == "tracked.issues_jsonl") | .classification' "must-migrate" "Tracked issues.jsonl must classify as must-migrate"
     assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .classification' "blocked" "SQLite backend with canonical-root coupling must be a blocker"
     assert_json_value "${json}" '.worktrees[] | select(.current == true) | .state' "legacy_jsonl_first" "Current worktree must classify as legacy_jsonl_first"
@@ -332,10 +336,15 @@ test_inventory_scopes_pilot_gate_to_current_worktree() {
 
     json="$(run_inventory "${repo_dir}" "${fake_bin}" pilot-ready --format json)"
 
-    assert_json_value "${json}" '.summary.verdict' "blocked" "Global inventory verdict must stay blocked while a sibling worktree is still legacy"
+    assert_json_value "${json}" '.summary.verdict' "warning" "Operator verdict must stay scoped to the current worktree even when a sibling remains legacy"
+    assert_json_value "${json}" '.summary.operator_verdict' "warning" "Operator verdict must reflect only current-worktree warnings once pilot blockers are absent"
+    assert_json_value "${json}" '.summary.fleet_verdict' "blocked" "Fleet verdict must remain blocked while a sibling worktree is still legacy"
+    assert_json_value "${json}" '.summary.target_scope' "current_worktree" "Inventory must report the default current-worktree scope"
     assert_json_value "${json}" '.summary.pilot_gate' "pass" "Pilot gate must remain scoped to the current pilot-ready worktree"
-    assert_json_value "${json}" '.summary.full_cutover_gate' "blocked" "Full cutover gate must remain blocked while fleet-wide blockers exist"
+    assert_json_value "${json}" '.summary.full_cutover_gate' "pass" "Full cutover gate must remain scoped to the current pilot-ready worktree"
+    assert_json_value "${json}" '.summary.fleet_residual_gate' "blocked" "Fleet residual gate must stay blocked while sibling legacy residue exists"
     assert_json_value "${json}" '.summary.pilot_blocking_count' "0" "Pilot blocking count must exclude blocked sibling worktrees"
+    assert_json_value "${json}" '.summary.fleet_legacy_count' "1" "Fleet residual count must report one blocked sibling outside the current scope"
     assert_json_array_contains "${json}" '.blockers | map(.id)' "worktree:${blocked_worktree}" "Blocked sibling must remain visible in full cutover blockers"
 
     rm -rf "${fixture_root}"
@@ -387,7 +396,11 @@ test_inventory_machine_readable_report_can_pass_pilot_gate() {
     gate_rc="$(printf '%s\n' "${gate_output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
 
     assert_json_value "${json}" '.summary.verdict' "warning" "Pilot-ready fixture may still carry bridge warnings"
+    assert_json_value "${json}" '.summary.operator_verdict' "warning" "Operator verdict must surface current-worktree bridge warnings"
+    assert_json_value "${json}" '.summary.fleet_verdict' "warning" "Fleet verdict must preserve warning-only pilot-ready baselines"
     assert_json_value "${json}" '.summary.pilot_gate' "pass" "Pilot-ready fixture must pass the pilot gate when blockers are absent"
+    assert_json_value "${json}" '.summary.full_cutover_gate' "pass" "Full cutover gate must pass when the current pilot-ready worktree is ready"
+    assert_json_value "${json}" '.summary.fleet_residual_gate' "pass" "Fleet residual gate must pass when no sibling legacy worktrees remain"
     assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .classification' "already-compatible" "Pilot-ready runtime backend must classify as compatible"
     assert_eq "0" "${gate_rc}" "Pilot gate should exit successfully when blockers are absent"
     assert_contains "${gate_output}" "pilot_gate=pass" "Env output must expose pilot gate result"

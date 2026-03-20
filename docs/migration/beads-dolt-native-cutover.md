@@ -62,10 +62,11 @@ Pilot guarantees:
 - staged `.beads/issues.jsonl` is blocked in pre-commit.
 - the documented review surface is `./scripts/beads-dolt-pilot.sh review`.
 
-Current live-repo status:
+Scoped-gate semantics:
 
-- `pilot_gate=blocked`
-- `pilot_mode_enabled=false`
+- `pilot_gate` is current-worktree scoped.
+- `full_cutover_gate` is current-worktree or explicit-target scoped.
+- `fleet_residual_gate` reports legacy sibling worktrees outside the active scope.
 
 ## Hermetic Rollout And Rollback Proof
 
@@ -92,7 +93,8 @@ Operator commands:
 
 Use this document to answer:
 
-- what still blocks live pilot and cutover in the real repo
+- whether the active worktree passed pilot and cutover
+- what residual fleet cleanup still remains outside the active scope
 - what review surface applies in inventory, pilot, and cutover modes
 - what the hermetic rollout and rollback proof already covers
 

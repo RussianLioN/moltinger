@@ -132,6 +132,7 @@ pilot_write_mode_file() {
     --arg inventory_verdict "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.verdict')" \
     --arg pilot_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.pilot_gate')" \
     --arg full_cutover_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.full_cutover_gate')" \
+    --arg fleet_residual_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.fleet_residual_gate')" \
     '{
       schema: $schema,
       mode: "pilot",
@@ -142,7 +143,8 @@ pilot_write_mode_file() {
       review_command: $review_command,
       inventory_verdict: $inventory_verdict,
       pilot_gate: $pilot_gate,
-      full_cutover_gate: $full_cutover_gate
+      full_cutover_gate: $full_cutover_gate,
+      fleet_residual_gate: $fleet_residual_gate
     }' > "${mode_file}"
 }
 
@@ -209,6 +211,7 @@ pilot_build_status_json() {
     --arg inventory_verdict "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.verdict')" \
     --arg pilot_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.pilot_gate')" \
     --arg full_cutover_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.full_cutover_gate')" \
+    --arg fleet_residual_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.fleet_residual_gate')" \
     --argjson enabled "${enabled}" \
     '{
       schema: $schema,
@@ -219,7 +222,8 @@ pilot_build_status_json() {
       review_command: $review_command,
       inventory_verdict: $inventory_verdict,
       pilot_gate: $pilot_gate,
-      full_cutover_gate: $full_cutover_gate
+      full_cutover_gate: $full_cutover_gate,
+      fleet_residual_gate: $fleet_residual_gate
     }'
 }
 
@@ -254,10 +258,20 @@ pilot_build_review_json() {
       review_command: $review_command,
       inventory: {
         verdict: $inventory.summary.verdict,
+        operator_verdict: $inventory.summary.operator_verdict,
+        fleet_verdict: $inventory.summary.fleet_verdict,
+        target_scope: $inventory.summary.target_scope,
+        target_gate_stage: $inventory.summary.target_gate_stage,
+        target_gate: $inventory.summary.target_gate,
         pilot_gate: $inventory.summary.pilot_gate,
         full_cutover_gate: $inventory.summary.full_cutover_gate,
+        fleet_residual_gate: $inventory.summary.fleet_residual_gate,
+        target_blocking_count: $inventory.summary.target_blocking_count,
         pilot_blocking_count: $inventory.summary.pilot_blocking_count,
+        cohort_size: $inventory.summary.cohort_size,
+        cohort_blocking_count: $inventory.summary.cohort_blocking_count,
         blocking_count: $inventory.summary.blocking_count,
+        fleet_legacy_count: $inventory.summary.fleet_legacy_count,
         warning_count: $inventory.summary.warning_count
       },
       review_surface: {
@@ -284,6 +298,7 @@ pilot_render_human() {
           "Inventory Verdict: \(.inventory_verdict)",
           "Pilot Gate: \(.pilot_gate)",
           "Full Cutover Gate: \(.full_cutover_gate)",
+          "Fleet Residual Gate: \(.fleet_residual_gate)",
           "Review Command: \(.review_command)"
         ]
         | .[]'
@@ -296,10 +311,20 @@ pilot_render_human() {
           "Canonical Root: \(.canonical_root)",
           "Pilot Mode Enabled: \(.pilot_mode_enabled)",
           "Inventory Verdict: \(.inventory.verdict)",
+          "Operator Verdict: \(.inventory.operator_verdict)",
+          "Fleet Verdict: \(.inventory.fleet_verdict)",
+          "Target Scope: \(.inventory.target_scope)",
+          "Target Gate Stage: \(.inventory.target_gate_stage)",
+          "Target Gate: \(.inventory.target_gate)",
           "Pilot Gate: \(.inventory.pilot_gate)",
           "Full Cutover Gate: \(.inventory.full_cutover_gate)",
+          "Fleet Residual Gate: \(.inventory.fleet_residual_gate)",
+          "Target Blocking Items: \(.inventory.target_blocking_count)",
           "Pilot Blocking Items: \(.inventory.pilot_blocking_count)",
+          "Cohort Size: \(.inventory.cohort_size)",
+          "Cohort Blocking Items: \(.inventory.cohort_blocking_count)",
           "Full Cutover Blocking Items: \(.inventory.blocking_count)",
+          "Fleet Legacy Worktrees: \(.inventory.fleet_legacy_count)",
           "Review Command: \(.review_command)",
           "",
           "Review Surface:",
@@ -336,6 +361,7 @@ pilot_render_env() {
           "inventory_verdict=\(.inventory_verdict)",
           "pilot_gate=\(.pilot_gate)",
           "full_cutover_gate=\(.full_cutover_gate)",
+          "fleet_residual_gate=\(.fleet_residual_gate)",
           "review_command=\(.review_command | @sh)"
         ]
         | .[]'
@@ -348,10 +374,20 @@ pilot_render_env() {
           "canonical_root=\(.canonical_root | @sh)",
           "pilot_mode_enabled=\(.pilot_mode_enabled)",
           "inventory_verdict=\(.inventory.verdict)",
+          "operator_verdict=\(.inventory.operator_verdict)",
+          "fleet_verdict=\(.inventory.fleet_verdict)",
+          "target_scope=\(.inventory.target_scope)",
+          "target_gate_stage=\(.inventory.target_gate_stage)",
+          "target_gate=\(.inventory.target_gate)",
           "pilot_gate=\(.inventory.pilot_gate)",
           "full_cutover_gate=\(.inventory.full_cutover_gate)",
+          "fleet_residual_gate=\(.inventory.fleet_residual_gate)",
+          "target_blocking_count=\(.inventory.target_blocking_count)",
           "pilot_blocking_count=\(.inventory.pilot_blocking_count)",
+          "cohort_size=\(.inventory.cohort_size)",
+          "cohort_blocking_count=\(.inventory.cohort_blocking_count)",
           "full_cutover_blocking_count=\(.inventory.blocking_count)",
+          "fleet_legacy_count=\(.inventory.fleet_legacy_count)",
           "review_command=\(.review_command | @sh)",
           "info_rc=\(.review_surface.info.rc)",
           "ready_rc=\(.review_surface.ready.rc)",
