@@ -4,14 +4,14 @@
 # Expert: Backup & DR Specialist | Issue: moltinger-hdn
 #
 # Installed by: .github/workflows/deploy.yml (GitOps)
-# Manual install: sudo cp /opt/moltinger/scripts/cron.d/moltis-backup-verify /etc/cron.d/
+# Manual install: sudo cp /opt/moltinger-active/scripts/cron.d/moltis-backup-verify /etc/cron.d/
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Weekly backup verification (Sunday 03:00 MSK = Sunday 00:00 UTC)
 # Verifies the most recent weekly backup
-0 0 * * 0 root /opt/moltinger/scripts/backup-moltis-enhanced.sh verify "$(ls -t /var/backups/moltis/weekly/*.enc 2>/dev/null | head -1)" >> /var/log/moltis/backup-verify.log 2>&1
+0 0 * * 0 root /opt/moltinger-active/scripts/backup-moltis-enhanced.sh verify "$(ls -t /var/backups/moltis/weekly/*.enc 2>/dev/null | head -1)" >> /var/log/moltis/backup-verify.log 2>&1
 
 # Alert on verification failure (requires notify_email configured in backup.conf)
 # Exit code 1 = verification failed, will trigger cron email if MAILTO is set

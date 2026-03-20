@@ -1,7 +1,8 @@
 name: Deploy Clawdiy
 
 concurrency:
-  group: deploy-clawdiy-${{ github.ref }}
+  # Shared production lock with deploy.yml to avoid cross-workflow collisions on /opt/moltinger.
+  group: prod-remote-ainetic-tech-opt-moltinger
   cancel-in-progress: false
 
 on:

@@ -112,7 +112,7 @@ gitops_verify_file() {
 
 # Check for drift before deployment
 gitops_check_drift() {
-    local deploy_path="${1:-/opt/moltinger}"
+    local deploy_path="${1:-${DEPLOY_PATH:-${MOLTIS_ACTIVE_ROOT:-/opt/moltinger-active}}}"
     local drift_found=false
 
     echo -e "${BLUE}[GitOps] Checking for configuration drift...${NC}"
@@ -197,7 +197,7 @@ gitops_check_workflow_sed() {
 # Create marker file to indicate manual modifications
 gitops_mark_manual() {
     local file_path="$1"
-    local marker_dir="/opt/moltinger"
+    local marker_dir="${DEPLOY_PATH:-${MOLTIS_ACTIVE_ROOT:-/opt/moltinger-active}}"
     local marker_file="$marker_dir/.manual-modifications"
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
@@ -266,5 +266,5 @@ gitops_guard_config() {
 
 # Source this file provides all guard functions
 # Usage in other scripts:
-#   source /opt/moltinger/scripts/gitops-guards.sh
+#   source /opt/moltinger-active/scripts/gitops-guards.sh
 #   gitops_guard_deploy "$0"

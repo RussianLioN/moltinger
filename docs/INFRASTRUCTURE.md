@@ -68,83 +68,6 @@ This document describes the production-ready infrastructure for Moltis deploymen
 | AlertManager | 9093 | Alert handling |
 | cAdvisor | 8080 | Container metrics |
 
-## Clawdiy Same-Host Runtime
-
-Clawdiy is deployed as a second permanent agent on the same server in a separate compose stack.
-
-### Runtime Boundary
-
-| Area | Moltinger | Clawdiy |
-|------|-----------|---------|
-| Public URL | `https://moltis.ainetic.tech` | `https://clawdiy.ainetic.tech` |
-| Local bind | `127.0.0.1:13131` | `127.0.0.1:18789` |
-| Compose file | `docker-compose.prod.yml` | `docker-compose.clawdiy.yml` |
-| Runtime config | `config/moltis.toml` | `config/clawdiy/openclaw.json` |
-| Control-plane registry | `config/fleet/agents-registry.json` + `config/fleet/policy.json` | `config/fleet/agents-registry.json` + `config/fleet/policy.json` |
-| Persistent state | `data/` | `data/clawdiy/state` |
-| Audit evidence | mixed app logs | `data/clawdiy/audit` |
-
-### Shared Networks
-
-- `traefik-net`: public ingress through Traefik
-- `fleet-internal`: private agent-to-agent path
-- `moltinger_monitoring`: Prometheus and cAdvisor visibility for per-agent metrics
-
-### Topology Profiles
-
-| Profile | What changes | What must stay invariant | Machine trust posture |
-|---------|--------------|--------------------------|-----------------------|
-| `same_host` | container placement and local bind remain on one server | `agent_id`, logical address, handoff paths, message envelope | private `fleet-internal` network, bearer service auth, no public machine handoffs |
-| `remote_node` | Clawdiy internal endpoint, health, and metrics move to a private remote endpoint | `agent_id=clawdiy`, `agent://clawdiy`, `/internal/v1/agent-handoffs*`, public web URL | private overlay or equivalent, bearer service auth, public machine handoffs still forbidden |
-
-### Extraction Invariants
-
-- Moving Clawdiy to another node is a placement change, not an identity change.
-- `agent_id`, `logical_address`, correlation headers, required acknowledgements, and handoff envelope schema must remain unchanged.
-- `config/fleet/agents-registry.json` and `config/fleet/policy.json` stay authoritative for discovery and trust policy in both profiles.
-- `clawdiy.ainetic.tech` remains the human-facing URL even if the internal machine endpoint changes to a remote private hostname.
-
-### Same-Host vs Remote-Node Routing
-
-| Concern | Same-host phase | Remote-node target |
-|---------|-----------------|--------------------|
-| Human ingress | Traefik -> `clawdiy.ainetic.tech` on current host | same public hostname through Traefik or equivalent edge |
-| Machine handoff | `fleet-internal` -> `http://clawdiy:18789/internal/v1` | private overlay/private DNS -> `https://clawdiy-int.ainetic.tech/internal/v1` |
-| Discovery source | git-managed registry + policy | same git-managed registry + policy |
-| Auth boundary | bearer token bound to `X-Agent-Id` | same bearer contract, with room for later mTLS hardening |
-| Observability | local health/metrics + Prometheus scrape | same health/metrics paths, new host placement |
-
-### Routing and Trust Rules
-
-- Telegram is never the authoritative inter-agent transport.
-- Public subdomains are for human/operator ingress; machine handoffs stay on private authenticated paths.
-- Remote-node extraction does not authorize public machine-to-machine traffic just because Clawdiy has a public URL.
-- Future permanent roles such as architect, tester, and researcher must reuse the same registry/policy contract instead of inventing new routing rules.
-
-### Operator Commands
-
-```bash
-# Same-host deploy flow
-./scripts/deploy.sh clawdiy deploy
-./scripts/clawdiy-smoke.sh --stage same-host
-./scripts/clawdiy-smoke.sh --stage restart-isolation
-
-# Stop only Clawdiy
-./scripts/deploy.sh clawdiy stop
-
-# Inspect current Clawdiy status
-./scripts/deploy.sh --json clawdiy status | jq .
-
-# Verify the platform is ready for remote-node extraction
-./scripts/clawdiy-smoke.sh --json --stage extraction-readiness | jq .
-```
-
-### Ownership Rules
-
-- Clawdiy must not reuse Moltinger password material, cookies, or state directories.
-- Clawdiy control-plane config remains Git-managed under `config/clawdiy/` and `config/fleet/`.
-- A Clawdiy restart must not change Moltinger container identity or health.
-
 ## Quick Start
 
 ```bash
@@ -164,6 +87,8 @@ make logs LOGS_OPTS="-f"
 make backup
 ```
 
+For LLM/operator step-by-step remote image rollout and recovery guidance, see [LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md](./knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md).
+
 ## Configuration Files
 
 ```
@@ -174,13 +99,36 @@ config/
 │   └── alert-rules.yml      # Alert definitions
 ├── alertmanager/
 │   └── alertmanager.yml     # Alert routing
-├── backup/
-│   └── backup.conf          # Backup settings
-├── systemd/
-│   └── moltis-health-monitor.service
-└── cron/
-    └── moltis-cron          # Cron jobs
+└── backup/
+    └── backup.conf          # Backup settings
+
+systemd/
+├── moltis-health-monitor.service
+├── moltis-telegram-web-user-monitor.service
+└── moltis-telegram-web-user-monitor.timer
+
+scripts/cron.d/
+├── moltis-backup-verify
+├── moltis-telegram-user-monitor
+├── moltis-telegram-web-user-monitor
+└── moltis-telegram-webhook-monitor
 ```
+
+## Runtime Config State
+
+Production runtime uses three different server-side surfaces:
+
+- Branch/worktree-specific deploy root: `${DEPLOY_PATH:-/opt/moltinger}`
+- Active automation root symlink: `/opt/moltinger-active`
+- Git-synced static config under the active root: `/opt/moltinger-active/config`
+- Writable live runtime config: `${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}`
+
+The writable runtime config directory is prepared from the static config tree during deploy and then mounted into the container at `/home/moltis/.config/moltis`.
+This is where Moltis persists runtime-managed files such as:
+
+- `oauth_tokens.json`
+- `provider_keys.json`
+- `credentials.json`
 
 ## Backup Strategy
 
@@ -195,9 +143,12 @@ config/
 ### Backup Contents
 
 - Configuration files (`./config/`)
+- Runtime config state (`${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}`)
 - Data directory (`./data/`)
 - Container state (metadata)
 - Encryption (AES-256-CBC)
+
+Runtime auth/state files must exist only in the runtime config directory, not in the git-synced static `config/` tree.
 
 ### Offsite Backup Options
 
@@ -262,6 +213,9 @@ The health monitor (`health-monitor.sh`) provides:
 4. **Resource monitoring** (disk, memory)
 5. **Notifications** on all actions
 
+Critical rule:
+- Cron jobs, systemd units, and recovery automation must execute from `/opt/moltinger-active`, not from a hardcoded historical worktree like `/opt/moltinger`.
+
 ## Security Considerations
 
 1. **Secrets Management**
@@ -312,7 +266,7 @@ make logs
 docker inspect moltis
 
 # Force recreate
-docker compose -f docker-compose.prod.yml up -d --force-recreate moltis
+docker compose -p moltinger -f docker-compose.prod.yml up -d --force-recreate moltis
 ```
 
 ### Health check failing
@@ -340,8 +294,10 @@ docker logs moltis --tail 100
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `MOLTIS_PASSWORD` | Yes | Authentication password |
-| `GLM_API_KEY` | Yes | GLM API key |
+| `GLM_API_KEY` | Yes | GLM-5 last-fallback API key |
+| `OLLAMA_API_KEY` | No | Ollama Cloud key for `gemini-3-flash-preview:cloud` fallback |
 | `MOLTIS_DOMAIN` | No | Domain for Traefik |
+| `MOLTIS_RUNTIME_CONFIG_DIR` | No | Writable live Moltis config path on server (default `/opt/moltinger-state/config-runtime`) |
 | `SMTP_*` | No | Email notifications |
 | `SLACK_WEBHOOK` | No | Slack notifications |
 | `S3_*` | No | S3 backup storage |

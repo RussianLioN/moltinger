@@ -16,7 +16,7 @@ permissions:
 env:
   SSH_HOST: ainetic.tech
   SSH_USER: root
-  DEPLOY_PATH: /opt/moltinger
+  DEPLOY_PATH: /opt/moltinger-active
   METRICS_DIR: /var/log/gitops-metrics
 
 jobs:
@@ -47,10 +47,10 @@ jobs:
           echo "::group::Collecting GitOps metrics"
 
           # Initialize metrics directory
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
+          ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.METRICS_DIR }}"
 
           # Calculate compliance metrics
-          METRICS_RAW=$(ssh -q -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "bash -se" << 'ENDSSH'
+          METRICS_RAW=$(ssh -T ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'ENDSSH'
             set -e
 
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
@@ -97,38 +97,21 @@ jobs:
             NOW=$(date +%s)
             DEPLOY_AGE_MINUTES=$(( (NOW - LAST_DEPLOY) / 60 ))
 
-            COMPLIANCE_MET=false
+            # Output JSON
+            compliance_met=false
             if [ "$COMPLIANCE_PCT" -ge 95 ]; then
-              COMPLIANCE_MET=true
+              compliance_met=true
             fi
 
-            # Output JSON
-            echo "__METRICS_JSON_START__"
-            cat <<EOF
-          {
-            "timestamp": "$TIMESTAMP",
-            "tracked_files": $TRACKED,
-            "compliant_files": $COMPLIANT,
-            "compliance_percentage": $COMPLIANCE_PCT,
-            "last_deploy_age_minutes": $DEPLOY_AGE_MINUTES,
-            "slos": {
-              "compliance_target": 95,
-              "compliance_met": $COMPLIANCE_MET
-            }
-          }
-          EOF
-            echo "__METRICS_JSON_END__"
+            printf '{"timestamp":"%s","tracked_files":%s,"compliant_files":%s,"compliance_percentage":%s,"last_deploy_age_minutes":%s,"slos":{"compliance_target":95,"compliance_met":%s}}\n' \
+              "$TIMESTAMP" "$TRACKED" "$COMPLIANT" "$COMPLIANCE_PCT" "$DEPLOY_AGE_MINUTES" "$compliance_met"
           ENDSSH
           )
 
-          METRICS=$(printf '%s\n' "$METRICS_RAW" | awk '
-            /__METRICS_JSON_START__/ { capture=1; next }
-            /__METRICS_JSON_END__/ { capture=0; next }
-            capture { print }
-          ')
-
-          if ! echo "$METRICS" | jq -e . >/dev/null 2>&1; then
-            echo "::error::Failed to parse metrics JSON from remote output"
+          # Keep only JSON payload in case remote shell outputs banners/warnings.
+          METRICS=$(printf '%s\n' "$METRICS_RAW" | awk '/^\{/{line=$0} END{print line}')
+          if ! echo "$METRICS" | jq -e . > /dev/null 2>&1; then
+            echo "::error::Failed to parse GitOps metrics JSON"
             echo "$METRICS_RAW"
             exit 1
           fi

@@ -7,23 +7,16 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DEFAULT_PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="${PROJECT_ROOT:-${MOLTIS_ACTIVE_ROOT:-$DEFAULT_PROJECT_ROOT}}"
+COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_ROOT/docker-compose.prod.yml}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-moltinger}"
 LOG_DIR="/var/log/moltis"
 LOG_FILE="$LOG_DIR/health-monitor.log"
 ALERT_WEBHOOK="${ALERT_WEBHOOK:-}"
 MAX_RESTARTS=3
 RESTART_WINDOW=300  # 5 minutes
 HEALTH_CHECK_INTERVAL=60
-MOLTIS_CONTAINER_NAME="${MOLTIS_CONTAINER_NAME:-moltis}"
-MOLTIS_HEALTH_URL="${MOLTIS_HEALTH_URL:-http://localhost:13131/health}"
-MOLTIS_METRICS_URL="${MOLTIS_METRICS_URL:-http://localhost:13131/metrics}"
-MOLTIS_EVIDENCE_ROOT="${MOLTIS_EVIDENCE_ROOT:-$PROJECT_ROOT/data/.deployment-info}"
-CLAWDIY_CONTAINER_NAME="${CLAWDIY_CONTAINER_NAME:-clawdiy}"
-CLAWDIY_RUNTIME_CONFIG="${CLAWDIY_RUNTIME_CONFIG:-$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json}"
-CLAWDIY_ENV_FILE="${CLAWDIY_ENV_FILE:-$PROJECT_ROOT/.env.clawdiy}"
-CLAWDIY_AUDIT_ROOT="${CLAWDIY_AUDIT_ROOT:-$PROJECT_ROOT/data/clawdiy/audit}"
-CLAWDIY_HEALTH_URL="${CLAWDIY_HEALTH_URL:-http://localhost:18789/health}"
-CLAWDIY_METRICS_URL="${CLAWDIY_METRICS_URL:-http://localhost:18789/metrics}"
 
 # Output format flags
 OUTPUT_JSON=false
@@ -69,118 +62,6 @@ log_error() { log "ERROR" "${RED}$*${NC}"; }
 # Get ISO8601 timestamp
 get_timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-resolve_clawdiy_endpoints() {
-    if [[ -f "$CLAWDIY_RUNTIME_CONFIG" ]] && jq empty "$CLAWDIY_RUNTIME_CONFIG" >/dev/null 2>&1; then
-        local port
-        port="$(jq -r '.gateway.port // 18789' "$CLAWDIY_RUNTIME_CONFIG")"
-        CLAWDIY_HEALTH_URL="http://localhost:${port}/health"
-        CLAWDIY_METRICS_URL="http://localhost:${port}/metrics"
-    fi
-}
-
-count_files_under() {
-    local root="$1"
-
-    if [[ ! -d "$root" ]]; then
-        echo "0"
-        return
-    fi
-
-    find "$root" -type f | wc -l | tr -d ' '
-}
-
-latest_file_under() {
-    local root="$1"
-
-    if [[ ! -d "$root" ]]; then
-        return 0
-    fi
-
-    find "$root" -type f | sort | tail -1
-}
-
-service_correlation_label() {
-    case "$1" in
-        "$MOLTIS_CONTAINER_NAME") printf '%s' 'agent_id=moltinger' ;;
-        "$CLAWDIY_CONTAINER_NAME") printf '%s' 'agent_id=clawdiy' ;;
-        *) printf '%s' 'agent_id=unknown' ;;
-    esac
-}
-
-service_health_url() {
-    case "$1" in
-        "$MOLTIS_CONTAINER_NAME") printf '%s' "$MOLTIS_HEALTH_URL" ;;
-        "$CLAWDIY_CONTAINER_NAME") printf '%s' "$CLAWDIY_HEALTH_URL" ;;
-        *) printf '%s' '' ;;
-    esac
-}
-
-service_metrics_url() {
-    case "$1" in
-        "$MOLTIS_CONTAINER_NAME") printf '%s' "$MOLTIS_METRICS_URL" ;;
-        "$CLAWDIY_CONTAINER_NAME") printf '%s' "$CLAWDIY_METRICS_URL" ;;
-        *) printf '%s' '' ;;
-    esac
-}
-
-service_evidence_root() {
-    case "$1" in
-        "$MOLTIS_CONTAINER_NAME") printf '%s' "$MOLTIS_EVIDENCE_ROOT" ;;
-        "$CLAWDIY_CONTAINER_NAME") printf '%s' "$CLAWDIY_AUDIT_ROOT" ;;
-        *) printf '%s' '' ;;
-    esac
-}
-
-service_target() {
-    case "$1" in
-        "$MOLTIS_CONTAINER_NAME") printf '%s' 'moltis' ;;
-        "$CLAWDIY_CONTAINER_NAME") printf '%s' 'clawdiy' ;;
-        *) return 1 ;;
-    esac
-}
-
-should_monitor_clawdiy() {
-    [[ -f "$CLAWDIY_RUNTIME_CONFIG" || -d "$CLAWDIY_AUDIT_ROOT" ]] || docker inspect "$CLAWDIY_CONTAINER_NAME" >/dev/null 2>&1
-}
-
-compose_target_up() {
-    local target="$1"
-    local service="$2"
-
-    case "$target" in
-        moltis)
-            docker compose -f "$PROJECT_ROOT/docker-compose.prod.yml" up -d --force-recreate "$service"
-            ;;
-        clawdiy)
-            local -a args
-            args=(-f "$PROJECT_ROOT/docker-compose.clawdiy.yml")
-            if [[ -f "$CLAWDIY_ENV_FILE" ]]; then
-                args=(--env-file "$CLAWDIY_ENV_FILE" "${args[@]}")
-            fi
-            CLAWDIY_IMAGE="${CLAWDIY_IMAGE:-ghcr.io/openclaw/openclaw:2026.3.11}" docker compose "${args[@]}" up -d --force-recreate "$service"
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-iso8601_to_epoch() {
-    local timestamp="$1"
-
-    date -u -d "$timestamp" +%s 2>/dev/null || \
-        date -ju -f "%Y-%m-%dT%H:%M:%SZ" "$timestamp" +%s 2>/dev/null || \
-        python3 - "$timestamp" <<'PY'
-from datetime import datetime
-import sys
-
-value = sys.argv[1].strip()
-if value.endswith("Z"):
-    value = value[:-1] + "+00:00"
-print(int(datetime.fromisoformat(value).timestamp()))
-PY
 }
 
 # Alerting function
@@ -550,7 +431,7 @@ check_recovery_timeout() {
 
     # Calculate time since last failure
     local last_epoch current_epoch elapsed
-    last_epoch=$(iso8601_to_epoch "$last_failure" 2>/dev/null || echo "0")
+    last_epoch=$(date -d "$last_failure" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_failure}" +%s 2>/dev/null || echo "0")
     current_epoch=$(date +%s)
     elapsed=$((current_epoch - last_epoch))
 
@@ -781,8 +662,6 @@ restart_container() {
 # Full recovery procedure
 full_recovery() {
     local container="$1"
-    local target
-    target="$(service_target "$container" || true)"
 
     log_error "Initiating full recovery for $container"
     send_alert "Full Recovery" "Starting full recovery for $container"
@@ -795,14 +674,15 @@ full_recovery() {
     log_info "Cleaning up Docker resources"
     docker system prune -f 2>/dev/null || true
 
-    # Recreate container
-    log_info "Recreating container from compose"
-    cd "$PROJECT_ROOT"
-    if [[ -n "$target" ]]; then
-        compose_target_up "$target" "$container"
-    else
-        docker compose up -d --force-recreate "$container"
+    if [[ ! -f "$COMPOSE_FILE" ]]; then
+        log_error "Compose file not found for recovery: $COMPOSE_FILE"
+        send_alert "Recovery Failed" "Compose file missing: $COMPOSE_FILE"
+        return 1
     fi
+
+    # Recreate container from the active deploy root, not from whichever worktree installed the service.
+    log_info "Recreating container from compose file $COMPOSE_FILE (project: $COMPOSE_PROJECT_NAME)"
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d --force-recreate "$container"
 
     # Wait for startup
     sleep 60
@@ -870,7 +750,7 @@ get_container_uptime() {
 
     # Parse ISO timestamp and calculate uptime
     local started_epoch
-    started_epoch=$(iso8601_to_epoch "${started_at%%.*}Z" 2>/dev/null || echo "0")
+    started_epoch=$(date -d "$started_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${started_at%%.*}" +%s 2>/dev/null || echo "0")
 
     if [[ "$started_epoch" == "0" ]]; then
         echo "0"
@@ -885,37 +765,30 @@ output_health_json() {
     declare -a services_json
     declare -a alerts_json
 
-    add_service_status_json "$MOLTIS_CONTAINER_NAME"
-    services_json+=("$SERVICE_ENTRY_JSON")
-    if [[ -n "$SERVICE_ALERT_JSON" ]]; then
-        alerts_json+=("$SERVICE_ALERT_JSON")
-    fi
-    if [[ "$SERVICE_STATUS_SEVERITY" == "unhealthy" ]]; then
+    # Check moltis container (strip newlines for clean JSON)
+    local moltis_health
+    moltis_health=$(docker inspect --format='{{.State.Health.Status}}' moltis 2>/dev/null | tr -d '\n\r' || echo "unknown")
+    local moltis_uptime
+    moltis_uptime=$(get_container_uptime "moltis")
+
+    if [[ "$moltis_health" != "healthy" ]]; then
         overall_status="unhealthy"
-    elif [[ "$SERVICE_STATUS_SEVERITY" == "degraded" && "$overall_status" == "healthy" ]]; then
-        overall_status="degraded"
     fi
 
-    if should_monitor_clawdiy; then
-        add_service_status_json "$CLAWDIY_CONTAINER_NAME"
-        services_json+=("$SERVICE_ENTRY_JSON")
-        if [[ -n "$SERVICE_ALERT_JSON" ]]; then
-            alerts_json+=("$SERVICE_ALERT_JSON")
-        fi
-        if [[ "$SERVICE_STATUS_SEVERITY" == "unhealthy" ]]; then
-            overall_status="unhealthy"
-        elif [[ "$SERVICE_STATUS_SEVERITY" == "degraded" && "$overall_status" == "healthy" ]]; then
-            overall_status="degraded"
-        fi
+    services_json+=("{\"name\":\"moltis\",\"status\":\"$moltis_health\",\"uptime_seconds\":$moltis_uptime,\"health_endpoint\":\"http://localhost:13131/health\"}")
+
+    # Check watchtower container if exists
+    if docker ps --format '{{.Names}}' | grep -q '^watchtower$'; then
+        local watchtower_health="healthy"  # watchtower doesn't have health checks
+        local watchtower_uptime
+        watchtower_uptime=$(get_container_uptime "watchtower")
+        services_json+=("{\"name\":\"watchtower\",\"status\":\"$watchtower_health\",\"uptime_seconds\":$watchtower_uptime}")
     fi
 
     # Build JSON output
     local services_array
     services_array=$(printf '%s\n' "${services_json[@]}" | jq -s '.')
     local alerts_array="[]"
-    if [[ ${#alerts_json[@]} -gt 0 ]]; then
-        alerts_array=$(printf '%s\n' "${alerts_json[@]}" | jq -s '.')
-    fi
 
     jq -n \
         --arg status "$overall_status" \
@@ -930,59 +803,8 @@ output_health_json() {
         }'
 }
 
-add_service_status_json() {
-    local container="$1"
-    local health uptime health_url metrics_url evidence_root correlation_label evidence_count latest_evidence http_ok evidence_ok
-    SERVICE_ENTRY_JSON=""
-    SERVICE_ALERT_JSON=""
-    SERVICE_STATUS_SEVERITY="healthy"
-
-    health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null | tr -d '\n\r' || echo "not_found")
-    uptime=$(get_container_uptime "$container")
-    health_url="$(service_health_url "$container")"
-    metrics_url="$(service_metrics_url "$container")"
-    evidence_root="$(service_evidence_root "$container")"
-    correlation_label="$(service_correlation_label "$container")"
-    evidence_count="$(count_files_under "$evidence_root")"
-    latest_evidence="$(latest_file_under "$evidence_root")"
-    http_ok=false
-    evidence_ok=false
-
-    if [[ -n "$health_url" ]] && check_http_health "$health_url" 5; then
-        http_ok=true
-    fi
-
-    if [[ -d "$evidence_root" && "$evidence_count" -gt 0 ]]; then
-        evidence_ok=true
-    fi
-
-    SERVICE_ENTRY_JSON="$(jq -nc \
-        --arg name "$container" \
-        --arg status "$health" \
-        --argjson uptime "$uptime" \
-        --arg health_endpoint "$health_url" \
-        --arg metrics_endpoint "$metrics_url" \
-        --arg correlation_label "$correlation_label" \
-        --arg evidence_root "$evidence_root" \
-        --arg latest_evidence "$latest_evidence" \
-        --argjson evidence_count "$evidence_count" \
-        --argjson http_ok "$http_ok" \
-        --argjson evidence_ok "$evidence_ok" \
-        '{name: $name, status: $status, uptime_seconds: $uptime, health_endpoint: $health_endpoint, metrics_endpoint: $metrics_endpoint, correlation_label: $correlation_label, evidence_root: $evidence_root, evidence_file_count: $evidence_count, latest_evidence: (if $latest_evidence == "" then null else $latest_evidence end), http_ok: $http_ok, evidence_ok: $evidence_ok}')"
-
-    if [[ "$health" != "healthy" || "$http_ok" != "true" ]]; then
-        SERVICE_STATUS_SEVERITY="unhealthy"
-        SERVICE_ALERT_JSON="{\"service\":\"$container\",\"severity\":\"critical\",\"message\":\"health degradation detected\",\"correlation_label\":\"$correlation_label\"}"
-    elif [[ "$evidence_ok" != "true" ]]; then
-        SERVICE_STATUS_SEVERITY="degraded"
-        SERVICE_ALERT_JSON="{\"service\":\"$container\",\"severity\":\"warning\",\"message\":\"evidence root missing or empty\",\"correlation_label\":\"$correlation_label\"}"
-    fi
-}
-
 # Single health check (for --once mode)
 run_single_check() {
-    resolve_clawdiy_endpoints
-
     if [[ "$OUTPUT_JSON" == "true" ]]; then
         output_health_json
     else
@@ -991,45 +813,22 @@ run_single_check() {
 
         # Check moltis
         local moltis_health
-        moltis_health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$MOLTIS_CONTAINER_NAME" 2>/dev/null || echo "unknown")
+        moltis_health=$(docker inspect --format='{{.State.Health.Status}}' moltis 2>/dev/null || echo "unknown")
         local moltis_uptime
-        moltis_uptime=$(get_container_uptime "$MOLTIS_CONTAINER_NAME")
+        moltis_uptime=$(get_container_uptime "moltis")
 
         echo "Moltis:"
         echo "  Status: $moltis_health"
         echo "  Uptime: ${moltis_uptime}s"
-        echo "  Health: $MOLTIS_HEALTH_URL"
-        echo "  Metrics: $MOLTIS_METRICS_URL"
-        echo "  Correlation: $(service_correlation_label "$MOLTIS_CONTAINER_NAME")"
-        echo "  Evidence root: $MOLTIS_EVIDENCE_ROOT ($(count_files_under "$MOLTIS_EVIDENCE_ROOT") files)"
+        echo "  Health: http://localhost:13131/health"
 
         # HTTP check
-        if check_http_health "$MOLTIS_HEALTH_URL"; then
+        if check_http_health "http://localhost:13131/health"; then
             echo "  HTTP: OK"
         else
             echo "  HTTP: FAILED"
         fi
         echo ""
-
-        if should_monitor_clawdiy; then
-            local clawdiy_health clawdiy_uptime
-            clawdiy_health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || echo "not_found")
-            clawdiy_uptime=$(get_container_uptime "$CLAWDIY_CONTAINER_NAME")
-
-            echo "Clawdiy:"
-            echo "  Status: $clawdiy_health"
-            echo "  Uptime: ${clawdiy_uptime}s"
-            echo "  Health: $CLAWDIY_HEALTH_URL"
-            echo "  Metrics: $CLAWDIY_METRICS_URL"
-            echo "  Correlation: $(service_correlation_label "$CLAWDIY_CONTAINER_NAME")"
-            echo "  Evidence root: $CLAWDIY_AUDIT_ROOT ($(count_files_under "$CLAWDIY_AUDIT_ROOT") files)"
-            if check_http_health "$CLAWDIY_HEALTH_URL"; then
-                echo "  HTTP: OK"
-            else
-                echo "  HTTP: FAILED"
-            fi
-            echo ""
-        fi
 
         # Check watchtower
         if docker ps --format '{{.Names}}' | grep -q '^watchtower$'; then
@@ -1050,8 +849,6 @@ run_single_check() {
 
 # Main monitoring loop
 main() {
-    resolve_clawdiy_endpoints
-
     # Handle --once mode
     if [[ "$RUN_ONCE" == "true" ]]; then
         run_single_check
@@ -1063,17 +860,16 @@ main() {
     log_info "Max restarts: ${MAX_RESTARTS} per ${RESTART_WINDOW}s window"
 
     local consecutive_failures=0
-    local clawdiy_failures=0
 
     while true; do
         # Check container health
-        if ! check_container_health "$MOLTIS_CONTAINER_NAME"; then
+        if ! check_container_health "moltis"; then
             consecutive_failures=$((consecutive_failures + 1))
             log_warn "Moltis unhealthy (failure $consecutive_failures)"
 
             if [[ $consecutive_failures -ge 3 ]]; then
-                if ! restart_container "$MOLTIS_CONTAINER_NAME"; then
-                    if ! full_recovery "$MOLTIS_CONTAINER_NAME"; then
+                if ! restart_container "moltis"; then
+                    if ! full_recovery "moltis"; then
                         log_error "All recovery attempts failed"
                     fi
                 fi
@@ -1087,33 +883,8 @@ main() {
         fi
 
         # Check HTTP endpoint
-        if ! check_http_health "$MOLTIS_HEALTH_URL"; then
+        if ! check_http_health "http://localhost:13131/health"; then
             log_warn "HTTP health check failed"
-        fi
-
-        if should_monitor_clawdiy; then
-            if ! check_container_health "$CLAWDIY_CONTAINER_NAME"; then
-                clawdiy_failures=$((clawdiy_failures + 1))
-                log_warn "Clawdiy unhealthy (failure $clawdiy_failures)"
-
-                if [[ $clawdiy_failures -ge 3 ]]; then
-                    if ! restart_container "$CLAWDIY_CONTAINER_NAME"; then
-                        if ! full_recovery "$CLAWDIY_CONTAINER_NAME"; then
-                            log_error "All recovery attempts failed for Clawdiy"
-                        fi
-                    fi
-                    clawdiy_failures=0
-                fi
-            else
-                if [[ $clawdiy_failures -gt 0 ]]; then
-                    log_info "Clawdiy recovered"
-                fi
-                clawdiy_failures=0
-            fi
-
-            if ! check_http_health "$CLAWDIY_HEALTH_URL"; then
-                log_warn "Clawdiy HTTP health check failed"
-            fi
         fi
 
         # Check system resources
@@ -1152,8 +923,7 @@ Contract: specs/001-docker-deploy-improvements/contracts/scripts.md
 EOF
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # Parse arguments
+parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             --json)
@@ -1184,18 +954,18 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 ;;
         esac
     done
+}
 
-    # Apply color settings
+# Signal handlers
+cleanup() {
+    log_info "Health monitor shutting down"
+    exit 0
+}
+
+# Run main only when executed directly, not when sourced by tests.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    parse_args "$@"
     disable_colors
-
-    # Signal handlers
-    cleanup() {
-        log_info "Health monitor shutting down"
-        exit 0
-    }
-
     trap cleanup SIGTERM SIGINT
-
-    # Run main
     main "$@"
 fi

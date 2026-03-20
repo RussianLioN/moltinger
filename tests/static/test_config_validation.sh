@@ -308,6 +308,15 @@ PY
         test_fail "UAT gate must derive the Moltis version from git and deploy only through the backup-safe deploy.sh path"
     fi
 
+    test_start "static_production_workflows_share_remote_lock_group"
+    if rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$DEPLOY_WORKFLOW" && \
+       rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$CLAWDIY_WORKFLOW" && \
+       rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$UAT_GATE_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Production-mutating workflows must share one remote lock group to prevent parallel deploy collisions"
+    fi
+
     test_start "static_deploy_compliance_checks_prod_compose_hash"
     if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass

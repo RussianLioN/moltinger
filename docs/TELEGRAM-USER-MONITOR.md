@@ -16,7 +16,7 @@
 ```bash
 TELEGRAM_API_ID=...
 TELEGRAM_API_HASH=...
-TELEGRAM_SESSION=/opt/moltinger/data/.telegram-user
+TELEGRAM_SESSION=/opt/moltinger-active/data/.telegram-user
 TELEGRAM_MONITOR_TARGET=@moltinger_bot
 TELEGRAM_MONITOR_MESSAGE=/status
 ```

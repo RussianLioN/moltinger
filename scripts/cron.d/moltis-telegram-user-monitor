@@ -3,20 +3,20 @@
 # Runs user-level Telegram UAT probe (MTProto) and validates bot reply quality.
 #
 # Prerequisites on server:
-# - TELEGRAM_API_ID and TELEGRAM_API_HASH in /opt/moltinger/.env
+# - TELEGRAM_API_ID and TELEGRAM_API_HASH in /opt/moltinger-active/.env
 # - Telethon installed for python3
-# - Session initialized once: /opt/moltinger/scripts/telegram-user-send.py ...
+# - Session initialized once: /opt/moltinger-active/scripts/telegram-user-send.py ...
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-MOLTIS_ENV_FILE=/opt/moltinger/.env
+MOLTIS_ENV_FILE=/opt/moltinger-active/.env
 TELEGRAM_MONITOR_TARGET=@moltinger_bot
 TELEGRAM_MONITOR_MESSAGE=/status
 TELEGRAM_MONITOR_TIMEOUT_SECONDS=45
 TELEGRAM_MONITOR_POLL_INTERVAL=2
 TELEGRAM_MONITOR_MIN_REPLY_LEN=2
-TELEGRAM_SESSION=/opt/moltinger/data/.telegram-user
+TELEGRAM_SESSION=/opt/moltinger-active/data/.telegram-user
 
 # Every 10 minutes run user-level monitor and append JSON report.
-*/10 * * * * root mkdir -p /var/log/moltis && /opt/moltinger/scripts/telegram-user-monitor.sh >> /var/log/moltis/telegram-user-monitor.log 2>&1
+*/10 * * * * root mkdir -p /var/log/moltis && /opt/moltinger-active/scripts/telegram-user-monitor.sh >> /var/log/moltis/telegram-user-monitor.log 2>&1

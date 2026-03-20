@@ -57,7 +57,7 @@ services:
     # See SECURITY NOTICE above for details
     privileged: true
     networks:
-      - traefik-net
+      - ainetic_net
 
     ports:
       - "13131:13131"  # HTTP/WebSocket gateway
@@ -101,7 +101,6 @@ services:
     # Traefik labels for reverse proxy (Phase 4)
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-net"
       - "traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)"
       - "traefik.http.routers.moltis.entrypoints=websecure"
       - "traefik.http.routers.moltis.tls.certresolver=letsencrypt"
@@ -111,7 +110,7 @@ services:
 
   # Watchtower - Automatic container updates
   watchtower:
-    image: containrrr/watchtower:1.7.1
+    image: containrrr/watchtower:v1.7.1
     container_name: watchtower
     restart: unless-stopped
 
@@ -147,5 +146,5 @@ secrets:
 # ============================================================================
 # Connect to existing Traefik network (CRITICAL for routing)
 networks:
-  traefik-net:
+  ainetic_net:
     external: true

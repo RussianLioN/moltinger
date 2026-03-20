@@ -166,12 +166,14 @@ timezone = "Europe/Moscow"
 
 [providers]
 offered = [
-    "openai",  # GLM-5 via Z.ai Coding Plan
+    "openai-codex",  # Primary: ChatGPT subscription OAuth
+    "ollama",        # Fallback 1: Ollama cloud Gemini
+    "openai",        # Fallback 2: GLM-5 via Z.ai Coding Plan
 ] # Providers shown in onboarding/picker UI ([] = show all)
 # All available providers:
 #   "anthropic", "openai", "gemini", "groq", "xai", "deepseek",
 #   "mistral", "openrouter", "cerebras", "minimax", "moonshot",
-#   "venice", "ollama", "local-llm", "github-copilot",
+#   "venice", "ollama", "local-llm", "openai-codex", "github-copilot",
 #   "kimi-code"
 
 # ── Anthropic (Claude) ────────────────────────────────────────
@@ -181,6 +183,13 @@ api_key = "${ANTHROPIC_API_KEY}"    # Or set ANTHROPIC_API_KEY env var
 model = "claude-sonnet-4-20250514"  # Default model
 base_url = "https://api.anthropic.com"
 alias = "anthropic"
+
+# ── OpenAI Codex via ChatGPT OAuth ────────────────────────────
+[providers.openai-codex]
+enabled = true
+model = "gpt-5.4"
+alias = "openai-codex"
+models = ["gpt-5.4"]
 
 # ── OpenAI / GLM-5 via Z.ai Coding Plan ───────────────────────────────────────
 # Using Z.ai Coding Plan (Pro subscription) through OpenAI-compatible API
@@ -192,7 +201,7 @@ api_key = "${GLM_API_KEY}"                          # Use GLM_API_KEY from .env
 model = "glm-5"                                     # Default model
 base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
 alias = "zai"
-models = ["glm-5", "glm-4.7", "glm-4.5-air"]        # Explicit model whitelist
+models = ["glm-5"]                                  # Keep GLM-5 as third step in chain
 
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
@@ -200,10 +209,10 @@ models = ["glm-5", "glm-4.7", "glm-4.5-air"]        # Explicit model whitelist
 enabled = false
 
 # ── Google Gemini ─────────────────────────────────────────────
-# Fallback provider for Z.ai rate limits
-# Requires GOOGLE_API_KEY in environment (get from https://aistudio.google.com/)
+# Direct Gemini provider stays disabled to keep one explicit fallback path
+# through Ollama in the canonical chain.
 [providers.gemini]
-enabled = true                          # Enabled as fallback for Z.ai
+enabled = false                         # Keep disabled unless direct Gemini is explicitly required
 api_key = "${GOOGLE_API_KEY}"           # Or set GOOGLE_API_KEY env var
 model = "gemini-2.0-flash-exp"          # Experimental flash model (free tier available)
 alias = "gemini"
@@ -255,13 +264,17 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.4", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.4", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# Z.ai models + Ollama fallback + Gemini fallback for rate limit resilience
+# Preferred chain: GPT-5.4 (OAuth) -> Ollama Gemini 3 Flash Preview -> GLM-5
 allowed_models = [
-    "zai::glm-5", "zai::glm-4.7", "zai::glm-4.5-air",  # Primary: Z.ai GLM
-    "ollama::gemini-3-flash-preview:cloud",             # Fallback 1: Ollama
-    "gemini::gemini-2.0-flash-exp"                      # Fallback 2: Google Gemini
+    "openai-codex::gpt-5.4",                 # Primary
+    "ollama::gemini-3-flash-preview:cloud",  # Fallback 1
+    "zai::glm-5"                             # Fallback 2
 ]
-priority_models = ["zai::glm-5"]  # Prefer Z.ai, then fallback chain
+priority_models = [
+    "openai-codex::gpt-5.4",
+    "ollama::gemini-3-flash-preview:cloud",
+    "zai::glm-5",
+]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TOOLS
@@ -577,12 +590,12 @@ timezone = "local"                # Timezone: "local" or IANA name like "Europe/
 
 [failover]
 enabled = true                    # Enable automatic failover
-# Fallback chain: Z.ai GLM-5 → Ollama Gemini → Google Gemini
+# Fallback chain: GPT-5.4 → Ollama Gemini → GLM-5
 fallback_models = [
     "ollama::gemini-3-flash-preview:cloud",  # Primary fallback: Ollama sidecar
-    "gemini::gemini-2.0-flash-exp"           # Secondary fallback: Google Gemini direct
+    "zai::glm-5"                             # Secondary fallback: GLM-5 via Z.ai
 ]
-# Chain: glm-5 → ollama-gemini → google-gemini
+# Chain: gpt-5.4 → ollama-gemini → glm-5
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VOICE

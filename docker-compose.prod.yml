@@ -47,7 +47,8 @@ services:
 
     volumes:
       - ./:/server:ro
-      - ./config:/home/moltis/.config/moltis:ro
+      # Writable live config/state directory. Prepared from ./config by deploy workflow.
+      - ${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}:/home/moltis/.config/moltis
       - moltis-data:/home/moltis/.moltis
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
