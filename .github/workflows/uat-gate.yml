@@ -245,6 +245,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight, approval]
     if: success()
+    concurrency:
+      # Keep lock scope narrow (mutating stage only) so preflight/approval can run in parallel.
+      group: prod-remote-ainetic-tech-opt-moltinger
+      cancel-in-progress: false
     environment:
       name: production
       url: https://moltis.ainetic.tech

@@ -73,10 +73,160 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
 CLAWDIY_HEALTH_CHECK_TIMEOUT="${CLAWDIY_HEALTH_CHECK_TIMEOUT:-420}"
+DEPLOY_MUTEX_ENABLED="${DEPLOY_MUTEX_ENABLED:-true}"
+DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"
+DEPLOY_MUTEX_WAIT_SECONDS="${DEPLOY_MUTEX_WAIT_SECONDS:-3600}"
+DEPLOY_MUTEX_TTL_SECONDS="${DEPLOY_MUTEX_TTL_SECONDS:-5400}"
+DEPLOY_MUTEX_POLL_SECONDS="${DEPLOY_MUTEX_POLL_SECONDS:-5}"
+DEPLOY_MUTEX_OWNER="${DEPLOY_MUTEX_OWNER:-}"
+
+DEPLOY_LOCK_MODE=""
+DEPLOY_LOCK_FD=""
+DEPLOY_LOCK_DIR=""
+DEPLOY_LOCK_META_PATH=""
+DEPLOY_LOCK_OWNER=""
 
 # ========================================================================
 # UTILITY FUNCTIONS
 # ========================================================================
+
+lock_command_mutates_state() {
+    local command="$1"
+    case "$command" in
+        deploy|rollback|start|stop|restart)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+lock_meta_value() {
+    local file="$1"
+    local key="$2"
+
+    if [[ ! -r "$file" ]]; then
+        return 1
+    fi
+
+    awk -F= -v key="$key" '$1 == key { sub($1 FS, ""); print; exit }' "$file"
+}
+
+write_deploy_lock_metadata() {
+    local metadata_path="$1"
+    local lock_command="$2"
+    local now_epoch="$3"
+    local lock_host
+
+    lock_host="$(hostname 2>/dev/null || uname -n)"
+    cat > "$metadata_path" <<EOF
+owner=$DEPLOY_LOCK_OWNER
+target=$TARGET
+command=$lock_command
+host=$lock_host
+pid=$$
+created_at=$now_epoch
+expires_at=$((now_epoch + DEPLOY_MUTEX_TTL_SECONDS))
+EOF
+}
+
+acquire_deploy_mutex() {
+    local lock_command="$1"
+    local lock_parent start_epoch now_epoch waited_seconds expires_at current_owner
+
+    if [[ "$DEPLOY_MUTEX_ENABLED" != "true" ]]; then
+        return 0
+    fi
+
+    lock_parent="$(dirname "$DEPLOY_MUTEX_PATH")"
+    mkdir -p "$lock_parent"
+
+    DEPLOY_LOCK_OWNER="${DEPLOY_MUTEX_OWNER:-gha:${GITHUB_REPOSITORY:-local}:${GITHUB_RUN_ID:-manual}:${GITHUB_RUN_ATTEMPT:-0}:${TARGET}:${lock_command}:pid-$$}"
+
+    if command -v flock >/dev/null 2>&1; then
+        exec {DEPLOY_LOCK_FD}>"$DEPLOY_MUTEX_PATH"
+        if ! flock -w "$DEPLOY_MUTEX_WAIT_SECONDS" "$DEPLOY_LOCK_FD"; then
+            log_error "Timed out waiting for deploy mutex: $DEPLOY_MUTEX_PATH"
+            exit 1
+        fi
+
+        DEPLOY_LOCK_MODE="flock"
+        DEPLOY_LOCK_META_PATH="${DEPLOY_MUTEX_PATH}.meta"
+        now_epoch="$(date +%s)"
+        write_deploy_lock_metadata "$DEPLOY_LOCK_META_PATH" "$lock_command" "$now_epoch"
+        log_info "Acquired deploy mutex ($DEPLOY_LOCK_MODE): $DEPLOY_MUTEX_PATH owner=$DEPLOY_LOCK_OWNER"
+        return 0
+    fi
+
+    DEPLOY_LOCK_MODE="mkdir"
+    DEPLOY_LOCK_DIR="${DEPLOY_MUTEX_PATH}.d"
+    DEPLOY_LOCK_META_PATH="${DEPLOY_LOCK_DIR}/meta"
+
+    start_epoch="$(date +%s)"
+    while true; do
+        now_epoch="$(date +%s)"
+
+        if mkdir "$DEPLOY_LOCK_DIR" 2>/dev/null; then
+            write_deploy_lock_metadata "$DEPLOY_LOCK_META_PATH" "$lock_command" "$now_epoch"
+            log_info "Acquired deploy mutex ($DEPLOY_LOCK_MODE): $DEPLOY_LOCK_DIR owner=$DEPLOY_LOCK_OWNER"
+            return 0
+        fi
+
+        expires_at="$(lock_meta_value "$DEPLOY_LOCK_META_PATH" "expires_at" || true)"
+        if [[ "$expires_at" =~ ^[0-9]+$ ]] && (( now_epoch >= expires_at )); then
+            current_owner="$(lock_meta_value "$DEPLOY_LOCK_META_PATH" "owner" || true)"
+            log_warn "Removing stale deploy mutex owned by ${current_owner:-unknown}: $DEPLOY_LOCK_DIR"
+            rm -rf "$DEPLOY_LOCK_DIR" 2>/dev/null || true
+            continue
+        fi
+
+        waited_seconds=$((now_epoch - start_epoch))
+        if (( waited_seconds >= DEPLOY_MUTEX_WAIT_SECONDS )); then
+            current_owner="$(lock_meta_value "$DEPLOY_LOCK_META_PATH" "owner" || true)"
+            log_error "Timed out waiting for deploy mutex owner=${current_owner:-unknown}: $DEPLOY_LOCK_DIR"
+            exit 1
+        fi
+
+        sleep "$DEPLOY_MUTEX_POLL_SECONDS"
+    done
+}
+
+release_deploy_mutex() {
+    local current_owner
+
+    if [[ "$DEPLOY_MUTEX_ENABLED" != "true" ]]; then
+        return 0
+    fi
+
+    case "$DEPLOY_LOCK_MODE" in
+        flock)
+            rm -f "$DEPLOY_LOCK_META_PATH" 2>/dev/null || true
+            if [[ -n "$DEPLOY_LOCK_FD" ]]; then
+                flock -u "$DEPLOY_LOCK_FD" 2>/dev/null || true
+                eval "exec ${DEPLOY_LOCK_FD}>&-"
+                DEPLOY_LOCK_FD=""
+            fi
+            ;;
+        mkdir)
+            if [[ -n "$DEPLOY_LOCK_DIR" ]]; then
+                current_owner="$(lock_meta_value "$DEPLOY_LOCK_META_PATH" "owner" || true)"
+                if [[ -z "$current_owner" || "$current_owner" == "$DEPLOY_LOCK_OWNER" ]]; then
+                    rm -rf "$DEPLOY_LOCK_DIR" 2>/dev/null || true
+                else
+                    log_warn "Skipping deploy mutex release; ownership changed to ${current_owner}"
+                fi
+            fi
+            ;;
+        *)
+            ;;
+    esac
+
+    DEPLOY_LOCK_MODE=""
+    DEPLOY_LOCK_DIR=""
+    DEPLOY_LOCK_META_PATH=""
+    DEPLOY_LOCK_OWNER=""
+}
 
 disable_colors() {
     if [[ "$NO_COLOR" == "true" || "$OUTPUT_JSON" == "true" || ! -t 1 ]]; then
@@ -1249,6 +1399,11 @@ main() {
 
     local command="${1:-help}"
     shift || true
+
+    if lock_command_mutates_state "$command"; then
+        acquire_deploy_mutex "$command"
+        trap 'release_deploy_mutex' EXIT
+    fi
 
     case "$command" in
         deploy)

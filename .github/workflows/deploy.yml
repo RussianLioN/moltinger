@@ -3,10 +3,10 @@
 
 name: Deploy Moltis
 
-# Prevent parallel deployments - queue them instead
-# Expert: CI/CD Architect | Issue: moltinger-9q3
+# Prevent parallel remote mutations on production target.
+# This lock must stay shared with deploy-clawdiy.yml and uat-gate.yml deploy job.
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: prod-remote-ainetic-tech-opt-moltinger
   cancel-in-progress: false
 
 on:
