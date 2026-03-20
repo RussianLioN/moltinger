@@ -513,6 +513,14 @@ PY
         test_fail "Moltis update proposal workflow must fall back to a compare URL when GitHub token cannot create PRs"
     fi
 
+    test_start "static_moltis_update_proposal_email_action_uses_node24_compatible_major"
+    if rg -Fq 'uses: dawidd6/action-send-mail@v16' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       ! rg -Fq 'uses: dawidd6/action-send-mail@v3' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Moltis update proposal workflow must use a Node24-compatible action-send-mail major to avoid Node20 deprecation failures"
+    fi
+
     test_start "static_ci_runtime_installs_sqlite3_for_codex_session_path_repair_suite"
     if rg -q 'Install OS dependencies' "$TEST_WORKFLOW" && \
        rg -q 'apt-get install -y -qq jq sqlite3' "$TEST_WORKFLOW" && \
