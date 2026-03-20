@@ -39,7 +39,11 @@ done
 
 if [[ -n "${db_path}" ]]; then
   mkdir -p "$(dirname "${db_path}")"
-  : > "${db_path}"
+  if [[ -d "${db_path}" ]]; then
+    : > "${db_path}/.fake-db-touch"
+  else
+    : > "${db_path}"
+  fi
 fi
 
 printf 'DB=%s\n' "${db_path}"
@@ -76,6 +80,16 @@ auto-start-daemon: false
 EOF
     cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
 {"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+}
+
+seed_pilot_ready_dolt_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/beads.db"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
 EOF
 }
 
@@ -276,6 +290,52 @@ test_plain_bd_allows_explicit_troubleshooting_flags() {
     test_pass
 }
 
+test_plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation() {
+    test_start "plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-pilot-ready"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/pilot-ready" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_plain_bd "${worktree_path}" "${fake_bin}" backend show)"
+
+    assert_contains "${output}" "DB=${expected_db}" "Pilot-ready Dolt foundation should still resolve the local Beads runtime"
+    assert_contains "${output}" "ARGS=backend show" "Pilot-ready backend show should pass through as a read-only runtime probe"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation() {
+    test_start "plain_bd_allows_doctor_for_pilot_ready_dolt_foundation"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-pilot-ready-doctor"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/pilot-ready-doctor" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_plain_bd "${worktree_path}" "${fake_bin}" doctor --json)"
+
+    assert_contains "${output}" "DB=${expected_db}" "Pilot-ready Dolt foundation should allow doctor against the local runtime"
+    assert_contains "${output}" "ARGS=doctor --json" "Pilot-ready doctor should pass through as a read-only runtime probe"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_materializes_local_db_and_removes_redirect() {
     test_start "localize_materializes_local_db_and_removes_redirect"
 
@@ -374,6 +434,8 @@ run_all_tests() {
     test_plain_bd_blocks_legacy_redirect
     test_plain_bd_blocks_root_fallback_when_local_foundation_is_missing
     test_plain_bd_allows_explicit_troubleshooting_flags
+    test_plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation
+    test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref
     generate_report
