@@ -167,9 +167,11 @@ run_component_telegram_remote_uat_contract_tests() {
     fi
 
     test_start "component_telegram_remote_uat_deploy_guard_keeps_scheduler_disabled"
-    if grep -q "Disable Telegram Web auto-monitor scheduler" "$PROJECT_ROOT/.github/workflows/deploy.yml" \
-        && grep -q "systemctl disable --now moltis-telegram-web-user-monitor.timer" "$PROJECT_ROOT/.github/workflows/deploy.yml" \
-        && ! grep -q "systemctl enable --now moltis-telegram-web-user-monitor.timer" "$PROJECT_ROOT/.github/workflows/deploy.yml"
+    if grep -q "apply-moltis-host-automation.sh" "$PROJECT_ROOT/.github/workflows/deploy.yml" \
+        && grep -Fq 'DISABLED_FALLBACK_SCHEDULER="moltis-telegram-web-user-monitor"' "$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh" \
+        && grep -Fq 'systemctl disable --now "${DISABLED_FALLBACK_SCHEDULER}.timer"' "$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh" \
+        && ! grep -Fq '${{ env.DEPLOY_ACTIVE_PATH }}/scripts/cron.d/moltis-telegram-web-user-monitor' "$PROJECT_ROOT/.github/workflows/deploy.yml" \
+        && ! grep -q "systemctl enable --now .*telegram-web-user-monitor.timer" "$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
     then
         test_pass
     else

@@ -647,6 +647,83 @@
       ],
       "gitops": true
     },
+    "apply-moltis-host-automation.sh": {
+      "version": "1.0.0",
+      "description": "Apply Moltis post-sync host automation from the active deploy root without mutating the git-synced tree",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cp",
+        "rm"
+      ],
+      "provides": [
+        "apply-moltis-host-automation"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "render-moltis-env.sh": {
+      "version": "1.0.0",
+      "description": "Render the tracked Moltis runtime env file from CI-provided secrets",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cat",
+        "mkdir"
+      ],
+      "provides": [
+        "render-moltis-env"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "ssh-run-tracked-moltis-deploy.sh": {
+      "version": "1.0.0",
+      "description": "Safely invoke the tracked Moltis deploy control-plane script over SSH without inline remote shell composition",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "ssh"
+      ],
+      "provides": [
+        "ssh-run-tracked-moltis-deploy"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "run-tracked-moltis-deploy.sh": {
+      "version": "1.0.0",
+      "description": "Run the tracked Moltis deploy control plane: runtime prep, validation, deploy, audit markers, and checkout alignment",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "git",
+        "jq"
+      ],
+      "provides": [
+        "run-tracked-moltis-deploy"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "update-active-deploy-root.sh": {
+      "version": "1.0.0",
+      "description": "Shared active-root symlink update entrypoint with legacy migration and target validation",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "ln",
+        "mv",
+        "readlink"
+      ],
+      "provides": [
+        "update-active-deploy-root"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "git-session-guard.sh": {
       "version": "1.0.0",
       "description": "Guard against accidental branch/worktree drift across parallel sessions",
@@ -688,6 +765,22 @@
       ],
       "provides": [
         "gitops-repair-managed-checkout"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "gitops-sync-managed-surface.sh": {
+      "version": "1.0.0",
+      "description": "Sync the GitOps-managed deploy surface from the current checkout to the remote host",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "scp",
+        "ssh"
+      ],
+      "provides": [
+        "gitops-sync-managed-surface"
       ],
       "gitops": true,
       "ci": true
@@ -768,6 +861,21 @@
         "preflight-ci",
         "preflight-targeted"
       ],
+      "ci": true
+    },
+    "prepare-moltis-runtime-config.sh": {
+      "version": "1.0.0",
+      "description": "Prepare writable Moltis runtime config outside the git-synced tree while preserving runtime-managed auth state",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cp",
+        "mkdir"
+      ],
+      "provides": [
+        "prepare-moltis-runtime-config"
+      ],
+      "gitops": true,
       "ci": true
     },
     "query-lessons.sh": {

@@ -27,6 +27,10 @@ MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 TELEGRAM_WEBHOOK_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/telegram-webhook-monitor.sh"
 TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webhook-monitor"
 TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
+HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
+MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
+TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
+SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -197,28 +201,92 @@ PY
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
-    if rg -q 'data/\.deployed-sha' "$DEPLOY_WORKFLOW" && \
-       rg -q 'data/\.deployment-info' "$DEPLOY_WORKFLOW"; then
+    if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'data/\.deployed-sha' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'data/\.deployment-info' "$TRACKED_DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Deploy workflow should write audit markers under data/"
+        test_fail "Deploy workflow should delegate audit markers to the tracked deploy script and keep them under data/"
     fi
 
     test_start "static_deploy_audit_markers_not_written_to_repo_root"
-    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$DEPLOY_WORKFLOW" >/dev/null 2>&1; then
-        test_fail "Deploy workflow still writes audit markers to repo root"
+    if rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$DEPLOY_WORKFLOW" >/dev/null 2>&1 || \
+       rg -n '> \\.deployed-sha|cat > \\.deployment-info|cat \\.deployed-sha' "$TRACKED_DEPLOY_SCRIPT" >/dev/null 2>&1; then
+        test_fail "Deploy control-plane still writes audit markers to repo root"
     else
         test_pass
     fi
 
     test_start "static_deploy_server_git_checkout_aligned_after_success"
-    if rg -Fq 'git fetch --depth=1 origin "${{ github.ref_name }}"' "$DEPLOY_WORKFLOW" && \
-       rg -Fq 'git reset --hard "${{ github.sha }}"' "$DEPLOY_WORKFLOW" && \
-       rg -q 'Align server git checkout before sync' "$DEPLOY_WORKFLOW" && \
+    if rg -q 'Align server git checkout before sync' "$DEPLOY_WORKFLOW" && \
        rg -q 'git clean -fd' "$DEPLOY_WORKFLOW"; then
-        test_pass
+        if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+           rg -q 'git fetch --depth=1 origin "\$GIT_REF" >&2' "$TRACKED_DEPLOY_SCRIPT" && \
+           rg -q 'git reset --hard "\$GIT_SHA" >&2' "$TRACKED_DEPLOY_SCRIPT"; then
+            test_pass
+        else
+            test_fail "Deploy control-plane should align the server checkout after success inside the shared tracked deploy script"
+        fi
     else
         test_fail "Deploy workflow should align and clean the server git checkout before sync so failed rollouts do not self-create drift"
+    fi
+
+    test_start "static_deploy_workflows_use_shared_moltis_env_renderer"
+    if rg -q 'render-moltis-env\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'render-moltis-env\.sh' "$UAT_GATE_WORKFLOW" && \
+       ! rg -q 'cat > /tmp/moltis\.env << EOF' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'cat > /tmp/moltis\.env << EOF' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$MOLTIS_ENV_RENDER_SCRIPT" ]]; then
+        test_pass
+    else
+        test_fail "Deploy and UAT workflows should use the shared Moltis env renderer instead of inline heredocs"
+    fi
+
+    test_start "static_deploy_workflows_use_shared_tracked_deploy_entrypoint"
+    if rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]] && \
+       rg -q 'run-tracked-moltis-deploy\.sh' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       ! rg -q 'Prepare writable Moltis runtime config' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'Deploy tracked version' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_pass
+    else
+        test_fail "Deploy and UAT workflows should delegate tracked Moltis deploy orchestration to the shared script entrypoint"
+    fi
+
+    test_start "static_tracked_deploy_workflows_pass_remote_args_without_inline_shell_strings"
+    if rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]] && \
+       rg -Fq 'emit_remote_script | ssh "$SSH_TARGET" '"'"'bash -seu'"'"'' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       ! rg -Fq 'REMOTE_CMD=' "$DEPLOY_WORKFLOW" && \
+       ! rg -Fq 'REMOTE_CMD=' "$UAT_GATE_WORKFLOW" && \
+       ! rg -Fq 'ssh "$SSH_TARGET" bash -s -- \' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       ! rg -Fq '"$REMOTE_CMD"' "$SSH_TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy and UAT workflows must pass tracked deploy arguments via a constant remote command plus stdin-delivered script instead of inline remote command strings"
+    fi
+
+    test_start "static_tracked_deploy_script_treats_env_file_as_data"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       ! rg -Fq 'source "$env_file"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'read_env_file_value' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy script must not source .env as shell code"
+    fi
+
+    test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
+    if rg -q 'apply-moltis-host-automation\.sh' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'Install cron jobs' "$DEPLOY_WORKFLOW" && \
+       ! rg -q 'Install Moltis health monitor unit from active deploy root' "$DEPLOY_WORKFLOW" && \
+       ! grep -Fq '${{ env.DEPLOY_ACTIVE_PATH }}/scripts/cron.d/moltis-telegram-web-user-monitor' "$DEPLOY_WORKFLOW" && \
+       [[ -f "$HOST_AUTOMATION_SCRIPT" ]]; then
+        test_pass
+    else
+        test_fail "Deploy workflow should delegate host automation to the shared script entrypoint and avoid mutating tracked files under active root"
     fi
 
     test_start "static_deploy_pending_sync_is_not_treated_as_hard_drift"
@@ -339,12 +407,13 @@ PY
     test_start "static_uat_gate_uses_tracked_git_version_and_backup_safe_deploy"
     if ! rg -q 'target_version' "$UAT_GATE_WORKFLOW" && \
        rg -q 'scripts/moltis-version\.sh version' "$UAT_GATE_WORKFLOW" && \
-       rg -q 'deploy\.sh --json moltis deploy' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'deploy\.sh --json moltis deploy' "$TRACKED_DEPLOY_SCRIPT" && \
        ! rg -q 'docker pull ghcr\.io/moltis-org/moltis:\$VERSION' "$UAT_GATE_WORKFLOW" && \
        ! rg -q 'MOLTIS_VERSION="\$VERSION"' "$UAT_GATE_WORKFLOW"; then
         test_pass
     else
-        test_fail "UAT gate must derive the Moltis version from git and deploy only through the backup-safe deploy.sh path"
+        test_fail "UAT gate must derive the Moltis version from git and deploy only through the shared tracked deploy entrypoint backed by deploy.sh"
     fi
 
     test_start "static_production_workflows_share_remote_lock_group"

@@ -60,6 +60,29 @@ root_cause: "Branch-scoped deploy concurrency plus fragile ln -sfn symlink updat
    - отсутствие branch-scoped deploy group в `deploy.yml`,
    - наличие legacy migration guard для active-root symlink.
 
+## Follow-up hardening (moltinger-4hqr, first slice)
+
+После инцидентных фиксов обнаружилось, что корень проблемы глубже, чем отдельные YAML-баги:
+
+- критичная active-root orchestration была продублирована в `.github/workflows/deploy.yml` и `.github/workflows/uat-gate.yml`;
+- drift уже затронул не только тело SSH-блока, но и его входной контракт: в `uat-gate.yml` шаг ссылался на `DEPLOY_ACTIVE_PATH`, не объявляя его в workflow `env`;
+- каждое новое исправление приходилось вносить в два workflow вручную, что создавало повторяемый риск расхождения.
+
+Первый control-plane slice вынес active-root update и safety checks в единый versioned script entrypoint `scripts/update-active-deploy-root.sh`, а workflow оставил тонкими вызовами этого script. Это переводит источник истины из inline YAML в versioned shell contract и снижает вероятность повторного drift.
+
+Следующий slice вынес общий GitOps sync surface в `scripts/gitops-sync-managed-surface.sh`. Это убрало ещё один дублированный YAML-блок, где `deploy.yml` и `uat-gate.yml` уже расходились по реальному поведению: cleanup runtime-managed auth files, `systemd/` sync и remote chmod shell entrypoints.
+
+Финальный slice для `moltinger-4hqr` довёл это до самой tracked Moltis deploy orchestration:
+
+- общий runner-side env rendering вынесен в `scripts/render-moltis-env.sh`;
+- общий remote tracked deploy control plane вынесен в `scripts/run-tracked-moltis-deploy.sh`;
+- `deploy.yml` перестал вручную делать `prepare runtime config`, `pull`, `docker compose up`, `wait for health`, post-failure rollback verification, запись audit markers и post-success checkout alignment;
+- `uat-gate.yml` перестал держать свою отдельную версию `validate + deploy + record + align`.
+
+После этого критичный deploy path в обоих workflow сводится к thin wrapper around versioned scripts, а не к двум независимым YAML-реализациям одной и той же remote orchestration.
+
+Финальный cleanup-дожим после этого убрал и deploy-only host automation из `deploy.yml`: cron/systemd install и disabled scheduler cleanup теперь живут в `scripts/apply-moltis-host-automation.sh`. Это дополнительно устранило self-drift pattern, где workflow удалял tracked fallback cron-файл из active root после sync.
+
 ## Связанные обновления
 
 - [x] Новый файл правила создан (`docs/rules/production-deploy-single-writer.md`)
@@ -72,4 +95,3 @@ root_cause: "Branch-scoped deploy concurrency plus fragile ln -sfn symlink updat
 1. **Single writer для production обязателен** — concurrency group должен быть target-scoped (host/path), а не branch-scoped.
 2. **`ln -sfn` не мигрирует real directory** — перед symlink update нужен explicit guard на legacy path type.
 3. **Workflow policy должна быть тестируемой** — lock policy и migration guards нужно фиксировать unit-тестами, иначе регрессии возвращаются.
-
