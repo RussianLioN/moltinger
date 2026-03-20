@@ -40,13 +40,14 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
         run: |
           set -euo pipefail
 
           TRACKED_VERSION="$(bash ./scripts/moltis-version.sh version)"
           LATEST_RELEASE_TAG="$(gh api repos/moltis-org/moltis/releases/latest --jq '.tag_name')"
           CANDIDATE_VERSION="${LATEST_RELEASE_TAG#v}"
-          FORCE_MODE="${{ github.event_name == 'workflow_dispatch' && inputs.force || 'false' }}"
+          FORCE_MODE="${FORCE_INPUT}"
 
           echo "tracked_version=$TRACKED_VERSION" >> "$GITHUB_OUTPUT"
           echo "latest_release_tag=$LATEST_RELEASE_TAG" >> "$GITHUB_OUTPUT"
@@ -166,7 +167,7 @@ jobs:
           echo "candidate_version=$CANDIDATE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Send approval email (optional)
-        if: ${{ steps.pr.outputs.pr_url != '' && (github.event_name != 'workflow_dispatch' || inputs.send_email == true) && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != '' && secrets.MOLTIS_UPDATE_NOTIFY_EMAIL != '' }}
+        if: ${{ steps.pr.outputs.pr_url != '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.send_email == 'true') && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != '' && secrets.MOLTIS_UPDATE_NOTIFY_EMAIL != '' }}
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
