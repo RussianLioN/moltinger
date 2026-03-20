@@ -1,0 +1,239 @@
+name: Moltis Update Proposal
+
+concurrency:
+  group: moltis-update-proposal
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Create/update a proposal even when upstream is not newer than tracked"
+        required: false
+        default: false
+        type: boolean
+      send_email:
+        description: "Send email notification with approval link (requires SMTP secrets)"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propose-update:
+    name: Propose tracked Moltis upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tracked and upstream versions
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+
+          TRACKED_VERSION="$(bash ./scripts/moltis-version.sh version)"
+          LATEST_RELEASE_TAG="$(gh api repos/moltis-org/moltis/releases/latest --jq '.tag_name')"
+          CANDIDATE_VERSION="${LATEST_RELEASE_TAG#v}"
+          FORCE_MODE="${FORCE_INPUT}"
+
+          {
+            echo "tracked_version=$TRACKED_VERSION"
+            echo "latest_release_tag=$LATEST_RELEASE_TAG"
+            echo "candidate_version=$CANDIDATE_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
+            echo "::error::Latest release tag '$LATEST_RELEASE_TAG' does not normalize to a valid GHCR runtime tag"
+            exit 1
+          fi
+
+          if [[ "$CANDIDATE_VERSION" == "$TRACKED_VERSION" ]]; then
+            {
+              echo "should_update=false"
+              echo "skip_reason=tracked version already equals latest release candidate"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$FORCE_MODE" != "true" ]]; then
+            NEWEST="$(printf '%s\n%s\n' "$TRACKED_VERSION" "$CANDIDATE_VERSION" | sort -V | tail -n1)"
+            if [[ "$NEWEST" != "$CANDIDATE_VERSION" ]]; then
+              {
+                echo "should_update=false"
+                echo "skip_reason=latest release candidate is not newer than tracked version"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          if ! docker manifest inspect "ghcr.io/moltis-org/moltis:$CANDIDATE_VERSION" >/dev/null 2>&1; then
+            echo "::error::Normalized GHCR tag ghcr.io/moltis-org/moltis:$CANDIDATE_VERSION is not pullable"
+            exit 1
+          fi
+
+          echo "should_update=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare proposal branch
+        id: branch
+        if: steps.version.outputs.should_update == 'true'
+        run: |
+          set -euo pipefail
+
+          CANDIDATE_VERSION="${{ steps.version.outputs.candidate_version }}"
+          BRANCH="chore/moltis-update-${CANDIDATE_VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+
+          for compose_file in docker-compose.yml docker-compose.prod.yml; do
+            perl -0pi -e "s#(ghcr\\.io/moltis-org/moltis:\\$\\{MOLTIS_VERSION:-)[^}]+(\\})#\\1${CANDIDATE_VERSION}\\2#g" "$compose_file"
+          done
+
+          bash ./scripts/moltis-version.sh assert-tracked
+          RENDERED_VERSION="$(bash ./scripts/moltis-version.sh version)"
+          if [[ "$RENDERED_VERSION" != "$CANDIDATE_VERSION" ]]; then
+            echo "::error::Version render mismatch after update. expected=$CANDIDATE_VERSION actual=$RENDERED_VERSION"
+            exit 1
+          fi
+
+          if git diff --quiet -- docker-compose.yml docker-compose.prod.yml; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add docker-compose.yml docker-compose.prod.yml
+          git commit -m "chore(moltis): propose update to $CANDIDATE_VERSION"
+          git push --force-with-lease origin "$BRANCH"
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update upgrade PR
+        id: pr
+        if: steps.version.outputs.should_update == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          CANDIDATE_VERSION="${{ steps.version.outputs.candidate_version }}"
+          TRACKED_VERSION="${{ steps.version.outputs.tracked_version }}"
+          BRANCH="${{ steps.branch.outputs.branch }}"
+          TITLE="chore(moltis): propose update to ${CANDIDATE_VERSION}"
+          BODY_FILE="$(mktemp)"
+
+          cat > "$BODY_FILE" <<EOF
+          ## Automated Moltis update proposal
+
+          - Current tracked version: \`${TRACKED_VERSION}\`
+          - Upstream latest release: \`${{ steps.version.outputs.latest_release_tag }}\`
+          - Candidate GHCR runtime tag: \`${CANDIDATE_VERSION}\`
+
+          ## Safety checks already passed
+
+          - upstream release discovered from official \`moltis-org/moltis\`
+          - release tag normalized to GHCR runtime tag (\`vX.Y.Z -> X.Y.Z\`)
+          - \`ghcr.io/moltis-org/moltis:${CANDIDATE_VERSION}\` is pullable
+          - compose tracked defaults updated consistently
+
+          ## Approval flow
+
+          1. Review this PR.
+          2. Approve and merge when ready.
+          3. Standard production deploy from \`main\` will apply the update with existing backup-safe gates.
+          EOF
+
+          EXISTING_PR_NUMBER="$(gh pr list --base main --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+
+          if [[ -n "$EXISTING_PR_NUMBER" ]]; then
+            gh pr edit "$EXISTING_PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"
+            PR_URL="$(gh pr view "$EXISTING_PR_NUMBER" --json url --jq '.url')"
+          else
+            PR_URL="$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE")"
+          fi
+
+          rm -f "$BODY_FILE"
+
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "candidate_version=$CANDIDATE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate email prerequisites
+        id: email
+        if: steps.pr.outputs.pr_url != ''
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_TO: ${{ secrets.MOLTIS_UPDATE_NOTIFY_EMAIL }}
+          SEND_EMAIL_INPUT: ${{ github.event.inputs.send_email || 'true' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$SEND_EMAIL_INPUT" != "true" ]]; then
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=workflow_dispatch input send_email=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -n "$SMTP_SERVER" && -n "$SMTP_USERNAME" && -n "$SMTP_PASSWORD" && -n "$SMTP_TO" ]]; then
+            echo "should_send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=required SMTP secrets are missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send approval email (optional)
+        if: ${{ steps.email.outputs.should_send == 'true' }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT != '' && secrets.SMTP_PORT || '465' }}
+          secure: true
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          to: ${{ secrets.MOLTIS_UPDATE_NOTIFY_EMAIL }}
+          from: ${{ secrets.MOLTIS_UPDATE_NOTIFY_FROM != '' && secrets.MOLTIS_UPDATE_NOTIFY_FROM || secrets.SMTP_USERNAME }}
+          subject: "[Moltis] Approval needed: update to ${{ steps.pr.outputs.candidate_version }}"
+          body: |
+            Доступно обновление Moltis до версии ${{ steps.pr.outputs.candidate_version }}.
+
+            Для подтверждения откройте PR и выполните approve/merge:
+            ${{ steps.pr.outputs.pr_url }}
+
+            Это безопасный proposal workflow: деплой напрямую не запускался.
+
+      - name: Proposal summary
+        if: always()
+        run: |
+          {
+            echo "## Moltis Update Proposal"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Tracked version | \`${{ steps.version.outputs.tracked_version }}\` |"
+            echo "| Latest release tag | \`${{ steps.version.outputs.latest_release_tag }}\` |"
+            echo "| Candidate runtime tag | \`${{ steps.version.outputs.candidate_version }}\` |"
+            echo "| Should update | \`${{ steps.version.outputs.should_update || 'false' }}\` |"
+            echo "| Skip reason | \`${{ steps.version.outputs.skip_reason || 'n/a' }}\` |"
+            echo "| Proposal branch | \`${{ steps.branch.outputs.branch || 'n/a' }}\` |"
+            echo "| PR URL | ${{ steps.pr.outputs.pr_url || 'n/a' }} |"
+            echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
+            echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
+            echo ""
+            echo "> This workflow only prepares/updates a PR. It does not deploy to production."
+          } >> "$GITHUB_STEP_SUMMARY"
