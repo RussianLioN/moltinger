@@ -149,7 +149,7 @@ test_audit_apply_safe_bootstraps_damaged_sibling() {
     printf 'export PATH="${repo_root}/bin:${PATH}"\n' > "${repo_dir}/.envrc"
     (
         cd "${repo_dir}"
-        git add .beads/config.yaml .beads/issues.jsonl .envrc bin/bd scripts/beads-resolve-db.sh scripts/beads-worktree-localize.sh scripts/beads-worktree-audit.sh
+        git add -A -- .beads .envrc bin scripts
         git commit -m "fixture: seed bootstrap foundation" >/dev/null
         git push origin main >/dev/null
     )
