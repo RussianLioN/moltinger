@@ -231,3 +231,13 @@ If `command-worktree` is already merged but a real session still exposes a bug:
 6. Prefer small, reversible change sets.
 7. Run `make codex-check` before landing the plane when Codex governance artifacts changed.
 8. For GitHub auth incidents from Codex, compare sandbox and non-sandbox diagnostics before concluding user credentials are broken.
+
+## Completion Report Contract
+
+For every task-completion report to the user, include:
+
+- A brief plain-language summary of what was done and what outcome was achieved.
+- A current checklist or status snapshot showing what is done, what remains, and any blocked items.
+- A proposed next step and why it is the right next move. If no next step is needed, say that explicitly.
+
+Keep this concise by default and expand only when the user explicitly asks for more detail.
