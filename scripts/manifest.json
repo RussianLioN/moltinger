@@ -647,6 +647,53 @@
       ],
       "gitops": true
     },
+    "apply-moltis-host-automation.sh": {
+      "version": "1.0.0",
+      "description": "Apply Moltis post-sync host automation from the active deploy root without mutating the git-synced tree",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cp",
+        "rm"
+      ],
+      "provides": [
+        "apply-moltis-host-automation"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "render-moltis-env.sh": {
+      "version": "1.0.0",
+      "description": "Render the tracked Moltis runtime env file from CI-provided secrets",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cat",
+        "mkdir"
+      ],
+      "provides": [
+        "render-moltis-env"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "run-tracked-moltis-deploy.sh": {
+      "version": "1.0.0",
+      "description": "Run the tracked Moltis deploy control plane: runtime prep, validation, deploy, audit markers, and checkout alignment",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "git",
+        "jq"
+      ],
+      "provides": [
+        "run-tracked-moltis-deploy"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "update-active-deploy-root.sh": {
       "version": "1.0.0",
       "description": "Shared active-root symlink update entrypoint with legacy migration and target validation",

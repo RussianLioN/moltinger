@@ -72,6 +72,17 @@ root_cause: "Branch-scoped deploy concurrency plus fragile ln -sfn symlink updat
 
 Следующий slice вынес общий GitOps sync surface в `scripts/gitops-sync-managed-surface.sh`. Это убрало ещё один дублированный YAML-блок, где `deploy.yml` и `uat-gate.yml` уже расходились по реальному поведению: cleanup runtime-managed auth files, `systemd/` sync и remote chmod shell entrypoints.
 
+Финальный slice для `moltinger-4hqr` довёл это до самой tracked Moltis deploy orchestration:
+
+- общий runner-side env rendering вынесен в `scripts/render-moltis-env.sh`;
+- общий remote tracked deploy control plane вынесен в `scripts/run-tracked-moltis-deploy.sh`;
+- `deploy.yml` перестал вручную делать `prepare runtime config`, `pull`, `docker compose up`, `wait for health`, post-failure rollback verification, запись audit markers и post-success checkout alignment;
+- `uat-gate.yml` перестал держать свою отдельную версию `validate + deploy + record + align`.
+
+После этого критичный deploy path в обоих workflow сводится к thin wrapper around versioned scripts, а не к двум независимым YAML-реализациям одной и той же remote orchestration.
+
+Финальный cleanup-дожим после этого убрал и deploy-only host automation из `deploy.yml`: cron/systemd install и disabled scheduler cleanup теперь живут в `scripts/apply-moltis-host-automation.sh`. Это дополнительно устранило self-drift pattern, где workflow удалял tracked fallback cron-файл из active root после sync.
+
 ## Связанные обновления
 
 - [x] Новый файл правила создан (`docs/rules/production-deploy-single-writer.md`)

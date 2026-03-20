@@ -813,7 +813,7 @@ jobs:
       name: production
       url: https://moltis.ainetic.tech
     outputs:
-      auto_rollback_performed: ${{ steps.rollback_auto.outputs.rolled_back }}
+      auto_rollback_performed: ${{ steps.deploy_tracked.outputs.rolled_back }}
 
     steps:
       - name: Checkout code
@@ -867,95 +867,14 @@ jobs:
           echo "::endgroup::"
 
       # ===========================================
-      # GitOps Step 1.4: Install Cron Jobs (moltinger-hdn)
+      # GitOps Step 1.4: Apply tracked host automation from active root
       # ===========================================
-      # Installs system cron jobs from scripts/cron.d/
-      # All cron configurations must come from git (GitOps compliance)
-      # ===========================================
-      - name: Install cron jobs
+      - name: Apply Moltis host automation from active deploy root
         run: |
-          echo "::group::Installing cron jobs from scripts/cron.d/"
-
-          # Check if cron.d directory exists in repo
-          if [ -d "scripts/cron.d" ] && [ "$(ls -A scripts/cron.d/ 2>/dev/null)" ]; then
-            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'CRONEOF'
-              set -e
-              ACTIVE_ROOT="${{ env.DEPLOY_ACTIVE_PATH }}"
-
-              # Create cron.d directory if not exists
-              mkdir -p "${ACTIVE_ROOT}/scripts/cron.d"
-
-              # Install each cron file
-              for cron_file in "${ACTIVE_ROOT}"/scripts/cron.d/*; do
-                if [ -f "$cron_file" ]; then
-                  cron_name=$(basename "$cron_file")
-                  echo "Installing cron: $cron_name"
-
-                  # Copy to system cron.d with correct permissions
-                  cp "$cron_file" "/etc/cron.d/$cron_name"
-                  chmod 644 "/etc/cron.d/$cron_name"
-                  chown root:root "/etc/cron.d/$cron_name"
-                fi
-              done
-
-              # Verify cron service is running
-              if command -v systemctl &>/dev/null; then
-                systemctl reload cron 2>/dev/null || systemctl restart cron 2>/dev/null || true
-              fi
-
-              echo "Cron jobs installed successfully"
-          CRONEOF
-
-            echo "::notice::Cron jobs installed from GitOps"
-          else
-            echo "::notice::No cron jobs to install (scripts/cron.d/ empty or missing)"
-          fi
-
-          echo "::endgroup::"
-
-      - name: Install Moltis health monitor unit from active deploy root
-        run: |
-          echo "::group::Installing Moltis health monitor systemd unit"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'SYSTEMDEOF'
-            set -e
-
-            ACTIVE_ROOT="${{ env.DEPLOY_ACTIVE_PATH }}"
-            HEALTH_SRC="${ACTIVE_ROOT}/systemd/moltis-health-monitor.service"
-
-            if [ ! -f "$HEALTH_SRC" ]; then
-              echo "::error::Missing health monitor unit in ${ACTIVE_ROOT}/systemd"
-              exit 1
-            fi
-
-            cp "$HEALTH_SRC" /etc/systemd/system/moltis-health-monitor.service
-            chmod 644 /etc/systemd/system/moltis-health-monitor.service
-            systemctl daemon-reload
-            systemctl enable --now moltis-health-monitor.service
-            systemctl is-active --quiet moltis-health-monitor.service
-            echo "systemd service active: moltis-health-monitor.service"
-          SYSTEMDEOF
-          echo "::endgroup::"
-
-      - name: Disable Telegram Web auto-monitor scheduler
-        run: |
-          echo "::group::Disabling Telegram Web auto-monitor scheduler"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'SYSTEMDEOF'
-            set -e
-
-            rm -f /etc/cron.d/moltis-telegram-web-user-monitor
-            rm -f "${{ env.DEPLOY_ACTIVE_PATH }}/scripts/cron.d/moltis-telegram-web-user-monitor"
-
-            if command -v systemctl &>/dev/null; then
-              systemctl disable --now moltis-telegram-web-user-monitor.timer 2>/dev/null || true
-              systemctl stop moltis-telegram-web-user-monitor.service 2>/dev/null || true
-              rm -f /etc/systemd/system/moltis-telegram-web-user-monitor.service
-              rm -f /etc/systemd/system/moltis-telegram-web-user-monitor.timer
-              systemctl daemon-reload || true
-              systemctl reset-failed moltis-telegram-web-user-monitor.service moltis-telegram-web-user-monitor.timer 2>/dev/null || true
-            fi
-
-            echo "Telegram Web auto-monitor disabled"
-          SYSTEMDEOF
+          echo "::group::Applying Moltis host automation from active deploy root"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "bash '${{ env.DEPLOY_PATH }}/scripts/apply-moltis-host-automation.sh' \
+              --active-root '${{ env.DEPLOY_ACTIVE_PATH }}'"
           echo "::endgroup::"
 
       # ===========================================
@@ -974,36 +893,20 @@ jobs:
       # They will be rendered by a dedicated deploy-clawdiy workflow into a separate Clawdiy env path.
       # ===========================================
       - name: Generate .env from Secrets
+        env:
+          MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_ALLOWED_USERS }}
+          TELEGRAM_WEBHOOK_URL: ${{ secrets.TELEGRAM_WEBHOOK_URL }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          MOLTIS_DOMAIN: moltis.ainetic.tech
+          MOLTIS_RUNTIME_CONFIG_DIR: ${{ vars.MOLTIS_RUNTIME_CONFIG_DIR || '/opt/moltinger-state/config-runtime' }}
         run: |
           echo "::group::Generating .env file from GitHub Secrets"
-
-          # Create .env file content with secrets expanded
-          cat > /tmp/moltis.env << EOF
-          # Auto-generated by CI/CD from GitHub Secrets
-          # DO NOT EDIT MANUALLY - changes will be overwritten
-
-          # Authentication
-          MOLTIS_PASSWORD=${{ secrets.MOLTIS_PASSWORD }}
-
-          # LLM Provider - GLM (Zhipu AI)
-          GLM_API_KEY=${{ secrets.GLM_API_KEY }}
-
-          # LLM Fallback - Ollama Cloud (optional, for cloud models)
-          OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}
-
-          # Web Search - Tavily
-          TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
-
-          # Telegram Bot
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALLOWED_USERS=${{ secrets.TELEGRAM_ALLOWED_USERS }}
-          TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
-          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-
-          # Domain
-          MOLTIS_DOMAIN=moltis.ainetic.tech
-          MOLTIS_RUNTIME_CONFIG_DIR=${{ vars.MOLTIS_RUNTIME_CONFIG_DIR || '/opt/moltinger-state/config-runtime' }}
-          EOF
+          bash ./scripts/render-moltis-env.sh --output /tmp/moltis.env
 
           # Copy to server
           scp /tmp/moltis.env ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/.env
@@ -1014,200 +917,46 @@ jobs:
           echo ".env file generated and synced successfully"
           echo "::endgroup::"
 
-      - name: Prepare writable Moltis runtime config
+      # ===========================================
+      # GitOps Step 2: Run tracked deploy control plane
+      # ===========================================
+      - name: Run tracked Moltis deploy control plane
+        id: deploy_tracked
         run: |
-          echo "::group::Preparing writable Moltis runtime config"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            if [ -f "${{ env.DEPLOY_PATH }}/.env" ]; then
-              set -a
-              . "${{ env.DEPLOY_PATH }}/.env"
-              set +a
-            fi
-            RUNTIME_CONFIG_DIR="${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
-            mkdir -p "$RUNTIME_CONFIG_DIR"
-            bash "${{ env.DEPLOY_PATH }}/scripts/prepare-moltis-runtime-config.sh" "${{ env.DEPLOY_PATH }}/config" "$RUNTIME_CONFIG_DIR"
-            test -f "$RUNTIME_CONFIG_DIR/moltis.toml"
-          EOF
-          echo "::endgroup::"
+          echo "::group::Running tracked Moltis deploy control plane"
+          REMOTE_CMD="cd '${{ env.DEPLOY_PATH }}' && ./scripts/run-tracked-moltis-deploy.sh --json --git-sha '${{ github.sha }}' --git-ref '${{ github.ref_name }}' --workflow-run '${{ github.run_id }}' --version '${{ needs.preflight.outputs.version }}'"
 
-      - name: Pull new image
-        run: |
-          VERSION="${{ needs.preflight.outputs.version }}"
-          echo "::group::Pulling Moltis image $VERSION"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
-            # Try to pull the image, but don't fail if it doesn't exist remotely
-            # (image may already exist locally from previous builds)
-            if docker pull ${{ env.MOLTIS_IMAGE }}:$VERSION 2>/dev/null; then
-              echo "Image pulled successfully"
+          set +e
+          OUTPUT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "$REMOTE_CMD")
+          SSH_EXIT=$?
+          set -e
+
+          echo "$OUTPUT"
+
+          STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty' 2>/dev/null || true)
+          HEALTH=$(printf '%s' "$OUTPUT" | jq -r '.details.health // empty' 2>/dev/null || true)
+          ROLLBACK_VERIFIED=$(printf '%s' "$OUTPUT" | jq -r '.details.rollback_verified // false' 2>/dev/null || echo "false")
+          ROLLED_BACK=false
+
+          if [ "$HEALTH" = "rolled_back" ]; then
+            ROLLED_BACK=true
+          fi
+
+          if [ -n "$HEALTH" ]; then
+            echo "health=$HEALTH" >> $GITHUB_OUTPUT
+          fi
+          echo "rolled_back=$ROLLED_BACK" >> $GITHUB_OUTPUT
+          echo "rollback_verified=$ROLLBACK_VERIFIED" >> $GITHUB_OUTPUT
+
+          if [ $SSH_EXIT -ne 0 ] || [ "$STATUS" != "success" ]; then
+            if [ "$ROLLED_BACK" = "true" ]; then
+              echo "::warning::Tracked deploy failed after auto rollback (rollback_verified=$ROLLBACK_VERIFIED)"
             else
-              echo "::warning::Could not pull image ${{ env.MOLTIS_IMAGE }}:$VERSION - using existing local image if available"
-              # Check if image exists locally
-              if docker images ${{ env.MOLTIS_IMAGE }}:$VERSION --format "{{.ID}}" | grep -q .; then
-                echo "Using existing local image"
-              else
-                echo "::error::Image not found locally or remotely"
-                exit 1
-              fi
+              echo "::error::Tracked deploy control plane failed"
             fi
-          EOF
-          echo "::endgroup::"
-
-      # ===========================================
-      # GitOps Step 2: Validate configuration before deploy
-      # ===========================================
-      - name: Validate configuration (GitOps)
-        run: |
-          echo "::group::Validating docker-compose configuration"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            cd ${{ env.DEPLOY_PATH }}
-
-            if grep -q '^MOLTIS_VERSION=' .env 2>/dev/null; then
-              echo "::error::MOLTIS_VERSION override is forbidden in /opt/moltinger/.env; track Moltis version in git compose files instead"
-              exit 1
-            fi
-
-            # Validate docker-compose.prod.yml syntax (production config)
-            docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml config --quiet
-
-            # Verify the file matches expected structure
-            if ! grep -q "traefik.enable=true" docker-compose.prod.yml; then
-              echo "::error::Traefik labels missing in docker-compose.prod.yml"
-              exit 1
-            fi
-
-            echo "Configuration validation passed"
-          EOF
-          echo "::endgroup::"
-
-      - name: Deploy container
-        id: deploy
-        run: |
-          echo "::group::Deploying Moltis ${{ needs.preflight.outputs.version }}"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-
-            VERSION="${{ needs.preflight.outputs.version }}"
-            EXPECTED_IMAGE="${{ env.MOLTIS_IMAGE }}:${{ needs.preflight.outputs.version }}"
-
-            cd ${{ env.DEPLOY_PATH }}
-
-            # Pull pinned image version (use production compose file)
-            env -u MOLTIS_VERSION docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml pull moltis
-
-            # Stop container gracefully
-            echo "Stopping current container..."
-            docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml stop moltis || true
-
-            # Start new container
-            echo "Starting new container..."
-            env -u MOLTIS_VERSION docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" -f docker-compose.prod.yml up -d moltis
-
-            # Verify expected image is running
-            RUNNING_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo "unknown")
-            if [ "$RUNNING_IMAGE" != "$EXPECTED_IMAGE" ]; then
-              echo "::error::Running image mismatch. Expected: $EXPECTED_IMAGE, actual: $RUNNING_IMAGE"
-              exit 1
-            fi
-
-            # Remove old images
-            docker image prune -f
-
-            echo "Deployment completed"
-          EOF
-          echo "::endgroup::"
-
-      - name: Wait for health check
-        id: health
-        timeout-minutes: 3
-        run: |
-          echo "::group::Waiting for health check"
-
-          MAX_RETRIES=30
-          RETRY_INTERVAL=5
-          RETRY_COUNT=0
-
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-              "docker inspect --format='{{.State.Health.Status}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'not_found'")
-
-            echo "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES: $HEALTH"
-
-            if [ "$HEALTH" = "healthy" ]; then
-              echo "::notice::Container is healthy!"
-              echo "status=healthy" >> $GITHUB_OUTPUT
-              exit 0
-            elif [ "$HEALTH" = "not_found" ]; then
-              echo "::error::Container not found!"
-              echo "status=not_found" >> $GITHUB_OUTPUT
-              exit 1
-            fi
-
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            sleep $RETRY_INTERVAL
-          done
-
-          echo "::error::Health check timeout after $MAX_RETRIES attempts"
-          echo "status=unhealthy" >> $GITHUB_OUTPUT
-          exit 1
-
-          echo "::endgroup::"
-
-      - name: Auto rollback on health check failure
-        id: rollback_auto
-        if: steps.health.outcome == 'failure'
-        run: |
-          echo "::group::Auto rollback on failed deploy health gate"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-
-            cd ${{ env.DEPLOY_PATH }}
-            OUTPUT=$(./scripts/deploy.sh --json moltis rollback)
-            echo "$OUTPUT"
-
-            STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty')
-            if [ "$STATUS" != "success" ]; then
-              echo "::error::deploy.sh rollback failed"
-              exit 1
-            fi
-          EOF
-          echo "rolled_back=true" >> $GITHUB_OUTPUT
-          echo "::endgroup::"
-
-      - name: Verify auto rollback health
-        if: steps.rollback_auto.outcome == 'success'
-        run: |
-          echo "::group::Verifying auto rollback health"
-          MAX_RETRIES=30
-          RETRY_COUNT=0
-
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            HEALTH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-              "docker inspect --format='{{.State.Health.Status}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'not_found'")
-
-            if [ "$HEALTH" = "healthy" ]; then
-              break
-            fi
-
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            sleep 5
-          done
-
-          if [ "$HEALTH" != "healthy" ]; then
-            echo "::error::Auto rollback health check failed"
             exit 1
           fi
 
-          HTTP_CODE=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            "curl -sk -o /dev/null -w '%{http_code}' https://moltis.ainetic.tech/health")
-
-          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "401" ]; then
-            echo "::error::Auto rollback external health check failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
-
-          echo "::notice::Auto rollback completed and service is healthy"
           echo "::endgroup::"
 
       - name: Verify external access
@@ -1230,10 +979,11 @@ jobs:
         if: always()
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
-          STATUS="${{ steps.health.outputs.status }}"
-          ROLLED_BACK="${{ steps.rollback_auto.outputs.rolled_back }}"
+          STATUS="${{ steps.deploy_tracked.outputs.health }}"
+          ROLLED_BACK="${{ steps.deploy_tracked.outputs.rolled_back }}"
           RUNBOOK_URL="${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs/deployment-strategy.md"
           [ -z "$ROLLED_BACK" ] && ROLLED_BACK="false"
+          [ -z "$STATUS" ] && STATUS="failed"
 
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -1249,7 +999,7 @@ jobs:
           echo "| Runbook | $RUNBOOK_URL |" >> $GITHUB_STEP_SUMMARY
 
       - name: Notify auto rollback event (Slack)
-        if: steps.rollback_auto.outputs.rolled_back == 'true'
+        if: always() && steps.deploy_tracked.outputs.rolled_back == 'true'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
@@ -1288,51 +1038,6 @@ jobs:
               ]
             }" \
             "$SLACK_WEBHOOK_URL" || echo "::warning::Failed to send auto-rollback Slack notification"
-
-      # ===========================================
-      # GitOps Step 3: Record deployed git SHA
-      # ===========================================
-      # Stores the git commit SHA on the server for audit trail
-      # This enables verification that deployed config matches git
-      # ===========================================
-      - name: Record deployed git SHA (GitOps audit)
-        if: success()
-        run: |
-          echo "::group::Recording deployed git SHA"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            cd ${{ env.DEPLOY_PATH }}
-
-            mkdir -p data
-
-            # Record the exact commit from the CI workflow context.
-            # Keep audit markers in ignored state storage, not repo root, so GitOps drift
-            # checks stay truthful across repeated deploys.
-            echo "${{ github.sha }}" > data/.deployed-sha
-
-            # Also record deployment metadata
-            cat > data/.deployment-info << INFO
-          deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          git_sha=${{ github.sha }}
-          workflow_run=${{ github.run_id }}
-          version=${{ needs.preflight.outputs.version }}
-          INFO
-
-            echo "Git SHA recorded: $(cat data/.deployed-sha)"
-          EOF
-          echo "::endgroup::"
-
-      - name: Align server git checkout to deployed commit
-        if: success()
-        run: |
-          echo "::group::Aligning server git checkout"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            cd ${{ env.DEPLOY_PATH }}
-            git fetch --depth=1 origin "${{ github.ref_name }}"
-            git checkout --force "${{ github.ref_name }}"
-            git reset --hard "${{ github.sha }}"
-            git status --short
-          EOF
-          echo "::endgroup::"
 
   # ===========================================
   # Rollback procedure
