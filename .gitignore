@@ -16,9 +16,8 @@ config/provider_keys.json
 .telegram-web-state.json
 data/.telegram-web-state.json
 
-# Beads local (but track issues.jsonl for sync)
+# Beads local
 .beads/*
-!.beads/issues.jsonl
 !.beads/config.yaml
 
 # IDE
@@ -46,3 +45,7 @@ scripts/.scripts-hashes
 # Claude Code Local Overrides (Not Shared)
 .claude/settings.local.json
 .mcp.json
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
