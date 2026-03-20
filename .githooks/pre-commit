@@ -7,12 +7,21 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/_repo-local-path.sh"
 GUARD_SCRIPT="$PROJECT_ROOT/scripts/git-session-guard.sh"
 NORMALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-normalize-issues-jsonl.sh"
+BEADS_AUDIT_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-audit.sh"
 SESSION_FILE="$PROJECT_ROOT/SESSION_SUMMARY.md"
 LOG_FILE="$PROJECT_ROOT/.tmp/sessions/precommit.log"
 
 # Enforce branch/worktree session consistency before commit.
 if [[ -x "$GUARD_SCRIPT" ]]; then
     if ! "$GUARD_SCRIPT" --check --hook pre-commit; then
+        exit 1
+    fi
+fi
+
+if [[ -x "$BEADS_AUDIT_SCRIPT" ]]; then
+    if ! "$BEADS_AUDIT_SCRIPT" >/dev/null; then
+        echo "✗ Sibling worktree Beads ownership audit failed." >&2
+        echo "  Run ./scripts/beads-worktree-audit.sh from the canonical root and localize the reported worktrees." >&2
         exit 1
     fi
 fi

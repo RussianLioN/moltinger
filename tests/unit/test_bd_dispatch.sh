@@ -304,6 +304,58 @@ test_localize_materializes_local_db_and_removes_redirect() {
     test_pass
 }
 
+test_localize_bootstraps_missing_foundation_from_source_ref() {
+    test_start "localize_bootstraps_missing_foundation_from_source_ref"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    printf 'export PATH="${repo_root}/bin:${PATH}"\n' > "${repo_dir}/.envrc"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl .envrc
+        git commit -m "fixture: seed bootstrap foundation" >/dev/null
+    )
+    worktree_path="${fixture_root}/moltinger-bootstrap-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/bootstrap-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    rm -f \
+        "${worktree_path}/.beads/config.yaml" \
+        "${worktree_path}/.beads/issues.jsonl" \
+        "${worktree_path}/bin/bd" \
+        "${worktree_path}/scripts/beads-resolve-db.sh" \
+        "${worktree_path}/scripts/beads-worktree-localize.sh" \
+        "${worktree_path}/.envrc"
+    mkdir -p "${worktree_path}/.beads"
+    printf '%s\n' "${repo_dir}/.beads" > "${worktree_path}/.beads/redirect"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        cd "${PROJECT_ROOT}"
+        PATH="${PROJECT_ROOT}/bin:${fake_bin}:$PATH" ./scripts/beads-worktree-localize.sh --path "${worktree_path}" --bootstrap-source main
+    )"
+
+    assert_contains "${output}" "State: current" "Bootstrap localization should finish in the current localized state"
+    assert_contains "${output}" "Bootstrap Source: main" "Bootstrap localization should report the source ref"
+    if [[ -f "${worktree_path}/.beads/redirect" ]]; then
+        test_fail "Bootstrap localization should remove legacy redirect metadata"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/config.yaml" || ! -f "${worktree_path}/.beads/issues.jsonl" ]]; then
+        test_fail "Bootstrap localization should restore the local Beads foundation"
+    fi
+    if [[ ! -f "${worktree_path}/bin/bd" || ! -f "${worktree_path}/scripts/beads-resolve-db.sh" ]]; then
+        test_fail "Bootstrap localization should restore the plain bd toolchain"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
+        test_fail "Bootstrap localization should materialize the local beads.db"
+    fi
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -323,6 +375,7 @@ run_all_tests() {
     test_plain_bd_blocks_root_fallback_when_local_foundation_is_missing
     test_plain_bd_allows_explicit_troubleshooting_flags
     test_localize_materializes_local_db_and_removes_redirect
+    test_localize_bootstraps_missing_foundation_from_source_ref
     generate_report
 }
 

@@ -174,6 +174,7 @@ bash|component_codex_cli_update_advisor|Codex CLI update advisor component|$SCRI
 bash|component_codex_cli_update_delivery|Codex CLI update delivery component|$SCRIPT_DIR/component/test_codex_cli_update_delivery.sh
 bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/component/test_codex_profile_launch.sh
 bash|component_codex_session_path_repair|Codex session path repair component|$SCRIPT_DIR/component/test_codex_session_path_repair.sh
+bash|component_beads_worktree_audit|Beads worktree audit component|$SCRIPT_DIR/unit/test_beads_worktree_audit.sh
 bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh
 bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$SCRIPT_DIR/component/test_codex_telegram_consent_e2e.sh
 bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh
