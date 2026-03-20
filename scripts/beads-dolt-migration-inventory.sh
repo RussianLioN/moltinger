@@ -315,6 +315,72 @@ inventory_add_file_surface() {
     "$(inventory_json_array_from_args "${signals[@]}")"
 }
 
+inventory_add_pilot_aware_surface() {
+  local id="$1"
+  local area="$2"
+  local relpath="$3"
+  local summary="$4"
+  local legacy_reason="$5"
+  local pilot_bridge_reason="$6"
+  local reason_when_absent="$7"
+  shift 7
+
+  local abs_path=""
+  local observed="false"
+  local classification="already-compatible"
+  local readiness="ready"
+  local blocking="false"
+  local reason="${reason_when_absent}"
+  local legacy_present="false"
+  local pilot_bridge_present="false"
+  local -a signals=()
+
+  abs_path="$(inventory_relpath_abs "${relpath}")"
+  [[ -e "${abs_path}" ]] && signals+=("present")
+  inventory_git_tracked "${relpath}" && signals+=("tracked")
+
+  while [[ $# -gt 2 ]]; do
+    local signal_label="$1"
+    local signal_needle="$2"
+    local signal_kind="$3"
+    shift 3
+    if inventory_file_contains "${abs_path}" "${signal_needle}"; then
+      observed="true"
+      signals+=("${signal_label}")
+      if [[ "${signal_kind}" == "legacy" ]]; then
+        legacy_present="true"
+      fi
+      if [[ "${signal_kind}" == "pilot" ]]; then
+        pilot_bridge_present="true"
+      fi
+    fi
+  done
+
+  if [[ "${pilot_bridge_present}" == "true" ]]; then
+    classification="can-bridge"
+    readiness="warning"
+    blocking="false"
+    reason="${pilot_bridge_reason}"
+  elif [[ "${legacy_present}" == "true" ]]; then
+    classification="must-migrate"
+    readiness="blocked"
+    blocking="true"
+    reason="${legacy_reason}"
+  fi
+
+  inventory_add_surface \
+    "${id}" \
+    "${area}" \
+    "${relpath}" \
+    "${observed}" \
+    "${classification}" \
+    "${readiness}" \
+    "${blocking}" \
+    "${summary}" \
+    "${reason}" \
+    "$(inventory_json_array_from_args "${signals[@]}")"
+}
+
 inventory_run_bd_command() {
   local repo_root="$1"
   shift
@@ -573,11 +639,11 @@ inventory_collect_file_surfaces() {
     "script" \
     "scripts/beads-normalize-issues-jsonl.sh" \
     "true" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
+    "can-remove" \
+    "warning" \
+    "false" \
     "Tracked JSONL normalizer" \
-    "The repo still ships a dedicated .beads/issues.jsonl normalizer, which keeps JSONL in the operational workflow." \
+    "The repo still ships a dedicated .beads/issues.jsonl normalizer. It can remain only as an explicitly retired or compatibility-only surface." \
     "No tracked JSONL normalizer was found."
 
   inventory_add_file_surface \
@@ -594,20 +660,19 @@ inventory_collect_file_surfaces() {
     "plain-bd" 'plain `bd`' \
     "bd-sync" "bd sync"
 
-  inventory_add_file_surface \
+  inventory_add_pilot_aware_surface \
     "hook.pre_commit" \
     "hook" \
     ".githooks/pre-commit" \
-    "false" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
     "Pre-commit hook legacy Beads checks" \
     "The pre-commit hook still enforces legacy JSONL or legacy ownership behavior and must be migrated before pilot cutover." \
+    "The pre-commit hook now contains an explicit pilot-mode guard that blocks staged JSONL and bridges the legacy normalization path." \
     "No legacy Beads markers were detected in .githooks/pre-commit." \
-    "normalizes-jsonl" "beads-normalize-issues-jsonl.sh" \
-    "issues-jsonl" ".beads/issues.jsonl" \
-    "worktree-audit" "beads-worktree-audit.sh"
+    "normalizes-jsonl" "beads-normalize-issues-jsonl.sh" "legacy" \
+    "issues-jsonl" ".beads/issues.jsonl" "legacy" \
+    "worktree-audit" "beads-worktree-audit.sh" "legacy" \
+    "pilot-mode-file" "pilot-mode.json" "pilot" \
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
 
   inventory_add_file_surface \
     "hook.post_checkout" \
@@ -661,72 +726,67 @@ inventory_collect_file_surfaces() {
     "No legacy Beads sync markers were detected in AGENTS.md." \
     "bd-sync" "bd sync"
 
-  inventory_add_file_surface \
+  inventory_add_pilot_aware_surface \
     "doc.beads_agents" \
     "doc" \
     ".beads/AGENTS.md" \
-    "false" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
     "Tracked Beads state instructions" \
     "Tracked Beads state instructions still prescribe bd sync as part of the everyday workflow." \
+    "Tracked Beads state instructions now include pilot-mode guidance and can bridge the repo while ordinary legacy text is still being retired." \
     "No legacy Beads sync markers were detected in .beads/AGENTS.md." \
-    "bd-sync" "bd sync"
+    "bd-sync" "bd sync" "legacy" \
+    "pilot-mode-file" "pilot-mode.json" "pilot" \
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
 
-  inventory_add_file_surface \
+  inventory_add_pilot_aware_surface \
     "doc.quickstart_ru" \
     "doc" \
     ".claude/docs/beads-quickstart.md" \
-    "false" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
     "Russian Beads quickstart" \
     "The Russian quickstart still documents legacy Beads sync behavior and must be rewritten before pilot cutover." \
+    "The Russian quickstart now contains explicit pilot-mode guidance and can bridge the repo while ordinary legacy text is still being retired." \
     "No legacy Beads sync markers were detected in the Russian quickstart." \
-    "bd-sync" "bd sync" \
-    "session-close" "SESSION CLOSE PROTOCOL"
+    "bd-sync" "bd sync" "legacy" \
+    "session-close" "SESSION CLOSE PROTOCOL" "legacy" \
+    "pilot-mode-file" "pilot-mode.json" "pilot" \
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
 
-  inventory_add_file_surface \
+  inventory_add_pilot_aware_surface \
     "doc.quickstart_en" \
     "doc" \
     ".claude/docs/beads-quickstart.en.md" \
-    "false" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
     "English Beads quickstart" \
     "The English quickstart still documents legacy Beads sync behavior and must be rewritten before pilot cutover." \
+    "The English quickstart now contains explicit pilot-mode guidance and can bridge the repo while ordinary legacy text is still being retired." \
     "No legacy Beads sync markers were detected in the English quickstart." \
-    "bd-sync" "bd sync" \
-    "session-close" "SESSION CLOSE PROTOCOL"
+    "bd-sync" "bd sync" "legacy" \
+    "session-close" "SESSION CLOSE PROTOCOL" "legacy" \
+    "pilot-mode-file" "pilot-mode.json" "pilot" \
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
 
-  inventory_add_file_surface \
+  inventory_add_pilot_aware_surface \
     "skill.commands_quickref" \
     "skill" \
     ".claude/skills/beads/resources/COMMANDS_QUICKREF.md" \
-    "false" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
     "Beads command quick reference" \
     "The Beads command quick reference still documents legacy sync behavior that conflicts with the target contract boundary." \
+    "The Beads command quick reference now contains explicit pilot-mode guidance and can bridge the repo while ordinary legacy text is still being retired." \
     "No legacy Beads sync markers were detected in the command quick reference." \
-    "bd-sync" "bd sync"
+    "bd-sync" "bd sync" "legacy" \
+    "pilot-mode-file" "pilot-mode.json" "pilot" \
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
 
-  inventory_add_file_surface \
+  inventory_add_pilot_aware_surface \
     "skill.workflows" \
     "skill" \
     ".claude/skills/beads/resources/WORKFLOWS.md" \
-    "false" \
-    "must-migrate" \
-    "blocked" \
-    "true" \
     "Beads workflows reference" \
     "The Beads workflows reference still documents legacy sync behavior that conflicts with the target contract boundary." \
+    "The Beads workflows reference now contains explicit pilot-mode guidance and can bridge the repo while ordinary legacy text is still being retired." \
     "No legacy Beads sync markers were detected in the workflows reference." \
-    "bd-sync" "bd sync"
+    "bd-sync" "bd sync" "legacy" \
+    "pilot-mode-file" "pilot-mode.json" "pilot" \
+    "pilot-review" "beads-dolt-pilot.sh review" "pilot"
 
   inventory_add_file_surface \
     "test.static_beads_worktree_ownership" \

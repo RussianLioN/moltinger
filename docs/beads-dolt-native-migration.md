@@ -69,6 +69,29 @@ Explicit pilot gate:
 ./scripts/beads-dolt-migration-inventory.sh --format env --gate pilot
 ```
 
+Pilot status / enable / review:
+
+```bash
+./scripts/beads-dolt-pilot.sh status
+./scripts/beads-dolt-pilot.sh enable
+./scripts/beads-dolt-pilot.sh review
+```
+
+## Pilot Review Surface
+
+The pilot review surface is command-first, not JSONL-first.
+
+- Enable pilot mode only in one isolated dedicated worktree.
+- When `.beads/pilot-mode.json` exists, legacy-only paths such as `bd sync` are expected to fail closed.
+- Review pilot state through `./scripts/beads-dolt-pilot.sh review`.
+
+The review command is meant to stay:
+
+- human-readable
+- agent-readable
+- deterministic
+- independent from tracked `.beads/issues.jsonl` as the primary review surface
+
 ## Local Runtime Notes
 
 - Keep this phase report-only even if local `bd` exposes `migrate dolt`, `backend`, `branch`, or `vc`.

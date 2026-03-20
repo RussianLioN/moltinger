@@ -147,10 +147,9 @@
       "ci": true
     },
     "beads-dolt-pilot.sh": {
-      "version": "0.0.0",
-      "description": "Planned isolated pilot cutover workflow for the Beads Dolt-native migration",
-      "entrypoint": false,
-      "planned": true,
+      "version": "1.0.0",
+      "description": "Manage one isolated Beads Dolt-native pilot worktree with explicit readiness gating and a documented review surface",
+      "entrypoint": true,
       "requires": [
         "bash",
         "bd",

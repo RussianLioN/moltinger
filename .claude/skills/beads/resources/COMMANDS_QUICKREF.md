@@ -2,6 +2,8 @@
 
 In this repository, these commands assume the repo-local plain `bd` shim is active through `.envrc` or the managed worktree/Codex bootstrap path.
 
+If `.beads/pilot-mode.json` exists in the current worktree, do not use `bd sync` as the ordinary review path. Use `./scripts/beads-dolt-pilot.sh review` for pilot review instead.
+
 ## View Issues
 
 ```bash

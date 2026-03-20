@@ -78,15 +78,15 @@
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] Add pilot pass/fail/blocked coverage in `tests/unit/test_beads_dolt_pilot.sh`
-- [ ] T016 [P] [US2] Add legacy-surface interception coverage for pilot mode in `tests/unit/test_beads_dolt_pilot.sh`
+- [x] T015 [P] [US2] Add pilot pass/fail/blocked coverage in `tests/unit/test_beads_dolt_pilot.sh`
+- [x] T016 [P] [US2] Add legacy-surface interception coverage for pilot mode in `tests/unit/test_beads_dolt_pilot.sh`
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement the isolated pilot workflow in `scripts/beads-dolt-pilot.sh`
-- [ ] T018 [US2] Adapt `bin/bd`, `scripts/beads-resolve-db.sh`, and `.githooks/pre-commit` so pilot mode can detect and block legacy-only surfaces explicitly
-- [ ] T019 [US2] Define and document the replacement operator/review surface in `docs/beads-dolt-native-migration.md`, `docs/CODEX-OPERATING-MODEL.md`, and `specs/029-beads-dolt-native-migration/contracts/review-surface-contract.md`
-- [ ] T020 [US2] Update pilot-facing operator guidance in `.beads/AGENTS.md`, `.claude/docs/beads-quickstart.md`, and `.claude/docs/beads-quickstart.en.md`
+- [x] T017 [US2] Implement the isolated pilot workflow in `scripts/beads-dolt-pilot.sh`
+- [x] T018 [US2] Adapt `bin/bd`, `scripts/beads-resolve-db.sh`, and `.githooks/pre-commit` so pilot mode can detect and block legacy-only surfaces explicitly
+- [x] T019 [US2] Define and document the replacement operator/review surface in `docs/beads-dolt-native-migration.md`, `docs/CODEX-OPERATING-MODEL.md`, and `specs/029-beads-dolt-native-migration/contracts/review-surface-contract.md`
+- [x] T020 [US2] Update pilot-facing operator guidance in `.beads/AGENTS.md`, `.claude/docs/beads-quickstart.md`, and `.claude/docs/beads-quickstart.en.md`
 
 **Checkpoint**: One isolated worktree can demonstrate the target contract without silent return to the legacy model.
 
