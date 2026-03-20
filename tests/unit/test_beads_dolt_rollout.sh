@@ -324,6 +324,27 @@ test_rollout_cutover_creates_mode_and_rollback_package() {
     test_pass
 }
 
+test_rollout_cutover_accepts_current_worktree_dot_path() {
+    test_start "rollout_cutover_accepts_current_worktree_dot_path"
+
+    local fixture_root repo_dir ready_path fake_bin cutover_json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-rollout.XXXXXX)"
+    repo_dir="$(create_rollout_repo_fixture "${fixture_root}")"
+    ready_path="${fixture_root}/ready-worktree"
+    create_rollout_worktree "${repo_dir}" "${ready_path}" "feat/ready" "pilot-ready"
+    ready_path="$(cd "${ready_path}" && pwd -P)"
+    fake_bin="$(create_fake_rollout_bd_bin "${fixture_root}")"
+
+    cutover_json="$(run_rollout_script "${repo_dir}" "${fake_bin}" cutover-ready cutover --worktree "${ready_path}/." --package-id dot-path --format json)"
+
+    assert_json_value "${cutover_json}" '.summary.cutover_count' "1" "Cutover should accept --worktree . for the current ready worktree"
+    assert_json_value "${cutover_json}" '.worktrees[0].path' "${ready_path}" "Dot-path cutover should normalize to the canonical worktree path"
+    assert_json_value "${cutover_json}" '.worktrees[0].rollout_stage' "cutover" "Dot-path cutover should move the normalized target into cutover stage"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_rollout_cutover_keeps_blocked_worktree_visible() {
     test_start "rollout_cutover_keeps_blocked_worktree_visible"
 
@@ -444,6 +465,7 @@ run_all_tests() {
     test_rollout_report_only_summarizes_ready_and_blocked_worktrees
     test_rollout_report_only_recognizes_modern_dolt_runtime
     test_rollout_cutover_creates_mode_and_rollback_package
+    test_rollout_cutover_accepts_current_worktree_dot_path
     test_rollout_cutover_keeps_blocked_worktree_visible
     test_rollout_verify_fails_on_mixed_mode_and_rollback_restores_state
     test_rollout_cutover_blocks_legacy_helpers_and_sync

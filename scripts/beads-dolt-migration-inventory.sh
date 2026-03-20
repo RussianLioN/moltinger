@@ -312,7 +312,7 @@ inventory_add_file_surface() {
     "${blocking}" \
     "${summary}" \
     "${reason}" \
-    "$(inventory_json_array_from_args "${signals[@]}")"
+    "$(inventory_json_array_from_args "${signals[@]:-}")"
 }
 
 inventory_add_pilot_aware_surface() {
@@ -378,7 +378,7 @@ inventory_add_pilot_aware_surface() {
     "${blocking}" \
     "${summary}" \
     "${reason}" \
-    "$(inventory_json_array_from_args "${signals[@]}")"
+    "$(inventory_json_array_from_args "${signals[@]:-}")"
 }
 
 inventory_run_bd_command() {
@@ -483,7 +483,7 @@ inventory_collect_runtime_surfaces() {
     "${command_blocking}" \
     "Current bd command path" \
     "${command_reason}" \
-    "$(inventory_json_array_from_args "${command_signals[@]}")"
+    "$(inventory_json_array_from_args "${command_signals[@]:-}")"
 
   info_output="$(inventory_run_bd_command "${report_repo_root}" bd --no-daemon info || true)"
   if [[ -z "${info_output}" ]]; then
@@ -558,7 +558,7 @@ inventory_collect_runtime_surfaces() {
     "${info_blocking}" \
     "Current worktree no-daemon runtime" \
     "${info_reason_detail}" \
-    "$(inventory_json_array_from_args "${info_signals[@]}")"
+    "$(inventory_json_array_from_args "${info_signals[@]:-}")"
 
   backend_output="$(inventory_run_bd_command "${report_repo_root}" bd backend show || true)"
   if [[ -z "${backend_output}" ]]; then
@@ -666,7 +666,7 @@ inventory_collect_runtime_surfaces() {
     "${backend_blocking}" \
     "Current backend state" \
     "${backend_reason_detail}" \
-    "$(inventory_json_array_from_args "${backend_signals[@]}")"
+    "$(inventory_json_array_from_args "${backend_signals[@]:-}")"
 }
 
 inventory_collect_file_surfaces() {
@@ -1163,7 +1163,7 @@ inventory_classify_worktree() {
     "${blocking}" \
     "${current}" \
     "${reason}" \
-    "$(inventory_json_array_from_args "${signals[@]}")"
+    "$(inventory_json_array_from_args "${signals[@]:-}")"
 }
 
 inventory_collect_worktrees() {
