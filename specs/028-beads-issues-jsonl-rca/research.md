@@ -72,7 +72,7 @@
 
 ### Finding B: Local `.envrc` changes `PATH`, not `.beads/issues.jsonl`
 
-- **Evidence**: Current `.envrc` only prepends `$(git rev-parse --show-toplevel)/bin` to `PATH`; repo-local `bin/bd` then calls `scripts/beads-resolve-db.sh` and delegates to the system `bd`.
+- **Evidence**: Current `direnv status` reports `Loaded RC path /Users/rl/coding/moltinger/moltinger-028-beads-issues-jsonl-rca/.envrc`; that `.envrc` only prepends `$(git rev-parse --show-toplevel)/bin` to `PATH`; repo-local `bin/bd` then calls `scripts/beads-resolve-db.sh` and delegates to the system `bd`.
 - **Implication**: `direnv` affects which `bd` binary runs, not the tracked JSONL file directly.
 - **Inference**: `direnv` is relevant as a bootstrap/context factor and can indirectly change `.beads/issues.jsonl` outcomes by selecting the repo shim or bypassing it, but there is no local evidence that `direnv` itself writes the file.
 
@@ -96,7 +96,7 @@
 
 - **Evidence**:
   - Official release notes mention fixes such as ensuring the sync-branch worktree exists on fresh clone, normalizing JSONL paths in sync-branch mode, skipping sync when source and destination JSONL paths are identical, and using `GetGitCommonDir` for worktree creation in bare repo setups.
-  - Official issue #520 documents that daemon auto-sync to a sync branch can fail when pre-commit hooks are installed, and the issue body explicitly points users at `bd sync --flush-only` for diagnosis in that legacy workflow.
+  - Official issue #519 documents that `bd sync` can fail when `sync.branch` equals the currently checked-out branch; official issue #520 documents that daemon auto-sync to a sync branch can fail when pre-commit hooks are installed and explicitly points users at `bd sync --flush-only` for diagnosis; official issue #510 shows upstream users being surprised by where Beads created a worktree.
 - **Implication**: Our RCA cannot assume that worktree + sync-branch + JSONL behavior is a solved or static part of upstream Beads.
 - **Inference**: Tests and RCA fixtures in this repo should explicitly model mode/branch/worktree mismatches instead of treating them as impossible states.
 
@@ -114,9 +114,9 @@
 
 ### Finding F: User-observed `direnv` load path is a bootstrap signal, not standalone proof of the write path
 
-- **Evidence**: The observed shell message is `direnv: loading ~/coding/moltinger/moltinger-main/.envrc`, but the current `.envrc` computes `repo_root="$(git rev-parse --show-toplevel)"` before prepending `${repo_root}/bin` to `PATH`.
+- **Evidence**: The observed shell message is `direnv: loading ~/coding/moltinger/moltinger-main/.envrc`, but current `direnv status` in this worktree resolves `Loaded RC path /Users/rl/coding/moltinger/moltinger-028-beads-issues-jsonl-rca/.envrc`, and that `.envrc` computes `repo_root="$(git rev-parse --show-toplevel)"` before prepending `${repo_root}/bin` to `PATH`.
 - **Implication**: The visible `.envrc` path and the effective `repo_root` can diverge conceptually; the load message alone does not prove that canonical-root `bin/bd` or canonical-root `.beads/` handled the mutation.
-- **Inference**: RCA must capture the bootstrap tuple `direnv load message + git rev-parse --show-toplevel + command -v bd + bd --version + bd info` before attributing any `.beads/issues.jsonl` rewrite to the wrong worktree.
+- **Inference**: RCA must capture the bootstrap tuple `direnv status + git rev-parse --show-toplevel + command -v bd + bd --version + bd info` before attributing any `.beads/issues.jsonl` rewrite to the wrong worktree.
 
 ### Finding G: Official Beads documentation is in a transition window, so compatibility must be evidence-led
 
@@ -130,7 +130,9 @@
 - Official releases/changelog: <https://github.com/steveyegge/beads/releases>
 - Official CLI reference: <https://raw.githubusercontent.com/steveyegge/beads/main/docs/CLI_REFERENCE.md>
 - Official protected-branch / sync-branch migration note: <https://raw.githubusercontent.com/steveyegge/beads/main/docs/PROTECTED_BRANCHES.md>
-- Official issue example (`sync.branch` + hooks + daemon auto-sync): <https://github.com/steveyegge/beads/issues/520>
+- Official issue `bd sync fails when sync.branch is the currently checked-out branch`: <https://github.com/steveyegge/beads/issues/519>
+- Official issue `Daemon auto-sync to sync branch fails when pre-commit hooks are installed`: <https://github.com/steveyegge/beads/issues/520>
+- Official issue `How did beads create a worktree in the main branch?`: <https://github.com/steveyegge/beads/issues/510>
 
 ## Rejected Directions
 

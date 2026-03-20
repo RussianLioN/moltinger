@@ -13,12 +13,12 @@
 
 ## Observed Local Integration
 
-- User-observed `direnv: loading ~/coding/moltinger/moltinger-main/.envrc` messages are relevant evidence inputs, but they are not standalone proof that canonical-root `bd` handled a rewrite. The current `.envrc` computes `repo_root` dynamically via `git rev-parse --show-toplevel` before prepending `<repo_root>/bin` to `PATH`, so `direnv` affects which `bd` binary wins in the current shell but does not write `.beads/issues.jsonl` by itself.
+- User-observed `direnv: loading ~/coding/moltinger/moltinger-main/.envrc` messages are relevant evidence inputs, but they are not standalone proof that canonical-root `bd` handled a rewrite. Current `direnv status` in this worktree resolves the loaded RC to this worktree’s `.envrc`, and that `.envrc` computes `repo_root` dynamically via `git rev-parse --show-toplevel` before prepending `<repo_root>/bin` to `PATH`, so `direnv` affects which `bd` binary wins in the current shell but does not write `.beads/issues.jsonl` by itself.
 - Repo-local `bin/bd` sources `scripts/beads-resolve-db.sh`, then either blocks unsafe commands, passes through read-only/global flows, or execs the installed system `bd` against the current worktree DB.
 - The installed runtime in this worktree is `bd 0.49.6`; `bd info` currently reports `Mode: direct` and `Reason: worktree_safety`, which already diverges from older daemon-centric assumptions in local comments/config.
 - Tracked JSONL can still be rewritten by repo-local mutation surfaces such as `.githooks/pre-commit` and `scripts/beads-normalize-issues-jsonl.sh`, so RCA must distinguish “bootstrap picked a different `bd`” from “a local hook/script rewrote JSONL”.
 - Official upstream Beads docs and release notes now emphasize Dolt-native paths and show active churn around `bd sync`, sync mode, JSONL export, and worktree handling, so this feature must treat upstream behavior as a compatibility boundary, not as a fixed invariant.
-- RCA evidence must therefore capture both bootstrap context and writer context as one tuple: observed `direnv` load path, computed repo root, resolved `bd` binary, installed `bd` version/mode, and the mutation surface that actually touched tracked JSONL.
+- RCA evidence must therefore capture both bootstrap context and writer context as one tuple: `direnv status`, computed repo root, resolved `bd` binary, installed `bd` version/mode, and the mutation surface that actually touched tracked JSONL.
 
 ## Technical Context
 
@@ -129,7 +129,7 @@ Research outcomes are recorded in [research.md](./research.md). The design direc
 7. Before implementation, verify the current official Beads docs/releases/issues for `bd sync`, sync mode, worktree safety, and JSONL export semantics so the repo does not harden a stale upstream assumption.
 8. Treat `direnv` as a repo-local bootstrap path that changes which `bd` binary wins on `PATH`; do not treat it as direct evidence that `direnv` itself writes `.beads/issues.jsonl`.
 9. Reconcile repo-local tracked-JSONL workflow against current upstream Dolt-native guidance before finalizing execution order, because the local branch is pinned to installed `bd 0.49.6`, not to whatever the latest README now recommends.
-10. Require RCA fixtures and operator docs to log the bootstrap tuple (`direnv` load path, `git rev-parse --show-toplevel`, `command -v bd`, `bd --version`, `bd info`) before attributing any cross-worktree JSONL rewrite.
+10. Require RCA fixtures and operator docs to log the bootstrap tuple (`direnv status`, `git rev-parse --show-toplevel`, `command -v bd`, `bd --version`, `bd info`) before attributing any cross-worktree JSONL rewrite.
 
 ## Phase 1: Design Outcomes
 

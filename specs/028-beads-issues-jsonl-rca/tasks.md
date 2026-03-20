@@ -16,7 +16,7 @@
 - [ ] P003 Confirm affected implementation surfaces from `specs/028-beads-issues-jsonl-rca/plan.md` and annotate final execution order in `specs/028-beads-issues-jsonl-rca/tasks.md`
 - [ ] P004 Freeze scope boundaries for routine sync, migration, rollout, rollback, canonical-root cleanup, and repo-local bootstrap factors in `specs/028-beads-issues-jsonl-rca/plan.md`
 - [ ] P005 Research official Beads documentation, CLI/reference docs, release notes, and relevant upstream issue threads for `bd sync`, backend/sync mode, worktree safety, and JSONL export behavior in `specs/028-beads-issues-jsonl-rca/research.md`
-- [ ] P006 Capture the bootstrap evidence matrix (`direnv` load path, computed repo root, `command -v bd`, `bd --version`, `bd info`) and record how it constrains RCA attribution in `specs/028-beads-issues-jsonl-rca/research.md`
+- [ ] P006 Capture the bootstrap evidence matrix (`direnv status`, computed repo root, `command -v bd`, `bd --version`, `bd info`) and record how it constrains RCA attribution in `specs/028-beads-issues-jsonl-rca/research.md`
 - [ ] P007 Run a consilium checkpoint on upstream Beads semantics vs this repo’s JSONL workflow, then refresh `specs/028-beads-issues-jsonl-rca/plan.md` and `specs/028-beads-issues-jsonl-rca/tasks.md`
 
 **Gate**: Do not start `T001+` until `P005-P007` are complete and task ordering reflects the official Beads review plus bootstrap evidence findings.
@@ -84,7 +84,7 @@
 ### Implementation for User Story 2
 
 - [ ] T016 [US2] Implement the reproducible RCA and evidence runner in `scripts/beads-issues-jsonl-rca.sh`
-- [ ] T017 [US2] Emit stable machine-readable evidence fields, including the bootstrap tuple (`direnv` load path, repo root, resolved `bd`, runtime mode/version), from `scripts/beads-issues-jsonl-rca.sh` and `scripts/beads-resolve-db.sh`
+- [ ] T017 [US2] Emit stable machine-readable evidence fields, including the bootstrap tuple (`direnv status`, repo root, resolved `bd`, runtime mode/version), from `scripts/beads-issues-jsonl-rca.sh` and `scripts/beads-resolve-db.sh`
 - [ ] T018 [US2] Write the durable RCA incident record in `docs/rca/2026-03-xx-beads-issues-jsonl-drift-ownership-gap.md`
 - [ ] T019 [US2] Publish the deterministic sync-authority rule, upstream compatibility notes, legacy-vs-current `bd sync` semantics, and RCA usage guidance in `docs/rules/beads-issues-jsonl-deterministic-sync-authority.md`, `docs/WORKTREE-HOTFIX-PLAYBOOK.md`, and `docs/beads-issues-jsonl-sync-model.md`
 
