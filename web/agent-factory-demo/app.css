@@ -332,7 +332,8 @@ code {
 
 .app-frame[data-sidebar-open="false"] .sidebar,
 .app-frame[data-sidebar-open="false"] .app-frame__divider {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .app-frame__divider {

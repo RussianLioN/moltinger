@@ -517,7 +517,11 @@
       dom.appFrame.dataset.sidebarOpen = visible ? "true" : "false";
     }
     if (dom.sidebarResizer) {
-      dom.sidebarResizer.hidden = !visible || isMobileLayout();
+      const mobileLayout = isMobileLayout();
+      const interactive = visible && !mobileLayout;
+      dom.sidebarResizer.hidden = mobileLayout;
+      dom.sidebarResizer.setAttribute("aria-hidden", interactive ? "false" : "true");
+      dom.sidebarResizer.tabIndex = interactive ? 0 : -1;
     }
     if (dom.sidebarToggle) {
       dom.sidebarToggle.hidden = !visible;
