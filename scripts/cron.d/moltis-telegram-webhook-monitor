@@ -8,9 +8,9 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-# Keep webhook readiness checks enabled.
-# Probe message stays passive-by-default (no required chat target).
-TELEGRAM_REQUIRE_WEBHOOK=true
+# Keep default monitor aligned with production polling mode.
+# If webhook cutover is enabled intentionally, set TELEGRAM_REQUIRE_WEBHOOK=true explicitly.
+TELEGRAM_REQUIRE_WEBHOOK=false
 TELEGRAM_REQUIRE_HTTPS_WEBHOOK=true
 TELEGRAM_REQUIRE_TEST_USER=false
 TELEGRAM_PROBE_DISABLE_NOTIFICATION=true

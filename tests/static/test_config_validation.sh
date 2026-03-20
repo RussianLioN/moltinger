@@ -138,11 +138,12 @@ PY
     fi
 
     test_start "static_telegram_webhook_cron_defaults_to_passive_probe_mode"
-    if rg -q '^TELEGRAM_REQUIRE_TEST_USER=false$' "$TELEGRAM_WEBHOOK_MONITOR_CRON" && \
+    if rg -q '^TELEGRAM_REQUIRE_WEBHOOK=false$' "$TELEGRAM_WEBHOOK_MONITOR_CRON" && \
+       rg -q '^TELEGRAM_REQUIRE_TEST_USER=false$' "$TELEGRAM_WEBHOOK_MONITOR_CRON" && \
        rg -q '^TELEGRAM_PROBE_DISABLE_NOTIFICATION=true$' "$TELEGRAM_WEBHOOK_MONITOR_CRON"; then
         test_pass
     else
-        test_fail "Webhook cron defaults must keep active Telegram probe opt-in and quiet"
+        test_fail "Webhook cron defaults must stay polling-friendly and keep active Telegram probe opt-in + quiet"
     fi
 
     test_start "static_telegram_user_monitor_cron_is_disabled_by_default"

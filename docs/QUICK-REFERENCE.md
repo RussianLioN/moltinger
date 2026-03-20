@@ -45,7 +45,7 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
 ./scripts/telegram-webhook-monitor.sh --json
 
 # Server-side cron (GitOps): scripts/cron.d/moltis-telegram-webhook-monitor
-# Контракт по умолчанию: пассивный check (без sendMessage probe, пока не задан TELEGRAM_TEST_USER)
+# Контракт по умолчанию: polling-friendly + пассивный check (без sendMessage probe, пока не задан TELEGRAM_TEST_USER)
 # .github/workflows/telegram-webhook-monitor.yml запускается вручную (workflow_dispatch)
 ```
 
