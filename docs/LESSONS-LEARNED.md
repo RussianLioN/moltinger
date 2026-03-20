@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 34
+**Total Lessons**: 36
 
 ---
 
@@ -14,8 +14,10 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (9 lessons)
+#### P1 (11 lessons)
+- [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
+- [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
 - [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
 - [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
@@ -59,11 +61,13 @@
 ### By Category
 
 
-#### cicd (12 lessons)
+#### cicd (14 lessons)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
+- [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Moltis update proposal workflow failed with workflow-file issue due to forbidden secrets context in step if](../docs/rca/2026-03-20-moltis-update-proposal-workflow-file-issue-on-secrets-context.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
+- [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [Clawdiy deploy treated transient OpenClaw startup unhealthy as a hard latest-upgrade failure](../docs/rca/2026-03-14-clawdiy-latest-startup-warmup-was-treated-as-hard-failure.md)
 - [Clawdiy upgrade to official Docker latest regressed live health and required baseline rollback](../docs/rca/2026-03-14-clawdiy-latest-channel-regressed-live-health.md)
@@ -106,15 +110,15 @@
 
 ### Popular Tags
 
+- `github-actions` (11 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
-- `github-actions` (9 lessons)
+- `gitops` (8 lessons)
 - `clawdiy` (8 lessons)
-- `gitops` (7 lessons)
+- `deploy` (7 lessons)
+- `rca` (6 lessons)
 - `openclaw` (6 lessons)
-- `rca` (5 lessons)
 - `docker` (5 lessons)
-- `deploy` (5 lessons)
 - `topology-registry` (4 lessons)
 
 
@@ -124,10 +128,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 34 |
-| Critical (P0/P1) | 10 |
+| Total Lessons | 36 |
+| Critical (P0/P1) | 12 |
 | Categories | 5 |
-| Unique Tags | 86 |
+| Unique Tags | 88 |
 
 ---
 
