@@ -328,6 +328,7 @@ PY
     test_start "static_deploy_script_cleans_legacy_container_name_conflicts_before_rollout"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        rg -Fq 'resolve_container_name_conflicts' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'expected_project="$(basename "$PROJECT_ROOT")"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'docker rm -f "$container_id"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'echo "prometheus"' "$DEPLOY_SCRIPT"; then
         test_pass
