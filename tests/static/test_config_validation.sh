@@ -30,6 +30,7 @@ TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-mo
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
+SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -242,14 +243,39 @@ PY
     fi
 
     test_start "static_deploy_workflows_use_shared_tracked_deploy_entrypoint"
-    if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
-       rg -q 'run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
+    if rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]] && \
+       rg -q 'run-tracked-moltis-deploy\.sh' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
        ! rg -q 'Prepare writable Moltis runtime config' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Deploy tracked version' "$UAT_GATE_WORKFLOW" && \
        [[ -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
         test_pass
     else
         test_fail "Deploy and UAT workflows should delegate tracked Moltis deploy orchestration to the shared script entrypoint"
+    fi
+
+    test_start "static_tracked_deploy_workflows_pass_remote_args_without_inline_shell_strings"
+    if rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
+       rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
+       [[ -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]] && \
+       rg -Fq 'emit_remote_script | ssh "$SSH_TARGET" '"'"'bash -seu'"'"'' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       ! rg -Fq 'REMOTE_CMD=' "$DEPLOY_WORKFLOW" && \
+       ! rg -Fq 'REMOTE_CMD=' "$UAT_GATE_WORKFLOW" && \
+       ! rg -Fq 'ssh "$SSH_TARGET" bash -s -- \' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       ! rg -Fq '"$REMOTE_CMD"' "$SSH_TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy and UAT workflows must pass tracked deploy arguments via a constant remote command plus stdin-delivered script instead of inline remote command strings"
+    fi
+
+    test_start "static_tracked_deploy_script_treats_env_file_as_data"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       ! rg -Fq 'source "$env_file"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'read_env_file_value' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy script must not source .env as shell code"
     fi
 
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"

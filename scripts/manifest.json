@@ -677,6 +677,20 @@
       "gitops": true,
       "ci": true
     },
+    "ssh-run-tracked-moltis-deploy.sh": {
+      "version": "1.0.0",
+      "description": "Safely invoke the tracked Moltis deploy control-plane script over SSH without inline remote shell composition",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "ssh"
+      ],
+      "provides": [
+        "ssh-run-tracked-moltis-deploy"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "run-tracked-moltis-deploy.sh": {
       "version": "1.0.0",
       "description": "Run the tracked Moltis deploy control plane: runtime prep, validation, deploy, audit markers, and checkout alignment",

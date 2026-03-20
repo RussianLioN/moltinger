@@ -15,12 +15,14 @@ SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
+SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
 EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
 EXPECTED_SYNC_SURFACE_SCRIPT="scripts/gitops-sync-managed-surface.sh"
 EXPECTED_HOST_AUTOMATION_SCRIPT="scripts/apply-moltis-host-automation.sh"
 EXPECTED_ENV_RENDER_SCRIPT="scripts/render-moltis-env.sh"
 EXPECTED_TRACKED_DEPLOY_SCRIPT="scripts/run-tracked-moltis-deploy.sh"
+EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT="scripts/ssh-run-tracked-moltis-deploy.sh"
 
 test_deploy_workflow_uses_shared_production_lock() {
     test_start "Deploy workflow should use shared production concurrency group"
@@ -161,18 +163,23 @@ test_moltis_env_workflows_use_shared_render_script() {
 test_tracked_deploy_workflows_use_shared_script_entrypoint() {
     test_start "Tracked Moltis deploy should use one shared control-plane script entrypoint"
 
-    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" || ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" || ! -f "$TRACKED_DEPLOY_SCRIPT" || ! -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]]; then
         test_skip "Workflow/script files missing for tracked deploy entrypoint check"
         return
     fi
 
-    if ! grep -Fq "$EXPECTED_TRACKED_DEPLOY_SCRIPT" "$DEPLOY_WORKFLOW"; then
-        test_fail "deploy.yml must call $EXPECTED_TRACKED_DEPLOY_SCRIPT"
+    if ! grep -Fq "$EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT" "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml must call $EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT"
         return
     fi
 
-    if ! grep -Fq "$EXPECTED_TRACKED_DEPLOY_SCRIPT" "$UAT_WORKFLOW"; then
-        test_fail "uat-gate.yml must call $EXPECTED_TRACKED_DEPLOY_SCRIPT"
+    if ! grep -Fq "$EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT" "$UAT_WORKFLOW"; then
+        test_fail "uat-gate.yml must call $EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_TRACKED_DEPLOY_SCRIPT" "$SSH_TRACKED_DEPLOY_SCRIPT"; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh must call $EXPECTED_TRACKED_DEPLOY_SCRIPT"
         return
     fi
 
@@ -193,6 +200,216 @@ test_tracked_deploy_workflows_use_shared_script_entrypoint() {
         return
     fi
 
+    test_pass
+}
+
+test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
+    test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
+
+    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" || ! -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Workflow/helper files missing for safe remote argument passing check"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT" "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq "$EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT" "$UAT_WORKFLOW" || \
+       ! grep -Fq "emit_remote_script | ssh \"\$SSH_TARGET\" 'bash -seu'" "$SSH_TRACKED_DEPLOY_SCRIPT"; then
+        test_fail "Deploy and UAT workflows must use the safe SSH wrapper for tracked deploy invocation"
+        return
+    fi
+
+    if grep -Fq 'REMOTE_CMD=' "$DEPLOY_WORKFLOW" || \
+       grep -Fq 'REMOTE_CMD=' "$UAT_WORKFLOW" || \
+       grep -Fq 'ssh "$SSH_TARGET" bash -s -- \' "$SSH_TRACKED_DEPLOY_SCRIPT" || \
+       grep -Fq '"$REMOTE_CMD"' "$SSH_TRACKED_DEPLOY_SCRIPT"; then
+        test_fail "Tracked deploy workflows must not interpolate github.ref_name into an inline remote shell command string or pass it via ssh argv serialization"
+        return
+    fi
+
+    test_pass
+}
+
+test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs() {
+    test_start "Tracked deploy SSH wrapper should preserve unsafe refs via shell-quoted stdin assignments"
+
+    if [[ ! -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing helper script: $SSH_TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local output_file tmp_dir
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/output.log"
+
+    if ! bash "$SSH_TRACKED_DEPLOY_SCRIPT" \
+        --dry-run \
+        --ssh-user "deploy" \
+        --ssh-host "example.com" \
+        --deploy-path "/opt/moltinger" \
+        --git-sha "deadbeef" \
+        --git-ref "feature/unsafe'quote" \
+        --workflow-run "12345" \
+        --version "1.2.3" >"$output_file" 2>&1; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh dry-run failed"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "+ ssh deploy@example.com bash -seu <<REMOTE_SCRIPT" "$output_file" || \
+       ! grep -Fq "GIT_REF=feature/unsafe\\'quote" "$output_file"; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh dry-run must render a constant remote command and shell-quoted stdin assignments"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if grep -Fq "bash -s --" "$output_file"; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh dry-run must not rely on ssh argv serialization"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_ssh_tracked_deploy_wrapper_runtime_executes_remote_script_via_stdin() {
+    test_start "Tracked deploy SSH wrapper should transport dynamic args via stdin script at runtime"
+
+    if [[ ! -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing helper script: $SSH_TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir bin_dir deploy_dir args_file output_json expected_ref
+    tmp_dir="$(mktemp -d)"
+    bin_dir="$tmp_dir/bin"
+    deploy_dir="$tmp_dir/deploy"
+    args_file="$tmp_dir/ssh-args.log"
+    output_json="$tmp_dir/output.json"
+    expected_ref="feature/unsafe'quote"
+
+    mkdir -p "$bin_dir" "$deploy_dir/scripts"
+
+    cat > "$bin_dir/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+args_file="${FAKE_SSH_ARGS_FILE:?}"
+printf '%s\n' "$@" >"$args_file"
+
+if [[ $# -ne 2 ]]; then
+    echo "fake ssh expected exactly 2 arguments after host serialization, got $#." >&2
+    exit 97
+fi
+
+if [[ "$2" != "bash -seu" ]]; then
+    echo "fake ssh expected constant remote command 'bash -seu', got '$2'." >&2
+    exit 98
+fi
+
+exec bash -seu
+EOF
+    chmod +x "$bin_dir/ssh"
+
+    cat > "$deploy_dir/scripts/run-tracked-moltis-deploy.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUTPUT_JSON=false
+DEPLOY_PATH=""
+GIT_SHA=""
+GIT_REF=""
+WORKFLOW_RUN=""
+EXPECTED_VERSION=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --json)
+            OUTPUT_JSON=true
+            shift
+            ;;
+        --deploy-path)
+            DEPLOY_PATH="${2:-}"
+            shift 2
+            ;;
+        --git-sha)
+            GIT_SHA="${2:-}"
+            shift 2
+            ;;
+        --git-ref)
+            GIT_REF="${2:-}"
+            shift 2
+            ;;
+        --workflow-run)
+            WORKFLOW_RUN="${2:-}"
+            shift 2
+            ;;
+        --version)
+            EXPECTED_VERSION="${2:-}"
+            shift 2
+            ;;
+        *)
+            echo "unexpected argument: $1" >&2
+            exit 64
+            ;;
+    esac
+done
+
+if [[ "$OUTPUT_JSON" != "true" ]]; then
+    echo "wrapper must request JSON output" >&2
+    exit 65
+fi
+
+jq -n \
+    --arg status "success" \
+    --arg deploy_path "$DEPLOY_PATH" \
+    --arg git_sha "$GIT_SHA" \
+    --arg git_ref "$GIT_REF" \
+    --arg workflow_run "$WORKFLOW_RUN" \
+    --arg version "$EXPECTED_VERSION" \
+    '{
+      status: $status,
+      details: {
+        deploy_path: $deploy_path,
+        git_sha: $git_sha,
+        git_ref: $git_ref,
+        workflow_run: $workflow_run,
+        version: $version
+      }
+    }'
+EOF
+    chmod +x "$deploy_dir/scripts/run-tracked-moltis-deploy.sh"
+
+    if ! PATH="$bin_dir:$PATH" \
+        FAKE_SSH_ARGS_FILE="$args_file" \
+        bash "$SSH_TRACKED_DEPLOY_SCRIPT" \
+            --ssh-user "deploy" \
+            --ssh-host "example.com" \
+            --deploy-path "$deploy_dir" \
+            --git-sha "deadbeef" \
+            --git-ref "$expected_ref" \
+            --workflow-run "12345" \
+            --version "1.2.3" >"$output_json" 2>&1; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh runtime execution failed against fake ssh"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(wc -l <"$args_file")" -ne 2 ]] || \
+       [[ "$(sed -n '2p' "$args_file")" != "bash -seu" ]]; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh must send a constant two-argument ssh command"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(jq -r '.details.git_ref' "$output_json")" != "$expected_ref" ]] || \
+       [[ "$(jq -r '.details.deploy_path' "$output_json")" != "$deploy_dir" ]]; then
+        test_fail "ssh-run-tracked-moltis-deploy.sh must preserve remote arguments exactly through stdin transport"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
     test_pass
 }
 
@@ -430,6 +647,81 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     test_pass
 }
 
+test_tracked_deploy_script_treats_env_file_as_data() {
+    test_start "Shared tracked deploy script should treat .env as data, not executable shell"
+
+    if [[ ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing script file: $TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir deploy_dir scripts_dir config_dir marker_file output_json runtime_dir
+    tmp_dir="$(mktemp -d)"
+    deploy_dir="$tmp_dir/deploy"
+    scripts_dir="$deploy_dir/scripts"
+    config_dir="$deploy_dir/config"
+    marker_file="$tmp_dir/marker"
+    runtime_dir="$tmp_dir/runtime-config"
+
+    mkdir -p "$scripts_dir" "$config_dir"
+
+    cat > "$deploy_dir/.env" <<EOF
+MOLTIS_PASSWORD=\$(touch "$marker_file")
+MOLTIS_DOMAIN=moltis.example.com
+MOLTIS_RUNTIME_CONFIG_DIR=$runtime_dir
+EOF
+
+    cat > "$scripts_dir/prepare-moltis-runtime-config.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    cat > "$scripts_dir/moltis-version.sh" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == "version" ]]; then
+  printf '%s\n' "1.2.3"
+elif [[ "${1:-}" == "assert-tracked" ]]; then
+  exit 0
+else
+  exit 0
+fi
+EOF
+    cat > "$scripts_dir/deploy.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$scripts_dir/prepare-moltis-runtime-config.sh" "$scripts_dir/moltis-version.sh" "$scripts_dir/deploy.sh"
+    printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
+    printf '[server]\nport = 13131\n' > "$config_dir/moltis.toml"
+
+    if ! output_json="$(bash "$TRACKED_DEPLOY_SCRIPT" \
+        --deploy-path "$deploy_dir" \
+        --git-sha "deadbeef" \
+        --git-ref "feature/unsafe'quote" \
+        --workflow-run "12345" \
+        --version "1.2.3" \
+        --json \
+        --dry-run 2>"$tmp_dir/stderr.log")"; then
+        test_fail "run-tracked-moltis-deploy.sh dry-run failed for safe .env parsing scenario"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ -e "$marker_file" ]]; then
+        test_fail "run-tracked-moltis-deploy.sh executed shell syntax from .env instead of treating it as data"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(printf '%s' "$output_json" | jq -r '.details.runtime_config_dir')" != "$runtime_dir" ]]; then
+        test_fail "run-tracked-moltis-deploy.sh did not preserve runtime_config_dir from .env during dry-run"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root() {
     test_start "Shared host-automation script should disable the fallback scheduler without mutating active root"
 
@@ -522,10 +814,13 @@ run_all_tests() {
     test_active_root_workflows_use_shared_script_entrypoint
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
+    test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
+    test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_deploy_workflow_uses_shared_host_automation_script
     test_gitops_sync_script_dry_run_covers_managed_surface
     test_render_moltis_env_script_renders_runtime_contract
     test_tracked_deploy_script_dry_run_reports_control_plane_steps
+    test_tracked_deploy_script_treats_env_file_as_data
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
     test_active_root_script_migrates_legacy_directory
     test_active_root_script_requires_existing_target_directory

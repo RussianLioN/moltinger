@@ -316,10 +316,15 @@ jobs:
       - name: Run tracked Moltis deploy control plane
         run: |
           echo "::group::Running tracked Moltis deploy control plane"
-          REMOTE_CMD="cd '${{ env.DEPLOY_PATH }}' && ./scripts/run-tracked-moltis-deploy.sh --json --git-sha '${{ github.sha }}' --git-ref '${{ github.ref_name }}' --workflow-run '${{ github.run_id }}' --version '${{ needs.preflight.outputs.version }}'"
-
           set +e
-          OUTPUT=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "$REMOTE_CMD")
+          OUTPUT=$(bash ./scripts/ssh-run-tracked-moltis-deploy.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --git-sha "${{ github.sha }}" \
+            --git-ref "${{ github.ref_name }}" \
+            --workflow-run "${{ github.run_id }}" \
+            --version "${{ needs.preflight.outputs.version }}")
           SSH_EXIT=$?
           set -e
 

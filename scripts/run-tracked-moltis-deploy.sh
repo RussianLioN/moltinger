@@ -12,6 +12,7 @@ WORKFLOW_RUN=""
 EXPECTED_VERSION=""
 TRACKED_VERSION=""
 RUNTIME_CONFIG_DIR=""
+MOLTIS_DOMAIN_VALUE="moltis.ainetic.tech"
 
 timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -139,19 +140,38 @@ require_file() {
     fi
 }
 
-load_runtime_env() {
+read_env_file_value() {
+    local env_file="$1"
+    local key="$2"
+    local value
+
+    if [[ ! -f "$env_file" ]]; then
+        return 1
+    fi
+
+    value="$(grep -E "^${key}=" "$env_file" | tail -1 | cut -d'=' -f2- || true)"
+    value="${value%\"}"
+    value="${value#\"}"
+
+    if [[ -z "$value" ]]; then
+        return 1
+    fi
+
+    printf '%s' "$value"
+}
+
+load_runtime_settings() {
     local env_file="$DEPLOY_PATH/.env"
     require_file "$env_file"
 
-    set -a
-    # shellcheck disable=SC1090
-    source "$env_file"
-    set +a
+    RUNTIME_CONFIG_DIR="$(read_env_file_value "$env_file" "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
+    [[ -n "$RUNTIME_CONFIG_DIR" ]] || RUNTIME_CONFIG_DIR="/opt/moltinger-state/config-runtime"
+
+    MOLTIS_DOMAIN_VALUE="$(read_env_file_value "$env_file" "MOLTIS_DOMAIN" || true)"
+    [[ -n "$MOLTIS_DOMAIN_VALUE" ]] || MOLTIS_DOMAIN_VALUE="moltis.ainetic.tech"
 }
 
 prepare_runtime_config() {
-    RUNTIME_CONFIG_DIR="${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
-
     mkdir -p "$RUNTIME_CONFIG_DIR"
     bash "$DEPLOY_PATH/scripts/prepare-moltis-runtime-config.sh" \
         "$DEPLOY_PATH/config" \
@@ -235,7 +255,7 @@ verify_rollback_health() {
         return 1
     fi
 
-    domain="${MOLTIS_DOMAIN:-moltis.ainetic.tech}"
+    domain="$MOLTIS_DOMAIN_VALUE"
     external_http_code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "https://${domain}/health" 2>/dev/null || echo "000")"
     if [[ "$external_http_code" != "200" && "$external_http_code" != "401" ]]; then
         log_info "Post-rollback external health returned HTTP $external_http_code"
@@ -299,8 +319,7 @@ require_file "$DEPLOY_PATH/scripts/deploy.sh"
 require_file "$DEPLOY_PATH/docker-compose.prod.yml"
 require_file "$DEPLOY_PATH/config/moltis.toml"
 
-load_runtime_env
-RUNTIME_CONFIG_DIR="${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
+load_runtime_settings
 
 if [[ "$DRY_RUN" == "true" ]]; then
     TRACKED_VERSION="${EXPECTED_VERSION:-dry-run}"
