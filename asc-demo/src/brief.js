@@ -64,6 +64,27 @@ const SUCCESS_METRICS_SECTION_MARKERS = [
   "уровень ошибок",
   "точность",
 ];
+const BRIEF_DIRECTIVE_MARKERS = [
+  "исправь",
+  "внеси",
+  "добавь",
+  "обнови",
+  "уточни",
+  "поправь",
+  "правку",
+  "без цитирования",
+];
+const EXPECTED_OUTPUT_HINT_MARKERS = [
+  "one-page",
+  "onepage",
+  "pdf",
+  "выход",
+  "результат",
+  "рекомендац",
+  "ключев",
+  "блок",
+  "материал",
+];
 
 function fallbackBrief(session) {
   const lines = ["# Brief проекта", ""];
@@ -172,8 +193,135 @@ function inferCorrectionTargets(correctionText) {
       return targets.filter((topicId) => topicId !== "success_metrics");
     }
   }
+  if (targets.includes("expected_outputs") && targets.includes("input_examples")) {
+    const outputContext = OUTPUT_CONTEXT_MARKERS.some((marker) => normalized.includes(marker));
+    const explicitInputContext = [
+      "входные данные",
+      "прилож",
+      "прикреп",
+      "файл",
+    ].some((marker) => normalized.includes(marker));
+    if (outputContext && !explicitInputContext) {
+      return targets.filter((topicId) => topicId !== "input_examples");
+    }
+  }
 
   return targets;
+}
+
+function isDirectiveLikeText(value) {
+  const lower = normalizeText(value).toLowerCase();
+  if (!lower) {
+    return false;
+  }
+  return BRIEF_DIRECTIVE_MARKERS.some((marker) => lower.includes(marker));
+}
+
+function cleanExpectedOutputHint(value) {
+  let text = normalizeText(value)
+    .replace(/^["«]+/, "")
+    .replace(/[»"]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) {
+    return "";
+  }
+  text = text
+    .replace(/^(исправь\s+brief|внеси\s+уточнение|добавь|обнови|уточни|поправь)\s*[:\-]\s*/i, "")
+    .replace(/^в\s+разделе\s+[^:]+:\s*/i, "")
+    .replace(
+      /^(?:ожидаем(?:ый|ые)?\s+(?:выход|результат)\s*(?:долж(?:ен|на|ны)\s*быть)?|на\s+выходе(?:\s+нуж(?:ен|на|ны))?)\s*[:\-]\s*/i,
+      "",
+    )
+    .replace(/\s+и\s+без\s+цитир[^.]+\.?$/i, "")
+    .trim();
+  return text;
+}
+
+function extractExpectedOutputHint(correctionText, session) {
+  const source = normalizeText(correctionText);
+  const fallback = normalizeText(session.topicAnswers?.expected_outputs);
+  if (!source) {
+    return cleanExpectedOutputHint(fallback);
+  }
+  const quotedAfterMarker = source.match(
+    /(?:ожидаем(?:ый|ые)?\s+(?:выход|результат)[^:]{0,120}|на\s+выходе[^:]{0,120})[:\-]\s*[«"]([^»"]+)[»"]/i,
+  );
+  if (quotedAfterMarker?.[1]) {
+    return cleanExpectedOutputHint(quotedAfterMarker[1]);
+  }
+  const quotedCandidates = Array.from(source.matchAll(/[«"]([^»"]{10,})[»"]/g))
+    .map((match) => cleanExpectedOutputHint(match[1]))
+    .filter(Boolean);
+  const markerQuote = quotedCandidates.find((candidate) => {
+    const lower = candidate.toLowerCase();
+    return EXPECTED_OUTPUT_HINT_MARKERS.some((marker) => lower.includes(marker));
+  });
+  if (markerQuote) {
+    return markerQuote;
+  }
+  const hasOutputContext = OUTPUT_CONTEXT_MARKERS.some((marker) => source.toLowerCase().includes(marker));
+  if (hasOutputContext) {
+    const afterColon = cleanExpectedOutputHint(source.split(":").slice(1).join(":"));
+    if (afterColon) {
+      return afterColon;
+    }
+  }
+  return cleanExpectedOutputHint(fallback || source);
+}
+
+function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
+  let normalized = normalizeBrief(revisedBrief);
+  if (!normalized) {
+    return normalized;
+  }
+  const correction = normalizeText(correctionText);
+  const targets = inferCorrectionTargets(correctionText);
+  if (!targets.includes("expected_outputs")) {
+    return normalized;
+  }
+  const expectedHint = extractExpectedOutputHint(correctionText, session);
+  if (!expectedHint) {
+    return normalized;
+  }
+  if (correction && correction.length >= 8 && normalized.includes(correction)) {
+    normalized = normalized.split(correction).join(expectedHint);
+  }
+  normalized = normalized.replace(/[«"]([^»"]{10,})[»"]/g, (full, inner) => {
+    if (!isDirectiveLikeText(inner)) {
+      return full;
+    }
+    return `«${expectedHint}»`;
+  });
+  const lines = normalized.split("\n");
+  let outputSection = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const heading = line.match(/^##\s+(.+)$/);
+    if (heading) {
+      outputSection = /(ожидаем|выход|результат|примеры входов и выходов)/i.test(heading[1]);
+      continue;
+    }
+    if (!outputSection) {
+      continue;
+    }
+    const trimmed = normalizeText(line);
+    if (!trimmed) {
+      continue;
+    }
+    if (/^Ожидаемые выходы\s*:/i.test(trimmed)) {
+      lines[index] = `Ожидаемые выходы: ${expectedHint}`;
+      continue;
+    }
+    if (/^-/.test(trimmed) && isDirectiveLikeText(trimmed)) {
+      lines[index] = `${line.match(/^\s*-\s*/)?.[0] || "- "}${expectedHint}`;
+      continue;
+    }
+    if (isDirectiveLikeText(trimmed)) {
+      lines[index] = expectedHint;
+    }
+  }
+  return lines.join("\n");
 }
 
 function buildCorrectionGuidance(session, correctionText) {
@@ -225,6 +373,7 @@ function buildFallbackRevision(session, correctionText) {
   const baseBrief = normalizeBrief(session.briefText) || fallbackBrief(session);
   const sections = parseBriefSections(baseBrief);
   const targets = inferCorrectionTargets(correctionText);
+  const expectedHint = extractExpectedOutputHint(correctionText, session);
 
   if (!targets.length) {
     const currentSummary = normalizeText(sections.get("Резюме"), "Brief обновлен в fallback-режиме.");
@@ -235,6 +384,10 @@ function buildFallbackRevision(session, correctionText) {
 
   targets.forEach((topicId) => {
     const title = BRIEF_SECTION_TITLES[topicId];
+    if (topicId === "expected_outputs" && expectedHint) {
+      sections.set(title, expectedHint);
+      return;
+    }
     const current = normalizeText(sections.get(title), "Требуется уточнение.");
     if (!current.includes(note)) {
       sections.set(title, `${current}\n\nДополнительное уточнение: ${note}`.trim());
@@ -294,7 +447,7 @@ export async function generateBrief(session) {
 }
 
 export async function reviseBrief(session, correctionText) {
-  const fallback = buildFallbackRevision(session, correctionText);
+  const fallback = sanitizeRevisedBrief(session, buildFallbackRevision(session, correctionText), correctionText);
 
   if (!isLLMConfigured()) {
     return fallback;
@@ -310,6 +463,7 @@ export async function reviseBrief(session, correctionText) {
         "Сначала опирайся на подтвержденный discovery context и загруженные файлы, а не только на историю сообщений.",
         "Если корректировка семантически относится к конкретной теме brief, обнови соответствующую секцию в первую очередь и не разбрасывай факт по нерелевантным разделам.",
         "Если пользователь просит добавить подробности, используй только подтвержденные факты. Не придумывай новые данные.",
+        "Никогда не копируй управляющие формулировки пользователя в итоговый brief дословно (например: «исправь», «внеси», «добавь», «без цитирования»). Преобразуй их в нейтральный целевой факт.",
         "Верни только markdown.",
       ].join("\n"),
     },
@@ -335,7 +489,8 @@ export async function reviseBrief(session, correctionText) {
 
   try {
     const completion = await chatCompletion(messages, { temperature: 0.1, maxTokens: 2000 });
-    return normalizeBrief(completion) || fallback;
+    const revised = normalizeBrief(completion) || fallback;
+    return sanitizeRevisedBrief(session, revised, correctionText) || fallback;
   } catch (error) {
     console.error("[asc-demo] brief.reviseBrief:", error?.message || error);
     return fallback;
