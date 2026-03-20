@@ -124,7 +124,7 @@ test_audit_apply_safe_localizes_redirected_sibling() {
     printf '%s\n' "${repo_dir}/.beads" > "${worktree_path}/.beads/redirect"
     fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
 
-    output="$(run_audit "${repo_dir}" "${fake_bin}" --apply-safe)"
+    output="$(run_audit "${repo_dir}" "${fake_bin}" --apply-safe --bootstrap-source main)"
 
     if [[ -f "${worktree_path}/.beads/redirect" ]]; then
         test_fail "Safe apply should remove redirect metadata from migratable siblings"
@@ -133,6 +133,53 @@ test_audit_apply_safe_localizes_redirected_sibling() {
         test_fail "Safe apply should materialize a local beads.db for migratable siblings"
     fi
     assert_contains "${output}" "Actions: 1" "Audit should report one localization action"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_audit_apply_safe_bootstraps_damaged_sibling() {
+    test_start "audit_apply_safe_bootstraps_damaged_sibling"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/beads-worktree-audit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_beads_audit_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    printf 'export PATH="${repo_root}/bin:${PATH}"\n' > "${repo_dir}/.envrc"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl .envrc bin/bd scripts/beads-resolve-db.sh scripts/beads-worktree-localize.sh scripts/beads-worktree-audit.sh
+        git commit -m "fixture: seed bootstrap foundation" >/dev/null
+        git push origin main >/dev/null
+    )
+    worktree_path="${fixture_root}/moltinger-damaged"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/damaged-localize" "main"
+    rm -f \
+        "${worktree_path}/.beads/config.yaml" \
+        "${worktree_path}/.beads/issues.jsonl" \
+        "${worktree_path}/bin/bd" \
+        "${worktree_path}/scripts/beads-resolve-db.sh" \
+        "${worktree_path}/scripts/beads-worktree-localize.sh" \
+        "${worktree_path}/.envrc"
+    mkdir -p "${worktree_path}/.beads"
+    printf '%s\n' "${repo_dir}/.beads" > "${worktree_path}/.beads/redirect"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_audit "${repo_dir}" "${fake_bin}" --apply-safe)"
+
+    if [[ -f "${worktree_path}/.beads/redirect" ]]; then
+        test_fail "Safe apply should remove redirect metadata from bootstrap-repair siblings"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
+        test_fail "Safe apply should materialize a local beads.db for bootstrap-repair siblings"
+    fi
+    if [[ ! -f "${worktree_path}/bin/bd" || ! -f "${worktree_path}/scripts/beads-resolve-db.sh" ]]; then
+        test_fail "Safe apply should restore the plain bd toolchain for bootstrap-repair siblings"
+    fi
+    assert_contains "${output}" "Actions: 1" "Audit should report one localization action for bootstrap-repair siblings"
+    assert_contains "${output}" "state=current action=localized path=" "Audit should report the sibling as localized after bootstrap repair"
+    assert_contains "${output}" "moltinger-damaged" "Audit output should identify the repaired bootstrap sibling"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -166,6 +213,7 @@ run_test_beads_worktree_audit() {
     start_timer
     test_audit_blocks_canonical_root_when_legacy_redirect_exists
     test_audit_apply_safe_localizes_redirected_sibling
+    test_audit_apply_safe_bootstraps_damaged_sibling
     test_audit_skips_enforcement_in_non_canonical_worktree
     generate_report
 }
