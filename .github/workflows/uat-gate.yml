@@ -268,6 +268,18 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Align server git checkout before sync
+        run: |
+          echo "::group::Aligning server git checkout before sync"
+          bash ./scripts/align-server-checkout.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --target-ref "${{ github.ref_name }}" \
+            --target-sha "${{ github.sha }}" \
+            --clean-untracked
+          echo "::endgroup::"
+
       # ===========================================
       # GitOps Step 1: Sync configuration files from git
       # ===========================================

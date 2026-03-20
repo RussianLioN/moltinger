@@ -5,6 +5,8 @@ set -euo pipefail
 
 ACTIVE_ROOT=""
 DRY_RUN=false
+HOST_CRON_DIR="${MOLTIS_HOST_CRON_DIR:-/etc/cron.d}"
+HOST_SYSTEMD_DIR="${MOLTIS_HOST_SYSTEMD_DIR:-/etc/systemd/system}"
 
 usage() {
     cat <<'EOF'
@@ -64,12 +66,41 @@ if [[ ! -d "$ACTIVE_ROOT" ]]; then
 fi
 
 CRON_DIR="$ACTIVE_ROOT/scripts/cron.d"
-HEALTH_SRC="$ACTIVE_ROOT/systemd/moltis-health-monitor.service"
+SYSTEMD_DIR="$ACTIVE_ROOT/systemd"
+HEALTH_UNIT="moltis-health-monitor.service"
+HEALTH_SRC="$SYSTEMD_DIR/$HEALTH_UNIT"
 DISABLED_FALLBACK_SCHEDULER="moltis-telegram-web-user-monitor"
+DISABLED_FALLBACK_SYSTEMD_UNITS=(
+    "${DISABLED_FALLBACK_SCHEDULER}.service"
+    "${DISABLED_FALLBACK_SCHEDULER}.timer"
+)
+
+log_dry_run() {
+    printf '[dry-run] %s\n' "$*"
+}
+
+array_contains() {
+    local needle="$1"
+    shift
+    local item
+
+    for item in "$@"; do
+        if [[ "$item" == "$needle" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+systemctl_available() {
+    command -v systemctl >/dev/null 2>&1
+}
 
 install_cron_jobs() {
-    local cron_file cron_name
+    local cron_file cron_name host_entry host_name
     local -a cron_files=()
+    local -a desired_cron_names=()
 
     if [[ -d "$CRON_DIR" ]]; then
         shopt -s nullglob
@@ -79,7 +110,6 @@ install_cron_jobs() {
 
     if [[ ${#cron_files[@]} -eq 0 ]]; then
         log "No cron jobs to install from $CRON_DIR"
-        return 0
     fi
 
     for cron_file in "${cron_files[@]}"; do
@@ -91,61 +121,117 @@ install_cron_jobs() {
             continue
         fi
 
+        desired_cron_names+=("$cron_name")
         log "Installing cron job: $cron_name"
-        run_or_print cp "$cron_file" "/etc/cron.d/$cron_name"
-        run_or_print chmod 644 "/etc/cron.d/$cron_name"
-        run_or_print chown root:root "/etc/cron.d/$cron_name"
+        run_or_print cp "$cron_file" "$HOST_CRON_DIR/$cron_name"
+        run_or_print chmod 644 "$HOST_CRON_DIR/$cron_name"
+        run_or_print chown root:root "$HOST_CRON_DIR/$cron_name"
     done
 
+    shopt -s nullglob
+    for host_entry in "$HOST_CRON_DIR"/moltis-*; do
+        [[ -f "$host_entry" ]] || continue
+        host_name="$(basename "$host_entry")"
+        if ! array_contains "$host_name" "${desired_cron_names[@]}"; then
+            log "Removing stale managed cron job: $host_name"
+            run_or_print rm -f "$host_entry"
+        fi
+    done
+    shopt -u nullglob
+
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo "[dry-run] systemctl reload cron || systemctl restart cron || true"
-    elif command -v systemctl >/dev/null 2>&1; then
+        log_dry_run "systemctl reload cron || systemctl restart cron || true"
+    elif systemctl_available; then
         systemctl reload cron 2>/dev/null || systemctl restart cron 2>/dev/null || true
     fi
 }
 
-disable_telegram_web_scheduler() {
-    log "Keeping Telegram Web fallback scheduler disabled on host"
-    run_or_print rm -f "/etc/cron.d/$DISABLED_FALLBACK_SCHEDULER"
+sync_systemd_units() {
+    local unit_file unit_name host_entry host_name
+    local -a desired_systemd_units=()
+    local -a systemd_files=()
 
-    if [[ "$DRY_RUN" == "true" ]]; then
-        echo "[dry-run] systemctl disable --now ${DISABLED_FALLBACK_SCHEDULER}.timer 2>/dev/null || true"
-        echo "[dry-run] systemctl stop ${DISABLED_FALLBACK_SCHEDULER}.service 2>/dev/null || true"
-        echo "[dry-run] rm -f /etc/systemd/system/${DISABLED_FALLBACK_SCHEDULER}.service"
-        echo "[dry-run] rm -f /etc/systemd/system/${DISABLED_FALLBACK_SCHEDULER}.timer"
-        echo "[dry-run] systemctl reset-failed ${DISABLED_FALLBACK_SCHEDULER}.service ${DISABLED_FALLBACK_SCHEDULER}.timer 2>/dev/null || true"
-    elif command -v systemctl >/dev/null 2>&1; then
-        systemctl disable --now "${DISABLED_FALLBACK_SCHEDULER}.timer" 2>/dev/null || true
-        systemctl stop "${DISABLED_FALLBACK_SCHEDULER}.service" 2>/dev/null || true
-        rm -f "/etc/systemd/system/${DISABLED_FALLBACK_SCHEDULER}.service"
-        rm -f "/etc/systemd/system/${DISABLED_FALLBACK_SCHEDULER}.timer"
-        systemctl reset-failed "${DISABLED_FALLBACK_SCHEDULER}.service" "${DISABLED_FALLBACK_SCHEDULER}.timer" 2>/dev/null || true
+    if [[ ! -d "$SYSTEMD_DIR" ]]; then
+        echo "apply-moltis-host-automation.sh: missing systemd directory in $ACTIVE_ROOT" >&2
+        exit 1
     fi
-}
 
-install_health_monitor() {
     if [[ ! -f "$HEALTH_SRC" ]]; then
         echo "apply-moltis-host-automation.sh: missing health monitor unit in $ACTIVE_ROOT/systemd" >&2
         exit 1
     fi
 
-    log "Installing Moltis health monitor unit"
-    run_or_print cp "$HEALTH_SRC" /etc/systemd/system/moltis-health-monitor.service
-    run_or_print chmod 644 /etc/systemd/system/moltis-health-monitor.service
+    shopt -s nullglob
+    systemd_files=("$SYSTEMD_DIR"/moltis-*.service "$SYSTEMD_DIR"/moltis-*.timer)
+    shopt -u nullglob
+
+    for unit_file in "${systemd_files[@]}"; do
+        [[ -f "$unit_file" ]] || continue
+        unit_name="$(basename "$unit_file")"
+        if array_contains "$unit_name" "${DISABLED_FALLBACK_SYSTEMD_UNITS[@]}"; then
+            log "Keeping fallback scheduler systemd unit absent on host: $unit_name"
+            continue
+        fi
+
+        desired_systemd_units+=("$unit_name")
+        log "Installing systemd unit: $unit_name"
+        run_or_print cp "$unit_file" "$HOST_SYSTEMD_DIR/$unit_name"
+        run_or_print chmod 644 "$HOST_SYSTEMD_DIR/$unit_name"
+        run_or_print chown root:root "$HOST_SYSTEMD_DIR/$unit_name"
+    done
+
+    shopt -s nullglob
+    for host_entry in "$HOST_SYSTEMD_DIR"/moltis-*.service "$HOST_SYSTEMD_DIR"/moltis-*.timer; do
+        [[ -f "$host_entry" ]] || continue
+        host_name="$(basename "$host_entry")"
+        if ! array_contains "$host_name" "${desired_systemd_units[@]}"; then
+            log "Removing stale managed systemd unit: $host_name"
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_dry_run "systemctl disable --now $host_name 2>/dev/null || true"
+                log_dry_run "systemctl stop $host_name 2>/dev/null || true"
+                log_dry_run "rm -f $host_entry"
+                log_dry_run "systemctl reset-failed $host_name 2>/dev/null || true"
+            else
+                if systemctl_available; then
+                    systemctl disable --now "$host_name" 2>/dev/null || true
+                    systemctl stop "$host_name" 2>/dev/null || true
+                fi
+                rm -f "$host_entry"
+                if systemctl_available; then
+                    systemctl reset-failed "$host_name" 2>/dev/null || true
+                fi
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    log "Keeping Telegram Web fallback scheduler disabled on host"
+    run_or_print rm -f "$HOST_CRON_DIR/$DISABLED_FALLBACK_SCHEDULER"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo "[dry-run] systemctl daemon-reload"
-        echo "[dry-run] systemctl enable --now moltis-health-monitor.service"
-        echo "[dry-run] systemctl is-active --quiet moltis-health-monitor.service"
-    elif command -v systemctl >/dev/null 2>&1; then
+        log_dry_run "systemctl disable --now ${DISABLED_FALLBACK_SCHEDULER}.timer 2>/dev/null || true"
+        log_dry_run "systemctl stop ${DISABLED_FALLBACK_SCHEDULER}.service 2>/dev/null || true"
+        log_dry_run "rm -f $HOST_SYSTEMD_DIR/${DISABLED_FALLBACK_SCHEDULER}.service"
+        log_dry_run "rm -f $HOST_SYSTEMD_DIR/${DISABLED_FALLBACK_SCHEDULER}.timer"
+        log_dry_run "systemctl daemon-reload"
+        log_dry_run "systemctl reset-failed ${DISABLED_FALLBACK_SCHEDULER}.service ${DISABLED_FALLBACK_SCHEDULER}.timer 2>/dev/null || true"
+        log_dry_run "systemctl enable --now $HEALTH_UNIT"
+        log_dry_run "systemctl is-active --quiet $HEALTH_UNIT"
+    elif systemctl_available; then
+        systemctl disable --now "${DISABLED_FALLBACK_SCHEDULER}.timer" 2>/dev/null || true
+        systemctl stop "${DISABLED_FALLBACK_SCHEDULER}.service" 2>/dev/null || true
+        rm -f "$HOST_SYSTEMD_DIR/${DISABLED_FALLBACK_SCHEDULER}.service"
+        rm -f "$HOST_SYSTEMD_DIR/${DISABLED_FALLBACK_SCHEDULER}.timer"
         systemctl daemon-reload
-        systemctl enable --now moltis-health-monitor.service
-        systemctl is-active --quiet moltis-health-monitor.service
+        systemctl reset-failed "${DISABLED_FALLBACK_SCHEDULER}.service" "${DISABLED_FALLBACK_SCHEDULER}.timer" 2>/dev/null || true
+        systemctl enable --now "$HEALTH_UNIT"
+        systemctl is-active --quiet "$HEALTH_UNIT"
+    else
+        log "systemctl not available; copied managed unit files but skipped service activation"
     fi
 }
 
 install_cron_jobs
-disable_telegram_web_scheduler
-install_health_monitor
+sync_systemd_units
 
 log "Moltis host automation applied from $ACTIVE_ROOT"

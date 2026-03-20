@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 UAT_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 ACTIVE_ROOT_SCRIPT="$PROJECT_ROOT/scripts/update-active-deploy-root.sh"
+CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
@@ -18,6 +19,7 @@ TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
 EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
+EXPECTED_CHECKOUT_ALIGN_SCRIPT="scripts/align-server-checkout.sh"
 EXPECTED_SYNC_SURFACE_SCRIPT="scripts/gitops-sync-managed-surface.sh"
 EXPECTED_HOST_AUTOMATION_SCRIPT="scripts/apply-moltis-host-automation.sh"
 EXPECTED_ENV_RENDER_SCRIPT="scripts/render-moltis-env.sh"
@@ -88,6 +90,34 @@ test_active_root_workflows_use_shared_script_entrypoint() {
     if grep -Fq "Detected legacy non-symlink active root" "$UAT_WORKFLOW" || \
        grep -Fq 'ln -sfn "$TARGET_PATH" "$ACTIVE_PATH"' "$UAT_WORKFLOW"; then
         test_fail "uat-gate.yml should not inline active-root mutation logic"
+        return
+    fi
+
+    test_pass
+}
+
+test_checkout_align_workflows_use_shared_script_entrypoint() {
+    test_start "Checkout align step should use one shared script entrypoint"
+
+    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" || ! -f "$CHECKOUT_ALIGN_SCRIPT" ]]; then
+        test_skip "Workflow/script files missing for checkout align entrypoint check"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_CHECKOUT_ALIGN_SCRIPT" "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml must call $EXPECTED_CHECKOUT_ALIGN_SCRIPT"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_CHECKOUT_ALIGN_SCRIPT" "$UAT_WORKFLOW"; then
+        test_fail "uat-gate.yml must call $EXPECTED_CHECKOUT_ALIGN_SCRIPT"
+        return
+    fi
+
+    if grep -Fq "git clean -fd" "$DEPLOY_WORKFLOW" || \
+       grep -Fq "git reset --hard \"\${{ github.sha }}\"" "$DEPLOY_WORKFLOW" || \
+       grep -Fq "git clean -fd" "$UAT_WORKFLOW"; then
+        test_fail "Workflow YAML should not inline remote checkout align logic"
         return
     fi
 
@@ -413,6 +443,49 @@ EOF
     test_pass
 }
 
+test_checkout_align_script_dry_run_uses_constant_remote_command() {
+    test_start "Checkout align script should use a constant remote command and shell-quoted stdin assignments"
+
+    if [[ ! -f "$CHECKOUT_ALIGN_SCRIPT" ]]; then
+        test_skip "Missing helper script: $CHECKOUT_ALIGN_SCRIPT"
+        return
+    fi
+
+    local tmp_dir output_file
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/output.log"
+
+    if ! bash "$CHECKOUT_ALIGN_SCRIPT" \
+        --dry-run \
+        --ssh-user "deploy" \
+        --ssh-host "example.com" \
+        --deploy-path "/opt/moltinger" \
+        --target-ref "feature/unsafe'quote" \
+        --target-sha "deadbeef" \
+        --clean-untracked >"$output_file" 2>&1; then
+        test_fail "align-server-checkout.sh dry-run failed"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "+ ssh deploy@example.com bash -seu <<REMOTE_SCRIPT" "$output_file" || \
+       ! grep -Fq "TARGET_REF=feature/unsafe\\'quote" "$output_file" || \
+       ! grep -Fq "git clean -fd" "$output_file"; then
+        test_fail "align-server-checkout.sh dry-run must render constant ssh transport and expected git cleanup plan"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if grep -Fq "bash -s --" "$output_file"; then
+        test_fail "align-server-checkout.sh dry-run must not rely on ssh argv serialization"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_deploy_workflow_uses_shared_host_automation_script() {
     test_start "Deploy workflow should use a shared host-automation script entrypoint"
 
@@ -500,6 +573,7 @@ test_gitops_sync_script_dry_run_covers_managed_surface() {
     printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
     printf 'name = \"moltis\"\n' > "$project_root/config/moltis.toml"
     printf '#!/usr/bin/env bash\n' > "$project_root/scripts/local-entry.sh"
+    printf 'hidden\n' > "$project_root/scripts/.hidden-entry"
     printf 'demo\n' > "$project_root/systemd/demo.service"
     cat > "$project_root/scripts/manifest.json" <<'EOF'
 {
@@ -551,6 +625,12 @@ EOF
 
     if ! grep -Fq "/srv/moltinger/scripts/local-entry.sh" "$output_file"; then
         test_fail "Dry-run output should include manifest-driven remote chmod alignment"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if grep -Fq ".hidden-entry" "$output_file"; then
+        test_fail "Dry-run output should not sync hidden top-level entries from managed directories"
         rm -rf "$tmp_dir"
         return
     fi
@@ -647,6 +727,140 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     test_pass
 }
 
+test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields() {
+    test_start "Tracked deploy dry-run JSON should expose the workflow ABI contract fields"
+
+    if [[ ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing script file: $TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir project_root output_json
+    tmp_dir="$(mktemp -d)"
+    project_root="$tmp_dir/project"
+    output_json="$tmp_dir/output.json"
+
+    mkdir -p "$project_root/config" "$project_root/scripts"
+    printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
+    printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$project_root/.env"
+    : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
+    : > "$project_root/scripts/moltis-version.sh"
+    : > "$project_root/scripts/deploy.sh"
+
+    if ! bash "$TRACKED_DEPLOY_SCRIPT" \
+        --dry-run \
+        --json \
+        --deploy-path "$project_root" \
+        --git-sha deadbeef \
+        --git-ref main \
+        --workflow-run 123456 \
+        --version 1.2.3 >"$output_json" 2>&1; then
+        test_fail "run-tracked-moltis-deploy.sh dry-run failed for ABI contract check"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(jq -r '.status' "$output_json")" != "dry-run" ]] || \
+       [[ "$(jq -r '.details.git_sha' "$output_json")" != "deadbeef" ]] || \
+       [[ "$(jq -r '.details.git_ref' "$output_json")" != "main" ]] || \
+       [[ "$(jq -r '.details.workflow_run' "$output_json")" != "123456" ]] || \
+       [[ "$(jq -r '.details.tracked_version' "$output_json")" != "1.2.3" ]] || \
+       [[ "$(jq -r '.details.runtime_config_dir' "$output_json")" != "/srv/runtime-config" ]]; then
+        test_fail "Tracked deploy dry-run JSON must preserve the workflow ABI fields consumed by GitHub Actions"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields() {
+    test_start "Tracked deploy failure JSON should keep health and rollback ABI fields"
+
+    if [[ ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing script file: $TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir deploy_dir output_json
+    tmp_dir="$(mktemp -d)"
+    deploy_dir="$tmp_dir/deploy"
+    output_json="$tmp_dir/output.json"
+
+    mkdir -p "$deploy_dir/config" "$deploy_dir/scripts"
+    printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
+    printf '[server]\nport = 13131\n' > "$deploy_dir/config/moltis.toml"
+    : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
+    : > "$deploy_dir/scripts/moltis-version.sh"
+    : > "$deploy_dir/scripts/deploy.sh"
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+
+    if bash "$TRACKED_DEPLOY_SCRIPT" \
+        --json \
+        --deploy-path "$deploy_dir" \
+        --git-sha "deadbeef" \
+        --git-ref "main" \
+        --workflow-run "12345" >"$output_json" 2>&1; then
+        test_fail "run-tracked-moltis-deploy.sh should fail when required .env is missing"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(jq -r '.details.health' "$output_json")" != "failed" ]] || \
+       [[ "$(jq -r '.details.rollback_verified' "$output_json")" != "false" ]]; then
+        test_fail "Tracked deploy failure JSON must keep health=failed and rollback_verified=false for workflow parsing"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_tracked_deploy_script_requires_workflow_run_argument() {
+    test_start "Tracked deploy script should require the workflow-run CLI argument"
+
+    if [[ ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing script file: $TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir deploy_dir output_file exit_code
+    tmp_dir="$(mktemp -d)"
+    deploy_dir="$tmp_dir/deploy"
+    output_file="$tmp_dir/output.log"
+
+    mkdir -p "$deploy_dir/config" "$deploy_dir/scripts"
+    printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
+    printf '[server]\nport = 13131\n' > "$deploy_dir/config/moltis.toml"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$deploy_dir/.env"
+    : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
+    : > "$deploy_dir/scripts/moltis-version.sh"
+    : > "$deploy_dir/scripts/deploy.sh"
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+
+    set +e
+    bash "$TRACKED_DEPLOY_SCRIPT" \
+        --dry-run \
+        --json \
+        --deploy-path "$deploy_dir" \
+        --git-sha "deadbeef" \
+        --git-ref "main" >"$output_file" 2>&1
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -ne 2 ]] || ! grep -Fq "missing required argument: --workflow-run" "$output_file"; then
+        test_fail "Tracked deploy script must fail closed when workflow-run CLI arg is missing"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_tracked_deploy_script_treats_env_file_as_data() {
     test_start "Shared tracked deploy script should treat .env as data, not executable shell"
 
@@ -723,36 +937,52 @@ EOF
 }
 
 test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root() {
-    test_start "Shared host-automation script should disable the fallback scheduler without mutating active root"
+    test_start "Shared host-automation script should converge managed cron/systemd state without mutating active root"
 
     if [[ ! -f "$HOST_AUTOMATION_SCRIPT" ]]; then
         test_skip "Missing script file: $HOST_AUTOMATION_SCRIPT"
         return
     fi
 
-    local tmp_dir active_root output_file
+    local tmp_dir active_root host_cron_dir host_systemd_dir output_file
     tmp_dir="$(mktemp -d)"
     active_root="$tmp_dir/active-root"
+    host_cron_dir="$tmp_dir/etc-cron.d"
+    host_systemd_dir="$tmp_dir/etc-systemd"
     output_file="$tmp_dir/output.log"
 
-    mkdir -p "$active_root/scripts/cron.d" "$active_root/systemd"
+    mkdir -p "$active_root/scripts/cron.d" "$active_root/systemd" "$host_cron_dir" "$host_systemd_dir"
     printf 'backup\n' > "$active_root/scripts/cron.d/moltis-backup-verify"
+    printf 'watcher\n' > "$active_root/scripts/cron.d/moltis-codex-upstream-watcher"
     printf 'fallback\n' > "$active_root/scripts/cron.d/moltis-telegram-web-user-monitor"
+    printf '[Unit]\nDescription=backup\n' > "$active_root/systemd/moltis-backup.service"
+    printf '[Timer]\nOnCalendar=daily\n' > "$active_root/systemd/moltis-backup.timer"
     printf '[Unit]\nDescription=health monitor\n' > "$active_root/systemd/moltis-health-monitor.service"
+    printf '[Unit]\nDescription=stale cron\n' > "$host_cron_dir/moltis-obsolete-cron"
+    printf '[Unit]\nDescription=stale unit\n' > "$host_systemd_dir/moltis-obsolete.service"
+    printf '[Timer]\nDescription=fallback\n' > "$host_systemd_dir/moltis-telegram-web-user-monitor.timer"
+    printf '[Unit]\nDescription=fallback service\n' > "$host_systemd_dir/moltis-telegram-web-user-monitor.service"
 
-    if ! bash "$HOST_AUTOMATION_SCRIPT" \
-        --dry-run \
-        --active-root "$active_root" >"$output_file" 2>&1; then
+    if ! MOLTIS_HOST_CRON_DIR="$host_cron_dir" \
+        MOLTIS_HOST_SYSTEMD_DIR="$host_systemd_dir" \
+        bash "$HOST_AUTOMATION_SCRIPT" \
+            --dry-run \
+            --active-root "$active_root" >"$output_file" 2>&1; then
         test_fail "apply-moltis-host-automation.sh dry-run failed"
         rm -rf "$tmp_dir"
         return
     fi
 
-    if ! grep -Fq "/etc/cron.d/moltis-backup-verify" "$output_file" || \
+    if ! grep -Fq "$host_cron_dir/moltis-backup-verify" "$output_file" || \
+       ! grep -Fq "$host_cron_dir/moltis-obsolete-cron" "$output_file" || \
        ! grep -Fq "Skipping disabled fallback scheduler: moltis-telegram-web-user-monitor" "$output_file" || \
-       ! grep -Fq "/etc/systemd/system/moltis-health-monitor.service" "$output_file" || \
-       ! grep -Fq "systemctl disable --now moltis-telegram-web-user-monitor.timer" "$output_file"; then
-        test_fail "Host-automation dry-run should describe cron install, health monitor install, and disabled scheduler cleanup"
+       ! grep -Fq "$host_systemd_dir/moltis-obsolete.service" "$output_file" || \
+       ! grep -Fq "$host_systemd_dir/moltis-backup.service" "$output_file" || \
+       ! grep -Fq "$host_systemd_dir/moltis-backup.timer" "$output_file" || \
+       ! grep -Fq "$host_systemd_dir/moltis-health-monitor.service" "$output_file" || \
+       ! grep -Fq "systemctl disable --now moltis-telegram-web-user-monitor.timer" "$output_file" || \
+       ! grep -Fq "systemctl daemon-reload" "$output_file"; then
+        test_fail "Host-automation dry-run should describe managed cron/systemd convergence, stale cleanup, and disabled scheduler enforcement"
         rm -rf "$tmp_dir"
         return
     fi
@@ -810,16 +1040,21 @@ run_all_tests() {
 
     test_deploy_workflow_uses_shared_production_lock
     test_uat_deploy_job_uses_shared_production_lock
-    test_gitops_sync_workflows_use_shared_script_entrypoint
     test_active_root_workflows_use_shared_script_entrypoint
+    test_checkout_align_workflows_use_shared_script_entrypoint
+    test_gitops_sync_workflows_use_shared_script_entrypoint
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
+    test_checkout_align_script_dry_run_uses_constant_remote_command
     test_deploy_workflow_uses_shared_host_automation_script
     test_gitops_sync_script_dry_run_covers_managed_surface
     test_render_moltis_env_script_renders_runtime_contract
     test_tracked_deploy_script_dry_run_reports_control_plane_steps
+    test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields
+    test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields
+    test_tracked_deploy_script_requires_workflow_run_argument
     test_tracked_deploy_script_treats_env_file_as_data
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
     test_active_root_script_migrates_legacy_directory
