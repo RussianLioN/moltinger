@@ -314,6 +314,34 @@ test_inventory_detects_blocked_sibling_and_bootstrap_variance() {
     test_pass
 }
 
+test_inventory_scopes_pilot_gate_to_current_worktree() {
+    test_start "inventory_scopes_pilot_gate_to_current_worktree"
+
+    local fixture_root repo_dir blocked_worktree fake_bin json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-inventory.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    git_topology_fixture_seed_beads_migration_surface_layout "${repo_dir}" pilot-ready
+    git_topology_fixture_seed_pilot_ready_state "${repo_dir}"
+    seed_inventory_script "${repo_dir}"
+    commit_fixture_state "${repo_dir}" "fixture: seed pilot-ready repo with blocked sibling"
+    blocked_worktree="${fixture_root}/moltinger-blocked"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${blocked_worktree}" "feat/blocked" "main"
+    blocked_worktree="$(cd "${blocked_worktree}" && pwd -P)"
+    git_topology_fixture_seed_legacy_jsonl_first_state "${blocked_worktree}"
+    fake_bin="$(create_fake_inventory_bd_bin "${fixture_root}")"
+
+    json="$(run_inventory "${repo_dir}" "${fake_bin}" pilot-ready --format json)"
+
+    assert_json_value "${json}" '.summary.verdict' "blocked" "Global inventory verdict must stay blocked while a sibling worktree is still legacy"
+    assert_json_value "${json}" '.summary.pilot_gate' "pass" "Pilot gate must remain scoped to the current pilot-ready worktree"
+    assert_json_value "${json}" '.summary.full_cutover_gate' "blocked" "Full cutover gate must remain blocked while fleet-wide blockers exist"
+    assert_json_value "${json}" '.summary.pilot_blocking_count' "0" "Pilot blocking count must exclude blocked sibling worktrees"
+    assert_json_array_contains "${json}" '.blockers | map(.id)' "worktree:${blocked_worktree}" "Blocked sibling must remain visible in full cutover blockers"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_inventory_uses_doctor_json_fallback_for_modern_bd() {
     test_start "inventory_uses_doctor_json_fallback_for_modern_bd"
 
@@ -375,6 +403,7 @@ run_test_beads_dolt_inventory() {
     test_inventory_detects_runtime_coupling_and_surface_blockers
     test_inventory_is_deterministic_across_repeated_runs
     test_inventory_detects_blocked_sibling_and_bootstrap_variance
+    test_inventory_scopes_pilot_gate_to_current_worktree
     test_inventory_uses_doctor_json_fallback_for_modern_bd
     test_inventory_machine_readable_report_can_pass_pilot_gate
     generate_report

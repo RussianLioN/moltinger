@@ -33,13 +33,14 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd status             # Inspect the current Beads state
+bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
 ```
 
 If the current worktree is in a Beads migration mode:
-- `.beads/pilot-mode.json` means use `./scripts/beads-dolt-pilot.sh review` instead of `bd sync`
-- `.beads/cutover-mode.json` means use `./scripts/beads-dolt-rollout.sh verify --worktree .` instead of `bd sync`
-- if no migration mode is active but the repo-local wrapper path hangs, use direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync`
+- `.beads/pilot-mode.json` means use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface
+- `.beads/cutover-mode.json` means use `./scripts/beads-dolt-rollout.sh verify --worktree .` as the documented cutover verification surface
+- if no migration mode is active, the ordinary review path is `bd status` plus the narrowest read-only `bd` command you actually need
 
 ## Beads Worktree Ownership
 
@@ -55,7 +56,7 @@ When a dedicated worktree enters the Beads Dolt-native migration flow:
 
 - `.beads/pilot-mode.json` enables the isolated pilot contract for one worktree
 - `.beads/cutover-mode.json` enables the staged cutover contract for an already-ready worktree
-- in either mode, treat legacy JSONL-first paths and ordinary `bd sync` as blocked unless the active migration script explicitly says otherwise
+- in either mode, treat legacy JSONL-first paths and the old sync-style workflow as blocked unless the active migration script explicitly says otherwise
 - use `./scripts/beads-dolt-pilot.sh review` for pilot review
 - use `./scripts/beads-dolt-rollout.sh verify --worktree .` for cutover verification
 
@@ -126,13 +127,13 @@ Forbidden:
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd status
    git push
    git status  # MUST show "up to date with origin"
    ```
-   If pilot mode is active, replace `bd sync` with `./scripts/beads-dolt-pilot.sh review`.
-   If cutover mode is active, replace `bd sync` with `./scripts/beads-dolt-rollout.sh verify --worktree .`.
-   If no migration mode is active but repo-local `bd sync` hangs, fall back to direct system `bd --no-daemon --db "$PWD/.beads/beads.db" sync`.
+   If pilot mode is active, replace `bd status` with `./scripts/beads-dolt-pilot.sh review`.
+   If cutover mode is active, replace `bd status` with `./scripts/beads-dolt-rollout.sh verify --worktree .`.
+   If a Dolt remote is configured for the project, run `bd dolt push` before `git push`.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session

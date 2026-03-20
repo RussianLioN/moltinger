@@ -25,7 +25,7 @@ declare -a INVENTORY_WORKTREES=()
 inventory_usage() {
   cat <<'EOF'
 Usage:
-  scripts/beads-dolt-migration-inventory.sh [--repo <path>] [--format <human|json|env>] [--output <path>] [--gate pilot]
+  scripts/beads-dolt-migration-inventory.sh [--repo <path>] [--format <human|json|env>] [--output <path>] [--gate pilot|full-cutover]
 
 Description:
   Build a deterministic inventory of legacy Beads surfaces and a machine-readable
@@ -36,7 +36,7 @@ Options:
   --repo <path>      Inspect a different repository root or worktree
   --format <value>   Output format: human, json, env (default: human)
   --output <path>    Write the rendered report to a file instead of stdout
-  --gate pilot       Exit non-zero when pilot cutover must remain blocked
+  --gate <name>      Exit non-zero when the requested gate remains blocked
   -h, --help         Show this help text
 EOF
 }
@@ -158,7 +158,7 @@ inventory_parse_args() {
   esac
 
   case "${gate_name}" in
-    ""|pilot) ;;
+    ""|pilot|full-cutover) ;;
     *)
       inventory_die "Unsupported gate: ${gate_name}"
       ;;
@@ -1192,6 +1192,23 @@ inventory_build_report_json() {
       --argjson surfaces "${surfaces_json}" \
       --argjson worktrees "${worktrees_json}" \
       '
+      def pilot_blockers:
+        (
+          [$surfaces[] | select(.blocking) | {
+            id: .id,
+            source: "surface",
+            classification: .classification,
+            path: .path,
+            reason: .reason
+          }] +
+          [$worktrees[] | select(.current and .blocking) | {
+            id: ("worktree:" + .path),
+            source: "worktree",
+            classification: .classification,
+            path: .path,
+            reason: .reason
+          }]
+        );
       def blockers:
         (
           [$surfaces[] | select(.blocking) | {
@@ -1227,15 +1244,18 @@ inventory_build_report_json() {
         },
         summary: {
           verdict: verdict,
-          pilot_gate: (if (blockers | length) > 0 then "blocked" else "pass" end),
+          pilot_gate: (if (pilot_blockers | length) > 0 then "blocked" else "pass" end),
+          full_cutover_gate: (if (blockers | length) > 0 then "blocked" else "pass" end),
           surface_count: ($surfaces | length),
           observed_surface_count: ([$surfaces[] | select(.observed)] | length),
           worktree_count: ($worktrees | length),
+          pilot_blocking_count: (pilot_blockers | length),
           blocking_count: (blockers | length),
           warning_count: warning_count
         },
         surfaces: $surfaces,
         worktrees: $worktrees,
+        pilot_blockers: pilot_blockers,
         blockers: blockers
       }'
   )"
@@ -1250,10 +1270,23 @@ inventory_render_human() {
       "Target Contract: \(.target_contract.name)",
       "Verdict: \(.summary.verdict)",
       "Pilot Gate: \(.summary.pilot_gate)",
+      "Full Cutover Gate: \(.summary.full_cutover_gate)",
       "Observed Surfaces: \(.summary.observed_surface_count)/\(.summary.surface_count)",
       "Worktrees: \(.summary.worktree_count)",
+      "Pilot Blocking Items: \(.summary.pilot_blocking_count)",
       "Blocking Items: \(.summary.blocking_count)",
       "Warnings: \(.summary.warning_count)",
+      "",
+      "Pilot Blockers:"
+    ] +
+    (
+      if (.pilot_blockers | length) == 0 then
+        ["  - none"]
+      else
+        [.pilot_blockers[] | "  - \(.id) :: \(.reason)"]
+      end
+    ) +
+    [
       "",
       "Surfaces:"
     ] +
@@ -1291,11 +1324,14 @@ inventory_render_env() {
       "canonical_root=\(.canonical_root | @sh)",
       "verdict=\(.summary.verdict)",
       "pilot_gate=\(.summary.pilot_gate)",
+      "full_cutover_gate=\(.summary.full_cutover_gate)",
       "surface_count=\(.summary.surface_count)",
       "observed_surface_count=\(.summary.observed_surface_count)",
       "worktree_count=\(.summary.worktree_count)",
+      "pilot_blocking_count=\(.summary.pilot_blocking_count)",
       "blocking_count=\(.summary.blocking_count)",
       "warning_count=\(.summary.warning_count)",
+      "pilot_blocking_ids=\(([.pilot_blockers[].id] | join(",")) | @sh)",
       "blocking_ids=\(([.blockers[].id] | join(",")) | @sh)"
     ]
     | .[]'
@@ -1325,13 +1361,19 @@ inventory_emit_output() {
 }
 
 inventory_apply_gate() {
-  local pilot_gate=""
+  local gate_status=""
 
   [[ -n "${gate_name}" ]] || return 0
-  pilot_gate="$(printf '%s\n' "${report_json}" | jq -r '.summary.pilot_gate')"
-  if [[ "${gate_name}" == "pilot" && "${pilot_gate}" != "pass" ]]; then
-    return 20
-  fi
+  case "${gate_name}" in
+    pilot)
+      gate_status="$(printf '%s\n' "${report_json}" | jq -r '.summary.pilot_gate')"
+      [[ "${gate_status}" == "pass" ]] || return 20
+      ;;
+    full-cutover)
+      gate_status="$(printf '%s\n' "${report_json}" | jq -r '.summary.full_cutover_gate')"
+      [[ "${gate_status}" == "pass" ]] || return 20
+      ;;
+  esac
   return 0
 }
 

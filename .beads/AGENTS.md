@@ -14,13 +14,13 @@ This directory stores Beads tracker state for the repository.
 
 If `.beads/pilot-mode.json` exists in the current worktree:
 
-1. Do not use `bd sync` as the normal operator path.
+1. Do not use the ordinary non-migration review path.
 2. Use `./scripts/beads-dolt-pilot.sh review` for the documented pilot review surface.
 3. Do not stage `.beads/issues.jsonl` as part of pilot review reasoning.
 
 If `.beads/cutover-mode.json` exists in the current worktree:
 
-1. Do not use `bd sync` as the normal operator path.
+1. Do not use the ordinary non-migration review path.
 2. Use `./scripts/beads-dolt-rollout.sh verify --worktree .` for the documented cutover verification surface.
 3. Do not re-enable tracked `.beads/issues.jsonl` as a truth surface.
 
@@ -31,9 +31,10 @@ Use the narrowest relevant `bd` command:
 - `bd show <id>`
 - `bd update <id> --status ...`
 - `bd close <id>`
-- `bd sync`
+- `bd status`
+- `bd bootstrap`
 
-For migration worktrees, replace `bd sync` with the active review command:
+For migration worktrees, replace the ordinary review path with the active review command:
 - `./scripts/beads-dolt-pilot.sh review`
 - `./scripts/beads-dolt-rollout.sh verify --worktree .`
 

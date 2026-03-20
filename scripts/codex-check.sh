@@ -112,11 +112,12 @@ check_instruction_references() {
   local failures=0
   assert_contains ".ai/instructions/shared-core.md" "Speckit Artifact Guard" "root Speckit guard" || failures=1
   assert_contains ".ai/instructions/shared-core.md" "docs/GIT-TOPOLOGY-REGISTRY.md" "topology registry reference" || failures=1
-  if grep -Fq -- "./scripts/bd-local.sh sync" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
-     grep -Fq -- "bd sync" "${REPO_ROOT}/.ai/instructions/shared-core.md"; then
-    log_success "Verified safe Beads sync guidance in .ai/instructions/shared-core.md"
+  if grep -Fq -- "bd status" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+     grep -Fq -- "./scripts/beads-dolt-pilot.sh review" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+     grep -Fq -- "./scripts/beads-dolt-rollout.sh verify --worktree ." "${REPO_ROOT}/.ai/instructions/shared-core.md"; then
+    log_success "Verified Beads review-surface guidance in .ai/instructions/shared-core.md"
   else
-    log_error "Missing safe Beads sync guidance in .ai/instructions/shared-core.md"
+    log_error "Missing Beads review-surface guidance in .ai/instructions/shared-core.md"
     failures=1
   fi
   assert_contains ".ai/instructions/codex-adapter.md" "docs/CODEX-OPERATING-MODEL.md" "operating model reference" || failures=1
