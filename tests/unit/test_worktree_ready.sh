@@ -24,6 +24,20 @@ if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; t
   exit 0
 fi
 
+if [[ "${1:-}" == "list" && "${2:-}" == "--all" && "${3:-}" == "--json" ]]; then
+  printf '%s\n' "${BD_LIST_ALL_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "show" && "${3:-}" == "--json" ]]; then
+  if [[ -n "${BD_SHOW_JSON_MAP:-}" ]]; then
+    printf '%s\n' "${BD_SHOW_JSON_MAP}" | jq -c --arg issue "${2:-}" '.[$issue] // empty'
+    exit 0
+  fi
+  printf '%s\n' "${BD_SHOW_JSON:-[]}"
+  exit 0
+fi
+
 printf 'unsupported fake bd invocation\n' >&2
 exit 1
 EOF
@@ -682,6 +696,52 @@ test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them() {
     test_pass
 }
 
+test_create_prefers_live_bd_issue_context_without_jsonl_bootstrap() {
+    test_start "worktree_ready_create_prefers_live_bd_issue_context_without_jsonl_bootstrap"
+
+    local fixture_root repo_dir fake_bd_bin fake_direnv_bin probe_dir output
+    local live_list_json live_show_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_direnv_bin="$(create_fake_direnv_permission_denied_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-molt-2-codex-update-monitor-new"
+    mkdir -p "${probe_dir}"
+    printf 'export DEMO=1\n' > "${probe_dir}/.envrc"
+    seed_fake_issue_artifacts "${repo_dir}"
+    live_list_json='[{"id":"molt-2","title":"Implement Codex CLI update monitor from Speckit seed"}]'
+    live_show_json='{"molt-2":{"id":"molt-2","title":"Implement Codex CLI update monitor from Speckit seed","description":"Create the dedicated feature branch/worktree and run the Speckit workflow using docs/plans/codex-cli-update-monitoring-speckit-seed.md and docs/research/codex-cli-update-monitoring-2026-03-09.md as inputs."}}'
+
+    output="$(
+        set +e
+        BD_LIST_ALL_JSON="${live_list_json}" \
+        BD_SHOW_JSON_MAP="${live_show_json}" \
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/molt-2-codex-update-monitor-new --path "$probe_dir" 2>&1
+    )"
+
+    assert_contains "$output" 'Issue: molt-2' "Live bd issue ids should still resolve the branch-to-issue mapping"
+    assert_contains "$output" 'Issue Title: Implement Codex CLI update monitor from Speckit seed' "Live bd issue context should populate the issue title"
+    assert_contains "$output" "Issue 'molt-2' is not present in target worktree Beads state; rely on the handoff context until local bd bootstrap completes." "Live bd handoff should explain the missing target state without falling back to tracked JSONL"
+    assert_contains "$output" 'git checkout origin/main -- docs/plans/codex-cli-update-monitoring-speckit-seed.md docs/research/codex-cli-update-monitoring-2026-03-09.md docs/research/README.md' "Live bd bootstrap import should no longer depend on tracked .beads/issues.jsonl"
+    if [[ "$output" == *'.beads/issues.jsonl'* ]]; then
+        test_fail "Live bd handoff should not import tracked .beads/issues.jsonl"
+    fi
+
+    output="$(
+        set +e
+        BD_LIST_ALL_JSON="${live_list_json}" \
+        BD_SHOW_JSON_MAP="${live_show_json}" \
+        PATH="${fake_direnv_bin}:${fake_bd_bin}:$PATH" \
+        "$WORKTREE_READY_SCRIPT" create --repo "$repo_dir" --branch feat/molt-2-codex-update-monitor-new --path "$probe_dir" --format env 2>&1
+    )"
+
+    assert_contains "$output" 'bootstrap_file_count=3' "Live bd bootstrap should only include the missing artifact files"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_doctor_branch_only_suppresses_already_attached_warning() {
     test_start "worktree_ready_doctor_branch_only_suppresses_already_attached_warning"
 
@@ -1169,6 +1229,7 @@ run_all_tests() {
     test_create_infers_issue_from_issue_aware_branch_name
     test_create_returns_issue_na_when_branch_mapping_is_ambiguous
     test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them
+    test_create_prefers_live_bd_issue_context_without_jsonl_bootstrap
     test_doctor_branch_only_suppresses_already_attached_warning
     test_doctor_accepts_local_beads_state
     test_doctor_does_not_block_on_beads_probe_unavailable
