@@ -11,12 +11,12 @@
 
 **Purpose**: Freeze migration boundaries, evidence sources, and stage gates before any implementation.
 
-- [ ] P001 Reconcile `specs/029-beads-dolt-native-migration/spec.md`, `plan.md`, and `tasks.md` against the current repo-local Beads surfaces and local `bd 0.49.6` command surface
-- [ ] P002 Re-review official upstream Beads docs and issue threads recorded in `specs/029-beads-dolt-native-migration/research.md`
-- [ ] P003 Confirm affected files and execution order from `specs/029-beads-dolt-native-migration/plan.md`
-- [ ] P004 Freeze migration boundaries for inventory, pilot, rollout, rollback, legacy RCA separation, and canonical-root cleanup in `specs/029-beads-dolt-native-migration/plan.md`
-- [ ] P005 Capture the initial legacy-surface inventory scope across wrappers, hooks, docs, skills, configs, tests, and bootstrap flows in `specs/029-beads-dolt-native-migration/research.md`
-- [ ] P006 Record readiness gate, pilot gate, and rollback package expectations from `specs/029-beads-dolt-native-migration/contracts/`
+- [x] P001 Reconcile `specs/029-beads-dolt-native-migration/spec.md`, `plan.md`, and `tasks.md` against the current repo-local Beads surfaces and local `bd 0.49.6` command surface
+- [x] P002 Re-review official upstream Beads docs and issue threads recorded in `specs/029-beads-dolt-native-migration/research.md`
+- [x] P003 Confirm affected files and execution order from `specs/029-beads-dolt-native-migration/plan.md`
+- [x] P004 Freeze migration boundaries for inventory, pilot, rollout, rollback, legacy RCA separation, and canonical-root cleanup in `specs/029-beads-dolt-native-migration/plan.md`
+- [x] P005 Capture the initial legacy-surface inventory scope across wrappers, hooks, docs, skills, configs, tests, and bootstrap flows in `specs/029-beads-dolt-native-migration/research.md`
+- [x] P006 Record readiness gate, pilot gate, and rollback package expectations from `specs/029-beads-dolt-native-migration/contracts/`
 
 **Gate**: Do not start `T001+` until the target contract, legacy inventory scope, pilot gate, and rollback contract are all reflected in task ordering.
 
@@ -26,9 +26,9 @@
 
 **Purpose**: Prepare shared fixtures, docs surface, and script registration for migration work.
 
-- [ ] T001 Create migration fixture support for legacy JSONL-first, pilot-ready, blocked sibling, and bootstrap-variance states in `tests/lib/git_topology_fixture.sh`
-- [ ] T002 [P] Create migration operator doc scaffold in `docs/beads-dolt-native-migration.md`
-- [ ] T003 [P] Register planned migration scripts in `scripts/manifest.json`
+- [x] T001 Create migration fixture support for legacy JSONL-first, pilot-ready, blocked sibling, and bootstrap-variance states in `tests/lib/git_topology_fixture.sh`
+- [x] T002 [P] Create migration operator doc scaffold in `docs/beads-dolt-native-migration.md`
+- [x] T003 [P] Register planned migration scripts in `scripts/manifest.json`
 
 ---
 
@@ -38,11 +38,11 @@
 
 **⚠️ CRITICAL**: No user story work should begin before these tasks are complete.
 
-- [ ] T004 [P] Implement reusable legacy-surface discovery helpers in `scripts/beads-dolt-migration-inventory.sh`
-- [ ] T005 [P] Implement deterministic readiness classification helpers and machine-readable report output in `scripts/beads-dolt-migration-inventory.sh`
-- [ ] T006 [P] Add reusable migration assertion helpers in `tests/lib/test_helpers.sh`
-- [ ] T007 Extend static expectations for docs/AGENTS/skills alignment under the target contract in `tests/static/test_beads_dolt_docs_alignment.sh`
-- [ ] T008 Add foundational unit coverage for backend/runtime detection, canonical-root coupling, and legacy-surface classification in `tests/unit/test_beads_dolt_inventory.sh`
+- [x] T004 [P] Implement reusable legacy-surface discovery helpers in `scripts/beads-dolt-migration-inventory.sh`
+- [x] T005 [P] Implement deterministic readiness classification helpers and machine-readable report output in `scripts/beads-dolt-migration-inventory.sh`
+- [x] T006 [P] Add reusable migration assertion helpers in `tests/lib/test_helpers.sh`
+- [x] T007 Extend static expectations for docs/AGENTS/skills alignment under the target contract in `tests/static/test_beads_dolt_docs_alignment.sh`
+- [x] T008 Add foundational unit coverage for backend/runtime detection, canonical-root coupling, and legacy-surface classification in `tests/unit/test_beads_dolt_inventory.sh`
 
 **Checkpoint**: Inventory and readiness primitives exist and can support report-only, pilot, and rollout stages without hidden mixed mode.
 
@@ -56,15 +56,15 @@
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add repeated-run determinism coverage for inventory/readiness reports in `tests/unit/test_beads_dolt_inventory.sh`
-- [ ] T010 [P] [US1] Add blocker classification coverage for wrappers, hooks, docs, configs, and bootstrap variance in `tests/unit/test_beads_dolt_inventory.sh`
+- [x] T009 [P] [US1] Add repeated-run determinism coverage for inventory/readiness reports in `tests/unit/test_beads_dolt_inventory.sh`
+- [x] T010 [P] [US1] Add blocker classification coverage for wrappers, hooks, docs, configs, and bootstrap variance in `tests/unit/test_beads_dolt_inventory.sh`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement the repo-local legacy-surface inventory runner in `scripts/beads-dolt-migration-inventory.sh`
-- [ ] T012 [US1] Emit deterministic readiness reports and blocker summaries from `scripts/beads-dolt-migration-inventory.sh`
-- [ ] T013 [US1] Document the inventory model and target contract summary in `docs/beads-dolt-native-migration.md` and `docs/rules/beads-dolt-native-contract.md`
-- [ ] T014 [US1] Capture the initial repository inventory baseline in `docs/migration/beads-dolt-native-cutover.md`
+- [x] T011 [US1] Implement the repo-local legacy-surface inventory runner in `scripts/beads-dolt-migration-inventory.sh`
+- [x] T012 [US1] Emit deterministic readiness reports and blocker summaries from `scripts/beads-dolt-migration-inventory.sh`
+- [x] T013 [US1] Document the inventory model and target contract summary in `docs/beads-dolt-native-migration.md` and `docs/rules/beads-dolt-native-contract.md`
+- [x] T014 [US1] Capture the initial repository inventory baseline in `docs/migration/beads-dolt-native-cutover.md`
 
 **Checkpoint**: The project can enumerate and classify migration blockers before any mutating cutover.
 

@@ -258,6 +258,271 @@ git_topology_fixture_refresh_registry_from_publish_branch() {
   cp "${publish_path}/docs/GIT-TOPOLOGY-REGISTRY.md" "${repo_dir}/docs/GIT-TOPOLOGY-REGISTRY.md"
 }
 
+git_topology_fixture_seed_beads_migration_surface_layout() {
+  local repo_dir="$1"
+  local layout_mode="${2:-legacy}"
+
+  mkdir -p \
+    "${repo_dir}/.beads" \
+    "${repo_dir}/.githooks" \
+    "${repo_dir}/.claude/docs" \
+    "${repo_dir}/.claude/skills/beads/resources" \
+    "${repo_dir}/bin" \
+    "${repo_dir}/docs" \
+    "${repo_dir}/scripts" \
+    "${repo_dir}/tests/static" \
+    "${repo_dir}/tests/unit"
+
+  cat > "${repo_dir}/AGENTS.md" <<'EOF'
+# Fixture Agents
+
+Use `bd sync` before push when this file represents the legacy contract.
+EOF
+
+  cat > "${repo_dir}/.beads/AGENTS.md" <<'EOF'
+# Fixture Beads State
+
+Run `bd sync` after meaningful issue updates.
+EOF
+
+  cat > "${repo_dir}/.envrc" <<'EOF'
+repo_root="$(git rev-parse --show-toplevel)"
+export PATH="${repo_root}/bin:${PATH}"
+EOF
+
+  cat > "${repo_dir}/bin/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=scripts/beads-resolve-db.sh
+source "${REPO_ROOT}/scripts/beads-resolve-db.sh"
+SYSTEM_BD="${BEADS_SYSTEM_BD:-bd}"
+beads_resolve_dispatch "$PWD" "$@"
+exec "${SYSTEM_BD}" "$@"
+EOF
+
+  cat > "${repo_dir}/scripts/beads-resolve-db.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+beads_resolve_repo_root() {
+  git -C "${1:-$PWD}" rev-parse --show-toplevel
+}
+
+beads_resolve_canonical_root() {
+  local repo_root="$1"
+  local common_dir=""
+  common_dir="$(git -C "${repo_root}" rev-parse --git-common-dir)"
+  (
+    cd "${repo_root}"
+    cd "${common_dir}"
+    cd ..
+    pwd -P
+  )
+}
+
+beads_resolve_dispatch() {
+  return 0
+}
+EOF
+
+  cat > "${repo_dir}/scripts/beads-worktree-localize.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "fixture localize"
+EOF
+
+  cat > "${repo_dir}/scripts/beads-normalize-issues-jsonl.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "fixture normalize"
+EOF
+
+  cat > "${repo_dir}/scripts/worktree-ready.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo 'plain `bd`'
+echo 'bd sync'
+EOF
+
+  cat > "${repo_dir}/.githooks/pre-commit" <<'EOF'
+#!/usr/bin/env bash
+./scripts/beads-normalize-issues-jsonl.sh
+git diff --cached --quiet -- .beads/issues.jsonl
+./scripts/beads-worktree-audit.sh
+EOF
+
+  cat > "${repo_dir}/.githooks/post-checkout" <<'EOF'
+#!/usr/bin/env bash
+./scripts/beads-worktree-localize.sh
+EOF
+
+  cat > "${repo_dir}/.githooks/post-merge" <<'EOF'
+#!/usr/bin/env bash
+./scripts/beads-worktree-localize.sh
+EOF
+
+  cat > "${repo_dir}/.githooks/pre-push" <<'EOF'
+#!/usr/bin/env bash
+./scripts/beads-worktree-audit.sh
+EOF
+
+  cat > "${repo_dir}/.claude/docs/beads-quickstart.md" <<'EOF'
+# Fixture Quickstart RU
+
+SESSION CLOSE PROTOCOL
+bd sync
+EOF
+
+  cat > "${repo_dir}/.claude/docs/beads-quickstart.en.md" <<'EOF'
+# Fixture Quickstart EN
+
+SESSION CLOSE PROTOCOL
+bd sync
+EOF
+
+  cat > "${repo_dir}/.claude/skills/beads/resources/COMMANDS_QUICKREF.md" <<'EOF'
+# Fixture Commands
+
+bd sync
+EOF
+
+  cat > "${repo_dir}/.claude/skills/beads/resources/WORKFLOWS.md" <<'EOF'
+# Fixture Workflows
+
+bd sync
+EOF
+
+  cat > "${repo_dir}/tests/static/test_beads_worktree_ownership.sh" <<'EOF'
+#!/usr/bin/env bash
+echo ".beads/issues.jsonl"
+echo "beads-normalize-issues-jsonl.sh"
+EOF
+
+  cat > "${repo_dir}/tests/unit/test_bd_dispatch.sh" <<'EOF'
+#!/usr/bin/env bash
+echo ".beads/issues.jsonl"
+echo "beads-worktree-localize.sh"
+EOF
+
+  cat > "${repo_dir}/tests/unit/test_beads_worktree_audit.sh" <<'EOF'
+#!/usr/bin/env bash
+echo "beads-worktree-audit.sh"
+echo "beads-worktree-localize.sh"
+EOF
+
+  cat > "${repo_dir}/tests/unit/test_beads_normalize_issues_jsonl.sh" <<'EOF'
+#!/usr/bin/env bash
+echo "normalize"
+EOF
+
+  if [[ "${layout_mode}" == "pilot-ready" ]]; then
+    cat > "${repo_dir}/AGENTS.md" <<'EOF'
+# Fixture Agents
+
+Pilot-ready guidance lives outside legacy sync.
+EOF
+    cat > "${repo_dir}/.beads/AGENTS.md" <<'EOF'
+# Fixture Beads State
+
+Pilot-ready guidance lives outside legacy sync.
+EOF
+    cat > "${repo_dir}/scripts/worktree-ready.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo 'pilot-ready'
+EOF
+    cat > "${repo_dir}/.githooks/pre-commit" <<'EOF'
+#!/usr/bin/env bash
+echo "pilot-ready"
+EOF
+    cat > "${repo_dir}/.claude/docs/beads-quickstart.md" <<'EOF'
+# Fixture Quickstart RU
+
+Pilot-ready guidance
+EOF
+    cat > "${repo_dir}/.claude/docs/beads-quickstart.en.md" <<'EOF'
+# Fixture Quickstart EN
+
+Pilot-ready guidance
+EOF
+    cat > "${repo_dir}/.claude/skills/beads/resources/COMMANDS_QUICKREF.md" <<'EOF'
+# Fixture Commands
+
+Pilot-ready guidance
+EOF
+    cat > "${repo_dir}/.claude/skills/beads/resources/WORKFLOWS.md" <<'EOF'
+# Fixture Workflows
+
+Pilot-ready guidance
+EOF
+    rm -f \
+      "${repo_dir}/scripts/beads-normalize-issues-jsonl.sh" \
+      "${repo_dir}/tests/unit/test_beads_normalize_issues_jsonl.sh"
+  fi
+
+  chmod +x \
+    "${repo_dir}/bin/bd" \
+    "${repo_dir}/scripts/beads-resolve-db.sh" \
+    "${repo_dir}/scripts/beads-worktree-localize.sh" \
+    "${repo_dir}/scripts/worktree-ready.sh" \
+    "${repo_dir}/.githooks/pre-commit" \
+    "${repo_dir}/.githooks/post-checkout" \
+    "${repo_dir}/.githooks/post-merge" \
+    "${repo_dir}/.githooks/pre-push"
+
+  if [[ -f "${repo_dir}/scripts/beads-normalize-issues-jsonl.sh" ]]; then
+    chmod +x "${repo_dir}/scripts/beads-normalize-issues-jsonl.sh"
+  fi
+}
+
+git_topology_fixture_seed_legacy_jsonl_first_state() {
+  local worktree_dir="$1"
+
+  mkdir -p "${worktree_dir}/.beads"
+  cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+EOF
+  cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-1","title":"legacy","status":"open","type":"task","priority":3}
+EOF
+  : > "${worktree_dir}/.beads/beads.db"
+}
+
+git_topology_fixture_seed_pilot_ready_state() {
+  local worktree_dir="$1"
+
+  mkdir -p "${worktree_dir}/.beads"
+  cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+EOF
+  : > "${worktree_dir}/.beads/beads.db"
+  rm -f "${worktree_dir}/.beads/issues.jsonl" "${worktree_dir}/.beads/redirect"
+}
+
+git_topology_fixture_seed_blocked_sibling_state() {
+  local worktree_dir="$1"
+  local canonical_root="$2"
+
+  mkdir -p "${worktree_dir}/.beads"
+  cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+EOF
+  cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-2","title":"redirected","status":"open","type":"task","priority":2}
+EOF
+  printf '%s\n' "${canonical_root}/.beads" > "${worktree_dir}/.beads/redirect"
+}
+
+git_topology_fixture_seed_bootstrap_variance_state() {
+  local worktree_dir="$1"
+  local canonical_root="$2"
+
+  git_topology_fixture_seed_blocked_sibling_state "${worktree_dir}" "${canonical_root}"
+  rm -f "${worktree_dir}/.envrc" "${worktree_dir}/bin/bd" "${worktree_dir}/scripts/beads-resolve-db.sh"
+}
+
 git_topology_fixture_doctor_write_doc_from_publish_branch() {
   local repo_dir="$1"
   local registry_script="${2:-}"
