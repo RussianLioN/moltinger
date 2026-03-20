@@ -184,6 +184,13 @@ run_inventory() {
     )
 }
 
+seed_modern_dolt_runtime_fixture() {
+    local worktree_dir="$1"
+
+    rm -f "${worktree_dir}/.beads/beads.db"
+    mkdir -p "${worktree_dir}/.beads/dolt"
+}
+
 test_inventory_reports_blocked_legacy_baseline() {
     test_start "inventory_reports_blocked_legacy_baseline"
 
@@ -203,6 +210,29 @@ test_inventory_reports_blocked_legacy_baseline() {
     assert_json_value "${json}" '.surfaces[] | select(.id == "tracked.issues_jsonl") | .classification' "must-migrate" "Tracked issues.jsonl must classify as must-migrate"
     assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .classification' "blocked" "SQLite backend with canonical-root coupling must be a blocker"
     assert_json_value "${json}" '.worktrees[] | select(.current == true) | .state' "legacy_jsonl_first" "Current worktree must classify as legacy_jsonl_first"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_inventory_recognizes_modern_dolt_runtime_artifacts() {
+    test_start "inventory_recognizes_modern_dolt_runtime_artifacts"
+
+    local fixture_root repo_dir fake_bin json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-inventory.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    git_topology_fixture_seed_beads_migration_surface_layout "${repo_dir}" legacy
+    git_topology_fixture_seed_legacy_jsonl_first_state "${repo_dir}"
+    seed_modern_dolt_runtime_fixture "${repo_dir}"
+    seed_inventory_script "${repo_dir}"
+    commit_fixture_state "${repo_dir}" "fixture: seed modern dolt runtime inventory state"
+    fake_bin="$(create_fake_inventory_bd_bin "${fixture_root}")"
+
+    json="$(run_inventory "${repo_dir}" "${fake_bin}" legacy --format json)"
+
+    assert_json_value "${json}" '.worktrees[] | select(.current == true) | .state' "legacy_jsonl_first" "Modern Dolt runtime artifacts must still count as local runtime foundation"
+    assert_json_value "${json}" '.worktrees[] | select(.current == true) | .reason' "This worktree still combines tracked issues.jsonl with a local Beads database/runtime." "Modern Dolt runtime must avoid the stale sqlite-only wording"
+    assert_json_array_contains "${json}" '.worktrees[] | select(.current == true) | .signals' "dolt-store" "Modern Dolt runtime must be visible in worktree signals"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -341,6 +371,7 @@ test_inventory_machine_readable_report_can_pass_pilot_gate() {
 run_test_beads_dolt_inventory() {
     start_timer
     test_inventory_reports_blocked_legacy_baseline
+    test_inventory_recognizes_modern_dolt_runtime_artifacts
     test_inventory_detects_runtime_coupling_and_surface_blockers
     test_inventory_is_deterministic_across_repeated_runs
     test_inventory_detects_blocked_sibling_and_bootstrap_variance

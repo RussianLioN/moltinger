@@ -243,6 +243,13 @@ create_rollout_worktree() {
     esac
 }
 
+seed_rollout_modern_dolt_runtime() {
+    local worktree_dir="$1"
+
+    rm -f "${worktree_dir}/.beads/beads.db"
+    mkdir -p "${worktree_dir}/.beads/dolt"
+}
+
 test_rollout_report_only_summarizes_ready_and_blocked_worktrees() {
     test_start "rollout_report_only_summarizes_ready_and_blocked_worktrees"
 
@@ -262,6 +269,28 @@ test_rollout_report_only_summarizes_ready_and_blocked_worktrees() {
     assert_json_value "${report_json}" '.summary.blocked_count' "1" "Rollout report-only must count blocked sibling worktrees"
     assert_json_filter_count "${report_json}" '.worktrees | map(select(.rollout_stage == "ready"))' "2" "Rollout report-only must classify ready worktrees explicitly"
     assert_json_filter_count "${report_json}" '.worktrees | map(select(.rollout_stage == "blocked"))' "1" "Rollout report-only must keep blocked worktrees visible"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_rollout_report_only_recognizes_modern_dolt_runtime() {
+    test_start "rollout_report_only_recognizes_modern_dolt_runtime"
+
+    local fixture_root repo_dir ready_path fake_bin report_json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-rollout.XXXXXX)"
+    repo_dir="$(create_rollout_repo_fixture "${fixture_root}")"
+    ready_path="${fixture_root}/moltinger-rollout-ready"
+    create_rollout_worktree "${repo_dir}" "${ready_path}" "feat/ready" pilot-ready
+    seed_rollout_modern_dolt_runtime "${repo_dir}"
+    seed_rollout_modern_dolt_runtime "${ready_path}"
+    fake_bin="$(create_fake_rollout_bd_bin "${fixture_root}")"
+
+    report_json="$(run_rollout_script "${repo_dir}" "${fake_bin}" pilot-ready report-only --format json)"
+
+    assert_json_value "${report_json}" '.summary.ready_count' "2" "Report-only must treat modern Dolt runtime artifacts as ready foundation"
+    assert_json_value "${report_json}" '.worktrees[] | select(.branch == "feat/ready") | .db_present' "true" "Sibling worktree must report db_present when only Dolt runtime artifacts exist"
+    assert_json_value "${report_json}" '.worktrees[] | select(.branch == "feat/ready") | .inventory_state' "pilot_ready_candidate" "Modern Dolt runtime must preserve pilot-ready classification"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -411,6 +440,7 @@ run_all_tests() {
     start_timer
 
     test_rollout_report_only_summarizes_ready_and_blocked_worktrees
+    test_rollout_report_only_recognizes_modern_dolt_runtime
     test_rollout_cutover_creates_mode_and_rollback_package
     test_rollout_cutover_keeps_blocked_worktree_visible
     test_rollout_verify_fails_on_mixed_mode_and_rollback_restores_state
