@@ -474,6 +474,11 @@ beads_resolve_find_system_bd() {
       continue
     fi
 
+    # Skip any repo-local wrapper so we do not recurse into a sibling worktree's bin/bd.
+    if [[ -f "$(dirname "${candidate_real}")/../scripts/beads-resolve-db.sh" ]]; then
+      continue
+    fi
+
     printf '%s\n' "${candidate}"
     IFS="${old_ifs}"
     return 0

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 41
+**Total Lessons**: 42
 
 ---
 
@@ -29,12 +29,13 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (17 lessons)
+#### P2 (18 lessons)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
 - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
 - [Moltis update proposal workflow failed with workflow-file issue due to forbidden secrets context in step if](../docs/rca/2026-03-20-moltis-update-proposal-workflow-file-issue-on-secrets-context.md)
 - [Moltis update proposal failed on perl replacement ambiguity and GitHub PR permission assumption](../docs/rca/2026-03-20-moltis-update-proposal-perl-backreference-and-pr-permission-fallback.md)
+- [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
 - [Deploy Clawdiy блокировался на dirty checkout без auditable repair path](../docs/rca/2026-03-14-clawdiy-deploy-missing-gitops-repair-path.md)
 - [CI preflight ошибочно требовал materialized Clawdiy runtime home до deploy/render шага](../docs/rca/2026-03-14-clawdiy-ci-preflight-materialization-assumption.md)
 - [Clawdiy UI bootstrap был задокументирован как Settings/OAuth flow вместо реального browser bootstrap](../docs/rca/2026-03-12-clawdiy-ui-bootstrap-doc-drift.md)
@@ -110,7 +111,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (5 lessons)
+#### shell (6 lessons)
+- [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Command-worktree follow-up UAT exposed preview, sync, and lock edge-case gaps](../docs/rca/2026-03-09-command-worktree-followup-uat.md)
@@ -126,10 +128,10 @@
 - `lessons` (9 lessons)
 - `deploy` (8 lessons)
 - `clawdiy` (8 lessons)
-- `rca` (6 lessons)
+- `rca` (7 lessons)
 - `openclaw` (6 lessons)
 - `telegram` (5 lessons)
-- `docker` (5 lessons)
+- `git-worktree` (5 lessons)
 
 
 ---
@@ -138,10 +140,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 41 |
+| Total Lessons | 42 |
 | Critical (P0/P1) | 14 |
 | Categories | 5 |
-| Unique Tags | 101 |
+| Unique Tags | 102 |
 
 ---
 
