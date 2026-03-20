@@ -51,7 +51,7 @@ root_cause: "Deploy contract pinned a non-pullable GHCR tag (`v0.10.18`) and wor
    - `workflow_dispatch.environment` ограничен только `production`;
    - удалён ad-hoc `version` override из deploy workflow;
    - добавлен hard block при `TARGET_ENV != production`;
-   - production deploy разрешён только с `main` или matching tag;
+   - production deploy разрешён только с `main`; tag-triggered deploy допускается только если tag SHA совпадает с текущим `origin/main` HEAD;
    - запрещён `MOLTIS_VERSION` override в серверном `.env`.
 3. **Немедленное исправление (test guardrails):**
    - расширены static тесты для проверки:
@@ -83,4 +83,3 @@ root_cause: "Deploy contract pinned a non-pullable GHCR tag (`v0.10.18`) and wor
 3. **Production deploy contract должен быть однозначным и неизбыточным**: без staging-ветвлений и без version override в dispatch.
 4. **Rollback должен оставаться только recovery-path** (по health-failure/manual rollback), а не побочным эффектом нестрогого deploy flow.
 5. **Static CI guards должны проверять policy-контракт, а не только синтаксис**, иначе drift semantics замечается слишком поздно.
-

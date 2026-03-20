@@ -239,10 +239,11 @@ PY
        ! rg -q ' - staging' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        ! rg -q '^[[:space:]]+version:[[:space:]]*$' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'supports production target only' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+       rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'tag must point to current origin/main HEAD' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass
     else
-        test_fail "Deploy workflow must resolve tracked Moltis version, remove ad-hoc version input, forbid staging bypass, and block feature-branch production deploys"
+        test_fail "Deploy workflow must resolve tracked Moltis version, remove ad-hoc version input, forbid staging bypass, and block non-main tag deploys"
     fi
 
     test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"
@@ -353,10 +354,11 @@ PY
     test_start "static_deploy_uses_tracked_moltis_version_and_blocks_feature_prod_deploys"
     if rg -q 'scripts/moltis-version\.sh version' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production deploys must run from main' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'tag must point to current origin/main HEAD' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Production tag deploy version must match tracked Moltis version' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass
     else
-        test_fail "Deploy workflow must resolve the tracked Moltis version and block feature-branch production deploys"
+        test_fail "Deploy workflow must resolve the tracked Moltis version, block feature-branch deploys, and reject tags that do not point to current main HEAD"
     fi
 
     test_start "static_deploy_surfaces_post_upgrade_protocol_skew_as_operator_signal"

@@ -92,8 +92,17 @@ jobs:
           fi
 
           if [ "$REPAIR_REQUESTED" = true ] && [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
-            echo "::error::repair_server_checkout is only allowed for production deploys from main or a matching release tag."
+            echo "::error::repair_server_checkout is only allowed for production deploys from main or release tags that point to current origin/main HEAD."
             exit 1
+          fi
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            git fetch --no-tags --depth=1 origin main
+            MAIN_HEAD="$(git rev-parse origin/main)"
+            if [ "$MAIN_HEAD" != "${{ github.sha }}" ]; then
+              echo "::error::Production tag deploy is blocked: tag must point to current origin/main HEAD ($MAIN_HEAD), got ${{ github.sha }}."
+              exit 1
+            fi
           fi
 
           # Function to compare files
@@ -367,6 +376,15 @@ jobs:
           if [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
             echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
             exit 1
+          fi
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            git fetch --no-tags --depth=1 origin main
+            MAIN_HEAD="$(git rev-parse origin/main)"
+            if [ "$MAIN_HEAD" != "${{ github.sha }}" ]; then
+              echo "::error::Production tag deploy is blocked: tag must point to current origin/main HEAD ($MAIN_HEAD), got ${{ github.sha }}."
+              exit 1
+            fi
           fi
 
           if [ "$TARGET_ENV" = "production" ] && [ "${{ github.ref_type }}" = "tag" ] && [ "${{ steps.version.outputs.version }}" != "$TRACKED_VERSION" ]; then

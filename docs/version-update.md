@@ -83,6 +83,7 @@ BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 - validate restore readiness of that backup
 - deploy the git-tracked version only
 - allow only production target in workflow_dispatch
+- allow tag-triggered production deploy only when tag SHA equals current `origin/main` HEAD
 - keep manual version input blank by default (tracked git version is source of truth)
 - block deploy if restore readiness fails
 
