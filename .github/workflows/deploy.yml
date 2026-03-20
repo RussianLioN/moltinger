@@ -402,6 +402,52 @@ jobs:
 
           echo "::notice::All preflight checks passed"
 
+      - name: Setup SSH for version regression guard
+        if: steps.validate.outputs.should_deploy == 'true'
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts for version regression guard
+        if: steps.validate.outputs.should_deploy == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Prevent tracked version regressions against running production baseline
+        if: steps.validate.outputs.should_deploy == 'true'
+        run: |
+          set -euo pipefail
+
+          TRACKED_VERSION="${{ steps.version.outputs.version }}"
+          REMOTE_IMAGE="$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "docker inspect --format='{{.Config.Image}}' ${{ env.CONTAINER_NAME }} 2>/dev/null || true")"
+
+          if [[ -z "$REMOTE_IMAGE" ]]; then
+            echo "::notice::No running Moltis container detected on server; skipping version regression guard."
+            exit 0
+          fi
+
+          if [[ "$REMOTE_IMAGE" != "${{ env.MOLTIS_IMAGE }}:"* ]]; then
+            echo "::warning::Running image '$REMOTE_IMAGE' is outside tracked Moltis image namespace; skipping version regression guard."
+            exit 0
+          fi
+
+          REMOTE_VERSION="${REMOTE_IMAGE##*:}"
+
+          if [[ ! "$REMOTE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
+            echo "::warning::Running Moltis image uses non-semver tag '$REMOTE_VERSION'; skipping version regression guard."
+            exit 0
+          fi
+
+          NEWEST="$(printf '%s\n%s\n' "$REMOTE_VERSION" "$TRACKED_VERSION" | sort -V | tail -n1)"
+          if [[ "$NEWEST" != "$TRACKED_VERSION" && "$REMOTE_VERSION" != "$TRACKED_VERSION" ]]; then
+            echo "::error::Tracked Moltis version regression detected: running=$REMOTE_VERSION tracked=$TRACKED_VERSION"
+            echo "::error::Production downgrade via tracked git version is blocked. Use explicit rollback flow instead."
+            exit 1
+          fi
+
+          echo "::notice::Version regression guard passed: running=$REMOTE_VERSION tracked=$TRACKED_VERSION"
+
       - name: Run preflight validation script
         id: preflight
         if: steps.validate.outputs.should_deploy == 'true'

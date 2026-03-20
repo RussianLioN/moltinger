@@ -33,6 +33,7 @@ Operational policy in this repository:
 - Do not pull or restart a new Moltis image without a fresh pre-update backup.
 - Do not continue rollout if restore-check fails for that fresh backup.
 - Do not treat "previous image exists" as sufficient rollback evidence by itself.
+- Do not downgrade tracked version through normal deploy flow; use explicit rollback path.
 
 ## Required Evidence
 
@@ -115,6 +116,7 @@ GitHub Actions path:
 - `workflow_dispatch` target is production-only
 - release-tag deploy is allowed only when tag SHA matches current `origin/main` HEAD
 - manual version input defaults to blank and must equal tracked git version if provided
+- tracked version regression versus currently running semver image is blocked
 - backup step must finish successfully
 - restore-readiness validation must finish successfully
 - only then may the new Moltis image be pulled and started

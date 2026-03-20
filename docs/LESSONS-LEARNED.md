@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 39
+**Total Lessons**: 40
 
 ---
 
@@ -14,9 +14,10 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (12 lessons)
+#### P1 (13 lessons)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
+- [Deploy workflow allowed tracked-version regression risk against newer running Moltis baseline](../docs/rca/2026-03-20-moltis-tracked-version-regression-guard.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
 - [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
 - [Clawdiy lost gpt-5.4 as default model after redeploy because runtime wizard state was not captured in tracked config](../docs/rca/2026-03-14-clawdiy-runtime-model-state-was-not-in-gitops.md)
@@ -64,12 +65,13 @@
 ### By Category
 
 
-#### cicd (15 lessons)
+#### cicd (16 lessons)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Moltis update proposal workflow failed with workflow-file issue due to forbidden secrets context in step if](../docs/rca/2026-03-20-moltis-update-proposal-workflow-file-issue-on-secrets-context.md)
+- [Deploy workflow allowed tracked-version regression risk against newer running Moltis baseline](../docs/rca/2026-03-20-moltis-tracked-version-regression-guard.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
 - [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
@@ -116,12 +118,12 @@
 
 ### Popular Tags
 
+- `gitops` (11 lessons)
 - `github-actions` (11 lessons)
-- `gitops` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
+- `deploy` (8 lessons)
 - `clawdiy` (8 lessons)
-- `deploy` (7 lessons)
 - `rca` (6 lessons)
 - `openclaw` (6 lessons)
 - `telegram` (5 lessons)
@@ -134,10 +136,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 39 |
-| Critical (P0/P1) | 13 |
+| Total Lessons | 40 |
+| Critical (P0/P1) | 14 |
 | Categories | 5 |
-| Unique Tags | 95 |
+| Unique Tags | 98 |
 
 ---
 
