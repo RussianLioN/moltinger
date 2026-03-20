@@ -266,7 +266,8 @@ test_rollout_report_only_summarizes_ready_and_blocked_worktrees() {
 
     assert_json_value "${report_json}" '.stage' "report-only" "Rollout report-only must expose the report-only stage"
     assert_json_value "${report_json}" '.inventory.pilot_gate' "pass" "Report-only must preserve a passing pilot gate for the current ready worktree"
-    assert_json_value "${report_json}" '.inventory.full_cutover_gate' "blocked" "Report-only must preserve a blocked full cutover gate while blocked siblings remain"
+    assert_json_value "${report_json}" '.inventory.full_cutover_gate' "pass" "Report-only must preserve a passing scoped full cutover gate for the current ready worktree"
+    assert_json_value "${report_json}" '.inventory.fleet_residual_gate' "blocked" "Report-only must surface blocked sibling residue separately from the scoped cutover gate"
     assert_json_value "${report_json}" '.summary.ready_count' "2" "Rollout report-only must count ready pilot candidates"
     assert_json_value "${report_json}" '.summary.blocked_count' "1" "Rollout report-only must count blocked sibling worktrees"
     assert_json_filter_count "${report_json}" '.worktrees | map(select(.rollout_stage == "ready"))' "2" "Rollout report-only must classify ready worktrees explicitly"

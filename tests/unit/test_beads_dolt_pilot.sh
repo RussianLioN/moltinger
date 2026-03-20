@@ -285,7 +285,8 @@ test_pilot_enable_ignores_blocked_siblings_when_current_worktree_is_ready() {
 
     assert_json_value "${status_json}" '.pilot_mode_enabled' "true" "Pilot enable must still arm the isolated ready worktree"
     assert_json_value "${status_json}" '.pilot_gate' "pass" "Pilot gate must stay passed for the current worktree"
-    assert_json_value "${status_json}" '.full_cutover_gate' "blocked" "Pilot status must still expose fleet-wide blockers"
+    assert_json_value "${status_json}" '.full_cutover_gate' "pass" "Pilot status must expose the scoped full cutover gate for the current worktree"
+    assert_json_value "${status_json}" '.fleet_residual_gate' "blocked" "Pilot status must still expose blocked sibling residue separately"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -340,6 +341,7 @@ test_pilot_review_emits_review_surface() {
 
     assert_json_value "${review_json}" '.pilot_mode_enabled' "true" "Pilot review must require enabled pilot mode"
     assert_json_value "${review_json}" '.inventory.pilot_gate' "pass" "Pilot review must preserve the passed gate"
+    assert_json_value "${review_json}" '.inventory.full_cutover_gate' "pass" "Pilot review must expose a passing scoped cutover gate for the ready worktree"
     assert_json_value "${review_json}" '.review_surface.info.rc' "0" "Pilot review must capture read-only info successfully"
     assert_json_value "${review_json}" '.review_surface.ready.rc' "0" "Pilot review must capture ready output successfully"
     assert_json_value "${review_json}" '.review_surface.list_all.rc' "0" "Pilot review must capture list output successfully"

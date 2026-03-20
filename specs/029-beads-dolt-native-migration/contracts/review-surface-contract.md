@@ -28,6 +28,7 @@ For the isolated pilot worktree, the documented review surface is:
 
 This command must expose:
 
-- inventory verdict and pilot gate
+- operator verdict plus target-scoped pilot and cutover gates
+- fleet residual legacy signal separate from the active operator path
 - current runtime/backend summary
 - read-only Beads review commands needed by operators and agents

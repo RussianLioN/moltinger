@@ -50,10 +50,19 @@ Every detected surface is classified as one of:
 
 The readiness report emits:
 
-- verdict: `ready`, `warning`, or `blocked`
-- pilot gate: `pass` or `blocked`
+- operator verdict: `ready`, `warning`, or `blocked`
+- target-scoped pilot gate: `pass` or `blocked`
+- scope-aware full cutover gate: `pass` or `blocked`
+- fleet residual gate: `pass` or `blocked`
 - deterministic blocker list
 - machine-readable JSON for human and agent review
+
+Gate semantics:
+
+- `pilot_gate` answers whether the current worktree can enter or remain in pilot mode.
+- `full_cutover_gate` is scope-aware and answers whether the active worktree is ready for controlled cutover.
+- `fleet_residual_gate` is observational only and reports whether sibling legacy worktrees still remain outside the active scope.
+- residual fleet legacy is cleanup debt, not a hard blocker for a worktree that already passed target-scoped cutover.
 
 ## Commands
 
