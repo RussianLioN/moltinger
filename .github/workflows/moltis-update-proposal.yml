@@ -159,18 +159,40 @@ jobs:
           EOF
 
           EXISTING_PR_NUMBER="$(gh pr list --base main --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          PR_MODE="unknown"
 
           if [[ -n "$EXISTING_PR_NUMBER" ]]; then
-            gh pr edit "$EXISTING_PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"
             PR_URL="$(gh pr view "$EXISTING_PR_NUMBER" --json url --jq '.url')"
+            if gh pr edit "$EXISTING_PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"; then
+              PR_MODE="existing_pr_updated"
+            else
+              PR_MODE="existing_pr_unmodified"
+              echo "::warning::Failed to edit existing PR #$EXISTING_PR_NUMBER; keeping current PR body/title"
+            fi
           else
-            PR_URL="$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE")"
+            set +e
+            CREATE_OUTPUT="$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE" 2>&1)"
+            CREATE_RC=$?
+            set -e
+
+            if [[ "$CREATE_RC" -eq 0 ]]; then
+              PR_URL="$CREATE_OUTPUT"
+              PR_MODE="pr_created"
+            elif grep -qi 'not permitted to create or approve pull requests' <<<"$CREATE_OUTPUT"; then
+              PR_URL="https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
+              PR_MODE="manual_pr_required_actions_permission"
+              echo "::warning::GitHub Actions token cannot create PR in this repository; using compare URL fallback"
+            else
+              echo "::error::Failed to create proposal PR: $CREATE_OUTPUT"
+              exit "$CREATE_RC"
+            fi
           fi
 
           rm -f "$BODY_FILE"
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "candidate_version=$CANDIDATE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "pr_mode=$PR_MODE" >> "$GITHUB_OUTPUT"
 
       - name: Evaluate email prerequisites
         id: email
@@ -215,6 +237,8 @@ jobs:
             Для подтверждения откройте PR и выполните approve/merge:
             ${{ steps.pr.outputs.pr_url }}
 
+            Если ссылка открывает compare-страницу вместо готового PR, нажмите "Create pull request", затем approve/merge.
+
             Это безопасный proposal workflow: деплой напрямую не запускался.
 
       - name: Proposal summary
@@ -232,6 +256,7 @@ jobs:
             echo "| Skip reason | \`${{ steps.version.outputs.skip_reason || 'n/a' }}\` |"
             echo "| Proposal branch | \`${{ steps.branch.outputs.branch || 'n/a' }}\` |"
             echo "| PR URL | ${{ steps.pr.outputs.pr_url || 'n/a' }} |"
+            echo "| PR mode | \`${{ steps.pr.outputs.pr_mode || 'n/a' }}\` |"
             echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
             echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
             echo ""
