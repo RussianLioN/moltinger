@@ -60,6 +60,16 @@ root_cause: "Branch-scoped deploy concurrency plus fragile ln -sfn symlink updat
    - отсутствие branch-scoped deploy group в `deploy.yml`,
    - наличие legacy migration guard для active-root symlink.
 
+## Follow-up hardening (moltinger-4hqr, first slice)
+
+После инцидентных фиксов обнаружилось, что корень проблемы глубже, чем отдельные YAML-баги:
+
+- критичная active-root orchestration была продублирована в `.github/workflows/deploy.yml` и `.github/workflows/uat-gate.yml`;
+- drift уже затронул не только тело SSH-блока, но и его входной контракт: в `uat-gate.yml` шаг ссылался на `DEPLOY_ACTIVE_PATH`, не объявляя его в workflow `env`;
+- каждое новое исправление приходилось вносить в два workflow вручную, что создавало повторяемый риск расхождения.
+
+Первый control-plane slice вынес active-root update и safety checks в единый versioned script entrypoint `scripts/update-active-deploy-root.sh`, а workflow оставил тонкими вызовами этого script. Это переводит источник истины из inline YAML в versioned shell contract и снижает вероятность повторного drift.
+
 ## Связанные обновления
 
 - [x] Новый файл правила создан (`docs/rules/production-deploy-single-writer.md`)
@@ -72,4 +82,3 @@ root_cause: "Branch-scoped deploy concurrency plus fragile ln -sfn symlink updat
 1. **Single writer для production обязателен** — concurrency group должен быть target-scoped (host/path), а не branch-scoped.
 2. **`ln -sfn` не мигрирует real directory** — перед symlink update нужен explicit guard на legacy path type.
 3. **Workflow policy должна быть тестируемой** — lock policy и migration guards нужно фиксировать unit-тестами, иначе регрессии возвращаются.
-

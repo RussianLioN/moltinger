@@ -32,3 +32,4 @@ EOF
 
 1. Critical deploy steps must include explicit state checks and readable error messages.
 2. Add/maintain unit guards for workflow invariants (`tests/unit/test_deploy_workflow_guards.sh`).
+3. For high-risk remote mutations, prefer a versioned script entrypoint in `scripts/` over inline workflow heredocs; quoted heredoc is the fallback when remote logic cannot yet be extracted.

@@ -647,6 +647,22 @@
       ],
       "gitops": true
     },
+    "update-active-deploy-root.sh": {
+      "version": "1.0.0",
+      "description": "Shared active-root symlink update entrypoint with legacy migration and target validation",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "ln",
+        "mv",
+        "readlink"
+      ],
+      "provides": [
+        "update-active-deploy-root"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "git-session-guard.sh": {
       "version": "1.0.0",
       "description": "Guard against accidental branch/worktree drift across parallel sessions",
@@ -768,6 +784,21 @@
         "preflight-ci",
         "preflight-targeted"
       ],
+      "ci": true
+    },
+    "prepare-moltis-runtime-config.sh": {
+      "version": "1.0.0",
+      "description": "Prepare writable Moltis runtime config outside the git-synced tree while preserving runtime-managed auth state",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cp",
+        "mkdir"
+      ],
+      "provides": [
+        "prepare-moltis-runtime-config"
+      ],
+      "gitops": true,
       "ci": true
     },
     "query-lessons.sh": {

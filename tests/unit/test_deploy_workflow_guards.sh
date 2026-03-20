@@ -10,7 +10,9 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 UAT_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
+ACTIVE_ROOT_SCRIPT="$PROJECT_ROOT/scripts/update-active-deploy-root.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
+EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
 
 test_deploy_workflow_uses_shared_production_lock() {
     test_start "Deploy workflow should use shared production concurrency group"
@@ -49,81 +51,112 @@ test_uat_deploy_job_uses_shared_production_lock() {
     test_pass
 }
 
-test_active_root_symlink_step_handles_legacy_directory() {
-    test_start "Symlink update should migrate legacy non-symlink active root"
+test_active_root_workflows_use_shared_script_entrypoint() {
+    test_start "Active-root workflow step should use shared script entrypoint"
 
-    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" ]]; then
-        test_skip "Workflow files missing for symlink migration guard check"
+    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" || ! -f "$ACTIVE_ROOT_SCRIPT" ]]; then
+        test_skip "Workflow/script files missing for active-root entrypoint check"
         return
     fi
 
-    local deploy_guard=false
-    local uat_guard=false
-
-    if grep -Fq "Detected legacy non-symlink active root" "$DEPLOY_WORKFLOW" && \
-       grep -Fq 'mv "$ACTIVE_PATH" "$LEGACY_BACKUP"' "$DEPLOY_WORKFLOW"; then
-        deploy_guard=true
+    if ! grep -Fq "$EXPECTED_ACTIVE_ROOT_SCRIPT" "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml must call $EXPECTED_ACTIVE_ROOT_SCRIPT"
+        return
     fi
 
-    if grep -Fq "Detected legacy non-symlink active root" "$UAT_WORKFLOW" && \
-       grep -Fq 'mv "$ACTIVE_PATH" "$LEGACY_BACKUP"' "$UAT_WORKFLOW"; then
-        uat_guard=true
+    if ! grep -Fq "$EXPECTED_ACTIVE_ROOT_SCRIPT" "$UAT_WORKFLOW"; then
+        test_fail "uat-gate.yml must call $EXPECTED_ACTIVE_ROOT_SCRIPT"
+        return
     fi
 
-    if [[ "$deploy_guard" == "true" && "$uat_guard" == "true" ]]; then
-        test_pass
-    else
-        test_fail "Legacy directory migration guard missing in deploy.yml and/or uat-gate.yml"
+    if grep -Fq "Detected legacy non-symlink active root" "$DEPLOY_WORKFLOW" || \
+       grep -Fq 'ln -sfn "$TARGET_PATH" "$ACTIVE_PATH"' "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml should not inline active-root mutation logic"
+        return
     fi
+
+    if grep -Fq "Detected legacy non-symlink active root" "$UAT_WORKFLOW" || \
+       grep -Fq 'ln -sfn "$TARGET_PATH" "$ACTIVE_PATH"' "$UAT_WORKFLOW"; then
+        test_fail "uat-gate.yml should not inline active-root mutation logic"
+        return
+    fi
+
+    test_pass
 }
 
-workflow_symlink_step_uses_quoted_heredoc() {
-    local workflow_file="$1"
-    local in_step=false
-    local saw_quoted=false
+test_active_root_script_migrates_legacy_directory() {
+    test_start "Shared active-root script should migrate legacy directory into backup"
 
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^[[:space:]]*-[[:space:]]name:[[:space:]]Update[[:space:]]active[[:space:]]deploy[[:space:]]root[[:space:]]symlink[[:space:]]*$ ]]; then
-            in_step=true
-            continue
-        fi
+    if [[ ! -f "$ACTIVE_ROOT_SCRIPT" ]]; then
+        test_skip "Missing script file: $ACTIVE_ROOT_SCRIPT"
+        return
+    fi
 
-        if [[ "$in_step" == "true" && "$line" =~ ^[[:space:]]*-[[:space:]]name:[[:space:]] ]]; then
-            break
-        fi
+    local tmp_dir target_path active_path output_file resolved_target
+    tmp_dir="$(mktemp -d)"
+    target_path="$tmp_dir/deploy-root"
+    active_path="$tmp_dir/active-root"
+    output_file="$tmp_dir/output.log"
 
-        if [[ "$in_step" == "true" ]]; then
-            if [[ "$line" == *"<< 'EOF'"* ]]; then
-                saw_quoted=true
-            fi
+    mkdir -p "$target_path" "$active_path"
+    echo "legacy" > "$active_path/marker.txt"
 
-            if [[ "$line" == *"<< EOF"* ]]; then
-                return 1
-            fi
-        fi
-    done < "$workflow_file"
+    if ! bash "$ACTIVE_ROOT_SCRIPT" --target-path "$target_path" --active-path "$active_path" >"$output_file" 2>&1; then
+        test_fail "update-active-deploy-root.sh failed for legacy directory scenario"
+        rm -rf "$tmp_dir"
+        return
+    fi
 
-    [[ "$in_step" == "true" && "$saw_quoted" == "true" ]]
+    if [[ ! -L "$active_path" ]]; then
+        test_fail "Active path must become a symlink"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    resolved_target="$(readlink "$active_path")"
+    if [[ "$resolved_target" != "$target_path" ]]; then
+        test_fail "Active path must point to target path after update"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! find "$tmp_dir" -maxdepth 1 -type d -name 'active-root.legacy-*' | grep -q .; then
+        test_fail "Legacy directory backup should be created next to active path"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
 }
 
-test_active_root_symlink_step_uses_quoted_heredoc() {
-    test_start "Symlink update should use quoted heredoc to avoid runner-side expansion"
+test_active_root_script_requires_existing_target_directory() {
+    test_start "Shared active-root script should reject a missing target directory"
 
-    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" ]]; then
-        test_skip "Workflow files missing for heredoc quoting guard check"
+    if [[ ! -f "$ACTIVE_ROOT_SCRIPT" ]]; then
+        test_skip "Missing script file: $ACTIVE_ROOT_SCRIPT"
         return
     fi
 
-    if ! workflow_symlink_step_uses_quoted_heredoc "$DEPLOY_WORKFLOW"; then
-        test_fail "deploy.yml symlink update step must use << 'EOF' (quoted heredoc)"
+    local tmp_dir missing_target active_path output_file
+    tmp_dir="$(mktemp -d)"
+    missing_target="$tmp_dir/missing-target"
+    active_path="$tmp_dir/active-root"
+    output_file="$tmp_dir/output.log"
+
+    if bash "$ACTIVE_ROOT_SCRIPT" --target-path "$missing_target" --active-path "$active_path" >"$output_file" 2>&1; then
+        test_fail "update-active-deploy-root.sh must fail when target directory is missing"
+        rm -rf "$tmp_dir"
         return
     fi
 
-    if ! workflow_symlink_step_uses_quoted_heredoc "$UAT_WORKFLOW"; then
-        test_fail "uat-gate.yml symlink update step must use << 'EOF' (quoted heredoc)"
+    if ! grep -Fq "Target deploy root does not exist or is not a directory" "$output_file"; then
+        test_fail "Missing-target failure should explain the target-path contract"
+        rm -rf "$tmp_dir"
         return
     fi
 
+    rm -rf "$tmp_dir"
     test_pass
 }
 
@@ -140,8 +173,9 @@ run_all_tests() {
 
     test_deploy_workflow_uses_shared_production_lock
     test_uat_deploy_job_uses_shared_production_lock
-    test_active_root_symlink_step_handles_legacy_directory
-    test_active_root_symlink_step_uses_quoted_heredoc
+    test_active_root_workflows_use_shared_script_entrypoint
+    test_active_root_script_migrates_legacy_directory
+    test_active_root_script_requires_existing_target_directory
 
     generate_report
 }

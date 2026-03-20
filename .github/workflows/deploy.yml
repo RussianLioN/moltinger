@@ -884,32 +884,10 @@ jobs:
       - name: Update active deploy root symlink
         run: |
           echo "::group::Updating active deploy root"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -euo pipefail
-            ACTIVE_PATH="${{ env.DEPLOY_ACTIVE_PATH }}"
-            TARGET_PATH="${{ env.DEPLOY_PATH }}"
-            # Legacy migration: ln -sfn does NOT replace an existing real directory.
-            # In that case it creates a nested link and test -L fails.
-            if [ -e "$ACTIVE_PATH" ] && [ ! -L "$ACTIVE_PATH" ]; then
-              LEGACY_BACKUP="${ACTIVE_PATH}.legacy-$(date -u +%Y%m%dT%H%M%SZ)"
-              echo "::warning::Detected legacy non-symlink active root: $ACTIVE_PATH; moving to $LEGACY_BACKUP"
-              mv "$ACTIVE_PATH" "$LEGACY_BACKUP"
-            fi
-            ln -sfn "$TARGET_PATH" "$ACTIVE_PATH"
-            if [ ! -L "$ACTIVE_PATH" ]; then
-              echo "::error::Active deploy root is not a symlink after update: $ACTIVE_PATH"
-              ls -ld "$ACTIVE_PATH" || true
-              exit 1
-            fi
-            RESOLVED_TARGET="$(readlink "$ACTIVE_PATH")"
-            if [ "$RESOLVED_TARGET" != "$TARGET_PATH" ]; then
-              echo "::error::Active deploy root points to unexpected target: $RESOLVED_TARGET (expected $TARGET_PATH)"
-              ls -ld "$ACTIVE_PATH" || true
-              exit 1
-            fi
-            ls -ld "$ACTIVE_PATH"
-          EOF
-          echo "::notice::Active deploy root -> ${{ env.DEPLOY_PATH }}"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "bash '${{ env.DEPLOY_PATH }}/scripts/update-active-deploy-root.sh' \
+              --target-path '${{ env.DEPLOY_PATH }}' \
+              --active-path '${{ env.DEPLOY_ACTIVE_PATH }}'"
           echo "::endgroup::"
 
       # ===========================================
