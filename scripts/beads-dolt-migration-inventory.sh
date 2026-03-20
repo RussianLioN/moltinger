@@ -391,12 +391,39 @@ inventory_run_bd_command() {
   )
 }
 
+inventory_run_bd_command_capture() {
+  local repo_root="$1"
+  shift
+
+  (
+    cd "${repo_root}"
+    "$@" 2>&1
+  )
+}
+
+inventory_doctor_check_field() {
+  local doctor_json="$1"
+  local check_name="$2"
+  local field_name="$3"
+
+  printf '%s\n' "${doctor_json}" | jq -r --arg name "${check_name}" --arg field "${field_name}" 'first(.checks[]? | select(.name == $name) | .[$field]) // empty'
+}
+
 inventory_collect_runtime_surfaces() {
   local command_path=""
   local normalized_command_path=""
   local bd_version=""
   local info_output=""
+  local info_fallback_output=""
   local backend_output=""
+  local doctor_json=""
+  local doctor_backend=""
+  local doctor_database_status=""
+  local doctor_database_message=""
+  local doctor_database_detail=""
+  local doctor_connection_status=""
+  local doctor_connection_detail=""
+  local doctor_classic_artifacts_message=""
   local info_db=""
   local info_mode=""
   local info_reason=""
@@ -415,6 +442,7 @@ inventory_collect_runtime_surfaces() {
   local backend_readiness="blocked"
   local backend_blocking="true"
   local backend_reason_detail="Could not collect 'bd backend show' from the current worktree."
+  local backend_probe_succeeded="false"
   local -a command_signals=()
   local -a info_signals=()
   local -a backend_signals=()
@@ -458,6 +486,13 @@ inventory_collect_runtime_surfaces() {
     "$(inventory_json_array_from_args "${command_signals[@]}")"
 
   info_output="$(inventory_run_bd_command "${report_repo_root}" bd --no-daemon info || true)"
+  if [[ -z "${info_output}" ]]; then
+    info_fallback_output="$(inventory_run_bd_command_capture "${report_repo_root}" bd info || true)"
+    if [[ -n "${info_fallback_output}" ]]; then
+      info_output="${info_fallback_output}"
+      info_signals+=("fallback:bd-info")
+    fi
+  fi
   if [[ -n "${info_output}" ]]; then
     info_db="$(printf '%s\n' "${info_output}" | sed -n 's/^Database: //p' | head -1)"
     info_mode="$(printf '%s\n' "${info_output}" | sed -n 's/^Mode: //p' | head -1)"
@@ -484,6 +519,24 @@ inventory_collect_runtime_surfaces() {
       info_blocking="true"
       info_reason_detail="Read-only no-daemon info still resolves to the canonical-root tracker instead of the current worktree."
       info_signals+=("canonical-root-coupling")
+    elif [[ "${info_output}" == *"dolt is not installed"* ]]; then
+      info_classification="blocked"
+      info_readiness="blocked"
+      info_blocking="true"
+      info_reason_detail="Current bd runtime expects Dolt, but dolt is not installed in PATH for the inspected worktree."
+      info_signals+=("dolt-missing")
+    elif [[ "${info_output}" == *"No Dolt database found"* ]]; then
+      info_classification="blocked"
+      info_readiness="blocked"
+      info_blocking="true"
+      info_reason_detail="Current bd runtime expects a Dolt database, but the inspected worktree has not initialized one yet."
+      info_signals+=("dolt-db-missing")
+    elif [[ "${info_output}" == *"Dolt server unreachable"* ]]; then
+      info_classification="blocked"
+      info_readiness="blocked"
+      info_blocking="true"
+      info_reason_detail="Current bd runtime targets Dolt, but the local Dolt server/runtime is not reachable yet."
+      info_signals+=("dolt-runtime-unreachable")
     else
       info_classification="warning"
       info_readiness="warning"
@@ -508,7 +561,65 @@ inventory_collect_runtime_surfaces() {
     "$(inventory_json_array_from_args "${info_signals[@]}")"
 
   backend_output="$(inventory_run_bd_command "${report_repo_root}" bd backend show || true)"
+  if [[ -z "${backend_output}" ]]; then
+    doctor_json="$(inventory_run_bd_command_capture "${report_repo_root}" bd doctor --json || true)"
+    if [[ -n "${doctor_json}" ]] && printf '%s\n' "${doctor_json}" | jq -e . >/dev/null 2>&1; then
+      backend_probe_succeeded="true"
+      backend_signals+=("fallback:doctor-json")
+      doctor_backend="$(printf '%s\n' "${doctor_json}" | jq -r '.platform.backend // empty')"
+      doctor_database_status="$(inventory_doctor_check_field "${doctor_json}" "Database" "status")"
+      doctor_database_message="$(inventory_doctor_check_field "${doctor_json}" "Database" "message")"
+      doctor_database_detail="$(inventory_doctor_check_field "${doctor_json}" "Database" "detail")"
+      doctor_connection_status="$(inventory_doctor_check_field "${doctor_json}" "Dolt Connection" "status")"
+      doctor_connection_detail="$(inventory_doctor_check_field "${doctor_json}" "Dolt Connection" "detail")"
+      doctor_classic_artifacts_message="$(inventory_doctor_check_field "${doctor_json}" "Classic Artifacts" "message")"
+      backend_name="${doctor_backend}"
+      if [[ -n "${doctor_backend}" ]]; then
+        backend_signals+=("backend:${doctor_backend}")
+      fi
+      if [[ -n "${doctor_database_status}" ]]; then
+        backend_signals+=("doctor-database:${doctor_database_status}")
+      fi
+      if [[ -n "${doctor_database_message}" ]]; then
+        backend_signals+=("doctor-database-message:${doctor_database_message}")
+      fi
+      if [[ -n "${doctor_classic_artifacts_message}" ]]; then
+        backend_signals+=("doctor-classic-artifacts:${doctor_classic_artifacts_message}")
+      fi
+
+      if [[ "${doctor_backend}" != "dolt" ]]; then
+        backend_classification="blocked"
+        backend_readiness="blocked"
+        backend_blocking="true"
+        backend_reason_detail="The active backend is not Dolt yet, so pilot cutover must stay blocked."
+        backend_signals+=("backend-not-dolt")
+      elif [[ "${doctor_database_status}" == "error" && "${doctor_database_message}" == "No dolt database found" ]]; then
+        backend_classification="blocked"
+        backend_readiness="blocked"
+        backend_blocking="true"
+        backend_reason_detail="The active CLI is already Dolt-native, but the inspected worktree has not initialized its Dolt database yet."
+        backend_signals+=("backend-needs-init")
+      elif [[ "${doctor_connection_status}" == "error" ]]; then
+        backend_classification="blocked"
+        backend_readiness="blocked"
+        backend_blocking="true"
+        if [[ -n "${doctor_connection_detail}" ]]; then
+          backend_reason_detail="Dolt backend metadata exists, but the runtime connection is still unhealthy: ${doctor_connection_detail}"
+        else
+          backend_reason_detail="Dolt backend metadata exists, but the runtime connection is still unhealthy."
+        fi
+        backend_signals+=("backend-connection-unhealthy")
+      else
+        backend_classification="already-compatible"
+        backend_readiness="ready"
+        backend_blocking="false"
+        backend_reason_detail="Backend metadata already reflects a Dolt-native runtime contract for the inspected worktree."
+        backend_signals+=("backend-ready")
+      fi
+    fi
+  fi
   if [[ -n "${backend_output}" ]]; then
+    backend_probe_succeeded="true"
     backend_name="$(printf '%s\n' "${backend_output}" | sed -n 's/^Current backend: //p' | head -1)"
     backend_beads_dir="$(printf '%s\n' "${backend_output}" | sed -n 's/^  Beads dir: //p' | head -1)"
     backend_db="$(printf '%s\n' "${backend_output}" | sed -n 's/^  Database: //p' | head -1)"
@@ -541,7 +652,7 @@ inventory_collect_runtime_surfaces() {
       backend_reason_detail="Backend metadata already matches a Dolt-native worktree-local target."
       backend_signals+=("backend-ready")
     fi
-  else
+  elif [[ "${backend_probe_succeeded}" != "true" ]]; then
     backend_signals+=("backend-command-failed")
   fi
 
