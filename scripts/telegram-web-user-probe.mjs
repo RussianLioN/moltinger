@@ -41,7 +41,8 @@ const replySettleMs = Math.max(1000, Number(getArg("--reply-settle-ms", String(D
 const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
-const ERROR_RE = /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout)/i;
+const ERROR_RE =
+  /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed))/i;
 const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 
 let stage = "login";
@@ -57,6 +58,10 @@ function normalizeMessageText(value) {
     .replace(/(?:\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)+$/gi, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function isReplyErrorSignature(value) {
+  return ERROR_RE.test(normalizeMessageText(value));
 }
 
 function safeMid(value) {
@@ -1094,7 +1099,7 @@ async function main() {
       non_empty: replyText.length > 0,
       min_length: replyText.length >= minReplyLen,
       reply_settled: settledReply.settled === true,
-      error_signature_clean: !ERROR_RE.test(replyText),
+      error_signature_clean: !isReplyErrorSignature(replyText),
       sensitive_signature_clean: !SENSITIVE_RE.test(replyText),
     };
     const failures = Object.entries(checks)

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-20
-**Total Lessons**: 36
+**Total Lessons**: 37
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (11 lessons)
+#### P1 (12 lessons)
+- [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
 - [Deploy collision and active-root symlink guard](../docs/rca/2026-03-20-deploy-collision-and-active-root-symlink-guard.md)
@@ -61,9 +62,10 @@
 ### By Category
 
 
-#### cicd (14 lessons)
+#### cicd (15 lessons)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
+- [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
 - [SSH heredoc runner-side expansion in deploy workflow](../docs/rca/2026-03-20-ssh-heredoc-runner-expansion-in-deploy.md)
 - [Moltis update proposal workflow failed with workflow-file issue due to forbidden secrets context in step if](../docs/rca/2026-03-20-moltis-update-proposal-workflow-file-issue-on-secrets-context.md)
 - [Moltis stayed on 0.9.10 because pinned GHCR tag format was wrong and production deploy gate allowed bypass semantics](../docs/rca/2026-03-20-moltis-ghcr-tag-normalization-and-production-deploy-gate-hardening.md)
@@ -128,10 +130,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 36 |
-| Critical (P0/P1) | 12 |
+| Total Lessons | 37 |
+| Critical (P0/P1) | 13 |
 | Categories | 5 |
-| Unique Tags | 88 |
+| Unique Tags | 90 |
 
 ---
 
