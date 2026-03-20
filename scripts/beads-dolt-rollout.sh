@@ -392,7 +392,8 @@ rollout_build_payload() {
       rollback_manifest: (if $manifest_path == "" then null else $manifest_path end),
       inventory: {
         verdict: $inventory.summary.verdict,
-        pilot_gate: $inventory.summary.pilot_gate
+        pilot_gate: $inventory.summary.pilot_gate,
+        full_cutover_gate: $inventory.summary.full_cutover_gate
       },
       summary: {
         worktree_count: ($worktrees | length),
@@ -417,6 +418,7 @@ rollout_render_human() {
       "Stage: \(.stage)",
       "Inventory Verdict: \(.inventory.verdict)",
       "Pilot Gate: \(.inventory.pilot_gate)",
+      "Full Cutover Gate: \(.inventory.full_cutover_gate)",
       (if .package_id == null then empty else "Rollback Package: \(.package_id)" end),
       (if .rollback_manifest == null then empty else "Rollback Manifest: \(.rollback_manifest)" end),
       "Worktrees: \(.summary.worktree_count)",
@@ -441,6 +443,9 @@ rollout_render_env() {
       "canonical_root=\(.canonical_root | @sh)",
       "stage=\(.stage)",
       "package_id=\((.package_id // "") | @sh)",
+      "inventory_verdict=\(.inventory.verdict)",
+      "pilot_gate=\(.inventory.pilot_gate)",
+      "full_cutover_gate=\(.inventory.full_cutover_gate)",
       "worktree_count=\(.summary.worktree_count)",
       "ready_count=\(.summary.ready_count)",
       "pilot_count=\(.summary.pilot_count)",

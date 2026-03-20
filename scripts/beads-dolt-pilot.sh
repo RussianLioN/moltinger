@@ -131,6 +131,7 @@ pilot_write_mode_file() {
     --arg review_command "$(pilot_review_command)" \
     --arg inventory_verdict "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.verdict')" \
     --arg pilot_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.pilot_gate')" \
+    --arg full_cutover_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.full_cutover_gate')" \
     '{
       schema: $schema,
       mode: "pilot",
@@ -140,7 +141,8 @@ pilot_write_mode_file() {
       blocked_legacy_commands: ["sync"],
       review_command: $review_command,
       inventory_verdict: $inventory_verdict,
-      pilot_gate: $pilot_gate
+      pilot_gate: $pilot_gate,
+      full_cutover_gate: $full_cutover_gate
     }' > "${mode_file}"
 }
 
@@ -192,6 +194,7 @@ pilot_build_status_json() {
     --arg review_command "$(pilot_review_command)" \
     --arg inventory_verdict "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.verdict')" \
     --arg pilot_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.pilot_gate')" \
+    --arg full_cutover_gate "$(printf '%s\n' "${inventory_json}" | jq -r '.summary.full_cutover_gate')" \
     --argjson enabled "${enabled}" \
     '{
       schema: $schema,
@@ -201,7 +204,8 @@ pilot_build_status_json() {
       pilot_mode_file: $mode_file,
       review_command: $review_command,
       inventory_verdict: $inventory_verdict,
-      pilot_gate: $pilot_gate
+      pilot_gate: $pilot_gate,
+      full_cutover_gate: $full_cutover_gate
     }'
 }
 
@@ -237,6 +241,8 @@ pilot_build_review_json() {
       inventory: {
         verdict: $inventory.summary.verdict,
         pilot_gate: $inventory.summary.pilot_gate,
+        full_cutover_gate: $inventory.summary.full_cutover_gate,
+        pilot_blocking_count: $inventory.summary.pilot_blocking_count,
         blocking_count: $inventory.summary.blocking_count,
         warning_count: $inventory.summary.warning_count
       },
@@ -263,6 +269,7 @@ pilot_render_human() {
           "Pilot Mode File: \(.pilot_mode_file)",
           "Inventory Verdict: \(.inventory_verdict)",
           "Pilot Gate: \(.pilot_gate)",
+          "Full Cutover Gate: \(.full_cutover_gate)",
           "Review Command: \(.review_command)"
         ]
         | .[]'
@@ -276,6 +283,9 @@ pilot_render_human() {
           "Pilot Mode Enabled: \(.pilot_mode_enabled)",
           "Inventory Verdict: \(.inventory.verdict)",
           "Pilot Gate: \(.inventory.pilot_gate)",
+          "Full Cutover Gate: \(.inventory.full_cutover_gate)",
+          "Pilot Blocking Items: \(.inventory.pilot_blocking_count)",
+          "Full Cutover Blocking Items: \(.inventory.blocking_count)",
           "Review Command: \(.review_command)",
           "",
           "Review Surface:",
@@ -311,6 +321,7 @@ pilot_render_env() {
           "pilot_mode_file=\(.pilot_mode_file | @sh)",
           "inventory_verdict=\(.inventory_verdict)",
           "pilot_gate=\(.pilot_gate)",
+          "full_cutover_gate=\(.full_cutover_gate)",
           "review_command=\(.review_command | @sh)"
         ]
         | .[]'
@@ -324,6 +335,9 @@ pilot_render_env() {
           "pilot_mode_enabled=\(.pilot_mode_enabled)",
           "inventory_verdict=\(.inventory.verdict)",
           "pilot_gate=\(.inventory.pilot_gate)",
+          "full_cutover_gate=\(.inventory.full_cutover_gate)",
+          "pilot_blocking_count=\(.inventory.pilot_blocking_count)",
+          "full_cutover_blocking_count=\(.inventory.blocking_count)",
           "review_command=\(.review_command | @sh)",
           "info_rc=\(.review_surface.info.rc)",
           "ready_rc=\(.review_surface.ready.rc)",

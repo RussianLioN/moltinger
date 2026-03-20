@@ -4,7 +4,7 @@
 
 > **Moltinger repo note**: внутри этого репо для обычной работы используйте plain `bd`. Безопасный repo-local dispatch приходит через `.envrc` или managed worktree/Codex handoff; отдельную wrapper-команду выбирать не нужно.
 
-> **Pilot mode note**: если в текущей worktree есть `.beads/pilot-mode.json`, не используйте `bd sync` как обычный review path. Для pilot используйте `./scripts/beads-dolt-pilot.sh review`; попытки legacy-only sync path должны считаться ошибкой.
+> **Pilot mode note**: если в текущей worktree есть `.beads/pilot-mode.json`, используйте `./scripts/beads-dolt-pilot.sh review` как обычный review path. Старый sync-style workflow в pilot должен считаться ошибкой.
 
 ---
 
@@ -15,11 +15,13 @@
 ```bash
 git status              # 1. Что изменилось?
 git add <files>         # 2. Добавить код
-bd sync                 # 3. Sync beads
+bd status               # 3. Проверить текущее Beads state
 git commit -m "... (PREFIX-xxx)"  # 4. Коммит с ID issue
-bd sync                 # 5. Sync новые изменения
+bd status               # 5. Перепроверить Beads state после commit
 git push                # 6. Push в remote
 ```
+
+Если для проекта настроен Dolt remote, выполните `bd dolt push` перед `git push`.
 
 **Работа НЕ завершена пока не сделан push!**
 
@@ -54,7 +56,7 @@ bd close ID --reason "Описание"     # Закрыть задачу
 /push patch                         # Коммит
 
 # === КОНЕЦ (ОБЯЗАТЕЛЬНО) ===
-bd sync                     # Синхронизация перед выходом
+bd status                   # Проверка состояния перед выходом
 ```
 
 ---
@@ -250,9 +252,9 @@ bd prime      # Контекст workflow
 │ КОНЕЦ СЕССИИ (ВСЕ 6 ШАГОВ!)                      │
 │   1. git status                                  │
 │   2. git add <files>                             │
-│   3. bd sync                                     │
+│   3. bd status                                   │
 │   4. git commit -m "... (PREFIX-xxx)"            │
-│   5. bd sync                                     │
+│   5. bd status                                   │
 │   6. git push                                    │
 ├──────────────────────────────────────────────────┤
 │ WORKFLOWS bd formula list                        │

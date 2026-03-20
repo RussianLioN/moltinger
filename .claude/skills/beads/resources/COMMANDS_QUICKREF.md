@@ -2,8 +2,8 @@
 
 In this repository, these commands assume the repo-local plain `bd` shim is active through `.envrc` or the managed worktree/Codex bootstrap path.
 
-If `.beads/pilot-mode.json` exists in the current worktree, do not use `bd sync` as the ordinary review path. Use `./scripts/beads-dolt-pilot.sh review` for pilot review instead.
-If `.beads/cutover-mode.json` exists in the current worktree, do not use `bd sync` as the ordinary review path. Use `./scripts/beads-dolt-rollout.sh verify --worktree .` for cutover verification instead.
+If `.beads/pilot-mode.json` exists in the current worktree, use `./scripts/beads-dolt-pilot.sh review` for pilot review instead of the ordinary non-migration review path.
+If `.beads/cutover-mode.json` exists in the current worktree, use `./scripts/beads-dolt-rollout.sh verify --worktree .` for cutover verification instead of the ordinary non-migration review path.
 
 ## View Issues
 
@@ -67,13 +67,14 @@ bd label add ID label-name
 bd label remove ID label-name
 ```
 
-## Sync & Diagnostics
+## Review & Diagnostics
 
 ```bash
-bd sync                     # Sync DB ↔ JSONL ↔ Git (ordinary non-migration worktree only)
-bd sync --force             # Force from JSONL
+bd status                   # Review current Beads state
+bd bootstrap                # Safe setup / repair for a clone or broken local DB
 bd info                     # Project status
 bd doctor                   # Health check
+bd dolt push                # Publish Dolt history when a remote is configured
 bd prime                    # Context injection
 bd prime --full             # Full context
 ```

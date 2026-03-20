@@ -122,7 +122,7 @@ molecule-bonds:
 #   2. bd update ID --status in_progress - Claim task (acquires lock)
 #   3. Do the work
 #   4. bd close ID --reason "..." - Complete task (releases lock)
-#   5. Daemon auto-syncs (or bd sync manually)
+#   5. Review the resulting state with bd status (or publish with bd dolt push when a remote is configured)
 #
 # Multi-terminal work:
 #   - Each terminal should work on DIFFERENT issues
@@ -136,6 +136,5 @@ molecule-bonds:
 #   bd create "Found issue" -t bug --deps discovered-from:PREFIX-current
 #
 # SESSION CLOSE PROTOCOL (MANDATORY):
-#   git status → git add → bd sync → git commit → bd sync → git push
+#   git status → git add → bd status → git commit → bd status → git push
 #   Work is NOT done until pushed!
-

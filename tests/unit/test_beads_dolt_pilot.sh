@@ -220,6 +220,14 @@ create_isolated_pilot_worktree_fixture() {
     printf '%s\n%s\n' "${repo_dir}" "${worktree_dir}"
 }
 
+create_blocked_sibling_worktree() {
+    local repo_dir="$1"
+    local sibling_path="$2"
+
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${sibling_path}" "feat/blocked" "main"
+    git_topology_fixture_seed_legacy_jsonl_first_state "${sibling_path}"
+}
+
 test_pilot_enable_blocks_when_inventory_gate_is_blocked() {
     test_start "pilot_enable_blocks_when_inventory_gate_is_blocked"
 
@@ -245,6 +253,35 @@ test_pilot_enable_blocks_when_inventory_gate_is_blocked() {
 
     assert_eq "20" "${rc}" "Pilot enable must stop on a blocked readiness gate"
     assert_contains "${output}" "Pilot readiness gate is blocked" "Blocked pilot enable must explain why it refused to arm"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_pilot_enable_ignores_blocked_siblings_when_current_worktree_is_ready() {
+    test_start "pilot_enable_ignores_blocked_siblings_when_current_worktree_is_ready"
+
+    local fixture_root repo_dir worktree_dir blocked_sibling fake_bin status_json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-pilot.XXXXXX)"
+    mapfile -t fixture_paths < <(
+        create_isolated_pilot_worktree_fixture \
+            "${fixture_root}" \
+            pilot-ready \
+            pilot-ready \
+            "fixture: seed pilot-ready state with blocked sibling"
+    )
+    repo_dir="${fixture_paths[0]}"
+    worktree_dir="${fixture_paths[1]}"
+    blocked_sibling="${fixture_root}/blocked-sibling"
+    create_blocked_sibling_worktree "${repo_dir}" "${blocked_sibling}"
+    fake_bin="$(create_fake_pilot_bd_bin "${fixture_root}")"
+
+    run_pilot_script "${worktree_dir}" "${fake_bin}" pilot-ready enable >/dev/null
+    status_json="$(run_pilot_script "${worktree_dir}" "${fake_bin}" pilot-ready status --format json)"
+
+    assert_json_value "${status_json}" '.pilot_mode_enabled' "true" "Pilot enable must still arm the isolated ready worktree"
+    assert_json_value "${status_json}" '.pilot_gate' "pass" "Pilot gate must stay passed for the current worktree"
+    assert_json_value "${status_json}" '.full_cutover_gate' "blocked" "Pilot status must still expose fleet-wide blockers"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -410,6 +447,7 @@ test_pilot_enable_rejects_canonical_root() {
 run_test_beads_dolt_pilot() {
     start_timer
     test_pilot_enable_blocks_when_inventory_gate_is_blocked
+    test_pilot_enable_ignores_blocked_siblings_when_current_worktree_is_ready
     test_pilot_enable_writes_mode_file_when_gate_passes
     test_pilot_review_emits_review_surface
     test_plain_bd_blocks_sync_when_pilot_mode_is_enabled
