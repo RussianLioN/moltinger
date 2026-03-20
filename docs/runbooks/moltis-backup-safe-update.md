@@ -113,6 +113,7 @@ GitHub Actions path:
 
 - `.github/workflows/deploy.yml`
 - `workflow_dispatch` target is production-only
+- release-tag deploy is allowed only when tag SHA matches current `origin/main` HEAD
 - manual version input defaults to blank and must equal tracked git version if provided
 - backup step must finish successfully
 - restore-readiness validation must finish successfully
