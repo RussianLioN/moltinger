@@ -129,12 +129,12 @@ services:
     restart: unless-stopped
     privileged: true
     networks:
-      - traefik-net
+      - ainetic_net
     ports:
       - "13131:13131"
       - "13132:13132"
     volumes:
-      - ./config:/home/moltis/.config/moltis
+      - ${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}:/home/moltis/.config/moltis
       - ./data:/home/moltis/.moltis
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -156,10 +156,15 @@ services:
       <<: *logging              # Anchor: logging config
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-net"
       - "traefik.http.routers.moltis.rule=Host(`moltis.ainetic.tech`)"
       - "com.centurylinklabs.watchtower.enable=true"
 ```
+
+Production note:
+
+- `./config/` remains the Git-synced static source of truth
+- `${MOLTIS_RUNTIME_CONFIG_DIR}` is the writable live config/auth directory used by the container
+- prepare it before restart/deploy with `scripts/prepare-moltis-runtime-config.sh`
 
 ---
 

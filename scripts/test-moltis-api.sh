@@ -4,8 +4,11 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="${MOLTIS_ACTIVE_ROOT:-$DEFAULT_PROJECT_ROOT}"
 MOLTIS_URL="http://localhost:13131"
-ENV_FILE="/opt/moltinger/.env"
+ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 
 # Читаем пароль из .env (без раскрытия в логах)
 MOLTIS_PASSWORD=$(grep "^MOLTIS_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)

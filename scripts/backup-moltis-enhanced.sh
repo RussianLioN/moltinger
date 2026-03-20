@@ -28,26 +28,14 @@ fi
 # CONFIGURATION
 # ========================================================================
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-CONFIG_FILE="${BACKUP_CONFIG:-$PROJECT_ROOT/config/backup/backup.conf}"
+CONFIG_FILE="${BACKUP_CONFIG:-$PROJECT_ROOT/config/backup.conf}"
 
 # Default configuration (can be overridden by config file or environment)
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 CONFIG_DIR="${BACKUP_CONFIG_DIR:-$PROJECT_ROOT/config}"
 DATA_DIR="${BACKUP_DATA_DIR:-$PROJECT_ROOT/data}"
+RUNTIME_CONFIG_DIR="${BACKUP_RUNTIME_CONFIG_DIR:-${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/moltis}"
-RUNTIME_ENV_FILE="${BACKUP_ENV_FILE:-$PROJECT_ROOT/.env}"
-COMPOSE_FILE_MAIN="${BACKUP_COMPOSE_FILE_MAIN:-$PROJECT_ROOT/docker-compose.yml}"
-COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod.yml}"
-BACKUP_RESTORE_RUNTIME_FILES="${BACKUP_RESTORE_RUNTIME_FILES:-true}"
-CLAWDIY_BACKUP_ENABLED="${CLAWDIY_BACKUP_ENABLED:-true}"
-CLAWDIY_CONFIG_DIR="${CLAWDIY_CONFIG_DIR:-$PROJECT_ROOT/config/clawdiy}"
-CLAWDIY_RUNTIME_DIR="${CLAWDIY_RUNTIME_DIR:-$PROJECT_ROOT/data/clawdiy/runtime}"
-CLAWDIY_STATE_DIR="${CLAWDIY_STATE_DIR:-$PROJECT_ROOT/data/clawdiy/state}"
-CLAWDIY_AUDIT_DIR="${CLAWDIY_AUDIT_DIR:-$PROJECT_ROOT/data/clawdiy/audit}"
-CLAWDIY_CONTAINER_NAME="${CLAWDIY_CONTAINER_NAME:-clawdiy}"
-CLAWDIY_RESTORE_AUTOSTART="${CLAWDIY_RESTORE_AUTOSTART:-true}"
-CLAWDIY_ALLOW_PARTIAL_RESTORE="${CLAWDIY_ALLOW_PARTIAL_RESTORE:-false}"
-CLAWDIY_EVIDENCE_MANIFEST_NAME="${CLAWDIY_EVIDENCE_MANIFEST_NAME:-clawdiy-evidence-manifest.json}"
 RETENTION_DAYS=30
 RETENTION_WEEKS=12
 RETENTION_MONTHS=12
@@ -98,7 +86,6 @@ BACKUP_ENCRYPTED=false
 BACKUP_STATUS="pending"
 BACKUP_ERRORS=()
 BACKUP_ID=""
-ENCRYPTED_OUTPUT_FILE=""
 
 # ========================================================================
 # INITIALIZATION
@@ -108,14 +95,6 @@ ENCRYPTED_OUTPUT_FILE=""
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
-
-# Reconcile derived directories after config/env overrides are loaded.
-CONFIG_DIR="${BACKUP_CONFIG_DIR:-${CONFIG_DIR:-$PROJECT_ROOT/config}}"
-DATA_DIR="${BACKUP_DATA_DIR:-${DATA_DIR:-$PROJECT_ROOT/data}}"
-LOG_DIR="${BACKUP_LOG_DIR:-${LOG_DIR:-/var/log/moltis}}"
-RUNTIME_ENV_FILE="${BACKUP_ENV_FILE:-${RUNTIME_ENV_FILE:-$PROJECT_ROOT/.env}}"
-COMPOSE_FILE_MAIN="${BACKUP_COMPOSE_FILE_MAIN:-${COMPOSE_FILE_MAIN:-$PROJECT_ROOT/docker-compose.yml}}"
-COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-${COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod.yml}}"
 
 # Setup logging (with fallback if permission denied)
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
@@ -140,105 +119,6 @@ if [[ "$(date +%d)" == "01" ]]; then
     BACKUP_TYPE="monthly"
 fi
 
-string_is_true() {
-    case "${1:-}" in
-        1|true|TRUE|yes|YES|on|ON)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-container_exists() {
-    local container_name="$1"
-    docker inspect "$container_name" >/dev/null 2>&1
-}
-
-container_is_running() {
-    local container_name="$1"
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"
-}
-
-clawdiy_inventory_present() {
-    [[ -e "$CLAWDIY_CONFIG_DIR" || -e "$CLAWDIY_RUNTIME_DIR" || -e "$CLAWDIY_STATE_DIR" || -e "$CLAWDIY_AUDIT_DIR" ]]
-}
-
-count_files_under() {
-    local root="$1"
-
-    if [[ ! -d "$root" ]]; then
-        echo "0"
-        return
-    fi
-
-    find "$root" -type f | wc -l | tr -d ' '
-}
-
-latest_file_under() {
-    local root="$1"
-
-    if [[ ! -d "$root" ]]; then
-        return 0
-    fi
-
-    find "$root" -type f | sort | tail -1
-}
-
-json_bool() {
-    if string_is_true "$1"; then
-        echo "true"
-    else
-        echo "false"
-    fi
-}
-
-current_time_ms() {
-    local timestamp
-    timestamp=$(date +%s%3N 2>/dev/null || true)
-    if [[ "$timestamp" =~ ^[0-9]+$ ]]; then
-        echo "$timestamp"
-    else
-        echo "$(($(date +%s) * 1000))"
-    fi
-}
-
-write_sha256_file() {
-    local input_file="$1"
-    local output_file="$2"
-
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$input_file" > "$output_file"
-    elif command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$input_file" > "$output_file"
-    else
-        log_error "No SHA-256 checksum tool available"
-        return 1
-    fi
-}
-
-verify_sha256_file() {
-    local input_file="$1"
-    local checksum_file="$2"
-
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum -c "$checksum_file" --quiet 2>/dev/null
-        return $?
-    fi
-
-    if command -v shasum >/dev/null 2>&1; then
-        local expected actual
-        expected=$(awk '{print $1}' "$checksum_file")
-        actual=$(shasum -a 256 "$input_file" | awk '{print $1}')
-        [[ -n "$expected" && "$expected" == "$actual" ]]
-        return $?
-    fi
-
-    log_error "No SHA-256 checksum tool available"
-    return 1
-}
-
 # ========================================================================
 # LOGGING FUNCTIONS
 # ========================================================================
@@ -262,6 +142,25 @@ log_warn() { log "WARN" "$@"; }
 log_error() {
     log "ERROR" "$@"
     BACKUP_ERRORS+=("$*")
+}
+
+now_ms() {
+    local ts=""
+    ts=$(date +%s%3N 2>/dev/null || true)
+    if [[ "$ts" =~ ^[0-9]+$ ]]; then
+        echo "$ts"
+        return 0
+    fi
+
+    if command -v python3 &> /dev/null; then
+        python3 - <<'PY'
+import time
+print(int(time.time() * 1000))
+PY
+        return 0
+    fi
+
+    echo "$(( $(date +%s) * 1000 ))"
 }
 
 # ========================================================================
@@ -320,14 +219,10 @@ EOF
 write_backup_status() {
     local status="$1"
     local timestamp
-    local status_file="$BACKUP_STATUS_FILE"
     timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
     # Ensure directory exists
-    if ! mkdir -p "$(dirname "$status_file")" 2>/dev/null; then
-        status_file="${TMPDIR:-/tmp}/moltis-backup-status.json"
-        mkdir -p "$(dirname "$status_file")" 2>/dev/null || true
-    fi
+    mkdir -p "$(dirname "$BACKUP_STATUS_FILE")" 2>/dev/null || true
 
     # Build errors array
     local errors_json="[]"
@@ -350,7 +245,7 @@ write_backup_status() {
         s3_location="\"$BACKUP_S3_LOCATION\""
     fi
 
-    cat > "$status_file" <<EOF
+    cat > "$BACKUP_STATUS_FILE" <<EOF
 {
   "status": "$status",
   "last_backup_timestamp": "$timestamp",
@@ -371,7 +266,7 @@ write_backup_status() {
 }
 EOF
 
-    log_info "Backup status written to $status_file"
+    log_info "Backup status written to $BACKUP_STATUS_FILE"
 }
 
 # ========================================================================
@@ -382,16 +277,10 @@ EOF
 write_prometheus_metrics() {
     local status="$1"
     local duration_seconds
-    local metrics_dir="$PROMETHEUS_TEXTFILE_DIR"
-    local metrics_file="$PROMETHEUS_METRICS_FILE"
     duration_seconds=$(echo "scale=2; $BACKUP_DURATION_MS / 1000" | bc 2>/dev/null || echo "0")
 
     # Ensure directory exists
-    if ! mkdir -p "$metrics_dir" 2>/dev/null; then
-        metrics_dir="${TMPDIR:-/tmp}/moltis-prometheus-textfile"
-        metrics_file="${metrics_dir}/$(basename "$PROMETHEUS_METRICS_FILE")"
-        mkdir -p "$metrics_dir" 2>/dev/null || true
-    fi
+    mkdir -p "$PROMETHEUS_TEXTFILE_DIR" 2>/dev/null || true
 
     # Convert status to metric value
     local status_success=0
@@ -409,7 +298,7 @@ write_prometheus_metrics() {
     # Write metrics in Prometheus textfile format
     # Using temporary file for atomic write
     local temp_file
-    temp_file=$(mktemp "${metrics_dir}/.moltis_backup.XXXXXX") || {
+    temp_file=$(mktemp "${PROMETHEUS_TEXTFILE_DIR}/.moltis_backup.XXXXXX") || {
         log_warn "Failed to create temp file for Prometheus metrics"
         return 1
     }
@@ -442,13 +331,13 @@ moltis_backup_s3_uploaded $( [[ -n "$BACKUP_S3_LOCATION" ]] && echo "1" || echo 
 EOF
 
     # Atomic move
-    mv "$temp_file" "$metrics_file" || {
+    mv "$temp_file" "$PROMETHEUS_METRICS_FILE" || {
         log_warn "Failed to move Prometheus metrics file"
         rm -f "$temp_file"
         return 1
     }
 
-    log_info "Prometheus metrics written to $metrics_file"
+    log_info "Prometheus metrics written to $PROMETHEUS_METRICS_FILE"
 }
 
 # ========================================================================
@@ -515,10 +404,12 @@ init_backup_dirs() {
 generate_checksum() {
     local file="$1"
     local checksum_file="${file}.sha256"
-    write_sha256_file "$file" "$checksum_file"
+    sha256sum "$file" > "$checksum_file"
 
     # Extract just the hash for status tracking
     BACKUP_CHECKSUM=$(cut -d' ' -f1 "$checksum_file")
+
+    echo "$checksum_file"
 }
 
 # Verify checksum
@@ -531,7 +422,7 @@ verify_checksum() {
         return 1
     fi
 
-    if verify_sha256_file "$file" "$checksum_file"; then
+    if sha256sum -c "$checksum_file" --quiet 2>/dev/null; then
         log_info "Checksum verified: $file"
         return 0
     else
@@ -548,14 +439,14 @@ encrypt_file() {
     if [[ "$ENCRYPTION_ENABLED" != "true" ]]; then
         log_info "Encryption disabled, skipping"
         BACKUP_ENCRYPTED=false
-        ENCRYPTED_OUTPUT_FILE="$input_file"
+        echo "$input_file"
         return 0
     fi
 
     if [[ ! -f "$ENCRYPTION_KEY_FILE" ]]; then
         log_error "Encryption key not found: $ENCRYPTION_KEY_FILE"
         BACKUP_ENCRYPTED=false
-        ENCRYPTED_OUTPUT_FILE="$input_file"
+        echo "$input_file"
         return 0
     fi
 
@@ -572,18 +463,18 @@ encrypt_file() {
         if [[ -f "$output_file" ]] && [[ -s "$output_file" ]]; then
             rm -f "$input_file"
             # Also update checksum for encrypted file
-            write_sha256_file "$output_file" "${output_file}.sha256"
+            sha256sum "$output_file" > "${output_file}.sha256"
             BACKUP_CHECKSUM=$(cut -d' ' -f1 "${output_file}.sha256")
             BACKUP_ENCRYPTED=true
-            ENCRYPTED_OUTPUT_FILE="$output_file"
             log_info "Encryption complete: $output_file"
+            echo "$output_file"
             return 0
         fi
     fi
 
     log_error "Encryption failed"
     BACKUP_ENCRYPTED=false
-    ENCRYPTED_OUTPUT_FILE="$input_file"
+    echo "$input_file"
     return 1
 }
 
@@ -620,72 +511,14 @@ create_backup() {
     local backup_name="moltis_${BACKUP_TYPE}_${BACKUP_ID}"
     local backup_path="$BACKUP_DIR/$BACKUP_TYPE/${backup_name}.tar.gz"
     local tmp_dir="$BACKUP_DIR/tmp/${backup_name}"
-    local clawdiy_included=false
-    local env_included=false
-    local compose_main_included=false
-    local compose_prod_included=false
-    local moltis_restore_ready=false
 
     log_info "Creating $BACKUP_TYPE backup: $backup_name"
     mkdir -p "$tmp_dir"
 
     # Export container state (if running)
-    if container_is_running "moltis"; then
+    if docker ps --format '{{.Names}}' | grep -q '^moltis$'; then
         log_info "Exporting container state..."
         docker inspect moltis > "$tmp_dir/container-inspect.json" 2>/dev/null || true
-    fi
-
-    if string_is_true "$CLAWDIY_BACKUP_ENABLED"; then
-        if clawdiy_inventory_present; then
-            clawdiy_included=true
-            log_info "Recording Clawdiy inventory in backup metadata"
-
-            cat > "$tmp_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME" <<EOF
-{
-  "schema_version": "v1",
-  "captured_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "config_present": $(json_bool "$( [[ -d "$CLAWDIY_CONFIG_DIR" ]] && echo true || echo false )"),
-  "runtime_present": $(json_bool "$( [[ -d "$CLAWDIY_RUNTIME_DIR" ]] && echo true || echo false )"),
-  "state_present": $(json_bool "$( [[ -d "$CLAWDIY_STATE_DIR" ]] && echo true || echo false )"),
-  "audit_present": $(json_bool "$( [[ -d "$CLAWDIY_AUDIT_DIR" ]] && echo true || echo false )"),
-  "runtime_file_count": $(count_files_under "$CLAWDIY_RUNTIME_DIR"),
-  "state_file_count": $(count_files_under "$CLAWDIY_STATE_DIR"),
-  "audit_file_count": $(count_files_under "$CLAWDIY_AUDIT_DIR"),
-  "latest_runtime_artifact": $(latest_file_under "$CLAWDIY_RUNTIME_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
-  "latest_state_artifact": $(latest_file_under "$CLAWDIY_STATE_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
-  "latest_audit_artifact": $(latest_file_under "$CLAWDIY_AUDIT_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end')
-}
-EOF
-        else
-            log_warn "Clawdiy backup inventory is enabled but no Clawdiy paths were found"
-        fi
-
-        if container_exists "$CLAWDIY_CONTAINER_NAME"; then
-            log_info "Exporting Clawdiy container state..."
-            docker inspect "$CLAWDIY_CONTAINER_NAME" > "$tmp_dir/clawdiy-container-inspect.json" 2>/dev/null || true
-        fi
-    fi
-
-    if [[ -f "$RUNTIME_ENV_FILE" ]]; then
-        env_included=true
-    else
-        log_warn "Runtime env file missing from backup scope: $RUNTIME_ENV_FILE"
-    fi
-
-    if [[ -f "$COMPOSE_FILE_MAIN" ]]; then
-        compose_main_included=true
-    else
-        log_warn "Compose file missing from backup scope: $COMPOSE_FILE_MAIN"
-    fi
-
-    if [[ -f "$COMPOSE_FILE_PROD" ]]; then
-        compose_prod_included=true
-    else
-        log_warn "Production compose file missing from backup scope: $COMPOSE_FILE_PROD"
-    fi
-
-    if [[ "$env_included" == "true" && "$compose_main_included" == "true" && "$compose_prod_included" == "true" ]]; then
-        moltis_restore_ready=true
     fi
 
     # Create metadata
@@ -697,103 +530,58 @@ EOF
     "hostname": "$(hostname)",
     "version": "3.0",
     "config_dir": "$CONFIG_DIR",
+    "runtime_config_dir": "$RUNTIME_CONFIG_DIR",
     "data_dir": "$DATA_DIR",
-    "clawdiy": {
-        "enabled": $(json_bool "$CLAWDIY_BACKUP_ENABLED"),
-        "included": $(json_bool "$clawdiy_included"),
-        "config_dir": "$CLAWDIY_CONFIG_DIR",
-        "runtime_dir": "$CLAWDIY_RUNTIME_DIR",
-        "state_dir": "$CLAWDIY_STATE_DIR",
-        "audit_dir": "$CLAWDIY_AUDIT_DIR",
-        "container_name": "$CLAWDIY_CONTAINER_NAME"
-    },
-    "runtime_files": {
-        "env_file": {
-            "path": "$RUNTIME_ENV_FILE",
-            "included": $(json_bool "$env_included")
-        },
-        "compose_file_main": {
-            "path": "$COMPOSE_FILE_MAIN",
-            "included": $(json_bool "$compose_main_included")
-        },
-        "compose_file_prod": {
-            "path": "$COMPOSE_FILE_PROD",
-            "included": $(json_bool "$compose_prod_included")
-        }
-    },
-    "restore_readiness": {
-        "moltis": {
-            "ready": $(json_bool "$moltis_restore_ready"),
-            "required": [
-                "backup-metadata.json",
-                "config/",
-                "data/",
-                ".env",
-                "docker-compose.yml",
-                "docker-compose.prod.yml"
-            ],
-            "clawdiy_runtime_dir": "$CLAWDIY_RUNTIME_DIR"
-        }
-    },
     "docker_version": "$(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"
 }
 EOF
 
-    # Create tarball
-    log_info "Creating tarball..."
-    local -a tar_args
-    tar_args=(
-        -C "$tmp_dir" "backup-metadata.json"
-    )
-
-    if [[ -f "$tmp_dir/container-inspect.json" ]]; then
-        tar_args+=(-C "$tmp_dir" "container-inspect.json")
-    fi
-
-    if [[ -f "$tmp_dir/clawdiy-container-inspect.json" ]]; then
-        tar_args+=(-C "$tmp_dir" "clawdiy-container-inspect.json")
-    fi
-
-    if [[ -f "$tmp_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME" ]]; then
-        tar_args+=(-C "$tmp_dir" "$CLAWDIY_EVIDENCE_MANIFEST_NAME")
-    fi
-
-    if [[ -f "$RUNTIME_ENV_FILE" ]]; then
-        tar_args+=(-C "$(dirname "$RUNTIME_ENV_FILE")" "$(basename "$RUNTIME_ENV_FILE")")
-    fi
-
-    if [[ -f "$COMPOSE_FILE_MAIN" ]]; then
-        tar_args+=(-C "$(dirname "$COMPOSE_FILE_MAIN")" "$(basename "$COMPOSE_FILE_MAIN")")
-    fi
-
-    if [[ -f "$COMPOSE_FILE_PROD" ]]; then
-        tar_args+=(-C "$(dirname "$COMPOSE_FILE_PROD")" "$(basename "$COMPOSE_FILE_PROD")")
-    fi
-
-    tar_args+=(
-        -C "$(dirname "$CONFIG_DIR")" "$(basename "$CONFIG_DIR")"
-        -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")"
-    )
-
-    if ! tar -czf "$backup_path" "${tar_args[@]}" 2>/dev/null; then
-        log_error "Failed to create backup tarball"
+    if [[ ! -d "$CONFIG_DIR" ]]; then
+        log_error "Config directory not found: $CONFIG_DIR"
         rm -rf "$tmp_dir"
         return 1
     fi
 
+    if [[ ! -d "$DATA_DIR" ]]; then
+        log_error "Data directory not found: $DATA_DIR"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    log_info "Staging config and data into temporary backup directory..."
+    mkdir -p "$tmp_dir/config" "$tmp_dir/data"
+    rsync -a "$CONFIG_DIR/" "$tmp_dir/config/"
+    rsync -a "$DATA_DIR/" "$tmp_dir/data/"
+
+    local tar_inputs=("backup-metadata.json" "container-inspect.json" "config" "data")
+    if [[ -d "$RUNTIME_CONFIG_DIR" ]]; then
+        log_info "Staging runtime config state from: $RUNTIME_CONFIG_DIR"
+        mkdir -p "$tmp_dir/runtime-config"
+        rsync -a "$RUNTIME_CONFIG_DIR/" "$tmp_dir/runtime-config/"
+        tar_inputs+=("runtime-config")
+    else
+        log_warn "Runtime config directory not found, skipping: $RUNTIME_CONFIG_DIR"
+    fi
+
+    # Create tarball
+    log_info "Creating tarball..."
+    tar -czf "$backup_path" -C "$tmp_dir" "${tar_inputs[@]}" 2>/dev/null
+
     # Cleanup temp
     rm -rf "$tmp_dir"
+
+    # Check if tarball was created
+    if [[ ! -f "$backup_path" ]]; then
+        log_error "Failed to create backup tarball"
+        return 1
+    fi
 
     # Generate checksum
     generate_checksum "$backup_path"
 
     # Encrypt
-    local encrypted_path="$backup_path"
-    if encrypt_file "$backup_path"; then
-        encrypted_path="$ENCRYPTED_OUTPUT_FILE"
-    else
-        encrypted_path="${ENCRYPTED_OUTPUT_FILE:-$backup_path}"
-    fi
+    local encrypted_path
+    encrypted_path=$(encrypt_file "$backup_path")
 
     # Get size in bytes
     BACKUP_SIZE_BYTES=$(stat -f%z "$encrypted_path" 2>/dev/null || stat -c%s "$encrypted_path" 2>/dev/null || echo "0")
@@ -803,7 +591,8 @@ EOF
     size_human=$(du -h "$encrypted_path" | cut -f1)
 
     log_info "Backup created: $encrypted_path ($size_human)"
-    return 0
+
+    echo "$encrypted_path"
 }
 
 # Upload to S3 with retry logic
@@ -925,120 +714,6 @@ list_backups() {
     du -sh "$BACKUP_DIR" 2>/dev/null || echo "  Unknown"
 }
 
-extract_backup_payload() {
-    local backup_file="$1"
-    local extract_dir="$2"
-    local extract_file="$backup_file"
-
-    if [[ "$backup_file" == *.aes ]]; then
-        extract_file=$(decrypt_file "$backup_file")
-    fi
-
-    mkdir -p "$extract_dir"
-    tar -xzf "$extract_file" -C "$extract_dir"
-}
-
-validate_restore_readiness() {
-    local extracted_dir="$1"
-    local metadata_file="$extracted_dir/backup-metadata.json"
-    local expected_manifest="$extracted_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME"
-
-    if [[ ! -f "$metadata_file" ]]; then
-        log_error "Restore payload is missing backup-metadata.json"
-        return 1
-    fi
-
-    if [[ ! -d "$extracted_dir/config" ]]; then
-        log_error "Restore payload is missing config/"
-        return 1
-    fi
-
-    if [[ ! -d "$extracted_dir/data" ]]; then
-        log_error "Restore payload is missing data/"
-        return 1
-    fi
-
-    if [[ ! -f "$extracted_dir/.env" ]]; then
-        log_error "Restore payload is missing .env"
-        return 1
-    fi
-
-    if [[ ! -f "$extracted_dir/docker-compose.yml" ]]; then
-        log_error "Restore payload is missing docker-compose.yml"
-        return 1
-    fi
-
-    if [[ ! -f "$extracted_dir/docker-compose.prod.yml" ]]; then
-        log_error "Restore payload is missing docker-compose.prod.yml"
-        return 1
-    fi
-
-    if ! jq -e '.restore_readiness.moltis.ready == true' "$metadata_file" >/dev/null 2>&1; then
-        log_error "Backup metadata does not mark Moltis restore readiness as ready"
-        return 1
-    fi
-
-    if [[ -f "$metadata_file" ]] && jq -e '.clawdiy.included == true' "$metadata_file" >/dev/null 2>&1; then
-        if [[ ! -f "$expected_manifest" ]]; then
-            log_error "Restore payload is missing $CLAWDIY_EVIDENCE_MANIFEST_NAME for Clawdiy"
-            return 1
-        fi
-
-        if [[ ! -d "$extracted_dir/config/clawdiy" || ! -d "$extracted_dir/data/clawdiy/state" || ! -d "$extracted_dir/data/clawdiy/audit" ]]; then
-            log_error "Restore payload is missing required Clawdiy config/state/audit directories"
-            return 1
-        fi
-    fi
-
-    log_info "Restore readiness verified for payload at $extracted_dir"
-}
-
-restore_check_backup() {
-    local backup_file="$1"
-    local restore_dir="${2:-}"
-    local cleanup_dir=false
-
-    if [[ -z "$restore_dir" ]]; then
-        restore_dir=$(mktemp -d "${TMPDIR:-/tmp}/moltis-restore-check.XXXXXX")
-        cleanup_dir=true
-    fi
-
-    if ! verify_backup "$backup_file"; then
-        log_error "Backup verification failed, restore readiness check aborted"
-        [[ "$cleanup_dir" == "true" ]] && rm -rf "$restore_dir"
-        return 1
-    fi
-
-    if ! extract_backup_payload "$backup_file" "$restore_dir"; then
-        log_error "Failed to extract backup payload for restore readiness check"
-        [[ "$cleanup_dir" == "true" ]] && rm -rf "$restore_dir"
-        return 1
-    fi
-
-    if ! validate_restore_readiness "$restore_dir"; then
-        [[ "$cleanup_dir" == "true" ]] && rm -rf "$restore_dir"
-        return 1
-    fi
-
-    if [[ "$cleanup_dir" == "true" ]]; then
-        rm -rf "$restore_dir"
-    fi
-
-    log_info "Restore readiness check passed: $backup_file"
-}
-
-restore_runtime_file() {
-    local source_file="$1"
-    local target_file="$2"
-
-    if [[ ! -f "$source_file" ]]; then
-        return 0
-    fi
-
-    mkdir -p "$(dirname "$target_file")"
-    cp "$source_file" "$target_file"
-}
-
 # Verify backup integrity
 verify_backup() {
     local backup_file="$1"
@@ -1076,94 +751,50 @@ verify_backup() {
 restore_backup() {
     local backup_file="$1"
     local restore_dir="${2:-/tmp/moltis-restore}"
-    local clawdiy_container_present=false
-    local clawdiy_restore_expected=false
-    local metadata_file=""
 
     log_info "Starting restore from: $backup_file"
     log_warn "This will OVERWRITE existing data!"
 
-    if ! restore_check_backup "$backup_file" "$restore_dir"; then
-        log_error "Restore readiness check failed, aborting restore"
+    # Verify backup first
+    if ! verify_backup "$backup_file"; then
+        log_error "Backup verification failed, aborting restore"
         return 1
     fi
 
-    metadata_file="$restore_dir/backup-metadata.json"
-
-    if [[ -f "$metadata_file" ]] && jq -e '.clawdiy.included == true' "$metadata_file" >/dev/null 2>&1; then
-        clawdiy_restore_expected=true
+    # Decrypt if needed
+    local restore_file="$backup_file"
+    if [[ "$backup_file" == *.aes ]]; then
+        restore_file=$(decrypt_file "$backup_file")
     fi
 
-    if [[ "$clawdiy_restore_expected" != "true" ]] && clawdiy_inventory_present && ! string_is_true "$CLAWDIY_ALLOW_PARTIAL_RESTORE"; then
-        log_error "Current runtime has Clawdiy inventory but the backup payload does not; set CLAWDIY_ALLOW_PARTIAL_RESTORE=true only for explicit partial restores"
-        return 1
-    fi
+    # Create restore directory
+    mkdir -p "$restore_dir"
+
+    # Extract backup
+    log_info "Extracting backup to: $restore_dir"
+    tar -xzf "$restore_file" -C "$restore_dir"
 
     # Stop container
     log_info "Stopping Moltis container..."
     docker stop moltis 2>/dev/null || true
-
-    if container_exists "$CLAWDIY_CONTAINER_NAME"; then
-        clawdiy_container_present=true
-        log_info "Stopping Clawdiy container..."
-        docker stop "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || true
-    fi
 
     # Restore data
     log_info "Restoring data..."
     rsync -av --delete "$restore_dir/data/" "$DATA_DIR/"
     rsync -av --delete "$restore_dir/config/" "$CONFIG_DIR/"
 
-    if string_is_true "$BACKUP_RESTORE_RUNTIME_FILES"; then
-        log_info "Restoring runtime env and compose files..."
-        restore_runtime_file "$restore_dir/.env" "$RUNTIME_ENV_FILE"
-        restore_runtime_file "$restore_dir/docker-compose.yml" "$COMPOSE_FILE_MAIN"
-        restore_runtime_file "$restore_dir/docker-compose.prod.yml" "$COMPOSE_FILE_PROD"
-    fi
-
-    if string_is_true "$CLAWDIY_BACKUP_ENABLED" && [[ -e "$restore_dir/config/clawdiy" || -e "$restore_dir/data/clawdiy" ]]; then
-        log_info "Clawdiy backup inventory detected in restore payload"
-        mkdir -p "$CLAWDIY_STATE_DIR" "$CLAWDIY_AUDIT_DIR" 2>/dev/null || true
+    if [[ -d "$restore_dir/runtime-config" ]]; then
+        log_info "Restoring runtime config state..."
+        mkdir -p "$RUNTIME_CONFIG_DIR"
+        rsync -av --delete "$restore_dir/runtime-config/" "$RUNTIME_CONFIG_DIR/"
+    else
+        log_warn "Backup does not contain runtime-config/; skipping runtime config restore"
     fi
 
     # Start container
     log_info "Starting Moltis container..."
     cd "$PROJECT_ROOT"
-    docker compose -f "$PROJECT_ROOT/docker-compose.prod.yml" up -d moltis
-
-    if [[ "$clawdiy_container_present" == "true" ]] && string_is_true "$CLAWDIY_RESTORE_AUTOSTART"; then
-        log_info "Starting Clawdiy container..."
-        if [[ -f "$PROJECT_ROOT/docker-compose.clawdiy.yml" ]]; then
-            local -a clawdiy_compose_args
-            local clawdiy_env_file="${CLAWDIY_ENV_FILE:-$PROJECT_ROOT/.env.clawdiy}"
-            clawdiy_compose_args=(-f "$PROJECT_ROOT/docker-compose.clawdiy.yml")
-            if [[ -f "$clawdiy_env_file" ]]; then
-                clawdiy_compose_args=(--env-file "$clawdiy_env_file" "${clawdiy_compose_args[@]}")
-            fi
-            docker compose "${clawdiy_compose_args[@]}" up -d "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
-                docker start "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
-                log_warn "Failed to start Clawdiy container automatically after restore"
-        else
-            docker start "$CLAWDIY_CONTAINER_NAME" 2>/dev/null || \
-                log_warn "Failed to start Clawdiy container automatically after restore"
-        fi
-    fi
-
-    if [[ "$clawdiy_restore_expected" == "true" ]]; then
-        mkdir -p "$CLAWDIY_AUDIT_DIR" 2>/dev/null || true
-        cat > "$CLAWDIY_AUDIT_DIR/restore-report-$(date -u +%Y%m%dT%H%M%SZ).json" <<EOF
-{
-  "schema_version": "v1",
-  "restored_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "backup_file": "$backup_file",
-  "restore_dir": "$restore_dir",
-  "clawdiy_config_dir": "$CLAWDIY_CONFIG_DIR",
-  "clawdiy_state_dir": "$CLAWDIY_STATE_DIR",
-  "clawdiy_audit_dir": "$CLAWDIY_AUDIT_DIR",
-  "clawdiy_container_autostarted": $(json_bool "$CLAWDIY_RESTORE_AUTOSTART")
-}
-EOF
-    fi
+    docker compose up -d
 
     log_info "Restore complete!"
     send_notification "Restore Complete" "Successfully restored from $backup_file" "info"
@@ -1175,12 +806,11 @@ EOF
 
 show_usage() {
     cat <<EOF
-Usage: $0 [OPTIONS] {backup|verify|restore-check|restore|list|rotate|generate-key}
+Usage: $0 [OPTIONS] {backup|verify|restore|list|rotate|generate-key}
 
 Commands:
   backup                Create a new backup
   verify <file>         Verify backup integrity
-  restore-check <file>  Verify that a backup is restore-ready without mutating runtime
   restore <file> [dir]  Restore from backup
   list                  List available backups
   rotate                Rotate old backups
@@ -1198,15 +828,15 @@ Exit Codes:
 
 Environment Variables:
   BACKUP_CONFIG         Path to backup configuration file
+  BACKUP_RUNTIME_CONFIG_DIR  Runtime config directory to include in backup/restore
   PROMETHEUS_TEXTFILE_DIR  Directory for Prometheus metrics (default: /var/lib/node_exporter/textfile_dir)
   BACKUP_STATUS_FILE    Path to backup status JSON file (default: /var/lib/moltis/backup-status.json)
 
 Examples:
-  $0 backup                          # Create backup (human-readable output)
-  $0 --json backup                   # Create backup (JSON output)
-  $0 verify /path/to/backup          # Verify backup integrity
-  $0 restore-check /path/to/backup   # Verify restore readiness
-  $0 list                            # List all backups
+  $0 backup                    # Create backup (human-readable output)
+  $0 --json backup             # Create backup (JSON output)
+  $0 verify /path/to/backup    # Verify backup integrity
+  $0 list                      # List all backups
 EOF
 }
 
@@ -1225,7 +855,7 @@ main() {
                 show_usage
                 exit 0
                 ;;
-            backup|verify|restore-check|restore|list|rotate|generate-key)
+            backup|verify|restore|list|rotate|generate-key)
                 action="$1"
                 shift
                 # Collect remaining arguments for the action
@@ -1250,7 +880,7 @@ main() {
     case "$action" in
         backup)
             # Record start time
-            BACKUP_START_TIME=$(current_time_ms)
+            BACKUP_START_TIME=$(now_ms)
 
             if [[ "$JSON_OUTPUT" != "true" ]]; then
                 log_info "=========================================="
@@ -1261,10 +891,10 @@ main() {
 
             init_backup_dirs
 
+            local backup_file
             local backup_result=0
 
-            if create_backup; then
-                local backup_file="$BACKUP_LOCAL_PATH"
+            if backup_file=$(create_backup); then
                 # Upload to S3 with retry logic
                 local s3_result=0
                 upload_to_s3 "$backup_file" || s3_result=$?
@@ -1277,7 +907,7 @@ main() {
                 rotate_backups
 
                 # Record end time and calculate duration
-                BACKUP_END_TIME=$(current_time_ms)
+                BACKUP_END_TIME=$(now_ms)
                 BACKUP_DURATION_MS=$((BACKUP_END_TIME - BACKUP_START_TIME))
 
                 # Determine final status
@@ -1311,7 +941,7 @@ main() {
                 fi
             else
                 # Record end time
-                BACKUP_END_TIME=$(current_time_ms)
+                BACKUP_END_TIME=$(now_ms)
                 BACKUP_DURATION_MS=$((BACKUP_END_TIME - BACKUP_START_TIME))
 
                 # Write metrics and status
@@ -1335,16 +965,6 @@ main() {
                 exit $EXIT_GENERAL_ERROR
             fi
             verify_backup "$backup_file"
-            ;;
-
-        restore-check)
-            local backup_file="${action_args[0]:-}"
-            local restore_dir="${action_args[1]:-}"
-            if [[ -z "$backup_file" ]]; then
-                log_error "Usage: $0 restore-check <backup-file> [restore-dir]"
-                exit $EXIT_GENERAL_ERROR
-            fi
-            restore_check_backup "$backup_file" "$restore_dir"
             ;;
 
         restore)

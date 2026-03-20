@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="${MOLTIS_ACTIVE_ROOT:-$DEFAULT_PROJECT_ROOT}"
+
 MODE="text"
 
 show_help() {
@@ -17,7 +21,7 @@ Monitors Telegram channel health for Moltis:
   - Moltis telegram inbound mode + latest telegram session preview cleanliness
 
 Environment:
-  MOLTIS_ENV_FILE                  Path to .env file (default: /opt/moltinger/.env)
+  MOLTIS_ENV_FILE                  Path to .env file (default: <project-root>/.env)
   MOLTIS_BASE_URL                  Moltis base URL (default: http://localhost:13131)
   MOLTIS_PASSWORD                  Auth password for Moltis UI/API (optional for preview checks)
   TELEGRAM_BOT_TOKEN               Telegram bot token (required)
@@ -87,7 +91,7 @@ require_bin() {
 require_bin curl
 require_bin jq
 
-MOLTIS_ENV_FILE="${MOLTIS_ENV_FILE:-/opt/moltinger/.env}"
+MOLTIS_ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 MOLTIS_BASE_URL="${MOLTIS_BASE_URL:-http://localhost:13131}"
 TELEGRAM_REQUIRE_WEBHOOK="${TELEGRAM_REQUIRE_WEBHOOK:-true}"
 TELEGRAM_REQUIRE_HTTPS_WEBHOOK="${TELEGRAM_REQUIRE_HTTPS_WEBHOOK:-true}"

@@ -1,110 +1,156 @@
-# Quick Reference
+# Moltinger: Quick Reference
 
-## Runtime Surface
+**⚠️ ЧИТАТЬ В НАЧАЛЕ КАЖДОЙ СЕССИИ!**
 
-| Surface | Moltinger | Clawdiy |
-|---------|-----------|---------|
-| Web UI | `https://moltis.ainetic.tech` | `https://clawdiy.ainetic.tech` |
-| Telegram | `@moltinger_bot` | `@clawdiy_bot` |
-| Telegram mode | managed by Moltinger runtime | phase-1 long polling |
-| Role | coordinator | coder |
-| Runtime | Moltis | OpenClaw |
+---
 
-## Source Of Truth
+## Ключевые артефакты
 
-- Secrets: GitHub Secrets
-- Main runtime env mirror: `/opt/moltinger/.env`
-- Clawdiy runtime env mirror: `/opt/moltinger/clawdiy/.env`
-- Agent registry: `config/fleet/agents-registry.json`
-- Fleet policy: `config/fleet/policy.json`
-- Live git topology: authoritative runtime source
-- Reviewed topology intent: `docs/GIT-TOPOLOGY-INTENT.yaml`
-- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md` (published snapshot, not live source of truth)
+| Артефакт | Расположение | Назначение |
+|----------|--------------|------------|
+| **Telegram Bot** | @moltinger_bot | Основной способ взаимодействия |
+| **Web UI** | https://moltis.ainetic.tech | Веб-интерфейс |
+| **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
+| **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
 
-## Git Topology
+---
 
-```bash
-scripts/git-topology-registry.sh status
-scripts/git-topology-registry.sh check
-scripts/git-topology-registry.sh refresh --write-doc
+## Telegram Integration
+
+```
+Bot Username: @moltinger_bot
+Status: ✅ WORKING
+Token: GitHub Secret (TELEGRAM_BOT_TOKEN)
+Allowed Users: GitHub Secret (TELEGRAM_ALLOWED_USERS)
 ```
 
-Use `status`/`check` before cleanup worktree/branch actions and for ordinary topology inspection.
-Use `refresh --write-doc` only as an explicit publish step from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
-Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
+### Как отправить сообщение боту
 
-## Core Commands
+**Вариант 1: Через Telegram клиент**
+- Найти @moltinger_bot
+- Написать сообщение
 
-### Moltinger remote UAT
-
+**Вариант 2: Через API (для тестирования)**
 ```bash
-gh workflow run telegram-e2e-on-demand.yml \
-  -f message='/status' \
-  -f timeout_sec='45' \
-  -f operator_intent='post_deploy_verification' \
-  -f run_secondary_mtproto=false \
-  -f upload_restricted_debug=false
+TOKEN=$(gh secret get TELEGRAM_BOT_TOKEN)
+curl -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+  -d "chat_id=YOUR_CHAT_ID" \
+  -d "text=Test message"
 ```
 
-Canonical post-deploy verdict path is `Telegram Web`; `MTProto` is secondary diagnostics only.
-If secondary `MTProto` sees a verification-code prompt while Telegram Web passes, treat that as a sender-policy mismatch for the test user, not as a regression of the authoritative path.
-
-### Clawdiy deploy
+### Постоянный мониторинг webhook/качества ответов
 
 ```bash
-./scripts/preflight-check.sh --ci --target clawdiy --json
-./scripts/deploy.sh --json clawdiy deploy
-./scripts/clawdiy-smoke.sh --json --stage same-host
+# Одноразовый запуск (JSON отчёт)
+./scripts/telegram-webhook-monitor.sh --json
+
+# Server-side cron (GitOps): scripts/cron.d/moltis-telegram-webhook-monitor
+# CI schedule: .github/workflows/telegram-webhook-monitor.yml
 ```
 
-This is the first live OpenClaw launch step for Clawdiy.
-If `fleet-internal` is missing on the first rollout, use `deploy-clawdiy.yml` or `deploy.sh` to create it through GitOps; do not bootstrap it manually over SSH.
-
-### Inter-agent handoff
+### Standalone Telegram CLI (без Moltis)
 
 ```bash
-./scripts/clawdiy-smoke.sh --json --stage handoff
+# User-level UAT probe (главный режим)
+./scripts/telegram-user-monitor.sh --env-file .env
+
+# Альтернатива без API_HASH: Telegram Web
+./scripts/setup-telegram-web-user-monitor.sh --project-dir /opt/moltinger-active
+node scripts/telegram-web-user-login.mjs --state /opt/moltinger-active/data/.telegram-web-state.json
+TELEGRAM_WEB_PROBE_PROFILE=echo_ping TELEGRAM_WEB_MESSAGE=test2 ./scripts/telegram-web-user-monitor.sh
+
+# Primary scheduler (systemd timer)
+systemctl enable --now moltis-telegram-web-user-monitor.timer
+
+# Поднять webhook endpoint (Traefik + echo)
+./scripts/setup-telegram-webhook-echo.sh --domain moltis.ainetic.tech --path /telegram-webhook
+
+# Управление webhook напрямую через Bot API
+./scripts/telegram-webhook-control.sh webhook-info
+./scripts/telegram-webhook-control.sh webhook-set --url "https://YOUR_DOMAIN/HOOK"
+
+# Отправка как бот
+./scripts/telegram-bot-send.sh --chat-id 262872984 --text "/status"
+
+# Отправка как пользователь (MTProto)
+./scripts/telegram-user-send.py --to @some_bot --text "/start"
 ```
 
-### Auth checks
+Подробно: `docs/TELEGRAM-WEBHOOK-CLI.md`
+User-monitor: `docs/TELEGRAM-USER-MONITOR.md`
+No-API_HASH monitor: `docs/TELEGRAM-WEB-USER-MONITOR.md`
+Clean deploy runbook: `docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md`
+
+---
+
+## Skills System
+
+| Skill | Расположение | Назначение |
+|-------|--------------|------------|
+| telegram-learner | skills/telegram-learner/ | Мониторинг Telegram и извлечение знаний |
+
+### Активные skills (auto_load)
+- telegram-learner
+
+---
+
+## Knowledge Base
+
+```
+knowledge/
+├── concepts/        # Концепции
+├── tutorials/       # Туториалы
+├── references/      # Справочники
+├── troubleshooting/ # Решение проблем
+└── patterns/        # Паттерны
+```
+
+---
+
+## Deployment (GitOps)
 
 ```bash
-./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider telegram --json
-./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth --json
-./scripts/clawdiy-smoke.sh --json --stage auth
+# Deploy
+git add . && git commit -m "message" && git push
+
+# Manual check
+make status
+
+# Logs
+make logs LOGS_OPTS=-f
 ```
 
-### Recovery
+---
 
-```bash
-./scripts/deploy.sh --json clawdiy rollback
-./scripts/clawdiy-smoke.sh --json --stage rollback-evidence
-./scripts/backup-moltis-enhanced.sh verify /var/backups/moltis/daily/<archive>
-```
+## Secrets (GitHub Secrets)
 
-### Future-node readiness
+| Secret | Status | Purpose |
+|--------|--------|---------|
+| TELEGRAM_BOT_TOKEN | ✅ | Bot token |
+| TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
+| OLLAMA_API_KEY | ✅/optional | Ollama Cloud first fallback |
+| GLM_API_KEY | ✅ | GLM-5 last fallback + AI workflows |
+| SSH_PRIVATE_KEY | ✅ | Deploy |
 
-```bash
-./scripts/clawdiy-smoke.sh --json --stage extraction-readiness
-```
+Runtime-only auth state:
 
-## Rollout Rules
+- `openai-codex` does not use `OPENAI_API_KEY` here
+- OAuth state lives in `${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}`
+- normal deploy/restart must preserve it
+- re-auth only on expiry, revocation, corruption, or explicit rotation
 
-- Same-host first, remote-node later.
-- Inter-agent transport is private authenticated HTTP JSON.
-- Telegram is human ingress only and stays in long-polling mode for phase 1.
-- `gpt-5.4` through OpenAI Codex OAuth is a rollout gate, not a baseline deploy prerequisite.
-- Clawdiy must stay healthy even when Codex-backed capability is disabled.
+Workflow variable:
+- `AI_REVIEW_PROVIDER` (`zai` by default, `off` for emergency fallback-only mode)
 
-## Operator Pointers
+---
 
-- Deploy strategy: `docs/deployment-strategy.md`
-- Validation path: `specs/001-clawdiy-agent-platform/quickstart.md`
-- Clawdiy deploy runbook: `docs/runbooks/clawdiy-deploy.md`
-- Clawdiy browser bootstrap runbook: `docs/runbooks/clawdiy-browser-bootstrap.md`
-- Clawdiy repeat-auth runbook: `docs/runbooks/clawdiy-repeat-auth.md`
-- Clawdiy rollback runbook: `docs/runbooks/clawdiy-rollback.md`
-- Handoff incident runbook: `docs/runbooks/fleet-handoff-incident.md`
-- Git topology registry: `docs/GIT-TOPOLOGY-REGISTRY.md`
-- Worktree hotfix playbook: `docs/WORKTREE-HOTFIX-PLAYBOOK.md`
-- Session context: `SESSION_SUMMARY.md`
+## Текущие задачи
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 18 | Phase 4: Verification & Deploy | ⏳ pending |
+| 20 | Навык самообновления инструкции | 📋 backlog |
+
+---
+
+*Last updated: 2026-03-06*

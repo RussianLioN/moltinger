@@ -3,18 +3,20 @@
 
 set -euo pipefail
 
-PROJECT_DIR="${PROJECT_DIR:-/opt/moltinger}"
-INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-false}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="${PROJECT_DIR:-${MOLTIS_ACTIVE_ROOT:-$DEFAULT_PROJECT_DIR}}"
+INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-true}"
 
 show_help() {
     cat <<'EOF'
 Usage:
-  setup-telegram-web-user-monitor.sh [--project-dir /opt/moltinger] [--install-systemd true|false]
+  setup-telegram-web-user-monitor.sh [--project-dir /opt/moltinger-active] [--install-systemd true|false]
 
 Installs:
   - playwright npm package
   - chromium browser with required OS deps
-  - optional systemd service+timer (disabled by default)
+  - systemd service+timer (enabled by default)
 EOF
 }
 
@@ -25,7 +27,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --install-systemd)
-            INSTALL_SYSTEMD="${2:-false}"
+            INSTALL_SYSTEMD="${2:-true}"
             shift 2
             ;;
         -h|--help)

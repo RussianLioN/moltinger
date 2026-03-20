@@ -10,8 +10,9 @@ set -euo pipefail
 # CONFIGURATION
 # ========================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_DEPLOY_PATH="$(dirname "$SCRIPT_DIR")"
 METRICS_DIR="/var/log/gitops-metrics"
-DEPLOY_PATH="/opt/moltinger"
+DEPLOY_PATH="${DEPLOY_PATH:-${MOLTIS_ACTIVE_ROOT:-$DEFAULT_DEPLOY_PATH}}"
 METRICS_FILE="$METRICS_DIR/metrics.json"
 
 # SLO Targets

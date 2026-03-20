@@ -3,7 +3,7 @@
 # Runs continuous Telegram webhook + response cleanliness checks.
 #
 # Installed by: .github/workflows/deploy.yml (GitOps)
-# Manual install: sudo cp /opt/moltinger/scripts/cron.d/moltis-telegram-webhook-monitor /etc/cron.d/
+# Manual install: sudo cp /opt/moltinger-active/scripts/cron.d/moltis-telegram-webhook-monitor /etc/cron.d/
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -15,7 +15,7 @@ TELEGRAM_REQUIRE_TEST_USER=true
 TELEGRAM_MAX_PENDING_UPDATES=3
 MONITOR_VALIDATE_PREVIEW=true
 MOLTIS_BASE_URL=http://localhost:13131
-MOLTIS_ENV_FILE=/opt/moltinger/.env
+MOLTIS_ENV_FILE=/opt/moltinger-active/.env
 
 # Every 15 minutes run monitor and append JSON report.
-*/15 * * * * root mkdir -p /var/log/moltis && /opt/moltinger/scripts/telegram-webhook-monitor.sh --json >> /var/log/moltis/telegram-webhook-monitor.log 2>&1
+*/15 * * * * root mkdir -p /var/log/moltis && /opt/moltinger-active/scripts/telegram-webhook-monitor.sh --json >> /var/log/moltis/telegram-webhook-monitor.log 2>&1

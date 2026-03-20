@@ -17,7 +17,7 @@ permissions:
 env:
   SSH_HOST: ainetic.tech
   SSH_USER: root
-  DEPLOY_PATH: /opt/moltinger
+  DEPLOY_PATH: /opt/moltinger-active
 
 jobs:
   drift-check:
