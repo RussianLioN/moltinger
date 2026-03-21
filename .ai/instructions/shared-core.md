@@ -33,7 +33,8 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd status             # Inspect the current Beads state
+bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
 ```
 
 ## Beads Worktree Ownership
@@ -41,6 +42,9 @@ bd sync               # Sync with git
 Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 
 - The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
+- Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
+- For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.
+- If a preserved sibling worktree still cannot open local Beads state after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. First run `/usr/local/bin/bd doctor --json`, then repair with `bd init && bd backup restore` or `bd bootstrap` as appropriate.
 - If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
 - Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
 
@@ -111,10 +115,11 @@ Forbidden:
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd status
    git push
    git status  # MUST show "up to date with origin"
    ```
+   If the project still uses an explicit remote Dolt sync step, run `bd dolt push` before `git push`.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
