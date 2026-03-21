@@ -53,9 +53,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top center, rgba(255, 255, 255, 0.02), transparent 22%),
-    linear-gradient(180deg, #0b0e13 0%, #0d1015 48%, #0b0e13 100%);
+  background: #0b0e13;
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--text-md);
