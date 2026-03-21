@@ -3205,6 +3205,16 @@ def infer_brief_section_updates_from_feedback(
     return {"scope_boundaries": [cleaned_text or text_for_sections]}
 
 
+def has_non_fallback_brief_updates(updates: Any) -> bool:
+    if not isinstance(updates, dict) or not updates:
+        return False
+    for section in updates.keys():
+        normalized_section = normalize_text(section)
+        if normalized_section and normalized_section != "scope_boundaries":
+            return True
+    return False
+
+
 def build_discovery_request(
     payload: dict[str, Any],
     discovery_state: dict[str, Any],
@@ -3253,11 +3263,15 @@ def build_discovery_request(
             if is_explicit_status_refresh_text(combined_text):
                 return request, True, low_signal_submission
             correction_intent = is_likely_brief_correction_text(combined_text)
-            if in_download_ready and not correction_intent:
+            inferred_updates = infer_brief_section_updates_from_feedback(combined_text, uploaded_files=uploaded_files)
+            non_fallback_updates = has_non_fallback_brief_updates(inferred_updates)
+            if in_download_ready and not correction_intent and not non_fallback_updates:
+                append_user_turn(request, combined_text, "status_followup", now)
+                return request, True, low_signal_submission
+            if in_confirmation and not correction_intent and not non_fallback_updates:
                 append_user_turn(request, combined_text, "status_followup", now)
                 return request, True, low_signal_submission
             request["brief_feedback_text"] = combined_text
-            inferred_updates = infer_brief_section_updates_from_feedback(combined_text, uploaded_files=uploaded_files)
             if inferred_updates:
                 request["brief_section_updates"] = inferred_updates
             append_user_turn(request, combined_text, "brief_feedback", now)
@@ -3278,11 +3292,13 @@ def build_discovery_request(
                 return request, True, low_signal_submission
             if is_explicit_status_refresh_text(combined_text):
                 return request, True, low_signal_submission
-            if not is_likely_brief_correction_text(combined_text):
+            correction_intent = is_likely_brief_correction_text(combined_text)
+            inferred_updates = infer_brief_section_updates_from_feedback(combined_text, uploaded_files=uploaded_files)
+            non_fallback_updates = has_non_fallback_brief_updates(inferred_updates)
+            if not correction_intent and not non_fallback_updates:
                 append_user_turn(request, combined_text, "status_followup", now)
                 return request, True, low_signal_submission
             request["brief_feedback_text"] = combined_text
-            inferred_updates = infer_brief_section_updates_from_feedback(combined_text, uploaded_files=uploaded_files)
             if inferred_updates:
                 request["brief_section_updates"] = inferred_updates
             append_user_turn(request, combined_text, "brief_feedback", now)
@@ -3353,8 +3369,13 @@ def build_discovery_request(
                     return request, True, low_signal_submission
                 if is_explicit_status_refresh_text(combined_text):
                     return request, True, low_signal_submission
-                request["brief_feedback_text"] = combined_text
+                correction_intent = is_likely_brief_correction_text(combined_text)
                 inferred_updates = infer_brief_section_updates_from_feedback(combined_text, uploaded_files=uploaded_files)
+                non_fallback_updates = has_non_fallback_brief_updates(inferred_updates)
+                if not correction_intent and not non_fallback_updates:
+                    append_user_turn(request, combined_text, "status_followup", now)
+                    return request, True, low_signal_submission
+                request["brief_feedback_text"] = combined_text
                 if inferred_updates:
                     request["brief_section_updates"] = inferred_updates
                 append_user_turn(request, combined_text, "brief_feedback", now)

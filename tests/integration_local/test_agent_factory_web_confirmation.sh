@@ -290,6 +290,31 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Browser flow should treat substantive submit_turn text in review stage as brief correction"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_ignores_non_correction_submit_turn_text_in_review_mode"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/submit-followup-state" --output "$tmpdir/submit-followup-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005bb",
+          "request_id": "web-request-brief-review-005bb",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "autoscroll-collapsed-1774115858824"
+        } | del(.demo_access_grant)' "$tmpdir/submit-followup-review-out.json" >"$tmpdir/submit-followup-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/submit-followup-source.json" --state-root "$tmpdir/submit-followup-state" --output "$tmpdir/submit-followup-out.json" >/dev/null; then
+        local scope_before scope_after next_question_followup
+        scope_before="$(jq -c '.discovery_runtime_state.requirement_brief.scope_boundaries' "$tmpdir/submit-followup-review-out.json")"
+        scope_after="$(jq -c '.discovery_runtime_state.requirement_brief.scope_boundaries' "$tmpdir/submit-followup-out.json")"
+        next_question_followup="$(jq -r '.next_question' "$tmpdir/submit-followup-out.json")"
+        assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/submit-followup-out.json")" "Non-correction text in review mode should keep awaiting-confirmation state"
+        assert_eq "1.0" "$(jq -r '.discovery_runtime_state.requirement_brief.version' "$tmpdir/submit-followup-out.json")" "Non-correction follow-up must not bump brief version"
+        assert_eq "$scope_before" "$scope_after" "Non-correction follow-up must not mutate scope_boundaries via fallback"
+        if [[ "$next_question_followup" == *"Правку применил"* ]]; then
+            test_fail "Non-correction follow-up should not produce correction-applied acknowledgement"
+        fi
+        test_pass
+    else
+        test_fail "Browser flow should treat non-correction submit_turn text as status follow-up without brief mutation"
+    fi
+
     test_start "integration_local_agent_factory_web_confirmation_parses_combined_input_and_output_correction_without_literal_prefix"
     if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/combined-correction-state" --output "$tmpdir/combined-correction-review-out.json" >/dev/null &&
         jq '.web_conversation_envelope = {
