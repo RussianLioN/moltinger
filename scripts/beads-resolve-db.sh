@@ -23,6 +23,10 @@ Description:
   should pass through unchanged, or must fail closed before a root fallback.
   The `localize` subcommand materializes a local beads.db from the current
   worktree's tracked `.beads/issues.jsonl`.
+
+  When `.beads/pilot-mode.json` or `.beads/cutover-mode.json` exists in a
+  dedicated worktree, legacy-only operator paths such as `bd sync` fail
+  closed and must be replaced by the active migration review surface.
 EOF
 }
 
@@ -294,6 +298,82 @@ beads_resolve_extract_command() {
   fi
 }
 
+beads_resolve_pilot_mode_file() {
+  local repo_root="$1"
+  printf '%s/.beads/pilot-mode.json\n' "${repo_root}"
+}
+
+beads_resolve_pilot_mode_enabled() {
+  local repo_root="$1"
+  [[ -f "$(beads_resolve_pilot_mode_file "${repo_root}")" ]]
+}
+
+beads_resolve_cutover_mode_file() {
+  local repo_root="$1"
+  printf '%s/.beads/cutover-mode.json\n' "${repo_root}"
+}
+
+beads_resolve_cutover_mode_enabled() {
+  local repo_root="$1"
+  [[ -f "$(beads_resolve_cutover_mode_file "${repo_root}")" ]]
+}
+
+beads_resolve_active_migration_mode() {
+  local repo_root="$1"
+
+  if beads_resolve_cutover_mode_enabled "${repo_root}"; then
+    printf 'cutover\n'
+    return 0
+  fi
+
+  if beads_resolve_pilot_mode_enabled "${repo_root}"; then
+    printf 'pilot\n'
+    return 0
+  fi
+
+  return 1
+}
+
+beads_resolve_migration_review_command() {
+  local migration_mode="$1"
+
+  case "${migration_mode}" in
+    cutover)
+      printf './scripts/beads-dolt-rollout.sh verify --worktree .\n'
+      ;;
+    pilot)
+      printf './scripts/beads-dolt-pilot.sh review\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+beads_resolve_has_local_runtime() {
+  local beads_dir="$1"
+  local db_path="${beads_dir}/beads.db"
+  local dolt_dir="${beads_dir}/dolt"
+
+  [[ -e "${db_path}" || -d "${dolt_dir}" ]]
+}
+
+beads_resolve_is_migration_legacy_command() {
+  local command=""
+
+  beads_resolve_extract_command "$@"
+  command="${BEADS_RESOLVE_COMMAND}"
+
+  case "${command}" in
+    sync)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 beads_resolve_is_canonical_root_read_only_command() {
   local command=""
   local subcommand=""
@@ -303,8 +383,12 @@ beads_resolve_is_canonical_root_read_only_command() {
   subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
 
   case "${command}" in
-    ""|activity|blocked|children|completion|count|diff|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
+    ""|activity|blocked|children|completion|count|diff|doctor|export|find-duplicates|graph|help|history|human|info|list|onboard|orphans|prime|query|quickstart|ready|search|show|stale|state|status|types|version|where)
       return 0
+      ;;
+    backend)
+      [[ "${subcommand}" == "show" ]]
+      return
       ;;
     branch)
       [[ "${subcommand}" == "list" ]]
@@ -350,11 +434,15 @@ beads_resolve_dispatch() {
   local config_path=""
   local issues_path=""
   local db_path=""
+  local dolt_dir=""
   local redirect_path=""
   local redirect_target=""
   local root_db_path=""
+  local has_local_runtime="false"
   local recovery_hint=""
   local root_cleanup_notice=""
+  local migration_mode=""
+  local migration_review_command=""
 
   beads_resolve_reset
 
@@ -407,9 +495,28 @@ beads_resolve_dispatch() {
   config_path="${beads_dir}/config.yaml"
   issues_path="${beads_dir}/issues.jsonl"
   db_path="${beads_dir}/beads.db"
+  dolt_dir="${beads_dir}/dolt"
   redirect_path="${beads_dir}/redirect"
   root_db_path="${canonical_root}/.beads/beads.db"
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
+  if beads_resolve_has_local_runtime "${beads_dir}"; then
+    has_local_runtime="true"
+  fi
+
+  migration_mode="$(beads_resolve_active_migration_mode "${repo_root}" 2>/dev/null || true)"
+  if [[ -n "${migration_mode}" ]]; then
+    migration_review_command="$(beads_resolve_migration_review_command "${migration_mode}" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${migration_mode}" ]] && beads_resolve_is_migration_legacy_command "$@"; then
+    beads_resolve_set_decision \
+      "block_pilot_legacy_command" \
+      "dedicated_worktree" \
+      27 \
+      "bd: ${migration_mode} mode is enabled in ${repo_root}, so legacy-only commands such as ${BEADS_RESOLVE_COMMAND} are blocked." \
+      "Use ${migration_review_command:-./scripts/beads-dolt-pilot.sh review} for the active migration review surface, and keep JSONL export/sync out of the everyday operator path."
+    return 0
+  fi
 
   if [[ -f "${redirect_path}" ]]; then
     redirect_target="$(cat "${redirect_path}")"
@@ -426,7 +533,50 @@ beads_resolve_dispatch() {
     return 0
   fi
 
-  if [[ ! -f "${config_path}" || ! -f "${issues_path}" ]]; then
+  if [[ ! -f "${config_path}" ]]; then
+    if [[ -f "${root_db_path}" ]]; then
+      beads_resolve_set_decision \
+        "block_root_fallback" \
+        "dedicated_worktree" \
+        24 \
+        "bd: local Beads foundation is incomplete in ${repo_root}, and falling back to the canonical root tracker is blocked." \
+        "${recovery_hint}" \
+        "Residual canonical-root cleanup must be handled separately; this command will not repair root state."
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "dedicated_worktree" \
+      25 \
+      "bd: local Beads foundation is incomplete in ${repo_root}. Required files: .beads/config.yaml and .beads/issues.jsonl." \
+      "${recovery_hint}"
+    return 0
+  fi
+
+  if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && ! -f "${issues_path}" ]]; then
+    if [[ -n "${migration_mode}" ]]; then
+      BEADS_RESOLVE_DB_PATH="${db_path}"
+      beads_resolve_set_decision "execute_local" "${migration_mode}_worktree" 0
+      return 0
+    fi
+
+    if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
+      BEADS_RESOLVE_DB_PATH="${db_path}"
+      beads_resolve_set_decision "execute_local" "pilot_candidate_readonly" 0
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "dedicated_worktree" \
+      25 \
+      "bd: ${repo_root} has a pilot-ready local config/database foundation, but pilot mode is not enabled yet for mutating commands." \
+      "./scripts/beads-dolt-pilot.sh enable"
+    return 0
+  fi
+
+  if [[ ! -f "${issues_path}" ]]; then
     if [[ -f "${root_db_path}" ]]; then
       beads_resolve_set_decision \
         "block_root_fallback" \
@@ -471,11 +621,6 @@ beads_resolve_find_system_bd() {
 
     candidate_real="$(beads_resolve_normalize_path "${candidate}")"
     if [[ "${candidate_real}" == "${self_real}" ]]; then
-      continue
-    fi
-
-    # Skip any repo-local wrapper so we do not recurse into a sibling worktree's bin/bd.
-    if [[ -f "$(dirname "${candidate_real}")/../scripts/beads-resolve-db.sh" ]]; then
       continue
     fi
 
@@ -528,6 +673,7 @@ beads_localize_worktree() {
   local repo_root="$1"
   local output_format="$2"
   local current_db=""
+  local current_dolt=""
   local current_redirect=""
   local current_config=""
   local current_issues=""
@@ -536,6 +682,7 @@ beads_localize_worktree() {
   local backup_dir=""
   local timestamp=""
   local backup_path=""
+  local has_local_runtime="false"
 
   BEADS_LOCALIZE_FORMAT="${output_format}"
 
@@ -543,19 +690,47 @@ beads_localize_worktree() {
   current_config="${repo_root}/.beads/config.yaml"
   current_issues="${repo_root}/.beads/issues.jsonl"
   current_db="${repo_root}/.beads/beads.db"
+  current_dolt="${repo_root}/.beads/dolt"
   current_redirect="${repo_root}/.beads/redirect"
+
+  if beads_resolve_has_local_runtime "${repo_root}/.beads"; then
+    has_local_runtime="true"
+  fi
+
+  if [[ -f "${current_config}" && "${has_local_runtime}" == "true" && ! -f "${current_issues}" && ! -f "${current_redirect}" ]]; then
+    if [[ "${output_format}" == "env" ]]; then
+      printf 'result=%q\n' "post_migration_runtime_only"
+      printf 'repo_root=%q\n' "${repo_root}"
+      if [[ -e "${current_db}" ]]; then
+        printf 'db_path=%q\n' "${current_db}"
+      else
+        printf 'db_path=%q\n' "${current_dolt}"
+      fi
+    else
+      printf 'Tracked .beads/issues.jsonl is already retired; use the local Beads runtime in %s as the backlog source of truth.\n' "${repo_root}/.beads"
+    fi
+    return 0
+  fi
 
   if [[ ! -f "${current_config}" || ! -f "${current_issues}" ]]; then
     beads_resolve_die "Cannot localize ${repo_root}: tracked .beads/config.yaml and .beads/issues.jsonl must exist locally first."
   fi
 
-  if [[ -f "${current_db}" && ! -f "${current_redirect}" ]]; then
+  if [[ "${has_local_runtime}" == "true" && ! -f "${current_redirect}" ]]; then
     if [[ "${output_format}" == "env" ]]; then
       printf 'result=%q\n' "already_local"
       printf 'repo_root=%q\n' "${repo_root}"
-      printf 'db_path=%q\n' "${current_db}"
+      if [[ -e "${current_db}" ]]; then
+        printf 'db_path=%q\n' "${current_db}"
+      else
+        printf 'db_path=%q\n' "${current_dolt}"
+      fi
     else
-      printf 'Local Beads DB already present at %s\n' "${current_db}"
+      if [[ -e "${current_db}" ]]; then
+        printf 'Local Beads DB already present at %s\n' "${current_db}"
+      else
+        printf 'Local Beads runtime already present at %s\n' "${current_dolt}"
+      fi
     fi
     return 0
   fi

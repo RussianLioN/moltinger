@@ -91,16 +91,57 @@ ensure_worktree_context() {
   report_worktree="${target_path}"
 }
 
+detect_active_migration_mode() {
+  local pilot_mode_file="${target_path}/.beads/pilot-mode.json"
+  local cutover_mode_file="${target_path}/.beads/cutover-mode.json"
+
+  if [[ -f "${cutover_mode_file}" ]]; then
+    printf 'cutover\n'
+    return 0
+  fi
+
+  if [[ -f "${pilot_mode_file}" ]]; then
+    printf 'pilot\n'
+    return 0
+  fi
+
+  return 1
+}
+
 classify_state() {
   local beads_dir="${target_path}/.beads"
   local config_path="${beads_dir}/config.yaml"
   local issues_path="${beads_dir}/issues.jsonl"
   local db_path="${beads_dir}/beads.db"
+  local dolt_path="${beads_dir}/dolt"
   local redirect_path="${beads_dir}/redirect"
+  local active_migration_mode=""
+  local has_local_runtime="false"
 
   report_db_path="${db_path}"
   report_notice=""
   report_bootstrap_source=""
+
+  if beads_resolve_has_local_runtime "${beads_dir}"; then
+    has_local_runtime="true"
+    if [[ ! -e "${db_path}" && -d "${dolt_path}" ]]; then
+      report_db_path="${dolt_path}"
+    fi
+  fi
+
+  active_migration_mode="$(detect_active_migration_mode 2>/dev/null || true)"
+  if [[ -n "${active_migration_mode}" ]]; then
+    report_state="${active_migration_mode}_mode_active"
+    report_action="stop_and_report"
+    if [[ "${active_migration_mode}" == "cutover" ]]; then
+      report_message="Cutover mode is already active for this worktree; the localization helper is a retired compatibility path."
+      report_notice="Use ./scripts/beads-dolt-rollout.sh verify --worktree . for the active cutover review surface."
+    else
+      report_message="Pilot mode is already active for this worktree; the localization helper is a retired compatibility path."
+      report_notice="Use ./scripts/beads-dolt-pilot.sh review for the active pilot review surface."
+    fi
+    return 0
+  fi
 
   if [[ -f "${redirect_path}" ]]; then
     if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
@@ -127,10 +168,18 @@ classify_state() {
     return 0
   fi
 
-  if [[ -f "${config_path}" && -f "${issues_path}" && -f "${db_path}" ]]; then
+  if [[ -f "${config_path}" && -f "${issues_path}" && "${has_local_runtime}" == "true" ]]; then
     report_state="current"
     report_action="none"
     report_message="This worktree already has localized Beads ownership."
+    return 0
+  fi
+
+  if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && ! -f "${issues_path}" ]]; then
+    report_state="post_migration_runtime_only"
+    report_action="none"
+    report_message="Tracked .beads/issues.jsonl is already retired for this worktree; use the local Beads runtime as the backlog source of truth."
+    report_notice="If plain bd cannot read the local backlog, treat that as a local Beads repair problem and run /usr/local/bin/bd doctor --json before any repair step."
     return 0
   fi
 
@@ -192,6 +241,9 @@ localize_state() {
 
   case "${report_state}" in
     current)
+      return 0
+      ;;
+    post_migration_runtime_only)
       return 0
       ;;
     migratable_legacy)

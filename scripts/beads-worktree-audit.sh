@@ -98,8 +98,12 @@ classify_worktree_state() {
   local beads_dir="${worktree_path}/.beads"
   local config_path="${beads_dir}/config.yaml"
   local issues_path="${beads_dir}/issues.jsonl"
-  local db_path="${beads_dir}/beads.db"
   local redirect_path="${beads_dir}/redirect"
+  local has_local_runtime="false"
+
+  if beads_resolve_has_local_runtime "${beads_dir}"; then
+    has_local_runtime="true"
+  fi
 
   if [[ -f "${redirect_path}" ]]; then
     if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
@@ -110,8 +114,13 @@ classify_worktree_state() {
     return 0
   fi
 
-  if [[ -f "${config_path}" && -f "${issues_path}" && -f "${db_path}" ]]; then
+  if [[ -f "${config_path}" && -f "${issues_path}" && "${has_local_runtime}" == "true" ]]; then
     printf '%s\n' "current"
+    return 0
+  fi
+
+  if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && ! -f "${issues_path}" ]]; then
+    printf '%s\n' "post_migration_runtime_only"
     return 0
   fi
 
@@ -172,7 +181,7 @@ audit_worktree() {
   fi
 
   case "${state}" in
-    current|no_beads)
+    current|no_beads|post_migration_runtime_only)
       severity="ok"
       ;;
     partial_foundation)
