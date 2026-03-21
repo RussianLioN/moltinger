@@ -46,3 +46,7 @@ scripts/.scripts-hashes
 # Claude Code Local Overrides (Not Shared)
 .claude/settings.local.json
 .mcp.json
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
