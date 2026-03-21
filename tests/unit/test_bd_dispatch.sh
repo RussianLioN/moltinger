@@ -39,7 +39,11 @@ done
 
 if [[ -n "${db_path}" ]]; then
   mkdir -p "$(dirname "${db_path}")"
-  : > "${db_path}"
+  if [[ -d "${db_path}" ]]; then
+    : > "${db_path}/.fake-db-touch"
+  else
+    : > "${db_path}"
+  fi
 fi
 
 printf 'DB=%s\n' "${db_path}"
@@ -76,6 +80,16 @@ auto-start-daemon: false
 EOF
     cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
 {"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+}
+
+seed_pilot_ready_dolt_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/beads.db"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
 EOF
 }
 
@@ -128,6 +142,70 @@ test_plain_bd_executes_against_worktree_local_db() {
 
     assert_contains "${output}" "DB=${expected_db}" "Plain bd should pin the local worktree DB"
     assert_contains "${output}" "ARGS=info" "Plain bd should forward the original arguments"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_canonical_root_plain_bd_allows_read_only_commands() {
+    test_start "canonical_root_plain_bd_allows_read_only_commands"
+
+    local fixture_root repo_dir fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_plain_bd "${repo_dir}" "${fake_bin}" info)"
+
+    assert_contains "${output}" "DB=" "Canonical-root read-only commands should still pass through to bd"
+    assert_contains "${output}" "ARGS=info" "Canonical-root read-only commands should preserve the original subcommand"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_canonical_root_plain_bd_blocks_mutation_by_default() {
+    test_start "canonical_root_plain_bd_blocks_mutation_by_default"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${repo_dir}" "${fake_bin}" update demo-1 --status in_progress 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "26" "${rc}" "Canonical-root mutating plain bd should fail closed by default"
+    assert_contains "${output}" "mutating canonical-root tracker commands are blocked by default" "Blocked root mutation should explain the new policy"
+    assert_contains "${output}" "bd --db" "Blocked root mutation should point to the explicit override path"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_canonical_root_plain_bd_allows_explicit_root_db_override() {
+    test_start "canonical_root_plain_bd_allows_explicit_root_db_override"
+
+    local fixture_root repo_dir fake_bin output explicit_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    explicit_db="${repo_dir}/.beads/beads.db"
+
+    output="$(run_plain_bd "${repo_dir}" "${fake_bin}" --db "${explicit_db}" update demo-1 --status in_progress)"
+
+    assert_contains "${output}" "DB=${explicit_db}" "Explicit canonical-root DB override should be allowed"
+    assert_contains "${output}" "ARGS=update demo-1 --status in_progress" "Explicit canonical-root DB override should preserve the mutating command"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -212,6 +290,77 @@ test_plain_bd_allows_explicit_troubleshooting_flags() {
     test_pass
 }
 
+test_plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation() {
+    test_start "plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-pilot-ready"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/pilot-ready" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_plain_bd "${worktree_path}" "${fake_bin}" backend show)"
+
+    assert_contains "${output}" "DB=${expected_db}" "Pilot-ready Dolt foundation should still resolve the local Beads runtime"
+    assert_contains "${output}" "ARGS=backend show" "Pilot-ready backend show should pass through as a read-only runtime probe"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation() {
+    test_start "plain_bd_allows_doctor_for_pilot_ready_dolt_foundation"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-pilot-ready-doctor"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/pilot-ready-doctor" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_plain_bd "${worktree_path}" "${fake_bin}" doctor --json)"
+
+    assert_contains "${output}" "DB=${expected_db}" "Pilot-ready Dolt foundation should allow doctor against the local runtime"
+    assert_contains "${output}" "ARGS=doctor --json" "Pilot-ready doctor should pass through as a read-only runtime probe"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_recognizes_post_migration_runtime_only_state() {
+    test_start "localize_recognizes_post_migration_runtime_only_state"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-post-migration-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/post-migration-runtime" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --check --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: post_migration_runtime_only" "Localization helper must recognize the runtime-only post-migration state"
+    assert_contains "${output}" "Action: none" "Localization helper must not force a repair just because tracked JSONL is retired"
+    assert_contains "${output}" "DB Path: ${expected_db}" "Localization helper must point operators to the local runtime path"
+    assert_contains "${output}" "local Beads repair problem" "Localization helper must direct operators to repair language instead of backlog-loss language"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_materializes_local_db_and_removes_redirect() {
     test_start "localize_materializes_local_db_and_removes_redirect"
 
@@ -240,6 +389,58 @@ test_localize_materializes_local_db_and_removes_redirect() {
     test_pass
 }
 
+test_localize_bootstraps_missing_foundation_from_source_ref() {
+    test_start "localize_bootstraps_missing_foundation_from_source_ref"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    printf 'export PATH="${repo_root}/bin:${PATH}"\n' > "${repo_dir}/.envrc"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl .envrc
+        git commit -m "fixture: seed bootstrap foundation" >/dev/null
+    )
+    worktree_path="${fixture_root}/moltinger-bootstrap-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/bootstrap-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    rm -f \
+        "${worktree_path}/.beads/config.yaml" \
+        "${worktree_path}/.beads/issues.jsonl" \
+        "${worktree_path}/bin/bd" \
+        "${worktree_path}/scripts/beads-resolve-db.sh" \
+        "${worktree_path}/scripts/beads-worktree-localize.sh" \
+        "${worktree_path}/.envrc"
+    mkdir -p "${worktree_path}/.beads"
+    printf '%s\n' "${repo_dir}/.beads" > "${worktree_path}/.beads/redirect"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        cd "${PROJECT_ROOT}"
+        PATH="${PROJECT_ROOT}/bin:${fake_bin}:$PATH" ./scripts/beads-worktree-localize.sh --path "${worktree_path}" --bootstrap-source main
+    )"
+
+    assert_contains "${output}" "State: current" "Bootstrap localization should finish in the current localized state"
+    assert_contains "${output}" "Bootstrap Source: main" "Bootstrap localization should report the source ref"
+    if [[ -f "${worktree_path}/.beads/redirect" ]]; then
+        test_fail "Bootstrap localization should remove legacy redirect metadata"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/config.yaml" || ! -f "${worktree_path}/.beads/issues.jsonl" ]]; then
+        test_fail "Bootstrap localization should restore the local Beads foundation"
+    fi
+    if [[ ! -f "${worktree_path}/bin/bd" || ! -f "${worktree_path}/scripts/beads-resolve-db.sh" ]]; then
+        test_fail "Bootstrap localization should restore the plain bd toolchain"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
+        test_fail "Bootstrap localization should materialize the local beads.db"
+    fi
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -252,10 +453,17 @@ run_all_tests() {
     fi
 
     test_plain_bd_executes_against_worktree_local_db
+    test_canonical_root_plain_bd_allows_read_only_commands
+    test_canonical_root_plain_bd_blocks_mutation_by_default
+    test_canonical_root_plain_bd_allows_explicit_root_db_override
     test_plain_bd_blocks_legacy_redirect
     test_plain_bd_blocks_root_fallback_when_local_foundation_is_missing
     test_plain_bd_allows_explicit_troubleshooting_flags
+    test_plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation
+    test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation
+    test_localize_recognizes_post_migration_runtime_only_state
     test_localize_materializes_local_db_and_removes_redirect
+    test_localize_bootstraps_missing_foundation_from_source_ref
     generate_report
 }
 

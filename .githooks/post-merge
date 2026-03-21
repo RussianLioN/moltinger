@@ -2,13 +2,56 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# shellcheck source=.githooks/_repo-local-path.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/_repo-local-path.sh"
 REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
+BEADS_LOCALIZE_SCRIPT="$PROJECT_ROOT/scripts/beads-worktree-localize.sh"
+
+auto_localize_beads_state() {
+  local check_output=""
+  local check_rc=0
+  local localize_output=""
+  local state=""
+  local action=""
+  local bootstrap_source="origin/main"
+
+  [[ -x "${BEADS_LOCALIZE_SCRIPT}" ]] || return 0
+
+  set +e
+  check_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --check --format env --bootstrap-source "${bootstrap_source}" 2>/dev/null)"
+  check_rc=$?
+  set -e
+
+  if [[ "${check_rc}" -eq 0 ]]; then
+    eval "${check_output}"
+    state="${state:-}"
+    action="${action:-}"
+    if [[ "${state}" == "migratable_legacy" || "${state}" == "partial_foundation" || "${state}" == "bootstrap_required" || "${action}" == "localize_in_place" || "${action}" == "rebuild_local_foundation" || "${action}" == "bootstrap_and_localize" ]]; then
+      if localize_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --bootstrap-source "${bootstrap_source}" 2>&1)"; then
+        printf '%s\n' "${localize_output}" >&2
+      else
+        printf '%s\n' "${localize_output}" >&2
+      fi
+    fi
+    return 0
+  fi
+
+  if [[ "${check_rc}" -eq 23 ]]; then
+    set +e
+    localize_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --check --bootstrap-source "${bootstrap_source}" 2>&1)"
+    set -e
+    printf '%s\n' "${localize_output}" >&2
+    echo "[beads] automatic localization skipped: this worktree still needs manual Beads repair." >&2
+  fi
+}
+
+auto_localize_beads_state
 
 if [[ -x "$REGISTRY_SCRIPT" ]]; then
   if ! output="$("$REGISTRY_SCRIPT" check 2>&1)"; then
     printf '%s\n' "$output" >&2
     echo "[git-topology-registry] post-merge detected topology drift." >&2
-    echo "[git-topology-registry] Reconcile with /session-summary or scripts/git-topology-registry.sh doctor --prune --write-doc." >&2
+    echo "[git-topology-registry] Ordinary branches may continue; publish the tracked snapshot later from the dedicated non-main branch 'chore/topology-registry-publish' in its own publish worktree." >&2
   fi
 fi
 
