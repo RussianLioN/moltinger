@@ -151,6 +151,7 @@
 | `origin/028-beads-issues-jsonl-rca` | Needs decision |
 | `origin/029-beads-dolt-native-migration` | Needs decision |
 | `origin/030-rebase-conflict-tail-audit` | Needs decision |
+| `origin/031-moltis-reliability-diagnostics` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
 | `origin/chore/topology-registry-publish` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
