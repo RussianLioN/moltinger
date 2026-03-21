@@ -150,3 +150,8 @@ This keeps the work safe, auditable, and aligned with GitOps.
 
 - Update `tasks.md` with completed safe fixes.
 - Leave a precise operational follow-up list for the actual live repair.
+
+### Phase 5: Architectural Hardening Backlog
+
+- Record the consilium-backed backlog for fail-closed auth/config durability so follow-up work is driven by tracked artifacts rather than chat history.
+- Prioritize secret/env hardening, runtime-dir pinning, semantic proof of health, session reconciliation, durable-state audit, and immutable release-root design.

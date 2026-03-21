@@ -60,6 +60,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
 - What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
 - What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
+- What happens when the live UI itself proves the server is running a non-`main` branch and operators need that branch/runtime provenance to be deliberate rather than accidental drift?
 
 ## Requirements *(mandatory)*
 
@@ -78,6 +79,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-011**: The repository smoke script for Moltis API diagnostics MUST use the current auth surface and current chat/status transport.
 - **FR-012**: The package MUST explicitly distinguish safe repository fixes from deferred operational actions such as redeploying production, clearing stale session state, or backfilling memory indexes.
 - **FR-013**: The package MUST preserve the target-boundary rule: local fixture results may validate repo contracts, but only remote checks may prove the shared live runtime behavior.
+- **FR-014**: The package MUST record a concrete architectural hardening backlog for fail-closed config/auth/session durability beyond the safe-fix slice.
 
 ### Key Entities
 
@@ -104,3 +106,4 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **SC-004**: The repository Moltis smoke script authenticates through the current auth surface and exercises the current chat/status path.
 - **SC-005**: Safe fixes landed in this slice are validated by targeted repository checks.
 - **SC-006**: Deferred live actions are explicitly listed so operators can finish the repair without guessing which remaining steps are operational rather than code changes.
+- **SC-007**: The package records follow-up backlog items for auth secret rendering, runtime-dir pinning, session reconciliation, semantic UAT hardening, and release-root/runtime-attestation drift control.
