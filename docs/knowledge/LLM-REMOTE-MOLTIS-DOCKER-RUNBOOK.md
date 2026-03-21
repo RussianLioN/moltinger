@@ -287,6 +287,19 @@ Fix:
 
 - open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
 
+### Symptom: Telegram still replies with an old model or `Activity log ...` after OAuth/runtime recovery
+
+Likely cause:
+
+- the active Telegram-bound session still carries stale session-level model/context state
+
+Fix:
+
+- inspect the active channel session via `sessions.list`
+- patch that session to `openai-codex::gpt-5.4`
+- reset the same session to clear contaminated tool/context history
+- rerun authoritative Telegram `/status` and confirm the reply itself mentions `openai-codex::gpt-5.4`
+
 ### Symptom: Traefik looks healthy, but chat still fails
 
 Likely cause:

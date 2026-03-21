@@ -42,7 +42,7 @@ const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
 const ERROR_RE =
-  /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed))/i;
+  /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|^\s*activity log(?:\s*[•:-]|\b)|missing\s+'action'\s+parameter)/i;
 const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 
 let stage = "login";
