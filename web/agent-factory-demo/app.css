@@ -1,17 +1,17 @@
 :root {
-  --bg: #0e1117;
-  --bg-soft: #11151d;
-  --bg-elevated: #151a23;
-  --bg-sidebar: #0f141c;
-  --surface: rgba(255, 255, 255, 0.02);
-  --surface-strong: rgba(255, 255, 255, 0.035);
-  --surface-hover: rgba(255, 255, 255, 0.055);
-  --border: rgba(255, 255, 255, 0.085);
-  --border-strong: rgba(255, 255, 255, 0.19);
-  --text: rgba(244, 247, 252, 0.96);
+  --bg: #111317;
+  --bg-soft: #14171c;
+  --bg-elevated: #191d23;
+  --bg-sidebar: #12151b;
+  --surface: rgba(255, 255, 255, 0.018);
+  --surface-strong: rgba(255, 255, 255, 0.032);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: rgba(241, 244, 248, 0.95);
   --text-strong: #ffffff;
-  --muted: rgba(214, 220, 230, 0.62);
-  --muted-strong: rgba(232, 238, 246, 0.76);
+  --muted: rgba(210, 216, 226, 0.58);
+  --muted-strong: rgba(226, 232, 242, 0.74);
   --accent: #f3eee3;
   --accent-ink: #101218;
   --attention: #e7c46a;
@@ -53,7 +53,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: #0e1117;
+  background: #111317;
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--text-md);
@@ -680,7 +680,7 @@ code {
   height: 100%;
   min-height: 0;
   padding: var(--space-3) var(--space-4);
-  background: rgba(15, 19, 27, 0.96);
+  background: rgba(17, 21, 28, 0.97);
   overflow: hidden;
 }
 
@@ -704,7 +704,7 @@ code {
   top: 0;
   z-index: 48;
   padding: 6px 0 10px;
-  background: rgba(15, 19, 27, 0.99);
+  background: rgba(17, 21, 28, 0.99);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: none;
 }
@@ -1039,8 +1039,8 @@ code {
 
 .message--user {
   align-self: flex-end;
-  border-color: rgba(188, 193, 202, 0.22);
-  background: rgba(44, 49, 58, 0.72);
+  border-color: rgba(194, 200, 210, 0.2);
+  background: rgba(41, 45, 52, 0.84);
 }
 
 .message--system {
@@ -1058,14 +1058,14 @@ code {
   bottom: 0;
   z-index: 3;
   padding-bottom: 2px;
-  background: linear-gradient(180deg, rgba(14, 17, 22, 0) 0%, rgba(14, 17, 22, 0.66) 24%, rgba(14, 17, 22, 0.98) 100%);
+  background: linear-gradient(180deg, rgba(17, 21, 28, 0) 0%, rgba(17, 21, 28, 0.66) 24%, rgba(17, 21, 28, 0.98) 100%);
 }
 
 .composer {
   display: grid;
   gap: 6px;
   padding: 10px;
-  background: rgba(16, 20, 27, 0.985);
+  background: rgba(18, 22, 30, 0.985);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
