@@ -413,6 +413,7 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         expected_outputs_before="$(jq -c '.discovery_runtime_state.requirement_brief.expected_outputs' "$tmpdir/editorial-one-page-review-out.json")"
         expected_outputs_after="$(jq -c '.discovery_runtime_state.requirement_brief.expected_outputs' "$tmpdir/editorial-one-page-out.json")"
         assert_eq "$expected_outputs_before" "$expected_outputs_after" "Editorial one-page correction should not overwrite expected_outputs with command text"
+        assert_eq "в one-page добавь отдельный блок с краткой рекомендацией в самом начале." "$(jq -r '.discovery_runtime_state.requirement_brief.scope_boundaries[0]' "$tmpdir/editorial-one-page-out.json")" "Editorial one-page correction should be normalized before persisting to brief scope boundaries"
         assert_contains "$(jq -r '.next_question' "$tmpdir/editorial-one-page-out.json")" "Правку применил" "Editorial correction should still be acknowledged as applied"
         test_pass
     else

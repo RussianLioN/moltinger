@@ -2390,6 +2390,7 @@ def normalize_feedback_update_text(value: Any, *, section: str = "") -> str:
         r"^(?:нужно|надо|прошу|пожалуйста)?\s*(?:исправить|поправить|обновить|уточнить)\s+(?:brief|бриф)\s*[:\-–—]\s*",
         r"^(?:исправление|правка)\s+(?:brief|брифа)\s*[:\-–—]\s*",
         r"^(?:исправление|правка)\s*[:\-–—]\s*",
+        r"^(?:сделай|сделайте|внеси|внесите)\s+правк(?:у|и)?\s*[:\-–—]\s*",
     )
     for pattern in strip_prefix_patterns:
         cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
