@@ -26,6 +26,8 @@ FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
 CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
 CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
+CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
+MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -354,6 +356,40 @@ canonicalize_existing_path() {
         printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$base"
         return 0
     fi
+
+    return 1
+}
+
+normalize_runtime_config_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        return 1
+    fi
+
+    while [[ "$path" != "/" && "$path" == */ ]]; do
+        path="${path%/}"
+    done
+
+    printf '%s' "$path"
+}
+
+runtime_config_dir_allowed() {
+    local candidate="$1"
+    local normalized_candidate normalized_allowlist entry
+    normalized_candidate="$(normalize_runtime_config_path "$candidate" || true)"
+    [[ -n "$normalized_candidate" ]] || return 1
+
+    local old_ifs="$IFS"
+    IFS=':'
+    for entry in $MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST; do
+        normalized_allowlist="$(normalize_runtime_config_path "$entry" || true)"
+        if [[ -n "$normalized_allowlist" && "$normalized_candidate" == "$normalized_allowlist" ]]; then
+            IFS="$old_ifs"
+            return 0
+        fi
+    done
+    IFS="$old_ifs"
 
     return 1
 }
@@ -1235,7 +1271,12 @@ verify_deployment() {
         fi
 
         expected_runtime_config="$(read_env_file_value "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
-        expected_runtime_config="${expected_runtime_config:-/opt/moltinger-state/config-runtime}"
+        expected_runtime_config="${expected_runtime_config:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+        expected_runtime_config="$(normalize_runtime_config_path "$expected_runtime_config")"
+        if ! runtime_config_dir_allowed "$expected_runtime_config"; then
+            log_error "Moltis runtime contract mismatch: runtime config dir '$expected_runtime_config' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
+            return 1
+        fi
         expected_runtime_config="$(canonicalize_existing_path "$expected_runtime_config" || printf '%s\n' "$expected_runtime_config")"
         actual_runtime_config_source="$(container_mount_source "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
         if [[ -z "$actual_runtime_config_source" ]]; then

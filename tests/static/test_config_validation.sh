@@ -260,6 +260,16 @@ PY
         test_fail "Deploy and UAT workflows should use the shared Moltis env renderer instead of inline heredocs"
     fi
 
+    test_start "static_deploy_workflows_pin_canonical_moltis_runtime_config_dir"
+    if rg -Fq 'MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime' "$UAT_GATE_WORKFLOW" && \
+       ! rg -Fq "vars.MOLTIS_RUNTIME_CONFIG_DIR" "$DEPLOY_WORKFLOW" && \
+       ! rg -Fq "vars.MOLTIS_RUNTIME_CONFIG_DIR" "$UAT_GATE_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy and UAT workflows must pin the canonical Moltis runtime config dir instead of accepting mutable vars overrides"
+    fi
+
     test_start "static_deploy_workflows_use_shared_tracked_deploy_entrypoint"
     if rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
        rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \

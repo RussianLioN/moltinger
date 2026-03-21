@@ -27,6 +27,16 @@ assert_single_line() {
     esac
 }
 
+assert_non_empty() {
+    local key="$1"
+    local value="$2"
+
+    if [[ -z "$value" ]]; then
+        echo "render-moltis-env.sh: $key is required and must not be empty" >&2
+        exit 2
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --output)
@@ -69,6 +79,12 @@ assert_single_line "TELEGRAM_WEBHOOK_URL" "${TELEGRAM_WEBHOOK_URL:-}"
 assert_single_line "TELEGRAM_WEBHOOK_SECRET" "${TELEGRAM_WEBHOOK_SECRET:-}"
 assert_single_line "MOLTIS_DOMAIN" "$MOLTIS_DOMAIN_VALUE"
 assert_single_line "MOLTIS_RUNTIME_CONFIG_DIR" "$MOLTIS_RUNTIME_CONFIG_DIR_VALUE"
+
+assert_non_empty "MOLTIS_PASSWORD" "${MOLTIS_PASSWORD:-}"
+assert_non_empty "GLM_API_KEY" "${GLM_API_KEY:-}"
+assert_non_empty "TELEGRAM_BOT_TOKEN" "${TELEGRAM_BOT_TOKEN:-}"
+assert_non_empty "MOLTIS_DOMAIN" "$MOLTIS_DOMAIN_VALUE"
+assert_non_empty "MOLTIS_RUNTIME_CONFIG_DIR" "$MOLTIS_RUNTIME_CONFIG_DIR_VALUE"
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 

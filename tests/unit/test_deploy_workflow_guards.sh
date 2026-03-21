@@ -700,6 +700,38 @@ test_render_moltis_env_script_renders_runtime_contract() {
     test_pass
 }
 
+test_render_moltis_env_script_rejects_empty_required_auth_secrets() {
+    test_start "Shared Moltis env renderer should fail closed on empty required auth secrets"
+
+    if [[ ! -f "$ENV_RENDER_SCRIPT" ]]; then
+        test_skip "Missing script file: $ENV_RENDER_SCRIPT"
+        return
+    fi
+
+    local tmp_dir output_file exit_code
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/moltis.env"
+
+    set +e
+    MOLTIS_PASSWORD="" \
+        GLM_API_KEY="glm-key" \
+        TELEGRAM_BOT_TOKEN="telegram-token" \
+        MOLTIS_DOMAIN="moltis.example.com" \
+        MOLTIS_RUNTIME_CONFIG_DIR="/opt/moltinger-state/config-runtime" \
+        bash "$ENV_RENDER_SCRIPT" --output "$output_file" >"$tmp_dir/output.log" 2>&1
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "MOLTIS_PASSWORD is required" "$tmp_dir/output.log"; then
+        test_fail "render-moltis-env.sh must reject empty required auth secrets"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     test_start "Shared tracked deploy script dry-run should report the planned control-plane steps"
 
@@ -716,7 +748,7 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     mkdir -p "$project_root/config" "$project_root/scripts"
     printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
     printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
-    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$project_root/.env"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\n' > "$project_root/.env"
     : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
     : > "$project_root/scripts/moltis-version.sh"
     : > "$project_root/scripts/deploy.sh"
@@ -737,7 +769,7 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     if ! grep -Fq '"status": "dry-run"' "$output_file" || \
        ! grep -Fq '"prepare-runtime-config"' "$output_file" || \
        ! grep -Fq '"align-server-checkout"' "$output_file" || \
-       ! grep -Fq '"/srv/runtime-config"' "$output_file"; then
+       ! grep -Fq '"/opt/moltinger-state/config-runtime"' "$output_file"; then
         test_fail "Tracked deploy dry-run output should describe the shared control-plane contract"
         rm -rf "$tmp_dir"
         return
@@ -763,7 +795,7 @@ test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields() {
     mkdir -p "$project_root/config" "$project_root/scripts"
     printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
     printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
-    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$project_root/.env"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\n' > "$project_root/.env"
     : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
     : > "$project_root/scripts/moltis-version.sh"
     : > "$project_root/scripts/deploy.sh"
@@ -786,7 +818,7 @@ test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields() {
        [[ "$(jq -r '.details.git_ref' "$output_json")" != "main" ]] || \
        [[ "$(jq -r '.details.workflow_run' "$output_json")" != "123456" ]] || \
        [[ "$(jq -r '.details.tracked_version' "$output_json")" != "1.2.3" ]] || \
-       [[ "$(jq -r '.details.runtime_config_dir' "$output_json")" != "/srv/runtime-config" ]]; then
+       [[ "$(jq -r '.details.runtime_config_dir' "$output_json")" != "/opt/moltinger-state/config-runtime" ]]; then
         test_fail "Tracked deploy dry-run JSON must preserve the workflow ABI fields consumed by GitHub Actions"
         rm -rf "$tmp_dir"
         return
@@ -855,7 +887,7 @@ test_tracked_deploy_script_requires_workflow_run_argument() {
     mkdir -p "$deploy_dir/config" "$deploy_dir/scripts"
     printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
     printf '[server]\nport = 13131\n' > "$deploy_dir/config/moltis.toml"
-    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$deploy_dir/.env"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\n' > "$deploy_dir/.env"
     : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
     : > "$deploy_dir/scripts/moltis-version.sh"
     : > "$deploy_dir/scripts/deploy.sh"
@@ -873,6 +905,67 @@ test_tracked_deploy_script_requires_workflow_run_argument() {
 
     if [[ "$exit_code" -ne 2 ]] || ! grep -Fq "missing required argument: --workflow-run" "$output_file"; then
         test_fail "Tracked deploy script must fail closed when workflow-run CLI arg is missing"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_tracked_deploy_script_rejects_runtime_config_dir_outside_allowlist() {
+    test_start "Tracked deploy script should fail closed when runtime config dir leaves the production allowlist"
+
+    if [[ ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing script file: $TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir deploy_dir output_json
+    tmp_dir="$(mktemp -d)"
+    deploy_dir="$tmp_dir/deploy"
+    output_json="$tmp_dir/output.json"
+
+    mkdir -p "$deploy_dir/config" "$deploy_dir/scripts"
+    printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
+    printf '[server]\nport = 13131\n' > "$deploy_dir/config/moltis.toml"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$deploy_dir/.env"
+    cat > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    cat > "$deploy_dir/scripts/moltis-version.sh" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == "version" ]]; then
+  printf '%s\n' "1.2.3"
+elif [[ "${1:-}" == "assert-tracked" ]]; then
+  exit 0
+else
+  exit 0
+fi
+EOF
+    cat > "$deploy_dir/scripts/deploy.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+
+    if bash "$TRACKED_DEPLOY_SCRIPT" \
+        --dry-run \
+        --json \
+        --deploy-path "$deploy_dir" \
+        --git-sha deadbeef \
+        --git-ref main \
+        --workflow-run 123456 \
+        --version 1.2.3 >"$output_json" 2>&1; then
+        test_fail "run-tracked-moltis-deploy.sh should reject runtime config dirs outside the production allowlist"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! grep -Fq "outside the production allowlist" "$output_json"; then
+        test_fail "Tracked deploy failure should explain the runtime config dir allowlist violation"
         rm -rf "$tmp_dir"
         return
     fi
@@ -927,7 +1020,7 @@ EOF
     printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
     printf '[server]\nport = 13131\n' > "$config_dir/moltis.toml"
 
-    if ! output_json="$(bash "$TRACKED_DEPLOY_SCRIPT" \
+    if ! output_json="$(MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_dir" bash "$TRACKED_DEPLOY_SCRIPT" \
         --deploy-path "$deploy_dir" \
         --git-sha "deadbeef" \
         --git-ref "feature/unsafe'quote" \

@@ -13,6 +13,8 @@ EXPECTED_VERSION=""
 TRACKED_VERSION=""
 RUNTIME_CONFIG_DIR=""
 MOLTIS_DOMAIN_VALUE="moltis.ainetic.tech"
+CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
+MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
 
 timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -140,6 +142,57 @@ require_file() {
     fi
 }
 
+normalize_runtime_config_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        return 1
+    fi
+
+    while [[ "$path" != "/" && "$path" == */ ]]; do
+        path="${path%/}"
+    done
+
+    printf '%s' "$path"
+}
+
+runtime_config_dir_allowed() {
+    local candidate normalized_candidate allowlist_entry normalized_allowlist
+    candidate="$1"
+    normalized_candidate="$(normalize_runtime_config_path "$candidate" || true)"
+    [[ -n "$normalized_candidate" ]] || return 1
+
+    OLD_IFS="$IFS"
+    IFS=':'
+    for allowlist_entry in $MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST; do
+        normalized_allowlist="$(normalize_runtime_config_path "$allowlist_entry" || true)"
+        if [[ -n "$normalized_allowlist" && "$normalized_candidate" == "$normalized_allowlist" ]]; then
+            IFS="$OLD_IFS"
+            return 0
+        fi
+    done
+    IFS="$OLD_IFS"
+
+    return 1
+}
+
+validate_runtime_config_dir_policy() {
+    local candidate="$1"
+    local message
+
+    if runtime_config_dir_allowed "$candidate"; then
+        return 0
+    fi
+
+    message="Moltis runtime config dir '$candidate' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        emit_failure_json "$message"
+    else
+        echo "$message" >&2
+    fi
+    exit 1
+}
+
 read_env_file_value() {
     local env_file="$1"
     local key="$2"
@@ -166,6 +219,8 @@ load_runtime_settings() {
 
     RUNTIME_CONFIG_DIR="$(read_env_file_value "$env_file" "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
     [[ -n "$RUNTIME_CONFIG_DIR" ]] || RUNTIME_CONFIG_DIR="/opt/moltinger-state/config-runtime"
+    RUNTIME_CONFIG_DIR="$(normalize_runtime_config_path "$RUNTIME_CONFIG_DIR")"
+    validate_runtime_config_dir_policy "$RUNTIME_CONFIG_DIR"
 
     MOLTIS_DOMAIN_VALUE="$(read_env_file_value "$env_file" "MOLTIS_DOMAIN" || true)"
     [[ -n "$MOLTIS_DOMAIN_VALUE" ]] || MOLTIS_DOMAIN_VALUE="moltis.ainetic.tech"

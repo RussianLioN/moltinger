@@ -947,7 +947,7 @@ jobs:
           TELEGRAM_WEBHOOK_URL: ${{ secrets.TELEGRAM_WEBHOOK_URL }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           MOLTIS_DOMAIN: moltis.ainetic.tech
-          MOLTIS_RUNTIME_CONFIG_DIR: ${{ vars.MOLTIS_RUNTIME_CONFIG_DIR || '/opt/moltinger-state/config-runtime' }}
+          MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime
         run: |
           echo "::group::Generating .env file from GitHub Secrets"
           bash ./scripts/render-moltis-env.sh --output /tmp/moltis.env
