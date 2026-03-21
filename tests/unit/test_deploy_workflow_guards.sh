@@ -233,6 +233,26 @@ test_tracked_deploy_workflows_use_shared_script_entrypoint() {
     test_pass
 }
 
+test_deploy_script_verifies_live_moltis_runtime_contract() {
+    test_start "Deploy verification should enforce the live Moltis runtime contract"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" ]]; then
+        test_skip "Missing deploy script"
+        return
+    fi
+
+    if ! grep -Fq "working_dir is" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "/server mount is missing" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "/server/skills" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "MOLTIS_RUNTIME_CONFIG_DIR" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "provider_keys.json.tmp.contract-check" "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "deploy.sh must verify /server visibility, runtime config mount source, and writable runtime config behavior for Moltis"
+        return
+    fi
+
+    test_pass
+}
+
 test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
     test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
 
@@ -1045,6 +1065,7 @@ run_all_tests() {
     test_gitops_sync_workflows_use_shared_script_entrypoint
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
+    test_deploy_script_verifies_live_moltis_runtime_contract
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_checkout_align_script_dry_run_uses_constant_remote_command
