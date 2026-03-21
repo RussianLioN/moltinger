@@ -137,15 +137,6 @@ This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived se
 15. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
 16. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
 17. Canonical root cleanup is a separate gated action and must not happen in the same command that performs recovery apply.
-5. Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion or proof that the backlog is unavailable.
-6. When that happens, agents should keep using the local Beads database for read-only task inspection (`bd status`, `bd list`, `bd ready`, `bd show`) and describe any failure as a local Beads repair problem rather than falling back to ad-hoc plan files as the primary backlog.
-7. If a preserved sibling worktree still cannot open its local Beads state after JSONL retirement, run read-only diagnostics first (`/usr/local/bin/bd doctor --json`), then repair the local foundation with `./scripts/beads-worktree-localize.sh --path <worktree>` or `bd bootstrap` as appropriate.
-8. `.envrc` is a convenience bootstrap only: it should prepend the current worktree `bin/` directory to `PATH`, but dedicated-worktree safety must not depend solely on `direnv`.
-9. The normal repo-local command is plain `bd`, provided by `bin/bd`; managed Codex/worktree handoff flows and tracked git hooks must also prepend the current worktree `bin/` directory so the repo-local shim wins even when `direnv` is inactive.
-10. In the canonical root, plain `bd` is read-mostly by default: safe inspection commands may pass through, but mutating commands must not auto-discover or silently reuse the root tracker.
-11. Intentional canonical-root Beads mutation must be explicit. Use an explicit target such as `bd --db <canonical-root>/.beads/beads.db ...` (or another deliberate troubleshooting path) when root-scoped admin work is truly intended.
-12. `./scripts/bd-local.sh` remains a compatibility/troubleshooting helper, not the normal daily entrypoint; if `.beads/redirect` is present, localize that worktree before resuming plain `bd`.
-13. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
 14. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
 15. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
 16. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
