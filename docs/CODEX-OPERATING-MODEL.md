@@ -127,7 +127,7 @@ This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived se
 5. The normal repo-local command is plain `bd`, provided by `bin/bd`; managed Codex/worktree handoff flows and tracked git hooks must also prepend the current worktree `bin/` directory so the repo-local shim wins even when `direnv` is inactive.
 6. In the canonical root, plain `bd` is read-mostly by default: safe inspection commands may pass through, but mutating commands must not auto-discover or silently reuse the root tracker.
 7. Intentional canonical-root Beads mutation must be explicit. Use an explicit target such as `bd --db <canonical-root>/.beads/beads.db ...` (or another deliberate troubleshooting path) when root-scoped admin work is truly intended.
-8. `./scripts/bd-local.sh` remains a compatibility/troubleshooting helper, not the normal daily entrypoint; if `.beads/redirect` is present, localize that worktree before resuming plain `bd`.
+8. The normal daily entrypoint is plain `bd` (via `bin/bd`); `./scripts/bd-local.sh` is deprecated and should not be used. If `.beads/redirect` is present, localize that worktree with `scripts/beads-worktree-localize.sh` before resuming plain `bd`.
 9. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
 10. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
 11. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.

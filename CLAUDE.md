@@ -58,7 +58,7 @@ Run `check` before branch cleanup, worktree operations, or session handoff. Run 
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-In this repository, ordinary repo-local Beads work should use plain `bd`. The repo-local shim in `bin/bd` keeps dedicated-worktree ownership local, and `./scripts/bd-local.sh` remains a compatibility helper only when you need an explicit recovery/troubleshooting path.
+In this repository, ordinary repo-local Beads work should use plain `bd`. The repo-local shim in `bin/bd` keeps dedicated-worktree ownership local and is the only supported entrypoint.
 
 ## Quick Reference
 

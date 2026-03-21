@@ -83,7 +83,7 @@ cp .beads-templates/PRIME.template.md .beads/PRIME.md
 
 7. **Initial sync**:
 ```bash
-./scripts/bd-local.sh sync
+bd sync
 ```
 
 ## Post-Setup Instructions
@@ -99,22 +99,22 @@ After initialization, display:
 ### Quick Start
 
 1. Create your first task:
-   ./scripts/bd-local.sh create "Setup project" -t chore -p 3
+   bd create "Setup project" -t chore -p 3
 
 2. View available work:
-   ./scripts/bd-local.sh ready
+   bd ready
 
 3. Start working:
-   ./scripts/bd-local.sh update {PREFIX}-xxx --status in_progress
+   bd update {PREFIX}-xxx --status in_progress
 
 4. Complete task:
-   ./scripts/bd-local.sh close {PREFIX}-xxx --reason "Done"
+   bd close {PREFIX}-xxx --reason "Done"
 
 ### Session Workflow
 
-START:  ./scripts/bd-local.sh prime → ./scripts/bd-local.sh ready
-WORK:   ./scripts/bd-local.sh update → work → ./scripts/bd-local.sh close → /push patch
-END:    ./scripts/bd-local.sh sync → git push
+START:  bd prime → bd ready
+WORK:   bd update → work → bd close → /push patch
+END:    bd sync → git push
 
 ### Documentation
 
