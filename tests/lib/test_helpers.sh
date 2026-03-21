@@ -14,3 +14,7 @@ source "$LIB_DIR/process.sh"
 source "$LIB_DIR/docker.sh"
 # shellcheck source=tests/lib/rpc.sh
 source "$LIB_DIR/rpc.sh"
+
+# Test fixtures run in hermetic mode; keep adapter access gate explicit for local/CI suites.
+: "${ASC_DEMO_ACCESS_MODE:=fixture_trust}"
+export ASC_DEMO_ACCESS_MODE

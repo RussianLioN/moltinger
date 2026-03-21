@@ -94,6 +94,8 @@
                     class="icon-button workspace-topbar__menu"
                     type="button"
                     data-role="project-menu"
+                    aria-haspopup="menu"
+                    aria-controls="projectActionsMenu"
                     aria-label="Действия с проектом"
                     title="Действия с проектом"
                   >
@@ -384,7 +386,7 @@
         </div>
       </div>
 
-      <div class="project-actions-menu" data-role="project-actions-menu" hidden>
+      <div id="projectActionsMenu" class="project-actions-menu" data-role="project-actions-menu" role="menu" hidden>
         <button type="button" data-role="project-actions-rename">Переименовать</button>
         <button type="button" data-role="project-actions-delete">Удалить проект</button>
       </div>

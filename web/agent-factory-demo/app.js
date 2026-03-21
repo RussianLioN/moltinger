@@ -1842,37 +1842,47 @@
     const candidateQuestionNodes = dom.chatLog.querySelectorAll(".message--agent .message__question-line");
     const questionTarget = candidateQuestionNodes.length ? candidateQuestionNodes[candidateQuestionNodes.length - 1] : null;
     const agentNodes = dom.chatLog.querySelectorAll(".message--agent");
-    const target = questionTarget?.closest(".message--agent") || agentNodes[agentNodes.length - 1];
+    const target = questionTarget || agentNodes[agentNodes.length - 1];
     if (!target) {
       return false;
     }
-    const composerHeight = dom.composerForm?.offsetHeight || 0;
-    const topbarHeight = dom.workspaceTopbar?.offsetHeight || 0;
-    const topPadding = Math.max(8, topbarHeight ? Math.round(topbarHeight * 0.18) : 8);
-    const visibleTop = dom.chatLog.scrollTop;
-    const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - composerHeight - 12;
-    const targetTop = target.offsetTop;
-    const targetBottom = targetTop + target.offsetHeight;
-    const shouldAdjust = targetBottom > visibleBottom || targetTop < visibleTop;
-    if (shouldAdjust) {
+    const logRect = dom.chatLog.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetHeight = Math.max(1, targetRect.height);
+    const targetTop = targetRect.top - logRect.top + dom.chatLog.scrollTop;
+    const targetBottom = targetTop + targetHeight;
+    const topPadding = 8;
+    const bottomPadding = 12;
+    const visibleTop = dom.chatLog.scrollTop + topPadding;
+    const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - bottomPadding;
+    const alreadyVisible = targetTop >= visibleTop && targetBottom <= visibleBottom;
+    if (!alreadyVisible) {
+      let nextTop = dom.chatLog.scrollTop;
+      if (targetBottom > visibleBottom) {
+        nextTop = targetBottom - dom.chatLog.clientHeight + bottomPadding;
+      }
+      if (targetTop < visibleTop) {
+        nextTop = Math.min(nextTop, targetTop - topPadding);
+      }
       const maxTop = Math.max(0, dom.chatLog.scrollHeight - dom.chatLog.clientHeight);
-      const nextTop = Math.min(Math.max(0, targetTop - topPadding), maxTop);
-      dom.chatLog.scrollTop = nextTop;
+      dom.chatLog.scrollTop = Math.min(Math.max(0, Math.round(nextTop)), maxTop);
     }
     return true;
   }
 
   function scheduleScrollChatToBottom() {
-    window.requestAnimationFrame(() => {
+    const syncScroll = () => {
       if (!scrollChatToLatestAgentMessage()) {
         scrollChatToBottom();
       }
+    };
+    window.requestAnimationFrame(() => {
+      syncScroll();
       window.requestAnimationFrame(() => {
-        if (!scrollChatToLatestAgentMessage()) {
-          scrollChatToBottom();
-        }
+        syncScroll();
       });
     });
+    window.setTimeout(syncScroll, 72);
   }
 
   function renderTimeline(project, options = {}) {

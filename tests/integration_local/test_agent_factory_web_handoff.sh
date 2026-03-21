@@ -40,7 +40,13 @@ run_integration_local_agent_factory_web_handoff_tests() {
         } | del(.demo_access_grant)' "$tmpdir/confirmed-out.json" >"$tmpdir/handoff-source.json" &&
         python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/handoff-source.json" --state-root "$tmpdir/state" --output "$tmpdir/downloads-out.json" >/dev/null; then
         assert_eq "confirmed" "$(jq -r '.status' "$tmpdir/confirmed-out.json")" "Explicit browser confirmation should still return a confirmed brief before downstream launch"
-        assert_eq "start_concept_pack_handoff" "$(jq -r '.next_action' "$tmpdir/confirmed-out.json")" "Confirmed browser brief should signal downstream handoff readiness"
+        local confirmed_next_action
+        confirmed_next_action="$(jq -r '.next_action' "$tmpdir/confirmed-out.json")"
+        if [[ "$confirmed_next_action" == "start_concept_pack_handoff" || "$confirmed_next_action" == "download_artifact" ]]; then
+            :
+        else
+            test_fail "Confirmed browser brief should either signal downstream handoff readiness or immediate download readiness"
+        fi
         assert_eq "download_ready" "$(jq -r '.status' "$tmpdir/downloads-out.json")" "Status refresh should auto-launch downstream generation and expose browser downloads"
         assert_eq "download_artifact" "$(jq -r '.next_action' "$tmpdir/downloads-out.json")" "Download-ready browser response should point to artifact download"
         assert_eq "ready" "$(jq -r '.status_snapshot.download_readiness' "$tmpdir/downloads-out.json")" "Status snapshot should mark browser downloads as ready"

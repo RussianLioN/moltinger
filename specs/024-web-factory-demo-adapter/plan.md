@@ -7,6 +7,8 @@
 
 Add the primary web-first demo adapter for the factory business-analyst agent on `Moltis`. The adapter must expose a controlled browser-accessible demo surface on a dedicated subdomain such as `asc.ainetic.tech`, route browser turns into the existing `022` discovery runtime, let the user review and confirm the brief in a chat-like UI, automatically trigger `handoff -> intake -> concept pack`, and expose the resulting artifacts as browser downloads. Telegram stays preserved in `023` as a follow-up transport slice, not as the primary near-term demo path.
 
+2026-03-20 clarification pass adds strict non-simulated post-brief behavior: sticky topbar/chat correctness, deterministic brief correction semantics, resolved `input_examples` loop handling, auto-open right preview on confirm, rendered markdown preview, and OnePage generation quality gates that require source-derived facts instead of brief restatement.
+
 ## Technical Context
 
 **Language/Version**: Bash 5.x, Python 3.11+, HTML/CSS/vanilla JavaScript, JSON/TOML/Markdown contracts  
@@ -274,3 +276,12 @@ Do not auto-write `AGENTS.md` from `update-agent-context.sh` for this feature. T
 - persist resumable browser session state
 - support same-host deployment and operator-visible health
 - validate the demo with hermetic browser coverage and targeted remote smoke
+
+### Stage 6: P0 Clarification And Quality Hardening
+
+- enforce UI correctness invariants (sticky topbar, panel toggles, scroll anchoring, in-flight indicator, dedupe submits)
+- enforce brief-edit semantics (section-targeted patch, no cross-section drift, no service-phrase copy into canonical brief)
+- enforce clarification resolution rules (accepted sanitized evidence closes topic; no repeated `input_examples` prompts)
+- enforce post-brief reality checks (auto-open preview, markdown render, no mock fallback as success)
+- enforce OnePage quality/provenance contract (`brief_version`, `result_format`, `processing_algorithm`, source-derived facts)
+- validate through component + integration + e2e + live smoke slices with anti-regression assertions

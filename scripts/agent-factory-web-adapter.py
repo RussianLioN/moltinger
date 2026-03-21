@@ -3255,16 +3255,34 @@ def build_discovery_request(
         request["brief_feedback_text"] = combined_text or normalize_text(payload.get("brief_feedback_text"))
         feedback_target_raw = normalize_text(payload.get("brief_feedback_target")).lower()
         feedback_target = TOPIC_TO_BRIEF_FIELD.get(feedback_target_raw, feedback_target_raw)
-        if request["brief_feedback_text"] and feedback_target in BRIEF_SECTION_FIELDS:
-            cleaned_text = normalize_feedback_update_text(request["brief_feedback_text"], section=feedback_target)
-            request["brief_section_updates"] = {feedback_target: [cleaned_text or request["brief_feedback_text"]]}
-        elif isinstance(payload.get("brief_section_updates"), dict):
-            request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
-        elif request["brief_feedback_text"]:
+        inferred_updates: dict[str, Any] = {}
+        inferred_io_updates: dict[str, Any] = {}
+        if request["brief_feedback_text"]:
             inferred_updates = infer_brief_section_updates_from_feedback(
                 request["brief_feedback_text"],
                 uploaded_files=uploaded_files,
             )
+            inferred_io_updates = {
+                section: deepcopy(value)
+                for section, value in inferred_updates.items()
+                if section in {"input_examples", "expected_outputs"}
+            }
+        if request["brief_feedback_text"] and feedback_target in BRIEF_SECTION_FIELDS:
+            cleaned_text = normalize_feedback_update_text(request["brief_feedback_text"], section=feedback_target)
+            targeted_update = {feedback_target: [cleaned_text or request["brief_feedback_text"]]}
+            if feedback_target in {"input_examples", "expected_outputs"} and inferred_io_updates:
+                opposite_section = "expected_outputs" if feedback_target == "input_examples" else "input_examples"
+                if opposite_section in inferred_io_updates:
+                    request["brief_section_updates"] = inferred_io_updates
+                elif feedback_target in inferred_io_updates:
+                    request["brief_section_updates"] = {feedback_target: deepcopy(inferred_io_updates[feedback_target])}
+                else:
+                    request["brief_section_updates"] = inferred_io_updates
+            else:
+                request["brief_section_updates"] = targeted_update
+        elif isinstance(payload.get("brief_section_updates"), dict):
+            request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
+        elif request["brief_feedback_text"]:
             if inferred_updates:
                 request["brief_section_updates"] = inferred_updates
     elif ui_action == "confirm_brief":

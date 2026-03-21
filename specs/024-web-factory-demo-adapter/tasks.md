@@ -193,6 +193,38 @@
 
 ---
 
+## Phase 9: P0 Clarification Hardening (Speckit 2026-03-20)
+
+**Purpose**: Уточнить и закрыть критические P0-дефекты качества UX/logic/post-brief, выявленные в live-сценарии.
+
+### Validation for P0 Hardening
+
+- [ ] T063 [P] [US1] Add deterministic in-flight agent indicator coverage in `tests/component/test_agent_factory_web_discovery.sh` and `tests/e2e_browser/agent_factory_web_demo.mjs` (beads: `molt-d07`)
+- [ ] T064 [P] [US1] Add sticky topbar + persistent `Brief`/right-toggle regression in `tests/e2e_browser/agent_factory_web_demo.mjs` (beads: `molt-sus`, `molt-n4m`)
+- [ ] T065 [P] [US1] Add scroll anchoring regression for collapsed/expanded sidebar in `tests/e2e_browser/agent_factory_web_demo.mjs` (beads: `molt-4dp`)
+- [ ] T066 [P] [US2] Add section-target brief patch regression (no cross-section drift) in `tests/component/test_agent_factory_web_brief.sh` and `tests/integration_local/test_agent_factory_web_confirmation.sh` (beads: `molt-khh`)
+- [ ] T067 [P] [US2] Add `input_examples` closure regression after first valid user-provided example (text/attachment) without extra anonymization-proof loop in `tests/component/test_agent_factory_web_uploads.sh` (beads: `molt-kft`)
+- [ ] T068 [P] [US3] Add post-confirm preview regression (`confirm -> right panel auto-open -> non-empty markdown preview`) in `tests/integration_local/test_agent_factory_web_handoff.sh` and `tests/e2e_browser/agent_factory_web_demo.mjs` (beads: `molt-2xg.1`, `molt-2xg.2`)
+- [ ] T069 [P] [US3] Add OnePage quality guard test with source-unique facts and anti-brief-copy assertion in `tests/integration_local/test_agent_factory_web_handoff.sh` (beads: `molt-2xg.3`)
+
+### Implementation for P0 Hardening
+
+- [ ] T070 [US1] Implement sticky topbar and move `Brief`/right-panel toggles into persistent topbar controls in `web/agent-factory-demo/index.html`, `web/agent-factory-demo/app.css`, and `web/agent-factory-demo/app.js` (beads: `molt-sus`, `molt-n4m`)
+- [ ] T071 [US1] Implement robust scroll anchoring and send-dedupe behavior in `web/agent-factory-demo/app.js` (beads: `molt-4dp`)
+- [ ] T072 [US1] Implement single-source in-flight agent indicator bound to adapter state in `web/agent-factory-demo/app.js` and `scripts/agent-factory-web-adapter.py` (beads: `molt-d07`)
+- [ ] T073 [US2] Implement section-targeted brief merge semantics with drift guard in `scripts/agent-factory-web-adapter.py` and `scripts/agent_factory_common.py` (beads: `molt-khh`)
+- [ ] T074 [US2] Prevent canonical brief pollution by service/user helper phrases in `scripts/agent_factory_common.py` (beads: `molt-hzn`)
+- [ ] T075 [US2] Resolve `input_examples` loop: first valid user-provided example closes topic and advances flow without extra anonymization confirmations in `scripts/agent-factory-web-adapter.py` (beads: `molt-kft`)
+- [ ] T076 [US2] Enforce `confirm brief` preconditions (`result_format`, `processing_algorithm`, `constraints`, `success_metrics`) in `scripts/agent-factory-web-adapter.py` and `specs/024-web-factory-demo-adapter/contracts/web-brief-confirmation-contract.md` (beads: `molt-2xg.4`)
+- [ ] T077 [US3] Implement post-confirm auto-open preview state and markdown render path for `one_page_summary` in `scripts/agent-factory-web-adapter.py` and `web/agent-factory-demo/app.js` (beads: `molt-2xg.1`, `molt-2xg.2`)
+- [ ] T078 [US3] Remove success-path mock preview fallback and add explicit incomplete/error preview state in `web/agent-factory-demo/app.js` (beads: `molt-2xg.2`)
+- [ ] T079 [US3] Implement OnePage source-derived quality gate and provenance fields (`brief_version`, `result_format`, `processing_algorithm`, `delivery_channel`, source refs) in `scripts/agent-factory-intake.py`, `scripts/agent-factory-artifacts.py`, and `scripts/agent-factory-web-adapter.py` (beads: `molt-2xg.3`, `molt-2xg.4`)
+- [ ] T080 [US3] Document post-brief non-simulated pipeline and quality/provenance contract in `docs/runbooks/agent-factory-web-demo.md` and `docs/architecture/agent-factory-web-demo-llm-orchestration.md`
+
+**Checkpoint**: Post-brief flow показывает реальный OnePage preview и корректный UX/логический state без симуляции и без повторных deadlock-вопросов.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -205,6 +237,7 @@
 - **Phase 6: US4** depends on Phase 2 and should be complete before remote demo rollout.
 - **Phase 7: US5** depends on US1 and US2 because resume and reopen operate on real session and brief state.
 - **Phase 8: Polish** depends on all desired user stories.
+- **Phase 9: P0 Clarification Hardening** depends on completed baseline from Phases 3-8 and is mandatory before claiming demo readiness.
 
 ### User Story Dependencies
 
@@ -223,6 +256,10 @@
 - `T025` and `T026` can run in parallel for US3 validation.
 - `T031` and `T032` can run in parallel for US4 validation.
 - `T036` and `T037` can run in parallel for US5 validation.
+- `T063`-`T069` can run in parallel as validation-first slices while implementation tasks are still pending.
+- `T070`-`T072` can run in parallel across frontend and adapter status plumbing.
+- `T073`-`T076` can run in parallel across brief semantics and discovery precondition guards.
+- `T077`-`T079` can run in parallel once post-confirm contract fields are frozen.
 
 ## Implementation Strategy
 

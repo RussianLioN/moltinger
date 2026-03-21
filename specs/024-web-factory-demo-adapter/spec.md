@@ -17,6 +17,15 @@
 - Q: Является ли web UI новым агентом? → A: Нет. Фабричный агент по-прежнему реализован на `Moltis`, а web UI является только первым приоритетным demo adapter поверх уже существующего discovery/factory runtime.
 - Q: Требуется ли для demo новый heavy frontend stack? → A: Нет. Для MVP этого slice достаточно thin web adapter с chat-like UX, стандартным HTTPS transport и загрузкой артефактов без обязательного нового SPA build stack.
 
+### Session 2026-03-20
+
+- Q: Что обязательно должно происходить сразу после `confirm brief`? → A: Правая панель должна автоматически раскрываться в режиме preview и показывать главный результат (`one_page_summary`), а не пустой контейнер.
+- Q: Достаточно ли пересказа brief как результата OnePage? → A: Нет. OnePage обязан содержать фактическую суммаризацию приложенных данных и согласованных правил обработки, а не копию brief.
+- Q: Можно ли считать accepted сценарий, если preview строится из mock fallback? → A: Нет. Mock/placeholder допустим только как явный failure state, но не как успешный post-brief результат.
+- Q: Какие UX-паттерны обязательны для чата? → A: Sticky topbar с доступными контролами `Brief`/panel toggle, корректный scroll anchoring после send, единый индикатор работы агента, отсутствие дублей и service-noise в transcript.
+- Q: Когда разрешено `confirm brief`? → A: Только после сбора обязательных параметров результата (`result_format`, `processing_algorithm`, `constraints`, `success_metrics`) и закрытия unresolved clarification.
+- Q: Нужно ли требовать от пользователя отдельные подтверждения обезличенности входных примеров? → A: Нет. По умолчанию все пользовательские данные в этом прототипе считаются обезличенными; повторные доказательства/подтверждения не требуются.
+
 ## Scope Boundary
 
 ### In Scope
@@ -140,7 +149,7 @@
 - Пользователь refreshes страницу в момент, когда adapter уже ждет clarification или confirmation.
 - Brief summary слишком длинный для одного экрана или одной карточки, и UI должен разбить его на читаемые sections без потери смысла.
 - Пользователь пытается скачать артефакты, пока generation еще идет или один из файлов еще не готов.
-- Пользователь вводит реальные чувствительные данные, и adapter должен показать plain-language warning от discovery runtime и попросить sanitized substitute.
+- Пользователь вводит явно чувствительные данные, уверенно распознанные runtime, и adapter должен показать plain-language warning и попросить заменить формулировку, но не требовать отдельных доказательств обезличенности.
 - У проекта есть несколько historical brief versions, и UI должен явно показывать, какая версия current, какая archived и какая handoff-ready.
 
 ## Requirements *(mandatory)*
@@ -178,7 +187,7 @@
 - **FR-018**: System MUST support deployment as a dedicated same-host subdomain demo surface that stays operationally separate from the main `moltis.ainetic.tech` runtime surface.
 - **FR-019**: System MUST provide concise user-facing status updates for discovery progress, confirmation state, handoff state, and concept-pack delivery state.
 - **FR-020**: System MUST hide filesystem paths, stack traces, secrets, and internal factory evidence from browser user messages.
-- **FR-021**: System MUST surface sanitized-data warnings from the discovery runtime in plain language when user examples appear unsafe for prototype use.
+- **FR-021**: System MUST surface plain-language safety warnings only when runtime confidently detects explicitly unsafe example content and MUST NOT require additional anonymization proofs by default.
 - **FR-022**: System MUST provide an operator-visible health/status signal for the demo adapter without requiring direct inspection of user conversations.
 
 #### Resume, Governance, And Adapter Boundaries
@@ -187,6 +196,20 @@
 - **FR-024**: System MUST keep web adapter responsibilities limited to access gating, session routing, user-facing rendering, download delivery, and operator-safe status publication while leaving business-analysis and factory-generation logic to the existing runtimes.
 - **FR-025**: System MUST preserve semantic compatibility with future UI adapters and MUST NOT make `023-telegram-factory-adapter` obsolete as a follow-up transport slice.
 - **FR-026**: System MUST support one project having multiple discovery and confirmation iterations without requiring the user to restart from an empty session each time.
+
+#### Interaction Correctness, Brief Semantics, And Post-Brief Quality
+
+- **FR-027**: System MUST show one visible agent-processing indicator bound to in-flight state and MUST clear it immediately on terminal success/error state.
+- **FR-028**: System MUST keep a sticky workspace topbar with always-available `Brief` and right-panel toggle controls during vertical transcript scrolling.
+- **FR-029**: After each user send action, system MUST preserve scroll anchoring on the active question and the latest user turn in both collapsed and expanded sidebar modes.
+- **FR-030**: System MUST prevent duplicate user turns caused by repeated send actions while one request is already in-flight.
+- **FR-031**: For `input_examples`, the first valid user-provided example (text or attachment) MUST close the topic by default and prevent repeated requests for anonymization proof or duplicate evidence.
+- **FR-032**: Brief corrections MUST apply as section-targeted replacements/patches and MUST NOT duplicate content into unrelated sections or copy service/user helper phrases verbatim into canonical brief text.
+- **FR-033**: System MUST block `confirm brief` until required output-design topics are captured: `result_format`, `processing_algorithm`, `constraints`, and `success_metrics` (or explicitly unresolved with visible risk flag).
+- **FR-034**: Immediately after `confirm brief`, system MUST auto-open the right panel in preview mode for the primary artifact (`one_page_summary`).
+- **FR-035**: Preview MUST render markdown artifacts as readable content and MUST NOT show empty preview when artifact content exists.
+- **FR-036**: The generated `one_page_summary` MUST include synthesized facts from input data sources and agreed processing rules and MUST NOT be accepted when it is only a brief paraphrase.
+- **FR-037**: Downstream handoff and artifact metadata MUST carry traceable provenance fields at minimum: `confirmed_brief_version`, `result_format`, `processing_algorithm`, `delivery_channel`, and source artifact references.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -210,6 +233,9 @@
 - **SC-006**: Resumed web sessions do not re-ask already confirmed topics unless the brief was explicitly reopened.
 - **SC-007**: 0 normal user-facing errors expose internal filesystem paths, secrets, or raw stack traces.
 - **SC-008**: Operators can trace any downloaded concept pack back to the exact confirmed brief version and discovery session that produced it.
+- **SC-009**: In pilot and regression runs, 100% of `confirm brief` events auto-open right-panel preview and show non-empty render for available markdown artifacts.
+- **SC-010**: In validated synthetic scenarios, 0 completed sessions produce `one_page_summary` outputs that are only brief restatements without source-derived facts.
+- **SC-011**: In regression suite runs, 0 accepted `input_examples` turns trigger repeated anonymization-proof requests or duplicate evidence prompts.
 
 ## Assumptions
 
