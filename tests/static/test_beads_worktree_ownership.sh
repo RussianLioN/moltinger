@@ -25,6 +25,8 @@ BEADS_SKILL="$PROJECT_ROOT/.claude/skills/beads/SKILL.md"
 BEADS_COMMAND_QUICKREF="$PROJECT_ROOT/.claude/skills/beads/resources/COMMANDS_QUICKREF.md"
 BEADS_WORKFLOWS="$PROJECT_ROOT/.claude/skills/beads/resources/WORKFLOWS.md"
 WORKTREE_COMMAND="$PROJECT_ROOT/.claude/commands/worktree.md"
+SHARED_CORE_INSTRUCTIONS="$PROJECT_ROOT/.ai/instructions/shared-core.md"
+ROOT_AGENTS="$PROJECT_ROOT/AGENTS.md"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -62,6 +64,7 @@ run_static_beads_worktree_ownership_tests() {
     if [[ -x "$LOCALIZE_SCRIPT" ]] && \
        rg -q 'migratable_legacy' "$LOCALIZE_SCRIPT" && \
        rg -q 'partial_foundation' "$LOCALIZE_SCRIPT" && \
+       rg -q 'post_migration_runtime_only' "$LOCALIZE_SCRIPT" && \
        rg -q 'bootstrap_required' "$LOCALIZE_SCRIPT" && \
        rg -q -- '--bootstrap-source' "$LOCALIZE_SCRIPT"; then
         test_pass
@@ -74,10 +77,21 @@ run_static_beads_worktree_ownership_tests() {
        rg -q 'worktree list --porcelain' "$AUDIT_SCRIPT" && \
        rg -q 'migratable_legacy' "$AUDIT_SCRIPT" && \
        rg -q 'partial_foundation' "$AUDIT_SCRIPT" && \
+       rg -q 'post_migration_runtime_only' "$AUDIT_SCRIPT" && \
        rg -q 'Non-canonical worktree' "$AUDIT_SCRIPT"; then
         test_pass
     else
         test_fail "The repo must provide a canonical-root sibling ownership audit helper"
+    fi
+
+    test_start "static_root_instructions_define_post_migration_runtime_repair_protocol"
+    if rg -q -F 'Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
+       rg -q -F 'Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
+       rg -q -F 'local Beads repair problem' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
+       rg -q -F 'bd status' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS"; then
+        test_pass
+    else
+        test_fail "Root instructions must define the post-migration local-runtime state and repair protocol explicitly"
     fi
 
     test_start "static_codex_launcher_bootstraps_repo_local_plain_bd"
