@@ -673,6 +673,7 @@ beads_localize_worktree() {
   local repo_root="$1"
   local output_format="$2"
   local current_db=""
+  local current_dolt=""
   local current_redirect=""
   local current_config=""
   local current_issues=""
@@ -681,6 +682,7 @@ beads_localize_worktree() {
   local backup_dir=""
   local timestamp=""
   local backup_path=""
+  local has_local_runtime="false"
 
   BEADS_LOCALIZE_FORMAT="${output_format}"
 
@@ -688,19 +690,47 @@ beads_localize_worktree() {
   current_config="${repo_root}/.beads/config.yaml"
   current_issues="${repo_root}/.beads/issues.jsonl"
   current_db="${repo_root}/.beads/beads.db"
+  current_dolt="${repo_root}/.beads/dolt"
   current_redirect="${repo_root}/.beads/redirect"
+
+  if beads_resolve_has_local_runtime "${repo_root}/.beads"; then
+    has_local_runtime="true"
+  fi
+
+  if [[ -f "${current_config}" && "${has_local_runtime}" == "true" && ! -f "${current_issues}" && ! -f "${current_redirect}" ]]; then
+    if [[ "${output_format}" == "env" ]]; then
+      printf 'result=%q\n' "post_migration_runtime_only"
+      printf 'repo_root=%q\n' "${repo_root}"
+      if [[ -e "${current_db}" ]]; then
+        printf 'db_path=%q\n' "${current_db}"
+      else
+        printf 'db_path=%q\n' "${current_dolt}"
+      fi
+    else
+      printf 'Tracked .beads/issues.jsonl is already retired; use the local Beads runtime in %s as the backlog source of truth.\n' "${repo_root}/.beads"
+    fi
+    return 0
+  fi
 
   if [[ ! -f "${current_config}" || ! -f "${current_issues}" ]]; then
     beads_resolve_die "Cannot localize ${repo_root}: tracked .beads/config.yaml and .beads/issues.jsonl must exist locally first."
   fi
 
-  if [[ -f "${current_db}" && ! -f "${current_redirect}" ]]; then
+  if [[ "${has_local_runtime}" == "true" && ! -f "${current_redirect}" ]]; then
     if [[ "${output_format}" == "env" ]]; then
       printf 'result=%q\n' "already_local"
       printf 'repo_root=%q\n' "${repo_root}"
-      printf 'db_path=%q\n' "${current_db}"
+      if [[ -e "${current_db}" ]]; then
+        printf 'db_path=%q\n' "${current_db}"
+      else
+        printf 'db_path=%q\n' "${current_dolt}"
+      fi
     else
-      printf 'Local Beads DB already present at %s\n' "${current_db}"
+      if [[ -e "${current_db}" ]]; then
+        printf 'Local Beads DB already present at %s\n' "${current_db}"
+      else
+        printf 'Local Beads runtime already present at %s\n' "${current_dolt}"
+      fi
     fi
     return 0
   fi

@@ -336,6 +336,31 @@ test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation() {
     test_pass
 }
 
+test_localize_recognizes_post_migration_runtime_only_state() {
+    test_start "localize_recognizes_post_migration_runtime_only_state"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-post-migration-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/post-migration-runtime" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --check --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: post_migration_runtime_only" "Localization helper must recognize the runtime-only post-migration state"
+    assert_contains "${output}" "Action: none" "Localization helper must not force a repair just because tracked JSONL is retired"
+    assert_contains "${output}" "DB Path: ${expected_db}" "Localization helper must point operators to the local runtime path"
+    assert_contains "${output}" "local Beads repair problem" "Localization helper must direct operators to repair language instead of backlog-loss language"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_materializes_local_db_and_removes_redirect() {
     test_start "localize_materializes_local_db_and_removes_redirect"
 
@@ -436,6 +461,7 @@ run_all_tests() {
     test_plain_bd_allows_explicit_troubleshooting_flags
     test_plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation
     test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation
+    test_localize_recognizes_post_migration_runtime_only_state
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref
     generate_report

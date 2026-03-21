@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-20
-**Total Lessons**: 40
+**Generated**: 2026-03-21
+**Total Lessons**: 41
 
 ---
 
@@ -47,7 +47,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (9 lessons)
+#### P3 (10 lessons)
+- [2026-03-21-beads-post-migration-jsonl-misread](../docs/rca/2026-03-21-beads-post-migration-jsonl-misread.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
@@ -83,7 +84,8 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### generic (5 lessons)
+#### generic (6 lessons)
+- [2026-03-21-beads-post-migration-jsonl-misread](../docs/rca/2026-03-21-beads-post-migration-jsonl-misread.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
 - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
@@ -136,7 +138,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 40 |
+| Total Lessons | 41 |
 | Critical (P0/P1) | 14 |
 | Categories | 5 |
 | Unique Tags | 98 |

@@ -70,6 +70,16 @@ EOF
 EOF
 }
 
+seed_post_migration_runtime_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/beads.db"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+}
+
 run_audit() {
     local worktree_dir="$1"
     local fake_bin="$2"
@@ -209,12 +219,42 @@ test_audit_skips_enforcement_in_non_canonical_worktree() {
     test_pass
 }
 
+test_audit_treats_post_migration_runtime_only_sibling_as_ok() {
+    test_start "audit_treats_post_migration_runtime_only_sibling_as_ok"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/beads-worktree-audit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_beads_audit_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-post-migration-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/post-migration-runtime" "main"
+    seed_post_migration_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_audit "${repo_dir}" "${fake_bin}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Canonical root audit must not fail on the post-migration runtime-only sibling state"
+    assert_contains "${output}" "state=post_migration_runtime_only" "Audit must classify the sibling as the post-migration runtime-only state"
+    assert_contains "${output}" "action=none" "Audit must avoid suggesting localization for the runtime-only state"
+    assert_contains "${output}" "moltinger-post-migration-runtime" "Audit output must still identify the sibling worktree"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_test_beads_worktree_audit() {
     start_timer
     test_audit_blocks_canonical_root_when_legacy_redirect_exists
     test_audit_apply_safe_localizes_redirected_sibling
     test_audit_apply_safe_bootstraps_damaged_sibling
     test_audit_skips_enforcement_in_non_canonical_worktree
+    test_audit_treats_post_migration_runtime_only_sibling_as_ok
     generate_report
 }
 

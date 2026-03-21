@@ -54,6 +54,7 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 
 - The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
 - Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
+- Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion. Continue with local `bd` read-only inspection first.
 - For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.
 - If a preserved sibling worktree still reports incomplete local foundation after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. First run read-only diagnostics such as `/usr/local/bin/bd doctor --json`, then repair the local foundation with `./scripts/beads-worktree-localize.sh --path .` or `bd bootstrap` as appropriate.
 - If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
