@@ -1096,7 +1096,7 @@
       return "Войти";
     }
     if (state.awaitingResponse) {
-      return "Нажми ■ чтобы остановить";
+      return "Агент-архитектор формирует следующий шаг";
     }
     if (!hasConversationActivity(project)) {
       return "Опиши задачу";
