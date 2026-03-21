@@ -257,6 +257,74 @@ run_integration_local_agent_factory_web_flow_tests() {
         test_fail "Browser adapter should bridge uploads, handle repeat meta-replies, and complete discovery flow up to explicit brief confirmation"
     fi
 
+    test_start "integration_local_agent_factory_web_flow_blocks_confirmation_until_output_contract_is_explicit"
+    if jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-001",
+          "request_id": "web-request-contract-001",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Клиентский менеджер и кредитный комитет."
+        } | del(.demo_access_grant)' "$tmpdir/start-out.json" >"$tmpdir/contract-turn-1.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-1.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-1-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-002",
+          "request_id": "web-request-contract-002",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Сейчас one-page готовится вручную из выгрузок и долго сверяется."
+        } | del(.demo_access_grant)' "$tmpdir/contract-turn-1-out.json" >"$tmpdir/contract-turn-2.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-2.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-2-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-003",
+          "request_id": "web-request-contract-003",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Вход: CSV-выгрузка по клиенту и комментарий менеджера."
+        } | del(.demo_access_grant)' "$tmpdir/contract-turn-2-out.json" >"$tmpdir/contract-turn-3.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-3.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-3-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-004",
+          "request_id": "web-request-contract-004",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "На выходе нужен итоговый материал с рекомендацией для кредитного комитета и ключевыми выводами."
+        } | del(.demo_access_grant)' "$tmpdir/contract-turn-3-out.json" >"$tmpdir/contract-turn-4.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-4.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-4-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-005",
+          "request_id": "web-request-contract-005",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Правила: если данных не хватает — эскалация; проверяем обязательные поля."
+        } | del(.demo_access_grant)' "$tmpdir/contract-turn-4-out.json" >"$tmpdir/contract-turn-5.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-5.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-5-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-006",
+          "request_id": "web-request-contract-006",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Метрики: сократить время на 50% и снизить ошибки до 2%."
+        } | del(.demo_access_grant)' "$tmpdir/contract-turn-5-out.json" >"$tmpdir/contract-turn-6.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-6.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-6-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-contract-007",
+          "request_id": "web-request-contract-007",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": "Итоговый формат: one-page PDF и markdown. Обязательные блоки: профиль клиента, ключевые риски, рекомендация и итоговое решение."
+        } | del(.demo_access_grant)' "$tmpdir/contract-turn-6-out.json" >"$tmpdir/contract-turn-7.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/contract-turn-7.json" --state-root "$tmpdir/state-contract" --output "$tmpdir/contract-turn-7-out.json" >/dev/null; then
+        assert_eq "awaiting_user_reply" "$(jq -r '.status' "$tmpdir/contract-turn-6-out.json")" "Discovery should stay active while mandatory output contract details are missing"
+        assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/contract-turn-6-out.json")" "Missing output contract should route back to expected_outputs topic"
+        assert_eq "mandatory_contract_guard" "$(jq -r '.ui_projection.question_source' "$tmpdir/contract-turn-6-out.json")" "UI projection should expose mandatory contract guard source"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/contract-turn-6-out.json")" "формат" "Mandatory guard question should request explicit output format"
+        assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/contract-turn-7-out.json")" "After explicit format and structure, flow should progress to confirmation"
+        assert_eq "request_explicit_confirmation" "$(jq -r '.next_action' "$tmpdir/contract-turn-7-out.json")" "Confirmation action should be available after contract details are complete"
+        test_pass
+    else
+        test_fail "Discovery flow should block confirmation until output format/structure contract is explicit"
+    fi
+
     generate_report
 }
 

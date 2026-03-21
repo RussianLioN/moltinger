@@ -279,6 +279,39 @@ EXPECTED_OUTPUT_SIGNAL_MARKERS = (
     "файл",
     "экран",
 )
+MANDATORY_OUTPUT_FORMAT_MARKERS = (
+    "pdf",
+    "markdown",
+    "md",
+    "doc",
+    "docx",
+    "ppt",
+    "pptx",
+    "xlsx",
+    "csv",
+    "json",
+    "xml",
+    "html",
+    "one-page",
+    "onepage",
+)
+MANDATORY_OUTPUT_STRUCTURE_MARKERS = (
+    "обязательные блоки",
+    "блоки:",
+    "блок ",
+    "разделы",
+    "раздел ",
+    "секции",
+    "секции:",
+    "структура",
+    "структурирован",
+    "рекомендац",
+    "вывод",
+)
+MANDATORY_OUTPUT_CONTRACT_QUESTION = (
+    "Чтобы перейти к подтверждению brief, уточни контракт результата: "
+    "в каком формате агент отдаёт итог и какие обязательные блоки должны быть в документе."
+)
 ARCHITECT_TOPIC_FRAMES: dict[str, dict[str, str]] = {
     "problem": {
         "lead": "Начинаем с контекста задачи.",
@@ -2259,6 +2292,12 @@ def adaptive_architect_question(
     user_text = normalize_text(envelope.get("user_text"))
     low_signal = force_low_signal_guard or is_low_signal_reply(user_text, uploaded_files)
     if low_signal:
+        metrics_like_reply = any(
+            marker in user_text.lower()
+            for marker in ("метрик", "kpi", "sla", "%", "процент", "время подготовки", "доля ошибок", "точност")
+        )
+        if topic == "expected_outputs" and metrics_like_reply:
+            return MANDATORY_OUTPUT_CONTRACT_QUESTION, "mandatory_contract_guard"
         reprompt = (
             "Описание предмета автоматизации пока слишком общее, его нельзя зафиксировать в brief."
             if topic == "problem"
@@ -2725,6 +2764,39 @@ def next_missing_required_topic(runtime_state: dict[str, Any], uploaded_files: l
             continue
         return topic
     return ""
+
+
+def has_mandatory_output_contract_gap(runtime_state: dict[str, Any]) -> bool:
+    summaries = requirement_topic_summaries(runtime_state)
+    captured_answers = runtime_state.get("captured_answers")
+    brief = runtime_state.get("requirement_brief")
+
+    expected_outputs_values: list[str] = []
+    summary_value = normalize_text(summaries.get("expected_outputs"))
+    if summary_value:
+        expected_outputs_values.append(summary_value)
+
+    if isinstance(captured_answers, dict):
+        captured_value = captured_answers.get("expected_outputs")
+        if isinstance(captured_value, list):
+            expected_outputs_values.extend(normalize_text(item) for item in captured_value)
+        else:
+            expected_outputs_values.append(normalize_text(captured_value))
+
+    if isinstance(brief, dict):
+        brief_value = brief.get("expected_outputs")
+        if isinstance(brief_value, list):
+            expected_outputs_values.extend(normalize_text(item) for item in brief_value)
+        else:
+            expected_outputs_values.append(normalize_text(brief_value))
+
+    contract_text = " ".join(value for value in expected_outputs_values if value).lower()
+    if not contract_text:
+        return False
+
+    has_format = any(marker in contract_text for marker in MANDATORY_OUTPUT_FORMAT_MARKERS)
+    has_structure = any(marker in contract_text for marker in MANDATORY_OUTPUT_STRUCTURE_MARKERS)
+    return not (has_format and has_structure)
 
 
 def normalize_requester_identity(payload: dict[str, Any], discovery_state: dict[str, Any]) -> dict[str, Any]:
@@ -3215,6 +3287,61 @@ def has_non_fallback_brief_updates(updates: Any) -> bool:
     return False
 
 
+def infer_cross_topic_captures(user_text: str, uploaded_files: list[dict[str, Any]]) -> dict[str, str]:
+    text = normalize_text(user_text)
+    normalized_uploads = normalize_uploaded_files(uploaded_files)
+    if not text and not normalized_uploads:
+        return {}
+
+    lowered = text.lower()
+    captures: dict[str, str] = {}
+
+    input_signal = bool(normalized_uploads) or bool(
+        re.search(r"(?:\bcsv\b|выгрузк|вход(?:ные)?\s+данн|input|пример(?:ы)?\s+вход)", lowered)
+    )
+    if input_signal:
+        input_value = uploaded_input_examples_summary(normalized_uploads) if normalized_uploads else normalize_feedback_update_text(
+            text, section="input_examples"
+        )
+        if input_value:
+            captures["input_examples"] = input_value
+
+    expected_fragment = extract_feedback_section_fragment(text, section="expected_outputs")
+    expected_signal = bool(expected_fragment) or any(
+        marker in lowered
+        for marker in (
+            "на выходе",
+            "итоговый формат",
+            "формат результата",
+            "что агент должен выдать",
+            "что пользователь должен получить",
+        )
+    )
+    if expected_signal:
+        expected_value = normalize_feedback_update_text(expected_fragment or text, section="expected_outputs")
+        if expected_value:
+            captures["expected_outputs"] = expected_value
+
+    constraints_signal = bool(
+        re.search(
+            r"(?:ограничен|запрет|правил|эскалац|обязательн(?:ые|ых)?\s+пол|аудит\s+изменени)",
+            lowered,
+        )
+    )
+    if constraints_signal:
+        constraints_value = normalize_feedback_update_text(text, section="constraints")
+        if constraints_value:
+            captures["constraints"] = constraints_value
+
+    metrics_signal = bool(re.search(r"(?:метрик|kpi|sla|доля\s+ошиб|точност|процент|%)", lowered))
+    if metrics_signal:
+        metrics_value = normalize_feedback_update_text(text, section="success_metrics")
+        if metrics_value:
+            captures["success_metrics"] = metrics_value
+
+    return captures
+
+
 def build_discovery_request(
     payload: dict[str, Any],
     discovery_state: dict[str, Any],
@@ -3410,6 +3537,15 @@ def build_discovery_request(
             captured_answers[current_topic] = effective_answer_text
         elif effective_answer_text and not normalize_text(request.get("raw_idea")) and not low_signal_submission:
             request["raw_idea"] = effective_answer_text
+        cross_topic_captures = infer_cross_topic_captures(user_text or combined_text, uploaded_files)
+        for topic_name, topic_value in cross_topic_captures.items():
+            normalized_topic = normalize_text(topic_name)
+            if not normalized_topic or normalized_topic == normalize_text(current_topic):
+                continue
+            normalized_value = normalize_text(topic_value)
+            if not normalized_value:
+                continue
+            captured_answers[normalized_topic] = normalized_value
         request["captured_answers"] = captured_answers
         append_user_turn(request, user_text or effective_answer_text or combined_text, current_topic, now)
     elif ui_action == "request_brief_correction":
@@ -4342,6 +4478,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 next_question = f"{next_question}\n\n{clarification_retry_hint}"
         else:
             next_question = clarification_retry_hint
+    force_skip_adaptive_architect = False
     if access_granted and not download_artifacts:
         missing_topic = next_missing_required_topic(runtime_state, uploaded_files)
         requested_action = normalize_text(envelope.get("ui_action"))
@@ -4369,6 +4506,37 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
             )
             runtime_state["status"] = "awaiting_user_reply"
             architect_question_source = "confirmation_state_alignment_guard"
+        output_contract_gap = has_mandatory_output_contract_gap(runtime_state)
+        normalized_user_text_for_guard = normalize_text(envelope.get("user_text")).lower()
+        metrics_like_submission = bool(
+            re.search(r"(?:метрик|kpi|sla|доля\s+ошиб|точност|процент|%)", normalized_user_text_for_guard)
+        )
+        post_success_metrics_contract_check = (
+            adapter_status == "awaiting_user_reply"
+            and normalize_text(next_topic) == "expected_outputs"
+            and metrics_like_submission
+        )
+        post_metrics_confirmation_transition_check = (
+            requested_action == "submit_turn"
+            and metrics_like_submission
+            and adapter_status in {"confirmed", "awaiting_confirmation", "reopened"}
+        )
+        if output_contract_gap and (
+            post_success_metrics_contract_check or post_metrics_confirmation_transition_check
+        ):
+            adapter_status = "awaiting_user_reply"
+            next_action = "ask_next_question"
+            next_topic = "expected_outputs"
+            next_question = MANDATORY_OUTPUT_CONTRACT_QUESTION
+            patch_runtime_next_question(
+                runtime_state,
+                next_question=next_question,
+                next_topic=next_topic,
+                next_action=next_action,
+            )
+            runtime_state["status"] = "awaiting_user_reply"
+            architect_question_source = "mandatory_contract_guard"
+            force_skip_adaptive_architect = True
 
     user_text_hint = normalize_text(envelope.get("user_text"))
     if (
@@ -4389,7 +4557,7 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         )
     bridged_from_uploaded_examples = False
     bridged_repeat_ack = False
-    skip_adaptive_architect = False
+    skip_adaptive_architect = force_skip_adaptive_architect
     if access_granted and not download_artifacts:
         if adapter_status == "awaiting_user_reply":
             next_topic, next_question, bridged_from_uploaded_examples = bridge_input_examples_topic(
@@ -4481,6 +4649,26 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
                 next_topic = fallback_topic
                 next_question = fallback_question
                 architect_question_source = "fallback_question_guard"
+    if access_granted and not download_artifacts and adapter_status == "awaiting_user_reply":
+        late_guard_text = normalize_text(envelope.get("user_text")).lower()
+        late_metrics_like = bool(
+            re.search(r"(?:метрик|kpi|sla|доля\s+ошиб|точност|процент|%)", late_guard_text)
+        )
+        if (
+            late_metrics_like
+            and normalize_text(next_topic) == "expected_outputs"
+            and has_mandatory_output_contract_gap(runtime_state)
+        ):
+            next_action = "ask_next_question"
+            next_question = MANDATORY_OUTPUT_CONTRACT_QUESTION
+            patch_runtime_next_question(
+                runtime_state,
+                next_question=next_question,
+                next_topic="expected_outputs",
+                next_action=next_action,
+            )
+            runtime_state["status"] = "awaiting_user_reply"
+            architect_question_source = "mandatory_contract_guard"
     if access_granted and not download_artifacts:
         patch_runtime_next_question(
             runtime_state,
