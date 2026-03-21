@@ -41,6 +41,7 @@ services:
         python3 scripts/agent-factory-web-adapter.py serve
         --host 0.0.0.0
         --port ${ASC_DEMO_INTERNAL_PORT:-18791}
+        --assets-root ${ASC_DEMO_ASSETS_ROOT:-/workspace/web/agent-factory-demo}
 
     environment:
       PYTHONUNBUFFERED: "1"
@@ -51,6 +52,7 @@ services:
       ASC_DEMO_SHARED_TOKEN_HASH: ${ASC_DEMO_SHARED_TOKEN_HASH:-}
       ASC_DEMO_OPERATOR_LABEL: ${ASC_DEMO_OPERATOR_LABEL:-factory-demo-operator}
       ASC_DEMO_INTERNAL_PORT: ${ASC_DEMO_INTERNAL_PORT:-18791}
+      ASC_DEMO_ASSETS_ROOT: ${ASC_DEMO_ASSETS_ROOT:-/workspace/web/agent-factory-demo}
       ASC_DEMO_LLM_ENABLED: ${ASC_DEMO_LLM_ENABLED:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.fireworks.ai/inference/v1}

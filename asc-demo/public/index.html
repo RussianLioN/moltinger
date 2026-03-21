@@ -42,21 +42,12 @@
         </section>
       </section>
 
-      <div class="app-frame">
-        <aside class="sidebar" aria-label="Проекты">
+      <div class="app-frame" data-sidebar-open="true">
+        <aside class="sidebar" id="projectsSidebar" aria-label="Проекты">
           <div class="sidebar__brand">
             <p class="sidebar__eyebrow">ASC AI Fabrique</p>
             <div class="sidebar__brand-row">
               <h2>Проекты</h2>
-              <button
-                class="sidebar__collapse"
-                type="button"
-                data-role="sidebar-toggle"
-                aria-label="Скрыть список проектов"
-                title="Скрыть проекты"
-              >
-                <span aria-hidden="true">◧</span>
-              </button>
             </div>
           </div>
 
@@ -80,22 +71,27 @@
         <div class="workspace-shell" data-role="workspace-shell" data-panel-open="false">
           <main class="workspace">
             <header class="workspace-topbar">
-              <div class="workspace-topbar__main">
+              <div class="workspace-topbar__sidebar-actions">
                 <button
-                  class="sidebar-reopen"
+                  class="icon-button workspace-toggle"
                   type="button"
-                  data-role="sidebar-reopen"
-                  aria-label="Показать список проектов"
-                  title="Показать проекты"
-                  hidden
+                  data-role="sidebar-toggle"
+                  aria-label="Скрыть список проектов"
+                  aria-controls="projectsSidebar"
+                  aria-pressed="true"
+                  aria-expanded="true"
+                  title="Скрыть проекты"
                 >
-                  <span aria-hidden="true">◨</span>
+                  <span class="workspace-toggle__icon" aria-hidden="true"></span>
                 </button>
+              </div>
+
+              <div class="workspace-topbar__main">
                 <p class="workspace-topbar__eyebrow">Агент-архитектор Moltis</p>
                 <div class="workspace-topbar__title-row">
                   <h1 data-role="project-title">Новый проект</h1>
                   <button
-                    class="workspace-topbar__menu"
+                    class="icon-button workspace-topbar__menu"
                     type="button"
                     data-role="project-menu"
                     aria-label="Действия с проектом"
@@ -112,13 +108,22 @@
 
               <div class="workspace-topbar__actions">
                 <button
-                  class="button button--ghost button--compact"
+                  class="icon-button workspace-toggle workspace-toggle--panel"
                   type="button"
                   data-role="side-panel-toggle"
-                  hidden
+                  aria-label="Открыть правую панель brief"
+                  aria-controls="briefSidePanel"
+                  aria-expanded="false"
+                  aria-pressed="false"
+                  data-state="inactive"
+                  title="Brief и результаты"
                 >
-                  Brief и файлы
+                  <span class="workspace-toggle__icon" aria-hidden="true"></span>
                 </button>
+                <div class="workspace-agent-state" data-role="agent-status" hidden>
+                  <span class="workspace-agent-state__label">Агент думает</span>
+                  <span class="workspace-agent-state__dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                </div>
               </div>
             </header>
 
@@ -152,7 +157,7 @@
 
             <section class="composer-dock">
               <form class="composer" data-role="composer-form">
-                <div class="composer__lead">
+                <div class="composer__lead" data-role="composer-lead" hidden>
                   <span class="composer__lead-label" data-role="composer-lead-label">Сообщение</span>
                   <div class="composer__lead-row">
                     <strong class="composer__question" data-role="composer-mode">Ответ агенту-архитектору</strong>
@@ -217,7 +222,7 @@
             hidden
           ></div>
 
-          <aside class="side-panel" data-role="side-panel" data-mode="hidden" hidden>
+          <aside class="side-panel" id="briefSidePanel" data-role="side-panel" data-mode="hidden" hidden>
             <div class="side-panel__header">
               <div>
                 <p class="side-panel__eyebrow" data-role="side-panel-eyebrow">Детали проекта</p>
@@ -225,28 +230,32 @@
               </div>
               <div class="side-panel__header-actions">
                 <button
-                  class="button button--ghost button--compact"
+                  class="icon-button side-panel__icon-button"
                   type="button"
                   data-role="brief-edit-toggle"
+                  aria-label="Исправить brief"
+                  title="Исправить brief"
                   hidden
                 >
-                  Редактировать brief
+                  ✎
                 </button>
                 <button
-                  class="button button--ghost button--compact"
+                  class="icon-button side-panel__icon-button"
                   type="button"
                   data-role="side-panel-fullscreen"
                   aria-label="Развернуть правую панель на весь экран"
+                  title="Развернуть правую панель"
                 >
-                  Развернуть
+                  ⛶
                 </button>
                 <button
-                  class="button button--ghost button--compact"
+                  class="icon-button side-panel__icon-button"
                   type="button"
                   data-role="side-panel-close"
                   aria-label="Закрыть панель"
+                  title="Закрыть правую панель"
                 >
-                  Закрыть
+                  ✕
                 </button>
               </div>
             </div>

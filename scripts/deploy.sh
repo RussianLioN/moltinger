@@ -391,6 +391,29 @@ ensure_asc_demo_runtime_paths() {
     done
 }
 
+sync_asc_demo_frontend_assets() {
+    local source_root="$PROJECT_ROOT/web/agent-factory-demo"
+    local target_root="$PROJECT_ROOT/asc-demo/public"
+    local required_files=("index.html" "app.css" "app.js")
+
+    if [[ ! -d "$source_root" ]]; then
+        log_error "ASC demo frontend source root not found: $source_root"
+        exit 2
+    fi
+
+    mkdir -p "$target_root"
+
+    for filename in "${required_files[@]}"; do
+        if [[ ! -f "$source_root/$filename" ]]; then
+            log_error "ASC demo frontend source file missing: $source_root/$filename"
+            exit 2
+        fi
+        cp "$source_root/$filename" "$target_root/$filename"
+    done
+
+    log_info "Synced ASC demo frontend assets: $source_root -> $target_root"
+}
+
 render_clawdiy_runtime_config() {
     if [[ "$TARGET" != "clawdiy" ]]; then
         return 0
@@ -561,6 +584,7 @@ check_prerequisites() {
         render_clawdiy_runtime_config
     elif [[ "$TARGET" == "asc-demo" && ("$action" == "deploy" || "$action" == "rollback" || "$action" == "start" || "$action" == "restart") ]]; then
         ensure_asc_demo_runtime_paths
+        sync_asc_demo_frontend_assets
     fi
 
     if ! compose_cmd allow-placeholder config --quiet >/dev/null 2>&1; then
@@ -725,6 +749,17 @@ verify_deployment() {
         http_code=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_METRICS_URL" 2>/dev/null || echo "000")
         if [[ "$http_code" != "200" ]]; then
             log_warn "Metrics endpoint returned HTTP $http_code for target $TARGET (non-critical)"
+        fi
+    fi
+
+    if [[ "$TARGET" == "asc-demo" ]]; then
+        local local_base_url
+        local_base_url="${TARGET_HEALTH_URL%/health}"
+        if ! "$PROJECT_ROOT/scripts/check-frontend-bundle-sync.sh" \
+            --base-url "$local_base_url" \
+            --source-root "$PROJECT_ROOT/web/agent-factory-demo"; then
+            log_error "Frontend bundle sync check failed for ASC demo"
+            return 1
         fi
     fi
 

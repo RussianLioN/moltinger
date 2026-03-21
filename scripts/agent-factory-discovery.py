@@ -102,7 +102,6 @@ EXPECTED_OUTPUT_HINT_MARKERS = (
     "summary",
     "презентац",
     "документ",
-    "файл",
     "карточк",
 )
 
@@ -239,11 +238,15 @@ def normalized_answers_from_payload(payload: dict[str, Any], raw_idea: str) -> d
         answers["problem"] = raw_idea
 
     if "expected_outputs" not in answers:
-        desired_outcome = normalize_text(answers.get("desired_outcome"))
-        if desired_outcome:
-            lowered = desired_outcome.lower()
-            if any(marker in lowered for marker in EXPECTED_OUTPUT_HINT_MARKERS):
-                answers["expected_outputs"] = [desired_outcome]
+        desired_outcome_value = answers.get("desired_outcome")
+        if isinstance(desired_outcome_value, list):
+            desired_outcome_text = " ".join(
+                normalize_text(item) for item in desired_outcome_value if normalize_text(item)
+            ).strip()
+        else:
+            desired_outcome_text = normalize_text(desired_outcome_value)
+        if desired_outcome_text and any(marker in desired_outcome_text.lower() for marker in EXPECTED_OUTPUT_HINT_MARKERS):
+            answers["expected_outputs"] = [desired_outcome_text]
 
     return answers
 
@@ -536,7 +539,7 @@ def mark_feedback_applied(
     return updated
 
 
-def resolve_example_data_safety_status(explicit_status: Any, *values: Any) -> str:
+def resolve_example_data_safety_status(explicit_status: Any, *values: Any, web_safe_default: bool = False) -> str:
     allowed_statuses = {"synthetic", "sanitized", "needs_redaction"}
     explicit = normalize_text(explicit_status).lower()
     if explicit == "safe":
@@ -548,16 +551,17 @@ def resolve_example_data_safety_status(explicit_status: Any, *values: Any) -> st
     if explicit in {"synthetic", "sanitized"}:
         return explicit
     if explicit == "needs_redaction":
-        if any(marker in source_blob for marker in ("совпадения случайны", "не имеют ничего общего с реальными")):
-            return "synthetic"
-        if computed in {"synthetic", "sanitized"}:
-            return computed
-        return explicit
+        return "synthetic" if web_safe_default else "needs_redaction"
+    if computed == "needs_redaction":
+        # Web-demo policy: user examples are treated as synthetic/anonymized by default.
+        # Outside web-demo this guard must remain strict.
+        return "synthetic" if web_safe_default else "needs_redaction"
     return computed
 
 
 def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, Any]) -> list[dict[str, Any]]:
     explicit_cases = payload.get("example_cases", [])
+    web_safe_default = normalize_text(payload.get("request_channel")).lower() == "web"
     fresh_input_examples = normalize_brief_section_value(
         "input_examples",
         brief_value_from_payload(payload, "input_examples"),
@@ -588,6 +592,7 @@ def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, A
                 linked_rules,
                 exception_notes,
                 brief_value_from_payload(payload, "input_examples"),
+                web_safe_default=web_safe_default,
             )
             normalized_cases.append(
                 {
@@ -618,6 +623,7 @@ def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, A
                     case.get("linked_rules"),
                     case.get("exception_notes"),
                     fresh_input_examples,
+                    web_safe_default=web_safe_default,
                 )
                 if fresh_status in {"synthetic", "sanitized"}:
                     case["input_summary"] = fresh_input_summary
@@ -641,6 +647,14 @@ def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, A
         input_summary = input_examples[index] if index < len(input_examples) else ""
         expected_output_summary = expected_outputs[index] if index < len(expected_outputs) else ""
         exception_notes = "; ".join(exceptions) if exceptions and index == 0 else ""
+        data_safety_status = resolve_example_data_safety_status(
+            "",
+            input_summary,
+            expected_output_summary,
+            business_rules,
+            exception_notes,
+            web_safe_default=web_safe_default,
+        )
         normalized_cases.append(
             {
                 "example_case_id": f"example-case-{index + 1:03d}",
@@ -649,12 +663,7 @@ def normalize_example_cases(payload: dict[str, Any], existing_brief: dict[str, A
                 "expected_output_summary": expected_output_summary,
                 "linked_rules": business_rules,
                 "exception_notes": exception_notes,
-                "data_safety_status": discovery_example_data_safety_status(
-                    input_summary,
-                    expected_output_summary,
-                    business_rules,
-                    exception_notes,
-                ),
+                "data_safety_status": data_safety_status,
             }
         )
     return normalized_cases
@@ -688,6 +697,10 @@ def generated_example_clarifications(
     existing_clarifications: list[dict[str, Any]],
     now: str,
 ) -> list[dict[str, Any]]:
+    session = payload.get("discovery_session", {})
+    session_channel = normalize_text(session.get("request_channel")) if isinstance(session, dict) else ""
+    request_channel = normalize_text(payload.get("request_channel") or session_channel).lower()
+    web_safe_default = request_channel == "web"
     business_rules = normalize_brief_section_value(
         "business_rules",
         brief_value_from_payload(payload, "business_rules") or existing_brief.get("business_rules"),
@@ -708,17 +721,17 @@ def generated_example_clarifications(
         expected_output_summary = normalize_text(case.get("expected_output_summary"))
         linked_rules = normalize_brief_section_value("business_rules", case.get("linked_rules"))
         exception_notes = normalize_text(case.get("exception_notes"))
-        if normalize_text(case.get("data_safety_status")) == "needs_redaction":
+        data_safety_status = normalize_text(case.get("data_safety_status")).lower()
+        if data_safety_status == "needs_redaction" and not web_safe_default:
             clarification_id = f"clarification-unsafe-{case_id}"
-            safe_case_ref = case_id if re.fullmatch(r"example-case-\d{3}", case_id) else "пример"
             generated.append(
                 clarification_item_from_example_case(
                     clarification_id=clarification_id,
                     topic_name="input_examples",
                     reason="unsafe_data_example",
                     question_text=(
-                        "Можешь прислать обезличенный пример входных данных "
-                        f"({safe_case_ref}) без реальных реквизитов, номеров и названий контрагентов?"
+                        f"Можешь прислать обезличенный пример для '{input_summary or case_id}' "
+                        "без реальных реквизитов, номеров и названий контрагентов?"
                     ),
                     existing_item=existing_by_id.get(clarification_id),
                     now=now,
@@ -857,6 +870,13 @@ def brief_value_from_payload(payload: dict[str, Any], field_name: str) -> Any:
     for container_name in ("brief_section_updates", "captured_answers", "discovery_answers"):
         container = payload.get(container_name, {})
         if not isinstance(container, dict):
+            continue
+        if container_name == "brief_section_updates":
+            # Web adapter должен передавать deterministic canonical section keys.
+            # Не читаем aliases здесь, чтобы не допускать cross-section drift.
+            value = container.get(field_name)
+            if value not in (None, "", []):
+                return value
             continue
         for alias in aliases:
             value = container.get(alias)
@@ -1506,6 +1526,46 @@ def process_brief_stage(
             "open_questions": open_questions,
         }
 
+    # Explicit confirmation must have priority over incidental candidate diffs.
+    # Otherwise stale/transient payload fragments can keep brief in a loop.
+    if confirmation_reply and normalize_text(existing_brief.get("status")) != "confirmed":
+        current_brief = dict(existing_brief) if existing_brief else dict(candidate_brief)
+        if not normalize_text(current_brief.get("version")):
+            current_brief["version"] = normalize_text(candidate_brief.get("version")) or "1.0"
+        current_brief["owner"] = normalize_text(current_brief.get("owner")) or candidate_brief["owner"]
+        current_brief["status"] = "confirmed"
+        current_brief["updated_at"] = now
+        conversation_turns = append_turn_if_missing(
+            conversation_turns,
+            actor="user",
+            turn_type="confirmation_reply",
+            raw_text=confirmation_reply["confirmation_text"],
+            extracted_topics=["brief_confirmation"],
+            now=now,
+        )
+        return {
+            "status": "confirmed",
+            "next_action": "start_concept_pack_handoff",
+            "next_topic": "handoff",
+            "next_question": "",
+            "requirement_brief": current_brief,
+            "brief_revisions": existing_revisions,
+            "brief_feedback_history": feedback_history,
+            "confirmation_snapshot": build_confirmation_snapshot(
+                current_brief,
+                existing_snapshot,
+                confirmation_history,
+                confirmation_reply,
+                now,
+            ),
+            "confirmation_history": confirmation_history,
+            "handoff_history": handoff_history,
+            "conversation_turns": conversation_turns,
+            "brief_markdown": render_requirement_brief_markdown(payload, current_brief, discovery_session, []),
+            "brief_template_path": str(BRIEF_TEMPLATE_PATH),
+            "open_questions": [],
+        }
+
     if changed_sections:
         candidate_brief["version"] = next_brief_version(normalize_text(existing_brief.get("version")))
         candidate_brief["status"] = "reopened" if reopening_from_confirmed else "awaiting_confirmation"
@@ -1580,40 +1640,6 @@ def process_brief_stage(
 
     current_brief = dict(existing_brief)
     current_brief["owner"] = normalize_text(current_brief.get("owner")) or candidate_brief["owner"]
-
-    if confirmation_reply and normalize_text(current_brief.get("status")) != "confirmed":
-        current_brief["status"] = "confirmed"
-        current_brief["updated_at"] = now
-        conversation_turns = append_turn_if_missing(
-            conversation_turns,
-            actor="user",
-            turn_type="confirmation_reply",
-            raw_text=confirmation_reply["confirmation_text"],
-            extracted_topics=["brief_confirmation"],
-            now=now,
-        )
-        return {
-            "status": "confirmed",
-            "next_action": "start_concept_pack_handoff",
-            "next_topic": "handoff",
-            "next_question": "",
-            "requirement_brief": current_brief,
-            "brief_revisions": existing_revisions,
-            "brief_feedback_history": feedback_history,
-            "confirmation_snapshot": build_confirmation_snapshot(
-                current_brief,
-                existing_snapshot,
-                confirmation_history,
-                confirmation_reply,
-                now,
-            ),
-            "confirmation_history": confirmation_history,
-            "handoff_history": handoff_history,
-            "conversation_turns": conversation_turns,
-            "brief_markdown": render_requirement_brief_markdown(payload, current_brief, discovery_session, []),
-            "brief_template_path": str(BRIEF_TEMPLATE_PATH),
-            "open_questions": [],
-        }
 
     brief_status = normalize_text(current_brief.get("status")) or "awaiting_confirmation"
     if brief_status == "draft":

@@ -5,7 +5,7 @@
   const MAX_LOCAL_UPLOAD_FILES = 4;
   const MAX_LOCAL_UPLOAD_BYTES = 512 * 1024;
   const IS_AUTOMATION = Boolean(window.navigator?.webdriver) || /playwright/i.test(window.navigator?.userAgent || "");
-  const MIN_PENDING_VISUAL_MS = IS_AUTOMATION ? 80 : 420;
+  const MIN_PENDING_VISUAL_MS = IS_AUTOMATION ? 120 : 650;
   const TURN_TIMEOUT_MS = IS_AUTOMATION ? 20_000 : 90_000;
   const ARTIFACT_FETCH_TIMEOUT_MS = IS_AUTOMATION ? 10_000 : 40_000;
   const HANDOFF_POLL_MAX_ATTEMPTS = IS_AUTOMATION ? 4 : 8;
@@ -17,6 +17,7 @@
   const PANEL_WIDTH_DEFAULT = 460;
   const PANEL_WIDTH_MIN = 320;
   const PANEL_WIDTH_MAX = 720;
+  const SCROLL_BOTTOM_THRESHOLD = 80;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
   const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
     "txt",
@@ -147,8 +148,8 @@
     appFrame: document.querySelector(".app-frame"),
     sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     sidebarToggle: document.querySelector('[data-role="sidebar-toggle"]'),
-    sidebarReopen: document.querySelector('[data-role="sidebar-reopen"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
+    workspaceTopbar: document.querySelector(".workspace-topbar"),
     panelResizer: document.querySelector('[data-role="panel-resizer"]'),
     gateNote: document.querySelector('[data-role="gate-note"]'),
     accessForm: document.querySelector('[data-role="access-form"]'),
@@ -159,6 +160,7 @@
     projectTitle: document.querySelector('[data-role="project-title"]'),
     projectSubtitle: document.querySelector('[data-role="project-subtitle"]'),
     projectMenu: document.querySelector('[data-role="project-menu"]'),
+    agentStatus: document.querySelector('[data-role="agent-status"]'),
     homePanel: document.querySelector('[data-role="home-panel"]'),
     homeExamples: document.querySelector('[data-role="home-examples"]'),
     sidePanel: document.querySelector('[data-role="side-panel"]'),
@@ -196,6 +198,7 @@
     threadPanel: document.querySelector('[data-role="thread-panel"]'),
     chatLog: document.querySelector('[data-role="chat-log"]'),
     composerForm: document.querySelector('[data-role="composer-form"]'),
+    composerLead: document.querySelector('[data-role="composer-lead"]'),
     composerLeadLabel: document.querySelector('[data-role="composer-lead-label"]'),
     composerMode: document.querySelector('[data-role="composer-mode"]'),
     composerThinking: document.querySelector('[data-role="composer-thinking"]'),
@@ -236,9 +239,10 @@
     gateNote: "Токен запрашивается только один раз для этой браузерной сессии.",
     gateNoteTone: "neutral",
     awaitingResponse: false,
+    forceScrollToBottom: false,
     activeAbortController: null,
     activeRequest: null,
-    composerNotice: { text: "", tone: "info" },
+    composerNotice: { text: "", tone: "info", projectId: "" },
     accessProbePending: false,
     projectActions: {
       open: false,
@@ -367,15 +371,32 @@
       || type.includes("rtf");
   }
 
-  function showComposerNotice(text, tone = "info") {
+  function showComposerNotice(text, tone = "info", projectId = "") {
+    const activeProjectId = normalizeText(projectId) || normalizeText(getActiveProject()?.id);
     state.composerNotice = {
       text: normalizeText(text),
       tone: normalizeText(tone, "info"),
+      projectId: activeProjectId,
     };
   }
 
   function clearComposerNotice() {
-    state.composerNotice = { text: "", tone: "info" };
+    state.composerNotice = { text: "", tone: "info", projectId: "" };
+  }
+
+  function composerNoticeForProject(project) {
+    const text = normalizeText(state.composerNotice?.text);
+    const noticeProjectId = normalizeText(state.composerNotice?.projectId);
+    if (!text) {
+      return { text: "", tone: "info" };
+    }
+    if (project && noticeProjectId && noticeProjectId !== project.id) {
+      return { text: "", tone: "info" };
+    }
+    return {
+      text,
+      tone: normalizeText(state.composerNotice?.tone, "info"),
+    };
   }
 
   function hasFilePayload(dataTransfer) {
@@ -430,7 +451,7 @@
       warnings.push(`Не удалось прочитать: ${failedUploads.slice(0, 3).join(", ")}${failedUploads.length > 3 ? "..." : ""}`);
     }
     if (warnings.length) {
-      showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info");
+      showComposerNotice(warnings.join(" "), unsupported.length ? "warning" : "info", project.id);
     } else if (loadedUploads.length) {
       clearComposerNotice();
     }
@@ -502,6 +523,7 @@
     state.sidebarWidth = nextWidth;
     if (dom.root) {
       dom.root.style.setProperty("--sidebar-width", `${nextWidth}px`);
+      dom.root.style.setProperty("--sidebar-width-effective", `${state.sidebarVisible === false ? 0 : nextWidth}px`);
     }
     if (dom.sidebarResizer) {
       dom.sidebarResizer.setAttribute("aria-valuemin", String(SIDEBAR_WIDTH_MIN));
@@ -516,6 +538,9 @@
     if (dom.appFrame) {
       dom.appFrame.dataset.sidebarOpen = visible ? "true" : "false";
     }
+    if (dom.root) {
+      dom.root.style.setProperty("--sidebar-width-effective", `${visible ? state.sidebarWidth : 0}px`);
+    }
     if (dom.sidebarResizer) {
       const mobileLayout = isMobileLayout();
       const interactive = visible && !mobileLayout;
@@ -524,14 +549,12 @@
       dom.sidebarResizer.tabIndex = interactive ? 0 : -1;
     }
     if (dom.sidebarToggle) {
-      dom.sidebarToggle.hidden = !visible;
+      dom.sidebarToggle.hidden = false;
+      dom.sidebarToggle.dataset.state = visible ? "active" : "inactive";
       dom.sidebarToggle.setAttribute("aria-pressed", visible ? "true" : "false");
-      dom.sidebarToggle.setAttribute("aria-label", "Скрыть список проектов");
-    }
-    if (dom.sidebarReopen) {
-      dom.sidebarReopen.hidden = visible;
-      dom.sidebarReopen.setAttribute("aria-label", "Показать список проектов");
-      dom.sidebarReopen.setAttribute("aria-pressed", visible ? "false" : "true");
+      dom.sidebarToggle.setAttribute("aria-expanded", visible ? "true" : "false");
+      dom.sidebarToggle.setAttribute("aria-label", visible ? "Свернуть левую панель" : "Развернуть левую панель");
+      dom.sidebarToggle.title = visible ? "Свернуть левую панель" : "Развернуть левую панель";
     }
   }
 
@@ -767,11 +790,9 @@
     dom.projectMenu.disabled = isBusy;
     dom.newProject.disabled = isBusy;
     if (dom.sidebarToggle) {
-      dom.sidebarToggle.disabled = isBusy;
+      dom.sidebarToggle.disabled = !state.accessToken;
     }
-    if (dom.sidebarReopen) {
-      dom.sidebarReopen.disabled = isBusy;
-    }
+    renderAgentStatus();
   }
 
   function focusComposerSoon() {
@@ -847,6 +868,11 @@
     return ["playground_ready", "downloads_ready", "download_ready"].includes(normalizeText(status));
   }
 
+  function isPostBriefStatus(status) {
+    const normalized = normalizeText(status);
+    return isDownloadsReadyStatus(normalized) || normalized === "confirmed" || normalized === "handoff_running";
+  }
+
   function isLikelyBriefConfirmationText(text) {
     const normalized = normalizeText(text).toLowerCase();
     if (!normalized) {
@@ -868,6 +894,30 @@
       "ок подтверждаю",
     ];
     return confirmationMarkers.some((marker) => normalized.includes(marker));
+  }
+
+  function isShortBriefConfirmationAck(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    const negationMarkers = ["не подтверж", "не готов подтверж", "not confirm", "don't confirm"];
+    if (negationMarkers.some((marker) => normalized.includes(marker))) {
+      return false;
+    }
+    const compact = normalized
+      .replace(/[.,!?;:()[\]{}"'`«»]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!compact) {
+      return false;
+    }
+    const shortAckMarkers = new Set(["да", "ок", "ok", "okay", "yes", "yep", "ага", "угу", "все ок", "всё ок"]);
+    return shortAckMarkers.has(compact);
+  }
+
+  function hasBriefConfirmationIntent(text) {
+    return isLikelyBriefConfirmationText(text) || isShortBriefConfirmationAck(text);
   }
 
   function isLikelyBriefCorrectionText(text) {
@@ -894,7 +944,7 @@
     if (!normalized) {
       return false;
     }
-    if (isLikelyBriefConfirmationText(normalized)) {
+    if (hasBriefConfirmationIntent(normalized)) {
       return false;
     }
     if (isLikelyBriefCorrectionText(normalized)) {
@@ -935,12 +985,18 @@
     const status = currentStatus(project);
     const response = currentResponse(project) || {};
     const hasDownloadArtifacts = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
-    const postBriefMode = hasDownloadArtifacts || isDownloadsReadyStatus(status) || status === "confirmed";
+    const postBriefMode = hasDownloadArtifacts || isPostBriefStatus(status);
     const simulationRequest = isLikelyProductionSimulationRequestText(normalizedText);
-    const confirmationRequest = isLikelyBriefConfirmationText(normalizedText);
+    const confirmationRequest = hasBriefConfirmationIntent(normalizedText);
     const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
     const explicitRefresh = isLikelyStatusRefreshText(normalizedText);
     const freeformFeedback = Boolean(normalizedText) && !simulationRequest && !confirmationRequest && !explicitRefresh;
+    const reviewStage =
+      ["awaiting_confirmation", "reopened"].includes(status)
+      || (
+        normalizeText(response?.ui_projection?.side_panel_mode) === "brief_review"
+        && !postBriefMode
+      );
     const knownComposerActions = new Set([
       "submit_turn",
       "request_status",
@@ -949,6 +1005,25 @@
       "confirm_brief",
       "reopen_brief",
     ]);
+    if (reviewStage) {
+      if (confirmationRequest) {
+        return "confirm_brief";
+      }
+      if (explicitRefresh) {
+        return "request_status";
+      }
+      if (correctionRequest || freeformFeedback) {
+        return "request_brief_correction";
+      }
+    }
+
+    if (
+      confirmationRequest
+      && ["confirm_brief", "request_brief_correction", "request_brief_review"].includes(requestedAction)
+      && !postBriefMode
+    ) {
+      return "confirm_brief";
+    }
 
     if (simulationRequest && postBriefMode) {
       return "request_status";
@@ -969,7 +1044,7 @@
         }
         return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
       }
-      if (isDownloadsReadyStatus(status) || status === "confirmed") {
+      if (isPostBriefStatus(status)) {
         return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
@@ -978,12 +1053,12 @@
       if (["awaiting_confirmation", "reopened"].includes(status)) {
         return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
       }
-      if (isDownloadsReadyStatus(status) || status === "confirmed") {
+      if (isPostBriefStatus(status)) {
         return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
     }
-    if (requestedAction === "submit_turn" && (isDownloadsReadyStatus(status) || status === "confirmed")) {
+    if (requestedAction === "submit_turn" && isPostBriefStatus(status)) {
       return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
     }
     return requestedAction;
@@ -1051,7 +1126,7 @@
     if (status === "handoff_running") {
       return "Фабрика готовит материалы. Можно дождаться обновления статуса или отправить правку brief.";
     }
-    if (isDownloadsReadyStatus(status) || status === "confirmed") {
+    if (isPostBriefStatus(status)) {
       return "Опиши правку brief или запроси имитацию запуска.";
     }
     if (topic === "input_examples") {
@@ -1101,7 +1176,7 @@
     if (status === "awaiting_confirmation") {
       return "Brief собран. Открой правую панель, чтобы проверить summary, внести правки или подтвердить версию.";
     }
-    if (isDownloadsReadyStatus(status) || status === "confirmed") {
+    if (isPostBriefStatus(status)) {
       return "Материалы готовы. Открой правую панель, чтобы скачать артефакты или вернуть проект на доработку.";
     }
     return "Продолжай диалог с агентом-архитектором и при необходимости прикладывай файлы с примерами.";
@@ -1138,7 +1213,7 @@
     if (["awaiting_confirmation", "reopened"].includes(status)) {
       return "attention";
     }
-    if (isDownloadsReadyStatus(status) || status === "confirmed") {
+    if (isPostBriefStatus(status)) {
       return "success";
     }
     return "neutral";
@@ -1272,6 +1347,15 @@
     dom.projectTitle.title = title;
     dom.projectSubtitle.textContent = projectSubtitle(project);
     renderSidePanelToggle(project);
+    renderAgentStatus();
+  }
+
+  function renderAgentStatus() {
+    if (!dom.agentStatus) {
+      return;
+    }
+    dom.agentStatus.hidden = !state.awaitingResponse;
+    dom.agentStatus.dataset.state = state.awaitingResponse ? "thinking" : "idle";
   }
 
   function isPanelOnlyAction(action) {
@@ -1431,23 +1515,22 @@
     let objectUrl = "";
     try {
       const href = artifactDownloadUrl(project, artifact);
-      if (href) {
-        const response = await fetchWithTimeout(
-          href,
-          {
-            headers: { Accept: "*/*" },
-            cache: "no-store",
-          },
-          ARTIFACT_FETCH_TIMEOUT_MS,
-        );
-        if (!response.ok) {
-          throw new Error(`download_http_${response.status}`);
-        }
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-      } else {
-        objectUrl = createMockDownload(project, artifact);
+      if (!href) {
+        throw new Error("download_unavailable");
       }
+      const response = await fetchWithTimeout(
+        href,
+        {
+          headers: { Accept: "*/*" },
+          cache: "no-store",
+        },
+        ARTIFACT_FETCH_TIMEOUT_MS,
+      );
+      if (!response.ok) {
+        throw new Error(`download_http_${response.status}`);
+      }
+      const blob = await response.blob();
+      objectUrl = URL.createObjectURL(blob);
 
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -1455,11 +1538,12 @@
       document.body.appendChild(link);
       link.click();
       link.remove();
-      showComposerNotice("Файл подготовлен к скачиванию.", "info");
+      showComposerNotice("Файл подготовлен к скачиванию.", "info", project?.id);
     } catch (error) {
       showComposerNotice(
         `Не удалось скачать артефакт: ${normalizeText(error?.message, "unknown_error")}.`,
         "error",
+        project?.id,
       );
     } finally {
       if (objectUrl) {
@@ -1615,18 +1699,19 @@
     attachments.hidden = (message.attachments || []).length === 0;
 
     actions.innerHTML = "";
-    if (bodyText) {
+    if (bodyText && message.role === "agent") {
       const copy = document.createElement("button");
       copy.type = "button";
       copy.className = "message__action";
-      copy.textContent = "Copy";
+      copy.textContent = "⧉";
+      copy.title = "Копировать";
       copy.setAttribute("aria-label", "Скопировать сообщение");
       copy.addEventListener("click", async () => {
         try {
           await window.navigator.clipboard.writeText(bodyText);
-          showComposerNotice("Сообщение скопировано.", "info");
+          showComposerNotice("Сообщение скопировано.", "info", getActiveProject()?.id);
         } catch (_error) {
-          showComposerNotice("Не удалось скопировать сообщение.", "warning");
+          showComposerNotice("Не удалось скопировать сообщение.", "warning", getActiveProject()?.id);
         }
         renderComposer(getActiveProject());
       });
@@ -1734,18 +1819,78 @@
     }
   }
 
-  function renderTimeline(project) {
+  function isChatNearBottom() {
+    if (!dom.chatLog) {
+      return true;
+    }
+    const distance = dom.chatLog.scrollHeight - dom.chatLog.scrollTop - dom.chatLog.clientHeight;
+    return distance <= SCROLL_BOTTOM_THRESHOLD;
+  }
+
+  function scrollChatToBottom() {
+    if (!dom.chatLog) {
+      return;
+    }
+    const maxTop = Math.max(0, dom.chatLog.scrollHeight - dom.chatLog.clientHeight);
+    dom.chatLog.scrollTop = maxTop;
+  }
+
+  function scrollChatToLatestAgentMessage() {
+    if (!dom.chatLog) {
+      return false;
+    }
+    const candidateQuestionNodes = dom.chatLog.querySelectorAll(".message--agent .message__question-line");
+    const questionTarget = candidateQuestionNodes.length ? candidateQuestionNodes[candidateQuestionNodes.length - 1] : null;
+    const agentNodes = dom.chatLog.querySelectorAll(".message--agent");
+    const target = questionTarget?.closest(".message--agent") || agentNodes[agentNodes.length - 1];
+    if (!target) {
+      return false;
+    }
+    const composerHeight = dom.composerForm?.offsetHeight || 0;
+    const topbarHeight = dom.workspaceTopbar?.offsetHeight || 0;
+    const topPadding = Math.max(8, topbarHeight ? Math.round(topbarHeight * 0.18) : 8);
+    const visibleTop = dom.chatLog.scrollTop;
+    const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - composerHeight - 12;
+    const targetTop = target.offsetTop;
+    const targetBottom = targetTop + target.offsetHeight;
+    const shouldAdjust = targetBottom > visibleBottom || targetTop < visibleTop;
+    if (shouldAdjust) {
+      const maxTop = Math.max(0, dom.chatLog.scrollHeight - dom.chatLog.clientHeight);
+      const nextTop = Math.min(Math.max(0, targetTop - topPadding), maxTop);
+      dom.chatLog.scrollTop = nextTop;
+    }
+    return true;
+  }
+
+  function scheduleScrollChatToBottom() {
+    window.requestAnimationFrame(() => {
+      if (!scrollChatToLatestAgentMessage()) {
+        scrollChatToBottom();
+      }
+      window.requestAnimationFrame(() => {
+        if (!scrollChatToLatestAgentMessage()) {
+          scrollChatToBottom();
+        }
+      });
+    });
+  }
+
+  function renderTimeline(project, options = {}) {
+    const forceBottom = Boolean(options.forceBottom);
+    const keepBottom = forceBottom || state.forceScrollToBottom || isChatNearBottom();
     dom.chatLog.innerHTML = "";
     const items = project?.timeline?.length ? project.timeline : [];
     items.forEach((message) => {
       dom.chatLog.appendChild(createMessageNode(message));
     });
-    dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+    if (keepBottom) {
+      scheduleScrollChatToBottom();
+    }
   }
 
   function sidePanelMode(project) {
     const status = currentStatus(project);
-    const canUseArtifactOverride = isDownloadsReadyStatus(status) || status === "confirmed";
+    const canUseArtifactOverride = isPostBriefStatus(status);
     const localOverride = normalizeText(project?.panelModeOverride);
     if (canUseArtifactOverride && localOverride === "preview" && selectedPreviewArtifact(project)) {
       return "preview";
@@ -1800,14 +1945,23 @@
 
   function renderSidePanelToggle(project) {
     const mode = sidePanelMode(project);
-    dom.sidePanelToggle.hidden = mode === "hidden";
-    if (mode === "brief_review") {
-      dom.sidePanelToggle.textContent = "Brief";
-    } else if (["downloads", "preview"].includes(mode)) {
-      dom.sidePanelToggle.textContent = "Результаты";
-    } else {
-      dom.sidePanelToggle.textContent = "Детали";
+    const canOpenPanel = mode !== "hidden";
+    const isOpen = canOpenPanel && Boolean(project?.sidePanelOpen);
+    dom.sidePanelToggle.hidden = false;
+    dom.sidePanelToggle.disabled = !canOpenPanel;
+    dom.sidePanelToggle.dataset.state = isOpen ? "active" : "inactive";
+    dom.sidePanelToggle.setAttribute("aria-pressed", isOpen ? "true" : "false");
+    dom.sidePanelToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (!canOpenPanel) {
+      dom.sidePanelToggle.setAttribute("aria-label", "Правая панель пока недоступна");
+      dom.sidePanelToggle.title = "Правая панель недоступна";
+      return;
     }
+    dom.sidePanelToggle.setAttribute(
+      "aria-label",
+      isOpen ? "Свернуть правую панель" : "Развернуть правую панель",
+    );
+    dom.sidePanelToggle.title = isOpen ? "Свернуть правую панель" : "Развернуть правую панель";
   }
 
   function mockArtifactMarkdown(project, artifact) {
@@ -1977,7 +2131,7 @@
 
   async function fetchArtifactPreviewHtml(project, artifact) {
     if (state.connectionMode !== "live") {
-      return mockPreviewDocument(project, artifact);
+      throw new Error("preview_unavailable_offline");
     }
 
     const previewUrl = artifactPreviewUrl(project, artifact);
@@ -2014,7 +2168,7 @@
       }
     }
 
-    throw new Error("Preview недоступен. Backend endpoint /api/preview/... ещё не отвечает.");
+    throw new Error("Preview недоступен. Endpoint /api/preview или /api/download не вернул содержимое.");
   }
 
   async function loadArtifactPreview(project, artifact) {
@@ -2170,16 +2324,18 @@
   function renderSidePanel(project) {
     const mode = sidePanelMode(project);
     const open = Boolean(project?.sidePanelOpen) && mode !== "hidden";
+    const mobileLayout = isMobileLayout();
     if (open && state.panelWidth < 420) {
       updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
     }
-    const fullscreen = open && Boolean(project?.sidePanelFullscreen);
+    const fullscreen = open && (mobileLayout || Boolean(project?.sidePanelFullscreen));
     dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
     dom.workspaceShell.dataset.panelFullscreen = fullscreen ? "true" : "false";
     dom.sidePanel.hidden = !open;
+    dom.sidePanel.setAttribute("aria-hidden", open ? "false" : "true");
     dom.sidePanel.dataset.mode = mode;
     if (dom.panelResizer) {
-      dom.panelResizer.hidden = !(open && !isMobileLayout());
+      dom.panelResizer.hidden = !(open && !mobileLayout);
     }
     if (!open) {
       return;
@@ -2210,7 +2366,12 @@
     const isBriefReview = mode === "brief_review";
     if (dom.briefEditToggle) {
       dom.briefEditToggle.hidden = !isBriefReview;
-      dom.briefEditToggle.textContent = project?.briefEditOpen ? "Скрыть правку" : "Исправить";
+      dom.briefEditToggle.dataset.state = project?.briefEditOpen ? "active" : "inactive";
+      dom.briefEditToggle.setAttribute(
+        "aria-label",
+        project?.briefEditOpen ? "Скрыть форму правки brief" : "Открыть форму правки brief",
+      );
+      dom.briefEditToggle.title = project?.briefEditOpen ? "Скрыть правку" : "Исправить brief";
     }
     if (dom.briefEditSection) {
       dom.briefEditSection.hidden = !isBriefReview || !project?.briefEditOpen;
@@ -2226,12 +2387,15 @@
       dom.briefConfirm.disabled = state.awaitingResponse;
     }
     if (dom.sidePanelFullscreen) {
-      dom.sidePanelFullscreen.hidden = false;
-      dom.sidePanelFullscreen.textContent = fullscreen ? "Свернуть" : "Развернуть";
+      dom.sidePanelFullscreen.hidden = mobileLayout;
+      dom.sidePanelFullscreen.dataset.state = fullscreen ? "active" : "inactive";
+      dom.sidePanelFullscreen.setAttribute("aria-pressed", fullscreen ? "true" : "false");
+      dom.sidePanelFullscreen.setAttribute("aria-expanded", fullscreen ? "true" : "false");
       dom.sidePanelFullscreen.setAttribute(
         "aria-label",
         fullscreen ? "Свернуть правую панель" : "Развернуть правую панель на весь экран",
       );
+      dom.sidePanelFullscreen.title = fullscreen ? "Свернуть правую панель" : "Развернуть на весь экран";
     }
 
     dom.panelCardList.innerHTML = "";
@@ -2305,23 +2469,29 @@
   }
 
   function renderComposer(project) {
-    dom.composerLeadLabel.textContent = leadLabelFor(project);
-    dom.composerMode.textContent = modeTextFor(project);
+    dom.composerLeadLabel.textContent = "Статус";
+    dom.composerMode.textContent = state.awaitingResponse
+      ? "Агент-архитектор формирует следующий шаг"
+      : "";
+    if (dom.composerLead) {
+      dom.composerLead.hidden = !state.awaitingResponse;
+    }
     if (dom.composerThinking) {
       dom.composerThinking.hidden = !state.awaitingResponse;
     }
     dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
-      dom.composerHelperExample.textContent = helperExampleFor(project);
-      dom.composerHelperExample.hidden = !dom.composerHelperExample.textContent;
+      dom.composerHelperExample.textContent = "";
+      dom.composerHelperExample.hidden = true;
     }
     dom.composerInput.placeholder = placeholderFor(project);
-    dom.composerSubmit.textContent = state.awaitingResponse ? "■" : "↑";
+    dom.composerSubmit.textContent = state.awaitingResponse ? "■" : "↗";
     dom.composerSubmit.dataset.mode = state.awaitingResponse ? "stop" : "send";
     dom.composerSubmit.setAttribute("aria-label", state.awaitingResponse ? "Остановить ответ" : "Отправить сообщение");
-    dom.composerNotice.textContent = normalizeText(state.composerNotice?.text);
-    dom.composerNotice.hidden = !dom.composerNotice.textContent;
-    dom.composerNotice.dataset.tone = normalizeText(state.composerNotice?.tone, "info");
+    const notice = composerNoticeForProject(project);
+    dom.composerNotice.textContent = notice.text;
+    dom.composerNotice.hidden = !notice.text;
+    dom.composerNotice.dataset.tone = notice.tone;
     dom.composerInput.value = normalizeText(project?.draftText);
     resizeComposerInput();
   }
@@ -2672,6 +2842,7 @@
     if (reusable && options.forceCreate !== true) {
       state.activeProjectId = reusable.id;
       reusable.updatedAt = nowIso();
+      clearComposerNotice();
       if (options.activate !== false) {
         renderAll();
       }
@@ -2681,6 +2852,7 @@
     const project = createProject();
     state.projects.unshift(project);
     state.activeProjectId = project.id;
+    clearComposerNotice();
     if (options.activate !== false) {
       renderAll();
     }
@@ -2710,6 +2882,7 @@
       return;
     }
     state.activeProjectId = projectId;
+    clearComposerNotice();
     persist();
     renderAll();
     const active = getActiveProject();
@@ -2860,8 +3033,72 @@
     }));
   }
 
+  function detectExplicitBriefFeedbackTarget(text) {
+    const lowered = normalizeText(text).toLowerCase();
+    if (!lowered) {
+      return "";
+    }
+    const hasExplicitSectionReference =
+      /(?:раздел|секци(?:я|ю)|section)/.test(lowered)
+      || /(?:input\s*examples?|expected\s*outputs?|target\s*users?|current\s*process|constraints?|success\s*metrics?|входн(?:ые)?\s+(?:примеры|данн(?:ые)?)|ожидаем(?:ый|ые)?\s+(?:выход(?:ы)?|результат(?:ы)?)|целев(?:ой|ые)\s+пользовател(?:ь|и)|выгодоприобретател(?:ь|и)|текущ(?:ий|ая)\s+процесс|ограничени(?:е|я)|метрик(?:а|и)\s+успеха?)\s*[:\-–—]/.test(lowered);
+    if (!hasExplicitSectionReference) {
+      return "";
+    }
+
+    const mapping = [
+      {
+        target: "input_examples",
+        patterns: [
+          /(?:input\s*examples?|входн(?:ые)?\s+(?:примеры|данн(?:ые)?))/,
+        ],
+      },
+      {
+        target: "expected_outputs",
+        patterns: [
+          /(?:expected\s*outputs?|ожидаем(?:ый|ые)?\s+(?:выход(?:ы)?|результат(?:ы)?))/,
+        ],
+      },
+      {
+        target: "target_users",
+        patterns: [
+          /(?:target\s*users?|целев(?:ой|ые)\s+пользовател(?:ь|и)|выгодоприобретател(?:ь|и))/,
+        ],
+      },
+      {
+        target: "current_process",
+        patterns: [
+          /(?:current\s*process|workflow|текущ(?:ий|ая)\s+процесс)/,
+        ],
+      },
+      {
+        target: "constraints",
+        patterns: [
+          /(?:constraints?|ограничени(?:е|я)|compliance|policy)/,
+        ],
+      },
+      {
+        target: "success_metrics",
+        patterns: [
+          /(?:success\s*metrics?|kpi|sla|метрик(?:а|и)\s+успеха?)/,
+        ],
+      },
+    ];
+
+    for (const candidate of mapping) {
+      if (candidate.patterns.some((pattern) => pattern.test(lowered))) {
+        return candidate.target;
+      }
+    }
+    return "";
+  }
+
   function buildTurnPayload(project, action, userText, queuedUploads = []) {
     const last = currentResponse(project) || {};
+    const normalizedUserText = normalizeText(userText);
+    const shouldSendBriefFeedbackTarget = ["request_brief_correction", "reopen_brief"].includes(action);
+    const briefFeedbackTarget = shouldSendBriefFeedbackTarget
+      ? detectExplicitBriefFeedbackTarget(normalizedUserText)
+      : "";
     return {
       working_language: "ru",
       project_key: last.browser_project_pointer?.project_key || "",
@@ -2893,11 +3130,12 @@
       web_conversation_envelope: {
         request_id: nextRequestId(project, action),
         ui_action: action,
-        user_text: normalizeText(userText),
+        user_text: normalizedUserText,
         transport_mode: "browser_shell",
         linked_discovery_session_id: last.web_conversation_envelope?.linked_discovery_session_id || "",
         linked_brief_id: last.web_conversation_envelope?.linked_brief_id || "",
       },
+      brief_feedback_target: briefFeedbackTarget || undefined,
       discovery_runtime_state: last.discovery_runtime_state || {},
       uploaded_files: queuedUploads.length ? serializeUploadsForTransport(queuedUploads) : undefined,
     };
@@ -3316,7 +3554,7 @@
         active.lastAutoFollowupSource = "";
         persist();
         if (state.activeProjectId === active.id) {
-          showComposerNotice("Фабрика ещё формирует материалы. Нажми «Обновить», чтобы проверить статус позже.", "info");
+          showComposerNotice("Фабрика ещё формирует материалы. Нажми «Обновить», чтобы проверить статус позже.", "info", active.id);
           renderComposer(active);
         }
         return;
@@ -3404,13 +3642,23 @@
     }
     project.lastPanelMode = panelMode;
     project.lastResumeFingerprint = normalizeText(response.resume_context?.resume_fingerprint, project.lastResumeFingerprint);
+    const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
+    const sourceRequestId = normalizeText(response.web_conversation_envelope?.request_id);
+    const sourceUserText = normalizeText(response.web_conversation_envelope?.user_text);
+    const submitTurnConfirmation = sourceAction === "submit_turn" && isLikelyBriefConfirmationText(sourceUserText);
+    const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
+    const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
+    if (downloadsReady && (sourceAction === "confirm_brief" || submitTurnConfirmation || syncReason === "handoff_poll")) {
+      const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
+      project.sidePanelOpen = true;
+      project.sidePanelFullscreen = false;
+      project.panelModeOverride = "preview";
+      project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
+    }
 
     persist();
     renderAll();
 
-    const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
-    const sourceRequestId = normalizeText(response.web_conversation_envelope?.request_id);
-    const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     if (hasDownloads || isDownloadsReadyStatus(currentStatus(project))) {
       stopHandoffPolling(project);
       persist();
@@ -3449,6 +3697,7 @@
     const abortController = new AbortController();
     let abortedByUser = false;
     let timedOut = false;
+    let backendError = null;
     const pendingStartedAt = Date.now();
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
@@ -3469,10 +3718,11 @@
         actions: [],
       });
       project.updatedAt = nowIso();
-      renderTimeline(project);
+      renderTimeline(project, { forceBottom: true });
     }
 
     clearComposerNotice();
+    state.forceScrollToBottom = true;
     state.awaitingResponse = true;
     state.activeAbortController = abortController;
     state.activeRequest = {
@@ -3483,6 +3733,7 @@
       action,
     };
     setBusy(true);
+    renderAgentStatus();
     renderComposer(project);
     try {
       const response = await postTurn(payload, { signal: abortController.signal });
@@ -3493,7 +3744,7 @@
       } else if (error?.name === "AbortError") {
         abortedByUser = true;
       } else {
-        applyResponse(project, mockAdapterTurn(project, payload), "mock");
+        backendError = error;
       }
     } finally {
       if (!abortedByUser && !timedOut) {
@@ -3503,7 +3754,8 @@
           await new Promise((resolve) => window.setTimeout(resolve, remaining));
         }
       }
-      if (abortedByUser || timedOut) {
+      const restoreInput = abortedByUser || timedOut || Boolean(backendError);
+      if (restoreInput) {
         const activeProject = state.projects.find((item) => item.id === project.id);
         if (activeProject) {
           const last = activeProject.timeline[activeProject.timeline.length - 1];
@@ -3521,21 +3773,28 @@
         showComposerNotice(
           timedOut
             ? "Превышено время ожидания. Проверь соединение и отправь сообщение повторно."
-            : "Ответ остановлен. Можно отредактировать сообщение и отправить снова.",
-          timedOut ? "warning" : "info",
+            : abortedByUser
+              ? "Ответ остановлен. Можно отредактировать сообщение и отправить снова."
+              : `Не удалось получить ответ от backend: ${normalizeText(backendError?.message, "unknown_error")}.`,
+          timedOut ? "warning" : abortedByUser ? "info" : "error",
+          project.id,
         );
       } else if (queuedUploads.length) {
         project.pendingUploads = project.pendingUploads.filter(
           (item) => !queuedUploads.some((queued) => queued.upload_id === item.upload_id),
         );
       }
-      if (!abortedByUser && !timedOut) {
+      if (!restoreInput) {
         project.draftText = "";
       }
       state.awaitingResponse = false;
       state.activeAbortController = null;
       state.activeRequest = null;
       renderAll();
+      if (state.forceScrollToBottom) {
+        scheduleScrollChatToBottom();
+      }
+      state.forceScrollToBottom = false;
       setBusy(false);
       focusComposerSoon();
     }
@@ -3819,16 +4078,8 @@
 
     if (dom.sidebarToggle) {
       dom.sidebarToggle.addEventListener("click", () => {
-        state.sidebarVisible = false;
+        state.sidebarVisible = !state.sidebarVisible;
         closeProjectActionsMenu();
-        persist();
-        renderAll();
-      });
-    }
-
-    if (dom.sidebarReopen) {
-      dom.sidebarReopen.addEventListener("click", () => {
-        state.sidebarVisible = true;
         persist();
         renderAll();
       });
@@ -3929,7 +4180,7 @@
         }
         const correctionText = normalizeText(project.briefDraft || dom.briefEditInput?.value);
         if (!correctionText) {
-          showComposerNotice("Опиши правку brief, затем нажми «Применить правку».", "warning");
+          showComposerNotice("Опиши правку brief, затем нажми «Применить правку».", "warning", project.id);
           renderComposer(project);
           dom.briefEditInput?.focus();
           return;
@@ -3974,7 +4225,8 @@
         return;
       }
       project.draftText = dom.composerInput.value;
-      if (state.composerNotice.text) {
+      const visibleNotice = composerNoticeForProject(project);
+      if (visibleNotice.text) {
         clearComposerNotice();
         renderComposer(project);
       }
@@ -4021,9 +4273,6 @@
       dispatchTurn(effectiveAction, text, { queuedUploads });
       dom.composerInput.value = "";
       resizeComposerInput();
-      if (effectiveAction !== "submit_turn") {
-        setProjectAction(project, "submit_turn");
-      }
       focusComposerSoon();
     });
 
@@ -4031,6 +4280,15 @@
       dom.attachmentTrigger.addEventListener("click", () => {
         if (!state.accessToken || state.awaitingResponse) {
           return;
+        }
+        if (typeof dom.attachmentInput.showPicker === "function") {
+          try {
+            dom.attachmentInput.showPicker();
+            return;
+          } catch (_error) {
+            // Some Chromium builds expose showPicker but can reject it at runtime.
+            // Fall through to the standard click path.
+          }
         }
         dom.attachmentInput.click();
       });

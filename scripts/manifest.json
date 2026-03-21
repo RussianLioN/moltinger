@@ -347,6 +347,20 @@
         "rate-watch-stats"
       ]
     },
+    "check-frontend-bundle-sync.sh": {
+      "version": "1.0.0",
+      "description": "Verify that served ASC demo frontend bundle matches canonical web/agent-factory-demo assets",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "shasum"
+      ],
+      "provides": [
+        "check-frontend-bundle-sync"
+      ],
+      "ci": true
+    },
     "deploy.sh": {
       "version": "2.3.0",
       "description": "Target-aware deployment orchestration with health checks, rollback, and notifications",
