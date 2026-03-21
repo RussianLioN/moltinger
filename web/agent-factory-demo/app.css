@@ -429,9 +429,9 @@ code {
   width: 1px;
   border-radius: 999px;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.22);
   transition: background-color 0.14s ease, opacity 0.14s ease;
-  opacity: 0.42;
+  opacity: 0;
 }
 
 .app-frame__divider:hover::after,
@@ -657,8 +657,8 @@ code {
   width: 1px;
   border-radius: 999px;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.12);
-  opacity: 0.42;
+  background: rgba(255, 255, 255, 0.22);
+  opacity: 0;
   transition: background-color 0.14s ease, opacity 0.14s ease;
 }
 
@@ -680,7 +680,7 @@ code {
   height: 100%;
   min-height: 0;
   padding: var(--space-3) var(--space-4);
-  background: rgba(14, 17, 22, 0.94);
+  background: rgba(15, 19, 27, 0.96);
   overflow: hidden;
 }
 
@@ -704,8 +704,8 @@ code {
   top: 0;
   z-index: 48;
   padding: 6px 0 10px;
-  background: rgba(13, 16, 22, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 19, 27, 0.99);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: none;
 }
 
