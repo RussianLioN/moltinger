@@ -1,17 +1,17 @@
 :root {
-  --bg: #0d1015;
-  --bg-soft: #10141b;
-  --bg-elevated: #141922;
-  --bg-sidebar: #0f141b;
-  --surface: rgba(255, 255, 255, 0.016);
-  --surface-strong: rgba(255, 255, 255, 0.028);
-  --surface-hover: rgba(255, 255, 255, 0.046);
-  --border: rgba(255, 255, 255, 0.072);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --text: rgba(242, 245, 250, 0.95);
+  --bg: #0e1117;
+  --bg-soft: #11151d;
+  --bg-elevated: #151a23;
+  --bg-sidebar: #0f141c;
+  --surface: rgba(255, 255, 255, 0.02);
+  --surface-strong: rgba(255, 255, 255, 0.035);
+  --surface-hover: rgba(255, 255, 255, 0.055);
+  --border: rgba(255, 255, 255, 0.085);
+  --border-strong: rgba(255, 255, 255, 0.19);
+  --text: rgba(244, 247, 252, 0.96);
   --text-strong: #ffffff;
-  --muted: rgba(229, 234, 242, 0.58);
-  --muted-strong: rgba(236, 240, 247, 0.74);
+  --muted: rgba(214, 220, 230, 0.62);
+  --muted-strong: rgba(232, 238, 246, 0.76);
   --accent: #f3eee3;
   --accent-ink: #101218;
   --attention: #e7c46a;
@@ -53,7 +53,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: #0b0e13;
+  background: #0e1117;
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--text-md);
@@ -192,7 +192,7 @@ code {
 .panel-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background: rgba(18, 21, 27, 0.95);
+  background: rgba(17, 21, 29, 0.96);
   box-shadow: var(--shadow-md);
   backdrop-filter: none;
 }
