@@ -976,6 +976,53 @@
     return markers.some((marker) => normalized.includes(marker));
   }
 
+  function isLikelyActionableBriefFeedbackText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized || normalized.length < 12) {
+      return false;
+    }
+    if (hasBriefConfirmationIntent(normalized)) {
+      return false;
+    }
+    if (isLikelyStatusRefreshText(normalized)) {
+      return false;
+    }
+    if (isLikelyProductionSimulationRequestText(normalized)) {
+      return false;
+    }
+    const markers = [
+      "на выходе",
+      "ожидаем",
+      "ожидаемый",
+      "pdf",
+      "one-page",
+      "onepage",
+      "summary",
+      "рекомендац",
+      "входн",
+      "пример",
+      "файл",
+      "csv",
+      "xlsx",
+      "json",
+      "пользовател",
+      "выгодоприобрет",
+      "процесс",
+      "workflow",
+      "огранич",
+      "запрет",
+      "исключ",
+      "правил",
+      "метрик",
+      "kpi",
+      "sla",
+      "риск",
+      "scope",
+      "границ",
+    ];
+    return markers.some((marker) => normalized.includes(marker));
+  }
+
   function resolveComposerAction(project, text) {
     const requestedAction = normalizeText(project?.currentAction, "submit_turn");
     const normalizedText = normalizeText(text);
@@ -990,7 +1037,8 @@
     const confirmationRequest = hasBriefConfirmationIntent(normalizedText);
     const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
     const explicitRefresh = isLikelyStatusRefreshText(normalizedText);
-    const freeformFeedback = Boolean(normalizedText) && !simulationRequest && !confirmationRequest && !explicitRefresh;
+    const actionableFeedback = isLikelyActionableBriefFeedbackText(normalizedText);
+    const freeformFeedback = actionableFeedback;
     const reviewStage =
       ["awaiting_confirmation", "reopened"].includes(status)
       || (
