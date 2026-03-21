@@ -129,7 +129,7 @@ If the hotfix also requires publishing a tracked topology snapshot, do that as a
 git add ...
 git commit -m "fix(worktree): <short description>"
 git pull --rebase
-./scripts/bd-local.sh sync
+bd sync
 git push
 git status
 ```
