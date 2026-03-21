@@ -297,7 +297,12 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
     step.coveredTopics.add("input_examples");
   }
 
-  if (!step.lowSignal && activeTopic && activeTopicCovered) {
+  const isLastUncoveredTopic = activeTopic
+    && computeMissing(step.coveredTopics).length === 1
+    && !step.coveredTopics.has(activeTopic.id);
+  const forceLastTopicCoverage = !step.lowSignal && isLastUncoveredTopic && hasText;
+
+  if (!step.lowSignal && activeTopic && (activeTopicCovered || forceLastTopicCoverage)) {
     step.coveredTopics.add(activeTopic.id);
   }
 
@@ -365,12 +370,12 @@ function applyAntiLoopGuard(session, finalized) {
   const nextQuestion = normalizeText(finalized.nextQuestion).toLowerCase();
   const repeatedTopic = previousTopic && finalized.nextTopic === previousTopic;
   const repeatedQuestion = previousQuestion && nextQuestion === previousQuestion;
-  const reaskingInputExamples = finalized.nextTopic === "input_examples"
-    && finalized.coveredTopics.has("input_examples");
+  const reaskingCoveredTopic = finalized.nextTopic
+    && finalized.coveredTopics.has(finalized.nextTopic);
   const anonymizedLoopQuestion = /обезлич|аноним|реквизит|контрагент|example-case/i.test(nextQuestion)
     && finalized.coveredTopics.has("input_examples");
 
-  if (!repeatedTopic && !repeatedQuestion && !reaskingInputExamples && !anonymizedLoopQuestion) {
+  if (!repeatedTopic && !repeatedQuestion && !reaskingCoveredTopic && !anonymizedLoopQuestion) {
     return finalized;
   }
 

@@ -186,6 +186,37 @@ const BRIEF_CORRECTION_MARKERS = [
   "нужно изменить",
 ];
 
+const CONFIRM_BRIEF_MARKERS = [
+  "подтверждаю",
+  "подтвержд",
+  "confirm",
+  "всё верно",
+  "все верно",
+  "brief готов",
+  "brief ок",
+  "brief ok",
+  "бриф готов",
+  "принимаю brief",
+  "принимаю бриф",
+  "запускай",
+  "в производство",
+  "передавай в фабрику",
+];
+
+function isLikelyConfirmBriefText(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  const negation = ["не подтверж", "не готов", "не верно", "не принима"].some(
+    (marker) => normalized.includes(marker),
+  );
+  if (negation) {
+    return false;
+  }
+  return CONFIRM_BRIEF_MARKERS.some((marker) => normalized.includes(marker));
+}
+
 const PRODUCTION_SIMULATION_MARKERS = [
   "имитац",
   "симуляц",
@@ -455,7 +486,12 @@ export async function handleTurn(payload = {}) {
     const simulationIntent = hasUserText && isProductionSimulationRequest(userText);
     const downloadsMode = ["downloads_ready", "confirmed"].includes(normalizeText(session.stage));
 
-    if (action === "confirm_brief") {
+    const textConfirmBrief = hasUserText
+      && session.stage === "awaiting_confirmation"
+      && isLikelyConfirmBriefText(userText)
+      && !correctionIntent;
+
+    if (action === "confirm_brief" || textConfirmBrief) {
       await ensureBriefReady(session);
       session.stage = "confirmed";
       if (session.summaryState !== "running" && session.summaryState !== "ready") {

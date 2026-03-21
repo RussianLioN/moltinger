@@ -9,6 +9,8 @@ Add the primary web-first demo adapter for the factory business-analyst agent on
 
 2026-03-20 clarification pass adds strict non-simulated post-brief behavior: sticky topbar/chat correctness, deterministic brief correction semantics, resolved `input_examples` loop handling, auto-open right preview on confirm, rendered markdown preview, and OnePage generation quality gates that require source-derived facts instead of brief restatement.
 
+2026-03-21 execution note: active stabilization, clean-room parity, and migration-gate execution now follow the master plan [asc-demo-clean-room-parity-implementation-master-plan.md](../../docs/plans/asc-demo-clean-room-parity-implementation-master-plan.md).
+
 ## Technical Context
 
 **Language/Version**: Bash 5.x, Python 3.11+, HTML/CSS/vanilla JavaScript, JSON/TOML/Markdown contracts  

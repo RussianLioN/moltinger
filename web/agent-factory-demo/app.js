@@ -3662,7 +3662,18 @@
     const submitTurnConfirmation = sourceAction === "submit_turn" && isLikelyBriefConfirmationText(sourceUserText);
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
-    if (downloadsReady && (sourceAction === "confirm_brief" || submitTurnConfirmation || syncReason === "handoff_poll")) {
+    if (sourceAction === "confirm_brief" || submitTurnConfirmation) {
+      project.sidePanelOpen = true;
+      project.sidePanelFullscreen = false;
+      if (downloadsReady) {
+        const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
+        project.panelModeOverride = "preview";
+        project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
+      } else {
+        project.panelModeOverride = "downloads";
+        project.previewArtifactKind = "";
+      }
+    } else if (downloadsReady && syncReason === "handoff_poll") {
       const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;

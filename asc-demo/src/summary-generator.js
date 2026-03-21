@@ -153,19 +153,129 @@ function buildPresentation(session) {
   return lines.join("\n");
 }
 
-export async function generateArtifacts(session) {
-  const demoData = await loadDemoData();
+function hasUsableUploadData(session) {
+  const uploads = session.uploadedFiles || [];
+  return uploads.some((file) => normalizeText(file.excerpt).length > 20);
+}
+
+function buildSessionContext(session) {
+  const lines = [];
+  const brief = normalizeText(session.briefText);
+  if (brief) {
+    lines.push("## Confirmed Brief", "", brief);
+  }
+  const answers = session.topicAnswers || {};
+  const answeredTopics = Object.entries(answers).filter(([, v]) => normalizeText(v));
+  if (answeredTopics.length) {
+    lines.push("", "## Discovery Answers");
+    answeredTopics.forEach(([topic, answer]) => {
+      lines.push(`### ${topic}`, normalizeText(answer), "");
+    });
+  }
+  const uploads = (session.uploadedFiles || []).filter((f) => normalizeText(f.excerpt));
+  if (uploads.length) {
+    lines.push("", "## Uploaded Data Excerpts");
+    uploads.forEach((file) => {
+      lines.push(`### ${normalizeText(file.name, "file")}`, normalizeText(file.excerpt).slice(0, 800), "");
+    });
+  }
+  return lines.join("\n");
+}
+
+async function generateOnePageFromSession(session) {
+  const context = buildSessionContext(session);
+  if (!isLLMConfigured()) {
+    return fallbackOnePageFromSession(session);
+  }
+  const messages = [
+    {
+      role: "system",
+      content: [
+        "Ты агент-архитектор Moltis. Сформируй one-page summary на русском языке по результатам discovery.",
+        "Структура документа:",
+        "# One-page Summary",
+        "## Бизнес-проблема и цель автоматизации",
+        "## Целевые пользователи и текущий процесс",
+        "## Входные данные и ожидаемые результаты",
+        "## Ключевые правила, метрики и критерии успеха",
+        "",
+        "Используй ТОЛЬКО факты из предоставленного контекста. Не придумывай данных.",
+        "Если в контексте есть загруженные файлы (CSV/Excel), используй ключевые поля и структуру данных для обогащения разделов.",
+        "Деловой стиль, без JSON, без пояснений вне markdown.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: context,
+    },
+  ];
+  try {
+    const completion = await chatCompletion(messages, { temperature: 0.15, maxTokens: 2400 });
+    const normalized = normalizeText(completion);
+    return normalized || fallbackOnePageFromSession(session);
+  } catch (error) {
+    console.error("[asc-demo] summary.generateOnePageFromSession:", error?.message || error);
+    return fallbackOnePageFromSession(session);
+  }
+}
+
+function fallbackOnePageFromSession(session) {
+  const answers = session.topicAnswers || {};
+  const lines = [
+    "# One-page Summary",
+    "",
+    "## Бизнес-проблема и цель автоматизации",
+    normalizeText(answers.problem, "Данные отсутствуют."),
+    "",
+    "## Целевые пользователи и текущий процесс",
+    `Пользователи: ${normalizeText(answers.target_users, "Не указаны.")}`,
+    `Текущий процесс: ${normalizeText(answers.current_workflow, "Не описан.")}`,
+    "",
+    "## Входные данные и ожидаемые результаты",
+    `Входы: ${normalizeText(answers.input_examples, "Не указаны.")}`,
+    `Выходы: ${normalizeText(answers.expected_outputs, "Не указаны.")}`,
+    "",
+    "## Ключевые правила, метрики и критерии успеха",
+    `Правила: ${normalizeText(answers.branching_rules, "Не указаны.")}`,
+    `Метрики: ${normalizeText(answers.success_metrics, "Не указаны.")}`,
+  ];
+  const uploads = (session.uploadedFiles || []).filter((f) => normalizeText(f.excerpt));
+  if (uploads.length) {
+    lines.push("", "## Приложенные данные");
+    uploads.forEach((file) => {
+      lines.push(`- ${normalizeText(file.name, "файл")}: ${normalizeText(file.excerpt).slice(0, 300)}`);
+    });
+  }
+  return lines.join("\n");
+}
+
+async function generateOnePageWithDemoData(session) {
+  let demoData;
+  try {
+    demoData = await loadDemoData();
+  } catch (_error) {
+    return fallbackOnePageFromSession(session);
+  }
   const sections = await Promise.all(
     SECTION_CONFIG.map((config) => generateSection(config, demoData)),
   );
-  const onePageSummary = ["# One-page Summary", "", ...sections].join("\n\n");
+  return ["# One-page Summary", "", ...sections].join("\n\n");
+}
+
+export async function generateArtifacts(session) {
+  const useSessionData = normalizeText(session.briefText) || hasUsableUploadData(session);
+  const onePageSummary = useSessionData
+    ? await generateOnePageFromSession(session)
+    : await generateOnePageWithDemoData(session);
 
   return [
     {
       artifact_kind: "one_page_summary",
       download_name: "one-page-summary.md",
       download_status: "ready",
-      description: "One-page summary на основе 4 секций и данных клиента «Боку до манж».",
+      description: useSessionData
+        ? "One-page summary на основе discovery и brief пользователя."
+        : "One-page summary на основе демо-данных клиента «Боку до манж».",
       content: onePageSummary,
     },
     {

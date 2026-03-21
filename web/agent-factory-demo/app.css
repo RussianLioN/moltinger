@@ -1010,7 +1010,7 @@ code {
   margin: 0;
   color: rgba(255, 255, 255, 0.88);
   font-size: 0.95rem;
-  line-height: 1.42;
+  line-height: 1.55;
 }
 
 .message__body--split {
@@ -1032,9 +1032,12 @@ code {
 .message__question-line {
   display: block;
   color: var(--text-strong);
-  font-size: 0.93rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.55;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 2px;
 }
 
 .message--user {

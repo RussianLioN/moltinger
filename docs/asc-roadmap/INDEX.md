@@ -32,6 +32,10 @@
 **Общее время**: 5-10 минут  
 **Результат**: Вы поймете суть проекта и сможете выбрать подходящий путь для углубленного изучения.
 
+### Актуальный execution-plan по web demo
+
+- [Master Plan: ASC Demo Clean-Room Parity & Stabilization](../plans/asc-demo-clean-room-parity-implementation-master-plan.md) — главный план стабилизации `demo.ainetic.tech`, логики фабрики и UX/UI parity
+
 ---
 
 ## Карта документов

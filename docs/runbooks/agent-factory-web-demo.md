@@ -1,5 +1,7 @@
 # Agent Factory Web Demo Runbook
 
+**Master execution plan**: [asc-demo-clean-room-parity-implementation-master-plan.md](../plans/asc-demo-clean-room-parity-implementation-master-plan.md)
+
 ## Purpose
 
 Этот runbook описывает текущий рабочий slice `024-web-factory-demo-adapter`.

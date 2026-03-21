@@ -1,5 +1,7 @@
 # Plan: Full Review & Critical Fixes — ASC Demo Factory Prototype
 
+**Parent execution plan**: [asc-demo-clean-room-parity-implementation-master-plan.md](./asc-demo-clean-room-parity-implementation-master-plan.md)
+
 ## Context
 
 ASC Demo — прототип AI Agent Factory для демо через несколько часов. Timeout-фиксы (commit `77e58d9`) уже применены. Теперь нужно устранить критические проблемы, которые ломают **полный цикл** фабрики: discovery → brief → artifacts.

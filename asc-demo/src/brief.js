@@ -86,15 +86,31 @@ const EXPECTED_OUTPUT_HINT_MARKERS = [
   "материал",
 ];
 
+const SERVICE_PHRASE_PATTERNS = [
+  /Требуется уточнение\.?/g,
+  /Файлы в discovery не загружались\.?/g,
+  /нет подтвержденных данных/g,
+  /Brief собран в fallback-режиме\.?/g,
+  /Требуется дополнительная проверка перед передачей в производство\.?/g,
+];
+
+function stripServicePhrases(text) {
+  let result = text;
+  SERVICE_PHRASE_PATTERNS.forEach((pattern) => {
+    result = result.replace(pattern, "");
+  });
+  return result.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function fallbackBrief(session) {
   const lines = ["# Brief проекта", ""];
   BRIEF_SECTION_ORDER.forEach(([topicId, title]) => {
     lines.push(`## ${title}`);
-    lines.push(normalizeText(session.topicAnswers?.[topicId], "Требуется уточнение."));
+    lines.push(normalizeText(session.topicAnswers?.[topicId], "Информация пока не собрана."));
     lines.push("");
   });
   lines.push("## Резюме");
-  lines.push("Brief собран в fallback-режиме. Требуется дополнительная проверка перед передачей в производство.");
+  lines.push("Brief собран автоматически. Рекомендуется проверить перед подтверждением.");
   return lines.join("\n").trim();
 }
 
@@ -103,10 +119,14 @@ function normalizeBrief(brief) {
   if (!text) {
     return "";
   }
-  if (text.startsWith("# ")) {
-    return text;
+  const cleaned = stripServicePhrases(text);
+  if (!cleaned) {
+    return "";
   }
-  return ["# Brief проекта", "", text].join("\n");
+  if (cleaned.startsWith("# ")) {
+    return cleaned;
+  }
+  return ["# Brief проекта", "", cleaned].join("\n");
 }
 
 function buildConversationSummary(session) {
@@ -152,7 +172,7 @@ function collectUploadedFiles(session) {
 function buildUploadedFilesSummary(session) {
   const files = collectUploadedFiles(session);
   if (!files.length) {
-    return "Файлы в discovery не загружались.";
+    return "Файлы не приложены.";
   }
   return [
     SYNTHETIC_DATA_NOTE,
@@ -270,6 +290,36 @@ function extractExpectedOutputHint(correctionText, session) {
   return cleanExpectedOutputHint(fallback || source);
 }
 
+function protectUntargetedSections(session, revisedBrief, correctionTargets) {
+  if (!correctionTargets.length) {
+    return revisedBrief;
+  }
+  const originalBrief = normalizeBrief(session.briefText) || "";
+  if (!originalBrief) {
+    return revisedBrief;
+  }
+  const originalSections = parseBriefSections(originalBrief);
+  const revisedSections = parseBriefSections(revisedBrief);
+  const targetTitles = new Set(
+    correctionTargets.map((topicId) => BRIEF_SECTION_TITLES[topicId]).filter(Boolean),
+  );
+  let protected_ = revisedBrief;
+  for (const [title, originalContent] of originalSections) {
+    if (targetTitles.has(title)) {
+      continue;
+    }
+    const revisedContent = revisedSections.get(title);
+    if (revisedContent !== undefined && revisedContent !== originalContent) {
+      const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const sectionPattern = new RegExp(
+        `(## ${escapedTitle}\\n)([\\s\\S]*?)(?=\\n## |$)`,
+      );
+      protected_ = protected_.replace(sectionPattern, `$1${originalContent}\n`);
+    }
+  }
+  return protected_;
+}
+
 function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
   let normalized = normalizeBrief(revisedBrief);
   if (!normalized) {
@@ -277,6 +327,9 @@ function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
   }
   const correction = normalizeText(correctionText);
   const targets = inferCorrectionTargets(correctionText);
+  if (targets.length) {
+    normalized = protectUntargetedSections(session, normalized, targets);
+  }
   if (!targets.includes("expected_outputs")) {
     return normalized;
   }
@@ -462,6 +515,7 @@ export async function reviseBrief(session, correctionText) {
         "Сохрани деловой стиль и структуру секций.",
         "Сначала опирайся на подтвержденный discovery context и загруженные файлы, а не только на историю сообщений.",
         "Если корректировка семантически относится к конкретной теме brief, обнови соответствующую секцию в первую очередь и не разбрасывай факт по нерелевантным разделам.",
+        "CRITICAL: Модифицируй ТОЛЬКО секции, перечисленные в correction guidance ниже. НЕ МЕНЯЙ остальные секции.",
         "Если пользователь просит добавить подробности, используй только подтвержденные факты. Не придумывай новые данные.",
         "Никогда не копируй управляющие формулировки пользователя в итоговый brief дословно (например: «исправь», «внеси», «добавь», «без цитирования»). Преобразуй их в нейтральный целевой факт.",
         "Верни только markdown.",
