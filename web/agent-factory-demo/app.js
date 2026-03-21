@@ -1870,8 +1870,13 @@
     return true;
   }
 
-  function scheduleScrollChatToBottom() {
+  function scheduleScrollChatToBottom(options = {}) {
+    const strictBottom = Boolean(options.strictBottom);
     const syncScroll = () => {
+      if (strictBottom) {
+        scrollChatToBottom();
+        return;
+      }
       if (!scrollChatToLatestAgentMessage()) {
         scrollChatToBottom();
       }
@@ -1883,6 +1888,8 @@
       });
     });
     window.setTimeout(syncScroll, 72);
+    window.setTimeout(syncScroll, 180);
+    window.setTimeout(syncScroll, 320);
   }
 
   function renderTimeline(project, options = {}) {
@@ -1894,7 +1901,7 @@
       dom.chatLog.appendChild(createMessageNode(message));
     });
     if (keepBottom) {
-      scheduleScrollChatToBottom();
+      scheduleScrollChatToBottom({ strictBottom: forceBottom || state.forceScrollToBottom });
     }
   }
 
@@ -3817,7 +3824,7 @@
       state.activeRequest = null;
       renderAll();
       if (state.forceScrollToBottom) {
-        scheduleScrollChatToBottom();
+        scheduleScrollChatToBottom({ strictBottom: true });
       }
       state.forceScrollToBottom = false;
       setBusy(false);

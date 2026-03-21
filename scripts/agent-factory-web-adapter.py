@@ -3067,19 +3067,31 @@ def infer_brief_section_updates_from_feedback(
     explicit_expected_outputs_signal = any(
         marker in lowered
         for marker in (
-            "one-page",
-            "onepage",
-            "формат one-page",
-            "формат onepage",
             "на выходе",
             "ожидаемый результат",
             "ожидаемые результаты",
             "что пользователь должен получить",
             "ожидаем",
             "итоговый результат",
+        )
+    )
+    output_artifact_mention = any(
+        marker in lowered
+        for marker in (
+            "one-page",
+            "onepage",
+            "формат one-page",
+            "формат onepage",
             "pdf",
             "презентац",
             "рекомендац",
+        )
+    )
+    editorial_edit_signal = bool(
+        re.search(
+            r"(сделай\s+правк|внеси\s+правк|добав(?:ь|ьте)|убер(?:и|ите)|"
+            r"измени|замени|перепиши|перефразируй|в\s+самом\s+начале|в\s+начале|в\s+конце|блок)",
+            lowered,
         )
     )
     explicit_business_rules_signal = (
@@ -3098,6 +3110,8 @@ def infer_brief_section_updates_from_feedback(
         and mentions_output_data_phrase
         and not re.search(r"(на\s+выходе|итогов\w*\s+результат|результат\s+обработк\w*)", lowered)
     ):
+        expected_outputs_signal = False
+    if output_artifact_mention and editorial_edit_signal and not explicit_expected_outputs_signal and not output_fragment:
         expected_outputs_signal = False
     updates: dict[str, Any] = {}
 

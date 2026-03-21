@@ -574,8 +574,7 @@ code {
 }
 
 .project-card:hover .project-card__menu,
-.project-card:focus-within .project-card__menu,
-.project-card.is-active .project-card__menu {
+.project-card:focus-within .project-card__menu {
   opacity: 0.9;
   pointer-events: auto;
 }

@@ -399,6 +399,26 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Simulation request in post-handoff mode should not reopen brief review"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_does_not_overwrite_expected_outputs_with_editorial_one_page_feedback"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/editorial-one-page-state" --output "$tmpdir/editorial-one-page-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-008",
+          "request_id": "web-request-brief-review-008",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_brief_correction",
+          "user_text": "Сделай правку: в one-page добавь отдельный блок с краткой рекомендацией в самом начале."
+        } | del(.brief_section_updates) | del(.demo_access_grant)' "$tmpdir/editorial-one-page-review-out.json" >"$tmpdir/editorial-one-page-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/editorial-one-page-source.json" --state-root "$tmpdir/editorial-one-page-state" --output "$tmpdir/editorial-one-page-out.json" >/dev/null; then
+        local expected_outputs_before expected_outputs_after
+        expected_outputs_before="$(jq -c '.discovery_runtime_state.requirement_brief.expected_outputs' "$tmpdir/editorial-one-page-review-out.json")"
+        expected_outputs_after="$(jq -c '.discovery_runtime_state.requirement_brief.expected_outputs' "$tmpdir/editorial-one-page-out.json")"
+        assert_eq "$expected_outputs_before" "$expected_outputs_after" "Editorial one-page correction should not overwrite expected_outputs with command text"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/editorial-one-page-out.json")" "Правку применил" "Editorial correction should still be acknowledged as applied"
+        test_pass
+    else
+        test_fail "Editorial one-page correction should preserve expected_outputs semantics"
+    fi
+
     generate_report
 }
 
