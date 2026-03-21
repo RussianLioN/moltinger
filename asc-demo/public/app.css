@@ -809,32 +809,32 @@ code {
 }
 
 .workspace-toggle__icon::after {
+  content: "";
   position: absolute;
-  top: 50%;
-  line-height: 1;
-  font-size: 11px;
-  font-weight: 700;
-  color: currentColor;
-  opacity: 0.9;
-  transform: translateY(-56%);
+  top: 1px;
+  bottom: 1px;
+  width: 43%;
+  border-radius: 1px;
+  opacity: 0.22;
+  background: currentColor;
 }
 
 .workspace-toggle:not(.workspace-toggle--panel) .workspace-toggle__icon::after {
-  content: "‹";
-  right: -8px;
+  left: 1px;
 }
 
 .workspace-toggle:not(.workspace-toggle--panel)[aria-pressed="false"] .workspace-toggle__icon::after {
-  content: "›";
+  left: auto;
+  right: 1px;
 }
 
 .workspace-toggle--panel .workspace-toggle__icon::after {
-  content: "›";
-  left: -8px;
+  right: 1px;
 }
 
 .workspace-toggle--panel[aria-pressed="false"] .workspace-toggle__icon::after {
-  content: "‹";
+  right: auto;
+  left: 1px;
 }
 
 .workspace-toggle[aria-pressed="true"],
@@ -848,7 +848,10 @@ code {
 .workspace-toggle[aria-pressed="false"],
 .workspace-toggle[data-state="inactive"],
 .workspace-toggle--panel[data-state="inactive"] {
-  opacity: 0.94;
+  opacity: 0.88;
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.018);
+  color: rgba(212, 216, 224, 0.74);
 }
 
 .workspace-toggle:disabled {
