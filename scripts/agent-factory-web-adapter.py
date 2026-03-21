@@ -725,9 +725,80 @@ def load_delivery_entry_by_artifact_kind(state_root: Path, web_demo_session_id: 
     return {}
 
 
+def normalize_preview_markdown_source(text: str) -> str:
+    source = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if "\n" in source:
+        return source
+    # Some generators collapse markdown into a single line. Recover structural markers for preview readability.
+    source = re.sub(r"\s+(#{1,3}\s)", r"\n\1", source)
+    source = re.sub(r"\s+(\d+\.\s+)", r"\n\1", source)
+    source = re.sub(r"\s+-\s+", "\n- ", source)
+    return source
+
+
+def render_preview_inline_markdown(value: str) -> str:
+    escaped = escape(value or "")
+    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+    return escaped
+
+
+def markdown_to_preview_html(text: str) -> str:
+    lines = normalize_preview_markdown_source(text).split("\n")
+    blocks: list[str] = []
+    paragraph: list[str] = []
+    list_items: list[str] = []
+    list_tag = ""
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph
+        content = " ".join(token.strip() for token in paragraph if token.strip()).strip()
+        if content:
+            blocks.append(f"<p>{render_preview_inline_markdown(content)}</p>")
+        paragraph = []
+
+    def flush_list() -> None:
+        nonlocal list_items, list_tag
+        if list_items and list_tag:
+            blocks.append(f"<{list_tag}>{''.join(list_items)}</{list_tag}>")
+        list_items = []
+        list_tag = ""
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            flush_paragraph()
+            flush_list()
+            continue
+        heading_match = re.match(r"^(#{1,3})\s+(.+)$", line)
+        if heading_match:
+            flush_paragraph()
+            flush_list()
+            level = min(len(heading_match.group(1)), 3)
+            blocks.append(f"<h{level}>{render_preview_inline_markdown(heading_match.group(2))}</h{level}>")
+            continue
+        unordered_match = re.match(r"^[-*]\s+(.+)$", line)
+        ordered_match = re.match(r"^\d+\.\s+(.+)$", line)
+        if unordered_match or ordered_match:
+            flush_paragraph()
+            next_tag = "ul" if unordered_match else "ol"
+            if list_tag and list_tag != next_tag:
+                flush_list()
+            list_tag = next_tag
+            item_text = unordered_match.group(1) if unordered_match else ordered_match.group(1)
+            list_items.append(f"<li>{render_preview_inline_markdown(item_text)}</li>")
+            continue
+        flush_list()
+        paragraph.append(line)
+
+    flush_paragraph()
+    flush_list()
+    return "\n".join(blocks) if blocks else "<p>Артефакт пока пуст.</p>"
+
+
 def preview_html_from_text(text: str, *, title: str) -> str:
     safe_title = escape(normalize_text(title) or "Artifact preview")
-    escaped = escape(text or "")
+    body_html = markdown_to_preview_html(text)
     return (
         "<!doctype html><html lang='ru'><head>"
         "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -736,10 +807,15 @@ def preview_html_from_text(text: str, *, title: str) -> str:
         "body{margin:0;background:#f6f1e8;color:#181512;font:15px/1.6 'SF Pro Text','Avenir Next','Segoe UI',sans-serif;}"
         "main{max-width:980px;margin:0 auto;padding:28px 24px 36px;}"
         "h1{margin:0 0 14px;font-size:1.35rem;line-height:1.2;}"
-        "pre{margin:0;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid rgba(0,0,0,0.08);"
-        "border-radius:12px;padding:16px;font:14px/1.55 'JetBrains Mono','SFMono-Regular',monospace;}"
+        "h2{margin:1.4rem 0 0.6rem;font-size:1.15rem;line-height:1.3;}"
+        "h3{margin:1.2rem 0 0.5rem;font-size:1rem;line-height:1.3;}"
+        "p{margin:0 0 0.95rem;}"
+        "ul,ol{margin:0 0 0.95rem;padding-left:1.2rem;}"
+        "li{margin:0.2rem 0;}"
+        "code{padding:0.08rem 0.28rem;background:rgba(24,21,18,0.08);border-radius:0.28rem;font:0.92em 'JetBrains Mono','SFMono-Regular',monospace;}"
+        "main{background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:20px;}"
         "</style></head><body>"
-        f"<main><h1>{safe_title}</h1><pre>{escaped}</pre></main>"
+        f"<main><h1>{safe_title}</h1>{body_html}</main>"
         "</body></html>"
     )
 

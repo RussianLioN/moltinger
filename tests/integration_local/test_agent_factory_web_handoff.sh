@@ -79,9 +79,17 @@ run_integration_local_agent_factory_web_handoff_tests() {
     test_start "integration_local_agent_factory_web_handoff_download_endpoint_serves_artifact"
     local server_pid=""
     local download_url=""
+    local preview_endpoint=""
     local http_body="$tmpdir/project-doc.md"
+    local preview_body="$tmpdir/one-page-preview.html"
     local health_ready="false"
     download_url="$(jq -r '.download_artifacts[] | select(.artifact_kind == "project_doc") | .download_url' "$tmpdir/downloads-out.json")"
+    preview_endpoint="$(jq -r '
+      .web_demo_session.web_demo_session_id as $session_id
+      | .download_artifacts[]
+      | select(.artifact_kind == "one_page_summary")
+      | "/api/preview/\($session_id)/\(.artifact_kind)"
+    ' "$tmpdir/downloads-out.json")"
     if [[ -n "$download_url" ]]; then
         python3 "$WEB_ADAPTER_SCRIPT" serve --host 127.0.0.1 --port 18797 --state-root "$tmpdir/state" --assets-root "$PROJECT_ROOT/web/agent-factory-demo" >/dev/null 2>"$tmpdir/server.log" &
         server_pid=$!
@@ -103,6 +111,39 @@ run_integration_local_agent_factory_web_handoff_tests() {
         fi
     else
         test_fail "Download-ready response should expose a project-doc browser URL"
+    fi
+    if [[ -n "$server_pid" ]]; then
+        kill "$server_pid" >/dev/null 2>&1 || true
+        wait "$server_pid" 2>/dev/null || true
+    fi
+
+    test_start "integration_local_agent_factory_web_handoff_preview_endpoint_serves_rendered_html"
+    server_pid=""
+    health_ready="false"
+    if [[ -n "$preview_endpoint" ]]; then
+        python3 "$WEB_ADAPTER_SCRIPT" serve --host 127.0.0.1 --port 18797 --state-root "$tmpdir/state" --assets-root "$PROJECT_ROOT/web/agent-factory-demo" >/dev/null 2>"$tmpdir/server.log" &
+        server_pid=$!
+        for _ in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:18797/health" >/dev/null 2>&1; then
+                health_ready="true"
+                break
+            fi
+            sleep 0.25
+        done
+        if [[ "$health_ready" != "true" ]] && grep -q "PermissionError: \[Errno 1\] Operation not permitted" "$tmpdir/server.log"; then
+            test_skip "Sandbox denied local port bind for web adapter serve check"
+        elif [[ "$health_ready" == "true" ]] &&
+            curl -fsS "http://127.0.0.1:18797${preview_endpoint}" -o "$preview_body"; then
+            assert_contains "$(cat "$preview_body")" "<!doctype html>" "Preview endpoint should return an HTML document"
+            assert_contains "$(cat "$preview_body")" "<main>" "Preview HTML should include rendered content container"
+            assert_true "$(grep -qiE '<h1|<h2|<p|<pre' "$preview_body" && echo true || echo false)" "Preview HTML should contain rendered markdown blocks"
+            assert_true "$(grep -qi '<pre>' "$preview_body" && echo false || echo true)" "Preview HTML should render markdown structure instead of raw <pre> block"
+            test_pass
+        else
+            test_fail "Preview endpoint should serve rendered HTML for one-page summary"
+        fi
+    else
+        test_fail "Download-ready response should expose session and one-page artifact needed to build preview endpoint"
     fi
     if [[ -n "$server_pid" ]]; then
         kill "$server_pid" >/dev/null 2>&1 || true
