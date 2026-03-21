@@ -13,6 +13,7 @@ fi
 MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
 ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-20}"
+CHAT_WAIT_MS="${CHAT_WAIT_MS:-15000}"
 COOKIE_FILE="/tmp/moltis-session-$$"
 STATUS_FILE="/tmp/moltis-status-$$.json"
 RPC_OUTPUT_FILE="/tmp/moltis-chat-$$.json"
@@ -56,6 +57,7 @@ main() {
     local command="${1:-/status}"
     local health_code auth_code logout_code rpc_payload
     local final_event_count
+    local chat_run_started
 
     require_command curl
     require_command jq
@@ -119,12 +121,17 @@ main() {
         node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" request \
             --method chat.send \
             --params "$rpc_payload" \
-            --wait-ms 2000 \
+            --wait-ms "$CHAT_WAIT_MS" \
             --subscribe chat >"$RPC_OUTPUT_FILE"
 
     final_event_count="$(jq -r '[.events[]? | select(.event == "chat" and .payload.state == "final")] | length' "$RPC_OUTPUT_FILE")"
+    chat_run_started="$(jq -r '.result.ok == true and .result.payload.ok == true' "$RPC_OUTPUT_FILE" 2>/dev/null || echo "false")"
     if [[ "$final_event_count" == "0" ]]; then
-        echo "ERROR: Chat RPC did not produce a final chat event" >&2
+        if [[ "$chat_run_started" == "true" ]]; then
+            echo "ERROR: Chat RPC started successfully but did not reach a final event within CHAT_WAIT_MS=$CHAT_WAIT_MS" >&2
+        else
+            echo "ERROR: Chat RPC did not start successfully" >&2
+        fi
         jq . "$RPC_OUTPUT_FILE" >&2 || true
         exit 1
     fi

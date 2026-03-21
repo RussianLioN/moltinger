@@ -40,7 +40,7 @@
 
 ## Phase 4: Deferred Operational Follow-Up
 
-- [ ] T030 Redeploy production so the tracked runtime contract is actually applied on the server
+- [x] T030 Redeploy production so the tracked runtime contract is actually applied on the server
 - [ ] T031 Clear or migrate stale session/model state that still references removed provider catalogs
 - [ ] T032 Restore browser runtime health by fixing Docker access/connectivity on the target host
 - [ ] T033 Stabilize Tavily search integration or replace it with a less fragile search path
