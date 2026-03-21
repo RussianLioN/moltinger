@@ -54,7 +54,7 @@
 | `028-beads-issues-jsonl-rca` | `origin/028-beads-issues-jsonl-rca` | Needs decision |
 | `029-beads-dolt-native-migration` | `origin/029-beads-dolt-native-migration` | Needs decision |
 | `030-rebase-conflict-tail-audit` | `origin/030-rebase-conflict-tail-audit` | Needs decision |
-| `031-moltis-reliability-diagnostics` | `none` | Needs decision |
+| `031-moltis-reliability-diagnostics` | `origin/031-moltis-reliability-diagnostics` | Needs decision |
 | `chore/topology-registry-publish` | `origin/chore/topology-registry-publish` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
