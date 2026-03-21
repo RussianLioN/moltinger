@@ -114,6 +114,23 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Browser correction parser should split section command with short input/output markers into two clean brief fields"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_parses_quoted_section_phrase_with_expected_output_dash"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/quoted-section-state" --output "$tmpdir/quoted-section-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-008cc",
+          "request_id": "web-request-brief-review-008cc",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_brief_correction",
+          "user_text": "Правка в разделе «Примеры входов и выходов»: ожидаемый выход только один — one-page PDF с рекомендацией для кредитного комитета."
+        } | del(.brief_feedback_target) | del(.brief_section_updates) | del(.demo_access_grant)' "$tmpdir/quoted-section-review-out.json" >"$tmpdir/quoted-section-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/quoted-section-source.json" --state-root "$tmpdir/quoted-section-state" --output "$tmpdir/quoted-section-out.json" >/dev/null; then
+        assert_eq "one-page PDF с рекомендацией для кредитного комитета." "$(jq -r '.discovery_runtime_state.requirement_brief.expected_outputs[0]' "$tmpdir/quoted-section-out.json")" "Quoted section correction should update expected_outputs from dash-formatted phrase"
+        assert_eq "false" "$(jq -r '(.discovery_runtime_state.brief_revisions[-1].changed_sections | index("scope_boundaries")) != null' "$tmpdir/quoted-section-out.json")" "Quoted section correction should not silently fallback into scope_boundaries"
+        test_pass
+    else
+        test_fail "Quoted section correction should update expected_outputs instead of scope_boundaries fallback"
+    fi
+
     test_start "integration_local_agent_factory_web_confirmation_routes_users_and_process_section_to_current_process"
     if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/users-process-state" --output "$tmpdir/users-process-review-out.json" >/dev/null &&
         jq '.web_conversation_envelope = {

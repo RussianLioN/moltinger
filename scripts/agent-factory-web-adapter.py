@@ -2390,6 +2390,8 @@ def normalize_feedback_update_text(value: Any, *, section: str = "") -> str:
         r"^(?:нужно|надо|прошу|пожалуйста)?\s*(?:исправить|поправить|обновить|уточнить)\s+(?:brief|бриф)\s*[:\-–—]\s*",
         r"^(?:исправление|правка)\s+(?:brief|брифа)\s*[:\-–—]\s*",
         r"^(?:исправление|правка)\s*[:\-–—]\s*",
+        r"^(?:исправление|правка)\s+в\s+(?:разделе|раздел|секци(?:и|ю|я)|section)\s+.+?\s*[:\-–—]\s*",
+        r"^в\s+(?:разделе|раздел|секци(?:и|ю|я)|section)\s+.+?\s*[:\-–—]\s*",
         r"^(?:сделай|сделайте|внеси|внесите)\s+правк(?:у|и)?\s*[:\-–—]\s*",
     )
     for pattern in strip_prefix_patterns:
@@ -2429,6 +2431,12 @@ def normalize_feedback_update_text(value: Any, *, section: str = "") -> str:
                 cleaned,
                 flags=re.IGNORECASE,
             ).strip()
+            cleaned = re.sub(
+                r"^(?:ожидаем(?:ый|ые)?\s+выход(?:ы)?|ожидаем(?:ый|ые)?\s+результат(?:ы)?)(?:\s+[^:–—-]{1,40})?\s+[-–—]\s+",
+                "",
+                cleaned,
+                flags=re.IGNORECASE,
+            ).strip()
 
     if section in BRIEF_LIST_FIELDS:
         cleaned = re.sub(r"^\s*[-•]+\s*", "", cleaned).strip()
@@ -2456,6 +2464,7 @@ def extract_feedback_section_fragment(feedback_text: str, *, section: str) -> st
     elif section == "expected_outputs":
         patterns = (
             r"(?:ожидаем(?:ый|ые)?\s+выход(?:ы)?|ожидаем(?:ый|ые)?\s+результат(?:ы)?|на\s+выходе|expected\s*outputs?)\s*[:\-–—]\s*(.+)",
+            r"(?:ожидаем(?:ый|ые)?\s+выход(?:ы)?|ожидаем(?:ый|ые)?\s+результат(?:ы)?|на\s+выходе)\s+[^:]{0,60}?\s+[-–—]\s+(.+)",
             r"(?:исправь|исправить|поправь|поправить|обнови|обновить)\s+(?:expected\s*outputs?|output)\s*[:\-–—]\s*(.+)",
             r"(?:\bвыход(?:ы)?\b|output(?:s)?)\s*[:\-–—]\s*(.+)",
         )
@@ -3020,14 +3029,21 @@ def infer_brief_section_updates_from_feedback(
         return {}
     section_command_label = ""
     section_command_body = text
-    section_command_match = re.search(
+    section_command_match = None
+    section_command_patterns = (
         r"^(?:нужно|надо|прошу|пожалуйста)?\s*(?:исправь|исправить|поправь|поправить|обнови|обновить)\s+"
-        r"(?:раздел|секци(?:ю|я)|section)\s+(.+?)\s*[:\-–—]\s*(.+)$",
-        text,
-        flags=re.IGNORECASE | re.DOTALL,
+        r"(?:раздел|разделе|секци(?:ю|я|и)|section)\s+[\"'«»`]*?(.+?)[\"'«»`]*?\s*[:\-–—]\s*(.+)$",
+        r"^(?:исправление|правка)\s+в\s+(?:разделе|раздел|секци(?:и|ю|я)|section)\s+[\"'«»`]*?(.+?)[\"'«»`]*?\s*[:\-–—]\s*(.+)$",
+        r"^в\s+(?:разделе|раздел|секци(?:и|ю|я)|section)\s+[\"'«»`]*?(.+?)[\"'«»`]*?\s*[:\-–—]\s*(.+)$",
     )
+    for pattern in section_command_patterns:
+        section_command_match = re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+        if section_command_match:
+            break
     if section_command_match:
-        section_command_label = normalize_text(section_command_match.group(1)).lower()
+        section_command_label = normalize_text(
+            re.sub(r"^[\"'«»`]+|[\"'«»`]+$", "", normalize_text(section_command_match.group(1)))
+        ).lower()
         section_command_body = normalize_text(section_command_match.group(2)) or text
         lowered = section_command_body.lower()
     text_for_sections = section_command_body
@@ -3069,6 +3085,8 @@ def infer_brief_section_updates_from_feedback(
         marker in lowered
         for marker in (
             "на выходе",
+            "ожидаемый выход",
+            "ожидаемые выходы",
             "ожидаемый результат",
             "ожидаемые результаты",
             "что пользователь должен получить",
