@@ -1,17 +1,17 @@
 :root {
-  --bg: #090b10;
-  --bg-soft: #0f1219;
-  --bg-elevated: #141924;
-  --bg-sidebar: #0d1118;
-  --surface: rgba(255, 255, 255, 0.018);
-  --surface-strong: rgba(255, 255, 255, 0.03);
-  --surface-hover: rgba(255, 255, 255, 0.048);
-  --border: rgba(255, 255, 255, 0.055);
-  --border-strong: rgba(255, 255, 255, 0.13);
-  --text: rgba(255, 255, 255, 0.94);
+  --bg: #0d1015;
+  --bg-soft: #10141b;
+  --bg-elevated: #141922;
+  --bg-sidebar: #0f141b;
+  --surface: rgba(255, 255, 255, 0.016);
+  --surface-strong: rgba(255, 255, 255, 0.028);
+  --surface-hover: rgba(255, 255, 255, 0.046);
+  --border: rgba(255, 255, 255, 0.072);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: rgba(242, 245, 250, 0.95);
   --text-strong: #ffffff;
-  --muted: rgba(255, 255, 255, 0.58);
-  --muted-strong: rgba(255, 255, 255, 0.74);
+  --muted: rgba(229, 234, 242, 0.58);
+  --muted-strong: rgba(236, 240, 247, 0.74);
   --accent: #f3eee3;
   --accent-ink: #101218;
   --attention: #e7c46a;
@@ -54,8 +54,8 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top center, rgba(255, 255, 255, 0.028), transparent 24%),
-    linear-gradient(180deg, #090a0c 0%, #0b0b0c 52%, #0a0b0d 100%);
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.02), transparent 22%),
+    linear-gradient(180deg, #0b0e13 0%, #0d1015 48%, #0b0e13 100%);
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--text-md);
@@ -194,7 +194,7 @@ code {
 .panel-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background: rgba(17, 17, 19, 0.94);
+  background: rgba(18, 21, 27, 0.95);
   box-shadow: var(--shadow-md);
   backdrop-filter: none;
 }
@@ -249,7 +249,7 @@ code {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: rgba(10, 10, 10, 0.9);
+  background: rgba(11, 14, 19, 0.95);
   color: var(--text);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
@@ -298,7 +298,7 @@ code {
 
 .button--ghost {
   border-color: var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.018);
 }
 
 .button--compact {
@@ -314,9 +314,9 @@ code {
   min-width: 30px;
   min-height: 30px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.018);
   color: var(--muted-strong);
   cursor: pointer;
   transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease, opacity 0.14s ease;
@@ -683,7 +683,7 @@ code {
   height: 100%;
   min-height: 0;
   padding: var(--space-3) var(--space-4);
-  background: rgba(13, 14, 16, 0.9);
+  background: rgba(14, 17, 22, 0.94);
   overflow: hidden;
 }
 
@@ -707,7 +707,7 @@ code {
   top: 0;
   z-index: 48;
   padding: 6px 0 10px;
-  background: rgba(11, 13, 18, 0.98);
+  background: rgba(13, 16, 22, 0.98);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: none;
 }
@@ -977,9 +977,9 @@ code {
   width: fit-content;
   max-width: min(72ch, 74%);
   padding: 9px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 13px;
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.02);
   box-shadow: none;
 }
 
@@ -1042,8 +1042,8 @@ code {
 
 .message--user {
   align-self: flex-end;
-  border-color: rgba(155, 175, 214, 0.18);
-  background: rgba(104, 124, 168, 0.1);
+  border-color: rgba(161, 172, 197, 0.26);
+  background: rgba(49, 57, 73, 0.62);
 }
 
 .message--system {
@@ -1061,29 +1061,29 @@ code {
   bottom: 0;
   z-index: 3;
   padding-bottom: 2px;
-  background: linear-gradient(180deg, rgba(13, 14, 16, 0) 0%, rgba(13, 14, 16, 0.66) 24%, rgba(13, 14, 16, 0.97) 100%);
+  background: linear-gradient(180deg, rgba(14, 17, 22, 0) 0%, rgba(14, 17, 22, 0.66) 24%, rgba(14, 17, 22, 0.98) 100%);
 }
 
 .composer {
   display: grid;
   gap: 6px;
   padding: 10px;
-  background: rgba(16, 18, 23, 0.985);
+  background: rgba(16, 20, 27, 0.985);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .composer.is-dragover,
 .composer[data-drop-active="true"] {
-  border-color: rgba(151, 177, 255, 0.52);
-  box-shadow: 0 0 0 1px rgba(151, 177, 255, 0.38), 0 16px 36px rgba(85, 105, 196, 0.22);
-  background: rgba(24, 24, 26, 0.98);
+  border-color: rgba(176, 188, 216, 0.5);
+  box-shadow: 0 0 0 1px rgba(176, 188, 216, 0.34), 0 16px 36px rgba(39, 46, 63, 0.35);
+  background: rgba(22, 27, 36, 0.98);
 }
 
 .composer.is-dragover .attach-button,
 .composer[data-drop-active="true"] .attach-button {
-  border-color: rgba(151, 177, 255, 0.62);
-  color: rgba(240, 244, 255, 0.96);
-  background: rgba(121, 150, 255, 0.16);
+  border-color: rgba(176, 188, 216, 0.62);
+  color: rgba(240, 244, 252, 0.96);
+  background: rgba(131, 145, 178, 0.24);
 }
 
 .composer__lead {
@@ -1171,7 +1171,7 @@ code {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.022);
   color: var(--muted-strong);
   cursor: pointer;
   font-size: 1.06rem;
@@ -1193,7 +1193,7 @@ code {
   padding: 0 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.024);
 }
 
 .attachment-pill__label {
