@@ -35,24 +35,28 @@
 - [x] T020 Refresh `scripts/test-moltis-api.sh` to the current `/api/auth/*` and RPC contract
 - [x] T021 Validate the refreshed smoke script with targeted checks
 - [x] T022 Reconcile `tasks.md` after the diagnostic script changes land
+- [x] T023 Add a read-only Tavily/memory diagnostic script that summarizes tracked search/memory contract plus optional runtime-log failure taxonomy
+- [x] T024 Validate the new diagnostic script with targeted repository coverage
+- [x] T025 Reconcile `tasks.md` after the search/memory diagnostic additions land
 
 ---
 
-## Phase 4: Deferred Operational Follow-Up
+## Phase 4: Highest-Priority Live Reliability Follow-Up
 
 - [x] T030 Redeploy production so the tracked runtime contract is actually applied on the server
 - [x] T031 Clear or migrate stale session/model state that still references removed provider catalogs
-- [ ] T032 Restore browser runtime health by fixing Docker access/connectivity on the target host
-- [ ] T033 Stabilize Tavily search integration or replace it with a less fragile search path
-- [ ] T034 Configure repository-visible memory watch/index scope and backfill embeddings for useful vector memory
-- [ ] T035 Clean stale runtime context files in `~/.moltis` that conflict with the current project/runtime identity
+- [ ] T032 [P0] Stabilize Tavily search integration or replace it with a less fragile search path; include dedicated health proof beyond transport-green deploy/UAT
+- [ ] T033 [P0] Arrest `memory_search` embedding-provider failures by pinning a deterministic memory contract or explicit keyword-only fallback before broader memory rollout
+- [ ] T034 Restore browser runtime health by fixing Docker access/connectivity on the target host
+- [ ] T035 Configure repository-visible memory watch/index scope and backfill embeddings for useful vector memory after the provider contract is deterministic
+- [ ] T036 Clean stale runtime context files in `~/.moltis` that conflict with the current project/runtime identity
 
 ---
 
 ## Phase 5: Architectural Hardening Backlog
 
 - [x] T040 Record the config/auth/session durability consilium and capture the architectural hardening backlog in tracked artifacts
-- [x] T041 Make `scripts/render-moltis-env.sh` fail closed on empty required auth secrets and cover it with targeted tests
+- [x] T041 Make `scripts/render-moltis-env.sh` fail closed on empty required auth and provider secrets and cover it with targeted tests
 - [x] T042 Pin production `MOLTIS_RUNTIME_CONFIG_DIR` to the canonical runtime path or an explicit allowlist and validate that exact path during deploy
 - [ ] T043 Reconcile auth ownership across `config/moltis.toml`, secrets docs, deploy workflow, preflight, and runtime strategy including `MOLTINGER_SERVICE_TOKEN` and Telegram allowlist source of truth
 - [ ] T044 Upgrade deploy and smoke proof from transport green to canonical provider/model proof including `openai-codex::gpt-5.4` and restart survival

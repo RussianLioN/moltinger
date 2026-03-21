@@ -529,6 +529,19 @@
       ],
       "ci": true
     },
+    "moltis-search-memory-diagnostics.sh": {
+      "version": "1.0.0",
+      "description": "Summarize tracked Tavily search and memory/embeddings contract plus optional runtime-log failure taxonomy",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "moltis-search-memory-diagnostics"
+      ],
+      "ci": true
+    },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",

@@ -82,6 +82,7 @@ assert_single_line "MOLTIS_RUNTIME_CONFIG_DIR" "$MOLTIS_RUNTIME_CONFIG_DIR_VALUE
 
 assert_non_empty "MOLTIS_PASSWORD" "${MOLTIS_PASSWORD:-}"
 assert_non_empty "GLM_API_KEY" "${GLM_API_KEY:-}"
+assert_non_empty "TAVILY_API_KEY" "${TAVILY_API_KEY:-}"
 assert_non_empty "TELEGRAM_BOT_TOKEN" "${TELEGRAM_BOT_TOKEN:-}"
 assert_non_empty "MOLTIS_DOMAIN" "$MOLTIS_DOMAIN_VALUE"
 assert_non_empty "MOLTIS_RUNTIME_CONFIG_DIR" "$MOLTIS_RUNTIME_CONFIG_DIR_VALUE"

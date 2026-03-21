@@ -218,6 +218,34 @@ The strongest user-facing proof is:
 - prompt returns successfully
 - logs confirm the same model
 
+## Search And Memory Triage
+
+Before changing providers or re-authing anything for search/memory symptoms, take a read-only snapshot first.
+
+Tracked contract only:
+
+```bash
+cd /opt/moltinger-active
+bash ./scripts/moltis-search-memory-diagnostics.sh --config ./config/moltis.toml
+```
+
+Tracked contract plus recent runtime log sample:
+
+```bash
+docker exec moltis sh -lc 'tail -n 400 /server/data/logs.jsonl' >/tmp/moltis-runtime.log
+cd /opt/moltinger-active
+bash ./scripts/moltis-search-memory-diagnostics.sh \
+  --config ./config/moltis.toml \
+  --log-file /tmp/moltis-runtime.log
+```
+
+Interpretation rules:
+
+- if `risk_summary.tavily_transport_unstable=true`, treat Tavily SSE as a live blocker even when `/health` and basic chat remain green
+- if `openai_embeddings_endpoint_mismatch_suspected=true`, do not assume OpenAI OAuth is broken; `memory_search` is likely hitting the Z.ai Coding endpoint with an embeddings path it does not support
+- if `groq_runtime_drift_suspected=true` while tracked env does not provide a Groq key, treat it as stale runtime/provider drift until proven otherwise
+- if `memory_provider_autodetect=true` and `memory_missing_watch_dirs=true`, memory is still nondeterministic even before vector backfill work starts
+
 Useful live log filter:
 
 ```bash

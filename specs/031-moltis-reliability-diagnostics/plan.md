@@ -5,7 +5,7 @@
 
 ## Summary
 
-Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. This slice documents the evidence, separates configuration faults from operational drift, and lands only the safest repository-managed fixes: deploy-time runtime contract checks and a current API/RPC smoke diagnostic.
+Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers are Tavily SSE instability and `memory_search` embedding-provider failures. This slice documents the evidence, separates configuration faults from operational drift, and lands only the safest repository-managed fixes: deploy-time/runtime contract checks, a current API/RPC smoke diagnostic, and a read-only search/memory diagnostic entrypoint.
 
 ## Technical Context
 
@@ -51,6 +51,7 @@ No constitution exception is required.
 - Runtime logs show `memory system initialized` with `chunks: 0` and watch scope limited to `~/.moltis`, so project docs are not entering useful vector memory.
 - Runtime logs show browser image pull failures due Docker socket permission errors; official docs also require Docker-aware browser container connectivity for sibling browser containers.
 - Tavily MCP search intermittently fails its SSE handshake and auto-restart sequence.
+- Runtime logs show repeated `memory_search` failures where the fallback chain hits `https://api.z.ai/api/coding/paas/v4/embeddings` with `400 Bad Request`, then Groq embeddings with `401 Unauthorized`.
 - Telegram authoritative testing returns `model 'openai-codex::gpt-5.3-codex-spark' not found`, matching stale provider/model state rather than the tracked provider surface.
 - Runtime logs show `provider_keys.json.tmp... read-only file system`, proving the live config mount is incompatible with runtime-managed auth/key persistence.
 
@@ -68,12 +69,14 @@ No constitution exception is required.
 1. `config/moltis.toml` leaves memory watch scope effectively pointed away from repository knowledge, so even a healthy runtime will not build useful project vector memory by default.
 2. Browser automation is enabled, but the configuration does not explicitly set the Docker-in-Docker browser connectivity contract documented by Moltis for Docker deployments.
 3. Built-in web search is disabled while production depends entirely on a remote Tavily MCP path that is already showing transport instability.
+4. Memory embeddings are left on auto-detect, so the runtime can infer a chat-provider chain that is unsuitable for embeddings, including the Z.ai Coding endpoint under `[providers.openai]`.
 
 ### Missing Integration
 
 1. Repo-managed skills and scripts are not visible to the running container because the checkout is not mounted as `/server`.
 2. Repo knowledge cannot flow into vector memory because the runtime neither sees the repository nor watches repository docs/knowledge paths.
 3. The tracked codex-update runtime contract depends on container-visible `/server/...` paths; those integrations are unreachable while `/server` is absent.
+4. Search and memory health have no dedicated repository-managed proof today, so transport-green deploy/UAT signals can miss Tavily SSE churn and embedding-provider drift.
 
 ### Bugs
 
@@ -102,15 +105,23 @@ No constitution exception is required.
 
 1. Update `scripts/test-moltis-api.sh` to use the current `/api/auth/*` contract and the current WebSocket RPC chat/status path.
 2. Reuse existing shared test helpers instead of duplicating auth or RPC logic.
+3. Add a read-only `moltis-search-memory-diagnostics.sh` entrypoint that summarizes tracked Tavily/memory contract plus optional runtime-log failure taxonomy without mutating live state.
 
-### Phase 4 - Defer Live-Only Remediation
+### Phase 4 - Highest-Priority Live Follow-Up
 
 The following actions are intentionally **not** auto-applied in this slice and must remain operator-driven after the repository guardrails land:
+
+- stabilize Tavily SSE search or replace it with a less fragile search path
+- arrest `memory_search` embedding failures by pinning a deterministic memory contract or explicitly forcing keyword-only fallback until a supported embedding backend is validated
+- add live search/memory proof once the runtime contract is healthy
+
+### Phase 5 - Remaining Live-Only Remediation
+
+The following actions remain deferred and must stay operator-driven after the highest-priority Tavily/memory blockers are addressed:
 
 - redeploy production so the tracked runtime contract is actually applied
 - clear or migrate stale session/model state that still references removed models
 - repair browser Docker access or runtime permissions on the target host
-- stabilize or replace the Tavily MCP transport path
 - explicitly wire repository docs/knowledge into memory watch/index scope and then backfill embeddings
 
 ## Structure Decision
@@ -120,6 +131,7 @@ Keep this slice intentionally narrow:
 - Speckit artifacts under `specs/031-moltis-reliability-diagnostics/`
 - deploy/runtime verification hardening in existing deploy scripts
 - operator smoke diagnostic refresh in the existing Moltis API test script
+- read-only search/memory diagnostics as a separate operator entrypoint
 - no speculative production state mutation inside repository code
 
 This keeps the work safe, auditable, and aligned with GitOps.
@@ -144,14 +156,20 @@ This keeps the work safe, auditable, and aligned with GitOps.
 ### Phase 3: Diagnostic Tool Refresh
 
 - Refresh `scripts/test-moltis-api.sh` to current auth/RPC behavior.
-- Validate the updated script with syntax and targeted contract checks.
+- Add a read-only Tavily/memory diagnostic entrypoint for tracked config plus optional runtime logs.
+- Validate the updated diagnostics with syntax and targeted contract checks.
 
-### Phase 4: Handoff
+### Phase 4: Highest-Priority Live Backlog
+
+- Rank Tavily SSE failures and `memory_search` embedding failures above browser and stale-context cleanup.
+- Keep their remediation explicit and operator-driven until a deterministic provider contract is chosen.
+
+### Phase 5: Handoff
 
 - Update `tasks.md` with completed safe fixes.
 - Leave a precise operational follow-up list for the actual live repair.
 
-### Phase 5: Architectural Hardening Backlog
+### Phase 6: Architectural Hardening Backlog
 
 - Record the consilium-backed backlog for fail-closed auth/config durability so follow-up work is driven by tracked artifacts rather than chat history.
 - Prioritize secret/env hardening, runtime-dir pinning, semantic proof of health, session reconciliation, durable-state audit, and immutable release-root design.

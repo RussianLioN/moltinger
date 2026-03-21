@@ -732,6 +732,39 @@ test_render_moltis_env_script_rejects_empty_required_auth_secrets() {
     test_pass
 }
 
+test_render_moltis_env_script_rejects_empty_tavily_key() {
+    test_start "Shared Moltis env renderer should fail closed on empty TAVILY_API_KEY"
+
+    if [[ ! -f "$ENV_RENDER_SCRIPT" ]]; then
+        test_skip "Missing script file: $ENV_RENDER_SCRIPT"
+        return
+    fi
+
+    local tmp_dir output_file exit_code
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/moltis.env"
+
+    set +e
+    MOLTIS_PASSWORD="secret" \
+        GLM_API_KEY="glm-key" \
+        TAVILY_API_KEY="" \
+        TELEGRAM_BOT_TOKEN="telegram-token" \
+        MOLTIS_DOMAIN="moltis.example.com" \
+        MOLTIS_RUNTIME_CONFIG_DIR="/opt/moltinger-state/config-runtime" \
+        bash "$ENV_RENDER_SCRIPT" --output "$output_file" >"$tmp_dir/output.log" 2>&1
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "TAVILY_API_KEY is required" "$tmp_dir/output.log"; then
+        test_fail "render-moltis-env.sh must reject an empty TAVILY_API_KEY when Tavily MCP is part of the tracked runtime"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     test_start "Shared tracked deploy script dry-run should report the planned control-plane steps"
 
@@ -1165,6 +1198,8 @@ run_all_tests() {
     test_deploy_workflow_uses_shared_host_automation_script
     test_gitops_sync_script_dry_run_covers_managed_surface
     test_render_moltis_env_script_renders_runtime_contract
+    test_render_moltis_env_script_rejects_empty_required_auth_secrets
+    test_render_moltis_env_script_rejects_empty_tavily_key
     test_tracked_deploy_script_dry_run_reports_control_plane_steps
     test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields
     test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields

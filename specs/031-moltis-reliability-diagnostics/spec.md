@@ -57,6 +57,8 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 
 - What happens when a stale persisted session still points to a removed model even after the tracked provider catalog has been corrected?
 - What happens when the MCP search server is intermittently available and the runtime must distinguish transport flakiness from config drift?
+- What happens when Tavily MCP depends on SSE plus `TAVILY_API_KEY`, but the tracked env render path allows that secret to go empty or the runtime has no dedicated Tavily health proof?
+- What happens when `memory_search` auto-detects embedding providers from the chat chain and starts sending embeddings traffic to the Z.ai Coding endpoint, returning `400 Bad Request` while a stale Groq entry returns `401 Unauthorized`?
 - What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
 - What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
 - What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
@@ -80,6 +82,9 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-012**: The package MUST explicitly distinguish safe repository fixes from deferred operational actions such as redeploying production, clearing stale session state, or backfilling memory indexes.
 - **FR-013**: The package MUST preserve the target-boundary rule: local fixture results may validate repo contracts, but only remote checks may prove the shared live runtime behavior.
 - **FR-014**: The package MUST record a concrete architectural hardening backlog for fail-closed config/auth/session durability beyond the safe-fix slice.
+- **FR-015**: The package MUST surface Tavily SSE instability and `memory_search` embedding-provider failures as the highest-priority unresolved live blockers after OAuth/runtime-contract recovery.
+- **FR-016**: The repository MUST provide a read-only diagnostic entrypoint that summarizes the tracked Tavily/memory contract plus an optional runtime-log failure taxonomy for Tavily and embeddings.
+- **FR-017**: The shared Moltis env renderer MUST fail closed when `TAVILY_API_KEY` is empty if the tracked runtime depends on Tavily MCP search.
 
 ### Key Entities
 
@@ -107,3 +112,5 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **SC-005**: Safe fixes landed in this slice are validated by targeted repository checks.
 - **SC-006**: Deferred live actions are explicitly listed so operators can finish the repair without guessing which remaining steps are operational rather than code changes.
 - **SC-007**: The package records follow-up backlog items for auth secret rendering, runtime-dir pinning, session reconciliation, semantic UAT hardening, and release-root/runtime-attestation drift control.
+- **SC-008**: The Speckit backlog explicitly ranks Tavily SSE failures and `memory_search` embedding-provider failures above browser and long-tail cleanup work.
+- **SC-009**: A repository-managed diagnostic script can emit a machine-readable summary of tracked search/memory contract plus Tavily/embedding failure signals from a provided log sample.
