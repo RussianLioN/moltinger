@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import csv
 import hashlib
 import io
 import json
@@ -136,6 +137,29 @@ CONFIRM_BRIEF_NEGATION_MARKERS = (
     "не готов подтверж",
     "not confirm",
     "don't confirm",
+)
+ONE_PAGE_DATA_PRIORITY_MARKERS = (
+    "наимен",
+    "сумм",
+    "ставк",
+    "срок",
+    "марж",
+    "чод",
+    "rwa",
+    "кредит",
+    "потенциал",
+    "cltv",
+    "динам",
+    "рейтинг",
+    "продукт",
+)
+ONE_PAGE_SERVICE_INPUT_MARKERS = (
+    "уже прикреп",
+    "уже прилож",
+    "это и есть обезлич",
+    "пример чего",
+    "давай продолжим",
+    "продолжим",
 )
 REPEAT_ACK_MARKERS = (
     "уже отвечал",
@@ -932,6 +956,126 @@ def normalize_string_list(value: Any) -> list[str]:
     return [normalized] if normalized else []
 
 
+def compact_summary_value(value: Any, limit: int = 160) -> str:
+    compact = re.sub(r"\s+", " ", normalize_text(value)).strip(" ;,")
+    if len(compact) <= limit:
+        return compact
+    shortened = compact[:limit].rsplit(" ", 1)[0].rstrip()
+    return f"{shortened or compact[:limit]}…"
+
+
+def pick_tabular_delimiter(lines: list[str]) -> str:
+    scored = [(";", 0), ("\t", 0), (",", 0)]
+    for index, (delimiter, _score) in enumerate(scored):
+        score = sum(line.count(delimiter) for line in lines[:14])
+        scored[index] = (delimiter, score)
+    delimiter, score = max(scored, key=lambda item: item[1])
+    return delimiter if score > 0 else ""
+
+
+def parse_upload_excerpt_rows(excerpt: str) -> dict[str, Any]:
+    lines = [normalize_text(line) for line in excerpt.splitlines() if normalize_text(line)]
+    if not lines:
+        return {"record_count": 0, "sections": [], "key_facts": []}
+
+    delimiter = pick_tabular_delimiter(lines)
+    if not delimiter:
+        return {"record_count": 0, "sections": [], "key_facts": []}
+
+    records: list[tuple[str, str, str]] = []
+    section_order: list[str] = []
+    current_section = ""
+    reader = csv.reader(io.StringIO("\n".join(lines[:220])), delimiter=delimiter)
+    for raw_row in reader:
+        if not raw_row:
+            continue
+        cells = [compact_summary_value(cell, 220) for cell in raw_row]
+        while cells and not cells[-1]:
+            cells.pop()
+        if not any(cells):
+            continue
+
+        section = ""
+        key = ""
+        value = ""
+        if len(cells) >= 3 and cells[0] and cells[1]:
+            section = compact_summary_value(cells[0], 90)
+            key = compact_summary_value(cells[1], 120)
+            value = compact_summary_value(" ".join(cell for cell in cells[2:] if cell), 200)
+        elif len(cells) >= 3 and not cells[0] and cells[1]:
+            section = current_section
+            key = compact_summary_value(cells[1], 120)
+            value = compact_summary_value(" ".join(cell for cell in cells[2:] if cell), 200)
+        elif len(cells) >= 2:
+            section = current_section
+            key = compact_summary_value(cells[0], 120)
+            value = compact_summary_value(" ".join(cell for cell in cells[1:] if cell), 200)
+
+        if not key or not value:
+            continue
+        if value in {"-", "—"}:
+            continue
+        if section:
+            current_section = section
+            if section not in section_order:
+                section_order.append(section)
+        records.append((current_section or "Без секции", key, value))
+
+    if not records:
+        return {"record_count": 0, "sections": [], "key_facts": []}
+
+    def fact_score(section: str, key: str) -> int:
+        marker_source = f"{section} {key}".lower()
+        score = 0
+        if "сумма" in marker_source:
+            score += 140
+        if "ставк" in marker_source:
+            score += 130
+        if "продукт" in marker_source:
+            score += 120
+        if "срок" in marker_source:
+            score += 115
+        if "марж" in marker_source:
+            score += 108
+        if "выруч" in marker_source or "чод" in marker_source:
+            score += 102
+        if "rwa" in marker_source or "cltv" in marker_source:
+            score += 96
+        if any(marker in marker_source for marker in ONE_PAGE_DATA_PRIORITY_MARKERS):
+            score += 60
+        if section and section != "Без секции":
+            score += 5
+        return score
+
+    scored_rows: list[tuple[int, int, str, str, str]] = []
+    for index, (section, key, value) in enumerate(records):
+        score = fact_score(section, key)
+        if score <= 0:
+            continue
+        scored_rows.append((score, index, section, key, value))
+
+    key_facts: list[str] = []
+    seen_pairs: set[str] = set()
+    for _score, _index, section, key, value in sorted(scored_rows, key=lambda item: (-item[0], item[1])):
+        pair_key = f"{section}:{key}".lower()
+        if pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
+        key_facts.append(f"{section} / {key} = {value}")
+        if len(key_facts) >= 8:
+            break
+
+    if not key_facts:
+        for section, key, value in records[:5]:
+            key_facts.append(f"{section} / {key} = {value}")
+
+    return {
+        "record_count": len(records),
+        "sections": section_order[:5],
+        "key_facts": key_facts[:8],
+    }
+
+
 def summarize_upload_facts(uploaded_files: list[dict[str, Any]] | None) -> list[str]:
     facts: list[str] = []
     for item in normalize_uploaded_files(uploaded_files):
@@ -952,6 +1096,61 @@ def summarize_upload_facts(uploaded_files: list[dict[str, Any]] | None) -> list[
     return facts
 
 
+def summarize_structured_upload_facts(uploaded_files: list[dict[str, Any]] | None) -> list[str]:
+    facts: list[str] = []
+    for item in normalize_uploaded_files(uploaded_files):
+        name = normalize_text(item.get("name")) or "вложение"
+        excerpt = normalize_text(item.get("excerpt"))
+        if not excerpt:
+            continue
+        parsed = parse_upload_excerpt_rows(excerpt)
+        record_count = int(parsed.get("record_count") or 0)
+        if record_count <= 0:
+            continue
+        sections = [normalize_text(section) for section in (parsed.get("sections") or []) if normalize_text(section)]
+        section_summary = ", ".join(sections[:3]) if sections else "секции не определены"
+        facts.append(f"{name}: обработано {record_count} параметров; ключевые секции — {section_summary}.")
+        for fact in parsed.get("key_facts") or []:
+            normalized_fact = normalize_text(fact)
+            if normalized_fact:
+                facts.append(f"{name}: {normalized_fact}")
+    return facts
+
+
+def normalize_one_page_input_examples(
+    requirement_brief: dict[str, Any],
+    uploaded_files: list[dict[str, Any]] | None,
+) -> list[str]:
+    raw_examples = normalize_string_list(requirement_brief.get("input_examples"))
+    sanitized_examples = [
+        item
+        for item in raw_examples
+        if item
+        and not any(marker in item.lower() for marker in ONE_PAGE_SERVICE_INPUT_MARKERS)
+    ]
+
+    upload_names = [
+        normalize_text(item.get("name"))
+        for item in normalize_uploaded_files(uploaded_files)
+        if normalize_text(item.get("name"))
+    ]
+    if upload_names:
+        upload_examples = [f"Вложение: {name}" for name in upload_names[:3]]
+        sanitized_examples = [*upload_examples, *sanitized_examples]
+        if not any("синтет" in item.lower() or "обезлич" in item.lower() for item in sanitized_examples):
+            sanitized_examples.append(synthetic_data_default_disclaimer())
+
+    deduplicated: list[str] = []
+    seen: set[str] = set()
+    for item in sanitized_examples:
+        normalized_key = normalize_text(item).lower()
+        if not normalized_key or normalized_key in seen:
+            continue
+        seen.add(normalized_key)
+        deduplicated.append(item)
+    return deduplicated
+
+
 def render_one_page_markdown(
     runtime_state: dict[str, Any],
     requirement_brief: dict[str, Any],
@@ -966,19 +1165,19 @@ def render_one_page_markdown(
     exceptions = normalize_string_list(requirement_brief.get("exceptions"))
     constraints = normalize_string_list(requirement_brief.get("constraints"))
     success_metrics = normalize_string_list(requirement_brief.get("success_metrics"))
-    input_examples = normalize_string_list(requirement_brief.get("input_examples"))
-    upload_facts = summarize_upload_facts(uploaded_files)
+    input_examples = normalize_one_page_input_examples(requirement_brief, uploaded_files)
+    upload_facts = summarize_structured_upload_facts(uploaded_files)
+    if not upload_facts:
+        upload_facts = summarize_upload_facts(uploaded_files)
     upload_names = [
         normalize_text(item.get("name"))
         for item in normalize_uploaded_files(uploaded_files)
         if normalize_text(item.get("name"))
     ]
     recommendation = expected_outputs[0] if expected_outputs else (desired_outcome or "Сформировать итоговую рекомендацию для коллегиального органа.")
-    if upload_names:
-        input_examples.extend([f"Вложение: {name}" for name in upload_names[:3]])
     if not input_examples:
         input_examples.append("Входные примеры зафиксированы в discovery-диалоге.")
-    if upload_names:
+    if upload_names and not any("синтет" in item.lower() or "обезлич" in item.lower() for item in input_examples):
         input_examples.append(synthetic_data_default_disclaimer())
 
     def as_bullets(items: list[str], fallback: str) -> str:

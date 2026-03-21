@@ -256,6 +256,13 @@ run_integration_local_agent_factory_web_full_cycle_tests() {
     local download_session_id
     download_session_id="$(jq -r '.web_demo_session.web_demo_session_id' "$tmpdir/download-ready-out.json")"
     assert_file_exists "$tmpdir/state/downloads/$download_session_id/downloads/one-page-summary.md" "One-page summary should be persisted in web-demo downloads"
+    local one_page_path
+    one_page_path="$tmpdir/state/downloads/$download_session_id/downloads/one-page-summary.md"
+    local one_page_content
+    one_page_content="$(cat "$one_page_path")"
+    assert_contains "$one_page_content" "Ключевые факты из приложенных данных" "One-page summary should expose a dedicated data-facts section"
+    assert_contains "$one_page_content" "demo-client-data.csv: обработано" "One-page summary should include parsed upload evidence instead of brief-only retelling"
+    assert_contains "$one_page_content" "Сумма = 300 000 000 руб." "One-page summary should include concrete extracted deal facts from CSV"
     if compgen -G "$tmpdir/state/employees/executions/*.json" >/dev/null; then
         :
     else
