@@ -33,6 +33,7 @@
 | `primary-feature-028` | `028-beads-issues-jsonl-rca` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-029` | `029-beads-dolt-native-migration` | `dedicated-feature-worktree` | Needs decision |
 | `primary-feature-030` | `030-rebase-conflict-tail-audit` | `dedicated-feature-worktree` | Needs decision |
+| `primary-feature-031` | `031-moltis-reliability-diagnostics` | `dedicated-feature-worktree` | Needs decision |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -53,7 +54,8 @@
 | `028-beads-issues-jsonl-rca` | `origin/028-beads-issues-jsonl-rca` | Needs decision |
 | `029-beads-dolt-native-migration` | `origin/029-beads-dolt-native-migration` | Needs decision |
 | `030-rebase-conflict-tail-audit` | `origin/030-rebase-conflict-tail-audit` | Needs decision |
-| `chore/topology-registry-publish` | `none` | Needs decision |
+| `031-moltis-reliability-diagnostics` | `origin/031-moltis-reliability-diagnostics` | Needs decision |
+| `chore/topology-registry-publish` | `origin/chore/topology-registry-publish` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
 | `feat/moltinger-dmi-telegram-webhook-rollout` | `none` | Needs decision |
@@ -150,6 +152,7 @@
 | `origin/029-beads-dolt-native-migration` | Needs decision |
 | `origin/030-rebase-conflict-tail-audit` | Needs decision |
 | `origin/chore/topology-registry-after-cleanup-20260312` | Needs decision |
+| `origin/chore/topology-registry-publish` | Needs decision |
 | `origin/codex/004-telegram-e2e-harness` | Source for future Telegram consolidation. |
 | `origin/codex/fix-bot` | Source for future Telegram consolidation. |
 | `origin/codex/webhook-moltinger` | Source for future Telegram consolidation. |
