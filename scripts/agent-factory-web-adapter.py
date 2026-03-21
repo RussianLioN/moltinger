@@ -4258,9 +4258,24 @@ def handle_turn_payload(payload: dict[str, Any], *, state_root: Path) -> dict[st
         else normalize_text(runtime_state.get("next_question"))
     )
     if access_granted and not download_artifacts:
-        sanitized_next_question = sanitize_architect_question_text(next_question)
+        raw_next_question = normalize_text(next_question)
+        sanitized_next_question = sanitize_architect_question_text(raw_next_question)
         if sanitized_next_question:
             next_question = sanitized_next_question
+        elif has_redaction_retry_question_text(raw_next_question):
+            fallback_topic = (
+                normalize_text(runtime_state.get("next_topic"))
+                or normalize_text(discovery_session.get("current_topic"))
+                or normalize_text(next_topic)
+                or "input_examples"
+            )
+            if fallback_topic == "input_examples" and normalize_uploaded_files(uploaded_files):
+                fallback_topic = normalize_text(next_uncovered_topic_after(runtime_state, "input_examples")) or "expected_outputs"
+            fallback_question = normalize_text(ARCHITECT_TOPIC_FRAMES.get(fallback_topic, {}).get("question"))
+            if fallback_question:
+                next_topic = fallback_topic
+                next_question = fallback_question
+                architect_question_source = "question_sanitizer_fallback"
     if access_granted and not download_artifacts:
         (
             next_topic,

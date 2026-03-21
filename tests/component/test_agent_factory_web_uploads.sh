@@ -274,6 +274,44 @@ run_component_agent_factory_web_upload_tests() {
         test_fail "Adapter should auto-resolve stale redaction retry loop and advance to the next topic"
     fi
 
+    test_start "component_agent_factory_web_uploads_sanitizes_unsafe_runtime_question_to_canonical_topic_prompt"
+    if jq --slurpfile runtime "$DISCOVERY_INPUT_FIXTURE" '
+        .project_key = $runtime[0].project_key
+        | .browser_project_pointer.project_key = $runtime[0].project_key
+        | .browser_project_pointer.linked_discovery_session_id = $runtime[0].discovery_session.discovery_session_id
+        | .browser_project_pointer.selection_mode = "continue_active"
+        | .web_demo_session.status = "awaiting_user_reply"
+        | .web_conversation_envelope = {
+            "web_conversation_envelope_id": "web-envelope-question-sanitize-001",
+            "request_id": "web-request-question-sanitize-001",
+            "transport_mode": "synthetic_fixture",
+            "ui_action": "request_status",
+            "user_text": ""
+          }
+        | .discovery_runtime_state = (
+            $runtime[0]
+            | .status = "awaiting_user_reply"
+            | .next_action = "ask_next_question"
+            | .next_topic = "input_examples"
+            | .next_question = "Можешь прислать обезличенный пример входных данных (example-case-007) без реальных реквизитов, номеров и названий контрагентов?"
+            | .discovery_session.current_topic = "input_examples"
+            | .clarification_items = []
+          )
+        | .uploaded_files = []
+      ' "$SESSION_NEW_FIXTURE" >"$tmpdir/question-sanitize-request.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/question-sanitize-request.json" --state-root "$tmpdir/state-question-sanitize" --output "$tmpdir/question-sanitize-out.json" >/dev/null; then
+        assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/question-sanitize-out.json")" "Unsafe runtime redaction loop should advance to the next uncovered topic when input examples are already captured"
+        assert_contains "$(jq -r '.next_question' "$tmpdir/question-sanitize-out.json")" "Что агент должен выдать на выходе" "Unsafe runtime question should be replaced by a business-readable next-topic prompt"
+        if [[ "$(jq -r '.next_question' "$tmpdir/question-sanitize-out.json")" == *"example-case-007"* ]]; then
+            test_fail "Sanitized fallback must not leak example-case markers into browser question"
+        elif [[ "$(jq -r '.next_question' "$tmpdir/question-sanitize-out.json")" == *"без реальных реквизитов"* ]]; then
+            test_fail "Sanitized fallback must not repeat redaction-loop prompt wording"
+        fi
+        test_pass
+    else
+        test_fail "Adapter should sanitize unsafe runtime question into canonical topic prompt"
+    fi
+
     generate_report
 }
 
