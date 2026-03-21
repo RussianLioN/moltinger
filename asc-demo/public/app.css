@@ -1041,8 +1041,8 @@ code {
 
 .message--user {
   align-self: flex-end;
-  border-color: rgba(161, 172, 197, 0.26);
-  background: rgba(49, 57, 73, 0.62);
+  border-color: rgba(188, 193, 202, 0.22);
+  background: rgba(44, 49, 58, 0.72);
 }
 
 .message--system {
@@ -1073,16 +1073,16 @@ code {
 
 .composer.is-dragover,
 .composer[data-drop-active="true"] {
-  border-color: rgba(176, 188, 216, 0.5);
-  box-shadow: 0 0 0 1px rgba(176, 188, 216, 0.34), 0 16px 36px rgba(39, 46, 63, 0.35);
-  background: rgba(22, 27, 36, 0.98);
+  border-color: rgba(205, 210, 219, 0.42);
+  box-shadow: 0 0 0 1px rgba(205, 210, 219, 0.26), 0 16px 36px rgba(28, 31, 37, 0.35);
+  background: rgba(24, 28, 34, 0.98);
 }
 
 .composer.is-dragover .attach-button,
 .composer[data-drop-active="true"] .attach-button {
-  border-color: rgba(176, 188, 216, 0.62);
-  color: rgba(240, 244, 252, 0.96);
-  background: rgba(131, 145, 178, 0.24);
+  border-color: rgba(214, 218, 224, 0.52);
+  color: rgba(244, 246, 249, 0.96);
+  background: rgba(115, 121, 133, 0.26);
 }
 
 .composer__lead {
@@ -1319,16 +1319,16 @@ code {
 }
 
 .side-panel__icon-button[data-state="active"] {
-  border-color: rgba(151, 177, 255, 0.42);
-  background: rgba(121, 150, 255, 0.18);
-  color: #f2f5ff;
+  border-color: rgba(214, 218, 224, 0.36);
+  background: rgba(214, 218, 224, 0.14);
+  color: #f7f8fa;
 }
 
 .side-panel__icon-button[aria-pressed="true"],
 .side-panel__icon-button[aria-expanded="true"] {
-  border-color: rgba(151, 177, 255, 0.42);
-  background: rgba(121, 150, 255, 0.18);
-  color: #f2f5ff;
+  border-color: rgba(214, 218, 224, 0.36);
+  background: rgba(214, 218, 224, 0.14);
+  color: #f7f8fa;
 }
 
 .panel-card-list,
