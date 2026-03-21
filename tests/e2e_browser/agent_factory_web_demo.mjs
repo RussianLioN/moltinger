@@ -142,6 +142,17 @@ async function sendFirstIdea(page) {
   await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем или выгодоприобретателем результата?' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
 }
 
+async function sendComposerReply(page, text) {
+  const messageCountBefore = await page.locator('#messages .message').count();
+  await page.locator('#chatInput').fill(text);
+  await page.locator('#sendBtn').click();
+  await page.waitForFunction(
+    (previousCount) => document.querySelectorAll('#messages .message').length > previousCount,
+    messageCountBefore,
+    { timeout: defaultTimeoutMs },
+  );
+}
+
 async function run() {
   await startServer();
   const playwright = await getPlaywright();
@@ -238,6 +249,54 @@ async function run() {
         await page.locator('#chatInput').fill('Оператор первой линии и руководитель смены.');
         await page.locator('#sendBtn').click();
         await page.locator('#messages .message__body').filter({ hasText: 'Как этот процесс работает сейчас и где основные потери?' }).waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+      } finally {
+        await context.close();
+      }
+    });
+
+    await runCase('e2e_browser_web_demo_reopens_right_panel_after_text_confirm', 'Text confirmation reopens right panel in post-brief flow', async () => {
+      const { context, page } = await createPage(browser, { defaultTimeoutMs });
+      try {
+        await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+        await sendFirstIdea(page);
+
+        await sendComposerReply(page, 'Пользователь — клиентский менеджер, выгодоприобретатели — члены кредитного комитета.');
+        await sendComposerReply(page, 'Сейчас менеджер вручную собирает данные из CSV и Word, затем готовит PDF; много времени уходит на сверку и правки.');
+        await sendComposerReply(page, 'На выходе нужен one-page PDF и markdown. Обязательные блоки: профиль клиента, ключевые риски, рекомендация и итоговое решение.');
+        await sendComposerReply(page, 'В первую очередь агент помогает клиентскому менеджеру перед кредитным комитетом по каждой новой сделке.');
+        await sendComposerReply(page, 'CSV-выгрузка по клиенту и комментарий менеджера по сделке.');
+        await sendComposerReply(page, 'Если данных не хватает или есть противоречия — обязательная эскалация; обязательные поля должны быть заполнены.');
+        await sendComposerReply(page, 'Сократить время подготовки на 50% и снизить долю ошибок до 2%.');
+
+        const lastAgentMessage = ((await page.locator('#messages .message').last().innerText()) || '').trim();
+        if (/контракт результата|формате агент отда[её]т итог|обязательные блоки/i.test(lastAgentMessage)) {
+          await sendComposerReply(page, 'Итоговый формат: one-page PDF и markdown. Обязательные блоки: профиль клиента, ключевые риски, рекомендация и итоговое решение.');
+        }
+
+        await page.locator('#messages .message').filter({ hasText: 'подтверди' }).last().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        const sidePanel = page.locator('[data-role="side-panel"]');
+        const sidePanelClose = page.locator('[data-role="side-panel-close"]');
+        const sidePanelToggle = page.locator('[data-role="side-panel-toggle"]');
+
+        if (await sidePanelClose.isVisible().catch(() => false)) {
+          await sidePanelClose.click();
+          await page.waitForFunction(() => {
+            const panel = document.querySelector('[data-role="side-panel"]');
+            return Boolean(panel?.hasAttribute('hidden'));
+          }, { timeout: defaultTimeoutMs });
+        }
+
+        await sendComposerReply(page, 'Подтверждаю brief.');
+
+        await page.waitForFunction(() => {
+          const panel = document.querySelector('[data-role="side-panel"]');
+          return Boolean(panel && !panel.hasAttribute('hidden'));
+        }, { timeout: defaultTimeoutMs });
+        const panelMode = await sidePanel.getAttribute('data-mode');
+        const togglePressed = await sidePanelToggle.getAttribute('aria-pressed');
+
+        assert(['downloads', 'preview'].includes((panelMode || '').toLowerCase()), `Expected right panel mode downloads/preview after text confirm, got: ${panelMode}`);
+        assert(togglePressed === 'true', `Right panel toggle should be pressed after text confirm, got: ${togglePressed}`);
       } finally {
         await context.close();
       }

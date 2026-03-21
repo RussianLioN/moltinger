@@ -3715,9 +3715,12 @@
     const sourceRequestId = normalizeText(response.web_conversation_envelope?.request_id);
     const sourceUserText = normalizeText(response.web_conversation_envelope?.user_text);
     const submitTurnConfirmation = sourceAction === "submit_turn" && isLikelyBriefConfirmationText(sourceUserText);
+    const responseStatus = normalizeText(response.status).toLowerCase();
+    const briefRuntimeStatus = normalizeText(response.discovery_runtime_state?.requirement_brief?.status).toLowerCase();
+    const isPostConfirmState = responseStatus === "confirmed" || briefRuntimeStatus === "confirmed";
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
-    if (sourceAction === "confirm_brief" || submitTurnConfirmation) {
+    if (sourceAction === "confirm_brief" || submitTurnConfirmation || isPostConfirmState) {
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
       if (downloadsReady) {
