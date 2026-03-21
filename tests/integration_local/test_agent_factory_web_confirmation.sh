@@ -315,6 +315,31 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Browser flow should treat non-correction submit_turn text as status follow-up without brief mutation"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_ignores_non_correction_request_brief_correction_text"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/request-correction-followup-state" --output "$tmpdir/request-correction-followup-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005bc",
+          "request_id": "web-request-brief-review-005bc",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_brief_correction",
+          "user_text": "продолжим?"
+        } | del(.brief_feedback_target) | del(.brief_section_updates) | del(.demo_access_grant)' "$tmpdir/request-correction-followup-review-out.json" >"$tmpdir/request-correction-followup-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/request-correction-followup-source.json" --state-root "$tmpdir/request-correction-followup-state" --output "$tmpdir/request-correction-followup-out.json" >/dev/null; then
+        local scope_before_rc scope_after_rc next_question_rc
+        scope_before_rc="$(jq -c '.discovery_runtime_state.requirement_brief.scope_boundaries' "$tmpdir/request-correction-followup-review-out.json")"
+        scope_after_rc="$(jq -c '.discovery_runtime_state.requirement_brief.scope_boundaries' "$tmpdir/request-correction-followup-out.json")"
+        next_question_rc="$(jq -r '.next_question' "$tmpdir/request-correction-followup-out.json")"
+        assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/request-correction-followup-out.json")" "Non-correction request_brief_correction text should keep awaiting-confirmation state"
+        assert_eq "1.0" "$(jq -r '.discovery_runtime_state.requirement_brief.version' "$tmpdir/request-correction-followup-out.json")" "Non-correction request_brief_correction text must not bump brief version"
+        assert_eq "$scope_before_rc" "$scope_after_rc" "Non-correction request_brief_correction text must not mutate scope_boundaries"
+        if [[ "$next_question_rc" == *"Правку применил"* ]]; then
+            test_fail "Non-correction request_brief_correction text should not produce correction-applied acknowledgement"
+        fi
+        test_pass
+    else
+        test_fail "request_brief_correction should treat neutral follow-up text as status refresh without brief mutation"
+    fi
+
     test_start "integration_local_agent_factory_web_confirmation_parses_combined_input_and_output_correction_without_literal_prefix"
     if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/combined-correction-state" --output "$tmpdir/combined-correction-review-out.json" >/dev/null &&
         jq '.web_conversation_envelope = {

@@ -3416,8 +3416,14 @@ def build_discovery_request(
         request["brief_feedback_text"] = combined_text or normalize_text(payload.get("brief_feedback_text"))
         feedback_target_raw = normalize_text(payload.get("brief_feedback_target")).lower()
         feedback_target = TOPIC_TO_BRIEF_FIELD.get(feedback_target_raw, feedback_target_raw)
+        explicit_feedback_target = feedback_target in BRIEF_SECTION_FIELDS
+        if request["brief_feedback_text"] and is_explicit_status_refresh_text(request["brief_feedback_text"]) and not explicit_feedback_target:
+            append_user_turn(request, request["brief_feedback_text"], "status_followup", now)
+            request.pop("brief_feedback_text", None)
+            return request, True, low_signal_submission
         inferred_updates: dict[str, Any] = {}
         inferred_io_updates: dict[str, Any] = {}
+        correction_intent = is_likely_brief_correction_text(request["brief_feedback_text"])
         if request["brief_feedback_text"]:
             inferred_updates = infer_brief_section_updates_from_feedback(
                 request["brief_feedback_text"],
@@ -3428,6 +3434,11 @@ def build_discovery_request(
                 for section, value in inferred_updates.items()
                 if section in {"input_examples", "expected_outputs"}
             }
+        non_fallback_updates = has_non_fallback_brief_updates(inferred_updates)
+        if request["brief_feedback_text"] and not correction_intent and not non_fallback_updates and not explicit_feedback_target:
+            append_user_turn(request, request["brief_feedback_text"], "status_followup", now)
+            request.pop("brief_feedback_text", None)
+            return request, True, low_signal_submission
         if request["brief_feedback_text"] and feedback_target in BRIEF_SECTION_FIELDS:
             cleaned_text = normalize_feedback_update_text(request["brief_feedback_text"], section=feedback_target)
             targeted_update = {feedback_target: [cleaned_text or request["brief_feedback_text"]]}
