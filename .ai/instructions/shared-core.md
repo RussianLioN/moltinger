@@ -45,6 +45,7 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 - Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
 - For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.
 - If a preserved sibling worktree still cannot open local Beads state after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. First run `/usr/local/bin/bd doctor --json`, then repair with `bd init && bd backup restore` or `bd bootstrap` as appropriate.
+- Branch note for `031-moltis-reliability-diagnostics`: this worktree was recovered from a local Dolt branch-switch failure on 2026-03-21. If `bd` regresses to `database "beads" not found` while `.beads/backup/` still exists, treat it as local Dolt DB bootstrap drift, not backlog loss. Repair the local runtime from `.beads/backup`, keep `.beads/issues.jsonl` retired, and do not reintroduce legacy `bd sync`.
 - If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
 - Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
 
