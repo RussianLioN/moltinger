@@ -335,6 +335,19 @@ code {
   cursor: not-allowed;
 }
 
+.button:focus-visible,
+.chip:focus-visible,
+.project-card__main:focus-visible,
+.project-card__menu:focus-visible,
+.attach-button:focus-visible,
+.composer-send:focus-visible,
+.artifact-link-row__action:focus-visible,
+.message__action:focus-visible,
+.icon-button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -689,9 +702,10 @@ code {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 48;
   padding: 6px 0 10px;
   background: rgba(11, 13, 18, 0.98);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -920,6 +934,7 @@ code {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -937,6 +952,7 @@ code {
   min-height: 0;
   max-height: none;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 2px 0 10px;
   scroll-behavior: auto;
   scroll-padding-top: 78px;
@@ -1037,6 +1053,7 @@ code {
 }
 
 .composer-dock {
+  flex: 0 0 auto;
   position: sticky;
   bottom: 0;
   z-index: 3;
@@ -1610,6 +1627,16 @@ code {
     grid-column: 1;
   }
 
+  .workspace-shell[data-panel-open="true"][data-panel-fullscreen="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-shell[data-panel-open="true"] .side-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .workspace-topbar {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;
@@ -1649,6 +1676,11 @@ code {
 
   .preview-panel__frame {
     min-height: 320px;
+  }
+
+  .side-panel__body {
+    flex: 1 1 auto;
+    min-height: 1px;
   }
 
   .artifact-link-row {

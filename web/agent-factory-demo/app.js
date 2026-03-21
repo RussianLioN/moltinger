@@ -2479,12 +2479,10 @@
   }
 
   function renderComposer(project) {
-    dom.composerLeadLabel.textContent = "Статус";
-    dom.composerMode.textContent = state.awaitingResponse
-      ? "Агент-архитектор формирует следующий шаг"
-      : "";
+    dom.composerLeadLabel.textContent = leadLabelFor(project);
+    dom.composerMode.textContent = modeTextFor(project);
     if (dom.composerLead) {
-      dom.composerLead.hidden = !state.awaitingResponse;
+      dom.composerLead.hidden = !state.accessToken;
     }
     if (dom.composerThinking) {
       dom.composerThinking.hidden = !state.awaitingResponse;
@@ -3050,7 +3048,7 @@
     }
     const hasExplicitSectionReference =
       /(?:раздел|секци(?:я|ю)|section)/.test(lowered)
-      || /(?:input\s*examples?|expected\s*outputs?|target\s*users?|current\s*process|constraints?|success\s*metrics?|входн(?:ые)?\s+(?:примеры|данн(?:ые)?)|ожидаем(?:ый|ые)?\s+(?:выход(?:ы)?|результат(?:ы)?)|целев(?:ой|ые)\s+пользовател(?:ь|и)|выгодоприобретател(?:ь|и)|текущ(?:ий|ая)\s+процесс|ограничени(?:е|я)|метрик(?:а|и)\s+успеха?)\s*[:\-–—]/.test(lowered);
+      || /(?:input\s*examples?|expected\s*outputs?|target\s*users?|current\s*process|constraints?|success\s*metrics?|business\s*rules?|входн(?:ые)?\s+(?:примеры|данн(?:ые)?)|ожидаем(?:ый|ые)?\s+(?:выход(?:ы)?|результат(?:ы)?)|целев(?:ой|ые)\s+пользовател(?:ь|и)|выгодоприобретател(?:ь|и)|текущ(?:ий|ая)\s+процесс|ограничени(?:е|я)|метрик(?:а|и)\s+успеха?|бизнес[-\s]*правила|правила)\s*[:\-–—]/.test(lowered);
     if (!hasExplicitSectionReference) {
       return "";
     }
@@ -3090,6 +3088,12 @@
         target: "success_metrics",
         patterns: [
           /(?:success\s*metrics?|kpi|sla|метрик(?:а|и)\s+успеха?)/,
+        ],
+      },
+      {
+        target: "business_rules",
+        patterns: [
+          /(?:business\s*rules?|бизнес[-\s]*правила|\bправила\b)/,
         ],
       },
     ];

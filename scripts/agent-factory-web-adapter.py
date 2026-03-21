@@ -2329,6 +2329,11 @@ def normalize_feedback_update_text(value: Any, *, section: str = "") -> str:
             r"(?:(?:раздел|секци(?:ю|я)|section)\s+)?"
             r"(?:input[_\s]*examples?|входн(?:ые)?\s+данн(?:ые)?|входн(?:ые)?\s+примеры)\s*[:\-–—]\s*",
         ),
+        "business_rules": (
+            r"^(?:нужно|надо|прошу|пожалуйста)?\s*(?:добавь|добавить|исправь|исправить|поправь|поправить|обнови|обновить|уточни|пропиши)\s+"
+            r"(?:(?:раздел|секци(?:ю|я)|section)\s+)?"
+            r"(?:business[_\s]*rules?|бизнес[-\s]*правила|правила)\s*[:\-–—]\s*",
+        ),
     }
     for pattern in section_command_prefix_patterns.get(section, ()):
         cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
@@ -2378,6 +2383,17 @@ def extract_feedback_section_fragment(feedback_text: str, *, section: str) -> st
             r"(?:\bвыход(?:ы)?\b|output(?:s)?)\s*[:\-–—]\s*(.+)",
         )
         stop_pattern = ""
+    elif section == "business_rules":
+        patterns = (
+            r"(?:бизнес[-\s]*правила|правила|business\s*rules?)\s*[:\-–—]\s*(.+)",
+            r"(?:добавь|добавить|уточни|пропиши|зафиксируй)\s+(?:бизнес[-\s]*правила|правила|business\s*rules?)\s*[:\-–—]\s*(.+)",
+        )
+        stop_pattern = (
+            r"(?:входные\s+примеры|входные\s+данные|input\s*examples?|ожидаем(?:ый|ые)?\s+выход(?:ы)?|"
+            r"ожидаем(?:ый|ые)?\s+результат(?:ы)?|на\s+выходе|кто\s+будет\s+основным\s+пользовател|"
+            r"пользовател(?:ь|и)\s*(?:и|/)\s*выгодоприобретател|выгодоприобретател(?:ь|и)|"
+            r"текущ(?:ий|ая)\s+процесс|как\s+этот\s+процесс)\s*[:\-–—]"
+        )
     elif section == "target_users":
         patterns = (
             r"(?:кто\s+пользуется\s+результатом|кто\s+будет\s+основным\s+пользовател(?:ем|ями)|"
@@ -2964,6 +2980,7 @@ def infer_brief_section_updates_from_feedback(
         )
     input_fragment = extract_feedback_section_fragment(text_for_sections, section="input_examples")
     output_fragment = extract_feedback_section_fragment(text_for_sections, section="expected_outputs")
+    business_rules_fragment = extract_feedback_section_fragment(text_for_sections, section="business_rules")
     if (
         section_command_label
         and "пользовател" in section_command_label
@@ -2989,9 +3006,16 @@ def infer_brief_section_updates_from_feedback(
             "рекомендац",
         )
     )
+    explicit_business_rules_signal = (
+        bool(business_rules_fragment)
+        or bool(section_command_label and re.search(r"(?:бизнес[-\s]*правил|правил)", section_command_label))
+        or bool(re.search(r"(?:\bбизнес[-\s]*правила\b|\bправила\b|business\s*rules?)", lowered))
+    )
     mentions_output_data_phrase = bool(re.search(r"выходн\w*\s+данн", lowered))
     expected_outputs_signal = explicit_expected_outputs_signal or bool(output_fragment)
     if input_examples_signal and not output_fragment:
+        expected_outputs_signal = False
+    if explicit_business_rules_signal and not output_fragment:
         expected_outputs_signal = False
     if (
         input_examples_signal
@@ -3026,6 +3050,13 @@ def infer_brief_section_updates_from_feedback(
         cleaned_text = normalize_feedback_update_text(output_fragment or text_for_sections, section="expected_outputs")
         updates["expected_outputs"] = [cleaned_text or text_for_sections]
 
+    if explicit_business_rules_signal:
+        cleaned_text = normalize_feedback_update_text(
+            business_rules_fragment or text_for_sections,
+            section="business_rules",
+        )
+        updates["business_rules"] = [cleaned_text or business_rules_fragment or text_for_sections]
+
     has_target_users_signal = bool(target_users_fragment) or bool(
         re.search(
             r"(кто\s+будет\s+основным\s+пользовател|пользовател(?:ь|и)\s*(?:и|/)\s*выгодоприобретател|"
@@ -3047,7 +3078,7 @@ def infer_brief_section_updates_from_feedback(
         cleaned_text = normalize_feedback_update_text(current_process_fragment or text_for_sections, section="current_process")
         updates["current_process"] = cleaned_text or current_process_fragment or text_for_sections
 
-    if "expected_outputs" not in updates and not input_examples_signal and re.search(
+    if "expected_outputs" not in updates and not input_examples_signal and not explicit_business_rules_signal and re.search(
         r"(на\s+выходе|ожидаем\w*|итогов\w*\s+результат|результат\s+обработк\w*)",
         lowered,
     ):

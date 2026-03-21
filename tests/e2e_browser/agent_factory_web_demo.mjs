@@ -172,6 +172,10 @@ async function run() {
       try {
         await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
         await sendFirstIdea(page);
+        await page.waitForFunction(() => {
+          const sendButton = document.querySelector('#sendBtn');
+          return sendButton?.dataset?.mode === 'send';
+        }, { timeout: defaultTimeoutMs });
 
         const composerMode = (await page.locator('[data-role="composer-mode"]').textContent()) || '';
         const composerPlaceholder = (await page.locator('#chatInput').getAttribute('placeholder')) || '';

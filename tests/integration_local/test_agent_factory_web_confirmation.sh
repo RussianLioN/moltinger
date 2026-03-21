@@ -132,6 +132,26 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Section command 'Пользователи и процесс' should route to current_process without fallback"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_routes_business_rules_feedback_without_overwriting_expected_outputs"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/business-rules-state" --output "$tmpdir/business-rules-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-008e",
+          "request_id": "web-request-brief-review-008e",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_brief_correction",
+          "user_text": "Добавь правила: итоговый one-page должен быть на русском языке, не больше 1 страницы A4, с блоками «Ключевые факты», «Риски», «Рекомендация»."
+        } | del(.brief_feedback_target) | del(.brief_section_updates) | del(.demo_access_grant)' "$tmpdir/business-rules-review-out.json" >"$tmpdir/business-rules-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/business-rules-source.json" --state-root "$tmpdir/business-rules-state" --output "$tmpdir/business-rules-out.json" >/dev/null; then
+        local expected_outputs_before expected_outputs_after
+        expected_outputs_before="$(jq -c '.discovery_runtime_state.requirement_brief.expected_outputs' "$tmpdir/business-rules-review-out.json")"
+        expected_outputs_after="$(jq -c '.discovery_runtime_state.requirement_brief.expected_outputs' "$tmpdir/business-rules-out.json")"
+        assert_eq "$expected_outputs_before" "$expected_outputs_after" "Business rules correction must not overwrite expected_outputs"
+        assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.business_rules[0]' "$tmpdir/business-rules-out.json")" "итоговый one-page должен быть на русском языке" "Business rules correction should be persisted in business_rules section"
+        test_pass
+    else
+        test_fail "Business-rules correction should route to business_rules and keep expected_outputs unchanged"
+    fi
+
     test_start "integration_local_agent_factory_web_confirmation_reopens_confirmed_version_without_losing_history"
     if jq '.web_conversation_envelope = {
           "web_conversation_envelope_id": "web-envelope-brief-review-004",

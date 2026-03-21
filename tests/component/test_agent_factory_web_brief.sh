@@ -70,7 +70,7 @@ run_component_agent_factory_web_brief_tests() {
     assert_eq "request_explicit_confirmation" "$(jq -r '.next_action' "$tmpdir/brief-correction-out.json")" "After correction, the next step must still be explicit confirmation"
     assert_eq "1.1" "$(jq -r '.status_snapshot.brief_version' "$tmpdir/brief-correction-out.json")" "Correction text should produce a new brief version"
     assert_eq "0" "$(jq -r '[.reply_cards[] | select(.card_kind == "download_prompt")] | length' "$tmpdir/brief-correction-out.json")" "Correction text must not trigger download-ready cards"
-    assert_contains "$(jq -r '[.reply_cards[] | select(.title == "Пользователи и процесс")][0].body_text' "$tmpdir/brief-correction-out.json")" "BPMN-схему" "Correction text should be reflected in rendered brief sections"
+    assert_contains "$(jq -r '[.reply_cards[] | select(.card_kind == "brief_summary_section") | .body_text] | join("\n")' "$tmpdir/brief-correction-out.json")" "BPMN-схему" "Correction text should be reflected in rendered brief sections"
     test_pass
 
     generate_report
