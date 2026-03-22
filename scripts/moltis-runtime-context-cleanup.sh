@@ -78,55 +78,57 @@ if $APPLY_CHANGES; then
     done
 fi
 
-TMP_DIR="$(mktemp -d /tmp/moltis-runtime-context-cleanup.XXXXXX)"
-trap 'rm -rf "$TMP_DIR"' EXIT
-
-write_list_file() {
-    local output_path="$1"
-    shift
-
-    : > "$output_path"
-    if [[ $# -eq 0 ]]; then
-        return
-    fi
-
-    printf '%s\n' "$@" > "$output_path"
+json_escape() {
+    local value="${1-}"
+    awk -v s="$value" 'BEGIN {
+        gsub(/\\/,"\\\\",s)
+        gsub(/"/,"\\\"",s)
+        gsub(/\t/,"\\t",s)
+        gsub(/\r/,"\\r",s)
+        gsub(/\n/,"\\n",s)
+        printf "%s", s
+    }'
 }
 
-write_list_file "$TMP_DIR/candidates.txt" "${CANDIDATES[@]}"
-write_list_file "$TMP_DIR/removed.txt" "${REMOVED[@]}"
-write_list_file "$TMP_DIR/skipped.txt" "${SKIPPED[@]}"
-
-perl -MJSON::PP -e '
-use strict;
-use warnings;
-
-sub load_list {
-    my ($path) = @_;
-    open my $fh, "<", $path or die "open($path): $!";
-    chomp(my @items = <$fh>);
-    close $fh;
-    return [grep { length $_ } @items];
+json_print_array() {
+    local item first=true
+    printf '['
+    for item in "$@"; do
+        if [[ "$first" == true ]]; then
+            first=false
+        else
+            printf ','
+        fi
+        printf '"'
+        json_escape "$item"
+        printf '"'
+    done
+    printf ']'
 }
 
-my ($runtime_home, $mode, $candidates_path, $removed_path, $skipped_path) = @ARGV;
-my $candidates = load_list($candidates_path);
-my $removed = load_list($removed_path);
-my $skipped = load_list($skipped_path);
+print_report() {
+    local mode="$1"
 
-print JSON::PP->new->utf8->canonical->pretty->encode({
-    runtime_home => $runtime_home,
-    mode => $mode,
-    candidates => $candidates,
-    candidate_count => scalar(@{$candidates}),
-    removed => $removed,
-    removed_count => scalar(@{$removed}),
-    skipped => $skipped,
-    skipped_count => scalar(@{$skipped}),
-});
-' \
-    "$RUNTIME_HOME" \
-    "$([[ "$APPLY_CHANGES" == true ]] && echo apply || echo dry-run)" \
-    "$TMP_DIR/candidates.txt" \
-    "$TMP_DIR/removed.txt" \
-    "$TMP_DIR/skipped.txt"
+    printf '{\n'
+    printf '  "runtime_home": "'
+    json_escape "$RUNTIME_HOME"
+    printf '",\n'
+    printf '  "mode": "'
+    json_escape "$mode"
+    printf '",\n'
+    printf '  "candidates": '
+    json_print_array "${CANDIDATES[@]}"
+    printf ',\n'
+    printf '  "candidate_count": %s,\n' "${#CANDIDATES[@]}"
+    printf '  "removed": '
+    json_print_array "${REMOVED[@]}"
+    printf ',\n'
+    printf '  "removed_count": %s,\n' "${#REMOVED[@]}"
+    printf '  "skipped": '
+    json_print_array "${SKIPPED[@]}"
+    printf ',\n'
+    printf '  "skipped_count": %s\n' "${#SKIPPED[@]}"
+    printf '}\n'
+}
+
+print_report "$([[ "$APPLY_CHANGES" == true ]] && echo apply || echo dry-run)"

@@ -548,8 +548,8 @@
       "entrypoint": true,
       "requires": [
         "bash",
+        "awk",
         "find",
-        "perl",
         "sort"
       ],
       "provides": [
