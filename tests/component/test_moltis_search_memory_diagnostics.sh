@@ -70,8 +70,11 @@ EOF
 
     if [[ "$(jq -r '.tracked.search.tavily_mcp_enabled' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.tracked.search.tavily_transport' "$output_json")" != "sse" ]] || \
-       [[ "$(jq -r '.tracked.memory.provider_pinned' "$output_json")" != "false" ]]; then
-        test_fail "Real tracked config summary no longer reflects the expected Tavily + memory auto-detect contract"
+       [[ "$(jq -r '.tracked.memory.provider_pinned' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.tracked.memory.provider' "$output_json")" != "ollama" ]] || \
+       [[ "$(jq -r '.tracked.memory.model' "$output_json")" != "nomic-embed-text" ]] || \
+       [[ "$(jq -r '.tracked.memory.watch_dirs_configured' "$output_json")" != "true" ]]; then
+        test_fail "Real tracked config summary no longer reflects the expected pinned Tavily + memory provider contract"
         rm -rf "$tmp_dir"
         return
     fi

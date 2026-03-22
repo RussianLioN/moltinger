@@ -202,6 +202,17 @@ PY
         test_fail "Primary Moltis config must use container-visible /server paths for codex-update skill code and ~/.moltis paths for writable state"
     fi
 
+    test_start "static_config_pins_memory_provider_and_repo_watch_dirs"
+    if rg -Fq 'provider = "ollama"' "$TOML_CONFIG" && \
+       rg -Fq 'base_url = "http://ollama:11434/v1"' "$TOML_CONFIG" && \
+       rg -Fq 'model = "nomic-embed-text"' "$TOML_CONFIG" && \
+       rg -Fq '"~/.moltis/memory"' "$TOML_CONFIG" && \
+       rg -Fq '"/server/knowledge"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must pin the memory embeddings backend and repo-visible watch_dirs instead of relying on auto-detect"
+    fi
+
     test_start "static_codex_cli_update_delivery_script_is_executable"
     if [[ -x "$PROJECT_ROOT/scripts/codex-cli-update-delivery.sh" ]]; then
         test_pass
