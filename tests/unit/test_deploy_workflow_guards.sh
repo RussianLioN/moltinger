@@ -17,6 +17,7 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+CANONICAL_SMOKE_SCRIPT="$PROJECT_ROOT/scripts/moltis-canonical-smoke.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
 EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
 EXPECTED_CHECKOUT_ALIGN_SCRIPT="scripts/align-server-checkout.sh"
@@ -25,6 +26,7 @@ EXPECTED_HOST_AUTOMATION_SCRIPT="scripts/apply-moltis-host-automation.sh"
 EXPECTED_ENV_RENDER_SCRIPT="scripts/render-moltis-env.sh"
 EXPECTED_TRACKED_DEPLOY_SCRIPT="scripts/run-tracked-moltis-deploy.sh"
 EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT="scripts/ssh-run-tracked-moltis-deploy.sh"
+EXPECTED_CANONICAL_SMOKE_SCRIPT="scripts/moltis-canonical-smoke.sh"
 
 test_deploy_workflow_uses_shared_production_lock() {
     test_start "Deploy workflow should use shared production concurrency group"
@@ -227,6 +229,29 @@ test_tracked_deploy_workflows_use_shared_script_entrypoint() {
        grep -Fq "Verify deployment" "$UAT_WORKFLOW" || \
        grep -Fq "Record deployed git SHA (GitOps audit)" "$UAT_WORKFLOW"; then
         test_fail "uat-gate.yml should not inline tracked Moltis deploy orchestration"
+        return
+    fi
+
+    test_pass
+}
+
+test_deploy_workflows_use_canonical_provider_smoke_proof() {
+    test_start "Deploy and UAT workflows should require the canonical Moltis provider/model smoke proof"
+
+    if [[ ! -f "$DEPLOY_WORKFLOW" || ! -f "$UAT_WORKFLOW" || ! -f "$CANONICAL_SMOKE_SCRIPT" ]]; then
+        test_skip "Workflow/script files missing for canonical smoke proof check"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_CANONICAL_SMOKE_SCRIPT" "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq "$EXPECTED_CANONICAL_SMOKE_SCRIPT" "$UAT_WORKFLOW" || \
+       ! grep -Fq 'EXPECTED_AUTH_PROVIDER=openai-codex' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'EXPECTED_MODEL=openai-codex::gpt-5.4' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq -- '--restart-survival' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'EXPECTED_AUTH_PROVIDER=openai-codex' "$UAT_WORKFLOW" || \
+       ! grep -Fq 'EXPECTED_MODEL=openai-codex::gpt-5.4' "$UAT_WORKFLOW" || \
+       ! grep -Fq -- '--restart-survival' "$UAT_WORKFLOW"; then
+        test_fail "Deploy and UAT workflows must prove openai-codex::gpt-5.4 through the shared canonical smoke script, including restart survival"
         return
     fi
 
@@ -1285,6 +1310,7 @@ run_all_tests() {
     test_gitops_sync_workflows_use_shared_script_entrypoint
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
+    test_deploy_workflows_use_canonical_provider_smoke_proof
     test_deploy_script_verifies_live_moltis_runtime_contract
     test_deploy_script_force_recreates_moltis_runtime_on_rollout
     test_deploy_script_syncs_tracked_knowledge_into_runtime_memory

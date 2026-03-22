@@ -15,6 +15,9 @@ ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-20}"
 CHAT_WAIT_MS="${CHAT_WAIT_MS:-15000}"
 RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"
+EXPECTED_PROVIDER="${EXPECTED_PROVIDER:-}"
+EXPECTED_MODEL="${EXPECTED_MODEL:-}"
+EXPECTED_REPLY_TEXT="${EXPECTED_REPLY_TEXT:-}"
 COOKIE_FILE="/tmp/moltis-session-$$"
 STATUS_FILE="/tmp/moltis-status-$$.json"
 RPC_OUTPUT_FILE="/tmp/moltis-chat-$$.json"
@@ -58,7 +61,7 @@ print_json_summary() {
 main() {
     local command="${1:-/status}"
     local health_code auth_code logout_code rpc_payload
-    local final_event_count
+    local final_event_count final_provider final_model final_reply_text
     local chat_run_started
 
     require_command curl
@@ -152,6 +155,29 @@ main() {
         jq . "$RPC_OUTPUT_FILE" >&2 || true
         exit 1
     fi
+
+    final_provider="$(jq -r '[.events[]? | select(.event == "chat" and .payload.state == "final")][-1].payload.provider // empty' "$RPC_OUTPUT_FILE")"
+    final_model="$(jq -r '[.events[]? | select(.event == "chat" and .payload.state == "final")][-1].payload.model // empty' "$RPC_OUTPUT_FILE")"
+    final_reply_text="$(jq -r '[.events[]? | select(.event == "chat" and .payload.state == "final")][-1].payload.text // empty' "$RPC_OUTPUT_FILE")"
+
+    if [[ -n "$EXPECTED_PROVIDER" && "$final_provider" != "$EXPECTED_PROVIDER" ]]; then
+        echo "ERROR: Final provider mismatch: expected '$EXPECTED_PROVIDER', got '$final_provider'" >&2
+        jq . "$RPC_OUTPUT_FILE" >&2 || true
+        exit 1
+    fi
+
+    if [[ -n "$EXPECTED_MODEL" && "$final_model" != "$EXPECTED_MODEL" ]]; then
+        echo "ERROR: Final model mismatch: expected '$EXPECTED_MODEL', got '$final_model'" >&2
+        jq . "$RPC_OUTPUT_FILE" >&2 || true
+        exit 1
+    fi
+
+    if [[ -n "$EXPECTED_REPLY_TEXT" && "$final_reply_text" != "$EXPECTED_REPLY_TEXT" ]]; then
+        echo "ERROR: Final reply text mismatch: expected '$EXPECTED_REPLY_TEXT', got '$final_reply_text'" >&2
+        jq . "$RPC_OUTPUT_FILE" >&2 || true
+        exit 1
+    fi
+
     print_json_summary "$RPC_OUTPUT_FILE" '[.events[]? | select(.event == "chat" and .payload.state == "final")][-1]'
 
     echo

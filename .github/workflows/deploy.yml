@@ -1299,13 +1299,14 @@ jobs:
             test -f "$RUNTIME_CONFIG_DIR/moltis.toml"
             echo "Runtime config OK: $RUNTIME_CONFIG_DIR"
 
-            # Test 7: Provider auth status evidence
-            echo "Test 7: Provider auth status..."
-            AUTH_STATUS=$(docker exec moltis moltis auth status 2>&1 || true)
-            echo "$AUTH_STATUS"
-            if printf '%s' "$AUTH_STATUS" | grep -q 'No authenticated providers.'; then
-              echo "::warning::No authenticated providers are currently loaded in live Moltis"
-            fi
+            # Test 7: Canonical provider/model proof with restart survival
+            echo "Test 7: Canonical provider/model proof with restart survival..."
+            CHAT_WAIT_MS=90000 \
+            EXPECTED_AUTH_PROVIDER=openai-codex \
+            EXPECTED_PROVIDER=openai-codex \
+            EXPECTED_MODEL=openai-codex::gpt-5.4 \
+            EXPECTED_REPLY_TEXT=OK \
+            bash ./scripts/moltis-canonical-smoke.sh --base-url http://localhost:13131 --container moltis --restart-survival
 
             echo "All smoke tests passed!"
           EOF

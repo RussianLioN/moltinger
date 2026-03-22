@@ -271,6 +271,20 @@ PY
         test_fail "scripts/test-moltis-api.sh must clear chat context before chat.send so authoritative smoke runs do not reuse stale operator session state"
     fi
 
+    test_start "static_moltis_smoke_can_enforce_provider_model_and_reply_contract"
+    if rg -Fq 'EXPECTED_PROVIDER="${EXPECTED_PROVIDER:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'EXPECTED_MODEL="${EXPECTED_MODEL:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'EXPECTED_REPLY_TEXT="${EXPECTED_REPLY_TEXT:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq "Final provider mismatch" "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq "Final model mismatch" "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq "Final reply text mismatch" "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'EXPECTED_AUTH_PROVIDER="${EXPECTED_AUTH_PROVIDER:-openai-codex}"' "$PROJECT_ROOT/scripts/moltis-canonical-smoke.sh" && \
+       rg -Fq -- '--restart-survival' "$PROJECT_ROOT/scripts/moltis-canonical-smoke.sh"; then
+        test_pass
+    else
+        test_fail "Canonical Moltis smoke proof must be able to enforce provider/model/reply expectations and explicitly support restart-survival verification"
+    fi
+
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
     if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
        rg -q 'data/\.deployed-sha' "$TRACKED_DEPLOY_SCRIPT" && \

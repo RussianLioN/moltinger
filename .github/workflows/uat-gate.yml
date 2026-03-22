@@ -207,6 +207,15 @@ jobs:
             echo "Test 4: Database connectivity"
             docker exec moltis ls /data > /dev/null 2>&1 || true
 
+            echo "Test 5: Canonical provider/model proof with restart survival"
+            cd ${{ env.DEPLOY_PATH }}
+            CHAT_WAIT_MS=90000 \
+            EXPECTED_AUTH_PROVIDER=openai-codex \
+            EXPECTED_PROVIDER=openai-codex \
+            EXPECTED_MODEL=openai-codex::gpt-5.4 \
+            EXPECTED_REPLY_TEXT=OK \
+            bash ./scripts/moltis-canonical-smoke.sh --base-url http://localhost:13131 --container moltis --restart-survival
+
             echo "All smoke tests passed ✅"
           EOF
           echo "::endgroup::"

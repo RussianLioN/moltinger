@@ -560,6 +560,33 @@
       ],
       "ci": true
     },
+    "moltis-canonical-smoke.sh": {
+      "version": "1.0.0",
+      "description": "Authoritative Moltis provider/model smoke proof with optional restart-survival verification",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "jq",
+        "node"
+      ],
+      "provides": [
+        "moltis-canonical-smoke"
+      ],
+      "env_vars": [
+        "MOLTIS_URL",
+        "MOLTIS_CONTAINER",
+        "EXPECTED_AUTH_PROVIDER",
+        "EXPECTED_PROVIDER",
+        "EXPECTED_MODEL",
+        "EXPECTED_REPLY_TEXT",
+        "SMOKE_PROMPT",
+        "HEALTH_TIMEOUT",
+        "CHAT_WAIT_MS"
+      ],
+      "ci": true
+    },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",
@@ -1023,14 +1050,18 @@
       "entrypoint": true,
       "requires": [
         "curl",
-        "jq"
+        "jq",
+        "node"
       ],
       "provides": [
         "test-api"
       ],
       "env_vars": [
         "MOLTIS_URL",
-        "MOLTIS_PASSWORD"
+        "MOLTIS_PASSWORD",
+        "EXPECTED_PROVIDER",
+        "EXPECTED_MODEL",
+        "EXPECTED_REPLY_TEXT"
       ]
     },
     "zai-rate-monitor.sh": {
