@@ -96,6 +96,16 @@ run_static_config_validation_tests() {
         test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for live skill visibility"
     fi
 
+    test_start "static_moltis_browser_docker_contract_matches_official_sibling_container_requirements"
+    if rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG" && \
+       rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
+       rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
+       rg -q 'DOCKER_SOCKET_GID=\$docker_socket_gid' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Browser-in-Docker contract must set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
+    fi
+
     test_start "static_compose_clawdiy_valid"
     if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass

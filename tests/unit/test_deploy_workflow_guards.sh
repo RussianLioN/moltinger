@@ -290,6 +290,24 @@ test_deploy_script_syncs_tracked_knowledge_into_runtime_memory() {
     test_pass
 }
 
+test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
+    test_start "Deploy should export the live Docker socket GID for browser sandbox access"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/docker-compose.prod.yml" || ! -f "$PROJECT_ROOT/config/moltis.toml" ]]; then
+        test_skip "Missing deploy, compose, or config files"
+        return
+    fi
+
+    if ! grep -Fq 'DOCKER_SOCKET_GID=$docker_socket_gid' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
+       ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
+        test_fail "Browser sandbox access requires deploy.sh to inject the live socket GID and the tracked runtime to expose host.docker.internal for sibling browser containers"
+        return
+    fi
+
+    test_pass
+}
+
 test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
     test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
 
@@ -1231,6 +1249,7 @@ run_all_tests() {
     test_deploy_script_verifies_live_moltis_runtime_contract
     test_deploy_script_force_recreates_moltis_runtime_on_rollout
     test_deploy_script_syncs_tracked_knowledge_into_runtime_memory
+    test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_checkout_align_script_dry_run_uses_constant_remote_command
