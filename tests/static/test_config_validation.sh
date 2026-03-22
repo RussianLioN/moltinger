@@ -361,10 +361,11 @@ PY
     test_start "static_deploy_script_scopes_moltis_rollout_to_core_and_sidecars"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        rg -Fq 'TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'compose_cmd normal up -d --remove-orphans "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
+       rg -Fq 'deploy_args+=(--force-recreate)' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Moltis deploy path must target only moltis + required sidecars so unrelated monitoring services cannot block tracked upgrades"
+        test_fail "Moltis deploy path must target only moltis + required sidecars and force-recreate the runtime so config changes take effect immediately"
     fi
 
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"

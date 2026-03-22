@@ -1162,6 +1162,7 @@ pull_images() {
 deploy_containers() {
     log_info "Deploying containers for target $TARGET..."
     local -a deploy_services=("$TARGET_SERVICE")
+    local -a deploy_args=(up -d --remove-orphans)
     local service
 
     for service in "${TARGET_AUXILIARY_SERVICES[@]}"; do
@@ -1169,7 +1170,13 @@ deploy_containers() {
         deploy_services+=("$service")
     done
 
-    compose_cmd normal up -d --remove-orphans "${deploy_services[@]}"
+    if [[ "$TARGET" == "moltis" ]]; then
+        # Moltis loads runtime config at process start, so bind-mounted config
+        # changes must force a recreate to avoid stale live state.
+        deploy_args+=(--force-recreate)
+    fi
+
+    compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"
     log_success "Containers deployed for target $TARGET"
 }
 

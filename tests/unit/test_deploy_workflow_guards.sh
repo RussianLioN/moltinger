@@ -253,6 +253,24 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
     test_pass
 }
 
+test_deploy_script_force_recreates_moltis_runtime_on_rollout() {
+    test_start "Deploy rollout should force-recreate Moltis so runtime config changes are applied"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" ]]; then
+        test_skip "Missing deploy script"
+        return
+    fi
+
+    if ! grep -Fq 'deploy_args+=(--force-recreate)' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'bind-mounted config' "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "deploy.sh must force-recreate Moltis during deploy so updated runtime config is not left pending until a manual restart"
+        return
+    fi
+
+    test_pass
+}
+
 test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
     test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
 
@@ -1192,6 +1210,7 @@ run_all_tests() {
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
     test_deploy_script_verifies_live_moltis_runtime_contract
+    test_deploy_script_force_recreates_moltis_runtime_on_rollout
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_checkout_align_script_dry_run_uses_constant_remote_command
