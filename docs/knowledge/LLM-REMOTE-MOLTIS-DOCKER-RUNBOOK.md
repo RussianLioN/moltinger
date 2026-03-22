@@ -49,6 +49,9 @@ If `/opt/moltinger` is dirty, deploy from a separate server-side worktree.
 7. Never let cron/systemd point directly at a historical worktree.
 All installed automation must execute via `/opt/moltinger-active`, which is a symlink to the current live deploy root.
 
+8. Never enable persistent browser profiles in sibling-Docker mode without a host-visible profile path contract.
+When Moltis talks to the host Docker socket from inside a container, browser profile bind sources like `/home/moltis/.moltis/...` are interpreted on the host, not inside the Moltis container. In this deployment, keep `[tools.browser] persist_profile = false` unless the host path mapping has been redesigned and verified end-to-end.
+
 ## Canonical Deploy Sequence
 
 ### 1. Inspect the live state first
