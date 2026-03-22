@@ -153,6 +153,14 @@ PY
         test_fail "Expected environment variable substitution in config files"
     fi
 
+    test_start "static_identity_prompt_guards_tavily_country_usage"
+    if rg -Fq 'При использовании Tavily search не заполняй параметр `country`' "$TOML_CONFIG" && \
+       rg -Fq 'используй только lowercase plain English значения из Tavily schema' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must forbid implicit Tavily country usage and require lowercase English country values when country is explicitly needed"
+    fi
+
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
     if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
        bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
