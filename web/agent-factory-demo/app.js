@@ -1173,6 +1173,24 @@
     return normalizedAction;
   }
 
+  function dispatchActionWithPendingUploads(project, action, options = {}) {
+    if (!project) {
+      return;
+    }
+    const text = normalizeText(options.userText);
+    const skipUserMessage = options.skipUserMessage !== false;
+    const queuedUploads = uniqueUploads(options.queuedUploads || project.pendingUploads || []);
+    const normalizedAction = normalizeText(action, "submit_turn");
+    const effectiveAction = adjustComposerActionForUploads(project, normalizedAction, text, queuedUploads);
+    const previousAction = normalizeText(project.currentAction);
+    setProjectAction(project, effectiveAction);
+    void dispatchTurn(effectiveAction, text, {
+      skipUserMessage,
+      previousAction,
+      queuedUploads,
+    });
+  }
+
   function statusLabel(project) {
     const response = currentResponse(project) || {};
     return normalizeText(response.status_snapshot?.user_visible_status_label || STATUS_LABELS[currentStatus(project)] || "Черновик");
@@ -2097,7 +2115,19 @@
       return "downloads";
     }
     if (Array.isArray(response.reply_cards) && response.reply_cards.some((card) => card.card_kind === "brief_summary_section")) {
-      return "brief_review";
+      const briefStatus = normalizeText(response.discovery_runtime_state?.requirement_brief?.status).toLowerCase();
+      const nextAction = normalizeText(
+        response.status_snapshot?.next_recommended_action || response.next_action || response.ui_projection?.preferred_ui_action,
+      );
+      const sourceAction = normalizeText(response.web_conversation_envelope?.ui_action);
+      const allowsBriefReview =
+        ["awaiting_confirmation", "reopened"].includes(normalizeText(status))
+        || ["awaiting_confirmation", "reopened"].includes(briefStatus)
+        || ["request_brief_review", "request_brief_correction", "reopen_brief", "confirm_brief"].includes(nextAction)
+        || ["request_brief_review", "request_brief_correction", "reopen_brief", "confirm_brief"].includes(sourceAction);
+      if (allowsBriefReview) {
+        return "brief_review";
+      }
     }
     return "hidden";
   }
@@ -3871,6 +3901,9 @@
     const isPostConfirmState = responseStatus === "confirmed" || briefRuntimeStatus === "confirmed";
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
+    const keepPreviewMode = downloadsReady
+      && normalizeText(project.panelModeOverride) === "preview"
+      && Boolean(selectedPreviewArtifact(project));
     const shouldAutoOpenPostConfirm = sourceAction === "confirm_brief"
       || submitTurnConfirmation
       || (isPostConfirmState && !manualPanelClose);
@@ -3879,8 +3912,10 @@
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
       if (downloadsReady) {
-        project.panelModeOverride = "downloads";
-        project.previewArtifactKind = "";
+        project.panelModeOverride = keepPreviewMode ? "preview" : "downloads";
+        if (!keepPreviewMode) {
+          project.previewArtifactKind = "";
+        }
       } else {
         project.panelModeOverride = "downloads";
         project.previewArtifactKind = "";
@@ -3889,8 +3924,10 @@
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
-      project.panelModeOverride = "downloads";
-      project.previewArtifactKind = "";
+      project.panelModeOverride = keepPreviewMode ? "preview" : "downloads";
+      if (!keepPreviewMode) {
+        project.previewArtifactKind = "";
+      }
     }
 
     persist();
@@ -4123,6 +4160,14 @@
     }
 
     if (action === "request_brief_review") {
+      const queuedUploads = uniqueUploads(project?.pendingUploads || []);
+      if (project && queuedUploads.length) {
+        dispatchActionWithPendingUploads(project, action, {
+          skipUserMessage: true,
+          queuedUploads,
+        });
+        return;
+      }
       if (project && hasPanelContent(project)) {
         project.sidePanelOpen = true;
         project.briefEditOpen = false;
@@ -4152,9 +4197,7 @@
     }
 
     if (["request_status", "confirm_brief"].includes(action)) {
-      const previousAction = normalizeText(project?.currentAction);
-      setProjectAction(project, action);
-      dispatchTurn(action, "", { skipUserMessage: true, previousAction });
+      dispatchActionWithPendingUploads(project, action, { skipUserMessage: true });
       return;
     }
 
@@ -4483,7 +4526,10 @@
         if (dom.briefEditInput) {
           dom.briefEditInput.value = "";
         }
-        void dispatchTurn("request_brief_correction", correctionText, { skipUserMessage: true });
+        dispatchActionWithPendingUploads(project, "request_brief_correction", {
+          skipUserMessage: true,
+          userText: correctionText,
+        });
       });
     }
 
@@ -4493,7 +4539,11 @@
           return;
         }
         clearComposerNotice();
-        void dispatchTurn("confirm_brief", "", { skipUserMessage: true });
+        const project = getActiveProject();
+        if (!project) {
+          return;
+        }
+        dispatchActionWithPendingUploads(project, "confirm_brief", { skipUserMessage: true });
       });
     }
 
