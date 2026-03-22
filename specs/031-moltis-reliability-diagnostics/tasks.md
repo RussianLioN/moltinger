@@ -45,10 +45,10 @@
 
 - [x] T030 Redeploy production so the tracked runtime contract is actually applied on the server
 - [x] T031 Clear or migrate stale session/model state that still references removed provider catalogs
-- [ ] T032 [P0] Stabilize Tavily search integration or replace it with a less fragile search path; include dedicated health proof beyond transport-green deploy/UAT
-- [ ] T033 [P0] Arrest `memory_search` embedding-provider failures by pinning a deterministic memory contract or explicit keyword-only fallback before broader memory rollout
-- [ ] T034 Restore browser runtime health by fixing Docker access/connectivity on the target host
-- [ ] T035 Configure repository-visible memory watch/index scope and backfill embeddings for useful vector memory after the provider contract is deterministic
+- [x] T032 [P0] Stabilize Tavily search integration or replace it with a less fragile search path; include dedicated health proof beyond transport-green deploy/UAT
+- [x] T033 [P0] Arrest `memory_search` embedding-provider failures by pinning a deterministic memory contract or explicit keyword-only fallback before broader memory rollout
+- [x] T034 Restore browser runtime health by fixing Docker access/connectivity on the target host
+- [x] T035 Configure repository-visible memory watch/index scope and backfill embeddings for useful vector memory after the provider contract is deterministic
 - [ ] T036 Clean stale runtime context files in `~/.moltis` that conflict with the current project/runtime identity
 
 ---

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-22
-**Total Lessons**: 49
+**Total Lessons**: 50
 
 ---
 
@@ -56,7 +56,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (9 lessons)
+#### P3 (10 lessons)
+- [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
@@ -98,7 +99,8 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### generic (5 lessons)
+#### generic (6 lessons)
+- [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
 - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
@@ -139,11 +141,11 @@
 - `gitops` (15 lessons)
 - `github-actions` (13 lessons)
 - `deploy` (13 lessons)
+- `moltis` (11 lessons)
 - `cicd` (11 lessons)
-- `moltis` (10 lessons)
+- `rca` (9 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
-- `rca` (8 lessons)
 - `clawdiy` (8 lessons)
 - `telegram` (6 lessons)
 
@@ -154,10 +156,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 49 |
+| Total Lessons | 50 |
 | Critical (P0/P1) | 20 |
 | Categories | 5 |
-| Unique Tags | 112 |
+| Unique Tags | 118 |
 
 ---
 
