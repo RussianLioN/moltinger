@@ -94,6 +94,17 @@ run_static_beads_worktree_ownership_tests() {
         test_fail "Root instructions must define the post-migration local-runtime state and repair protocol explicitly"
     fi
 
+    test_start "static_root_instructions_do_not_reference_absent_migration_scripts"
+    if [[ ! -f "$PROJECT_ROOT/scripts/beads-dolt-pilot.sh" && ! -f "$PROJECT_ROOT/scripts/beads-dolt-rollout.sh" ]]; then
+        if ! rg -q 'beads-dolt-pilot\.sh|beads-dolt-rollout\.sh|pilot-mode\.json|cutover-mode\.json' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" "$PROJECT_ROOT/docs/CODEX-OPERATING-MODEL.md"; then
+            test_pass
+        else
+            test_fail "Ordinary source branches must not reference absent Beads migration scripts or mode markers"
+        fi
+    else
+        test_pass
+    fi
+
     test_start "static_codex_launcher_bootstraps_repo_local_plain_bd"
     if rg -q 'export PATH="\$\{REPO_ROOT\}/bin:\$\{PATH\}"' "$CODEX_LAUNCHER"; then
         test_pass

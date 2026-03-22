@@ -162,15 +162,9 @@ For Beads in dedicated worktrees, ordinary work should use plain `bd`.
 5. Canonical-root mutating `bd` commands are blocked by default unless the operator supplies an explicit root target on purpose.
 6. Residual cleanup in canonical `main` is a separate follow-up and must not be mixed into day-to-day worktree recovery.
 
-### Pilot Mode
+### Historical Migration Note
 
-When one dedicated worktree enters the Beads Dolt-native pilot:
-
-1. Enable it with `./scripts/beads-dolt-pilot.sh enable`.
-2. Treat `.beads/pilot-mode.json` as the local marker that pilot interception is active.
-3. In that worktree, do not use `bd sync` as the everyday review path.
-4. Use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface.
-5. Keep pilot mode isolated to one worktree until the pilot verdict is explicit.
+The dedicated Beads Dolt migration helper scripts lived only in the migration branches that introduced the cutover. Ordinary branches created from `main` should use the ordinary plain-`bd` contract unless a branch explicitly ships its own branch-local migration helpers and instructions.
 
 ## Local Instruction Split
 

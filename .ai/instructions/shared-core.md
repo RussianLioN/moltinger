@@ -37,11 +37,6 @@ bd status             # Inspect the current Beads state
 bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
 ```
 
-If the current worktree is in a Beads migration mode:
-- `.beads/pilot-mode.json` means use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface
-- `.beads/cutover-mode.json` means use `./scripts/beads-dolt-rollout.sh verify --worktree .` as the documented cutover verification surface
-- if no migration mode is active, the ordinary review path is `bd status` plus the narrowest read-only `bd` command you actually need
-
 ## Beads Worktree Ownership
 
 Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
@@ -50,20 +45,11 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 - Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
 - Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion. Continue with local `bd` read-only inspection first.
 - For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.
+- `bd sync` is retired in this repository. Use `bd status` for local inspection, and use `bd dolt push` / `bd dolt pull` only when this worktree is configured with a Dolt remote.
 - If a preserved sibling worktree still reports incomplete local foundation after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. First run read-only diagnostics such as `/usr/local/bin/bd doctor --json`, then repair the local foundation with `./scripts/beads-worktree-localize.sh --path .` or `bd bootstrap` as appropriate.
 - If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
 - Do not replace the Beads backlog with ad-hoc plan files just because `.beads/issues.jsonl` is absent; use plans only as supplemental execution context.
 - Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
-
-## Beads Migration Modes
-
-When a dedicated worktree enters the Beads Dolt-native migration flow:
-
-- `.beads/pilot-mode.json` enables the isolated pilot contract for one worktree
-- `.beads/cutover-mode.json` enables the staged cutover contract for an already-ready worktree
-- in either mode, treat legacy JSONL-first paths and the old sync-style workflow as blocked unless the active migration script explicitly says otherwise
-- use `./scripts/beads-dolt-pilot.sh review` for pilot review
-- use `./scripts/beads-dolt-rollout.sh verify --worktree .` for cutover verification
 
 ## Speckit Artifact Guard
 
@@ -136,8 +122,6 @@ Forbidden:
    git push
    git status  # MUST show "up to date with origin"
    ```
-   If pilot mode is active, replace `bd status` with `./scripts/beads-dolt-pilot.sh review`.
-   If cutover mode is active, replace `bd status` with `./scripts/beads-dolt-rollout.sh verify --worktree .`.
    If a Dolt remote is configured for the project, run `bd dolt push` before `git push`.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed

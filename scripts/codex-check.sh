@@ -129,6 +129,18 @@ check_instruction_references() {
     failures=1
   fi
 
+  if [[ ! -f "${REPO_ROOT}/scripts/beads-dolt-pilot.sh" && ! -f "${REPO_ROOT}/scripts/beads-dolt-rollout.sh" ]]; then
+    if grep -Fq -- "beads-dolt-pilot.sh" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+       grep -Fq -- "beads-dolt-rollout.sh" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+       grep -Fq -- "beads-dolt-pilot.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md" || \
+       grep -Fq -- "beads-dolt-rollout.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md"; then
+      log_error "Ordinary source branches must not reference Beads migration review scripts that are absent from the repo"
+      failures=1
+    else
+      log_success "Verified ordinary branches do not reference absent Beads migration review scripts"
+    fi
+  fi
+
   return "${failures}"
 }
 

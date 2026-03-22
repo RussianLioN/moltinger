@@ -79,7 +79,7 @@ test_bd_local_blocks_redirected_worktrees() {
     output="$(
         set +e
         cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" sync 2>&1
+        "${WRAPPER_SCRIPT}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -107,7 +107,7 @@ test_bd_local_blocks_missing_foundation_files() {
     output="$(
         set +e
         cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" sync 2>&1
+        "${WRAPPER_SCRIPT}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -145,6 +145,34 @@ test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl() {
     test_pass
 }
 
+test_bd_local_blocks_deprecated_sync_with_modern_guidance() {
+    test_start "bd_local_blocks_deprecated_sync_with_modern_guidance"
+
+    local fixture_root repo_dir worktree_path output rc
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-runtime-only-sync"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-sync" "main"
+
+    install_fake_bd "${worktree_path}"
+    seed_post_migration_runtime_state "${worktree_path}"
+
+    output="$(
+        set +e
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" sync 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "28" "${rc}" "bd-local must surface deprecated sync guidance instead of suggesting pilot mode"
+    assert_contains "${output}" "'sync' is retired" "bd-local must explain that bd sync is retired"
+    assert_contains "${output}" "bd dolt push / bd dolt pull" "bd-local must point operators to the modern Dolt workflow"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -166,6 +194,7 @@ run_all_tests() {
     test_bd_local_blocks_redirected_worktrees
     test_bd_local_blocks_missing_foundation_files
     test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl
+    test_bd_local_blocks_deprecated_sync_with_modern_guidance
     generate_report
 }
 
