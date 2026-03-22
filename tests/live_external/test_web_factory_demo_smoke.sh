@@ -14,6 +14,29 @@ normalize_base_url() {
     printf '%s' "${value%/}" | tr '[:upper:]' '[:lower:]'
 }
 
+is_local_base_url() {
+    local value
+    value="$(normalize_base_url "$1")"
+    [[ "$value" == http://127.0.0.1* || "$value" == http://localhost* || "$value" == https://127.0.0.1* || "$value" == https://localhost* ]]
+}
+
+pick_expected_public_base_url() {
+    local explicit_override="${LIVE_WEB_DEMO_EXPECT_PUBLIC_BASE_URL:-${ASC_DEMO_PUBLIC_BASE_URL:-}}"
+    if [[ -n "$explicit_override" ]]; then
+        printf '%s' "$explicit_override"
+        return
+    fi
+    if [[ -n "${ASC_DEMO_URL:-}" ]]; then
+        printf '%s' "$ASC_DEMO_URL"
+        return
+    fi
+    if is_local_base_url "$LIVE_WEB_DEMO_URL"; then
+        printf '%s' ""
+        return
+    fi
+    printf '%s' "$LIVE_WEB_DEMO_URL"
+}
+
 run_web_factory_demo_smoke_tests() {
     start_timer
 
@@ -67,11 +90,17 @@ run_web_factory_demo_smoke_tests() {
     operator_health_file="$(mktemp)"
     if curl_with_test_client_ip -fsS --max-time "$TEST_TIMEOUT" "${LIVE_WEB_DEMO_URL%/}/api/health" -o "$operator_health_file"; then
         local expected_public_base_url actual_public_base_url
-        expected_public_base_url="$(normalize_base_url "$LIVE_WEB_DEMO_URL")"
+        expected_public_base_url="$(normalize_base_url "$(pick_expected_public_base_url)")"
         actual_public_base_url="$(normalize_base_url "$(jq -r '.operator_status.public_base_url // .public_base_url // ""' "$operator_health_file")")"
         assert_eq "agent-factory-web-adapter" "$(jq -r '.service' "$operator_health_file")" "Operator health endpoint should identify the web adapter service"
         assert_eq "shared_token_hash" "$(jq -r '.access_gate_mode' "$operator_health_file")" "Operator health endpoint should expose the configured shared-token access gate"
-        assert_eq "$expected_public_base_url" "$actual_public_base_url" "Operator health endpoint should expose the expected public demo base URL"
+        if [[ -n "$expected_public_base_url" ]]; then
+            if [[ "$actual_public_base_url" != "$expected_public_base_url" ]]; then
+                test_fail "Operator health endpoint should expose the expected public demo base URL (expected: '$expected_public_base_url', got: '$actual_public_base_url')"
+            fi
+        elif [[ -z "$actual_public_base_url" ]]; then
+            test_fail "Operator health endpoint should expose non-empty public demo base URL for operator routing"
+        fi
         test_pass
     else
         test_fail "Operator health endpoint should be reachable on the live web demo"
