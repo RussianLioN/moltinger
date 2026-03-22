@@ -553,8 +553,8 @@
       dom.sidebarToggle.dataset.state = visible ? "active" : "inactive";
       dom.sidebarToggle.setAttribute("aria-pressed", visible ? "true" : "false");
       dom.sidebarToggle.setAttribute("aria-expanded", visible ? "true" : "false");
-      dom.sidebarToggle.setAttribute("aria-label", visible ? "Свернуть левую панель" : "Развернуть левую панель");
-      dom.sidebarToggle.title = visible ? "Свернуть левую панель" : "Развернуть левую панель";
+      dom.sidebarToggle.setAttribute("aria-label", visible ? "Скрыть проекты" : "Показать проекты");
+      dom.sidebarToggle.title = visible ? "Скрыть проекты" : "Показать проекты";
     }
   }
 
@@ -1883,6 +1883,19 @@
     dom.chatLog.scrollTop = maxTop;
   }
 
+  function updateChatScrollPadding() {
+    if (!dom.root) {
+      return;
+    }
+    const topbarHeight = Math.max(0, Math.round(dom.workspaceTopbar?.offsetHeight || 0));
+    const composerDock = dom.composerForm?.closest(".composer-dock");
+    const composerHeight = Math.max(0, Math.round(composerDock?.offsetHeight || dom.composerForm?.offsetHeight || 0));
+    const topPadding = Math.max(64, topbarHeight + 12);
+    const bottomPadding = Math.max(108, composerHeight + 16);
+    dom.root.style.setProperty("--chat-scroll-padding-top", `${topPadding}px`);
+    dom.root.style.setProperty("--chat-scroll-padding-bottom", `${bottomPadding}px`);
+  }
+
   function scrollChatToLatestAgentMessage() {
     if (!dom.chatLog) {
       return false;
@@ -1899,8 +1912,8 @@
     const targetHeight = Math.max(1, targetRect.height);
     const targetTop = targetRect.top - logRect.top + dom.chatLog.scrollTop;
     const targetBottom = targetTop + targetHeight;
-    const topPadding = 8;
-    const bottomPadding = 12;
+    const topPadding = 16;
+    const bottomPadding = 20;
     const visibleTop = dom.chatLog.scrollTop + topPadding;
     const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - bottomPadding;
     const alreadyVisible = targetTop >= visibleTop && targetBottom <= visibleBottom;
@@ -2018,15 +2031,15 @@
     dom.sidePanelToggle.setAttribute("aria-pressed", isOpen ? "true" : "false");
     dom.sidePanelToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     if (!canOpenPanel) {
-      dom.sidePanelToggle.setAttribute("aria-label", "Правая панель пока недоступна");
+      dom.sidePanelToggle.setAttribute("aria-label", "Правая панель недоступна");
       dom.sidePanelToggle.title = "Правая панель недоступна";
       return;
     }
     dom.sidePanelToggle.setAttribute(
       "aria-label",
-      isOpen ? "Свернуть правую панель" : "Развернуть правую панель",
+      isOpen ? "Скрыть правую панель" : "Показать правую панель",
     );
-    dom.sidePanelToggle.title = isOpen ? "Свернуть правую панель" : "Развернуть правую панель";
+    dom.sidePanelToggle.title = isOpen ? "Скрыть правую панель" : "Показать правую панель";
   }
 
   function mockArtifactMarkdown(project, artifact) {
@@ -2458,9 +2471,9 @@
       dom.sidePanelFullscreen.setAttribute("aria-expanded", fullscreen ? "true" : "false");
       dom.sidePanelFullscreen.setAttribute(
         "aria-label",
-        fullscreen ? "Свернуть правую панель" : "Развернуть правую панель на весь экран",
+        fullscreen ? "Вернуть обычную ширину правой панели" : "Развернуть правую панель на весь экран",
       );
-      dom.sidePanelFullscreen.title = fullscreen ? "Свернуть правую панель" : "Развернуть на весь экран";
+      dom.sidePanelFullscreen.title = fullscreen ? "Вернуть обычную ширину" : "Развернуть на весь экран";
     }
 
     dom.panelCardList.innerHTML = "";
@@ -2556,7 +2569,8 @@
     dom.composerNotice.hidden = !notice.text;
     dom.composerNotice.dataset.tone = notice.tone;
     dom.composerInput.value = normalizeText(project?.draftText);
-    resizeComposerInput();
+    const keepBottom = state.forceScrollToBottom || isChatNearBottom();
+    resizeComposerInput({ keepBottom });
   }
 
   function renderAll() {
@@ -2572,23 +2586,30 @@
     renderTopbar(project);
     renderHome(project);
     renderStatus(project);
-    renderTimeline(project);
     renderAttachmentList(project);
     renderComposer(project);
+    renderTimeline(project);
     renderSidePanel(project);
     renderProjectActionsMenu();
   }
 
-  function resizeComposerInput() {
+  function resizeComposerInput(options = {}) {
     if (!dom.composerInput) {
       return;
     }
+    const keepBottom = Boolean(options.keepBottom);
     const minHeight = 44;
     const maxHeight = 220;
     dom.composerInput.style.height = "auto";
     const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, minHeight), maxHeight);
     dom.composerInput.style.height = `${nextHeight}px`;
     dom.composerInput.style.overflowY = dom.composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
+    window.requestAnimationFrame(() => {
+      updateChatScrollPadding();
+      if (keepBottom) {
+        scheduleScrollChatToBottom({ strictBottom: state.forceScrollToBottom });
+      }
+    });
   }
 
   function setProjectAction(project, action) {
@@ -3801,7 +3822,6 @@
         actions: [],
       });
       project.updatedAt = nowIso();
-      renderTimeline(project, { forceBottom: true });
     }
 
     clearComposerNotice();
@@ -3818,6 +3838,9 @@
     setBusy(true);
     renderAgentStatus();
     renderComposer(project);
+    if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
+      renderTimeline(project, { forceBottom: true });
+    }
     try {
       const response = await postTurn(payload, { signal: abortController.signal });
       applyResponse(project, response, "live");
@@ -4082,6 +4105,9 @@
           persist();
         }
         renderAll();
+        window.requestAnimationFrame(() => {
+          updateChatScrollPadding();
+        });
       });
     }
 
@@ -4165,6 +4191,15 @@
         closeProjectActionsMenu();
         persist();
         renderAll();
+        window.requestAnimationFrame(() => {
+          if (state.sidebarVisible) {
+            const activeProjectButton = dom.projectList?.querySelector(".project-card.is-active .project-card__main")
+              || dom.projectList?.querySelector(".project-card__main");
+            activeProjectButton?.focus();
+            return;
+          }
+          dom.sidebarToggle?.focus();
+        });
       });
     }
 
@@ -4207,6 +4242,14 @@
       }
       persist();
       renderAll();
+      window.requestAnimationFrame(() => {
+        if (project.sidePanelOpen) {
+          const sidePanelPrimaryAction = dom.briefEditToggle || dom.briefConfirm || dom.sidePanelClose;
+          sidePanelPrimaryAction?.focus();
+          return;
+        }
+        dom.sidePanelToggle?.focus();
+      });
     });
 
     if (dom.sidePanelFullscreen) {
@@ -4218,6 +4261,9 @@
         project.sidePanelFullscreen = !project.sidePanelFullscreen;
         persist();
         renderAll();
+        window.requestAnimationFrame(() => {
+          dom.sidePanelFullscreen?.focus();
+        });
       });
     }
 
@@ -4230,6 +4276,9 @@
       project.sidePanelFullscreen = false;
       persist();
       renderAll();
+      window.requestAnimationFrame(() => {
+        dom.sidePanelToggle?.focus();
+      });
     });
 
     if (dom.briefEditToggle) {
