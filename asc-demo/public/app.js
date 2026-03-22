@@ -146,6 +146,8 @@
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
     appFrame: document.querySelector(".app-frame"),
+    sidebar: document.querySelector("#projectsSidebar"),
+    sidebarBackdrop: document.querySelector('[data-role="sidebar-backdrop"]'),
     sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     sidebarToggle: document.querySelector('[data-role="sidebar-toggle"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
@@ -161,6 +163,7 @@
     projectSubtitle: document.querySelector('[data-role="project-subtitle"]'),
     projectMenu: document.querySelector('[data-role="project-menu"]'),
     agentStatus: document.querySelector('[data-role="agent-status"]'),
+    agentStatusLabel: document.querySelector('[data-role="agent-status"] .workspace-agent-state__label'),
     homePanel: document.querySelector('[data-role="home-panel"]'),
     homeExamples: document.querySelector('[data-role="home-examples"]'),
     sidePanel: document.querySelector('[data-role="side-panel"]'),
@@ -541,12 +544,26 @@
     if (dom.root) {
       dom.root.style.setProperty("--sidebar-width-effective", `${visible ? state.sidebarWidth : 0}px`);
     }
+    if (dom.sidebar) {
+      if (visible) {
+        dom.sidebar.removeAttribute("inert");
+        dom.sidebar.removeAttribute("aria-hidden");
+      } else {
+        dom.sidebar.setAttribute("inert", "");
+        dom.sidebar.setAttribute("aria-hidden", "true");
+      }
+    }
     if (dom.sidebarResizer) {
       const mobileLayout = isMobileLayout();
       const interactive = visible && !mobileLayout;
-      dom.sidebarResizer.hidden = mobileLayout;
+      dom.sidebarResizer.hidden = !interactive;
       dom.sidebarResizer.setAttribute("aria-hidden", interactive ? "false" : "true");
       dom.sidebarResizer.tabIndex = interactive ? 0 : -1;
+    }
+    if (dom.sidebarBackdrop) {
+      const showBackdrop = visible && isMobileLayout();
+      dom.sidebarBackdrop.hidden = !showBackdrop;
+      dom.sidebarBackdrop.setAttribute("aria-hidden", showBackdrop ? "false" : "true");
     }
     if (dom.sidebarToggle) {
       dom.sidebarToggle.hidden = false;
@@ -1415,8 +1432,12 @@
     if (!dom.agentStatus) {
       return;
     }
-    dom.agentStatus.hidden = !state.awaitingResponse;
+    const visible = Boolean(state.accessToken);
+    dom.agentStatus.hidden = !visible;
     dom.agentStatus.dataset.state = state.awaitingResponse ? "thinking" : "idle";
+    if (dom.agentStatusLabel) {
+      dom.agentStatusLabel.textContent = state.awaitingResponse ? "Агент думает" : "Агент готов";
+    }
   }
 
   function isPanelOnlyAction(action) {
@@ -1950,6 +1971,11 @@
     dom.root.style.setProperty("--chat-scroll-padding-bottom", `${bottomPadding}px`);
   }
 
+  function readCssPixelValue(rawValue, fallback = 0) {
+    const parsed = Number.parseFloat(String(rawValue || ""));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   function scrollChatToLatestAgentMessage() {
     if (!dom.chatLog) {
       return false;
@@ -1966,8 +1992,9 @@
     const targetHeight = Math.max(1, targetRect.height);
     const targetTop = targetRect.top - logRect.top + dom.chatLog.scrollTop;
     const targetBottom = targetTop + targetHeight;
-    const topPadding = 16;
-    const bottomPadding = 20;
+    const computed = window.getComputedStyle(dom.chatLog);
+    const topPadding = Math.max(12, Math.round(readCssPixelValue(computed.scrollPaddingTop, 0)));
+    const bottomPadding = Math.max(12, Math.round(readCssPixelValue(computed.scrollPaddingBottom, 0)));
     const visibleTop = dom.chatLog.scrollTop + topPadding;
     const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - bottomPadding;
     const alreadyVisible = targetTop >= visibleTop && targetBottom <= visibleBottom;
@@ -2607,7 +2634,7 @@
       dom.composerLead.hidden = !state.accessToken;
     }
     if (dom.composerThinking) {
-      dom.composerThinking.hidden = !state.awaitingResponse;
+      dom.composerThinking.hidden = true;
     }
     dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
@@ -3864,6 +3891,7 @@
       return;
     }
     const queuedUploads = uniqueUploads(options.queuedUploads || []);
+    const previousAction = normalizeText(options.previousAction);
     const normalizedUserText = normalizeText(userText);
     const isBackgroundStatusPoll = action === "request_status" && options.skipUserMessage && !normalizedUserText && queuedUploads.length === 0;
     if (!isBackgroundStatusPoll) {
@@ -3917,9 +3945,6 @@
     }
     try {
       const response = await postTurn(payload, { signal: abortController.signal });
-      // Switch UI out of pending mode before applying the received projection.
-      state.awaitingResponse = false;
-      setBusy(false);
       applyResponse(project, response, "live", { syncReason: normalizeText(options.syncReason) });
     } catch (error) {
       if (error?.name === "TimeoutError") {
@@ -3950,6 +3975,9 @@
           }
           if (queuedUploads.length) {
             activeProject.pendingUploads = uniqueUploads([...queuedUploads, ...activeProject.pendingUploads]);
+          }
+          if (previousAction && isKnownAction(previousAction)) {
+            activeProject.currentAction = previousAction;
           }
           activeProject.updatedAt = nowIso();
         }
@@ -3989,6 +4017,9 @@
     }
     const project = getActiveProject();
     if (!project) {
+      return;
+    }
+    if (state.awaitingResponse) {
       return;
     }
     const syncReason = normalizeText(options.syncReason, "manual_refresh");
@@ -4064,8 +4095,9 @@
         renderAll();
         return;
       }
+      const previousAction = normalizeText(project?.currentAction);
       setProjectAction(project, action);
-      dispatchTurn(action, "", { skipUserMessage: true });
+      dispatchTurn(action, "", { skipUserMessage: true, previousAction });
       return;
     }
 
@@ -4084,8 +4116,9 @@
     }
 
     if (["request_status", "confirm_brief"].includes(action)) {
+      const previousAction = normalizeText(project?.currentAction);
       setProjectAction(project, action);
-      dispatchTurn(action, "", { skipUserMessage: true });
+      dispatchTurn(action, "", { skipUserMessage: true, previousAction });
       return;
     }
 
@@ -4361,6 +4394,17 @@
         dom.sidePanelToggle?.focus();
       });
     });
+
+    if (dom.sidebarBackdrop) {
+      dom.sidebarBackdrop.addEventListener("click", () => {
+        if (!isMobileLayout() || state.sidebarVisible === false) {
+          return;
+        }
+        state.sidebarVisible = false;
+        applySidebarVisibility();
+        persist();
+      });
+    }
 
     if (dom.briefEditToggle) {
       dom.briefEditToggle.addEventListener("click", () => {

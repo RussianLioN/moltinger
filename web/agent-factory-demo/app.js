@@ -14,8 +14,8 @@
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
   const SIDEBAR_WIDTH_MAX = 560;
-  const PANEL_WIDTH_DEFAULT = 460;
-  const PANEL_WIDTH_MIN = 320;
+  const PANEL_WIDTH_DEFAULT = 420;
+  const PANEL_WIDTH_MIN = 300;
   const PANEL_WIDTH_MAX = 720;
   const SCROLL_BOTTOM_THRESHOLD = 80;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
@@ -146,6 +146,8 @@
   const dom = {
     root: document.querySelector('[data-role="app-root"]'),
     appFrame: document.querySelector(".app-frame"),
+    sidebar: document.querySelector("#projectsSidebar"),
+    sidebarBackdrop: document.querySelector('[data-role="sidebar-backdrop"]'),
     sidebarResizer: document.querySelector('[data-role="sidebar-resizer"]'),
     sidebarToggle: document.querySelector('[data-role="sidebar-toggle"]'),
     workspaceShell: document.querySelector('[data-role="workspace-shell"]'),
@@ -161,6 +163,7 @@
     projectSubtitle: document.querySelector('[data-role="project-subtitle"]'),
     projectMenu: document.querySelector('[data-role="project-menu"]'),
     agentStatus: document.querySelector('[data-role="agent-status"]'),
+    agentStatusLabel: document.querySelector('[data-role="agent-status"] .workspace-agent-state__label'),
     homePanel: document.querySelector('[data-role="home-panel"]'),
     homeExamples: document.querySelector('[data-role="home-examples"]'),
     sidePanel: document.querySelector('[data-role="side-panel"]'),
@@ -504,7 +507,7 @@
       dom.workspaceShell?.clientWidth || 0,
       window.innerWidth - occupiedSidebar - 48,
     );
-    const minCenterWidth = 300;
+    const minCenterWidth = isMobileLayout() ? 300 : 720;
     const available = Math.max(PANEL_WIDTH_MIN, shellWidth - minCenterWidth - 20);
     return Math.max(PANEL_WIDTH_MIN, Math.min(Math.max(PANEL_WIDTH_MAX, 1040), available));
   }
@@ -541,12 +544,26 @@
     if (dom.root) {
       dom.root.style.setProperty("--sidebar-width-effective", `${visible ? state.sidebarWidth : 0}px`);
     }
+    if (dom.sidebar) {
+      if (visible) {
+        dom.sidebar.removeAttribute("inert");
+        dom.sidebar.removeAttribute("aria-hidden");
+      } else {
+        dom.sidebar.setAttribute("inert", "");
+        dom.sidebar.setAttribute("aria-hidden", "true");
+      }
+    }
     if (dom.sidebarResizer) {
       const mobileLayout = isMobileLayout();
       const interactive = visible && !mobileLayout;
-      dom.sidebarResizer.hidden = mobileLayout;
+      dom.sidebarResizer.hidden = !interactive;
       dom.sidebarResizer.setAttribute("aria-hidden", interactive ? "false" : "true");
       dom.sidebarResizer.tabIndex = interactive ? 0 : -1;
+    }
+    if (dom.sidebarBackdrop) {
+      const showBackdrop = visible && isMobileLayout();
+      dom.sidebarBackdrop.hidden = !showBackdrop;
+      dom.sidebarBackdrop.setAttribute("aria-hidden", showBackdrop ? "false" : "true");
     }
     if (dom.sidebarToggle) {
       dom.sidebarToggle.hidden = false;
@@ -624,6 +641,7 @@
       titleEdited: Boolean(project.titleEdited),
       sidePanelOpen: Boolean(project.sidePanelOpen),
       sidePanelFullscreen: Boolean(project.sidePanelFullscreen),
+      panelManuallyClosed: Boolean(project.panelManuallyClosed),
       lastPanelMode: normalizeText(project.lastPanelMode),
       panelModeOverride: normalizeText(project.panelModeOverride),
       previewArtifactKind: normalizeText(project.previewArtifactKind),
@@ -663,6 +681,7 @@
       titleEdited: Boolean(record.titleEdited),
       sidePanelOpen: Boolean(record.sidePanelOpen),
       sidePanelFullscreen: Boolean(record.sidePanelFullscreen),
+      panelManuallyClosed: Boolean(record.panelManuallyClosed),
       lastPanelMode: normalizeText(record.lastPanelMode),
       panelModeOverride: normalizeText(record.panelModeOverride),
       previewArtifactKind: normalizeText(record.previewArtifactKind),
@@ -698,6 +717,7 @@
       mockStage: "gate_pending",
       sidePanelOpen: false,
       sidePanelFullscreen: false,
+      panelManuallyClosed: false,
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
@@ -990,37 +1010,50 @@
     if (isLikelyProductionSimulationRequestText(normalized)) {
       return false;
     }
-    const markers = [
-      "на выходе",
-      "ожидаем",
-      "ожидаемый",
-      "pdf",
-      "one-page",
-      "onepage",
-      "summary",
-      "рекомендац",
+    if (/^(переоткрой|пересобери)\s+brief/i.test(normalized)) {
+      return true;
+    }
+    const intentMarkers = [
+      "исправ",
+      "обнов",
+      "уточн",
+      "поправ",
+      "добав",
+      "замен",
+      "удал",
+      "убер",
+      "перепиши",
+      "перефраз",
+      "помен",
+      "правка",
+    ];
+    const sectionMarkers = [
+      "проблем",
+      "пользоват",
+      "выгодоприобрет",
+      "процесс",
       "входн",
       "пример",
       "файл",
-      "csv",
-      "xlsx",
-      "json",
-      "пользовател",
-      "выгодоприобрет",
-      "процесс",
-      "workflow",
+      "ожидаем",
+      "результ",
+      "формат",
       "огранич",
-      "запрет",
       "исключ",
       "правил",
       "метрик",
       "kpi",
       "sla",
-      "риск",
-      "scope",
-      "границ",
+      "one-page",
+      "onepage",
+      "pdf",
+      "docx",
+      "ppt",
+      "summary",
     ];
-    return markers.some((marker) => normalized.includes(marker));
+    const hasIntent = intentMarkers.some((marker) => normalized.includes(marker));
+    const hasSection = sectionMarkers.some((marker) => normalized.includes(marker));
+    return hasIntent && hasSection;
   }
 
   function resolveComposerAction(project, text) {
@@ -1038,7 +1071,6 @@
     const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
     const explicitRefresh = isLikelyStatusRefreshText(normalizedText);
     const actionableFeedback = isLikelyActionableBriefFeedbackText(normalizedText);
-    const freeformFeedback = actionableFeedback;
     const reviewStage =
       ["awaiting_confirmation", "reopened"].includes(status)
       || (
@@ -1060,9 +1092,7 @@
       if (explicitRefresh) {
         return "request_status";
       }
-      if (correctionRequest || freeformFeedback) {
-        return "request_brief_correction";
-      }
+      return "request_brief_correction";
     }
 
     if (
@@ -1077,37 +1107,37 @@
       return "request_status";
     }
     if (postBriefMode && !knownComposerActions.has(requestedAction)) {
-      return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
+      return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
     }
     if (requestedAction === "confirm_brief") {
       if (confirmationRequest) {
         return "confirm_brief";
       }
-      return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
+      return correctionRequest ? "request_brief_correction" : "request_status";
     }
     if (requestedAction === "request_status") {
       if (["awaiting_confirmation", "reopened"].includes(status)) {
         if (confirmationRequest) {
           return "confirm_brief";
         }
-        return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
+        return correctionRequest ? "request_brief_correction" : "request_status";
       }
       if (isPostBriefStatus(status)) {
-        return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
+        return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
     }
     if (requestedAction === "request_brief_review") {
       if (["awaiting_confirmation", "reopened"].includes(status)) {
-        return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
+        return correctionRequest ? "request_brief_correction" : "request_status";
       }
       if (isPostBriefStatus(status)) {
-        return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
+        return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
       }
       return "submit_turn";
     }
     if (requestedAction === "submit_turn" && isPostBriefStatus(status)) {
-      return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
+      return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
     }
     return requestedAction;
   }
@@ -1175,7 +1205,7 @@
       return "Фабрика готовит материалы. Можно дождаться обновления статуса или отправить правку brief.";
     }
     if (isPostBriefStatus(status)) {
-      return "Опиши правку brief или запроси имитацию запуска.";
+      return "Напиши «обнови статус» или «переоткрой brief: <правка>».";
     }
     if (topic === "input_examples") {
       return "Приведи 1–2 примера или прикрепи файл.";
@@ -1402,8 +1432,12 @@
     if (!dom.agentStatus) {
       return;
     }
-    dom.agentStatus.hidden = !state.awaitingResponse;
+    const visible = Boolean(state.accessToken);
+    dom.agentStatus.hidden = !visible;
     dom.agentStatus.dataset.state = state.awaitingResponse ? "thinking" : "idle";
+    if (dom.agentStatusLabel) {
+      dom.agentStatusLabel.textContent = state.awaitingResponse ? "Агент думает" : "Агент готов";
+    }
   }
 
   function isPanelOnlyAction(action) {
@@ -1605,11 +1639,12 @@
     if (!project) {
       return;
     }
-    if (mode !== "hidden" && state.panelWidth < 420) {
-      updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+    if (mode !== "hidden" && state.panelWidth < PANEL_WIDTH_MIN) {
+      updatePanelWidth(Math.min(PANEL_WIDTH_DEFAULT, panelMaxByViewport()), { persist: true });
     }
     project.sidePanelOpen = mode !== "hidden";
     project.sidePanelFullscreen = mode === "hidden" ? false : Boolean(project.sidePanelFullscreen);
+    project.panelManuallyClosed = false;
     project.panelModeOverride = mode === "preview" || mode === "downloads" ? mode : "";
     project.previewArtifactKind = mode === "preview"
       ? normalizeArtifactKind(artifactKind || primaryArtifact(project)?.artifact_kind)
@@ -1867,6 +1902,46 @@
     }
   }
 
+  function isReviewPromptMessage(message) {
+    if (!message || typeof message !== "object") {
+      return false;
+    }
+    if (normalizeText(message.role) !== "agent") {
+      return false;
+    }
+    const body = normalizeText(message.body).toLowerCase();
+    if (!body) {
+      return false;
+    }
+    return body.includes("проверь brief")
+      || body.includes("правку применил. проверь обновлённый brief");
+  }
+
+  function dropTrailingReviewPrompt(project, action) {
+    if (!project || !Array.isArray(project.timeline)) {
+      return;
+    }
+    if (action !== "request_brief_correction") {
+      return;
+    }
+    for (let index = project.timeline.length - 1; index >= 0; index -= 1) {
+      const item = project.timeline[index];
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      if (normalizeText(item.role) === "user") {
+        return;
+      }
+      if (isReviewPromptMessage(item)) {
+        project.timeline.splice(index, 1);
+        return;
+      }
+      if (normalizeText(item.role) === "agent") {
+        return;
+      }
+    }
+  }
+
   function isChatNearBottom() {
     if (!dom.chatLog) {
       return true;
@@ -1896,6 +1971,11 @@
     dom.root.style.setProperty("--chat-scroll-padding-bottom", `${bottomPadding}px`);
   }
 
+  function readCssPixelValue(rawValue, fallback = 0) {
+    const parsed = Number.parseFloat(String(rawValue || ""));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   function scrollChatToLatestAgentMessage() {
     if (!dom.chatLog) {
       return false;
@@ -1912,8 +1992,9 @@
     const targetHeight = Math.max(1, targetRect.height);
     const targetTop = targetRect.top - logRect.top + dom.chatLog.scrollTop;
     const targetBottom = targetTop + targetHeight;
-    const topPadding = 16;
-    const bottomPadding = 20;
+    const computed = window.getComputedStyle(dom.chatLog);
+    const topPadding = Math.max(12, Math.round(readCssPixelValue(computed.scrollPaddingTop, 0)));
+    const bottomPadding = Math.max(12, Math.round(readCssPixelValue(computed.scrollPaddingBottom, 0)));
     const visibleTop = dom.chatLog.scrollTop + topPadding;
     const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - bottomPadding;
     const alreadyVisible = targetTop >= visibleTop && targetBottom <= visibleBottom;
@@ -2403,8 +2484,8 @@
     const mode = sidePanelMode(project);
     const open = Boolean(project?.sidePanelOpen) && mode !== "hidden";
     const mobileLayout = isMobileLayout();
-    if (open && state.panelWidth < 420) {
-      updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+    if (open && state.panelWidth < PANEL_WIDTH_MIN) {
+      updatePanelWidth(Math.min(PANEL_WIDTH_DEFAULT, panelMaxByViewport()), { persist: true });
     }
     const fullscreen = open && (mobileLayout || Boolean(project?.sidePanelFullscreen));
     dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
@@ -2553,7 +2634,7 @@
       dom.composerLead.hidden = !state.accessToken;
     }
     if (dom.composerThinking) {
-      dom.composerThinking.hidden = !state.awaitingResponse;
+      dom.composerThinking.hidden = true;
     }
     dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
@@ -2587,8 +2668,8 @@
     renderHome(project);
     renderStatus(project);
     renderAttachmentList(project);
-    renderComposer(project);
     renderTimeline(project);
+    renderComposer(project);
     renderSidePanel(project);
     renderProjectActionsMenu();
   }
@@ -3131,6 +3212,12 @@
 
     const mapping = [
       {
+        target: "problem",
+        patterns: [
+          /(?:business\s*problem|проблема|бизнес[-\s]*проблем)/,
+        ],
+      },
+      {
         target: "input_examples",
         patterns: [
           /(?:input\s*examples?|входн(?:ые)?\s+(?:примеры|данн(?:ые)?))/,
@@ -3149,27 +3236,21 @@
         ],
       },
       {
-        target: "current_process",
+        target: "current_workflow",
         patterns: [
           /(?:current\s*process|workflow|текущ(?:ий|ая)\s+процесс)/,
         ],
       },
       {
-        target: "constraints",
+        target: "branching_rules",
         patterns: [
-          /(?:constraints?|ограничени(?:е|я)|compliance|policy)/,
+          /(?:constraints?|ограничени(?:е|я)|compliance|policy|business\s*rules?|бизнес[-\s]*правила|\bправила\b|исключени(?:е|я))/,
         ],
       },
       {
         target: "success_metrics",
         patterns: [
           /(?:success\s*metrics?|kpi|sla|метрик(?:а|и)\s+успеха?)/,
-        ],
-      },
-      {
-        target: "business_rules",
-        patterns: [
-          /(?:business\s*rules?|бизнес[-\s]*правила|\bправила\b)/,
         ],
       },
     ];
@@ -3189,6 +3270,9 @@
     const briefFeedbackTarget = shouldSendBriefFeedbackTarget
       ? detectExplicitBriefFeedbackTarget(normalizedUserText)
       : "";
+    const briefSectionUpdates = shouldSendBriefFeedbackTarget && briefFeedbackTarget && normalizedUserText
+      ? { [briefFeedbackTarget]: normalizedUserText }
+      : undefined;
     return {
       working_language: "ru",
       project_key: last.browser_project_pointer?.project_key || "",
@@ -3226,6 +3310,7 @@
         linked_brief_id: last.web_conversation_envelope?.linked_brief_id || "",
       },
       brief_feedback_target: briefFeedbackTarget || undefined,
+      brief_section_updates: briefSectionUpdates,
       discovery_runtime_state: last.discovery_runtime_state || {},
       uploaded_files: queuedUploads.length ? serializeUploadsForTransport(queuedUploads) : undefined,
     };
@@ -3644,7 +3729,7 @@
         active.lastAutoFollowupSource = "";
         persist();
         if (state.activeProjectId === active.id) {
-          showComposerNotice("Фабрика ещё формирует материалы. Нажми «Обновить», чтобы проверить статус позже.", "info", active.id);
+          showComposerNotice("Фабрика ещё формирует материалы. Напиши «обнови статус» чуть позже.", "info", active.id);
           renderComposer(active);
         }
         return;
@@ -3656,7 +3741,11 @@
       }
       active.handoffPollAttempt = attempt + 1;
       persist();
-      dispatchTurn("request_status", "", { skipUserMessage: true }).finally(() => {
+      dispatchTurn("request_status", "", {
+        skipUserMessage: true,
+        projectId,
+        syncReason: "handoff_poll",
+      }).finally(() => {
         const latest = state.projects.find((item) => item.id === projectId);
         if (!latest || latest.lastAutoFollowupSource !== sourceRequestId) {
           return;
@@ -3673,6 +3762,8 @@
   function applyResponse(project, response, connectionMode, options = {}) {
     const appendReplyMessages = options.appendReplyMessages !== false;
     const syncReason = normalizeText(options.syncReason);
+    const previousPanelMode = normalizeText(project.lastPanelMode);
+    const manualPanelClose = Boolean(project.panelManuallyClosed);
 
     if (responseRequiresAccessGate(response)) {
       project.lastResponse = response;
@@ -3712,9 +3803,10 @@
     if (panelMode === "hidden") {
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = false;
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
-    } else if (panelMode !== normalizeText(project.lastPanelMode)) {
+    } else if (panelMode !== previousPanelMode && !manualPanelClose) {
       project.sidePanelOpen = true;
     }
     if (!["downloads", "preview"].includes(panelMode)) {
@@ -3741,9 +3833,13 @@
     const isPostConfirmState = responseStatus === "confirmed" || briefRuntimeStatus === "confirmed";
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
-    if (sourceAction === "confirm_brief" || submitTurnConfirmation || isPostConfirmState) {
+    const shouldAutoOpenPostConfirm = sourceAction === "confirm_brief"
+      || submitTurnConfirmation
+      || (isPostConfirmState && !manualPanelClose);
+    if (shouldAutoOpenPostConfirm) {
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = false;
       if (downloadsReady) {
         const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
         project.panelModeOverride = "preview";
@@ -3752,10 +3848,11 @@
         project.panelModeOverride = "downloads";
         project.previewArtifactKind = "";
       }
-    } else if (downloadsReady && syncReason === "handoff_poll") {
+    } else if (downloadsReady && syncReason === "handoff_poll" && !manualPanelClose) {
       const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = false;
       project.panelModeOverride = "preview";
       project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
     }
@@ -3783,7 +3880,10 @@
     if (!ensureWorkspaceAccess()) {
       return;
     }
-    const project = getActiveProject();
+    const targetProjectId = normalizeText(options.projectId);
+    const project = targetProjectId
+      ? state.projects.find((item) => item.id === targetProjectId) || getActiveProject()
+      : getActiveProject();
     if (!project) {
       return;
     }
@@ -3791,6 +3891,7 @@
       return;
     }
     const queuedUploads = uniqueUploads(options.queuedUploads || []);
+    const previousAction = normalizeText(options.previousAction);
     const normalizedUserText = normalizeText(userText);
     const isBackgroundStatusPoll = action === "request_status" && options.skipUserMessage && !normalizedUserText && queuedUploads.length === 0;
     if (!isBackgroundStatusPoll) {
@@ -3805,6 +3906,7 @@
     const pendingStartedAt = Date.now();
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
+      dropTrailingReviewPrompt(project, action);
       project.timeline.push({
         role: "user",
         kind: action,
@@ -3843,7 +3945,7 @@
     }
     try {
       const response = await postTurn(payload, { signal: abortController.signal });
-      applyResponse(project, response, "live");
+      applyResponse(project, response, "live", { syncReason: normalizeText(options.syncReason) });
     } catch (error) {
       if (error?.name === "TimeoutError") {
         timedOut = true;
@@ -3873,6 +3975,9 @@
           }
           if (queuedUploads.length) {
             activeProject.pendingUploads = uniqueUploads([...queuedUploads, ...activeProject.pendingUploads]);
+          }
+          if (previousAction && isKnownAction(previousAction)) {
+            activeProject.currentAction = previousAction;
           }
           activeProject.updatedAt = nowIso();
         }
@@ -3912,6 +4017,9 @@
     }
     const project = getActiveProject();
     if (!project) {
+      return;
+    }
+    if (state.awaitingResponse) {
       return;
     }
     const syncReason = normalizeText(options.syncReason, "manual_refresh");
@@ -3987,8 +4095,9 @@
         renderAll();
         return;
       }
+      const previousAction = normalizeText(project?.currentAction);
       setProjectAction(project, action);
-      dispatchTurn(action, "", { skipUserMessage: true });
+      dispatchTurn(action, "", { skipUserMessage: true, previousAction });
       return;
     }
 
@@ -4007,8 +4116,9 @@
     }
 
     if (["request_status", "confirm_brief"].includes(action)) {
+      const previousAction = normalizeText(project?.currentAction);
       setProjectAction(project, action);
-      dispatchTurn(action, "", { skipUserMessage: true });
+      dispatchTurn(action, "", { skipUserMessage: true, previousAction });
       return;
     }
 
@@ -4239,6 +4349,9 @@
       project.sidePanelOpen = !project.sidePanelOpen;
       if (!project.sidePanelOpen) {
         project.sidePanelFullscreen = false;
+        project.panelManuallyClosed = true;
+      } else {
+        project.panelManuallyClosed = false;
       }
       persist();
       renderAll();
@@ -4274,12 +4387,24 @@
       }
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = true;
       persist();
       renderAll();
       window.requestAnimationFrame(() => {
         dom.sidePanelToggle?.focus();
       });
     });
+
+    if (dom.sidebarBackdrop) {
+      dom.sidebarBackdrop.addEventListener("click", () => {
+        if (!isMobileLayout() || state.sidebarVisible === false) {
+          return;
+        }
+        state.sidebarVisible = false;
+        applySidebarVisibility();
+        persist();
+      });
+    }
 
     if (dom.briefEditToggle) {
       dom.briefEditToggle.addEventListener("click", () => {

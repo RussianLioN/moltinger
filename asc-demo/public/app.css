@@ -711,15 +711,15 @@ code {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: 0 0 auto;
   position: sticky;
   top: 0;
-  z-index: 48;
-  min-height: 42px;
-  padding: 5px 0 7px;
+  z-index: 64;
+  min-height: 40px;
+  padding: 4px 0 6px;
   background: var(--bg-soft);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 86%, transparent);
   backdrop-filter: none;
 }
 
@@ -791,10 +791,10 @@ code {
 
 .workspace-toggle {
   border-radius: 8px;
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
   border-color: transparent;
   background: transparent;
 }
@@ -809,6 +809,12 @@ code {
   opacity: 0.9;
 }
 
+.workspace-toggle--panel .workspace-toggle__icon {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+}
+
 .workspace-toggle__icon::before {
   content: "";
   position: absolute;
@@ -821,8 +827,9 @@ code {
 }
 
 .workspace-toggle--panel .workspace-toggle__icon::before {
-  left: auto;
-  right: 42%;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
 }
 
 .workspace-toggle__icon::after {
@@ -846,12 +853,26 @@ code {
 }
 
 .workspace-toggle--panel .workspace-toggle__icon::after {
-  right: 1px;
+  top: 50%;
+  bottom: auto;
+  left: 2px;
+  right: 2px;
+  width: auto;
+  height: 1.6px;
+  transform: translateY(-50%);
+  opacity: 0.86;
 }
 
 .workspace-toggle--panel[aria-pressed="false"] .workspace-toggle__icon::after {
-  right: auto;
-  left: 1px;
+  top: 50%;
+  bottom: auto;
+  left: 2px;
+  right: 2px;
+  transform: translateY(-50%);
+}
+
+.workspace-toggle--panel[aria-pressed="true"] .workspace-toggle__icon::before {
+  opacity: 0;
 }
 
 .workspace-toggle[aria-pressed="true"],
@@ -886,6 +907,13 @@ code {
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted-strong);
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.workspace-agent-state[data-state="idle"] {
+  color: rgba(218, 224, 234, 0.74);
+  border-color: color-mix(in oklab, var(--border) 82%, transparent);
+  background: color-mix(in oklab, var(--surface) 76%, transparent);
 }
 
 .workspace-agent-state[data-state="thinking"] {
@@ -910,6 +938,15 @@ code {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.74);
   animation: composer-thinking-pulse 1s ease-in-out infinite;
+}
+
+.workspace-agent-state[data-state="idle"] .workspace-agent-state__dots > span {
+  animation: none;
+  opacity: 0.34;
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 .workspace-agent-state__dots > span:nth-child(2) {
@@ -1618,14 +1655,23 @@ code {
 
   .app-frame {
     grid-template-columns: 1fr;
+    position: relative;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 81;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: rgba(6, 8, 12, 0.5);
+    cursor: pointer;
   }
 
   .app-frame[data-sidebar-open="false"] {
     grid-template-columns: 1fr;
-  }
-
-  .app-frame[data-sidebar-open="false"] .sidebar {
-    display: none !important;
   }
 
   .app-frame__divider {
@@ -1637,12 +1683,32 @@ code {
   }
 
   .sidebar {
-    grid-column: 1;
-    order: 2;
+    position: fixed;
+    top: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: min(320px, calc(100vw - 20px));
+    max-width: min(320px, calc(100vw - 20px));
+    z-index: 82;
+    border: 1px solid color-mix(in oklab, var(--border) 86%, transparent);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.44);
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+
+  .app-frame[data-sidebar-open="false"] .sidebar {
+    display: flex;
+    visibility: visible;
+    width: min(320px, calc(100vw - 20px));
+    max-width: min(320px, calc(100vw - 20px));
+    transform: translateX(calc(-100% - 18px));
+    opacity: 0;
+    pointer-events: none;
   }
 
   .workspace {
-    order: 1;
+    order: 0;
   }
 
   .workspace-shell {
