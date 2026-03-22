@@ -396,6 +396,7 @@ Do not do any of the following:
 - [ ] WebSocket handshake completes
 - [ ] `GPT 5.4 (Codex/OAuth)` is selectable
 - [ ] Live prompt succeeds on `openai-codex::gpt-5.4`
+- [ ] UAT gate surface matrix passes for browser/search/repo-context
 
 ## Final Instruction To Future LLM Sessions
 

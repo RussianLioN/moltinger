@@ -216,6 +216,16 @@ jobs:
             EXPECTED_REPLY_TEXT=OK \
             bash ./scripts/moltis-canonical-smoke.sh --base-url http://localhost:13131 --container moltis --restart-survival
 
+            echo "Test 6: Exercised browser/search/repo-context surface matrix"
+            CHAT_WAIT_MS=90000 \
+            EXPECTED_PROVIDER=openai-codex \
+            EXPECTED_MODEL=openai-codex::gpt-5.4 \
+            bash ./scripts/moltis-exercised-surface-matrix.sh \
+              --base-url http://localhost:13131 \
+              --surface browser \
+              --surface search \
+              --surface repo-context
+
             echo "All smoke tests passed ✅"
           EOF
           echo "::endgroup::"

@@ -107,6 +107,16 @@ gh workflow run telegram-e2e-on-demand.yml \
 - `failure.code`
 - `recommended_action`
 
+### `/status` semantic contract
+
+Для authoritative `/status` теперь недостаточно просто получить attributable reply.
+Wrapper дополнительно валидирует, что:
+
+- reply не является verification-gate сообщением;
+- reply сам упоминает canonical model `openai-codex::gpt-5.4`.
+
+Если ответ не проходит этот semantic check, authoritative verdict становится `failed` со stage `semantic_review`.
+
 ### Как authoritative path теперь отличает финальный ответ от промежуточного
 
 Authoritative `Telegram Web` probe больше не принимает первый попавшийся входящий bubble за окончательный успех.
@@ -132,6 +142,8 @@ Authoritative Telegram Web path различает минимум:
 - `stale_chat_noise`
 - `send_failure`
 - `bot_no_response`
+- `verification_gate_reply`
+- `semantic_status_mismatch`
 
 ## Restricted Debug Bundle
 
@@ -200,3 +212,13 @@ make codex-advisory-e2e
 5. degraded one-way path остаётся честным и фиксируется в audit trail.
 
 Для live post-deploy проверки transport/runtime по-прежнему остается каноническим этот remote UAT workflow, а для advisory UX используется отдельный helper выше.
+
+## Exercised-Surface Matrix In UAT Gate
+
+`uat-gate.yml` теперь дополняет canonical provider/model smoke ещё и surface-matrix проверкой:
+
+- browser -> ожидается `Introduction - Moltis Documentation`
+- search -> ожидается `docs.moltis.org`
+- repo-context -> ожидается `/server`
+
+Эти проверки запускаются shared script `scripts/moltis-exercised-surface-matrix.sh`.

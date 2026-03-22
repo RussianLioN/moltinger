@@ -30,6 +30,7 @@ SHARED_TARGET_LOCK="${SHARED_TARGET_LOCK:-/tmp/moltinger-telegram-remote-uat.loc
 SERIALIZE_SHARED_TARGET="${SERIALIZE_SHARED_TARGET:-true}"
 MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
+STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"
 
 RUN_ID=""
 STARTED_AT=""
@@ -163,6 +164,10 @@ sanitize_json_for_operator() {
   ' <<< "$input_json"
 }
 
+normalize_message_text() {
+  printf '%s' "${1:-}" | tr '\r\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
+}
+
 write_report() {
   local debug_available="false"
   if [[ -n "$DEBUG_OUTPUT_PATH" ]]; then
@@ -224,6 +229,48 @@ write_report() {
 
   write_json_file "$OUTPUT_PATH" "$report_json"
   log "Review-safe artifact written to $OUTPUT_PATH"
+}
+
+evaluate_authoritative_semantics() {
+  if [[ "$VERDICT" != "passed" ]]; then
+    return 0
+  fi
+
+  local normalized_message reply_text
+  normalized_message="$(normalize_message_text "$MESSAGE")"
+  reply_text="$(jq -r '.reply_text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null || true)"
+
+  if [[ "$normalized_message" != "/status" ]]; then
+    return 0
+  fi
+
+  local verification_gate_re
+  verification_gate_re='verification code|enter the verification code'
+
+  if printf '%s' "$reply_text" | grep -Eiq "$verification_gate_re"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "verification_gate_reply" "$RUN_STAGE" "Authoritative /status reply hit a verification gate and is not comparable to the allowlisted operator path" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg expected_model "$STATUS_EXPECTED_MODEL" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:"/status", expected_model:$expected_model, observed_reply:$reply_text, failure:"verification_gate_reply"}}')"
+    RECOMMENDED_ACTION="Reconcile Telegram allowlist/session state and rerun authoritative /status after removing the verification gate."
+    return 0
+  fi
+
+  if [[ -n "$STATUS_EXPECTED_MODEL" ]] && [[ "$reply_text" != *"$STATUS_EXPECTED_MODEL"* ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_status_mismatch" "$RUN_STAGE" "Authoritative /status reply was attributable but did not mention the canonical model contract" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg expected_model "$STATUS_EXPECTED_MODEL" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:"/status", expected_model:$expected_model, observed_reply:$reply_text, failure:"semantic_status_mismatch"}}')"
+    RECOMMENDED_ACTION="Reset or reconcile the active session/runtime and rerun authoritative /status until the reply itself mentions the canonical model."
+  fi
 }
 
 write_debug_bundle() {
@@ -827,6 +874,7 @@ main() {
   case "$MODE" in
     authoritative|telegram_web)
       run_authoritative_telegram_web
+      evaluate_authoritative_semantics
       if [[ "$VERDICT" == "failed" ]]; then
         evaluate_secondary_mtproto
         finish_with_status 3

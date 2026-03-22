@@ -34,6 +34,8 @@ SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.s
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 SELF_LEARNING_DOC="$PROJECT_ROOT/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md"
+TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
+MOLTIS_SURFACE_MATRIX_SCRIPT="$PROJECT_ROOT/scripts/moltis-exercised-surface-matrix.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -311,6 +313,30 @@ PY
         test_pass
     else
         test_fail "Session reconcile automation must be documented in the runbook and implemented through the shared moltis-session-reconcile.sh script"
+    fi
+
+    test_start "static_telegram_remote_uat_enforces_status_semantics"
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Authoritative Telegram remote UAT must fail when /status hits a verification gate or omits the canonical model contract"
+    fi
+
+    test_start "static_uat_gate_exercises_browser_search_and_repo_context_surfaces"
+    if [[ -x "$MOLTIS_SURFACE_MATRIX_SCRIPT" ]] && \
+       rg -Fq 'moltis-exercised-surface-matrix.sh' "$UAT_GATE_WORKFLOW" && \
+       rg -Fq -- '--surface browser' "$UAT_GATE_WORKFLOW" && \
+       rg -Fq -- '--surface search' "$UAT_GATE_WORKFLOW" && \
+       rg -Fq -- '--surface repo-context' "$UAT_GATE_WORKFLOW" && \
+       rg -Fq 'Introduction - Moltis Documentation' "$MOLTIS_SURFACE_MATRIX_SCRIPT" && \
+       rg -Fq 'docs.moltis.org' "$MOLTIS_SURFACE_MATRIX_SCRIPT" && \
+       rg -Fq '/server' "$MOLTIS_SURFACE_MATRIX_SCRIPT"; then
+        test_pass
+    else
+        test_fail "UAT gate must exercise browser, search, and repo-context surfaces through the shared Moltis surface matrix script"
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"

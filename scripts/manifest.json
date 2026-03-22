@@ -587,6 +587,27 @@
       ],
       "ci": true
     },
+    "moltis-exercised-surface-matrix.sh": {
+      "version": "1.0.0",
+      "description": "Exercise browser, search, and repo-context surfaces through the canonical Moltis chat contract",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "node"
+      ],
+      "provides": [
+        "moltis-exercised-surface-matrix"
+      ],
+      "env_vars": [
+        "MOLTIS_URL",
+        "MOLTIS_TEST_API_SCRIPT",
+        "EXPECTED_PROVIDER",
+        "EXPECTED_MODEL",
+        "CHAT_WAIT_MS"
+      ],
+      "ci": true
+    },
     "moltis-session-reconcile.sh": {
       "version": "1.0.0",
       "description": "Resolve, patch, and reset Moltis UI or Telegram-bound sessions onto the canonical model contract",
@@ -1143,6 +1164,7 @@
       "requires": [
         "curl",
         "jq",
+        "node",
         "python3"
       ],
       "provides": [
@@ -1150,6 +1172,7 @@
       ],
       "env_vars": [
         "MOLTIS_PASSWORD",
+        "STATUS_EXPECTED_MODEL",
         "TELEGRAM_TEST_API_ID",
         "TELEGRAM_TEST_API_HASH",
         "TELEGRAM_TEST_SESSION",
