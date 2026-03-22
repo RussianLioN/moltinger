@@ -300,11 +300,12 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
 
     if ! grep -Fq 'export DOCKER_SOCKET_GID="$docker_socket_gid"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'profile_dir = "/tmp/moltis-browser-profile/shared"' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'persist_profile = false' "$PROJECT_ROOT/config/moltis.toml" || \
        ! grep -Fq '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'prepare_moltis_browser_profile_dir' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Browser sandbox access requires a host-visible shared profile_dir, deploy-time permission prep, live socket GID injection, and host.docker.internal exposure for sibling browser containers"
+        test_fail "Browser sandbox access requires the tracked shared profile_dir, explicit non-persistent profile intent, deploy-time permission prep, live socket GID injection, and host.docker.internal exposure for sibling browser containers"
         return
     fi
 
@@ -325,7 +326,9 @@ test_deploy_script_prepulls_tracked_browser_sandbox_image() {
        ! grep -Fq 'docker build -f "$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" -t "$sandbox_image" "$PROJECT_ROOT"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'docker pull "$sandbox_image"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'sandbox_image = "moltinger/browserless-chrome-no-preboot:local"' "$PROJECT_ROOT/config/moltis.toml" || \
-       ! grep -Fq 'ENV PREBOOT_CHROME=false' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile"; then
+       ! grep -Fq 'ENV PREBOOT_CHROME=false' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" || \
+       ! grep -Fq 'ENTRYPOINT ["/usr/local/bin/start-browserless-no-preboot.sh"]' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" || \
+       ! grep -Fq 'export PREBOOT_CHROME=false' "$PROJECT_ROOT/docker/moltis-browser-sandbox/start-browserless-no-preboot.sh"; then
         test_fail "Deploy must parse the tracked browser contract with shell-only tooling, build the local no-preboot shim when configured, and otherwise pre-pull the sandbox image so the first browser run is not spent on a cold pull"
         return
     fi

@@ -447,10 +447,8 @@ cache_ttl_minutes = 15            # Cache fetched pages for this many minutes (0
 max_redirects = 3                 # Maximum HTTP redirects to follow
 readability = true                # Use readability extraction for HTML (cleaner output)
 
-[channels.telegram]
-enabled = true                    # Keep Telegram integration explicitly enabled
-
 # ── Telegram Bot Configuration ────────────────────────────────────────────────
+# Configure Telegram accounts directly under [channels.telegram.<account>].
 # Create bot via @BotFather, get token
 # Get user ID via @userinfobot
 [channels.telegram.moltis-bot]
@@ -486,6 +484,7 @@ allowed_domains = []              # Empty = all domains allowed
 memory_limit_percent = 90
 sandbox_image = "moltinger/browserless-chrome-no-preboot:local"
 profile_dir = "/tmp/moltis-browser-profile/shared"  # Host-visible path shared with the Moltis container so sibling browser sandboxes can write Chrome profile state
+persist_profile = false           # Upstream 0.10.18 still ignores this for sibling containers; keep it explicit and rely on the no-preboot shim until the runtime bug is fixed
 container_host = "host.docker.internal"  # Moltis-in-Docker sibling browser access via host-gateway on Linux
 # allowed_domains = [
 #     "docs.example.com",         # Exact match
@@ -660,7 +659,7 @@ provider = "ollama"              # Pin embeddings to Ollama instead of chat-prov
                                   #   "ollama"  - Ollama server
                                   #   "openai"  - OpenAI API
                                   #   "custom"  - Custom endpoint
-base_url = "http://ollama:11434/v1"  # Use the internal Ollama sidecar for embeddings
+base_url = "http://ollama:11434"  # Root Ollama endpoint keeps model probes/pulls on /api/* working in Docker
 model = "nomic-embed-text"       # Lightweight embedding model verified on the live Ollama sidecar
 # api_key = "..."                 # API key (optional for local endpoints like Ollama)
 

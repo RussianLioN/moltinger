@@ -99,6 +99,7 @@ run_static_config_validation_tests() {
     test_start "static_moltis_browser_docker_contract_matches_official_sibling_container_requirements"
     if rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG" && \
        rg -q '^profile_dir = "/tmp/moltis-browser-profile/shared"' "$TOML_CONFIG" && \
+       rg -q '^persist_profile = false' "$TOML_CONFIG" && \
        rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
        rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$COMPOSE_PROD" && \
        rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
@@ -110,10 +111,12 @@ run_static_config_validation_tests() {
        rg -q 'docker build -f "\$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" -t "\$sandbox_image" "\$PROJECT_ROOT"' "$DEPLOY_SCRIPT" && \
        rg -q '^sandbox_image = "moltinger/browserless-chrome-no-preboot:local"' "$TOML_CONFIG" && \
        rg -q '^FROM browserless/chrome$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
-       rg -q '^ENV PREBOOT_CHROME=false$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile"; then
+       rg -q '^ENV PREBOOT_CHROME=false$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^ENTRYPOINT \["/usr/local/bin/start-browserless-no-preboot.sh"\]$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^export PREBOOT_CHROME=false$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/start-browserless-no-preboot.sh"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must pin the tracked no-preboot sandbox image, keep the shared profile_dir contract, build the local shim image during deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must pin the tracked no-preboot sandbox image, keep the shared profile_dir contract, keep persist_profile disabled, build the local shim image during deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
@@ -224,13 +227,20 @@ PY
 
     test_start "static_config_pins_memory_provider_and_repo_watch_dirs"
     if rg -Fq 'provider = "ollama"' "$TOML_CONFIG" && \
-       rg -Fq 'base_url = "http://ollama:11434/v1"' "$TOML_CONFIG" && \
+       rg -Fq 'base_url = "http://ollama:11434"' "$TOML_CONFIG" && \
        rg -Fq 'model = "nomic-embed-text"' "$TOML_CONFIG" && \
        rg -Fq '"~/.moltis/memory"' "$TOML_CONFIG" && \
        rg -Fq '"/server/knowledge"' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis config must pin the memory embeddings backend and repo-visible watch_dirs instead of relying on auto-detect"
+        test_fail "Primary Moltis config must pin the memory embeddings backend, use the root Ollama endpoint for model probes, and keep repo-visible watch_dirs instead of relying on auto-detect"
+    fi
+
+    test_start "static_config_avoids_top_level_telegram_boolean_accounts"
+    if ! rg -Uq '^\[channels\.telegram\]\nenabled = true$' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must not declare enabled=true under [channels.telegram] because Moltis parses it as a bogus Telegram account entry"
     fi
 
     test_start "static_codex_cli_update_delivery_script_is_executable"
@@ -238,6 +248,14 @@ PY
         test_pass
     else
         test_fail "scripts/codex-cli-update-delivery.sh must be executable to stay GitOps-clean after managed surface sync applies executable bits"
+    fi
+
+    test_start "static_moltis_smoke_clears_chat_context_before_authoritative_run"
+    if rg -Fq 'RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq -- '--method chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh"; then
+        test_pass
+    else
+        test_fail "scripts/test-moltis-api.sh must clear chat context before chat.send so authoritative smoke runs do not reuse stale operator session state"
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"

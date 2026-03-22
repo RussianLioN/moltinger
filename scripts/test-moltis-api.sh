@@ -14,10 +14,12 @@ MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
 ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-20}"
 CHAT_WAIT_MS="${CHAT_WAIT_MS:-15000}"
+RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"
 COOKIE_FILE="/tmp/moltis-session-$$"
 STATUS_FILE="/tmp/moltis-status-$$.json"
 RPC_OUTPUT_FILE="/tmp/moltis-chat-$$.json"
 AUTH_STATUS_FILE="/tmp/moltis-auth-$$.json"
+CHAT_CLEAR_FILE="/tmp/moltis-chat-clear-$$.json"
 
 # shellcheck source=../tests/lib/http.sh
 source "$PROJECT_ROOT/tests/lib/http.sh"
@@ -25,7 +27,7 @@ source "$PROJECT_ROOT/tests/lib/http.sh"
 source "$PROJECT_ROOT/tests/lib/rpc.sh"
 
 cleanup() {
-    rm -f "$COOKIE_FILE" "$STATUS_FILE" "$RPC_OUTPUT_FILE" "$AUTH_STATUS_FILE"
+    rm -f "$COOKIE_FILE" "$STATUS_FILE" "$RPC_OUTPUT_FILE" "$AUTH_STATUS_FILE" "$CHAT_CLEAR_FILE"
     unset TEST_COOKIE_HEADER || true
 }
 
@@ -114,8 +116,23 @@ main() {
     fi
     print_json_summary "$STATUS_FILE" '{version: .result.payload.version, connections: .result.payload.connections}'
 
+    if [[ "$RESET_CHAT_CONTEXT_BEFORE_SEND" == "true" ]]; then
+        echo
+        echo "5. Clearing chat context via RPC..."
+        TEST_BASE_URL="$MOLTIS_URL" TEST_TIMEOUT="$TEST_TIMEOUT" MOLTIS_PASSWORD="$MOLTIS_PASSWORD" TEST_COOKIE_HEADER="$TEST_COOKIE_HEADER" \
+            node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" request \
+                --method chat.clear \
+                --params '{}' >"$CHAT_CLEAR_FILE"
+        if ! jq -e '.ok == true and .result.ok == true and .result.payload.ok == true' "$CHAT_CLEAR_FILE" >/dev/null 2>&1; then
+            echo "ERROR: chat.clear RPC failed" >&2
+            jq . "$CHAT_CLEAR_FILE" >&2 || true
+            exit 1
+        fi
+        echo "   OK"
+    fi
+
     echo
-    echo "5. Sending chat via RPC..."
+    echo "6. Sending chat via RPC..."
     rpc_payload="$(jq -nc --arg text "$command" '{text: $text}')"
     TEST_BASE_URL="$MOLTIS_URL" TEST_TIMEOUT="$TEST_TIMEOUT" \
         node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" request \
@@ -138,7 +155,7 @@ main() {
     print_json_summary "$RPC_OUTPUT_FILE" '[.events[]? | select(.event == "chat" and .payload.state == "final")][-1]'
 
     echo
-    echo "6. Logging out..."
+    echo "7. Logging out..."
     logout_code="$(moltis_logout_code "$MOLTIS_URL" "$COOKIE_FILE" "$TEST_TIMEOUT")"
     if [[ ! "$logout_code" =~ ^(200|204|302|303)$ ]]; then
         echo "ERROR: Logout failed (HTTP $logout_code)" >&2
