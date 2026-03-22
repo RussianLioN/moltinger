@@ -1378,28 +1378,41 @@ prepull_moltis_browser_sandbox_image() {
     fi
 
     local browser_contract browser_enabled sandbox_image
-    browser_contract="$(python3 - "$PROJECT_ROOT/config/moltis.toml" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib
-
-with Path(sys.argv[1]).open("rb") as fh:
-    config = tomllib.load(fh)
-
-browser = ((config.get("tools") or {}).get("browser") or {})
-print(json.dumps({
-    "enabled": bool(browser.get("enabled", True)),
-    "sandbox_image": browser.get("sandbox_image") or "browserless/chrome",
-}))
-PY
-)"
-    browser_enabled="$(jq -r '.enabled' <<<"$browser_contract")"
-    sandbox_image="$(jq -r '.sandbox_image' <<<"$browser_contract")"
+    browser_contract="$(awk '
+        BEGIN {
+            in_section = 0
+            enabled = "true"
+            image = "browserless/chrome"
+        }
+        /^\[tools\.browser\][[:space:]]*$/ {
+            in_section = 1
+            next
+        }
+        /^\[/ {
+            if (in_section) {
+                exit
+            }
+        }
+        in_section {
+            if ($0 ~ /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*(true|false)/) {
+                gsub(/#.*/, "", $0)
+                sub(/^[[:space:]]*enabled[[:space:]]*=[[:space:]]*/, "", $0)
+                gsub(/[[:space:]]+$/, "", $0)
+                enabled = $0
+            }
+            if ($0 ~ /^[[:space:]]*sandbox_image[[:space:]]*=[[:space:]]*"/) {
+                gsub(/#.*/, "", $0)
+                sub(/^[[:space:]]*sandbox_image[[:space:]]*=[[:space:]]*"/, "", $0)
+                sub(/".*$/, "", $0)
+                image = $0
+            }
+        }
+        END {
+            print enabled "|" image
+        }
+    ' "$PROJECT_ROOT/config/moltis.toml")"
+    browser_enabled="${browser_contract%%|*}"
+    sandbox_image="${browser_contract#*|}"
 
     if [[ "$browser_enabled" != "true" ]]; then
         log_info "Tracked Moltis browser tool is disabled; skipping sandbox image pre-pull"

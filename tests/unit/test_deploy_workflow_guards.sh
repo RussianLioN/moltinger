@@ -318,10 +318,16 @@ test_deploy_script_prepulls_tracked_browser_sandbox_image() {
     fi
 
     if ! grep -Fq 'prepull_moltis_browser_sandbox_image()' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'tools") or {}).get("browser")' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "awk '" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'docker pull "$sandbox_image"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'sandbox_image = "browserless/chrome"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Deploy must parse the tracked browser contract and pre-pull the sandbox image so the first browser run is not spent on a cold pull"
+        test_fail "Deploy must parse the tracked browser contract with shell-only tooling and pre-pull the sandbox image so the first browser run is not spent on a cold pull"
+        return
+    fi
+
+    if grep -Fq 'import tomllib' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       grep -Fq 'import tomli' "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "Deploy must not depend on Python TOML modules in the remote rollout path"
         return
     fi
 
