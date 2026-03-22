@@ -106,10 +106,14 @@ run_static_config_validation_tests() {
        rg -q 'prepare_moltis_browser_profile_dir' "$DEPLOY_SCRIPT" && \
        rg -q 'chmod 0777 "\$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "\$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"' "$DEPLOY_SCRIPT" && \
        rg -q 'prepull_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
-       rg -q 'docker pull "\$sandbox_image"' "$DEPLOY_SCRIPT"; then
+       rg -q 'LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker build -f "\$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" -t "\$sandbox_image" "\$PROJECT_ROOT"' "$DEPLOY_SCRIPT" && \
+       rg -q '^sandbox_image = "moltinger/browserless-chrome-no-preboot:local"' "$TOML_CONFIG" && \
+       rg -q '^FROM browserless/chrome$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^ENV PREBOOT_CHROME=false$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must pin a host-visible shared profile_dir, mount it into Moltis, prepare writable permissions, set container_host, inject the live Docker socket GID, pre-pull the sandbox image, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must pin the tracked no-preboot sandbox image, keep the shared profile_dir contract, build the local shim image during deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"

@@ -312,7 +312,7 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
 }
 
 test_deploy_script_prepulls_tracked_browser_sandbox_image() {
-    test_start "Deploy should pre-pull the tracked browser sandbox image before Moltis comes up"
+    test_start "Deploy should build or pre-pull the tracked browser sandbox image before Moltis comes up"
 
     if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/config/moltis.toml" ]]; then
         test_skip "Missing deploy or config files"
@@ -321,9 +321,12 @@ test_deploy_script_prepulls_tracked_browser_sandbox_image() {
 
     if ! grep -Fq 'prepull_moltis_browser_sandbox_image()' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "awk '" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'docker build -f "$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" -t "$sandbox_image" "$PROJECT_ROOT"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'docker pull "$sandbox_image"' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'sandbox_image = "browserless/chrome"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Deploy must parse the tracked browser contract with shell-only tooling and pre-pull the sandbox image so the first browser run is not spent on a cold pull"
+       ! grep -Fq 'sandbox_image = "moltinger/browserless-chrome-no-preboot:local"' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'ENV PREBOOT_CHROME=false' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile"; then
+        test_fail "Deploy must parse the tracked browser contract with shell-only tooling, build the local no-preboot shim when configured, and otherwise pre-pull the sandbox image so the first browser run is not spent on a cold pull"
         return
     fi
 
