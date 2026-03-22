@@ -1,0 +1,324 @@
+name: Deploy ASC Demo
+
+concurrency:
+  group: deploy-asc-demo-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+      rollback:
+        description: Roll back ASC demo instead of deploying a new version
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger-asc-demo
+  ASC_DEMO_ENV_PATH: /opt/moltinger-asc-demo/.env.asc
+  ASC_DEMO_PUBLIC_URL: https://demo.ainetic.tech
+  LIVE_MOLTIS_URL: https://moltis.ainetic.tech
+
+jobs:
+  preflight:
+    name: ASC Demo Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      llm_enabled: ${{ steps.resolve-env.outputs.llm_enabled }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          missing=0
+
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "::error::SSH_PRIVATE_KEY secret not configured"
+            missing=1
+          fi
+
+          if [ -z "${{ secrets.ASC_DEMO_SHARED_TOKEN_HASH }}" ]; then
+            echo "::error::ASC_DEMO_SHARED_TOKEN_HASH secret not configured"
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Resolve ASC demo env contract
+        id: resolve-env
+        env:
+          OPENAI_API_KEY_SECRET: ${{ secrets.OPENAI_API_KEY }}
+          FIREWORKS_API_KEY_SECRET: ${{ secrets.FIREWORKS_API_KEY }}
+        run: |
+          llm_enabled="false"
+          openai_api_key="$OPENAI_API_KEY_SECRET"
+
+          if [ -z "$openai_api_key" ]; then
+            openai_api_key="$FIREWORKS_API_KEY_SECRET"
+          fi
+
+          if [ -n "$openai_api_key" ]; then
+            llm_enabled="true"
+          fi
+
+          echo "llm_enabled=$llm_enabled" >> "$GITHUB_OUTPUT"
+
+          if [ "$llm_enabled" = "false" ]; then
+            echo "::warning::OPENAI_API_KEY/FIREWORKS_API_KEY not configured; ASC demo rollout will run with deterministic fallback (ASC_DEMO_LLM_ENABLED=false)"
+          fi
+
+      - name: Run local ASC demo preflight
+        run: |
+          chmod +x scripts/preflight-check.sh
+          ./scripts/preflight-check.sh --ci --target asc-demo --json > /tmp/asc-demo-preflight.json
+          cat /tmp/asc-demo-preflight.json | jq .
+
+      - name: Validate ASC demo compose render
+        env:
+          ASC_DEMO_SHARED_TOKEN_HASH: ${{ secrets.ASC_DEMO_SHARED_TOKEN_HASH }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+        run: |
+          effective_openai_key="$OPENAI_API_KEY"
+          if [ -z "$effective_openai_key" ]; then
+            effective_openai_key="$FIREWORKS_API_KEY"
+          fi
+
+          ASC_DEMO_LLM_ENABLED="${{ steps.resolve-env.outputs.llm_enabled }}" \
+            OPENAI_API_KEY="$effective_openai_key" \
+            OPENAI_BASE_URL="${{ vars.ASC_DEMO_OPENAI_BASE_URL || 'https://api.fireworks.ai/inference/v1' }}" \
+            MODEL_NAME="${{ vars.ASC_DEMO_MODEL_NAME || 'accounts/fireworks/models/glm-5' }}" \
+            docker compose -f docker-compose.asc.yml config --quiet
+
+  deploy:
+    name: Deploy ASC Demo
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    environment:
+      name: ${{ github.event.inputs.environment }}
+      url: https://demo.ainetic.tech
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ env.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Prepare remote ASC demo worktree
+        run: |
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" << 'EOF'
+            set -euo pipefail
+
+            if [ ! -d "${{ env.DEPLOY_PATH }}/.git" ]; then
+              rm -rf "${{ env.DEPLOY_PATH }}"
+              git clone "https://github.com/${{ github.repository }}.git" "${{ env.DEPLOY_PATH }}"
+            fi
+
+            cd "${{ env.DEPLOY_PATH }}"
+            git fetch --prune origin
+            git checkout --force "${{ github.ref_name }}"
+            git reset --hard "${{ github.sha }}"
+            git clean -fd
+
+            if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+              echo "::error::ASC demo server worktree is dirty after GitOps sync"
+              git status --short || true
+              exit 1
+            fi
+          EOF
+
+      - name: Render ASC demo env from GitHub Secrets
+        env:
+          ASC_DEMO_SHARED_TOKEN_HASH: ${{ secrets.ASC_DEMO_SHARED_TOKEN_HASH }}
+          ASC_DEMO_DOMAIN_SECRET: ${{ secrets.ASC_DEMO_DOMAIN }}
+          ASC_DEMO_PUBLIC_BASE_URL_SECRET: ${{ secrets.ASC_DEMO_PUBLIC_BASE_URL }}
+          ASC_DEMO_OPERATOR_LABEL_SECRET: ${{ secrets.ASC_DEMO_OPERATOR_LABEL }}
+          OPENAI_API_KEY_SECRET: ${{ secrets.OPENAI_API_KEY }}
+          FIREWORKS_API_KEY_SECRET: ${{ secrets.FIREWORKS_API_KEY }}
+        run: |
+          asc_demo_domain="$ASC_DEMO_DOMAIN_SECRET"
+          if [ -z "$asc_demo_domain" ]; then
+            asc_demo_domain="${{ vars.ASC_DEMO_DOMAIN }}"
+          fi
+          if [ -z "$asc_demo_domain" ]; then
+            asc_demo_domain="demo.ainetic.tech"
+          fi
+
+          asc_demo_public_base_url="$ASC_DEMO_PUBLIC_BASE_URL_SECRET"
+          if [ -z "$asc_demo_public_base_url" ]; then
+            asc_demo_public_base_url="${{ vars.ASC_DEMO_PUBLIC_BASE_URL }}"
+          fi
+          if [ -z "$asc_demo_public_base_url" ]; then
+            asc_demo_public_base_url="https://$asc_demo_domain"
+          fi
+
+          asc_demo_operator_label="$ASC_DEMO_OPERATOR_LABEL_SECRET"
+          if [ -z "$asc_demo_operator_label" ]; then
+            asc_demo_operator_label="${{ vars.ASC_DEMO_OPERATOR_LABEL }}"
+          fi
+          if [ -z "$asc_demo_operator_label" ]; then
+            asc_demo_operator_label="factory-demo-operator"
+          fi
+
+          openai_api_key="$OPENAI_API_KEY_SECRET"
+          if [ -z "$openai_api_key" ]; then
+            openai_api_key="$FIREWORKS_API_KEY_SECRET"
+          fi
+
+          openai_base_url="${{ vars.ASC_DEMO_OPENAI_BASE_URL }}"
+          if [ -z "$openai_base_url" ]; then
+            openai_base_url="https://api.fireworks.ai/inference/v1"
+          fi
+
+          model_name="${{ vars.ASC_DEMO_MODEL_NAME }}"
+          if [ -z "$model_name" ]; then
+            model_name="accounts/fireworks/models/glm-5"
+          fi
+
+          llm_timeout="${{ vars.ASC_DEMO_LLM_TIMEOUT_SECONDS }}"
+          if [ -z "$llm_timeout" ]; then
+            llm_timeout="18"
+          fi
+
+          llm_temperature="${{ vars.ASC_DEMO_LLM_TEMPERATURE }}"
+          if [ -z "$llm_temperature" ]; then
+            llm_temperature="0.1"
+          fi
+
+          llm_max_tokens="${{ vars.ASC_DEMO_LLM_MAX_TOKENS }}"
+          if [ -z "$llm_max_tokens" ]; then
+            llm_max_tokens="350"
+          fi
+
+          llm_enabled="${{ needs.preflight.outputs.llm_enabled }}"
+
+          {
+            printf '%s\n' '# Auto-generated by deploy-asc-demo.yml'
+            printf '%s\n' '# DO NOT EDIT MANUALLY'
+            printf 'ASC_DEMO_DOMAIN=%s\n' "$asc_demo_domain"
+            printf 'ASC_DEMO_PUBLIC_BASE_URL=%s\n' "$asc_demo_public_base_url"
+            printf 'ASC_DEMO_PORT=%s\n' '18791'
+            printf 'ASC_DEMO_INTERNAL_PORT=%s\n' '18791'
+            printf 'ASC_DEMO_ASSETS_ROOT=%s\n' 'web/agent-factory-demo'
+            printf 'ASC_DEMO_ACCESS_MODE=%s\n' 'shared_token_hash'
+            printf 'ASC_DEMO_SHARED_TOKEN_HASH=%s\n' "$ASC_DEMO_SHARED_TOKEN_HASH"
+            printf 'ASC_DEMO_OPERATOR_LABEL=%s\n' "$asc_demo_operator_label"
+            printf 'ASC_DEMO_LLM_ENABLED=%s\n' "$llm_enabled"
+            printf 'OPENAI_API_KEY=%s\n' "$openai_api_key"
+            printf 'OPENAI_BASE_URL=%s\n' "$openai_base_url"
+            printf 'MODEL_NAME=%s\n' "$model_name"
+            printf 'ASC_DEMO_LLM_TIMEOUT_SECONDS=%s\n' "$llm_timeout"
+            printf 'ASC_DEMO_LLM_TEMPERATURE=%s\n' "$llm_temperature"
+            printf 'ASC_DEMO_LLM_MAX_TOKENS=%s\n' "$llm_max_tokens"
+          } > /tmp/asc-demo.env
+
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p '${{ env.DEPLOY_PATH }}' && chmod 700 '${{ env.DEPLOY_PATH }}'"
+          scp /tmp/asc-demo.env "${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.ASC_DEMO_ENV_PATH }}"
+          rm -f /tmp/asc-demo.env
+
+      - name: Deploy or rollback ASC demo
+        run: |
+          echo "::group::Execute ASC demo rollout"
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" << 'EOF'
+            set -euo pipefail
+            cd "${{ env.DEPLOY_PATH }}"
+            chmod +x scripts/deploy.sh scripts/check-frontend-bundle-sync.sh
+
+            export GITHUB_ACTIONS=true
+            export GITHUB_RUN_ID="${{ github.run_id }}"
+            export GITHUB_REPOSITORY="${{ github.repository }}"
+            export GITHUB_ACTOR="${{ github.actor }}"
+            export GITHUB_SHA="${{ github.sha }}"
+
+            deploy_rc=0
+            set +e
+
+            if [ "${{ github.event.inputs.rollback }}" = "true" ]; then
+              ASC_DEMO_ENV_FILE="${{ env.ASC_DEMO_ENV_PATH }}" ./scripts/deploy.sh --json asc-demo rollback > /tmp/asc-demo-deploy-result.json
+            else
+              ASC_DEMO_ENV_FILE="${{ env.ASC_DEMO_ENV_PATH }}" ./scripts/deploy.sh --json asc-demo deploy > /tmp/asc-demo-deploy-result.json
+            fi
+            deploy_rc=$?
+
+            set -e
+
+            if [ -f /tmp/asc-demo-deploy-result.json ]; then
+              cat /tmp/asc-demo-deploy-result.json | jq .
+            else
+              jq -n \
+                --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{
+                  status: "failure",
+                  target: "asc-demo",
+                  timestamp: $timestamp,
+                  action: "deploy",
+                  details: {},
+                  errors: [
+                    {
+                      code: "missing_result",
+                      message: "deploy.sh exited before writing /tmp/asc-demo-deploy-result.json"
+                    }
+                  ]
+                }'
+            fi
+
+            exit "$deploy_rc"
+          EOF
+          echo "::endgroup::"
+
+      - name: Capture final ASC demo status
+        if: always()
+        run: |
+          echo "::group::Final ASC demo status"
+          ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" << 'EOF'
+            set -euo pipefail
+            cd "${{ env.DEPLOY_PATH }}"
+            ASC_DEMO_ENV_FILE="${{ env.ASC_DEMO_ENV_PATH }}" ./scripts/deploy.sh --json asc-demo status | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Live smoke (web demo lane)
+        if: success()
+        env:
+          TEST_LIVE: 1
+          LIVE_WEB_DEMO_URL: ${{ env.ASC_DEMO_PUBLIC_URL }}
+          LIVE_MOLTIS_URL: ${{ env.LIVE_MOLTIS_URL }}
+        run: |
+          ./tests/run.sh --lane web_demo_live --json --live
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Deploy ASC Demo" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`${{ github.event.inputs.environment }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rollback | \`${{ github.event.inputs.rollback }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| URL | ${{ env.ASC_DEMO_PUBLIC_URL }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| LLM enabled | \`${{ needs.preflight.outputs.llm_enabled }}\` |" >> "$GITHUB_STEP_SUMMARY"
+

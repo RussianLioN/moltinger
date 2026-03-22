@@ -10,7 +10,7 @@
 #   --json             Output in JSON format
 #   --strict           Fail on warnings (not just errors)
 #   --ci               CI/CD mode (skip Docker daemon and runtime checks)
-#   --target <name>    Validation target (moltis|clawdiy)
+#   --target <name>    Validation target (moltis|clawdiy|asc-demo)
 #   -h, --help         Show help message
 #
 # Exit Codes:
@@ -175,6 +175,20 @@ configure_target() {
             RUNTIME_CONFIG_PATH="$PROJECT_ROOT/config/clawdiy/openclaw.json"
             REGISTRY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/agents-registry.json"
             POLICY_CONFIG_PATH="$PROJECT_ROOT/config/fleet/policy.json"
+            ;;
+        asc-demo)
+            REQUIRED_SECRETS=(
+                "asc_demo_shared_token_hash"
+            )
+            OPTIONAL_SECRETS=(
+                "openai_api_key"
+            )
+            COMPOSE_FILES=("$PROJECT_ROOT/docker-compose.asc.yml")
+            REQUIRED_NETWORKS=(
+                "$TRAEFIK_NETWORK"
+                "$MONITORING_NETWORK"
+            )
+            BOOTSTRAP_NETWORKS=("$FLEET_INTERNAL_NETWORK")
             ;;
         *)
             echo "Unsupported target: $TARGET" >&2
@@ -365,7 +379,13 @@ check_bootstrap_networks() {
     if [[ ${#missing_bootstrap_networks[@]} -eq 0 ]]; then
         add_check "network_bootstrap" "pass" "Bootstrap-capable networks already exist for target $TARGET: ${BOOTSTRAP_NETWORKS[*]}" "warning"
     else
-        add_check "network_bootstrap" "warning" "Bootstrap-capable networks missing for target $TARGET: ${missing_bootstrap_networks[*]}; they will be created during Clawdiy deploy via GitOps" "warning"
+        local bootstrap_message
+        if [[ "$TARGET" == "clawdiy" ]]; then
+            bootstrap_message="Bootstrap-capable networks missing for target $TARGET: ${missing_bootstrap_networks[*]}; they will be created during Clawdiy deploy via GitOps"
+        else
+            bootstrap_message="Bootstrap-capable networks missing for target $TARGET: ${missing_bootstrap_networks[*]}; they will be created during deploy via GitOps"
+        fi
+        add_check "network_bootstrap" "warning" "$bootstrap_message" "warning"
     fi
 }
 
@@ -858,7 +878,7 @@ Options:
     --json             Output in JSON format for AI parsing
     --strict           Fail on warnings (not just errors)
     --ci               CI mode (skip Docker daemon and runtime checks)
-    --target <name>    Validation target: moltis or clawdiy
+    --target <name>    Validation target: moltis, clawdiy, or asc-demo
     -h, --help         Show help message
 
 Exit Codes:
@@ -871,6 +891,7 @@ Examples:
     $0 --json
     $0 --ci --json
     $0 --target clawdiy --json
+    $0 --target asc-demo --json
     $0 --json --strict
 
 Contract: specs/001-docker-deploy-improvements/contracts/scripts.md

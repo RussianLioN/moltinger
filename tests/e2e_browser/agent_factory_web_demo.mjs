@@ -223,6 +223,23 @@ async function ensureAwaitingConfirmation(page) {
   throw new Error(`Expected awaiting_confirmation stage before brief confirm, got status=${status}, nextAction=${nextAction}, panelMode=${panelMode}, last=${lastAgentMessage.slice(0, 200)}`);
 }
 
+async function completeDiscoveryToAwaitingConfirmation(page, options = {}) {
+  const withUpload = Boolean(options.withUpload);
+  await sendComposerReply(page, 'Пользователь — клиентский менеджер, выгодоприобретатели — члены кредитного комитета.');
+  await sendComposerReply(page, 'Сейчас менеджер вручную собирает данные из CSV и Word, затем готовит PDF; много времени уходит на сверку и правки.');
+  await sendComposerReply(page, 'На выходе нужен one-page PDF и markdown. Обязательные блоки: профиль клиента, ключевые риски, рекомендация и итоговое решение.');
+  await sendComposerReply(page, 'В первую очередь агент помогает клиентскому менеджеру перед кредитным комитетом по каждой новой сделке.');
+  if (withUpload) {
+    await page.locator('#fileInput').setInputFiles(uploadFixturePath);
+    await sendComposerReply(page, 'Примеры входных данных прикрепил файлом.');
+  } else {
+    await sendComposerReply(page, 'CSV-выгрузка по клиенту и комментарий менеджера по сделке.');
+  }
+  await sendComposerReply(page, 'Если данных не хватает или есть противоречия — обязательная эскалация; обязательные поля должны быть заполнены.');
+  await sendComposerReply(page, 'Сократить время подготовки на 50% и снизить долю ошибок до 2%.');
+  await ensureAwaitingConfirmation(page);
+}
+
 async function run() {
   await startServer();
   const playwright = await getPlaywright();
@@ -297,6 +314,68 @@ async function run() {
       }
     });
 
+    await runCase('e2e_browser_web_demo_attachment_chip_is_one_shot', 'Attachment chip is cleared after send and not auto-reused', async () => {
+      const { context, page } = await createPage(browser, { defaultTimeoutMs });
+      try {
+        await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+        await page.locator('#accessToken').fill('asc-demo-shared');
+        await page.locator('[data-role="access-submit"]').click();
+        await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+
+        await page.locator('#fileInput').setInputFiles(uploadFixturePath);
+        await page.getByText('input-example-browser.txt').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#chatInput').fill('Примеры приложил файлом.');
+        await page.locator('#sendBtn').click();
+        await page.waitForFunction(() => {
+          const submit = document.querySelector('#sendBtn');
+          return submit?.dataset?.mode === 'send';
+        }, { timeout: defaultTimeoutMs });
+
+        const composerAttachmentCount = await page.locator('[data-role="attachment-list"] .attachment-pill').count();
+        assert(composerAttachmentCount === 0, `Composer attachment list should be cleared after successful send, got ${composerAttachmentCount}`);
+
+        await page.locator('#chatInput').fill('Второй ответ без вложений.');
+        await page.locator('#sendBtn').click();
+        await page.waitForFunction(() => {
+          const submit = document.querySelector('#sendBtn');
+          return submit?.dataset?.mode === 'send';
+        }, { timeout: defaultTimeoutMs });
+
+        const secondUserMessage = page.locator('#messages .message--user').last();
+        assert(await secondUserMessage.isVisible(), 'Second user bubble should be visible');
+        const secondMessageAttachment = secondUserMessage.locator('.attachment-pill');
+        assert((await secondMessageAttachment.count()) === 0, 'Second user bubble should not inherit previous attachment chips');
+      } finally {
+        await context.close();
+      }
+    });
+
+    await runCase('e2e_browser_web_demo_pending_indicator_visible_during_response', 'Agent pending indicator is shown while awaiting response', async () => {
+      const { context, page } = await createPage(browser, { defaultTimeoutMs });
+      try {
+        await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+        await page.locator('#accessToken').fill('asc-demo-shared');
+        await page.locator('[data-role="access-submit"]').click();
+        await page.locator('#chatInput').waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.locator('#chatInput').fill('Автоматизировать маршрутизацию согласования заявок на оплату.');
+        await page.locator('#sendBtn').click();
+
+        await page.waitForFunction(() => {
+          const submit = document.querySelector('#sendBtn');
+          const status = document.querySelector('[data-role="agent-status"]');
+          return submit?.dataset?.mode === 'stop' && status && !status.hasAttribute('hidden');
+        }, { timeout: defaultTimeoutMs });
+
+        await page.waitForFunction(() => {
+          const submit = document.querySelector('#sendBtn');
+          const status = document.querySelector('[data-role="agent-status"]');
+          return submit?.dataset?.mode === 'send' && Boolean(status?.hasAttribute('hidden'));
+        }, { timeout: defaultTimeoutMs });
+      } finally {
+        await context.close();
+      }
+    });
+
     await runCase('e2e_browser_web_demo_refresh_restores_session', 'Browser reload restores the active project and continues discovery', async () => {
       const { context, page } = await createPage(browser, { defaultTimeoutMs });
       try {
@@ -324,21 +403,35 @@ async function run() {
       }
     });
 
+    await runCase('e2e_browser_web_demo_topbar_sticky_with_scroll', 'Topbar controls stay visible and sticky while chat scrolls', async () => {
+      const { context, page } = await createPage(browser, { defaultTimeoutMs });
+      try {
+        await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+        await sendFirstIdea(page);
+        await completeDiscoveryToAwaitingConfirmation(page);
+
+        const topBefore = await page.locator('.workspace-topbar').boundingBox();
+        await page.locator('[data-role="chat-log"]').evaluate((node) => {
+          node.scrollTop = node.scrollHeight;
+        });
+        await page.waitForTimeout(100);
+        const topAfter = await page.locator('.workspace-topbar').boundingBox();
+
+        const delta = Math.abs((topAfter?.y || 0) - (topBefore?.y || 0));
+        assert(delta <= 1, `Topbar should remain sticky while chat scrolls, delta=${delta}`);
+        assert(await page.locator('[data-role="sidebar-toggle"]').isVisible(), 'Left topbar toggle should remain visible');
+        assert(await page.locator('[data-role="side-panel-toggle"]').isVisible(), 'Right topbar toggle should remain visible');
+      } finally {
+        await context.close();
+      }
+    });
+
     await runCase('e2e_browser_web_demo_reopens_right_panel_after_text_confirm', 'Text confirmation reopens right panel in post-brief flow', async () => {
       const { context, page } = await createPage(browser, { defaultTimeoutMs });
       try {
         await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
         await sendFirstIdea(page);
-
-        await sendComposerReply(page, 'Пользователь — клиентский менеджер, выгодоприобретатели — члены кредитного комитета.');
-        await sendComposerReply(page, 'Сейчас менеджер вручную собирает данные из CSV и Word, затем готовит PDF; много времени уходит на сверку и правки.');
-        await sendComposerReply(page, 'На выходе нужен one-page PDF и markdown. Обязательные блоки: профиль клиента, ключевые риски, рекомендация и итоговое решение.');
-        await sendComposerReply(page, 'В первую очередь агент помогает клиентскому менеджеру перед кредитным комитетом по каждой новой сделке.');
-        await sendComposerReply(page, 'CSV-выгрузка по клиенту и комментарий менеджера по сделке.');
-        await sendComposerReply(page, 'Если данных не хватает или есть противоречия — обязательная эскалация; обязательные поля должны быть заполнены.');
-        await sendComposerReply(page, 'Сократить время подготовки на 50% и снизить долю ошибок до 2%.');
-
-        await ensureAwaitingConfirmation(page);
+        await completeDiscoveryToAwaitingConfirmation(page, { withUpload: true });
         await page.locator('#messages .message').filter({ hasText: 'подтверди' }).last().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         const sidePanel = page.locator('[data-role="side-panel"]');
         const sidePanelClose = page.locator('[data-role="side-panel-close"]');
@@ -405,6 +498,22 @@ async function run() {
 
         assert(['downloads', 'preview'].includes((panelMode || '').toLowerCase()), `Expected right panel mode downloads/preview after text confirm, got: ${panelMode}`);
         assert(togglePressed === 'true', `Right panel toggle should be pressed after text confirm, got: ${togglePressed}`);
+
+        const previewSection = page.locator('[data-role="preview-section"]');
+        if (!(await previewSection.isVisible().catch(() => false))) {
+          const previewButton = page.locator('[data-role="primary-artifact-preview"]');
+          if (await previewButton.isVisible().catch(() => false)) {
+            await previewButton.click();
+          }
+        }
+        await previewSection.waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+        await page.waitForFunction(() => {
+          const frame = document.querySelector('[data-role="preview-frame"]');
+          return Boolean(frame && !frame.hasAttribute('hidden') && frame.getAttribute('srcdoc'));
+        }, { timeout: defaultTimeoutMs });
+        const previewSrcdoc = await page.locator('[data-role="preview-frame"]').getAttribute('srcdoc');
+        assert(/One-page Summary|One-page summary/i.test(previewSrcdoc || ''), 'Preview should render one-page heading');
+        assert((previewSrcdoc || '').length > 400, 'Preview should contain rendered one-page HTML content');
       } finally {
         await context.close();
       }

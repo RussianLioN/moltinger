@@ -46,10 +46,7 @@
 - хранить отдельные `pointers/` и `resume/` snapshots, чтобы refresh/resume не зависели только от localStorage
 - перечитывать `GET /api/session` после refresh и показывать browser-safe `resume_context` вместо потери активного проекта
 - возвращать reopened brief в новый reviewable loop без потери `confirmation_history` и `handoff_history`
-
-На этом этапе adapter ещё не завершает:
-
-- remote smoke/deploy rollout
+- деплоить `asc-demo` через dedicated CI workflow `.github/workflows/deploy-asc-demo.yml` (GitOps sync -> env render from secrets -> `deploy.sh asc-demo` -> live smoke lane)
 
 Оставшийся follow-up scope уже вне текущего browser slice:
 
@@ -433,6 +430,18 @@ US4 публикует browser demo как отдельный same-host target:
 ./scripts/deploy.sh --json asc-demo status
 ```
 
+CI-managed path (recommended for server rollout):
+
+```bash
+gh workflow run deploy-asc-demo.yml --ref 024-web-factory-demo-adapter
+```
+
+Rollback через CI:
+
+```bash
+gh workflow run deploy-asc-demo.yml --ref 024-web-factory-demo-adapter -f rollback=true
+```
+
 `deploy.sh` для `asc-demo` должен:
 
 - использовать [docker-compose.asc.yml](/Users/rl/coding/moltinger-019-asc-fabrique-prototype/docker-compose.asc.yml)
@@ -454,6 +463,26 @@ Recommended mode for the published demo:
 
 - `ASC_DEMO_ACCESS_MODE=shared_token_hash`
 - `ASC_DEMO_SHARED_TOKEN_HASH=<sha256 от выдаваемого demo token>`
+
+GitHub Secrets/Vars contract для CI rollout:
+
+- required secrets:
+  - `SSH_PRIVATE_KEY`
+  - `ASC_DEMO_SHARED_TOKEN_HASH`
+- optional secrets:
+  - `ASC_DEMO_DOMAIN`
+  - `ASC_DEMO_PUBLIC_BASE_URL`
+  - `ASC_DEMO_OPERATOR_LABEL`
+  - `OPENAI_API_KEY` (или `FIREWORKS_API_KEY` как fallback)
+- optional repository vars:
+  - `ASC_DEMO_DOMAIN`
+  - `ASC_DEMO_PUBLIC_BASE_URL`
+  - `ASC_DEMO_OPERATOR_LABEL`
+  - `ASC_DEMO_OPENAI_BASE_URL`
+  - `ASC_DEMO_MODEL_NAME`
+  - `ASC_DEMO_LLM_TIMEOUT_SECONDS`
+  - `ASC_DEMO_LLM_TEMPERATURE`
+  - `ASC_DEMO_LLM_MAX_TOKENS`
 
 Current behavior:
 

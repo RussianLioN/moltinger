@@ -12,6 +12,7 @@ COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 COMPOSE_ASC="$PROJECT_ROOT/docker-compose.asc.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
+ASC_DEMO_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-asc-demo.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 BACKUP_CONFIG="$PROJECT_ROOT/config/backup/backup.conf"
 FLEET_POLICY="$PROJECT_ROOT/config/fleet/policy.json"
@@ -148,6 +149,38 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Missing .github/workflows/deploy-clawdiy.yml"
+    fi
+
+    test_start "static_asc_demo_workflow_exists"
+    if [[ -f "$ASC_DEMO_WORKFLOW" ]]; then
+        test_pass
+    else
+        test_fail "Missing .github/workflows/deploy-asc-demo.yml"
+    fi
+
+    test_start "static_asc_demo_workflow_uses_targeted_preflight_and_deploy"
+    if rg -q 'preflight-check\.sh --ci --target asc-demo' "$ASC_DEMO_WORKFLOW" && \
+       rg -q 'deploy\.sh --json asc-demo deploy' "$ASC_DEMO_WORKFLOW" && \
+       rg -q 'deploy\.sh --json asc-demo rollback' "$ASC_DEMO_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "ASC demo deploy workflow must use target-aware preflight and deploy/rollback entrypoints"
+    fi
+
+    test_start "static_asc_demo_workflow_uses_dedicated_env_path"
+    if rg -q 'ASC_DEMO_ENV_PATH: /opt/moltinger-asc-demo/\.env\.asc' "$ASC_DEMO_WORKFLOW" && \
+       ! rg -q '/opt/moltinger/\.env[^[:alnum:]_]' "$ASC_DEMO_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "ASC demo deploy workflow must use a dedicated /opt/moltinger-asc-demo/.env.asc runtime env path"
+    fi
+
+    test_start "static_asc_demo_workflow_runs_live_smoke"
+    if rg -q './tests/run\.sh --lane web_demo_live --json --live' "$ASC_DEMO_WORKFLOW" && \
+       rg -q 'LIVE_WEB_DEMO_URL' "$ASC_DEMO_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "ASC demo deploy workflow must run live web_demo smoke checks after successful rollout"
     fi
 
     test_start "static_clawdiy_workflow_uses_targeted_preflight_and_deploy"

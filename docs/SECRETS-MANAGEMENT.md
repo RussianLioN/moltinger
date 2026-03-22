@@ -151,6 +151,12 @@ gh workflow run deploy.yml
 | `SSH_PRIVATE_KEY` | Deployment | GitHub Actions |
 | `SSH_HOST` | Server address | GitHub Actions |
 | `SSH_USER` | SSH username | GitHub Actions |
+| `ASC_DEMO_SHARED_TOKEN_HASH` | Controlled access gate for web demo | `deploy-asc-demo.yml` |
+| `OPENAI_API_KEY` | LLM orchestration for web demo (optional fallback-disabled if missing) | `deploy-asc-demo.yml` |
+| `FIREWORKS_API_KEY` | Optional fallback source for OpenAI-compatible key in web demo rollout | `deploy-asc-demo.yml` |
+| `ASC_DEMO_DOMAIN` | Optional demo subdomain override | `deploy-asc-demo.yml` |
+| `ASC_DEMO_PUBLIC_BASE_URL` | Optional public URL override | `deploy-asc-demo.yml` |
+| `ASC_DEMO_OPERATOR_LABEL` | Optional operator label for health projection | `deploy-asc-demo.yml` |
 
 ### AI Workflow Secrets (Code Review + Interactive Assistant)
 
@@ -165,6 +171,22 @@ For on-demand Telegram E2E harness:
 - `synthetic` mode requires only `MOLTIS_PASSWORD`.
 - `real_user` mode requires `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, and `TELEGRAM_TEST_SESSION`; `TELEGRAM_TEST_BOT_USERNAME` is optional.
 - `TELEGRAM_TEST_SESSION` is generated once via `scripts/telegram-real-user-bootstrap.py` (OTP login).
+
+### ASC Demo CI Rollout Secrets
+
+Dedicated workflow: `.github/workflows/deploy-asc-demo.yml`
+
+Runtime env file rendered by CI:
+- `/opt/moltinger-asc-demo/.env.asc`
+
+Rules:
+- `ASC_DEMO_SHARED_TOKEN_HASH` is mandatory for fail-closed access gate in `shared_token_hash` mode.
+- Plain demo token must not be stored in git; only SHA-256 hash is allowed.
+- `OPENAI_API_KEY` is optional: if absent (and no `FIREWORKS_API_KEY`), rollout stays functional with deterministic fallback (`ASC_DEMO_LLM_ENABLED=false`).
+- Domain/operator overrides may come from Secrets or Repository Variables; defaults remain:
+  - `demo.ainetic.tech`
+  - `https://demo.ainetic.tech`
+  - `factory-demo-operator`
 
 ### LLM Failover Secrets
 
