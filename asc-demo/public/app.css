@@ -1,13 +1,14 @@
 :root {
-  --bg: #0c0f13;
-  --bg-soft: #0f1216;
-  --bg-elevated: #13171d;
-  --bg-sidebar: #0e1116;
-  --surface: #151a21;
-  --surface-strong: #1a2028;
-  --surface-hover: #202734;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.15);
+  --bg: #0a0c10;
+  --bg-soft: #0f1217;
+  --bg-elevated: #171c23;
+  --bg-panel: #13171d;
+  --bg-sidebar: #13171d;
+  --surface: #141920;
+  --surface-strong: #181d25;
+  --surface-hover: #1d232d;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.1);
   --text: rgba(244, 246, 248, 0.9);
   --text-strong: #ffffff;
   --muted: rgba(228, 232, 238, 0.56);
@@ -710,15 +711,15 @@ code {
 
 .workspace-topbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
   flex: 0 0 auto;
   position: sticky;
   top: 0;
   z-index: 64;
-  min-height: 46px;
-  padding: 6px 0 8px;
+  min-height: 42px;
+  padding: 4px 0 7px;
   background: color-mix(in oklab, var(--bg-soft) 90%, black);
   border-bottom: 1px solid var(--border);
   backdrop-filter: none;
@@ -727,9 +728,12 @@ code {
 .workspace-topbar__sidebar-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  padding-top: 1px;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  gap: 0;
+  flex: 0 0 34px;
+  padding-top: 0;
 }
 
 .workspace-topbar__main {
@@ -776,12 +780,13 @@ code {
 .workspace-topbar__subtitle {
   font-size: 0.83rem;
   line-height: 1.4;
-  color: rgba(232, 236, 241, 0.68);
+  color: rgba(232, 236, 241, 0.56);
 }
 
 .workspace-topbar__eyebrow {
   font-size: 0.69rem;
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.36);
+  letter-spacing: 0.08em;
 }
 
 .workspace-topbar__actions {
@@ -790,15 +795,17 @@ code {
   gap: var(--space-2);
   flex-wrap: nowrap;
   flex: 0 0 auto;
+  min-width: 136px;
+  justify-content: flex-end;
 }
 
 .workspace-toggle {
-  border-radius: 8px;
+  border-radius: 7px;
   width: 32px;
   height: 32px;
   min-width: 32px;
   min-height: 32px;
-  border-color: transparent;
+  border-color: rgba(255, 255, 255, 0.05);
   background: transparent;
 }
 
@@ -881,18 +888,18 @@ code {
 .workspace-toggle[aria-pressed="true"],
 .workspace-toggle[data-state="active"],
 .workspace-toggle--panel[data-state="active"] {
-  border-color: transparent;
-  background: var(--surface-hover);
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
   color: rgba(250, 252, 255, 0.98);
 }
 
 .workspace-toggle[aria-pressed="false"],
 .workspace-toggle[data-state="inactive"],
 .workspace-toggle--panel[data-state="inactive"] {
-  opacity: 0.74;
-  border-color: transparent;
+  opacity: 0.82;
+  border-color: rgba(255, 255, 255, 0.05);
   background: transparent;
-  color: rgba(212, 216, 224, 0.74);
+  color: rgba(212, 216, 224, 0.58);
 }
 
 .workspace-toggle:disabled {
@@ -904,19 +911,19 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklab, var(--border) 92%, transparent);
   border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted-strong);
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+  color: rgba(218, 224, 234, 0.62);
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
 .workspace-agent-state[data-state="idle"] {
-  color: rgba(218, 224, 234, 0.74);
-  border-color: color-mix(in oklab, var(--border) 82%, transparent);
-  background: color-mix(in oklab, var(--surface) 76%, transparent);
+  color: rgba(218, 224, 234, 0.58);
+  border-color: color-mix(in oklab, var(--border) 90%, transparent);
+  background: color-mix(in oklab, var(--surface) 86%, transparent);
 }
 
 .workspace-agent-state[data-state="thinking"] {
@@ -926,7 +933,7 @@ code {
 }
 
 .workspace-agent-state__label {
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   letter-spacing: 0.03em;
 }
 
@@ -1033,9 +1040,9 @@ code {
   align-self: flex-start;
   width: fit-content;
   max-width: min(82ch, 80%);
-  padding: 11px 14px;
-  border: 1px solid color-mix(in oklab, var(--border) 92%, transparent);
-  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--border) 96%, transparent);
+  border-radius: 9px;
   background: var(--surface);
   box-shadow: none;
 }
@@ -1104,8 +1111,8 @@ code {
 
 .message--user {
   align-self: flex-end;
-  border-color: rgba(255, 255, 255, 0.09);
-  background: rgba(58, 63, 72, 0.42);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(56, 61, 70, 0.34);
 }
 
 .message--system {
@@ -1129,10 +1136,10 @@ code {
 .composer {
   display: grid;
   gap: 5px;
-  padding: 10px;
-  border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
-  border-radius: 12px;
-  background: rgba(20, 23, 28, 0.94);
+  padding: 8px;
+  border: 1px solid color-mix(in oklab, var(--border) 96%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--bg-panel, var(--bg-sidebar)) 88%, transparent);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
@@ -1737,9 +1744,11 @@ code {
   }
 
   .workspace-topbar {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 8px;
-    padding-bottom: 7px;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 6px;
+    min-height: 38px;
+    padding-top: 3px;
+    padding-bottom: 5px;
   }
 
   .workspace-topbar__subtitle {
@@ -1749,6 +1758,12 @@ code {
   .workspace-topbar__actions {
     justify-content: flex-end;
     align-self: start;
+    min-width: 108px;
+    gap: 6px;
+  }
+
+  .workspace-topbar h1 {
+    font-size: 1.94rem;
   }
 
   .composer__footer {

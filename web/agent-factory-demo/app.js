@@ -801,8 +801,9 @@
           }
         }
       });
-      dedupeProjectTitles();
       state.activeProjectId = normalizeText(saved.activeProjectId);
+      pruneExtraEmptyDraftProjects(state.activeProjectId);
+      dedupeProjectTitles();
     }
     if (!state.projects.length) {
       state.projects = [createProject()];
@@ -2980,6 +2981,31 @@
     });
   }
 
+  function pruneExtraEmptyDraftProjects(preferredKeepId = "") {
+    const emptyDraftIds = state.projects
+      .filter((project) => isEmptyDraftProject(project))
+      .map((project) => project.id);
+    if (emptyDraftIds.length <= 1) {
+      return;
+    }
+    let keepId = normalizeText(preferredKeepId);
+    if (!emptyDraftIds.includes(keepId)) {
+      const active = getActiveProject();
+      if (active && isEmptyDraftProject(active)) {
+        keepId = active.id;
+      }
+    }
+    if (!emptyDraftIds.includes(keepId)) {
+      keepId = emptyDraftIds[0];
+    }
+    state.projects = state.projects.filter(
+      (project) => !isEmptyDraftProject(project) || project.id === keepId,
+    );
+    if (!state.projects.some((project) => project.id === state.activeProjectId)) {
+      state.activeProjectId = state.projects[0]?.id || "";
+    }
+  }
+
   function maybeAutonameProject(project, userText, response) {
     if (!project || project.titleEdited) {
       return;
@@ -3040,23 +3066,29 @@
     if (!ensureWorkspaceAccess()) {
       return;
     }
-    const target = state.projects.find((item) => item.id === projectId);
+    const targetIndex = state.projects.findIndex((item) => item.id === projectId);
+    const target = targetIndex >= 0 ? state.projects[targetIndex] : null;
     if (!target) {
       return;
     }
     clearHandoffPollTimer(target);
     const remaining = state.projects.filter((item) => item.id !== projectId);
     const deletedActive = projectId === state.activeProjectId;
-    if (deletedActive) {
+    if (!remaining.length) {
       const fresh = createProject({ title: DEFAULT_PROJECT_TITLE });
-      state.projects = [fresh, ...remaining];
+      state.projects = [fresh];
       state.activeProjectId = fresh.id;
     } else {
-      state.projects = remaining.length ? remaining : [createProject({ title: DEFAULT_PROJECT_TITLE })];
-      if (!state.projects.some((item) => item.id === state.activeProjectId)) {
+      state.projects = remaining;
+      if (deletedActive) {
+        const fallbackIndex = Math.min(Math.max(targetIndex, 0), remaining.length - 1);
+        state.activeProjectId = remaining[fallbackIndex]?.id || remaining[0].id;
+      } else if (!state.projects.some((item) => item.id === state.activeProjectId)) {
         state.activeProjectId = state.projects[0].id;
       }
     }
+    pruneExtraEmptyDraftProjects(state.activeProjectId);
+    dedupeProjectTitles();
     closeProjectActionsMenu();
     persist();
     renderAll();
@@ -3092,6 +3124,7 @@
     if (reusable && options.forceCreate !== true) {
       state.activeProjectId = reusable.id;
       reusable.updatedAt = nowIso();
+      pruneExtraEmptyDraftProjects(reusable.id);
       clearComposerNotice();
       collapseSidebarOnMobile();
       if (options.activate !== false) {
@@ -3103,6 +3136,7 @@
     const project = createProject();
     state.projects.unshift(project);
     state.activeProjectId = project.id;
+    pruneExtraEmptyDraftProjects(project.id);
     clearComposerNotice();
     collapseSidebarOnMobile();
     if (options.activate !== false) {
@@ -3902,7 +3936,7 @@
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
     } else if (panelMode !== previousPanelMode && !manualPanelClose) {
-      project.sidePanelOpen = true;
+      project.sidePanelOpen = !isMobileLayout();
     }
     if (!["downloads", "preview"].includes(panelMode)) {
       project.panelModeOverride = "";
@@ -3928,6 +3962,7 @@
     const isPostConfirmState = responseStatus === "confirmed" || briefRuntimeStatus === "confirmed";
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
+    const mobileLayout = isMobileLayout();
     const keepPreviewMode = downloadsReady
       && normalizeText(project.panelModeOverride) === "preview"
       && Boolean(selectedPreviewArtifact(project));
@@ -3935,7 +3970,7 @@
       || submitTurnConfirmation
       || (isPostConfirmState && !manualPanelClose);
     if (shouldAutoOpenPostConfirm) {
-      project.sidePanelOpen = true;
+      project.sidePanelOpen = !mobileLayout;
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
       if (downloadsReady) {
@@ -3947,7 +3982,7 @@
         project.previewArtifactKind = "";
       }
     } else if (downloadsReady && syncReason === "handoff_poll" && !manualPanelClose) {
-      project.sidePanelOpen = true;
+      project.sidePanelOpen = !mobileLayout;
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
       project.panelModeOverride = keepPreviewMode ? "preview" : "downloads";
