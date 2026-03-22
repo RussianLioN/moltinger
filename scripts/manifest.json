@@ -549,7 +549,7 @@
       "requires": [
         "bash",
         "find",
-        "jq",
+        "perl",
         "sort"
       ],
       "provides": [

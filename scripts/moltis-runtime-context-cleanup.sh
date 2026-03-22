@@ -42,15 +42,6 @@ if [[ ! -d "$RUNTIME_HOME" ]]; then
     exit 2
 fi
 
-to_json_array() {
-    if [[ $# -eq 0 ]]; then
-        printf '[]'
-        return
-    fi
-
-    printf '%s\n' "$@" | jq -Rsc 'split("\n") | map(select(length > 0))'
-}
-
 collect_candidates() {
     {
         find "$RUNTIME_HOME" -mindepth 1 -maxdepth 1 -type d -name 'oauth-runtime-test-*' -print
@@ -87,19 +78,55 @@ if $APPLY_CHANGES; then
     done
 fi
 
-jq -n \
-    --arg runtime_home "$RUNTIME_HOME" \
-    --arg mode "$([[ "$APPLY_CHANGES" == true ]] && echo apply || echo dry-run)" \
-    --argjson candidates "$(to_json_array "${CANDIDATES[@]}")" \
-    --argjson removed "$(to_json_array "${REMOVED[@]}")" \
-    --argjson skipped "$(to_json_array "${SKIPPED[@]}")" \
-    '{
-        runtime_home: $runtime_home,
-        mode: $mode,
-        candidates: $candidates,
-        candidate_count: ($candidates | length),
-        removed: $removed,
-        removed_count: ($removed | length),
-        skipped: $skipped,
-        skipped_count: ($skipped | length)
-    }'
+TMP_DIR="$(mktemp -d /tmp/moltis-runtime-context-cleanup.XXXXXX)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+write_list_file() {
+    local output_path="$1"
+    shift
+
+    : > "$output_path"
+    if [[ $# -eq 0 ]]; then
+        return
+    fi
+
+    printf '%s\n' "$@" > "$output_path"
+}
+
+write_list_file "$TMP_DIR/candidates.txt" "${CANDIDATES[@]}"
+write_list_file "$TMP_DIR/removed.txt" "${REMOVED[@]}"
+write_list_file "$TMP_DIR/skipped.txt" "${SKIPPED[@]}"
+
+perl -MJSON::PP -e '
+use strict;
+use warnings;
+
+sub load_list {
+    my ($path) = @_;
+    open my $fh, "<", $path or die "open($path): $!";
+    chomp(my @items = <$fh>);
+    close $fh;
+    return [grep { length $_ } @items];
+}
+
+my ($runtime_home, $mode, $candidates_path, $removed_path, $skipped_path) = @ARGV;
+my $candidates = load_list($candidates_path);
+my $removed = load_list($removed_path);
+my $skipped = load_list($skipped_path);
+
+print JSON::PP->new->utf8->canonical->pretty->encode({
+    runtime_home => $runtime_home,
+    mode => $mode,
+    candidates => $candidates,
+    candidate_count => scalar(@{$candidates}),
+    removed => $removed,
+    removed_count => scalar(@{$removed}),
+    skipped => $skipped,
+    skipped_count => scalar(@{$skipped}),
+});
+' \
+    "$RUNTIME_HOME" \
+    "$([[ "$APPLY_CHANGES" == true ]] && echo apply || echo dry-run)" \
+    "$TMP_DIR/candidates.txt" \
+    "$TMP_DIR/removed.txt" \
+    "$TMP_DIR/skipped.txt"
