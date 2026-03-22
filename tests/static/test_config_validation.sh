@@ -100,7 +100,7 @@ run_static_config_validation_tests() {
     if rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG" && \
        rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
        rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
-       rg -q 'DOCKER_SOCKET_GID=\$docker_socket_gid' "$DEPLOY_SCRIPT"; then
+       rg -q 'export DOCKER_SOCKET_GID="\$docker_socket_gid"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
         test_fail "Browser-in-Docker contract must set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"

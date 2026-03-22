@@ -298,7 +298,7 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
         return
     fi
 
-    if ! grep -Fq 'DOCKER_SOCKET_GID=$docker_socket_gid' "$PROJECT_ROOT/scripts/deploy.sh" || \
+    if ! grep -Fq 'export DOCKER_SOCKET_GID="$docker_socket_gid"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
         test_fail "Browser sandbox access requires deploy.sh to inject the live socket GID and the tracked runtime to expose host.docker.internal for sibling browser containers"

@@ -510,7 +510,6 @@ compose_cmd() {
 
     local args=("$@")
     local -a compose_args=()
-    local -a env_prefix=(env)
     local docker_socket_gid=""
     local redirect_stdout=false
 
@@ -528,25 +527,23 @@ compose_cmd() {
         if [[ -S /var/run/docker.sock ]]; then
             docker_socket_gid="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
         fi
-        if [[ -n "$docker_socket_gid" ]]; then
-            env_prefix+=("DOCKER_SOCKET_GID=$docker_socket_gid")
-        fi
+        (
+            if [[ -n "$docker_socket_gid" ]]; then
+                export DOCKER_SOCKET_GID="$docker_socket_gid"
+            fi
 
-        if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" == "true" && -n "${MOLTIS_VERSION:-}" ]]; then
-            env_prefix+=("MOLTIS_VERSION=$MOLTIS_VERSION")
-            if [[ "$redirect_stdout" == "true" ]]; then
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+            if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" == "true" && -n "${MOLTIS_VERSION:-}" ]]; then
+                export MOLTIS_VERSION="$MOLTIS_VERSION"
             else
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}"
+                unset MOLTIS_VERSION
             fi
-        else
-            env_prefix+=(-u MOLTIS_VERSION)
+
             if [[ "$redirect_stdout" == "true" ]]; then
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+                docker compose "${compose_args[@]}" "${args[@]}" 1>&2
             else
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}"
+                docker compose "${compose_args[@]}" "${args[@]}"
             fi
-        fi
+        )
         return
     fi
 
