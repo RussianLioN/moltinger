@@ -299,10 +299,29 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
     fi
 
     if ! grep -Fq 'export DOCKER_SOCKET_GID="$docker_socket_gid"' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'chrome_args = ["--user-data-dir=/tmp/browser-profile"]' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'persist_profile = false' "$PROJECT_ROOT/config/moltis.toml" || \
        ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Browser sandbox access requires deploy.sh to inject the live socket GID and the tracked runtime to expose host.docker.internal plus a writable browser profile dir for sibling browser containers"
+        test_fail "Browser sandbox access requires deploy.sh to inject the live socket GID and the tracked runtime to expose host.docker.internal while disabling persistent sibling-container browser profiles"
+        return
+    fi
+
+    test_pass
+}
+
+test_deploy_script_prepulls_tracked_browser_sandbox_image() {
+    test_start "Deploy should pre-pull the tracked browser sandbox image before Moltis comes up"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/config/moltis.toml" ]]; then
+        test_skip "Missing deploy or config files"
+        return
+    fi
+
+    if ! grep -Fq 'prepull_moltis_browser_sandbox_image()' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'tools") or {}).get("browser")' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'docker pull "$sandbox_image"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'sandbox_image = "browserless/chrome"' "$PROJECT_ROOT/config/moltis.toml"; then
+        test_fail "Deploy must parse the tracked browser contract and pre-pull the sandbox image so the first browser run is not spent on a cold pull"
         return
     fi
 

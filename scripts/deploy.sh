@@ -1372,6 +1372,50 @@ sync_moltis_project_knowledge() {
     return 0
 }
 
+prepull_moltis_browser_sandbox_image() {
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    local browser_contract browser_enabled sandbox_image
+    browser_contract="$(python3 - "$PROJECT_ROOT/config/moltis.toml" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib
+
+with Path(sys.argv[1]).open("rb") as fh:
+    config = tomllib.load(fh)
+
+browser = ((config.get("tools") or {}).get("browser") or {})
+print(json.dumps({
+    "enabled": bool(browser.get("enabled", True)),
+    "sandbox_image": browser.get("sandbox_image") or "browserless/chrome",
+}))
+PY
+)"
+    browser_enabled="$(jq -r '.enabled' <<<"$browser_contract")"
+    sandbox_image="$(jq -r '.sandbox_image' <<<"$browser_contract")"
+
+    if [[ "$browser_enabled" != "true" ]]; then
+        log_info "Tracked Moltis browser tool is disabled; skipping sandbox image pre-pull"
+        return 0
+    fi
+
+    if [[ -z "$sandbox_image" || "$sandbox_image" == "null" ]]; then
+        sandbox_image="browserless/chrome"
+    fi
+
+    log_info "Pre-pulling Moltis browser sandbox image: $sandbox_image"
+    docker pull "$sandbox_image" >/dev/null
+    log_success "Moltis browser sandbox image ready: $sandbox_image"
+    return 0
+}
+
 send_notification() {
     local status="$1"
     local message="$2"
@@ -1424,6 +1468,7 @@ cmd_deploy() {
     check_prerequisites "deploy"
     backup_current_state
     pull_images
+    prepull_moltis_browser_sandbox_image
     deploy_containers
 
     if verify_deployment; then
