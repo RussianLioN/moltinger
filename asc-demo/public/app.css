@@ -195,7 +195,7 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--bg-elevated);
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
   backdrop-filter: none;
 }
 
@@ -203,6 +203,7 @@ code {
   display: grid;
   gap: 12px;
   padding: 16px;
+  box-shadow: var(--shadow-md);
 }
 
 .access-banner__copy {
