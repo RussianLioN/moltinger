@@ -465,6 +465,47 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Conflicting expected_outputs target should not override inferred input_examples correction"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_normalizes_expected_outputs_directive_without_colon_and_keeps_download_flow"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/expected-outputs-directive-state" --output "$tmpdir/expected-outputs-directive-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005g",
+          "request_id": "web-request-brief-review-005g",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_brief_correction",
+          "user_text": "В разделе ожидаемый результат добавь формат PPTX вместе с PDF."
+        } | .brief_feedback_target = "expected_outputs" | del(.brief_section_updates) | del(.demo_access_grant)' "$tmpdir/expected-outputs-directive-review-out.json" >"$tmpdir/expected-outputs-directive-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/expected-outputs-directive-source.json" --state-root "$tmpdir/expected-outputs-directive-state" --output "$tmpdir/expected-outputs-directive-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005h",
+          "request_id": "web-request-brief-review-005h",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "confirm_brief",
+          "user_text": ""
+        } | del(.demo_access_grant)' "$tmpdir/expected-outputs-directive-out.json" >"$tmpdir/expected-outputs-directive-confirm-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/expected-outputs-directive-confirm-source.json" --state-root "$tmpdir/expected-outputs-directive-state" --output "$tmpdir/expected-outputs-directive-confirm-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005i",
+          "request_id": "web-request-brief-review-005i",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_status",
+          "user_text": ""
+        } | del(.demo_access_grant)' "$tmpdir/expected-outputs-directive-confirm-out.json" >"$tmpdir/expected-outputs-directive-status-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/expected-outputs-directive-status-source.json" --state-root "$tmpdir/expected-outputs-directive-state" --output "$tmpdir/expected-outputs-directive-status-out.json" >/dev/null; then
+        local expected_outputs_directive_joined
+        expected_outputs_directive_joined="$(jq -r '.discovery_runtime_state.requirement_brief.expected_outputs | join("\n")' "$tmpdir/expected-outputs-directive-out.json")"
+        assert_contains "$expected_outputs_directive_joined" "PPTX" "Expected outputs should preserve PPTX format after directive correction"
+        assert_contains "$expected_outputs_directive_joined" "PDF" "Expected outputs should preserve PDF format after directive correction"
+        assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.expected_outputs[] | ascii_downcase | contains("в разделе ожидаемый результат")] | any' "$tmpdir/expected-outputs-directive-out.json")" "Expected outputs must not keep section command wrapper"
+        assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.expected_outputs[] | ascii_downcase | contains("добавь формат")] | any' "$tmpdir/expected-outputs-directive-out.json")" "Expected outputs must not keep imperative command text"
+        assert_eq "confirmed" "$(jq -r '.status' "$tmpdir/expected-outputs-directive-confirm-out.json")" "Confirm after directive correction should finalize brief"
+        assert_eq "download_ready" "$(jq -r '.status' "$tmpdir/expected-outputs-directive-status-out.json")" "Status refresh after confirmation should keep download-ready mode"
+        assert_eq "download_artifact" "$(jq -r '.next_action' "$tmpdir/expected-outputs-directive-status-out.json")" "Post-confirm status refresh should keep artifact download action"
+        assert_eq "ready" "$(jq -r '.download_artifacts[0].download_status' "$tmpdir/expected-outputs-directive-status-out.json")" "Download artifact should be ready after confirm flow"
+        test_pass
+    else
+        test_fail "Directive expected_outputs correction without colon should normalize and preserve post-confirm download flow"
+    fi
+
     test_start "integration_local_agent_factory_web_confirmation_keeps_download_mode_for_simulation_requests_after_confirm"
     if jq '.web_conversation_envelope = {
           "web_conversation_envelope_id": "web-envelope-brief-review-006",

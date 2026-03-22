@@ -2619,6 +2619,73 @@ def patch_runtime_next_question(
         break
 
 
+EXPECTED_OUTPUT_DIRECTIVE_PATTERN = re.compile(
+    r"(^|\s)(?:в\s+разделе|добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|"
+    r"исправ(?:ь|ьте)|обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|"
+    r"внес(?:и|ите)|сделай|сделайте|сформируй|сформируйте)(?=\s|$|[.,:;!?])",
+    flags=re.IGNORECASE,
+)
+EXPECTED_OUTPUT_IMPERATIVE_START = re.compile(
+    r"^(?:добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|"
+    r"обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите)|"
+    r"сделай|сделайте|сформируй|сформируйте)\s+",
+    flags=re.IGNORECASE,
+)
+EXPECTED_OUTPUT_FORMAT_PATTERN = re.compile(
+    r"\b(pdf|docx|doc|pptx|ppt|xlsx|xls|csv|json|xml|html|markdown|md|one-page|onepage)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def normalize_output_format_label(token: str) -> str:
+    lowered = normalize_text(token).lower()
+    mapping = {
+        "pdf": "PDF",
+        "docx": "DOCX",
+        "doc": "DOC",
+        "pptx": "PPTX",
+        "ppt": "PPT",
+        "xlsx": "XLSX",
+        "xls": "XLS",
+        "csv": "CSV",
+        "json": "JSON",
+        "xml": "XML",
+        "html": "HTML",
+        "markdown": "Markdown",
+        "md": "Markdown",
+        "one-page": "one-page",
+        "onepage": "one-page",
+    }
+    return mapping.get(lowered, lowered.upper())
+
+
+def extract_output_formats(value: str) -> list[str]:
+    text = normalize_text(value)
+    if not text:
+        return []
+    unique: list[str] = []
+    for match in EXPECTED_OUTPUT_FORMAT_PATTERN.findall(text):
+        label = normalize_output_format_label(match)
+        if label and label not in unique:
+            unique.append(label)
+    return unique
+
+
+def human_join(values: list[str]) -> str:
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    return f"{', '.join(values[:-1])} и {values[-1]}"
+
+
+def looks_like_expected_output_directive(value: str) -> bool:
+    text = normalize_text(value)
+    if not text:
+        return False
+    return bool(EXPECTED_OUTPUT_DIRECTIVE_PATTERN.search(text))
+
+
 def normalize_feedback_update_text(value: Any, *, section: str = "") -> str:
     text = normalize_text(value)
     if not text:
@@ -2676,6 +2743,35 @@ def normalize_feedback_update_text(value: Any, *, section: str = "") -> str:
                 cleaned,
                 flags=re.IGNORECASE,
             ).strip()
+            cleaned = re.sub(
+                r"^в\s+(?:разделе|раздел|секци(?:и|ю|я)|section)\s+[^,.:;!?]{2,80}\s+"
+                r"(?=(?:добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|"
+                r"обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите)|"
+                r"сделай|сделайте|сформируй|сформируйте)(?:\s|$|[.,:;!?]))",
+                "",
+                cleaned,
+                flags=re.IGNORECASE,
+            ).strip()
+            cleaned = re.sub(
+                r"^в\s+ожидаем(?:ых|ом)\s+результат(?:ах|е)\s+"
+                r"(?=(?:добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|"
+                r"обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите)|"
+                r"сделай|сделайте|сформируй|сформируйте)(?:\s|$|[.,:;!?]))",
+                "",
+                cleaned,
+                flags=re.IGNORECASE,
+            ).strip()
+            imperative_match = EXPECTED_OUTPUT_IMPERATIVE_START.match(cleaned)
+            if imperative_match:
+                payload = normalize_text(cleaned[imperative_match.end():])
+                if payload:
+                    cleaned = f"Итоговый документ должен содержать {payload}"
+            if looks_like_expected_output_directive(cleaned):
+                formats = extract_output_formats(text)
+                if formats:
+                    cleaned = f"Итоговый документ должен быть доступен в форматах {human_join(formats)}."
+                else:
+                    cleaned = ""
 
     if section in BRIEF_LIST_FIELDS:
         cleaned = re.sub(r"^\s*[-•]+\s*", "", cleaned).strip()

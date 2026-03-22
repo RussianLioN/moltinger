@@ -130,6 +130,30 @@ run_component_agent_factory_web_brief_tests() {
     assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.success_metrics[] | contains("блок KPI клиента")] | any' "$tmpdir/brief-correction-expected-outputs-out.json")" "Success metrics section must not be polluted by targeted expected-outputs correction"
     test_pass
 
+    local expected_outputs_no_colon_payload
+    expected_outputs_no_colon_payload="$tmpdir/brief-correction-expected-outputs-no-colon.json"
+    jq '
+      .web_conversation_envelope.ui_action = "request_brief_correction"
+      | .web_conversation_envelope.user_text = "В разделе ожидаемый результат добавь формат PPTX вместе с PDF."
+      | .brief_feedback_target = "expected_outputs"
+      | del(.brief_section_updates)
+    ' "$BRIEF_FIXTURE" > "$expected_outputs_no_colon_payload"
+
+    if ! python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$expected_outputs_no_colon_payload" --state-root "$tmpdir/state-expected-outputs-no-colon" --output "$tmpdir/brief-correction-expected-outputs-no-colon-out.json" >/dev/null; then
+        test_start "component_agent_factory_web_brief_expected_outputs_no_colon_directive_executes"
+        test_fail "Expected-outputs directive without colon should execute safely"
+        generate_report
+        return
+    fi
+
+    test_start "component_agent_factory_web_brief_normalizes_expected_outputs_directive_without_colon"
+    assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/brief-correction-expected-outputs-no-colon-out.json")" "Directive correction should keep brief in confirmation stage"
+    assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.expected_outputs | join("\n")' "$tmpdir/brief-correction-expected-outputs-no-colon-out.json")" "PPTX" "Expected outputs should preserve requested PPTX format"
+    assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.expected_outputs | join("\n")' "$tmpdir/brief-correction-expected-outputs-no-colon-out.json")" "PDF" "Expected outputs should preserve requested PDF format"
+    assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.expected_outputs[] | ascii_downcase | contains("в разделе ожидаемый результат")] | any' "$tmpdir/brief-correction-expected-outputs-no-colon-out.json")" "Expected outputs should not keep section-command wrapper"
+    assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.expected_outputs[] | ascii_downcase | contains("добавь формат")] | any' "$tmpdir/brief-correction-expected-outputs-no-colon-out.json")" "Expected outputs should not keep imperative directive text"
+    test_pass
+
     generate_report
 }
 

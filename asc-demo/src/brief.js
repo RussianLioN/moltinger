@@ -128,6 +128,11 @@ const EXPECTED_OUTPUT_STRONG_CONTEXT_MARKERS = [
   "output format",
   "expected output",
 ];
+const EXPECTED_OUTPUT_DIRECTIVE_PATTERNS = [
+  /(^|\s)(добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите)|перепиш(?:и|ите)|сделай|сформируй)(?=\s|$|[.,:;!?])/i,
+  /(^|\s)в\s+разделе(?=\s|$|[.,:;!?])/i,
+  /(^|\s)в\s+ожидаем(?:ых|ом)\s+результат(?:ах|е)(?=\s|$|[.,:;!?])/i,
+];
 
 function normalizeExplicitCorrectionTargets(explicitTargets = []) {
   const list = Array.isArray(explicitTargets) ? explicitTargets : [explicitTargets];
@@ -332,6 +337,73 @@ function isDirectiveLikeText(value) {
   return BRIEF_DIRECTIVE_MARKERS.some((marker) => lower.includes(marker));
 }
 
+function looksLikeExpectedOutputDirective(value) {
+  const text = normalizeText(value);
+  if (!text) {
+    return false;
+  }
+  return EXPECTED_OUTPUT_DIRECTIVE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function normalizeFormatLabel(value) {
+  const token = normalizeText(value).toLowerCase();
+  const mapping = new Map([
+    ["pdf", "PDF"],
+    ["docx", "DOCX"],
+    ["doc", "DOC"],
+    ["markdown", "Markdown"],
+    ["md", "Markdown"],
+    ["pptx", "PPTX"],
+    ["ppt", "PPT"],
+    ["html", "HTML"],
+    ["json", "JSON"],
+    ["csv", "CSV"],
+    ["xlsx", "XLSX"],
+    ["xls", "XLS"],
+  ]);
+  return mapping.get(token) || token.toUpperCase();
+}
+
+function extractFormatHints(value) {
+  const text = normalizeText(value);
+  if (!text) {
+    return [];
+  }
+  const formats = Array.from(
+    text.matchAll(/\b(pdf|docx|doc|markdown|md|pptx|ppt|html|json|csv|xlsx|xls)\b/gi),
+  )
+    .map((match) => normalizeFormatLabel(match[1]))
+    .filter(Boolean);
+  return Array.from(new Set(formats));
+}
+
+function mergeExpectedOutputFormatHint(correctionText, fallbackValue) {
+  const fallback = normalizeText(fallbackValue);
+  if (!fallback) {
+    return "";
+  }
+  const source = normalizeText(correctionText);
+  if (!source) {
+    return fallback;
+  }
+  if (!/(добав|включ|укаж|формат|выдач|output)/i.test(source)) {
+    return fallback;
+  }
+  const formats = extractFormatHints(source);
+  if (!formats.length) {
+    return fallback;
+  }
+  const hasAllFormats = formats.every((label) => new RegExp(`\\b${label}\\b`, "i").test(fallback));
+  if (hasAllFormats) {
+    return fallback;
+  }
+  const conjunction = formats.length > 1
+    ? `${formats.slice(0, -1).join(", ")} и ${formats[formats.length - 1]}`
+    : formats[0];
+  const suffix = fallback.match(/[.!?]$/) ? "" : ".";
+  return `${fallback}${suffix} Форматы выдачи: ${conjunction}.`.trim();
+}
+
 function cleanExpectedOutputHint(value) {
   let text = normalizeText(value)
     .replace(/^["«]+/, "")
@@ -344,6 +416,8 @@ function cleanExpectedOutputHint(value) {
   text = text
     .replace(/^(исправь\s+brief|внеси\s+уточнение|добавь|обнови|уточни|поправь)\s*[:\-]\s*/i, "")
     .replace(/^в\s+разделе\s+[^:]+:\s*/i, "")
+    .replace(/^в\s+разделе\s+[^,.:]{2,80}\s+(?=(?:добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите)|сделай|сформируй)(?:\s|$|[.,:;!?]))/i, "")
+    .replace(/^в\s+ожидаем(?:ых|ом)\s+результат(?:ах|е)\s+(?=(?:добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите)|сделай|сформируй)(?:\s|$|[.,:;!?]))/i, "")
     .replace(
       /^(?:ожидаем(?:ый|ые)?\s+(?:выход|результат)\s*(?:долж(?:ен|на|ны)\s*быть)?|на\s+выходе(?:\s+нуж(?:ен|на|ны))?)\s*[:\-]\s*/i,
       "",
@@ -439,11 +513,20 @@ function extractExpectedOutputHint(correctionText, session) {
   const hasOutputContext = OUTPUT_CONTEXT_MARKERS.some((marker) => source.toLowerCase().includes(marker));
   if (hasOutputContext) {
     const afterColon = cleanExpectedOutputHint(source.split(":").slice(1).join(":"));
-    if (afterColon) {
+    if (afterColon && !looksLikeExpectedOutputDirective(afterColon)) {
       return afterColon;
     }
   }
-  return cleanExpectedOutputHint(fallback || source);
+  const cleanedSource = cleanExpectedOutputHint(source);
+  if (cleanedSource && !looksLikeExpectedOutputDirective(cleanedSource)) {
+    return cleanedSource;
+  }
+  const mergedFallback = mergeExpectedOutputFormatHint(source, fallback);
+  const cleanedFallback = cleanExpectedOutputHint(mergedFallback || fallback);
+  if (cleanedFallback) {
+    return cleanedFallback;
+  }
+  return cleanExpectedOutputHint(source);
 }
 
 function protectUntargetedSections(session, revisedBrief, correctionTargets) {
@@ -497,7 +580,7 @@ function sanitizeRevisedBrief(session, revisedBrief, correctionText, explicitTar
     return normalized;
   }
   const expectedHint = extractExpectedOutputHint(correctionText, session);
-  if (!expectedHint) {
+  if (!expectedHint || looksLikeExpectedOutputDirective(expectedHint)) {
     return normalized;
   }
   if (correction && correction.length >= 8 && normalized.includes(correction)) {

@@ -109,8 +109,34 @@ function buildProjectDoc(session) {
   return lines.join("\n");
 }
 
+function sanitizeExpectedOutputsForArtifacts(value) {
+  let text = normalizeText(value);
+  if (!text) {
+    return "";
+  }
+  text = text
+    .replace(/^в\s+разделе\s+[^,.:]{2,120}\s+/i, "")
+    .replace(/^в\s+ожидаем(?:ых|ом)\s+результат(?:ах|е)\s+/i, "")
+    .replace(/^(добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|исправ(?:ь|ьте)|обнов(?:и|ите)|уточн(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите))\s+/i, "")
+    .trim();
+  if (!text) {
+    return "";
+  }
+  if (/(^|\s)(в\s+разделе|добав(?:ь|ьте)|исправ(?:ь|ьте)|уточн(?:и|ите)|обнов(?:и|ите)|поправ(?:ь|ьте)|внес(?:и|ите))(?=\s|$|[.,:;!?])/i.test(text)) {
+    return "";
+  }
+  return text;
+}
+
 function resolvedAnswersFromSession(session) {
-  return extractStructuredBriefAnswers(session.briefText, session.topicAnswers || {});
+  const answers = extractStructuredBriefAnswers(session.briefText, session.topicAnswers || {});
+  const safeExpectedOutputs = sanitizeExpectedOutputsForArtifacts(answers.expected_outputs);
+  if (safeExpectedOutputs) {
+    answers.expected_outputs = safeExpectedOutputs;
+  } else if (normalizeText(answers.expected_outputs)) {
+    answers.expected_outputs = "Ожидаемый результат требует уточнения формата и структуры.";
+  }
+  return answers;
 }
 
 function stripLeadingLabel(value, labels = []) {

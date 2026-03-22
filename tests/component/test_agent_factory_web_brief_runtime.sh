@@ -78,6 +78,67 @@ NODE
         test_fail "Revised brief should become the source of truth for synchronized topic answers"
     fi
 
+    test_start "component_agent_factory_web_brief_runtime_strips_section_command_from_expected_outputs"
+    if node --input-type=module >"$tmpdir/brief-command-strip.json" <<'NODE'
+import { reviseBrief, syncSessionTopicAnswersFromBrief } from "./asc-demo/src/brief.js";
+
+process.env.OPENAI_API_KEY = "";
+
+const session = {
+  briefText: [
+    "# Brief проекта",
+    "",
+    "## Бизнес-проблема",
+    "Автоматизировать подготовку one-page summary по клиенту для кредитного комитета.",
+    "",
+    "## Целевые пользователи и выгодоприобретатели",
+    "Пользователь — клиентский менеджер. Выгодоприобретатели — члены кредитного комитета.",
+    "",
+    "## Текущий процесс и точки потерь",
+    "Сейчас вручную собираю данные из выгрузки и формирую one-page в Word.",
+    "",
+    "## Входные данные и примеры",
+    "Приложены файлы: demo-client-data.csv. Все данные синтетические.",
+    "",
+    "## Ожидаемые результаты",
+    "Готовый one-page PDF с рекомендацией для кредитного комитета.",
+    "",
+    "## Правила ветвления и исключения",
+    "Пустые поля пропускаются.",
+    "",
+    "## Метрики успеха",
+    "Скорость и качество.",
+  ].join("\n"),
+  topicAnswers: {
+    problem: "Автоматизировать подготовку one-page summary по клиенту для кредитного комитета.",
+    target_users: "Пользователь — клиентский менеджер. Выгодоприобретатели — члены кредитного комитета.",
+    current_workflow: "Сейчас вручную собираю данные из выгрузки и формирую one-page в Word.",
+    input_examples: "Приложены файлы: demo-client-data.csv. Все данные синтетические.",
+    expected_outputs: "Готовый one-page PDF с рекомендацией для кредитного комитета.",
+    branching_rules: "Пустые поля пропускаются.",
+    success_metrics: "Скорость и качество.",
+  },
+  uploadedFiles: [{ name: "demo-client-data.csv", excerpt: "client_id,score,limit" }],
+};
+
+const revised = await reviseBrief(session, "В разделе ожидаемый результат добавь формат DOCX вместе с PDF.");
+syncSessionTopicAnswersFromBrief(session, revised);
+
+console.log(JSON.stringify({
+  revised,
+  expected_outputs: session.topicAnswers.expected_outputs,
+}, null, 2));
+NODE
+    then
+        assert_contains "$(jq -r '.expected_outputs' "$tmpdir/brief-command-strip.json")" "DOCX" "Expected outputs should include DOCX from section correction"
+        assert_contains "$(jq -r '.expected_outputs' "$tmpdir/brief-command-strip.json")" "PDF" "Expected outputs should preserve PDF format from section correction"
+        assert_eq "false" "$(jq -r '.expected_outputs | ascii_downcase | contains("в разделе")' "$tmpdir/brief-command-strip.json")" "Expected outputs should not keep section command wrapper"
+        assert_eq "false" "$(jq -r '.expected_outputs | ascii_downcase | contains("добавь")' "$tmpdir/brief-command-strip.json")" "Expected outputs should not keep imperative command prefix"
+        test_pass
+    else
+        test_fail "Section correction should be normalized into expected_outputs without command leakage"
+    fi
+
     test_start "component_agent_factory_web_brief_runtime_generates_one_page_from_confirmed_brief_not_stale_answers"
     if node --input-type=module >"$tmpdir/one-page-from-brief.json" <<'NODE'
 import { generateArtifacts } from "./asc-demo/src/summary-generator.js";
@@ -137,6 +198,67 @@ NODE
         test_pass
     else
         test_fail "Artifact generation should prefer confirmed brief over stale discovery answers"
+    fi
+
+    test_start "component_agent_factory_web_brief_runtime_prevents_directive_leakage_in_one_page"
+    if node --input-type=module >"$tmpdir/one-page-command-leak.json" <<'NODE'
+import { generateArtifacts } from "./asc-demo/src/summary-generator.js";
+
+process.env.OPENAI_API_KEY = "";
+
+const session = {
+  sessionId: "web-demo-session-command-leak",
+  projectKey: "factory-credit-one-page",
+  briefVersion: 2,
+  briefText: [
+    "# Brief проекта",
+    "",
+    "## Бизнес-проблема",
+    "Автоматизировать подготовку one-page summary по клиенту для кредитного комитета.",
+    "",
+    "## Целевые пользователи и выгодоприобретатели",
+    "Пользователь — клиентский менеджер. Выгодоприобретатели — члены кредитного комитета.",
+    "",
+    "## Текущий процесс и точки потерь",
+    "Сейчас вручную беру выгрузку, формирую one-page в Word и экспортирую в PDF.",
+    "",
+    "## Входные данные и примеры",
+    "Приложены файлы: demo-client-data.csv. Все данные синтетические.",
+    "",
+    "## Ожидаемые результаты",
+    "В разделе ожидаемый результат добавь формат DOCX вместе с PDF.",
+    "",
+    "## Правила ветвления и исключения",
+    "Пустые поля пропускаются.",
+    "",
+    "## Метрики успеха",
+    "Время подготовки one-page и количество ошибок в документе.",
+  ].join("\n"),
+  topicAnswers: {
+    problem: "Автоматизировать подготовку one-page summary по клиенту для кредитного комитета.",
+    target_users: "Пользователь — клиентский менеджер. Выгодоприобретатели — члены кредитного комитета.",
+    current_workflow: "Сейчас вручную беру выгрузку, формирую one-page в Word и экспортирую в PDF.",
+    input_examples: "Приложены файлы: demo-client-data.csv. Все данные синтетические.",
+    expected_outputs: "В разделе ожидаемый результат добавь формат DOCX вместе с PDF.",
+    branching_rules: "Пустые поля пропускаются.",
+    success_metrics: "Время подготовки one-page и количество ошибок в документе.",
+  },
+  uploadedFiles: [{ name: "demo-client-data.csv", excerpt: "client_id,score,limit\nSYN-100,701,250000" }],
+};
+
+const artifacts = await generateArtifacts(session);
+const onePage = artifacts.find((item) => item.artifact_kind === "one_page_summary");
+
+console.log(JSON.stringify({
+  one_page_summary: onePage?.content || "",
+}, null, 2));
+NODE
+    then
+        assert_eq "false" "$(jq -r '.one_page_summary | ascii_downcase | contains("в разделе ожидаемый результат")' "$tmpdir/one-page-command-leak.json")" "One-page should not leak section-command wrapper into output"
+        assert_eq "false" "$(jq -r '.one_page_summary | ascii_downcase | contains("добавь формат")' "$tmpdir/one-page-command-leak.json")" "One-page should not leak imperative correction commands into output"
+        test_pass
+    else
+        test_fail "Artifact generation should sanitize directive-like expected_outputs before one-page rendering"
     fi
 
     generate_report
