@@ -484,7 +484,9 @@ navigation_timeout_ms = 30000     # Page load timeout in milliseconds (30 sec)
 # This helps prevent prompt injection from untrusted websites.
 allowed_domains = []              # Empty = all domains allowed
 memory_limit_percent = 90
-chrome_args = []
+# browserless/chrome in the live sandbox runs as a non-root user; pin a writable
+# profile dir so Chrome can create its SingletonLock and CDP comes up reliably.
+chrome_args = ["--user-data-dir=/tmp/browser-profile"]
 sandbox_image = "browserless/chrome"
 container_host = "host.docker.internal"  # Moltis-in-Docker sibling browser access via host-gateway on Linux
 # allowed_domains = [
