@@ -49,7 +49,7 @@
 - [x] T033 [P0] Arrest `memory_search` embedding-provider failures by pinning a deterministic memory contract or explicit keyword-only fallback before broader memory rollout
 - [x] T034 Restore browser runtime health by fixing Docker access/connectivity on the target host
 - [x] T035 Configure repository-visible memory watch/index scope and backfill embeddings for useful vector memory after the provider contract is deterministic
-- [ ] T036 Clean stale runtime context files in `~/.moltis` that conflict with the current project/runtime identity
+- [x] T036 Clean stale runtime context files in `~/.moltis` that conflict with the current project/runtime identity
 
 ---
 

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-22
-**Total Lessons**: 50
+**Total Lessons**: 51
 
 ---
 
@@ -56,7 +56,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (10 lessons)
+#### P3 (11 lessons)
+- [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
 - [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
@@ -127,7 +128,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (6 lessons)
+#### shell (7 lessons)
+- [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
 - [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
@@ -141,9 +143,9 @@
 - `gitops` (15 lessons)
 - `github-actions` (13 lessons)
 - `deploy` (13 lessons)
-- `moltis` (11 lessons)
+- `moltis` (12 lessons)
 - `cicd` (11 lessons)
-- `rca` (9 lessons)
+- `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `clawdiy` (8 lessons)
@@ -156,10 +158,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 50 |
+| Total Lessons | 51 |
 | Critical (P0/P1) | 20 |
 | Categories | 5 |
-| Unique Tags | 118 |
+| Unique Tags | 120 |
 
 ---
 
