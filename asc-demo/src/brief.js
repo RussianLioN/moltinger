@@ -42,6 +42,36 @@ const CORRECTION_TOPIC_HINTS = [
     keywords: ["метрик", "kpi", "sla", "точност", "время", "сократ", "успех"],
   },
 ];
+const EXPLICIT_SECTION_HINTS = [
+  {
+    topicId: "problem",
+    markers: ["бизнес-проблема", "проблема", "цель автоматизации"],
+  },
+  {
+    topicId: "target_users",
+    markers: ["целевые пользователи", "выгодоприобретатели", "пользователи"],
+  },
+  {
+    topicId: "current_workflow",
+    markers: ["текущий процесс", "процесс и точки потерь", "as is"],
+  },
+  {
+    topicId: "input_examples",
+    markers: ["входные данные", "примеры вход", "input_examples", "inputs"],
+  },
+  {
+    topicId: "expected_outputs",
+    markers: ["ожидаемые результаты", "выход", "output", "one-page", "onepage"],
+  },
+  {
+    topicId: "branching_rules",
+    markers: ["ветвления", "исключения", "правила ветвления", "бизнес-правила", "алгоритм обработки"],
+  },
+  {
+    topicId: "success_metrics",
+    markers: ["метрики успеха", "метрики", "kpi", "sla"],
+  },
+];
 const OUTPUT_CONTEXT_MARKERS = [
   "на выход",
   "ожидаемый результат",
@@ -84,6 +114,16 @@ const EXPECTED_OUTPUT_HINT_MARKERS = [
   "ключев",
   "блок",
   "материал",
+];
+const EXPECTED_OUTPUT_STRONG_CONTEXT_MARKERS = [
+  "ожидаемые результаты",
+  "ожидаемый результат",
+  "на выходе",
+  "итоговый результат",
+  "формат выхода",
+  "финальный документ",
+  "output format",
+  "expected output",
 ];
 
 const SERVICE_PHRASE_PATTERNS = [
@@ -202,6 +242,10 @@ function inferCorrectionTargets(correctionText) {
   if (!normalized) {
     return [];
   }
+  const explicitTargets = inferExplicitSectionTargets(correctionText);
+  if (explicitTargets.length) {
+    return explicitTargets;
+  }
   const targets = CORRECTION_TOPIC_HINTS
     .filter((hint) => hint.keywords.some((keyword) => normalized.includes(keyword)))
     .map((hint) => hint.topicId);
@@ -215,18 +259,53 @@ function inferCorrectionTargets(correctionText) {
   }
   if (targets.includes("expected_outputs") && targets.includes("input_examples")) {
     const outputContext = OUTPUT_CONTEXT_MARKERS.some((marker) => normalized.includes(marker));
+    const strongOutputContext = EXPECTED_OUTPUT_STRONG_CONTEXT_MARKERS.some((marker) => normalized.includes(marker));
     const explicitInputContext = [
       "входные данные",
       "прилож",
       "прикреп",
       "файл",
     ].some((marker) => normalized.includes(marker));
+    if (explicitInputContext && !strongOutputContext) {
+      return targets.filter((topicId) => topicId !== "expected_outputs");
+    }
     if (outputContext && !explicitInputContext) {
       return targets.filter((topicId) => topicId !== "input_examples");
     }
   }
 
   return targets;
+}
+
+function inferExplicitSectionTargets(correctionText) {
+  const normalized = normalizeText(correctionText).toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+  const hasSectionIntent = /(^|\s)(раздел|секция|секции|в разделе|в секции)\b/i.test(normalized);
+  const matches = EXPLICIT_SECTION_HINTS
+    .filter((hint) => hint.markers.some((marker) => normalized.includes(marker)))
+    .map((hint) => hint.topicId);
+  if (!matches.length) {
+    return [];
+  }
+  const unique = Array.from(new Set(matches));
+  if (unique.includes("input_examples") && unique.includes("expected_outputs")) {
+    const strongOutputContext = EXPECTED_OUTPUT_STRONG_CONTEXT_MARKERS
+      .some((marker) => normalized.includes(marker));
+    const explicitInputContext = ["входные данные", "примеры вход", "влож", "файл", "input_examples"]
+      .some((marker) => normalized.includes(marker));
+    if (explicitInputContext && !strongOutputContext) {
+      return unique.filter((topicId) => topicId !== "expected_outputs");
+    }
+  }
+  if (!hasSectionIntent) {
+    return unique;
+  }
+  if (unique.length === 1) {
+    return unique;
+  }
+  return unique.filter((topicId) => topicId !== "target_users");
 }
 
 function isDirectiveLikeText(value) {
@@ -331,6 +410,13 @@ function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
     normalized = protectUntargetedSections(session, normalized, targets);
   }
   if (!targets.includes("expected_outputs")) {
+    if (targets.includes("input_examples")) {
+      normalized = replaceSectionContent(
+        normalized,
+        BRIEF_SECTION_TITLES.input_examples,
+        canonicalInputExamplesContent(session, correctionText),
+      );
+    }
     return normalized;
   }
   const expectedHint = extractExpectedOutputHint(correctionText, session);
@@ -374,7 +460,15 @@ function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
       lines[index] = expectedHint;
     }
   }
-  return lines.join("\n");
+  const merged = lines.join("\n");
+  if (targets.includes("input_examples")) {
+    return replaceSectionContent(
+      merged,
+      BRIEF_SECTION_TITLES.input_examples,
+      canonicalInputExamplesContent(session, correctionText),
+    );
+  }
+  return merged;
 }
 
 function buildCorrectionGuidance(session, correctionText) {
@@ -421,6 +515,35 @@ function parseBriefSections(briefText) {
   return sections;
 }
 
+function replaceSectionContent(briefText, sectionTitle, nextContent) {
+  const normalizedBrief = normalizeBrief(briefText);
+  const content = normalizeText(nextContent);
+  if (!normalizedBrief || !sectionTitle || !content) {
+    return normalizedBrief;
+  }
+  const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sectionPattern = new RegExp(`(## ${escapedTitle}\\n)([\\s\\S]*?)(?=\\n## |$)`);
+  if (sectionPattern.test(normalizedBrief)) {
+    return normalizedBrief.replace(sectionPattern, `$1${content}\n`);
+  }
+  return `${normalizedBrief}\n\n## ${sectionTitle}\n${content}\n`.trim();
+}
+
+function canonicalInputExamplesContent(session, correctionText = "") {
+  const files = collectUploadedFiles(session);
+  if (files.length) {
+    const names = files
+      .map((file) => normalizeText(file.name, "вложение"))
+      .filter(Boolean);
+    return `Приложены файлы: ${names.join(", ")}. ${SYNTHETIC_DATA_NOTE}`;
+  }
+  const cleaned = cleanExpectedOutputHint(correctionText);
+  if (cleaned) {
+    return cleaned;
+  }
+  return `Входные данные зафиксированы как обезличенные и синтетические. ${SYNTHETIC_DATA_NOTE}`;
+}
+
 function buildFallbackRevision(session, correctionText) {
   const note = normalizeText(correctionText, "Пользователь запросил уточнение, но не добавил текст.");
   const baseBrief = normalizeBrief(session.briefText) || fallbackBrief(session);
@@ -439,6 +562,10 @@ function buildFallbackRevision(session, correctionText) {
     const title = BRIEF_SECTION_TITLES[topicId];
     if (topicId === "expected_outputs" && expectedHint) {
       sections.set(title, expectedHint);
+      return;
+    }
+    if (topicId === "input_examples") {
+      sections.set(title, canonicalInputExamplesContent(session, correctionText));
       return;
     }
     const current = normalizeText(sections.get(title), "Требуется уточнение.");

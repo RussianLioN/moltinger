@@ -174,6 +174,7 @@ REPEAT_ACK_MARKERS = (
 )
 BRIEF_CORRECTION_TEXT_MARKERS = (
     "правк",
+    "корректировк",
     "исправ",
     "уточни",
     "уточн",
@@ -3749,6 +3750,12 @@ def build_discovery_request(
         append_user_turn(request, user_text or effective_answer_text or combined_text, current_topic, now)
     elif ui_action == "request_brief_correction":
         request["brief_feedback_text"] = combined_text or normalize_text(payload.get("brief_feedback_text"))
+        explicit_payload_updates = (
+            deepcopy(payload["brief_section_updates"])
+            if isinstance(payload.get("brief_section_updates"), dict)
+            else {}
+        )
+        has_explicit_payload_updates = bool(explicit_payload_updates)
         feedback_target_raw = normalize_text(payload.get("brief_feedback_target")).lower()
         feedback_target = TOPIC_TO_BRIEF_FIELD.get(feedback_target_raw, feedback_target_raw)
         explicit_feedback_target = feedback_target in BRIEF_SECTION_FIELDS
@@ -3770,7 +3777,13 @@ def build_discovery_request(
                 if section in {"input_examples", "expected_outputs"}
             }
         non_fallback_updates = has_non_fallback_brief_updates(inferred_updates)
-        if request["brief_feedback_text"] and not correction_intent and not non_fallback_updates and not explicit_feedback_target:
+        if (
+            request["brief_feedback_text"]
+            and not correction_intent
+            and not non_fallback_updates
+            and not explicit_feedback_target
+            and not has_explicit_payload_updates
+        ):
             append_user_turn(request, request["brief_feedback_text"], "status_followup", now)
             request.pop("brief_feedback_text", None)
             return request, True, low_signal_submission
@@ -3787,8 +3800,8 @@ def build_discovery_request(
                     request["brief_section_updates"] = inferred_io_updates
             else:
                 request["brief_section_updates"] = targeted_update
-        elif isinstance(payload.get("brief_section_updates"), dict):
-            request["brief_section_updates"] = deepcopy(payload["brief_section_updates"])
+        elif has_explicit_payload_updates:
+            request["brief_section_updates"] = explicit_payload_updates
         elif request["brief_feedback_text"]:
             if inferred_updates:
                 request["brief_section_updates"] = inferred_updates

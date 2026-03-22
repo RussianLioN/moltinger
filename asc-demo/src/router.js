@@ -9,7 +9,7 @@ import {
   normalizeBrowserUploads,
 } from "./response-builder.js";
 import { generateBrief, reviseBrief } from "./brief.js";
-import { getDiscoveryTopics, processDiscoveryTurn } from "./discovery.js";
+import { evaluateDiscoveryContract, getDiscoveryTopics, processDiscoveryTurn } from "./discovery.js";
 import { generateArtifacts } from "./summary-generator.js";
 import { getOrCreateSession, setSessionArtifacts, setSessionResponse, setSessionSummaryPromise, updateSession } from "./sessions.js";
 import { normalizeText } from "./utils.js";
@@ -57,6 +57,14 @@ function sessionIdFromPayload(payload) {
 
 function getAction(payload) {
   return normalizeText(payload?.web_conversation_envelope?.ui_action, "submit_turn");
+}
+
+function getRequestId(payload) {
+  return normalizeText(
+    payload?.web_conversation_envelope?.request_id
+      || payload?.web_conversation_envelope?.web_conversation_envelope_id,
+    "",
+  );
 }
 
 function getUserText(payload) {
@@ -174,6 +182,111 @@ function maybeAutonameProject(session, userText) {
   session.displayProjectTitle = compact.join(" ") || text.slice(0, 66);
 }
 
+function isNoisyInputExamplesValue(value) {
+  const normalized = normalizeText(value).toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (normalized.length < 28) {
+    return true;
+  }
+  return [
+    "уже прикреп",
+    "уже прилож",
+    "это и есть",
+    "обезличенн",
+    "синтетич",
+  ].some((marker) => normalized.includes(marker));
+}
+
+function isActionAllowedForStage(action, stage) {
+  const currentStage = normalizeText(stage, "gate_pending");
+  const allowed = {
+    gate_pending: new Set(["request_demo_access", "submit_access_token", "request_status"]),
+    discovery: new Set([
+      "submit_turn",
+      "request_status",
+      "request_brief_review",
+      "request_demo_access",
+      "submit_access_token",
+    ]),
+    awaiting_confirmation: new Set([
+      "submit_turn",
+      "request_status",
+      "request_brief_review",
+      "request_brief_correction",
+      "confirm_brief",
+      "reopen_brief",
+    ]),
+    confirmed: new Set([
+      "submit_turn",
+      "request_status",
+      "request_brief_review",
+      "request_brief_correction",
+      "reopen_brief",
+      "preview_one_page",
+      "download_artifact",
+    ]),
+    downloads_ready: new Set([
+      "submit_turn",
+      "request_status",
+      "request_brief_review",
+      "request_brief_correction",
+      "reopen_brief",
+      "preview_one_page",
+      "download_artifact",
+    ]),
+  };
+  const stageAllowed = allowed[currentStage] || allowed.discovery;
+  return stageAllowed.has(normalizeText(action, "submit_turn"));
+}
+
+function rememberProcessedRequestId(session, requestId) {
+  const normalized = normalizeText(requestId);
+  if (!normalized) {
+    return;
+  }
+  if (!Array.isArray(session.processedRequestIds)) {
+    session.processedRequestIds = [];
+  }
+  if (session.processedRequestIds.includes(normalized)) {
+    return;
+  }
+  session.processedRequestIds.push(normalized);
+  if (session.processedRequestIds.length > 80) {
+    session.processedRequestIds = session.processedRequestIds.slice(-80);
+  }
+}
+
+function isDuplicateRequest(session, requestId) {
+  const normalized = normalizeText(requestId);
+  if (!normalized) {
+    return false;
+  }
+  return Array.isArray(session.processedRequestIds) && session.processedRequestIds.includes(normalized);
+}
+
+function withSafeMessage(response, message) {
+  const normalizedMessage = normalizeText(message);
+  if (!normalizedMessage || !response || typeof response !== "object") {
+    return response;
+  }
+  const nextQuestion = normalizeText(response.next_question);
+  if (!nextQuestion) {
+    return {
+      ...response,
+      next_question: normalizedMessage,
+    };
+  }
+  if (nextQuestion.startsWith(normalizedMessage)) {
+    return response;
+  }
+  return {
+    ...response,
+    next_question: `${normalizedMessage}\n\n${nextQuestion}`,
+  };
+}
+
 const BRIEF_CORRECTION_MARKERS = [
   "правк",
   "исправ",
@@ -184,6 +297,23 @@ const BRIEF_CORRECTION_MARKERS = [
   "измени",
   "обнови brief",
   "нужно изменить",
+];
+
+const NON_CORRECTION_FOLLOWUP_MARKERS = [
+  "продолж",
+  "дальше",
+  "ок",
+  "okay",
+  "понял",
+  "поняла",
+  "поясни",
+  "объясни",
+  "что дальше",
+  "статус",
+  "обнови",
+  "refresh",
+  "да",
+  "нет",
 ];
 
 const CONFIRM_BRIEF_MARKERS = [
@@ -234,6 +364,14 @@ function isLikelyBriefCorrectionText(text) {
   return BRIEF_CORRECTION_MARKERS.some((marker) => normalized.includes(marker));
 }
 
+function isLowConfidenceBriefCorrectionText(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized || normalized.length < 12) {
+    return true;
+  }
+  return NON_CORRECTION_FOLLOWUP_MARKERS.some((marker) => normalized === marker || normalized.includes(marker));
+}
+
 function isProductionSimulationRequest(text) {
   const normalized = normalizeText(text).toLowerCase();
   if (!normalized) {
@@ -280,13 +418,21 @@ function pushAssistantMessage(session, text) {
   });
 }
 
-async function runSummaryGeneration(session) {
-  if (session.summaryState === "running" && session.summaryPromise) {
+async function runSummaryGeneration(session, generationId) {
+  if (
+    session.summaryState === "running"
+    && session.summaryPromise
+    && Number(session.handoffGenerationId || 0) === Number(generationId || 0)
+  ) {
     return session.summaryPromise;
   }
 
   const promise = (async () => {
     const artifacts = await generateArtifacts(session);
+    const stillActual = Number(session.handoffGenerationId || 0) === Number(generationId || 0);
+    if (!stillActual || normalizeText(session.stage) !== "confirmed") {
+      return session.artifacts || artifacts;
+    }
     setSessionArtifacts(session, artifacts);
     updateSession(session, {
       stage: "downloads_ready",
@@ -296,6 +442,10 @@ async function runSummaryGeneration(session) {
     return artifacts;
   })().catch((error) => {
     console.error("[asc-demo] router.runSummaryGeneration:", error?.message || error);
+    const stillActual = Number(session.handoffGenerationId || 0) === Number(generationId || 0);
+    if (!stillActual || normalizeText(session.stage) !== "confirmed") {
+      return session.artifacts || [];
+    }
     const fallbackArtifacts = [
       {
         artifact_kind: "one_page_summary",
@@ -352,7 +502,11 @@ async function discoveryFlow(session, payload, userText, uploadedFiles) {
     if (!session.topicAnswers || typeof session.topicAnswers !== "object") {
       session.topicAnswers = {};
     }
-    if (!session.topicAnswers?.input_examples) {
+    const currentInputExamples = normalizeText(session.topicAnswers?.input_examples);
+    const needsStructuredInputExamples = !currentInputExamples
+      || isNoisyInputExamplesValue(currentInputExamples)
+      || !/приложены файлы/i.test(currentInputExamples);
+    if (needsStructuredInputExamples) {
       const names = session.uploadedFiles
         .map((file) => normalizeText(file?.name))
         .filter(Boolean)
@@ -365,6 +519,37 @@ async function discoveryFlow(session, payload, userText, uploadedFiles) {
 
   const discovery = await processDiscoveryTurn(session, userText, uploadedFiles);
   if (discovery.complete) {
+    const contract = evaluateDiscoveryContract(session);
+    if (!contract.ready) {
+      const followup = contract.followups[0];
+      const followupQuestion = followup?.question || "Уточни обязательные параметры результата перед подтверждением brief.";
+      const followupTopic = normalizeText(followup?.topicId, "expected_outputs");
+      const followupWhy = normalizeText(
+        followup?.why,
+        "Перед подтверждением brief нужно закрыть обязательные параметры результата и правил обработки.",
+      );
+      session.stage = "discovery";
+      session.currentTopic = followupTopic;
+      session.currentQuestion = followupQuestion;
+      session.whyAskingNow = followupWhy;
+      session.missingCoverage = [followupTopic];
+      const response = buildDiscoveryResponse(session, payload, {
+        nextQuestion: followupQuestion,
+        nextTopic: followupTopic,
+        whyAskingNow: followupWhy,
+        missingCoverage: [followupTopic],
+        lowSignal: false,
+        theatreMessage: `Нужна ещё одна фиксация перед brief: ${followupWhy}`,
+        uploadedFiles,
+        coveredCount: discovery.coveredCount,
+        totalCount: discovery.totalCount,
+        helperExample: followupQuestion,
+        questionSource: "mandatory_contract_guard",
+      });
+      pushAssistantMessage(session, response.next_question);
+      return response;
+    }
+
     await ensureBriefReady(session);
     session.stage = "awaiting_confirmation";
     session.currentTopic = "";
@@ -372,7 +557,13 @@ async function discoveryFlow(session, payload, userText, uploadedFiles) {
     session.whyAskingNow = "";
     session.missingCoverage = [];
     const response = buildAwaitingConfirmationResponse(session, payload, {
-      theatreMessage: "Discovery завершён. Формирование brief...",
+      theatreMessage: [
+        "Discovery завершён.",
+        `Формат результата: ${contract.summary.result_format}.`,
+        `Правила обработки: ${contract.summary.processing_rules}.`,
+        `Критерии качества: ${contract.summary.quality_criteria}.`,
+        "Сформировал brief для проверки.",
+      ].join(" "),
       uploadedFiles,
     });
     pushAssistantMessage(session, response.next_question);
@@ -416,22 +607,32 @@ async function statusFlow(session, payload) {
   if (session.stage === "awaiting_confirmation") {
     return buildAwaitingConfirmationResponse(session, payload);
   }
-  const defaultTopic = getDiscoveryTopics()[0];
-  const nextQuestion = normalizeText(session.currentQuestion, defaultTopic.question);
+  const topics = getDiscoveryTopics();
+  const covered = session.coveredTopics instanceof Set ? session.coveredTopics : new Set(session.coveredTopics || []);
+  const firstUncovered = topics.find((topic) => !covered.has(topic.id)) || topics[0];
+  const currentTopicId = normalizeText(session.currentTopic);
+  const currentTopicCovered = currentTopicId && covered.has(currentTopicId);
+  const fallbackTopic = currentTopicCovered ? firstUncovered : (topics.find((topic) => topic.id === currentTopicId) || firstUncovered);
+  const defaultTopic = fallbackTopic || topics[0];
+  const nextQuestion = currentTopicCovered
+    ? defaultTopic.question
+    : normalizeText(session.currentQuestion, defaultTopic.question);
   const nextTopic = normalizeText(session.currentTopic, defaultTopic.id);
   session.currentQuestion = nextQuestion;
-  session.currentTopic = nextTopic;
+  session.currentTopic = currentTopicCovered ? defaultTopic.id : nextTopic;
   session.whyAskingNow = normalizeText(session.whyAskingNow, defaultTopic.why);
-  session.missingCoverage = session.missingCoverage || getDiscoveryTopics().map((topic) => topic.id);
+  if (!Array.isArray(session.missingCoverage) || !session.missingCoverage.length) {
+    session.missingCoverage = topics.filter((topic) => !covered.has(topic.id)).map((topic) => topic.id);
+  }
   return buildDiscoveryResponse(session, payload, {
-    nextQuestion,
-    nextTopic,
+    nextQuestion: session.currentQuestion,
+    nextTopic: session.currentTopic,
     whyAskingNow: session.whyAskingNow,
     missingCoverage: session.missingCoverage,
     lowSignal: false,
     uploadedFiles: session.uploadedFiles || [],
     coveredCount: (session.coveredTopics || new Set()).size,
-    totalCount: getDiscoveryTopics().length,
+    totalCount: topics.length,
     helperExample: defaultTopic.question,
     questionSource: "adaptive_architect",
   });
@@ -439,6 +640,7 @@ async function statusFlow(session, payload) {
 
 export async function handleTurn(payload = {}) {
   const action = getAction(payload);
+  const requestId = getRequestId(payload);
   const userText = getUserText(payload);
   const hasUserText = Boolean(normalizeText(userText));
   const sessionId = sessionIdFromPayload(payload);
@@ -449,6 +651,9 @@ export async function handleTurn(payload = {}) {
     projectKey: projectKeyFromPayload(payload, userText),
     displayProjectTitle: "Новый проект",
   });
+  if (isDuplicateRequest(session, requestId) && session.lastResponse) {
+    return session.lastResponse;
+  }
   session.projectKey = session.projectKey || projectKeyFromPayload(payload, userText);
   session.uploadedFiles = mergeIncomingUploads(session, incomingUploads);
 
@@ -463,6 +668,7 @@ export async function handleTurn(payload = {}) {
             ? "Этот demo access token не подходит. Проверь токен или запроси актуальный доступ у оператора."
             : "Укажи active demo access token, чтобы открыть рабочее пространство фабрики.",
         );
+        rememberProcessedRequestId(session, requestId);
         setSessionResponse(session, denied);
         return denied;
       }
@@ -476,29 +682,57 @@ export async function handleTurn(payload = {}) {
         updateSession(session, { stage: session.stage, uploadedFiles: session.uploadedFiles });
       } else {
         const initial = await statusFlow(session, payload);
+        rememberProcessedRequestId(session, requestId);
         setSessionResponse(session, initial);
         return initial;
       }
+    }
+
+    if (!isActionAllowedForStage(action, session.stage)) {
+      const guardMessage = [
+        "Это действие сейчас недоступно для текущего этапа.",
+        "Продолжаем с актуальным состоянием проекта.",
+      ].join(" ");
+      const safe = withSafeMessage(await statusFlow(session, payload), guardMessage);
+      rememberProcessedRequestId(session, requestId);
+      setSessionResponse(session, safe);
+      updateSession(session, { stage: session.stage, uploadedFiles: session.uploadedFiles });
+      return safe;
     }
 
     let response;
     const correctionIntent = hasUserText && isLikelyBriefCorrectionText(userText);
     const simulationIntent = hasUserText && isProductionSimulationRequest(userText);
     const downloadsMode = ["downloads_ready", "confirmed"].includes(normalizeText(session.stage));
+    const reviewMode = normalizeText(session.stage) === "awaiting_confirmation";
+    const explicitSectionUpdates = payload?.brief_section_updates
+      && typeof payload.brief_section_updates === "object"
+      && Object.keys(payload.brief_section_updates).length > 0;
+    const lowConfidenceCorrection = hasUserText && isLowConfidenceBriefCorrectionText(userText);
+    const correctionAllowedByText = hasUserText && (!lowConfidenceCorrection || explicitSectionUpdates);
 
     const textConfirmBrief = hasUserText
-      && session.stage === "awaiting_confirmation"
+      && reviewMode
       && isLikelyConfirmBriefText(userText)
       && !correctionIntent;
+    const textCorrectionBrief = hasUserText
+      && reviewMode
+      && correctionIntent
+      && correctionAllowedByText;
 
-    if (action === "confirm_brief" || textConfirmBrief) {
+    if ((action === "confirm_brief" || textConfirmBrief) && reviewMode) {
       await ensureBriefReady(session);
       session.stage = "confirmed";
-      if (session.summaryState !== "running" && session.summaryState !== "ready") {
-        session.summaryState = "running";
-        void runSummaryGeneration(session);
-      }
+      const generationId = Number(session.handoffGenerationId || 0) + 1;
+      session.handoffGenerationId = generationId;
+      session.summaryState = "running";
+      void runSummaryGeneration(session, generationId);
       response = buildHandoffRunningResponse(session, payload);
+    } else if (action === "confirm_brief" && !reviewMode) {
+      response = withSafeMessage(
+        await statusFlow(session, payload),
+        "Brief сейчас не находится на этапе подтверждения. Сначала открой актуальную версию и проверь её.",
+      );
     } else if (downloadsMode && simulationIntent) {
       pushUserMessage(session, userText, incomingUploads);
       response = buildDownloadsReadyResponse(
@@ -508,17 +742,35 @@ export async function handleTurn(payload = {}) {
         { primaryArtifactKind: "production_simulation" },
       );
       pushAssistantMessage(session, response.next_question);
-    } else if (action === "request_brief_correction" || (downloadsMode && correctionIntent)) {
+    } else if (
+      action === "request_brief_correction"
+      || textCorrectionBrief
+      || (downloadsMode && correctionIntent && correctionAllowedByText)
+    ) {
+      if (!correctionAllowedByText && !explicitSectionUpdates) {
+        response = withSafeMessage(
+          buildAwaitingConfirmationResponse(session, payload, {
+            theatreMessage: "Нужна конкретная правка brief: укажи, какой раздел и что именно изменить.",
+            uploadedFiles: session.uploadedFiles,
+          }),
+          "Не вижу конкретной правки. Опиши точное изменение по смыслу или укажи раздел.",
+        );
+      } else {
       pushUserMessage(session, userText, incomingUploads);
       const revised = await reviseBrief(session, userText);
       session.briefText = revised;
       session.briefVersion = Math.max(1, Number(session.briefVersion || 0) + 1);
       session.stage = "awaiting_confirmation";
+      session.handoffGenerationId = Number(session.handoffGenerationId || 0) + 1;
+      session.summaryPromise = null;
+      session.summaryState = "idle";
+      session.artifacts = [];
       response = buildAwaitingConfirmationResponse(session, payload, {
         theatreMessage: "Правки применены. Проверь обновлённый brief и подтверди версию.",
         uploadedFiles: session.uploadedFiles,
       });
       pushAssistantMessage(session, response.next_question);
+      }
     } else if (downloadsMode && hasUserText) {
       pushUserMessage(session, userText, incomingUploads);
       response = buildDownloadsReadyResponse(
@@ -529,8 +781,10 @@ export async function handleTurn(payload = {}) {
       pushAssistantMessage(session, response.next_question);
     } else if (action === "reopen_brief") {
       session.stage = "awaiting_confirmation";
+      session.handoffGenerationId = Number(session.handoffGenerationId || 0) + 1;
       session.summaryPromise = null;
       session.summaryState = "idle";
+      session.artifacts = [];
       response = buildAwaitingConfirmationResponse(session, payload, {
         theatreMessage: "Brief переоткрыт для доработки. Внеси изменения и подтверди новую версию.",
         uploadedFiles: session.uploadedFiles,
@@ -546,12 +800,14 @@ export async function handleTurn(payload = {}) {
       response = await discoveryFlow(session, payload, userText, incomingUploads);
     }
 
+    rememberProcessedRequestId(session, requestId);
     setSessionResponse(session, response);
     updateSession(session, { stage: session.stage, uploadedFiles: session.uploadedFiles });
     return response;
   } catch (error) {
     console.error("[asc-demo] router.handleTurn:", error?.message || error);
     const fallback = buildErrorFallbackResponse(session, payload, normalizeText(error?.message));
+    rememberProcessedRequestId(session, requestId);
     setSessionResponse(session, fallback);
     return fallback;
   }

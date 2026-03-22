@@ -411,6 +411,32 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_fail "Input examples correction should not drift into expected_outputs even when user text mentions output data"
     fi
 
+    test_start "integration_local_agent_factory_web_confirmation_routes_explicit_input_examples_section_with_client_phrase_without_touching_target_users"
+    if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/explicit-input-section-state" --output "$tmpdir/explicit-input-section-review-out.json" >/dev/null &&
+        jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-brief-review-005ea",
+          "request_id": "web-request-brief-review-005ea",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "request_brief_correction",
+          "user_text": "В разделе \"Входные данные и примеры\" укажи, что входом является CSV-файл с синтетическими данными клиента из приложенного файла; не добавляй фразу пользователя как цитату."
+        } | .uploaded_files = [
+          {
+            "upload_id": "upload-demo-client-data-explicit-input-section",
+            "name": "demo-client-data.csv",
+            "content_type": "text/csv",
+            "size_bytes": 11264,
+            "content_base64": "Y2xpZW50X2lkLG5hbWUsc2VnbWVudAoxLEFjbWUgQ28sQ29ycG9yYXRlCg=="
+          }
+        ] | del(.brief_section_updates) | del(.demo_access_grant)' "$tmpdir/explicit-input-section-review-out.json" >"$tmpdir/explicit-input-section-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/explicit-input-section-source.json" --state-root "$tmpdir/explicit-input-section-state" --output "$tmpdir/explicit-input-section-out.json" >/dev/null; then
+        assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.input_examples[0]' "$tmpdir/explicit-input-section-out.json")" "demo-client-data.csv" "Explicit section command must route to input_examples even when text contains client-related words"
+        assert_eq "Финансовый контролер" "$(jq -r '.discovery_runtime_state.requirement_brief.target_users[0]' "$tmpdir/explicit-input-section-out.json")" "Explicit input_examples correction should not mutate first target user"
+        assert_eq "Руководитель подразделения" "$(jq -r '.discovery_runtime_state.requirement_brief.target_users[1]' "$tmpdir/explicit-input-section-out.json")" "Explicit input_examples correction should not mutate second target user"
+        test_pass
+    else
+        test_fail "Explicit input_examples section correction with client phrase should not leak into target_users"
+    fi
+
     test_start "integration_local_agent_factory_web_confirmation_prefers_inferred_input_examples_over_conflicting_expected_outputs_target"
     if python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$BRIEF_FIXTURE" --state-root "$tmpdir/section-target-conflict-state" --output "$tmpdir/section-target-conflict-review-out.json" >/dev/null &&
         jq '.web_conversation_envelope = {

@@ -85,6 +85,13 @@ function hydrateSession(rawValue) {
   base.createdAt = normalizeText(value.createdAt, base.createdAt);
   base.updatedAt = normalizeText(value.updatedAt, base.updatedAt);
   base.lastAccessAt = normalizeText(value.lastAccessAt, nowIso());
+  base.handoffGenerationId = Number(value.handoffGenerationId || 0);
+  base.processedRequestIds = Array.isArray(value.processedRequestIds)
+    ? value.processedRequestIds
+      .map((item) => normalizeText(item))
+      .filter(Boolean)
+      .slice(-80)
+    : [];
   return base;
 }
 
@@ -157,6 +164,8 @@ export function createSession(sessionId, seed = {}) {
     artifacts: [],
     summaryPromise: null,
     summaryState: "idle",
+    handoffGenerationId: 0,
+    processedRequestIds: [],
     currentQuestion: "",
     currentTopic: "",
     whyAskingNow: "",

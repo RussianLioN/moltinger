@@ -624,6 +624,7 @@
       titleEdited: Boolean(project.titleEdited),
       sidePanelOpen: Boolean(project.sidePanelOpen),
       sidePanelFullscreen: Boolean(project.sidePanelFullscreen),
+      panelDismissedMode: normalizeText(project.panelDismissedMode),
       lastPanelMode: normalizeText(project.lastPanelMode),
       panelModeOverride: normalizeText(project.panelModeOverride),
       previewArtifactKind: normalizeText(project.previewArtifactKind),
@@ -663,6 +664,7 @@
       titleEdited: Boolean(record.titleEdited),
       sidePanelOpen: Boolean(record.sidePanelOpen),
       sidePanelFullscreen: Boolean(record.sidePanelFullscreen),
+      panelDismissedMode: normalizeText(record.panelDismissedMode),
       lastPanelMode: normalizeText(record.lastPanelMode),
       panelModeOverride: normalizeText(record.panelModeOverride),
       previewArtifactKind: normalizeText(record.previewArtifactKind),
@@ -698,6 +700,7 @@
       mockStage: "gate_pending",
       sidePanelOpen: false,
       sidePanelFullscreen: false,
+      panelDismissedMode: "",
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
@@ -976,58 +979,10 @@
     return markers.some((marker) => normalized.includes(marker));
   }
 
-  function isLikelyActionableBriefFeedbackText(text) {
-    const normalized = normalizeText(text).toLowerCase();
-    if (!normalized || normalized.length < 12) {
-      return false;
-    }
-    if (hasBriefConfirmationIntent(normalized)) {
-      return false;
-    }
-    if (isLikelyStatusRefreshText(normalized)) {
-      return false;
-    }
-    if (isLikelyProductionSimulationRequestText(normalized)) {
-      return false;
-    }
-    const markers = [
-      "на выходе",
-      "ожидаем",
-      "ожидаемый",
-      "pdf",
-      "one-page",
-      "onepage",
-      "summary",
-      "рекомендац",
-      "входн",
-      "пример",
-      "файл",
-      "csv",
-      "xlsx",
-      "json",
-      "пользовател",
-      "выгодоприобрет",
-      "процесс",
-      "workflow",
-      "огранич",
-      "запрет",
-      "исключ",
-      "правил",
-      "метрик",
-      "kpi",
-      "sla",
-      "риск",
-      "scope",
-      "границ",
-    ];
-    return markers.some((marker) => normalized.includes(marker));
-  }
-
   function resolveComposerAction(project, text) {
-    const requestedAction = normalizeText(project?.currentAction, "submit_turn");
     const normalizedText = normalizeText(text);
     if (!normalizedText) {
-      return requestedAction;
+      return normalizeText(project?.currentAction, "submit_turn");
     }
     const status = currentStatus(project);
     const response = currentResponse(project) || {};
@@ -1036,80 +991,31 @@
     const simulationRequest = isLikelyProductionSimulationRequestText(normalizedText);
     const confirmationRequest = hasBriefConfirmationIntent(normalizedText);
     const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
-    const explicitRefresh = isLikelyStatusRefreshText(normalizedText);
-    const actionableFeedback = isLikelyActionableBriefFeedbackText(normalizedText);
-    const freeformFeedback = actionableFeedback;
+    if (isLikelyStatusRefreshText(normalizedText)) {
+      return "request_status";
+    }
     const reviewStage =
       ["awaiting_confirmation", "reopened"].includes(status)
       || (
         normalizeText(response?.ui_projection?.side_panel_mode) === "brief_review"
         && !postBriefMode
       );
-    const knownComposerActions = new Set([
-      "submit_turn",
-      "request_status",
-      "request_brief_review",
-      "request_brief_correction",
-      "confirm_brief",
-      "reopen_brief",
-    ]);
     if (reviewStage) {
       if (confirmationRequest) {
         return "confirm_brief";
       }
-      if (explicitRefresh) {
-        return "request_status";
-      }
-      if (correctionRequest || freeformFeedback) {
+      if (correctionRequest) {
         return "request_brief_correction";
       }
+      return "submit_turn";
     }
-
-    if (
-      confirmationRequest
-      && ["confirm_brief", "request_brief_correction", "request_brief_review"].includes(requestedAction)
-      && !postBriefMode
-    ) {
-      return "confirm_brief";
-    }
-
     if (simulationRequest && postBriefMode) {
       return "request_status";
     }
-    if (postBriefMode && !knownComposerActions.has(requestedAction)) {
-      return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
+    if (postBriefMode && correctionRequest) {
+      return "reopen_brief";
     }
-    if (requestedAction === "confirm_brief") {
-      if (confirmationRequest) {
-        return "confirm_brief";
-      }
-      return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
-    }
-    if (requestedAction === "request_status") {
-      if (["awaiting_confirmation", "reopened"].includes(status)) {
-        if (confirmationRequest) {
-          return "confirm_brief";
-        }
-        return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
-      }
-      if (isPostBriefStatus(status)) {
-        return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
-      }
-      return "submit_turn";
-    }
-    if (requestedAction === "request_brief_review") {
-      if (["awaiting_confirmation", "reopened"].includes(status)) {
-        return correctionRequest || freeformFeedback ? "request_brief_correction" : "request_status";
-      }
-      if (isPostBriefStatus(status)) {
-        return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
-      }
-      return "submit_turn";
-    }
-    if (requestedAction === "submit_turn" && isPostBriefStatus(status)) {
-      return correctionRequest || freeformFeedback ? "reopen_brief" : "request_status";
-    }
-    return requestedAction;
+    return "submit_turn";
   }
 
   function statusLabel(project) {
@@ -1404,6 +1310,9 @@
     }
     dom.agentStatus.hidden = !state.awaitingResponse;
     dom.agentStatus.dataset.state = state.awaitingResponse ? "thinking" : "idle";
+    if (dom.composerThinking) {
+      dom.composerThinking.hidden = !state.awaitingResponse;
+    }
   }
 
   function isPanelOnlyAction(action) {
@@ -1949,7 +1858,7 @@
       dom.chatLog.appendChild(createMessageNode(message));
     });
     if (keepBottom) {
-      scheduleScrollChatToBottom({ strictBottom: forceBottom || state.forceScrollToBottom });
+      scheduleScrollChatToBottom({ strictBottom: forceBottom });
     }
   }
 
@@ -2004,15 +1913,16 @@
   }
 
   function renderHome(project) {
-    dom.homePanel.hidden = !state.accessToken || hasConversationActivity(project);
-    dom.threadPanel.hidden = !state.accessToken || !hasConversationActivity(project);
+    const hasAccess = Boolean(state.accessToken);
+    dom.homePanel.hidden = true;
+    dom.threadPanel.hidden = !hasAccess;
   }
 
   function renderSidePanelToggle(project) {
     const mode = sidePanelMode(project);
     const canOpenPanel = mode !== "hidden";
     const isOpen = canOpenPanel && Boolean(project?.sidePanelOpen);
-    dom.sidePanelToggle.hidden = false;
+    dom.sidePanelToggle.hidden = !canOpenPanel;
     dom.sidePanelToggle.disabled = !canOpenPanel;
     dom.sidePanelToggle.dataset.state = isOpen ? "active" : "inactive";
     dom.sidePanelToggle.setAttribute("aria-pressed", isOpen ? "true" : "false");
@@ -2539,9 +2449,7 @@
     if (dom.composerLead) {
       dom.composerLead.hidden = !state.accessToken;
     }
-    if (dom.composerThinking) {
-      dom.composerThinking.hidden = !state.awaitingResponse;
-    }
+    dom.composerMode.textContent = state.awaitingResponse ? "Архитектор формирует ответ…" : modeTextFor(project);
     dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
       dom.composerHelperExample.textContent = "";
@@ -3688,13 +3596,22 @@
     ].find((action) => isComposerAction(action));
     project.currentAction = suggestedComposerAction || "submit_turn";
     const panelMode = sidePanelMode(project);
+    const previousPanelMode = normalizeText(project.lastPanelMode);
+    const dismissedMode = normalizeText(project.panelDismissedMode);
     if (panelMode === "hidden") {
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
-    } else if (panelMode !== normalizeText(project.lastPanelMode)) {
-      project.sidePanelOpen = true;
+      project.panelDismissedMode = "";
+    } else {
+      if (dismissedMode && panelMode !== dismissedMode) {
+        project.panelDismissedMode = "";
+      }
+      const effectiveDismissedMode = normalizeText(project.panelDismissedMode);
+      if (panelMode !== previousPanelMode && effectiveDismissedMode !== panelMode) {
+        project.sidePanelOpen = true;
+      }
     }
     if (!["downloads", "preview"].includes(panelMode)) {
       project.panelModeOverride = "";
@@ -3720,7 +3637,8 @@
     const isPostConfirmState = responseStatus === "confirmed" || briefRuntimeStatus === "confirmed";
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
-    if (sourceAction === "confirm_brief" || submitTurnConfirmation || isPostConfirmState) {
+    const canAutoOpenPanel = normalizeText(project.panelDismissedMode) !== panelMode;
+    if ((sourceAction === "confirm_brief" || submitTurnConfirmation || isPostConfirmState) && canAutoOpenPanel) {
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
       if (downloadsReady) {
@@ -3731,12 +3649,14 @@
         project.panelModeOverride = "downloads";
         project.previewArtifactKind = "";
       }
-    } else if (downloadsReady && syncReason === "handoff_poll") {
+      project.panelDismissedMode = "";
+    } else if (downloadsReady && syncReason === "handoff_poll" && canAutoOpenPanel) {
       const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
       project.panelModeOverride = "preview";
       project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
+      project.panelDismissedMode = "";
     }
 
     persist();
@@ -3875,7 +3795,7 @@
       state.activeRequest = null;
       renderAll();
       if (state.forceScrollToBottom) {
-        scheduleScrollChatToBottom({ strictBottom: true });
+        scheduleScrollChatToBottom();
       }
       state.forceScrollToBottom = false;
       setBusy(false);
@@ -4204,6 +4124,9 @@
       project.sidePanelOpen = !project.sidePanelOpen;
       if (!project.sidePanelOpen) {
         project.sidePanelFullscreen = false;
+        project.panelDismissedMode = sidePanelMode(project);
+      } else {
+        project.panelDismissedMode = "";
       }
       persist();
       renderAll();
@@ -4228,6 +4151,7 @@
       }
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
+      project.panelDismissedMode = sidePanelMode(project);
       persist();
       renderAll();
     });

@@ -73,6 +73,37 @@ run_component_agent_factory_web_brief_tests() {
     assert_contains "$(jq -r '[.reply_cards[] | select(.card_kind == "brief_summary_section") | .body_text] | join("\n")' "$tmpdir/brief-correction-out.json")" "BPMN-схему" "Correction text should be reflected in rendered brief sections"
     test_pass
 
+    local input_examples_route_payload
+    input_examples_route_payload="$tmpdir/brief-correction-input-examples-route.json"
+    jq '
+      .web_conversation_envelope.ui_action = "request_brief_correction"
+      | .web_conversation_envelope.user_text = "Входные данные не фраза, а прикрепленный ранее файл с примерами выходных данных."
+      | .uploaded_files = [
+          {
+            "upload_id": "upload-route-001",
+            "name": "demo-client-data.csv",
+            "content_type": "text/csv",
+            "size_bytes": 11234,
+            "excerpt": "synthetic rows"
+          }
+        ]
+    ' "$BRIEF_FIXTURE" > "$input_examples_route_payload"
+
+    if ! python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$input_examples_route_payload" --state-root "$tmpdir/state-input-examples-route" --output "$tmpdir/brief-correction-input-examples-route-out.json" >/dev/null; then
+        test_start "component_agent_factory_web_brief_input_examples_correction_route_executes"
+        test_fail "Input-examples correction request should execute safely"
+        generate_report
+        return
+    fi
+
+    test_start "component_agent_factory_web_brief_routes_input_examples_correction_without_expected_outputs_pollution"
+    assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/brief-correction-input-examples-route-out.json")" "Input-examples correction should keep the brief in confirmation stage"
+    assert_eq "1.1" "$(jq -r '.status_snapshot.brief_version' "$tmpdir/brief-correction-input-examples-route-out.json")" "Input-examples correction should bump brief version"
+    assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.input_examples | join("\n")' "$tmpdir/brief-correction-input-examples-route-out.json")" "demo-client-data.csv" "Input-examples section should reference uploaded file evidence"
+    assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.input_examples | join("\n")' "$tmpdir/brief-correction-input-examples-route-out.json")" "синтетически" "Input-examples section should keep synthetic-data disclaimer"
+    assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.expected_outputs[] | contains("прикрепленный ранее файл")] | any' "$tmpdir/brief-correction-input-examples-route-out.json")" "Expected outputs section must not be polluted by input-examples correction text"
+    test_pass
+
     generate_report
 }
 

@@ -34,14 +34,14 @@ export const DISCOVERY_TOPICS = [
   },
   {
     id: "expected_outputs",
-    question: "Какой результат должен быть на выходе и в каком формате?",
-    why: "Нужно зафиксировать ожидаемый output будущего агента.",
+    question: "Какой результат должен быть на выходе, в каком формате и с какими обязательными блоками?",
+    why: "Нужно зафиксировать формат и структуру ожидаемого output будущего агента.",
     signals: ["выход", "результ", "отчет", "карточк", "summary", "рекомендац", "pdf", "презентац", "материал"],
   },
   {
     id: "branching_rules",
-    question: "Какие ветвления, исключения и бизнес-правила нужно учесть?",
-    why: "Нужно собрать edge-cases и правила принятия решения.",
+    question: "Какие ветвления, исключения, бизнес-правила и алгоритм обработки нужно учесть?",
+    why: "Нужно собрать edge-cases и правила принятия решения/обработки данных.",
     signals: ["если", "иначе", "исключ", "ветвл", "правил", "эскалац"],
   },
   {
@@ -106,6 +106,88 @@ const TOPIC_ACKS = {
   expected_outputs: "Ожидаемый результат зафиксировал.",
   branching_rules: "Правила и исключения зафиксировал.",
   success_metrics: "Метрики успеха зафиксировал.",
+};
+
+const RESULT_FORMAT_MARKERS = [
+  "pdf",
+  "docx",
+  "ppt",
+  "pptx",
+  "xlsx",
+  "csv",
+  "json",
+  "xml",
+  "markdown",
+  "md",
+  "one-page",
+  "onepage",
+  "презентац",
+  "таблиц",
+  "карточ",
+  "документ",
+  "отчёт",
+  "отчет",
+];
+
+const OUTPUT_STRUCTURE_MARKERS = [
+  "структур",
+  "раздел",
+  "блок",
+  "порядок",
+  "обязательн",
+  "включать",
+  "содержать",
+  "шаблон",
+];
+
+const PROCESSING_RULE_MARKERS = [
+  "правил",
+  "алгорит",
+  "ветвл",
+  "если",
+  "иначе",
+  "огранич",
+  "запрет",
+  "исключ",
+  "эскалац",
+  "провер",
+  "валидац",
+];
+
+const QUALITY_METRIC_MARKERS = [
+  "метрик",
+  "kpi",
+  "sla",
+  "время",
+  "точност",
+  "ошиб",
+  "качеств",
+  "%",
+  "доля",
+  "сократ",
+];
+
+const CONTRACT_FOLLOWUP_BY_GAP = {
+  result_format: {
+    topicId: "expected_outputs",
+    question: "Уточни формат итогового результата: PDF, DOCX, Markdown, презентация или другой конкретный формат?",
+    why: "Без чёткого формата невозможно корректно зафиксировать контракт результата.",
+  },
+  output_structure: {
+    topicId: "expected_outputs",
+    question: "Какие обязательные блоки должен содержать итоговый материал на выходе?",
+    why: "Нужно зафиксировать структуру результата, чтобы генерация была предсказуемой.",
+  },
+  processing_rules: {
+    topicId: "branching_rules",
+    question: "По каким правилам или алгоритму агент обрабатывает входные данные и принимает решения?",
+    why: "Нужно зафиксировать правила обработки до перехода к подтверждению brief.",
+  },
+  quality_criteria: {
+    topicId: "success_metrics",
+    question: "Какие измеримые критерии качества результата фиксируем для запуска?",
+    why: "Подтверждение brief требует явных критериев качества и измеримости.",
+  },
 };
 
 let cachedSystemPrompt = null;
@@ -201,6 +283,39 @@ function buildUploadedFilesAnswer(uploadedFiles = []) {
   return `Приложены файлы: ${files.join(", ")}. ${SYNTHETIC_DATA_NOTE}`;
 }
 
+function isNoisyInputExamplesAnswer(value) {
+  const normalized = normalizeText(value).toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (normalized.length < 28) {
+    return true;
+  }
+  if (hasFileAcknowledgement(normalized) || hasSyntheticAffirmation(normalized) || hasAlreadyAnsweredMarker(normalized)) {
+    return true;
+  }
+  return /^(да|нет|ок|okay|понял|поняла|продолжим|давай продолжим)\b/.test(normalized);
+}
+
+function canonicalInputExamplesAnswer(session, userText, uploadedFiles = []) {
+  const fromCurrentUploads = buildUploadedFilesAnswer(uploadedFiles);
+  if (fromCurrentUploads) {
+    return fromCurrentUploads;
+  }
+
+  const fromSessionUploads = buildUploadedFilesAnswer(session.uploadedFiles || []);
+  if (fromSessionUploads) {
+    return fromSessionUploads;
+  }
+
+  const normalizedText = normalizeText(userText);
+  const lowerText = normalizedText.toLowerCase();
+  if (!normalizedText || hasFileAcknowledgement(lowerText) || hasSyntheticAffirmation(lowerText)) {
+    return `Входные данные подтверждены пользователем как обезличенные. ${SYNTHETIC_DATA_NOTE}`;
+  }
+  return normalizedText;
+}
+
 function syncTopicAnswers(session, userText, newCoverage, uploadedFiles = []) {
   const text = normalizeText(userText);
   const effectiveText = text || buildUploadedFilesAnswer(uploadedFiles);
@@ -208,6 +323,16 @@ function syncTopicAnswers(session, userText, newCoverage, uploadedFiles = []) {
     return;
   }
   newCoverage.forEach((topicId) => {
+    if (topicId === "input_examples") {
+      const existing = normalizeText(session.topicAnswers?.input_examples);
+      const shouldReplaceExisting = !existing
+        || isNoisyInputExamplesAnswer(existing)
+        || (Array.isArray(uploadedFiles) && uploadedFiles.length > 0 && !/приложены файлы/i.test(existing));
+      if (shouldReplaceExisting) {
+        session.topicAnswers.input_examples = canonicalInputExamplesAnswer(session, userText, uploadedFiles);
+      }
+      return;
+    }
     if (!session.topicAnswers[topicId]) {
       session.topicAnswers[topicId] = effectiveText;
     }
@@ -262,6 +387,98 @@ function sanitizeNextQuestion(rawQuestion, fallbackQuestion) {
   }
 
   return candidate.includes("?") ? candidate : fallback;
+}
+
+function hasAnyMarker(text, markers = []) {
+  const lower = normalizeText(text).toLowerCase();
+  if (!lower) {
+    return false;
+  }
+  return markers.some((marker) => lower.includes(marker));
+}
+
+function compactSummary(text, fallback = "не указан") {
+  const normalized = normalizeText(text, fallback);
+  if (normalized.length <= 140) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 137)}...`;
+}
+
+function detectResultFormat(answer) {
+  const lower = normalizeText(answer).toLowerCase();
+  if (!lower) {
+    return "";
+  }
+  if (lower.includes("pdf")) {
+    return "PDF";
+  }
+  if (lower.includes("docx") || lower.includes("word")) {
+    return "DOCX/Word";
+  }
+  if (lower.includes("ppt") || lower.includes("презентац")) {
+    return "PPT/Presentation";
+  }
+  if (lower.includes("markdown") || /\bmd\b/.test(lower)) {
+    return "Markdown";
+  }
+  if (lower.includes("json")) {
+    return "JSON";
+  }
+  if (lower.includes("csv")) {
+    return "CSV";
+  }
+  if (lower.includes("таблиц") || lower.includes("xlsx")) {
+    return "Table/XLSX";
+  }
+  if (lower.includes("one-page") || lower.includes("onepage")) {
+    return "One-page document";
+  }
+  if (lower.includes("документ")) {
+    return "Document";
+  }
+  return "";
+}
+
+export function evaluateDiscoveryContract(session) {
+  const expectedOutputs = normalizeText(session?.topicAnswers?.expected_outputs);
+  const branchingRules = normalizeText(session?.topicAnswers?.branching_rules);
+  const successMetrics = normalizeText(session?.topicAnswers?.success_metrics);
+  const resultFormat = detectResultFormat(expectedOutputs);
+  const outputStructureReady = expectedOutputs.length >= 48 || hasAnyMarker(expectedOutputs, OUTPUT_STRUCTURE_MARKERS);
+  const processingRulesReady = branchingRules.length >= 24 || hasAnyMarker(branchingRules, PROCESSING_RULE_MARKERS);
+  const qualityCriteriaReady = successMetrics.length >= 18 || hasAnyMarker(successMetrics, QUALITY_METRIC_MARKERS);
+  const resultFormatReady = Boolean(resultFormat) || hasAnyMarker(expectedOutputs, RESULT_FORMAT_MARKERS);
+
+  const missing = [];
+  if (!resultFormatReady) {
+    missing.push("result_format");
+  }
+  if (!outputStructureReady) {
+    missing.push("output_structure");
+  }
+  if (!processingRulesReady) {
+    missing.push("processing_rules");
+  }
+  if (!qualityCriteriaReady) {
+    missing.push("quality_criteria");
+  }
+
+  const followups = missing
+    .map((gapId) => ({ gapId, ...(CONTRACT_FOLLOWUP_BY_GAP[gapId] || {}) }))
+    .filter((item) => item.topicId && item.question);
+
+  return {
+    ready: followups.length === 0,
+    missing,
+    followups,
+    summary: {
+      result_format: resultFormat || compactSummary(expectedOutputs),
+      output_structure: compactSummary(expectedOutputs),
+      processing_rules: compactSummary(branchingRules),
+      quality_criteria: compactSummary(successMetrics),
+    },
+  };
 }
 
 function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
