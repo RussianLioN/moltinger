@@ -10,6 +10,7 @@ Usage:
     --ssh-user <user> \
     --ssh-host <host> \
     --deploy-path <path> \
+    [--active-path <path>] \
     --git-sha <sha> \
     --git-ref <ref> \
     --workflow-run <run-id> \
@@ -32,6 +33,7 @@ require_argument() {
 SSH_USER=""
 SSH_HOST=""
 DEPLOY_PATH=""
+ACTIVE_PATH="/opt/moltinger-active"
 GIT_SHA=""
 GIT_REF=""
 WORKFLOW_RUN=""
@@ -50,6 +52,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --deploy-path)
             DEPLOY_PATH="${2:-}"
+            shift 2
+            ;;
+        --active-path)
+            ACTIVE_PATH="${2:-}"
             shift 2
             ;;
         --git-sha)
@@ -100,6 +106,7 @@ shell_quote() {
 emit_remote_script() {
     printf 'set -euo pipefail\n'
     printf 'DEPLOY_PATH=%s\n' "$(shell_quote "$DEPLOY_PATH")"
+    printf 'ACTIVE_DEPLOY_PATH=%s\n' "$(shell_quote "$ACTIVE_PATH")"
     printf 'GIT_SHA=%s\n' "$(shell_quote "$GIT_SHA")"
     printf 'GIT_REF=%s\n' "$(shell_quote "$GIT_REF")"
     printf 'WORKFLOW_RUN=%s\n' "$(shell_quote "$WORKFLOW_RUN")"

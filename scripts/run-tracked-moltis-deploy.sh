@@ -13,6 +13,7 @@ EXPECTED_VERSION=""
 TRACKED_VERSION=""
 RUNTIME_CONFIG_DIR=""
 MOLTIS_DOMAIN_VALUE="moltis.ainetic.tech"
+ACTIVE_DEPLOY_PATH="${ACTIVE_DEPLOY_PATH:-/opt/moltinger-active}"
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
 
@@ -31,7 +32,7 @@ log_info() {
 usage() {
     cat <<'EOF'
 Usage: run-tracked-moltis-deploy.sh [--json] [--dry-run] [--deploy-path <path>] \
-  --git-sha <sha> --git-ref <ref> --workflow-run <run-id> [--version <version>]
+  [--active-path <path>] --git-sha <sha> --git-ref <ref> --workflow-run <run-id> [--version <version>]
 
 Runs the tracked Moltis deploy control plane on the remote host:
   1. prepare writable runtime config
@@ -39,6 +40,7 @@ Runs the tracked Moltis deploy control plane on the remote host:
   3. call scripts/deploy.sh --json moltis deploy
   4. record deployed git SHA + deployment metadata
   5. align the server checkout to the deployed commit
+  6. attest the live runtime provenance against the tracked intent
 EOF
 }
 
@@ -271,15 +273,42 @@ validate_tracked_contract() {
 }
 
 record_deployment_state() {
-    mkdir -p "$DEPLOY_PATH/data"
-    printf '%s\n' "$GIT_SHA" > "$DEPLOY_PATH/data/.deployed-sha"
+    local target_root="$1"
 
-    cat > "$DEPLOY_PATH/data/.deployment-info" <<EOF
+    mkdir -p "$target_root/data"
+    printf '%s\n' "$GIT_SHA" > "$target_root/data/.deployed-sha"
+
+    cat > "$target_root/data/.deployment-info" <<EOF
 deployed_at=$(timestamp)
 git_sha=$GIT_SHA
+git_ref=$GIT_REF
 workflow_run=$WORKFLOW_RUN
 version=${TRACKED_VERSION:-$EXPECTED_VERSION}
+deploy_path=$DEPLOY_PATH
+active_path=$ACTIVE_DEPLOY_PATH
+runtime_config_dir=$RUNTIME_CONFIG_DIR
+audit_root=$target_root
 EOF
+}
+
+resolve_active_target() {
+    if [[ -d "$ACTIVE_DEPLOY_PATH" ]]; then
+        (
+            cd "$ACTIVE_DEPLOY_PATH"
+            pwd -P
+        )
+    fi
+}
+
+record_deployment_markers() {
+    local active_target=""
+
+    record_deployment_state "$DEPLOY_PATH"
+
+    active_target="$(resolve_active_target || true)"
+    if [[ -n "$active_target" && "$active_target" != "$DEPLOY_PATH" ]]; then
+        record_deployment_state "$active_target"
+    fi
 }
 
 align_checkout() {
@@ -334,6 +363,10 @@ while [[ $# -gt 0 ]]; do
             DEPLOY_PATH="${2:-}"
             shift 2
             ;;
+        --active-path)
+            ACTIVE_DEPLOY_PATH="${2:-}"
+            shift 2
+            ;;
         --git-sha)
             GIT_SHA="${2:-}"
             shift 2
@@ -371,6 +404,7 @@ DEPLOY_PATH="$(cd "$DEPLOY_PATH" && pwd)"
 require_file "$DEPLOY_PATH/scripts/prepare-moltis-runtime-config.sh"
 require_file "$DEPLOY_PATH/scripts/moltis-version.sh"
 require_file "$DEPLOY_PATH/scripts/deploy.sh"
+require_file "$DEPLOY_PATH/scripts/moltis-runtime-attestation.sh"
 require_file "$DEPLOY_PATH/docker-compose.prod.yml"
 require_file "$DEPLOY_PATH/config/moltis.toml"
 
@@ -406,7 +440,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
               "validate-tracked-contract",
               "deploy-via-deploy-sh",
               "record-deployed-state",
-              "align-server-checkout"
+              "align-server-checkout",
+              "attest-live-runtime"
             ]
           },
           errors: []
@@ -451,7 +486,7 @@ ROLLBACK_VERIFIED=false
 
 if [[ "$DEPLOY_EXIT" -eq 0 && "$DEPLOY_STATUS" == "success" ]]; then
     log_info "Recording deployed git SHA and deployment metadata"
-    if ! record_deployment_state; then
+    if ! record_deployment_markers; then
         emit_failure_json "Deploy succeeded but recording deployment metadata failed" "healthy"
         exit 1
     fi
@@ -462,7 +497,58 @@ if [[ "$DEPLOY_EXIT" -eq 0 && "$DEPLOY_STATUS" == "success" ]]; then
         exit 1
     fi
 
-    append_result_context "$DEPLOY_OUTPUT" "success" "$ROLLBACK_VERIFIED"
+    log_info "Attesting live Moltis runtime provenance"
+    set +e
+    ATTESTATION_OUTPUT="$(
+        "$DEPLOY_PATH/scripts/moltis-runtime-attestation.sh" \
+            --json \
+            --deploy-path "$DEPLOY_PATH" \
+            --active-path "$ACTIVE_DEPLOY_PATH" \
+            --container "moltis" \
+            --base-url "http://localhost:13131" \
+            --expected-git-sha "$GIT_SHA" \
+            --expected-git-ref "$GIT_REF" \
+            --expected-version "${TRACKED_VERSION:-$EXPECTED_VERSION}" \
+            --expected-runtime-config-dir "$RUNTIME_CONFIG_DIR" \
+            --expected-auth-provider "openai-codex"
+    )"
+    ATTESTATION_EXIT=$?
+    set -e
+
+    if ! jq empty >/dev/null 2>&1 <<<"$ATTESTATION_OUTPUT"; then
+        emit_failure_json "Deploy succeeded but runtime attestation returned non-JSON output" "healthy"
+        exit 1
+    fi
+
+    if [[ "$ATTESTATION_EXIT" -ne 0 || "$(jq -r '.status // empty' <<<"$ATTESTATION_OUTPUT")" != "success" ]]; then
+        ATTESTATION_MESSAGE="$(jq -r '.errors[0].message // empty' <<<"$ATTESTATION_OUTPUT" 2>/dev/null || true)"
+        ATTESTATION_MESSAGE="${ATTESTATION_MESSAGE:-Deploy succeeded but live runtime attestation failed}"
+        RESULT_JSON="$(append_result_context "$DEPLOY_OUTPUT" "failure" "$ROLLBACK_VERIFIED" "$ATTESTATION_MESSAGE")"
+        RESULT_JSON="$(jq \
+            --argjson attestation "$ATTESTATION_OUTPUT" \
+            '.details = ((.details // {}) + {
+                runtime_attestation: {
+                    status: ($attestation.status // null),
+                    details: ($attestation.details // {}),
+                    errors: ($attestation.errors // [])
+                }
+            })' <<<"$RESULT_JSON")"
+        printf '%s\n' "$RESULT_JSON"
+        exit 1
+    fi
+
+    RESULT_JSON="$(append_result_context "$DEPLOY_OUTPUT" "success" "$ROLLBACK_VERIFIED")"
+    RESULT_JSON="$(jq \
+        --argjson attestation "$ATTESTATION_OUTPUT" \
+        '.details = ((.details // {}) + {
+            runtime_attestation: {
+                status: ($attestation.status // null),
+                details: ($attestation.details // {}),
+                errors: ($attestation.errors // [])
+            }
+        })' <<<"$RESULT_JSON")"
+
+    printf '%s\n' "$RESULT_JSON"
     exit 0
 fi
 

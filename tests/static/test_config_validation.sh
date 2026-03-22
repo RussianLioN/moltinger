@@ -14,6 +14,7 @@ DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
+DRIFT_WORKFLOW="$PROJECT_ROOT/.github/workflows/gitops-drift-detection.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 TEST_WORKFLOW="$PROJECT_ROOT/.github/workflows/test.yml"
 TEST_RUNNER_DOCKERFILE="$PROJECT_ROOT/tests/Dockerfile.runner"
@@ -31,6 +32,8 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
+SSH_RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-moltis-runtime-attestation.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 SELF_LEARNING_DOC="$PROJECT_ROOT/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md"
@@ -339,6 +342,27 @@ PY
         test_fail "UAT gate must exercise browser, search, and repo-context surfaces through the shared Moltis surface matrix script"
     fi
 
+    test_start "static_runtime_attestation_is_shared_versioned_contract"
+    if [[ -x "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       [[ -x "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq '"$DEPLOY_PATH/scripts/moltis-runtime-attestation.sh"' "$SSH_RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'ssh-run-moltis-runtime-attestation.sh' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq '{{.Config.WorkingDir}}' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq 'docker inspect --format' "$DRIFT_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Runtime provenance attestation must live in shared scripts and drift detection must call the shared SSH wrapper instead of inlining docker inspect logic"
+    fi
+
+    test_start "static_tracked_deploy_attests_live_runtime_before_success"
+    if rg -Fq 'moltis-runtime-attestation.sh' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'Attesting live Moltis runtime provenance' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq '"attest-live-runtime"' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy must include the shared live runtime attestation step before reporting success"
+    fi
+
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
     if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
        rg -q 'data/\.deployed-sha' "$TRACKED_DEPLOY_SCRIPT" && \
@@ -405,6 +429,9 @@ PY
        rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
        [[ -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]] && \
        rg -q 'run-tracked-moltis-deploy\.sh' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'ACTIVE_DEPLOY_PATH=' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq -- '--active-path "${{ env.DEPLOY_ACTIVE_PATH }}"' "$DEPLOY_WORKFLOW" && \
+       rg -Fq -- '--active-path "${{ env.DEPLOY_ACTIVE_PATH }}"' "$UAT_GATE_WORKFLOW" && \
        ! rg -q 'Prepare writable Moltis runtime config' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Deploy tracked version' "$UAT_GATE_WORKFLOW" && \
        [[ -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
@@ -463,6 +490,36 @@ PY
         test_pass
     else
         test_fail "Tracked deploy script must fail with an explicit error when deploy.sh exits before returning JSON"
+    fi
+
+    test_start "static_tracked_deploy_attests_live_runtime_provenance"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'moltis-runtime-attestation.sh' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq '"attest-live-runtime"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'runtime_attestation' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy control-plane must attest live runtime provenance through the shared runtime attestation script"
+    fi
+
+    test_start "static_gitops_drift_detection_uses_shared_runtime_attestation_wrapper"
+    if [[ -f "$DRIFT_WORKFLOW" ]] && \
+       [[ -f "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'ssh-run-moltis-runtime-attestation.sh' "$DRIFT_WORKFLOW" && \
+       rg -Fq 'moltis-runtime-attestation.sh' "$SSH_RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq -- '--expected-runtime-config-dir /opt/moltinger-state/config-runtime' "$DRIFT_WORKFLOW" && \
+       rg -Fq 'check_drift "docker-compose.yml" "${{ env.DEPLOY_ACTIVE_PATH }}/docker-compose.yml"' "$DRIFT_WORKFLOW" && \
+       rg -Fq 'check_drift "config/moltis.toml" "${{ env.DEPLOY_ACTIVE_PATH }}/config/moltis.toml"' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq 'docker inspect --format' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq '{{.Config.WorkingDir}}' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq -- '--expected-git-sha "${{ github.sha }}"' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq -- '--expected-git-ref "${{ github.ref_name }}"' "$DRIFT_WORKFLOW" && \
+       ! rg -Fq -- '--expected-version "$EXPECTED_VERSION"' "$DRIFT_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Drift detection must use the shared SSH/runtime-attestation entrypoints and stay marker-driven instead of comparing production to repo HEAD"
     fi
 
     test_start "static_deploy_script_cleans_legacy_container_name_conflicts_before_rollout"

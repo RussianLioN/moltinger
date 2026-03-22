@@ -352,6 +352,7 @@ jobs:
             --ssh-user "${{ env.SSH_USER }}" \
             --ssh-host "${{ env.SSH_HOST }}" \
             --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --active-path "${{ env.DEPLOY_ACTIVE_PATH }}" \
             --git-sha "${{ github.sha }}" \
             --git-ref "${{ github.ref_name }}" \
             --workflow-run "${{ github.run_id }}" \

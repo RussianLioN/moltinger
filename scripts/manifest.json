@@ -608,6 +608,28 @@
       ],
       "ci": true
     },
+    "moltis-runtime-attestation.sh": {
+      "version": "1.0.0",
+      "description": "Attest live Moltis runtime provenance against the active deploy root, recorded deploy metadata, and container mount contract",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "git",
+        "jq"
+      ],
+      "provides": [
+        "moltis-runtime-attestation"
+      ],
+      "env_vars": [
+        "ACTIVE_DEPLOY_PATH",
+        "CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR",
+        "MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "moltis-session-reconcile.sh": {
       "version": "1.0.0",
       "description": "Resolve, patch, and reset Moltis UI or Telegram-bound sessions onto the canonical model contract",
@@ -820,9 +842,23 @@
       "gitops": true,
       "ci": true
     },
+    "ssh-run-moltis-runtime-attestation.sh": {
+      "version": "1.0.0",
+      "description": "Safely invoke the shared Moltis runtime attestation contract over SSH without inline remote shell composition",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "ssh"
+      ],
+      "provides": [
+        "ssh-run-moltis-runtime-attestation"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "run-tracked-moltis-deploy.sh": {
       "version": "1.0.0",
-      "description": "Run the tracked Moltis deploy control plane: runtime prep, validation, deploy, audit markers, and checkout alignment",
+      "description": "Run the tracked Moltis deploy control plane: runtime prep, validation, deploy, audit markers, checkout alignment, and live runtime attestation",
       "entrypoint": true,
       "requires": [
         "bash",

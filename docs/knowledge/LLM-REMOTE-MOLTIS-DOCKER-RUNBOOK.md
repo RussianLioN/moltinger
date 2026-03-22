@@ -226,6 +226,40 @@ The strongest user-facing proof is:
 - prompt returns successfully
 - logs confirm the same model
 
+## Runtime Attestation
+
+Before calling a deploy, repair, or drift investigation "done", prove that the live container
+still runs from the intended deploy root rather than only looking at `/health`.
+
+Canonical command:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-runtime-attestation.sh \
+  --json \
+  --deploy-path /opt/moltinger \
+  --active-path /opt/moltinger-active \
+  --container moltis \
+  --base-url http://localhost:13131 \
+  --expected-runtime-config-dir /opt/moltinger-state/config-runtime | jq .
+```
+
+What this attests:
+
+- `/opt/moltinger-active` is still the authoritative live-root symlink
+- container `working_dir` is still `/server`
+- live `/server` mount source matches the resolved active root target
+- live runtime config mount source still matches `MOLTIS_RUNTIME_CONFIG_DIR` and remains writable
+- durable `~/.moltis` mount still exists
+- `data/.deployed-sha` and `data/.deployment-info` still match live git SHA/ref and runtime version
+
+For periodic drift detection, do not override expected SHA/ref/version from repo HEAD. Let the attestation
+read deployed markers from the active root so scheduled checks validate the live runtime against what is
+actually deployed, not against a newer commit that may not be on the server yet.
+
+If this check fails, treat it as runtime provenance drift first. Do not jump straight to
+fresh OAuth or provider reconfiguration.
+
 ## Search And Memory Triage
 
 Before changing providers or re-authing anything for search/memory symptoms, take a read-only snapshot first.

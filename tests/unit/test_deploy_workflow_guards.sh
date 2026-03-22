@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 UAT_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
+DRIFT_WORKFLOW="$PROJECT_ROOT/.github/workflows/gitops-drift-detection.yml"
 ACTIVE_ROOT_SCRIPT="$PROJECT_ROOT/scripts/update-active-deploy-root.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
@@ -17,6 +18,8 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
+SSH_RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-moltis-runtime-attestation.sh"
 CANONICAL_SMOKE_SCRIPT="$PROJECT_ROOT/scripts/moltis-canonical-smoke.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
 EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
@@ -26,6 +29,8 @@ EXPECTED_HOST_AUTOMATION_SCRIPT="scripts/apply-moltis-host-automation.sh"
 EXPECTED_ENV_RENDER_SCRIPT="scripts/render-moltis-env.sh"
 EXPECTED_TRACKED_DEPLOY_SCRIPT="scripts/run-tracked-moltis-deploy.sh"
 EXPECTED_SSH_TRACKED_DEPLOY_SCRIPT="scripts/ssh-run-tracked-moltis-deploy.sh"
+EXPECTED_RUNTIME_ATTESTATION_SCRIPT="scripts/moltis-runtime-attestation.sh"
+EXPECTED_SSH_RUNTIME_ATTESTATION_SCRIPT="scripts/ssh-run-moltis-runtime-attestation.sh"
 EXPECTED_CANONICAL_SMOKE_SCRIPT="scripts/moltis-canonical-smoke.sh"
 
 test_deploy_workflow_uses_shared_production_lock() {
@@ -229,6 +234,43 @@ test_tracked_deploy_workflows_use_shared_script_entrypoint() {
        grep -Fq "Verify deployment" "$UAT_WORKFLOW" || \
        grep -Fq "Record deployed git SHA (GitOps audit)" "$UAT_WORKFLOW"; then
         test_fail "uat-gate.yml should not inline tracked Moltis deploy orchestration"
+        return
+    fi
+
+    test_pass
+}
+
+test_drift_detection_uses_shared_runtime_attestation_entrypoint() {
+    test_start "Drift detection should use one shared runtime attestation entrypoint"
+
+    if [[ ! -f "$DRIFT_WORKFLOW" || ! -f "$RUNTIME_ATTESTATION_SCRIPT" || ! -f "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]]; then
+        test_skip "Workflow/script files missing for runtime attestation entrypoint check"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_SSH_RUNTIME_ATTESTATION_SCRIPT" "$DRIFT_WORKFLOW"; then
+        test_fail "gitops-drift-detection.yml must call $EXPECTED_SSH_RUNTIME_ATTESTATION_SCRIPT"
+        return
+    fi
+
+    if ! grep -Fq "$EXPECTED_RUNTIME_ATTESTATION_SCRIPT" "$SSH_RUNTIME_ATTESTATION_SCRIPT"; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh must call $EXPECTED_RUNTIME_ATTESTATION_SCRIPT"
+        return
+    fi
+
+    if ! grep -Fq 'DEPLOY_ACTIVE_PATH: /opt/moltinger-active' "$DRIFT_WORKFLOW" || \
+       ! grep -Fq 'MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime' "$DRIFT_WORKFLOW" || \
+       ! grep -Fq -- '--active-path "${{ env.DEPLOY_ACTIVE_PATH }}"' "$DRIFT_WORKFLOW"; then
+        test_fail "gitops-drift-detection.yml must attest the live active root and keep the canonical runtime-config dir pinned"
+        return
+    fi
+
+    if grep -Fq '{{.Config.WorkingDir}}' "$DRIFT_WORKFLOW" || \
+       grep -Fq 'docker inspect --format' "$DRIFT_WORKFLOW" || \
+       grep -Fq 'moltis --version' "$DRIFT_WORKFLOW" || \
+       grep -Fq -- '--expected-git-sha "${{ github.sha }}"' "$DRIFT_WORKFLOW" || \
+       grep -Fq -- '--expected-git-ref "${{ github.ref_name }}"' "$DRIFT_WORKFLOW"; then
+        test_fail "gitops-drift-detection.yml should not inline runtime provenance checks"
         return
     fi
 
@@ -574,6 +616,216 @@ EOF
     if [[ "$(jq -r '.details.git_ref' "$output_json")" != "$expected_ref" ]] || \
        [[ "$(jq -r '.details.deploy_path' "$output_json")" != "$deploy_dir" ]]; then
         test_fail "ssh-run-tracked-moltis-deploy.sh must preserve remote arguments exactly through stdin transport"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_ssh_runtime_attestation_wrapper_dry_run_uses_constant_remote_command() {
+    test_start "Runtime attestation SSH wrapper should use a constant remote command and shell-quoted stdin assignments"
+
+    if [[ ! -f "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]]; then
+        test_skip "Missing helper script: $SSH_RUNTIME_ATTESTATION_SCRIPT"
+        return
+    fi
+
+    local output_file tmp_dir
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/output.log"
+
+    if ! bash "$SSH_RUNTIME_ATTESTATION_SCRIPT" \
+        --dry-run \
+        --ssh-user "deploy" \
+        --ssh-host "example.com" \
+        --deploy-path "/opt/moltinger" \
+        --active-path "/opt/moltinger-active" \
+        --base-url "http://localhost:13131" >"$output_file" 2>&1; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh dry-run failed"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "+ ssh deploy@example.com bash -seu <<REMOTE_SCRIPT" "$output_file" || \
+       ! grep -Fq "DEPLOY_PATH=/opt/moltinger" "$output_file" || \
+       ! grep -Fq "ACTIVE_PATH=/opt/moltinger-active" "$output_file"; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh dry-run must render a constant remote command and shell-quoted stdin assignments"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if grep -Fq "bash -s --" "$output_file"; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh dry-run must not rely on ssh argv serialization"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_ssh_runtime_attestation_wrapper_runtime_executes_remote_script_via_stdin() {
+    test_start "Runtime attestation SSH wrapper should transport remote args through stdin script"
+
+    if [[ ! -f "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]]; then
+        test_skip "Missing helper script: $SSH_RUNTIME_ATTESTATION_SCRIPT"
+        return
+    fi
+
+    local tmp_dir bin_dir deploy_dir args_file output_json
+    tmp_dir="$(mktemp -d)"
+    bin_dir="$tmp_dir/bin"
+    deploy_dir="$tmp_dir/deploy"
+    args_file="$tmp_dir/ssh-args.log"
+    output_json="$tmp_dir/output.json"
+
+    mkdir -p "$bin_dir" "$deploy_dir/scripts"
+
+    cat > "$bin_dir/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+args_file="${FAKE_SSH_ARGS_FILE:?}"
+printf '%s\n' "$@" >"$args_file"
+
+if [[ $# -ne 2 ]]; then
+    echo "fake ssh expected exactly 2 arguments after host serialization, got $#." >&2
+    exit 97
+fi
+
+if [[ "$2" != "bash -seu" ]]; then
+    echo "fake ssh expected constant remote command 'bash -seu', got '$2'." >&2
+    exit 98
+fi
+
+exec bash -seu
+EOF
+    chmod +x "$bin_dir/ssh"
+
+    cat > "$deploy_dir/scripts/moltis-runtime-attestation.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUTPUT_JSON=false
+DEPLOY_PATH=""
+ACTIVE_PATH=""
+MOLTIS_CONTAINER=""
+MOLTIS_URL=""
+EXPECTED_GIT_SHA=""
+EXPECTED_GIT_REF=""
+EXPECTED_VERSION=""
+EXPECTED_RUNTIME_CONFIG_DIR=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --json)
+            OUTPUT_JSON=true
+            shift
+            ;;
+        --deploy-path)
+            DEPLOY_PATH="${2:-}"
+            shift 2
+            ;;
+        --active-path)
+            ACTIVE_PATH="${2:-}"
+            shift 2
+            ;;
+        --container)
+            MOLTIS_CONTAINER="${2:-}"
+            shift 2
+            ;;
+        --base-url)
+            MOLTIS_URL="${2:-}"
+            shift 2
+            ;;
+        --expected-git-sha)
+            EXPECTED_GIT_SHA="${2:-}"
+            shift 2
+            ;;
+        --expected-git-ref)
+            EXPECTED_GIT_REF="${2:-}"
+            shift 2
+            ;;
+        --expected-version)
+            EXPECTED_VERSION="${2:-}"
+            shift 2
+            ;;
+        --expected-runtime-config-dir)
+            EXPECTED_RUNTIME_CONFIG_DIR="${2:-}"
+            shift 2
+            ;;
+        *)
+            echo "unexpected argument: $1" >&2
+            exit 64
+            ;;
+    esac
+done
+
+if [[ "$OUTPUT_JSON" != "true" ]]; then
+    echo "wrapper must request JSON output" >&2
+    exit 65
+fi
+
+jq -n \
+    --arg status "success" \
+    --arg deploy_path "$DEPLOY_PATH" \
+    --arg active_path "$ACTIVE_PATH" \
+    --arg container "$MOLTIS_CONTAINER" \
+    --arg base_url "$MOLTIS_URL" \
+    --arg expected_git_sha "$EXPECTED_GIT_SHA" \
+    --arg expected_git_ref "$EXPECTED_GIT_REF" \
+    --arg expected_version "$EXPECTED_VERSION" \
+    --arg expected_runtime_config_dir "$EXPECTED_RUNTIME_CONFIG_DIR" \
+    '{
+      status: $status,
+      details: {
+        deploy_path: $deploy_path,
+        active_path: $active_path,
+        container: $container,
+        base_url: $base_url,
+        expected_git_sha: $expected_git_sha,
+        expected_git_ref: $expected_git_ref,
+        expected_version: $expected_version,
+        expected_runtime_config_dir: $expected_runtime_config_dir
+      }
+    }'
+EOF
+    chmod +x "$deploy_dir/scripts/moltis-runtime-attestation.sh"
+
+    if ! PATH="$bin_dir:$PATH" \
+        FAKE_SSH_ARGS_FILE="$args_file" \
+        bash "$SSH_RUNTIME_ATTESTATION_SCRIPT" \
+            --ssh-user "deploy" \
+            --ssh-host "example.com" \
+            --deploy-path "$deploy_dir" \
+            --active-path "/opt/moltinger-active" \
+            --container "moltis" \
+            --base-url "http://localhost:13131" \
+            --expected-git-sha "deadbeef" \
+            --expected-git-ref "main" \
+            --expected-version "1.2.3" \
+            --expected-runtime-config-dir "/opt/moltinger-state/config-runtime" >"$output_json" 2>&1; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh runtime execution failed against fake ssh"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(wc -l <"$args_file")" -ne 2 ]] || \
+       [[ "$(sed -n '2p' "$args_file")" != "bash -seu" ]]; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh must send a constant two-argument ssh command"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(jq -r '.details.deploy_path' "$output_json")" != "$deploy_dir" ]] || \
+       [[ "$(jq -r '.details.active_path' "$output_json")" != "/opt/moltinger-active" ]] || \
+       [[ "$(jq -r '.details.expected_git_sha' "$output_json")" != "deadbeef" ]] || \
+       [[ "$(jq -r '.details.expected_git_ref' "$output_json")" != "main" ]] || \
+       [[ "$(jq -r '.details.expected_version' "$output_json")" != "1.2.3" ]] || \
+       [[ "$(jq -r '.details.expected_runtime_config_dir' "$output_json")" != "/opt/moltinger-state/config-runtime" ]]; then
+        test_fail "ssh-run-moltis-runtime-attestation.sh must preserve remote arguments exactly through stdin transport"
         rm -rf "$tmp_dir"
         return
     fi
@@ -977,6 +1229,7 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
     : > "$project_root/scripts/moltis-version.sh"
     : > "$project_root/scripts/deploy.sh"
+    : > "$project_root/scripts/moltis-runtime-attestation.sh"
 
     if ! bash "$TRACKED_DEPLOY_SCRIPT" \
         --dry-run \
@@ -994,6 +1247,7 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     if ! grep -Fq '"status": "dry-run"' "$output_file" || \
        ! grep -Fq '"prepare-runtime-config"' "$output_file" || \
        ! grep -Fq '"align-server-checkout"' "$output_file" || \
+       ! grep -Fq '"attest-live-runtime"' "$output_file" || \
        ! grep -Fq '"/opt/moltinger-state/config-runtime"' "$output_file"; then
         test_fail "Tracked deploy dry-run output should describe the shared control-plane contract"
         rm -rf "$tmp_dir"
@@ -1024,6 +1278,7 @@ test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields() {
     : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
     : > "$project_root/scripts/moltis-version.sh"
     : > "$project_root/scripts/deploy.sh"
+    : > "$project_root/scripts/moltis-runtime-attestation.sh"
 
     if ! bash "$TRACKED_DEPLOY_SCRIPT" \
         --dry-run \
@@ -1072,7 +1327,8 @@ test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields() {
     : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
     : > "$deploy_dir/scripts/moltis-version.sh"
     : > "$deploy_dir/scripts/deploy.sh"
-    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+    : > "$deploy_dir/scripts/moltis-runtime-attestation.sh"
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh" "$deploy_dir/scripts/moltis-runtime-attestation.sh"
 
     if bash "$TRACKED_DEPLOY_SCRIPT" \
         --json \
@@ -1116,7 +1372,8 @@ test_tracked_deploy_script_requires_workflow_run_argument() {
     : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
     : > "$deploy_dir/scripts/moltis-version.sh"
     : > "$deploy_dir/scripts/deploy.sh"
-    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+    : > "$deploy_dir/scripts/moltis-runtime-attestation.sh"
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh" "$deploy_dir/scripts/moltis-runtime-attestation.sh"
 
     set +e
     bash "$TRACKED_DEPLOY_SCRIPT" \
@@ -1173,7 +1430,11 @@ EOF
 #!/bin/bash
 exit 0
 EOF
-    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+    cat > "$deploy_dir/scripts/moltis-runtime-attestation.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh" "$deploy_dir/scripts/moltis-runtime-attestation.sh"
 
     if bash "$TRACKED_DEPLOY_SCRIPT" \
         --dry-run \
@@ -1241,7 +1502,11 @@ EOF
 #!/bin/bash
 exit 0
 EOF
-    chmod +x "$scripts_dir/prepare-moltis-runtime-config.sh" "$scripts_dir/moltis-version.sh" "$scripts_dir/deploy.sh"
+    cat > "$scripts_dir/moltis-runtime-attestation.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$scripts_dir/prepare-moltis-runtime-config.sh" "$scripts_dir/moltis-version.sh" "$scripts_dir/deploy.sh" "$scripts_dir/moltis-runtime-attestation.sh"
     printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
     printf '[server]\nport = 13131\n' > "$config_dir/moltis.toml"
 
@@ -1383,6 +1648,7 @@ run_all_tests() {
     test_gitops_sync_workflows_use_shared_script_entrypoint
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
+    test_drift_detection_uses_shared_runtime_attestation_entrypoint
     test_deploy_workflows_use_canonical_provider_smoke_proof
     test_deploy_script_verifies_live_moltis_runtime_contract
     test_deploy_script_force_recreates_moltis_runtime_on_rollout
@@ -1390,6 +1656,9 @@ run_all_tests() {
     test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
+    test_ssh_tracked_deploy_wrapper_runtime_executes_remote_script_via_stdin
+    test_ssh_runtime_attestation_wrapper_dry_run_uses_constant_remote_command
+    test_ssh_runtime_attestation_wrapper_runtime_executes_remote_script_via_stdin
     test_checkout_align_script_dry_run_uses_constant_remote_command
     test_deploy_workflow_uses_shared_host_automation_script
     test_gitops_sync_script_dry_run_covers_managed_surface

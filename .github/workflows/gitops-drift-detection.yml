@@ -17,7 +17,9 @@ permissions:
 env:
   SSH_HOST: ainetic.tech
   SSH_USER: root
-  DEPLOY_PATH: /opt/moltinger-active
+  DEPLOY_PATH: /opt/moltinger
+  DEPLOY_ACTIVE_PATH: /opt/moltinger-active
+  MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime
 
 jobs:
   drift-check:
@@ -26,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
@@ -72,13 +74,13 @@ jobs:
           echo "=== Checking configuration files ==="
 
           # Check docker-compose.yml
-          check_drift "docker-compose.yml" "${{ env.DEPLOY_PATH }}/docker-compose.yml" "docker-compose.yml"
+          check_drift "docker-compose.yml" "${{ env.DEPLOY_ACTIVE_PATH }}/docker-compose.yml" "docker-compose.yml"
 
           # Check config files
-          check_drift "config/moltis.toml" "${{ env.DEPLOY_PATH }}/config/moltis.toml" "moltis.toml"
+          check_drift "config/moltis.toml" "${{ env.DEPLOY_ACTIVE_PATH }}/config/moltis.toml" "moltis.toml"
 
           if [ -f "config/mcp-servers.json" ]; then
-            check_drift "config/mcp-servers.json" "${{ env.DEPLOY_PATH }}/config/mcp-servers.json" "mcp-servers.json"
+            check_drift "config/mcp-servers.json" "${{ env.DEPLOY_ACTIVE_PATH }}/config/mcp-servers.json" "mcp-servers.json"
           fi
 
           # Check scripts
@@ -86,7 +88,7 @@ jobs:
             for SCRIPT in scripts/*; do
               if [ -f "$SCRIPT" ]; then
                 SCRIPT_NAME=$(basename "$SCRIPT")
-                check_drift "$SCRIPT" "${{ env.DEPLOY_PATH }}/scripts/$SCRIPT_NAME" "scripts/$SCRIPT_NAME"
+                check_drift "$SCRIPT" "${{ env.DEPLOY_ACTIVE_PATH }}/scripts/$SCRIPT_NAME" "scripts/$SCRIPT_NAME"
               fi
             done
           fi
@@ -104,8 +106,48 @@ jobs:
           fi
           echo "::endgroup::"
 
+      - name: Attest live runtime provenance
+        id: attestation
+        run: |
+          echo "::group::Runtime Attestation"
+          set +e
+          OUTPUT=$(bash ./scripts/ssh-run-moltis-runtime-attestation.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --active-path "${{ env.DEPLOY_ACTIVE_PATH }}" \
+            --container "moltis" \
+            --base-url "http://localhost:13131" \
+            --expected-runtime-config-dir /opt/moltinger-state/config-runtime)
+          ATTEST_EXIT=$?
+          set -e
+
+          if ! printf '%s' "$OUTPUT" | jq empty >/dev/null 2>&1; then
+            OUTPUT=$(jq -n \
+              --arg status "failure" \
+              --arg message "ssh-run-moltis-runtime-attestation.sh did not return valid JSON" \
+              '{status: $status, details: {}, errors: [{code: "ATTESTATION_JSON_CONTRACT_ERROR", message: $message}]}' )
+            ATTEST_EXIT=1
+          fi
+
+          echo "$OUTPUT"
+
+          STATUS=$(printf '%s' "$OUTPUT" | jq -r '.status // empty' 2>/dev/null || true)
+          if [ $ATTEST_EXIT -ne 0 ] || [ "$STATUS" != "success" ]; then
+            echo "::warning::Runtime provenance attestation failed"
+            STATUS="failure"
+          else
+            echo "::notice::Runtime provenance attestation passed ✅"
+          fi
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "::endgroup::"
+
       - name: Create issue on drift
-        if: steps.drift.outputs.drift_found == 'true'
+        if: steps.drift.outputs.drift_found == 'true' || steps.attestation.outputs.status != 'success'
         run: |
           # Check for existing open drift issue to prevent duplicates.
           # Search by title to avoid hard dependency on labels.
@@ -123,6 +165,14 @@ jobs:
           fi
 
           DRIFT_FILES="${{ steps.drift.outputs.drift_files }}"
+          ATTESTATION_STATUS="${{ steps.attestation.outputs.status }}"
+          ATTESTATION_PAYLOAD="$(cat <<'EOF'
+          ${{ steps.attestation.outputs.payload }}
+          EOF
+          )"
+          if [ "$ATTESTATION_STATUS" != "success" ]; then
+            DRIFT_FILES="${DRIFT_FILES}runtime-attestation\n"
+          fi
           ISSUE_BODY="## GitOps Drift Detected
 
           The following files on the server do not match git:
@@ -134,6 +184,13 @@ jobs:
           ### Action Required
           1. Investigate the source of drift (manual changes?)
           2. Either commit server changes to git, or redeploy to sync
+
+          ### Runtime Attestation
+          Status: \`${ATTESTATION_STATUS:-unknown}\`
+
+          \`\`\`json
+          ${ATTESTATION_PAYLOAD:-{}}
+          \`\`\`
 
           ### How to Fix
           \`\`\`bash
@@ -183,19 +240,35 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          COMBINED_DRIFT="false"
+          if [ "${{ steps.drift.outputs.drift_found }}" = "true" ] || [ "${{ steps.attestation.outputs.status }}" != "success" ]; then
+            COMBINED_DRIFT="true"
+          fi
+
           echo "## GitOps Drift Detection Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Time | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Drift Found | \`${{ steps.drift.outputs.drift_found }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Drift Found | \`$COMBINED_DRIFT\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime Attestation | \`${{ steps.attestation.outputs.status || 'unknown' }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ steps.drift.outputs.drift_found }}" = "true" ]; then
+          if [ "${{ steps.drift.outputs.drift_found }}" = "true" ] || [ "${{ steps.attestation.outputs.status }}" != "success" ]; then
             echo "### Files with Drift" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "${{ steps.drift.outputs.drift_files }}" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            ATTESTATION_PAYLOAD="$(cat <<'EOF'
+            ${{ steps.attestation.outputs.payload }}
+            EOF
+            )"
+            if [ -n "$ATTESTATION_PAYLOAD" ]; then
+              echo "### Runtime Attestation Payload" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+              echo "$ATTESTATION_PAYLOAD" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "✅ **All files compliant**" >> $GITHUB_STEP_SUMMARY
           fi
