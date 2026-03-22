@@ -71,6 +71,7 @@ services:
       - ./config:/home/moltis/.config/moltis
       # Persistent data (sessions, memory, logs)
       - ./data:/home/moltis/.moltis
+      - /tmp/moltis-browser-profile:/tmp/moltis-browser-profile
       # Docker socket for sandbox execution (WARNING: root access)
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:

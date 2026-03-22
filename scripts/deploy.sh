@@ -30,6 +30,8 @@ MOLTIS_SERVICE_UID="${MOLTIS_SERVICE_UID:-1000}"
 MOLTIS_SERVICE_GID="${MOLTIS_SERVICE_GID:-1000}"
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+CANONICAL_MOLTIS_BROWSER_PROFILE_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_DIR:-/tmp/moltis-browser-profile}"
+CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR:-$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR/shared}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -1372,6 +1374,17 @@ sync_moltis_project_knowledge() {
     return 0
 }
 
+prepare_moltis_browser_profile_dir() {
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    chmod 0777 "$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    log_success "Prepared shared Moltis browser profile dir: $CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    return 0
+}
+
 prepull_moltis_browser_sandbox_image() {
     if [[ "$TARGET" != "moltis" ]]; then
         return 0
@@ -1481,6 +1494,7 @@ cmd_deploy() {
     check_prerequisites "deploy"
     backup_current_state
     pull_images
+    prepare_moltis_browser_profile_dir
     prepull_moltis_browser_sandbox_image
     deploy_containers
 

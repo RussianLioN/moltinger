@@ -299,10 +299,12 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
     fi
 
     if ! grep -Fq 'export DOCKER_SOCKET_GID="$docker_socket_gid"' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'persist_profile = false' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'profile_dir = "/tmp/moltis-browser-profile/shared"' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
+       ! grep -Fq 'prepare_moltis_browser_profile_dir' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Browser sandbox access requires deploy.sh to inject the live socket GID and the tracked runtime to expose host.docker.internal while disabling persistent sibling-container browser profiles"
+        test_fail "Browser sandbox access requires a host-visible shared profile_dir, deploy-time permission prep, live socket GID injection, and host.docker.internal exposure for sibling browser containers"
         return
     fi
 

@@ -98,15 +98,18 @@ run_static_config_validation_tests() {
 
     test_start "static_moltis_browser_docker_contract_matches_official_sibling_container_requirements"
     if rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG" && \
-       rg -q '^persist_profile = false' "$TOML_CONFIG" && \
+       rg -q '^profile_dir = "/tmp/moltis-browser-profile/shared"' "$TOML_CONFIG" && \
        rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
+       rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$COMPOSE_PROD" && \
        rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
        rg -q 'export DOCKER_SOCKET_GID="\$docker_socket_gid"' "$DEPLOY_SCRIPT" && \
+       rg -q 'prepare_moltis_browser_profile_dir' "$DEPLOY_SCRIPT" && \
+       rg -q 'chmod 0777 "\$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "\$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"' "$DEPLOY_SCRIPT" && \
        rg -q 'prepull_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
        rg -q 'docker pull "\$sandbox_image"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must disable persistent sibling-container browser profiles, set container_host, inject the live Docker socket GID, pre-pull the sandbox image, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must pin a host-visible shared profile_dir, mount it into Moltis, prepare writable permissions, set container_host, inject the live Docker socket GID, pre-pull the sandbox image, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
