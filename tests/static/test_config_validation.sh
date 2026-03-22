@@ -368,6 +368,18 @@ PY
         test_fail "Moltis deploy path must target only moltis + required sidecars and force-recreate the runtime so config changes take effect immediately"
     fi
 
+    test_start "static_deploy_syncs_tracked_knowledge_into_official_runtime_memory_path"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       [[ -f "$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh" ]] && \
+       rg -Fq 'sync_moltis_project_knowledge()' "$DEPLOY_SCRIPT" && \
+       rg -Fq '/home/moltis/.moltis/memory/project-knowledge.md' "$DEPLOY_SCRIPT" && \
+       rg -Fq -- '--knowledge-root "$PROJECT_ROOT/knowledge"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'This file is generated from tracked repository knowledge' "$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh"; then
+        test_pass
+    else
+        test_fail "Deploy contract must mirror tracked knowledge into the official ~/.moltis/memory path instead of relying only on optional watch_dirs behavior"
+    fi
+
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
     if rg -q 'apply-moltis-host-automation\.sh' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Install cron jobs' "$DEPLOY_WORKFLOW" && \

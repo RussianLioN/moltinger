@@ -271,6 +271,25 @@ test_deploy_script_force_recreates_moltis_runtime_on_rollout() {
     test_pass
 }
 
+test_deploy_script_syncs_tracked_knowledge_into_runtime_memory() {
+    test_start "Deploy should sync tracked project knowledge into Moltis runtime memory"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh" ]]; then
+        test_skip "Missing deploy or knowledge sync script"
+        return
+    fi
+
+    if ! grep -Fq 'sync_moltis_project_knowledge()' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq '/home/moltis/.moltis/memory/project-knowledge.md' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq -- '--knowledge-root "$PROJECT_ROOT/knowledge"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'Project Knowledge Bundle' "$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh"; then
+        test_fail "deploy.sh must sync tracked knowledge into the official Moltis memory directory so project context becomes searchable without relying on unsupported watch_dirs"
+        return
+    fi
+
+    test_pass
+}
+
 test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
     test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
 
@@ -1211,6 +1230,7 @@ run_all_tests() {
     test_tracked_deploy_workflows_use_shared_script_entrypoint
     test_deploy_script_verifies_live_moltis_runtime_contract
     test_deploy_script_force_recreates_moltis_runtime_on_rollout
+    test_deploy_script_syncs_tracked_knowledge_into_runtime_memory
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_checkout_align_script_dry_run_uses_constant_remote_command

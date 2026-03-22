@@ -906,6 +906,21 @@
       "gitops": true,
       "ci": true
     },
+    "sync-moltis-project-knowledge.sh": {
+      "version": "1.0.0",
+      "description": "Mirror tracked repository knowledge into the canonical Moltis runtime memory directory",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "find",
+        "sort"
+      ],
+      "provides": [
+        "sync-moltis-project-knowledge"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "query-lessons.sh": {
       "version": "1.0.0",
       "description": "Query RCA lessons by severity, tag, or category",

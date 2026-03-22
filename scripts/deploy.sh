@@ -26,6 +26,8 @@ FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
 CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
 CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
+MOLTIS_SERVICE_UID="${MOLTIS_SERVICE_UID:-1000}"
+MOLTIS_SERVICE_GID="${MOLTIS_SERVICE_GID:-1000}"
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
 
@@ -68,6 +70,7 @@ TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
 CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
 CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
+MOLTIS_KNOWLEDGE_SYNC_SCRIPT="$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
@@ -1319,6 +1322,48 @@ verify_deployment() {
     return 0
 }
 
+sync_moltis_project_knowledge() {
+    local runtime_home_source canonical_runtime_home
+
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    if [[ ! -d "$PROJECT_ROOT/knowledge" ]]; then
+        log_info "Tracked knowledge/ directory not present; skipping project knowledge sync"
+        return 0
+    fi
+
+    if [[ ! -x "$MOLTIS_KNOWLEDGE_SYNC_SCRIPT" ]]; then
+        log_error "Moltis knowledge sync script is missing or not executable: $MOLTIS_KNOWLEDGE_SYNC_SCRIPT"
+        return 1
+    fi
+
+    runtime_home_source="$(container_mount_source "$TARGET_CONTAINER" "/home/moltis/.moltis")"
+    if [[ -z "$runtime_home_source" ]]; then
+        log_error "Moltis runtime contract mismatch: /home/moltis/.moltis mount source is missing"
+        return 1
+    fi
+    canonical_runtime_home="$(canonicalize_existing_path "$runtime_home_source" || printf '%s\n' "$runtime_home_source")"
+
+    if ! MOLTIS_SERVICE_UID="$MOLTIS_SERVICE_UID" \
+         MOLTIS_SERVICE_GID="$MOLTIS_SERVICE_GID" \
+         bash "$MOLTIS_KNOWLEDGE_SYNC_SCRIPT" \
+            --knowledge-root "$PROJECT_ROOT/knowledge" \
+            --runtime-home "$canonical_runtime_home"; then
+        log_error "Failed to sync tracked project knowledge into Moltis runtime memory"
+        return 1
+    fi
+
+    if ! docker exec "$TARGET_CONTAINER" sh -lc 'test -f /home/moltis/.moltis/memory/project-knowledge.md' >/dev/null 2>&1; then
+        log_error "Moltis knowledge sync did not materialize /home/moltis/.moltis/memory/project-knowledge.md"
+        return 1
+    fi
+
+    log_success "Tracked project knowledge synced into Moltis runtime memory"
+    return 0
+}
+
 send_notification() {
     local status="$1"
     local message="$2"
@@ -1374,6 +1419,14 @@ cmd_deploy() {
     deploy_containers
 
     if verify_deployment; then
+        if ! sync_moltis_project_knowledge; then
+            log_error "${TARGET_DISPLAY} post-deploy knowledge sync failed"
+            if [[ "$OUTPUT_JSON" == "true" ]]; then
+                output_json_result "failure" "deploy" "unhealthy"
+            fi
+            exit 1
+        fi
+
         DEPLOY_IMAGE="$(get_current_version)"
         add_json_services
 
