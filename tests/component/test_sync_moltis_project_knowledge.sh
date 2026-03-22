@@ -62,7 +62,7 @@ EOF
     test_start "component_sync_script_renders_tracked_knowledge_bundle"
     if ! bash "$SYNC_SCRIPT" \
         --knowledge-root "$knowledge_root" \
-        --runtime-home "$runtime_home" >"$tmp_dir/output.log" 2>&1; then
+        --runtime-home "$runtime_home" >"$tmp_dir/stdout.log" 2>"$tmp_dir/stderr.log"; then
         test_fail "Knowledge sync script failed on fixture inputs"
         rm -rf "$tmp_dir"
         return
@@ -73,6 +73,8 @@ EOF
        ! grep -Fq '## Source: knowledge/README.md' "$output_file" || \
        ! grep -Fq '## Source: knowledge/references/runtime.md' "$output_file" || \
        ! grep -Fq '## Source: knowledge/troubleshooting/memory.md' "$output_file" || \
+       [[ -s "$tmp_dir/stdout.log" ]] || \
+       ! grep -Fq '[sync-moltis-project-knowledge] synced 3 knowledge files into' "$tmp_dir/stderr.log" || \
        grep -Fq 'This file should not be mirrored' "$output_file"; then
         test_fail "Knowledge bundle did not include the expected tracked markdown sources"
         rm -rf "$tmp_dir"
@@ -98,13 +100,15 @@ EOF
 
     if ! bash "$SYNC_SCRIPT" \
         --knowledge-root "$knowledge_root" \
-        --runtime-home "$runtime_home" >"$tmp_dir/output-2.log" 2>&1; then
+        --runtime-home "$runtime_home" >"$tmp_dir/stdout-2.log" 2>"$tmp_dir/stderr-2.log"; then
         test_fail "Knowledge sync script failed on overwrite run"
         rm -rf "$tmp_dir"
         return
     fi
 
-    if ! grep -Fq 'recreate the runtime process after config changes' "$output_file"; then
+    if ! grep -Fq 'recreate the runtime process after config changes' "$output_file" || \
+       [[ -s "$tmp_dir/stdout-2.log" ]] || \
+       ! grep -Fq '[sync-moltis-project-knowledge] synced 3 knowledge files into' "$tmp_dir/stderr-2.log"; then
         test_fail "Knowledge bundle was not refreshed on the second sync"
         rm -rf "$tmp_dir"
         return

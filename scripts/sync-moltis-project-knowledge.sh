@@ -27,7 +27,7 @@ EOF
 }
 
 log() {
-    echo "[sync-moltis-project-knowledge] $*"
+    echo "[sync-moltis-project-knowledge] $*" >&2
 }
 
 require_argument() {
