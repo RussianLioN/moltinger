@@ -1142,6 +1142,37 @@
     return requestedAction;
   }
 
+  function adjustComposerActionForUploads(project, action, text, queuedUploads = []) {
+    const uploads = uniqueUploads(queuedUploads || []);
+    if (!project || uploads.length === 0) {
+      return normalizeText(action, "submit_turn");
+    }
+    const normalizedAction = normalizeText(action, "submit_turn");
+    const normalizedText = normalizeText(text);
+    const status = currentStatus(project);
+    const response = currentResponse(project) || {};
+    const postBriefMode = isPostBriefStatus(status);
+    const reviewStage =
+      ["awaiting_confirmation", "reopened"].includes(status)
+      || (
+        normalizeText(response?.ui_projection?.side_panel_mode) === "brief_review"
+        && !postBriefMode
+      );
+
+    // Upload-only submissions in review mode are corrective context, not silent confirmation.
+    if (reviewStage && !normalizedText) {
+      return "request_brief_correction";
+    }
+
+    // When the current question is about input examples, attached files should answer it directly
+    // instead of inheriting a stale status-oriented action from the composer.
+    if (!postBriefMode && currentTopic(project) === "input_examples") {
+      return "submit_turn";
+    }
+
+    return normalizedAction;
+  }
+
   function statusLabel(project) {
     const response = currentResponse(project) || {};
     return normalizeText(response.status_snapshot?.user_visible_status_label || STATUS_LABELS[currentStatus(project)] || "Черновик");
@@ -3841,20 +3872,18 @@
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
       if (downloadsReady) {
-        const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
-        project.panelModeOverride = "preview";
-        project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
+        project.panelModeOverride = "downloads";
+        project.previewArtifactKind = "";
       } else {
         project.panelModeOverride = "downloads";
         project.previewArtifactKind = "";
       }
     } else if (downloadsReady && syncReason === "handoff_poll" && !manualPanelClose) {
-      const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
-      project.panelModeOverride = "preview";
-      project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
+      project.panelModeOverride = "downloads";
+      project.previewArtifactKind = "";
     }
 
     persist();
@@ -4519,7 +4548,8 @@
       }
       const text = normalizeText(dom.composerInput.value);
       const queuedUploads = uniqueUploads(project.pendingUploads);
-      const effectiveAction = resolveComposerAction(project, text);
+      const resolvedAction = resolveComposerAction(project, text);
+      const effectiveAction = adjustComposerActionForUploads(project, resolvedAction, text, queuedUploads);
       const allowWithoutText = ["request_status", "request_brief_review", "confirm_brief"].includes(effectiveAction);
       if (!text && !queuedUploads.length && !allowWithoutText) {
         dom.composerInput.focus();

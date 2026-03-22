@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 WEB_ADAPTER_SCRIPT="$PROJECT_ROOT/scripts/agent-factory-web-adapter.py"
 BRIEF_FIXTURE="$PROJECT_ROOT/tests/fixtures/agent-factory/web-demo/session-awaiting-confirmation.json"
+DISCOVERY_FIXTURE="$PROJECT_ROOT/tests/fixtures/agent-factory/web-demo/session-discovery-answer.json"
 
 run_integration_local_agent_factory_web_confirmation_tests() {
     start_timer
@@ -531,6 +532,39 @@ run_integration_local_agent_factory_web_confirmation_tests() {
         test_pass
     else
         test_fail "Simulation request in post-handoff mode should not reopen brief review"
+    fi
+
+    test_start "integration_local_agent_factory_web_confirmation_upload_only_input_examples_submission_advances_to_expected_outputs"
+    if jq '.web_conversation_envelope = {
+          "web_conversation_envelope_id": "web-envelope-input-upload-001",
+          "request_id": "web-request-input-upload-001",
+          "transport_mode": "synthetic_fixture",
+          "ui_action": "submit_turn",
+          "user_text": ""
+        } | .discovery_runtime_state.status = "awaiting_user_reply"
+          | .discovery_runtime_state.next_action = "ask_next_question"
+          | .discovery_runtime_state.next_topic = "input_examples"
+          | .discovery_runtime_state.next_question = "Какие входные данные или кейсы агент получает на вход?"
+          | .discovery_runtime_state.discovery_session.status = "awaiting_user_reply"
+          | .discovery_runtime_state.discovery_session.current_topic = "input_examples"
+          | .discovery_runtime_state.discovery_session.next_recommended_action = "ask_next_question"
+          | .uploaded_files = [
+            {
+              "upload_id": "upload-demo-client-data-progress",
+              "name": "demo-client-data.csv",
+              "content_type": "text/csv",
+              "size_bytes": 11264,
+              "content_base64": "Y2xpZW50X2lkLG5hbWUsc2VnbWVudAoxLEFjbWUgQ28sQ29ycG9yYXRlCg=="
+            }
+          ] | del(.demo_access_grant)' "$DISCOVERY_FIXTURE" >"$tmpdir/input-upload-source.json" &&
+        python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$tmpdir/input-upload-source.json" --state-root "$tmpdir/input-upload-state" --output "$tmpdir/input-upload-out.json" >/dev/null; then
+        assert_eq "awaiting_user_reply" "$(jq -r '.status' "$tmpdir/input-upload-out.json")" "Upload-only input_examples answer should keep discovery in awaiting-user-reply mode"
+        assert_eq "expected_outputs" "$(jq -r '.next_topic' "$tmpdir/input-upload-out.json")" "Upload-only input_examples answer should advance to expected_outputs instead of repeating input_examples"
+        assert_eq "expected_outputs" "$(jq -r '.ui_projection.current_topic' "$tmpdir/input-upload-out.json")" "Browser projection should move to expected_outputs after upload-only input_examples answer"
+        assert_contains "$(jq -r '.discovery_runtime_state.captured_answers.input_examples' "$tmpdir/input-upload-out.json")" "demo-client-data.csv" "Captured input_examples answer should summarize the uploaded file"
+        test_pass
+    else
+        test_fail "Upload-only input_examples submission should advance the browser flow instead of re-asking for input examples"
     fi
 
     test_start "integration_local_agent_factory_web_confirmation_does_not_overwrite_expected_outputs_with_editorial_one_page_feedback"
