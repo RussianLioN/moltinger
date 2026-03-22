@@ -476,6 +476,31 @@ beads_resolve_dispatch() {
     return 0
   fi
 
+  migration_mode="$(beads_resolve_active_migration_mode "${repo_root}" 2>/dev/null || true)"
+  if [[ -n "${migration_mode}" ]]; then
+    migration_review_command="$(beads_resolve_migration_review_command "${migration_mode}" 2>/dev/null || true)"
+  fi
+
+  if beads_resolve_is_migration_legacy_command "$@"; then
+    if [[ -n "${migration_mode}" ]]; then
+      beads_resolve_set_decision \
+        "block_pilot_legacy_command" \
+        "dedicated_worktree" \
+        27 \
+        "bd: ${migration_mode} mode is enabled in ${repo_root}, so legacy-only commands such as ${BEADS_RESOLVE_COMMAND} are blocked." \
+        "Use ${migration_review_command:-./scripts/beads-dolt-pilot.sh review} for the active migration review surface, and keep JSONL export/sync out of the everyday operator path."
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_deprecated_sync" \
+      "repo_local" \
+      28 \
+      "bd: 'sync' is retired in this repository's Beads workflow." \
+      "Use bd status for local inspection, and use bd dolt push / bd dolt pull only when this worktree is configured with a Dolt remote."
+    return 0
+  fi
+
   if [[ "${repo_root}" == "${canonical_root}" ]]; then
     if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
       beads_resolve_set_decision "pass_through_root_readonly" "canonical_root" 0
@@ -501,21 +526,6 @@ beads_resolve_dispatch() {
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
-  fi
-
-  migration_mode="$(beads_resolve_active_migration_mode "${repo_root}" 2>/dev/null || true)"
-  if [[ -n "${migration_mode}" ]]; then
-    migration_review_command="$(beads_resolve_migration_review_command "${migration_mode}" 2>/dev/null || true)"
-  fi
-
-  if [[ -n "${migration_mode}" ]] && beads_resolve_is_migration_legacy_command "$@"; then
-    beads_resolve_set_decision \
-      "block_pilot_legacy_command" \
-      "dedicated_worktree" \
-      27 \
-      "bd: ${migration_mode} mode is enabled in ${repo_root}, so legacy-only commands such as ${BEADS_RESOLVE_COMMAND} are blocked." \
-      "Use ${migration_review_command:-./scripts/beads-dolt-pilot.sh review} for the active migration review surface, and keep JSONL export/sync out of the everyday operator path."
-    return 0
   fi
 
   if [[ -f "${redirect_path}" ]]; then
@@ -555,24 +565,11 @@ beads_resolve_dispatch() {
   fi
 
   if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && ! -f "${issues_path}" ]]; then
-    if [[ -n "${migration_mode}" ]]; then
-      BEADS_RESOLVE_DB_PATH="${db_path}"
-      beads_resolve_set_decision "execute_local" "${migration_mode}_worktree" 0
-      return 0
-    fi
-
-    if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
-      BEADS_RESOLVE_DB_PATH="${db_path}"
-      beads_resolve_set_decision "execute_local" "pilot_candidate_readonly" 0
-      return 0
-    fi
-
+    BEADS_RESOLVE_DB_PATH="${db_path}"
     beads_resolve_set_decision \
-      "block_missing_foundation" \
-      "dedicated_worktree" \
-      25 \
-      "bd: ${repo_root} has a pilot-ready local config/database foundation, but pilot mode is not enabled yet for mutating commands." \
-      "./scripts/beads-dolt-pilot.sh enable"
+      "execute_local" \
+      "$( [[ -n "${migration_mode}" ]] && printf '%s' "${migration_mode}_worktree" || printf '%s' "runtime_only_worktree" )" \
+      0
     return 0
   fi
 

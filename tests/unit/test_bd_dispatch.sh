@@ -336,6 +336,57 @@ test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation() {
     test_pass
 }
 
+test_plain_bd_allows_mutation_for_post_migration_runtime_only_state() {
+    test_start "plain_bd_allows_mutation_for_post_migration_runtime_only_state"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-runtime-only-update"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-update" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(run_plain_bd "${worktree_path}" "${fake_bin}" update demo-1 --status in_progress)"
+
+    assert_contains "${output}" "DB=${expected_db}" "Runtime-only post-migration worktrees must still execute local mutating commands without a pilot gate"
+    assert_contains "${output}" "ARGS=update demo-1 --status in_progress" "Runtime-only post-migration worktrees must preserve ordinary mutating commands"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_blocks_deprecated_sync_with_modern_guidance() {
+    test_start "plain_bd_blocks_deprecated_sync_with_modern_guidance"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-runtime-only-sync"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-sync" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_pilot_ready_dolt_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${worktree_path}" "${fake_bin}" sync 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "28" "${rc}" "Deprecated bd sync must fail with modern guidance instead of suggesting pilot mode"
+    assert_contains "${output}" "'sync' is retired" "Deprecated bd sync must be described as a retired workflow"
+    assert_contains "${output}" "bd dolt push / bd dolt pull" "Deprecated bd sync must point operators at the modern Dolt workflow"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_recognizes_post_migration_runtime_only_state() {
     test_start "localize_recognizes_post_migration_runtime_only_state"
 
@@ -461,6 +512,8 @@ run_all_tests() {
     test_plain_bd_allows_explicit_troubleshooting_flags
     test_plain_bd_allows_backend_show_for_pilot_ready_dolt_foundation
     test_plain_bd_allows_doctor_for_pilot_ready_dolt_foundation
+    test_plain_bd_allows_mutation_for_post_migration_runtime_only_state
+    test_plain_bd_blocks_deprecated_sync_with_modern_guidance
     test_localize_recognizes_post_migration_runtime_only_state
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref

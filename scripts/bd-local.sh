@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  DEPRECATED: Use plain `bd` (via bin/bd) instead.        ║
+# ║  This wrapper is kept for backward compatibility only.   ║
+# ║  It will be removed in a future release.                 ║
+# ║  See: docs/plans/zesty-percolating-hollerith.md Phase 3  ║
+# ╚═══════════════════════════════════════════════════════════╝
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
@@ -39,6 +46,8 @@ resolve_system_bd() {
   return 1
 }
 
+printf 'bd-local: WARNING: this wrapper is deprecated. Use plain `bd` instead.\n' >&2
+
 beads_resolve_dispatch "${repo_root}" "$@"
 
 case "${BEADS_RESOLVE_DECISION}" in
@@ -57,7 +66,7 @@ case "${BEADS_RESOLVE_DECISION}" in
     system_bd="$(resolve_system_bd)" || fail "could not locate a bd binary to execute the command" 1
     exec "${system_bd}" "$@"
     ;;
-  block_legacy_redirect|block_missing_foundation|block_pilot_legacy_command|block_root_fallback|block_root_mutation|block_unresolved_ownership)
+  block_deprecated_sync|block_legacy_redirect|block_missing_foundation|block_pilot_legacy_command|block_root_fallback|block_root_mutation|block_unresolved_ownership)
     printf '%s\n' "${BEADS_RESOLVE_MESSAGE}" >&2
     if [[ -n "${BEADS_RESOLVE_RECOVERY_HINT}" ]]; then
       printf 'Recovery: %s\n' "${BEADS_RESOLVE_RECOVERY_HINT}" >&2
