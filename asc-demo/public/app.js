@@ -3638,7 +3638,9 @@
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
     const canAutoOpenPanel = normalizeText(project.panelDismissedMode) !== panelMode;
-    if ((sourceAction === "confirm_brief" || submitTurnConfirmation || isPostConfirmState) && canAutoOpenPanel) {
+    const shouldForceOpenAfterConfirm = sourceAction === "confirm_brief" || submitTurnConfirmation;
+    const shouldAutoOpenByState = isPostConfirmState && canAutoOpenPanel;
+    if (shouldForceOpenAfterConfirm || shouldAutoOpenByState) {
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
       if (downloadsReady) {

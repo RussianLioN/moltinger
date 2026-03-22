@@ -140,17 +140,87 @@ async function sendFirstIdea(page) {
   await page.locator('#chatInput').fill('Нужен агент, который помогает быстрее разбирать заявки на оплату счетов и подсказывает, когда нужна эскалация.');
   await page.locator('#sendBtn').click();
   await page.locator('#messages .message').filter({ hasText: 'Кто будет основным пользователем или выгодоприобретателем результата?' }).first().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
+  await page.waitForFunction(() => {
+    const submit = document.querySelector('#sendBtn');
+    return submit?.dataset?.mode === 'send';
+  }, { timeout: defaultTimeoutMs });
 }
 
 async function sendComposerReply(page, text) {
   const messageCountBefore = await page.locator('#messages .message').count();
   await page.locator('#chatInput').fill(text);
   await page.locator('#sendBtn').click();
-  await page.waitForFunction(
-    (previousCount) => document.querySelectorAll('#messages .message').length > previousCount,
-    messageCountBefore,
-    { timeout: defaultTimeoutMs },
-  );
+  try {
+    await page.waitForFunction(
+      (previousCount) => {
+        const messageCount = document.querySelectorAll('#messages .message').length;
+        const submit = document.querySelector('#sendBtn');
+        const isSendMode = submit?.dataset?.mode === 'send';
+        return messageCount > previousCount && isSendMode;
+      },
+      messageCountBefore,
+      { timeout: defaultTimeoutMs },
+    );
+  } catch (error) {
+    const status = ((await page.locator('[data-role="status-user-visible"]').textContent()) || '').trim();
+    const nextAction = ((await page.locator('[data-role="status-next-action"]').textContent()) || '').trim();
+    const submitMode = (await page.locator('#sendBtn').getAttribute('data-mode')) || '';
+    const messageCountNow = await page.locator('#messages .message').count();
+    throw new Error(
+      [
+        `sendComposerReply-timeout: ${error instanceof Error ? error.message : String(error)}`,
+        `text=${text.slice(0, 120)}`,
+        `status=${status}`,
+        `nextAction=${nextAction}`,
+        `submitMode=${submitMode}`,
+        `messageCountBefore=${messageCountBefore}`,
+        `messageCountNow=${messageCountNow}`,
+      ].join(' | '),
+    );
+  }
+}
+
+async function ensureAwaitingConfirmation(page) {
+  const fallbackAnswer = "Фиксирую контракт результата: итоговый формат one-page PDF и markdown, обязательные блоки — профиль клиента, ключевые риски, рекомендация и итоговое решение.";
+  const isAwaitingConfirmation = async () => {
+    const status = ((await page.locator('[data-role="status-user-visible"]').textContent()) || '').trim().toLowerCase();
+    const nextAction = ((await page.locator('[data-role="status-next-action"]').textContent()) || '').trim().toLowerCase();
+    const panelMode = (((await page.locator('[data-role="side-panel"]').getAttribute('data-mode')) || '').trim()).toLowerCase();
+    return (
+      status === 'awaiting_confirmation'
+      || status.includes('подтверж')
+      || panelMode === 'brief_review'
+      || nextAction.includes('подтверд')
+    );
+  };
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (await isAwaitingConfirmation()) {
+      return;
+    }
+    try {
+      await sendComposerReply(page, fallbackAnswer);
+    } catch (error) {
+      const nextAction = ((await page.locator('[data-role="status-next-action"]').textContent()) || '').trim();
+      const panelMode = (await page.locator('[data-role="side-panel"]').getAttribute('data-mode')) || '';
+      const submitMode = (await page.locator('#sendBtn').getAttribute('data-mode')) || '';
+      const lastMessage = ((await page.locator('#messages .message').last().innerText()) || '').trim().slice(0, 220);
+      throw new Error(
+        [
+          `awaiting-confirmation-timeout[${attempt + 1}]: ${error instanceof Error ? error.message : String(error)}`,
+          `status=${((await page.locator('[data-role="status-user-visible"]').textContent()) || '').trim()}`,
+          `nextAction=${nextAction}`,
+          `panelMode=${panelMode}`,
+          `submitMode=${submitMode}`,
+          `lastMessage=${lastMessage}`,
+        ].join(' | '),
+      );
+    }
+  }
+  const status = ((await page.locator('[data-role="status-user-visible"]').textContent()) || '').trim();
+  const nextAction = ((await page.locator('[data-role="status-next-action"]').textContent()) || '').trim();
+  const panelMode = (await page.locator('[data-role="side-panel"]').getAttribute('data-mode')) || '';
+  const lastAgentMessage = ((await page.locator('#messages .message').last().innerText()) || '').trim();
+  throw new Error(`Expected awaiting_confirmation stage before brief confirm, got status=${status}, nextAction=${nextAction}, panelMode=${panelMode}, last=${lastAgentMessage.slice(0, 200)}`);
 }
 
 async function run() {
@@ -268,11 +338,7 @@ async function run() {
         await sendComposerReply(page, 'Если данных не хватает или есть противоречия — обязательная эскалация; обязательные поля должны быть заполнены.');
         await sendComposerReply(page, 'Сократить время подготовки на 50% и снизить долю ошибок до 2%.');
 
-        const lastAgentMessage = ((await page.locator('#messages .message').last().innerText()) || '').trim();
-        if (/контракт результата|формате агент отда[её]т итог|обязательные блоки/i.test(lastAgentMessage)) {
-          await sendComposerReply(page, 'Итоговый формат: one-page PDF и markdown. Обязательные блоки: профиль клиента, ключевые риски, рекомендация и итоговое решение.');
-        }
-
+        await ensureAwaitingConfirmation(page);
         await page.locator('#messages .message').filter({ hasText: 'подтверди' }).last().waitFor({ state: 'visible', timeout: defaultTimeoutMs });
         const sidePanel = page.locator('[data-role="side-panel"]');
         const sidePanelClose = page.locator('[data-role="side-panel-close"]');
@@ -286,12 +352,54 @@ async function run() {
           }, { timeout: defaultTimeoutMs });
         }
 
-        await sendComposerReply(page, 'Подтверждаю brief.');
+        try {
+          await sendComposerReply(page, 'Подтверждаю brief.');
+        } catch (error) {
+          const status = ((await page.locator('[data-role="status-user-visible"]').textContent()) || '').trim();
+          const nextAction = ((await page.locator('[data-role="status-next-action"]').textContent()) || '').trim();
+          const panelHidden = await sidePanel.evaluate((node) => node.hasAttribute('hidden')).catch(() => true);
+          const panelModeNow = (await sidePanel.getAttribute('data-mode')) || '';
+          const toggleNow = (await sidePanelToggle.getAttribute('aria-pressed')) || '';
+          const submitMode = (await page.locator('#sendBtn').getAttribute('data-mode')) || '';
+          const lastAgentMessageNow = ((await page.locator('#messages .message').last().innerText()) || '').trim().slice(0, 220);
+          throw new Error(
+            [
+              `confirm-send-timeout: ${error instanceof Error ? error.message : String(error)}`,
+              `status=${status}`,
+              `nextAction=${nextAction}`,
+              `panelHidden=${panelHidden}`,
+              `panelMode=${panelModeNow}`,
+              `togglePressed=${toggleNow}`,
+              `submitMode=${submitMode}`,
+              `lastMessage=${lastAgentMessageNow}`,
+            ].join(' | '),
+          );
+        }
 
-        await page.waitForFunction(() => {
-          const panel = document.querySelector('[data-role="side-panel"]');
-          return Boolean(panel && !panel.hasAttribute('hidden'));
-        }, { timeout: defaultTimeoutMs });
+        try {
+          await page.waitForFunction(() => {
+            const panel = document.querySelector('[data-role="side-panel"]');
+            return Boolean(panel && !panel.hasAttribute('hidden'));
+          }, { timeout: defaultTimeoutMs });
+        } catch (error) {
+          const status = ((await page.locator('[data-role="status-user-visible"]').textContent()) || '').trim();
+          const nextAction = ((await page.locator('[data-role="status-next-action"]').textContent()) || '').trim();
+          const panelHidden = await sidePanel.evaluate((node) => node.hasAttribute('hidden')).catch(() => true);
+          const panelModeNow = (await sidePanel.getAttribute('data-mode')) || '';
+          const toggleNow = (await sidePanelToggle.getAttribute('aria-pressed')) || '';
+          const lastAgentMessageNow = ((await page.locator('#messages .message').last().innerText()) || '').trim().slice(0, 220);
+          throw new Error(
+            [
+              error instanceof Error ? error.message : String(error),
+              `status=${status}`,
+              `nextAction=${nextAction}`,
+              `panelHidden=${panelHidden}`,
+              `panelMode=${panelModeNow}`,
+              `togglePressed=${toggleNow}`,
+              `lastMessage=${lastAgentMessageNow}`,
+            ].join(' | '),
+          );
+        }
         const panelMode = await sidePanel.getAttribute('data-mode');
         const togglePressed = await sidePanelToggle.getAttribute('aria-pressed');
 
