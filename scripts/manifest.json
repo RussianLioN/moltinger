@@ -542,6 +542,24 @@
       ],
       "ci": true
     },
+    "moltis-runtime-context-cleanup.sh": {
+      "version": "1.0.0",
+      "description": "Dry-run or remove allowlisted stale Moltis runtime-test artifacts from ~/.moltis",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "find",
+        "jq",
+        "sort"
+      ],
+      "provides": [
+        "moltis-runtime-context-cleanup"
+      ],
+      "env_vars": [
+        "MOLTIS_RUNTIME_HOME"
+      ],
+      "ci": true
+    },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",
