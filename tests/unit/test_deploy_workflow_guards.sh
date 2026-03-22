@@ -330,7 +330,10 @@ test_deploy_script_prepulls_tracked_browser_sandbox_image() {
        ! grep -Fq 'COPY docker/moltis-browser-sandbox/cdp-proxy.mjs /usr/local/bin/cdp-proxy.mjs' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" || \
        ! grep -Fq 'ENTRYPOINT ["/usr/local/bin/start-browserless-no-preboot.sh"]' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" || \
        ! grep -Fq 'exec node /usr/local/bin/cdp-proxy.mjs' "$PROJECT_ROOT/docker/moltis-browser-sandbox/start-browserless-no-preboot.sh" || \
-       ! grep -Fq 'function rewriteVersionPayload' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs"; then
+       ! grep -Fq 'function rewriteVersionPayload' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs" || \
+       ! grep -Fq 'function fetchActiveBrowserWsPath' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs" || \
+       ! grep -Fq 'function resolveUpstreamWebSocketPath' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs" || \
+       ! grep -Fq 'cachedBrowserWsPath' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs"; then
         test_fail "Deploy must parse the tracked browser contract with shell-only tooling, build the local browser CDP shim when configured, and otherwise pre-pull the sandbox image so the first browser run is not spent on a cold pull"
         return
     fi

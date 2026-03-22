@@ -5,6 +5,7 @@ const LISTEN_HOST = "0.0.0.0";
 const LISTEN_PORT = 3000;
 const TARGET_HOST = "127.0.0.1";
 const TARGET_PORT = 9222;
+let cachedBrowserWsPath = null;
 
 function sendBadGateway(res, error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -12,13 +13,70 @@ function sendBadGateway(res, error) {
   res.end(message);
 }
 
-function rewriteVersionPayload(body, hostHeader) {
+function extractBrowserWsPath(body) {
   const payload = JSON.parse(body);
-  if (payload.webSocketDebuggerUrl) {
-    const wsUrl = new URL(payload.webSocketDebuggerUrl);
-    payload.webSocketDebuggerUrl = `ws://${hostHeader}${wsUrl.pathname}${wsUrl.search}`;
+  if (!payload.webSocketDebuggerUrl) {
+    throw new Error("missing webSocketDebuggerUrl in /json/version payload");
   }
+
+  const wsUrl = new URL(payload.webSocketDebuggerUrl);
+  cachedBrowserWsPath = `${wsUrl.pathname}${wsUrl.search}`;
+  return { payload, wsUrl };
+}
+
+function rewriteVersionPayload(body, hostHeader) {
+  const { payload, wsUrl } = extractBrowserWsPath(body);
+  payload.webSocketDebuggerUrl = `ws://${hostHeader}${wsUrl.pathname}${wsUrl.search}`;
   return JSON.stringify(payload);
+}
+
+function fetchActiveBrowserWsPath(callback) {
+  const request = http.request(
+    {
+      host: TARGET_HOST,
+      port: TARGET_PORT,
+      path: "/json/version",
+      method: "GET",
+      headers: {
+        host: `${TARGET_HOST}:${TARGET_PORT}`,
+      },
+    },
+    (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      response.on("end", () => {
+        if ((response.statusCode || 500) >= 400) {
+          callback(new Error(`upstream /json/version returned HTTP ${response.statusCode || 500}`));
+          return;
+        }
+
+        try {
+          const body = Buffer.concat(chunks).toString("utf8");
+          extractBrowserWsPath(body);
+          callback(null, cachedBrowserWsPath);
+        } catch (error) {
+          callback(error);
+        }
+      });
+    },
+  );
+
+  request.on("error", (error) => callback(error));
+  request.end();
+}
+
+function resolveUpstreamWebSocketPath(requestUrl, callback) {
+  if (requestUrl && requestUrl !== "/") {
+    callback(null, requestUrl);
+    return;
+  }
+
+  if (cachedBrowserWsPath) {
+    callback(null, cachedBrowserWsPath);
+    return;
+  }
+
+  fetchActiveBrowserWsPath(callback);
 }
 
 function proxyHttp(req, res) {
@@ -66,34 +124,41 @@ function proxyHttp(req, res) {
 }
 
 function proxyWebSocket(req, clientSocket, head) {
-  const upstreamSocket = net.connect(TARGET_PORT, TARGET_HOST, () => {
-    const headerLines = [`GET ${req.url} HTTP/1.1`, `Host: ${TARGET_HOST}:${TARGET_PORT}`];
+  resolveUpstreamWebSocketPath(req.url, (resolveError, upstreamPath) => {
+    if (resolveError || !upstreamPath) {
+      clientSocket.destroy(resolveError || new Error("missing upstream websocket path"));
+      return;
+    }
 
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (key.toLowerCase() === "host") {
-        continue;
-      }
+    const upstreamSocket = net.connect(TARGET_PORT, TARGET_HOST, () => {
+      const headerLines = [`GET ${upstreamPath} HTTP/1.1`, `Host: ${TARGET_HOST}:${TARGET_PORT}`];
 
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          headerLines.push(`${key}: ${item}`);
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (key.toLowerCase() === "host") {
+          continue;
         }
-      } else if (value != null) {
-        headerLines.push(`${key}: ${value}`);
+
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            headerLines.push(`${key}: ${item}`);
+          }
+        } else if (value != null) {
+          headerLines.push(`${key}: ${value}`);
+        }
       }
-    }
 
-    upstreamSocket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
-    if (head.length > 0) {
-      upstreamSocket.write(head);
-    }
+      upstreamSocket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
+      if (head.length > 0) {
+        upstreamSocket.write(head);
+      }
 
-    clientSocket.pipe(upstreamSocket);
-    upstreamSocket.pipe(clientSocket);
+      clientSocket.pipe(upstreamSocket);
+      upstreamSocket.pipe(clientSocket);
+    });
+
+    upstreamSocket.on("error", () => clientSocket.destroy());
+    clientSocket.on("error", () => upstreamSocket.destroy());
   });
-
-  upstreamSocket.on("error", () => clientSocket.destroy());
-  clientSocket.on("error", () => upstreamSocket.destroy());
 }
 
 const server = http.createServer(proxyHttp);
