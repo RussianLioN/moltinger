@@ -8,6 +8,7 @@
 - `defense-feedback.json` — пример review-цикла с `rework_requested`
 - `swarm-evidence.json` — пример evidence-пакета для swarm run и playground package
 - `discovery/` — discovery-first fixtures для Telegram business analyst intake, brief и handoff
+- `telegram/` — follow-up Telegram adapter fixtures (update envelope, routing, confirm, delivery, resume)
 - `web-demo/` — browser-first fixtures для web adapter, session routing, brief review и artifact delivery
 
 ## Правила

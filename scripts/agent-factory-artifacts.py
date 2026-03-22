@@ -105,6 +105,8 @@ def derive_source_provenance(source: dict[str, Any], concept_record: dict[str, A
         "brief_id": normalize_text(concept_record.get("brief_id")) or normalize_text(requirement_brief.get("brief_id")),
         "brief_version": normalize_text(concept_record.get("brief_version"))
         or normalize_text(requirement_brief.get("version")),
+        "handoff_status": normalize_text(concept_record.get("handoff_status"))
+        or normalize_text(factory_handoff_record.get("handoff_status")),
         "confirmation_snapshot_id": normalize_text(concept_record.get("confirmation_snapshot_id"))
         or normalize_text(confirmation_snapshot.get("confirmation_snapshot_id")),
         "confirmed_at": normalize_text(concept_record.get("confirmed_at")) or normalize_text(confirmation_snapshot.get("confirmed_at")),

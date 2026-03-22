@@ -178,6 +178,10 @@ agent_factory_suite_entries() {
             optional_suite_entry bash component_agent_factory_web_brief "Agent factory web brief" "$SCRIPT_DIR/component/test_agent_factory_web_brief.sh"
             optional_suite_entry bash component_agent_factory_web_delivery "Agent factory web delivery" "$SCRIPT_DIR/component/test_agent_factory_web_delivery.sh"
             optional_suite_entry bash component_agent_factory_web_uploads "Agent factory web uploads" "$SCRIPT_DIR/component/test_agent_factory_web_uploads.sh"
+            optional_suite_entry bash component_agent_factory_telegram_routing "Agent factory telegram routing" "$SCRIPT_DIR/component/test_agent_factory_telegram_routing.sh"
+            optional_suite_entry bash component_agent_factory_telegram_intents "Agent factory telegram intents" "$SCRIPT_DIR/component/test_agent_factory_telegram_intents.sh"
+            optional_suite_entry bash component_agent_factory_telegram_brief "Agent factory telegram brief" "$SCRIPT_DIR/component/test_agent_factory_telegram_brief.sh"
+            optional_suite_entry bash component_agent_factory_telegram_delivery "Agent factory telegram delivery" "$SCRIPT_DIR/component/test_agent_factory_telegram_delivery.sh"
             ;;
         integration_local)
             optional_suite_entry bash integration_local_agent_factory_discovery_flow "Agent factory discovery flow" "$SCRIPT_DIR/integration_local/test_agent_factory_discovery_flow.sh"
@@ -191,6 +195,11 @@ agent_factory_suite_entries() {
             optional_suite_entry bash integration_local_agent_factory_web_confirmation "Agent factory web confirmation" "$SCRIPT_DIR/integration_local/test_agent_factory_web_confirmation.sh"
             optional_suite_entry bash integration_local_agent_factory_web_handoff "Agent factory web handoff" "$SCRIPT_DIR/integration_local/test_agent_factory_web_handoff.sh"
             optional_suite_entry bash integration_local_agent_factory_web_resume "Agent factory web resume" "$SCRIPT_DIR/integration_local/test_agent_factory_web_resume.sh"
+            optional_suite_entry bash integration_local_agent_factory_telegram_flow "Agent factory telegram flow" "$SCRIPT_DIR/integration_local/test_agent_factory_telegram_flow.sh"
+            optional_suite_entry bash integration_local_agent_factory_telegram_discovery "Agent factory telegram discovery" "$SCRIPT_DIR/integration_local/test_agent_factory_telegram_discovery.sh"
+            optional_suite_entry bash integration_local_agent_factory_telegram_confirmation "Agent factory telegram confirmation" "$SCRIPT_DIR/integration_local/test_agent_factory_telegram_confirmation.sh"
+            optional_suite_entry bash integration_local_agent_factory_telegram_handoff "Agent factory telegram handoff" "$SCRIPT_DIR/integration_local/test_agent_factory_telegram_handoff.sh"
+            optional_suite_entry bash integration_local_agent_factory_telegram_resume "Agent factory telegram resume" "$SCRIPT_DIR/integration_local/test_agent_factory_telegram_resume.sh"
             ;;
     esac
 }

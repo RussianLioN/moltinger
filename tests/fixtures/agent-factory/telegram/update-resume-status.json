@@ -1,0 +1,17 @@
+{
+  "update_id": 880630001,
+  "message": {
+    "message_id": 9301,
+    "date": 1783000001,
+    "chat": {
+      "id": 262872984,
+      "type": "private"
+    },
+    "from": {
+      "id": 262872984,
+      "first_name": "Сергей",
+      "language_code": "ru"
+    },
+    "text": "/status"
+  }
+}

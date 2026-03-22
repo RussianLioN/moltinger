@@ -28,10 +28,10 @@
 
 **Purpose**: Establish Telegram-adapter-specific config, manifest, fixtures, and test wiring before foundational implementation starts.
 
-- [ ] T001 Update active Telegram adapter anchors and storage paths in `config/moltis.toml`
-- [ ] T002 [P] Reconcile script descriptions and new adapter entrypoints in `scripts/manifest.json`
-- [ ] T003 [P] Create the Telegram adapter fixture tree in `tests/fixtures/agent-factory/telegram/README.md`
-- [ ] T004 [P] Register Telegram adapter suites in `tests/run.sh`
+- [x] T001 Update active Telegram adapter anchors and storage paths in `config/moltis.toml`
+- [x] T002 [P] Reconcile script descriptions and new adapter entrypoints in `scripts/manifest.json`
+- [x] T003 [P] Create the Telegram adapter fixture tree in `tests/fixtures/agent-factory/telegram/README.md`
+- [x] T004 [P] Register Telegram adapter suites in `tests/run.sh`
 
 **Checkpoint**: The repo knows where the adapter lives, how it is described, where its fixtures go, and how its tests will run.
 
@@ -43,12 +43,12 @@
 
 **⚠️ CRITICAL**: No Telegram user story should be treated as complete until this phase is done.
 
-- [ ] T005 [P] Create reusable Telegram adapter fixtures in `tests/fixtures/agent-factory/telegram/update-new-project.json`
-- [ ] T006 [P] Create component routing and sanitization coverage in `tests/component/test_agent_factory_telegram_routing.sh`
-- [ ] T007 [P] Create local adapter flow coverage in `tests/integration_local/test_agent_factory_telegram_flow.sh`
-- [ ] T008 [P] Implement the adapter entrypoint and normalized envelope handling in `scripts/agent-factory-telegram-adapter.py`
-- [ ] T009 [P] Extend shared Telegram render and state helpers in `scripts/agent_factory_common.py`
-- [ ] T010 Document operator flow and adapter storage layout in `docs/runbooks/agent-factory-telegram-adapter.md`
+- [x] T005 [P] Create reusable Telegram adapter fixtures in `tests/fixtures/agent-factory/telegram/update-new-project.json`
+- [x] T006 [P] Create component routing and sanitization coverage in `tests/component/test_agent_factory_telegram_routing.sh`
+- [x] T007 [P] Create local adapter flow coverage in `tests/integration_local/test_agent_factory_telegram_flow.sh`
+- [x] T008 [P] Implement the adapter entrypoint and normalized envelope handling in `scripts/agent-factory-telegram-adapter.py`
+- [x] T009 [P] Extend shared Telegram render and state helpers in `scripts/agent_factory_common.py`
+- [x] T010 Document operator flow and adapter storage layout in `docs/runbooks/agent-factory-telegram-adapter.md`
 
 **Checkpoint**: One Telegram update can be normalized, routed, and rendered through shared adapter plumbing.
 
@@ -62,15 +62,15 @@
 
 ### Validation for User Story 1
 
-- [ ] T011 [P] [US1] Create component coverage for Telegram intent parsing in `tests/component/test_agent_factory_telegram_intents.sh`
-- [ ] T012 [P] [US1] Create integration coverage for `new project -> first follow-up question` in `tests/integration_local/test_agent_factory_telegram_discovery.sh`
+- [x] T011 [P] [US1] Create component coverage for Telegram intent parsing in `tests/component/test_agent_factory_telegram_intents.sh`
+- [x] T012 [P] [US1] Create integration coverage for `new project -> first follow-up question` in `tests/integration_local/test_agent_factory_telegram_discovery.sh`
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Extend `scripts/agent-factory-telegram-adapter.py` to open projects and route free-form Telegram replies into `scripts/agent-factory-discovery.py`
-- [ ] T014 [P] [US1] Implement Telegram-readable discovery prompts and status text in `scripts/agent_factory_common.py`
-- [ ] T015 [US1] Add discovery conversation fixtures in `tests/fixtures/agent-factory/telegram/update-discovery-answer.json`
-- [ ] T016 [US1] Document live discovery commands and UX in `docs/runbooks/agent-factory-telegram-adapter.md`
+- [x] T013 [P] [US1] Extend `scripts/agent-factory-telegram-adapter.py` to open projects and route free-form Telegram replies into `scripts/agent-factory-discovery.py`
+- [x] T014 [P] [US1] Implement Telegram-readable discovery prompts and status text in `scripts/agent_factory_common.py`
+- [x] T015 [US1] Add discovery conversation fixtures in `tests/fixtures/agent-factory/telegram/update-discovery-answer.json`
+- [x] T016 [US1] Document live discovery commands and UX in `docs/runbooks/agent-factory-telegram-adapter.md`
 
 **Checkpoint**: The factory business-analyst agent is reachable by a real user through Telegram for discovery.
 
@@ -84,15 +84,15 @@
 
 ### Validation for User Story 2
 
-- [ ] T017 [P] [US2] Create component coverage for Telegram brief rendering and chunking in `tests/component/test_agent_factory_telegram_brief.sh`
-- [ ] T018 [P] [US2] Create integration coverage for Telegram correction and confirmation intents in `tests/integration_local/test_agent_factory_telegram_confirmation.sh`
+- [x] T017 [P] [US2] Create component coverage for Telegram brief rendering and chunking in `tests/component/test_agent_factory_telegram_brief.sh`
+- [x] T018 [P] [US2] Create integration coverage for Telegram correction and confirmation intents in `tests/integration_local/test_agent_factory_telegram_confirmation.sh`
 
 ### Implementation for User Story 2
 
-- [ ] T019 [P] [US2] Extend `scripts/agent-factory-telegram-adapter.py` to support brief review, correction, confirm, and reopen intents
-- [ ] T020 [P] [US2] Implement chunked brief rendering and confirmation prompts in `scripts/agent_factory_common.py`
-- [ ] T021 [US2] Add awaiting-confirmation fixtures in `tests/fixtures/agent-factory/telegram/update-brief-confirm.json`
-- [ ] T022 [US2] Document Telegram brief confirmation and reopen behavior in `docs/runbooks/agent-factory-telegram-adapter.md`
+- [x] T019 [P] [US2] Extend `scripts/agent-factory-telegram-adapter.py` to support brief review, correction, confirm, and reopen intents
+- [x] T020 [P] [US2] Implement chunked brief rendering and confirmation prompts in `scripts/agent_factory_common.py`
+- [x] T021 [US2] Add awaiting-confirmation fixtures in `tests/fixtures/agent-factory/telegram/update-brief-confirm.json`
+- [x] T022 [US2] Document Telegram brief confirmation and reopen behavior in `docs/runbooks/agent-factory-telegram-adapter.md`
 
 **Checkpoint**: The user can complete `discovery -> confirmed brief` fully inside Telegram.
 
@@ -106,15 +106,15 @@
 
 ### Validation for User Story 3
 
-- [ ] T023 [P] [US3] Create component coverage for downstream orchestration and delivery sanitization in `tests/component/test_agent_factory_telegram_delivery.sh`
-- [ ] T024 [P] [US3] Create integration coverage for `confirmed brief -> artifacts returned to Telegram` in `tests/integration_local/test_agent_factory_telegram_handoff.sh`
+- [x] T023 [P] [US3] Create component coverage for downstream orchestration and delivery sanitization in `tests/component/test_agent_factory_telegram_delivery.sh`
+- [x] T024 [P] [US3] Create integration coverage for `confirmed brief -> artifacts returned to Telegram` in `tests/integration_local/test_agent_factory_telegram_handoff.sh`
 
 ### Implementation for User Story 3
 
-- [ ] T025 [P] [US3] Extend `scripts/agent-factory-telegram-adapter.py` to invoke `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py` automatically after confirmation
-- [ ] T026 [P] [US3] Add Bot API document delivery helper in `scripts/telegram-bot-send-document.sh`
-- [ ] T027 [US3] Reconcile delivery and provenance fields in `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py`
-- [ ] T028 [US3] Document concept-pack delivery and failure messaging in `docs/runbooks/agent-factory-telegram-adapter.md` and `docs/runbooks/agent-factory-prototype.md`
+- [x] T025 [P] [US3] Extend `scripts/agent-factory-telegram-adapter.py` to invoke `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py` automatically after confirmation
+- [x] T026 [P] [US3] Add Bot API document delivery helper in `scripts/telegram-bot-send-document.sh`
+- [x] T027 [US3] Reconcile delivery and provenance fields in `scripts/agent-factory-intake.py` and `scripts/agent-factory-artifacts.py`
+- [x] T028 [US3] Document concept-pack delivery and failure messaging in `docs/runbooks/agent-factory-telegram-adapter.md` and `docs/runbooks/agent-factory-prototype.md`
 
 **Checkpoint**: Telegram is no longer just an input channel; it becomes the full user-facing path from confirmation to concept-pack delivery.
 
@@ -128,14 +128,14 @@
 
 ### Validation for User Story 4
 
-- [ ] T029 [P] [US4] Create integration coverage for resume, status, and project selection in `tests/integration_local/test_agent_factory_telegram_resume.sh`
+- [x] T029 [P] [US4] Create integration coverage for resume, status, and project selection in `tests/integration_local/test_agent_factory_telegram_resume.sh`
 
 ### Implementation for User Story 4
 
-- [ ] T030 [P] [US4] Extend `scripts/agent-factory-telegram-adapter.py` to persist active project pointers and resume context under `data/agent-factory/telegram/`
-- [ ] T031 [P] [US4] Extend `scripts/agent_factory_common.py` with Telegram session projection and reopened-brief status text
-- [ ] T032 [P] [US4] Add live pilot validation for adapter delivery boundaries in `tests/live_external/test_telegram_external_smoke.sh`
-- [ ] T033 [US4] Document resume, reopen, and `/status` behavior in `docs/runbooks/agent-factory-telegram-adapter.md`
+- [x] T030 [P] [US4] Extend `scripts/agent-factory-telegram-adapter.py` to persist active project pointers and resume context under `data/agent-factory/telegram/`
+- [x] T031 [P] [US4] Extend `scripts/agent_factory_common.py` with Telegram session projection and reopened-brief status text
+- [x] T032 [P] [US4] Add live pilot validation for adapter delivery boundaries in `tests/live_external/test_telegram_external_smoke.sh`
+- [x] T033 [US4] Document resume, reopen, and `/status` behavior in `docs/runbooks/agent-factory-telegram-adapter.md`
 
 **Checkpoint**: Telegram behaves like a real working user channel rather than a one-shot demo.
 
@@ -145,10 +145,10 @@
 
 **Purpose**: Reconcile planning, docs, topology, and validation once the Telegram adapter is implemented.
 
-- [ ] T034 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/023-telegram-factory-adapter/checklists/requirements.md`
-- [ ] T035 [P] Refresh topology documentation in `docs/GIT-TOPOLOGY-REGISTRY.md`
-- [ ] T036 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
-- [ ] T037 Run target Telegram adapter validation slices from `specs/023-telegram-factory-adapter/quickstart.md`
+- [x] T034 [P] Run final planning artifact validation in `.specify/scripts/bash/check-prerequisites.sh` and reconcile `specs/023-telegram-factory-adapter/checklists/requirements.md`
+- [x] T035 [P] Refresh topology documentation in `docs/GIT-TOPOLOGY-REGISTRY.md`
+- [x] T036 Reconcile session handoff and current status in `SESSION_SUMMARY.md`
+- [x] T037 Run target Telegram adapter validation slices from `specs/023-telegram-factory-adapter/quickstart.md`
 
 ---
 

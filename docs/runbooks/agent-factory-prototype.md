@@ -60,6 +60,7 @@ Expected result:
 - one canonical `concept_record`
 - one `artifact_context` for concept-pack generation
 - discovery-origin payloads preserve provenance in `concept_record` and later manifest metadata
+- discovery-origin payloads now include `source_handoff_status` (`ready|consumed`) to keep idempotent downstream replay traceable
 
 ### 2. Generate the concept pack
 
@@ -91,6 +92,19 @@ Notes:
 - `working/` is the editable source-first set
 - `downloads/` is the user-facing set to publish through the active factory interface
 - `concept-pack.json` is the canonical manifest for alignment and delivery
+- `source_provenance.handoff_status` in manifest must stay populated for discovery-origin requests
+
+### Telegram delivery helper (for adapter US3)
+
+```bash
+scripts/telegram-bot-send-document.sh --chat-id <CHAT_ID> --file /tmp/agent-factory-pack/downloads/one-page-summary.md --dry-run
+```
+
+Для live отправки:
+
+```bash
+TELEGRAM_BOT_TOKEN=<token> scripts/telegram-bot-send-document.sh --chat-id <CHAT_ID> --file /tmp/agent-factory-pack/downloads/one-page-summary.md
+```
 
 ### 3. Verify artifact alignment
 

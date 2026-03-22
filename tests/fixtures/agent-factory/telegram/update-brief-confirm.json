@@ -1,0 +1,17 @@
+{
+  "update_id": 880010090,
+  "message": {
+    "message_id": 4590,
+    "date": 1774000900,
+    "chat": {
+      "id": 262872984,
+      "type": "private"
+    },
+    "from": {
+      "id": 262872984,
+      "first_name": "Сергей",
+      "language_code": "ru"
+    },
+    "text": "Подтверждаю brief."
+  }
+}

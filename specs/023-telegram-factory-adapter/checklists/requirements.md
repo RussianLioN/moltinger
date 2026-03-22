@@ -34,3 +34,8 @@
 - This slice treats Telegram as a preserved follow-up live interface adapter, not as a separate agent identity.
 - The discovery runtime remains upstream in `022-telegram-ba-intake`, and the concept-pack pipeline remains downstream in `020-agent-factory-prototype`.
 - The feature is intentionally scoped around real user testing and adapter behavior, not around deploy, swarm redesign, or multi-channel abstraction.
+- Reconciled on 2026-03-22 with final implementation validation:
+  - `./.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+  - `./tests/run.sh --lane component --filter agent_factory_telegram_ --json`
+  - `./tests/run.sh --lane integration_local --filter agent_factory_telegram_ --json`
+  - quickstart adapter slices for `update-new-project`, `update-brief-confirm`, and `update-resume-status`.

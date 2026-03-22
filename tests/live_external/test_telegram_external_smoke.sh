@@ -33,15 +33,16 @@ telethon_available() {
 
 run_harness_probe() {
     local mode="$1"
-    local timeout_sec="$2"
-    local output_file="$3"
-    local log_file="$4"
+    local message="$2"
+    local timeout_sec="$3"
+    local output_file="$4"
+    local log_file="$5"
     local rc
 
     set +e
     bash "$HARNESS_SCRIPT" \
         --mode "$mode" \
-        --message "/status" \
+        --message "$message" \
         --timeout-sec "$timeout_sec" \
         --output "$output_file" \
         --moltis-url "$MOLTIS_URL" \
@@ -153,12 +154,26 @@ run_live_telegram_tests() {
         test_fail "Harness script is missing: $HARNESS_SCRIPT"
     elif require_secret_or_skip MOLTIS_PASSWORD "MOLTIS_PASSWORD"; then
         local synthetic_exit synthetic_status
-        synthetic_exit="$(run_harness_probe synthetic "$TEST_TIMEOUT" "$synthetic_report" "$synthetic_log")"
+        synthetic_exit="$(run_harness_probe synthetic "/status" "$TEST_TIMEOUT" "$synthetic_report" "$synthetic_log")"
         synthetic_status="$(jq -r '.status // "missing"' "$synthetic_report" 2>/dev/null || echo "missing")"
         if [[ "$synthetic_exit" == "0" ]] && harness_report_completed "$synthetic_report" "moltis_api_chat"; then
             test_pass
         else
             test_fail "Synthetic harness should complete (exit=$synthetic_exit, status=$synthetic_status)"
+        fi
+    fi
+
+    test_start "live_moltis_synthetic_projects_harness"
+    if ! [[ -f "$HARNESS_SCRIPT" ]]; then
+        test_fail "Harness script is missing: $HARNESS_SCRIPT"
+    elif require_secret_or_skip MOLTIS_PASSWORD "MOLTIS_PASSWORD"; then
+        local synthetic_projects_exit synthetic_projects_status
+        synthetic_projects_exit="$(run_harness_probe synthetic "/projects" "$TEST_TIMEOUT" "$suite_tmp_dir/moltis-synthetic-projects.json" "$suite_tmp_dir/moltis-synthetic-projects.log")"
+        synthetic_projects_status="$(jq -r '.status // "missing"' "$suite_tmp_dir/moltis-synthetic-projects.json" 2>/dev/null || echo "missing")"
+        if [[ "$synthetic_projects_exit" == "0" ]] && harness_report_completed "$suite_tmp_dir/moltis-synthetic-projects.json" "moltis_api_chat"; then
+            test_pass
+        else
+            test_fail "Synthetic /projects harness should complete (exit=$synthetic_projects_exit, status=$synthetic_projects_status)"
         fi
     fi
 
@@ -179,7 +194,7 @@ run_live_telegram_tests() {
         if [[ "$real_user_timeout" -lt 45 ]]; then
             real_user_timeout=45
         fi
-        real_user_exit="$(run_harness_probe real_user "$real_user_timeout" "$real_user_report" "$real_user_log")"
+        real_user_exit="$(run_harness_probe real_user "/status" "$real_user_timeout" "$real_user_report" "$real_user_log")"
         real_user_status="$(jq -r '.status // "missing"' "$real_user_report" 2>/dev/null || echo "missing")"
         if [[ "$real_user_exit" == "0" ]] && harness_report_completed "$real_user_report" "telegram_mtproto_real_user"; then
             test_pass

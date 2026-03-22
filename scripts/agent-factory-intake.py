@@ -103,7 +103,7 @@ def derive_discovery_handoff_request(payload: dict[str, Any]) -> tuple[dict[str,
         blocking_reasons.append("Нет активного confirmation snapshot.")
     if brief_version and snapshot_brief_version and brief_version != snapshot_brief_version:
         blocking_reasons.append("Confirmation snapshot относится к другой версии brief.")
-    if handoff_status != "ready":
+    if handoff_status not in {"ready", "consumed"}:
         blocking_reasons.append("Factory handoff record не готов к downstream intake.")
 
     if blocking_reasons:
@@ -146,6 +146,7 @@ def derive_discovery_handoff_request(payload: dict[str, Any]) -> tuple[dict[str,
         "source_kind": "confirmed_discovery_handoff",
         "source_brief_id": normalize_text(requirement_brief.get("brief_id")),
         "source_brief_version": brief_version,
+        "source_handoff_status": handoff_status,
         "source_confirmation_snapshot_id": normalize_text(confirmation_snapshot.get("confirmation_snapshot_id")),
         "source_discovery_session_id": normalize_text(discovery_session.get("discovery_session_id")),
         "source_project_key": normalize_text(requirement_brief.get("project_key")),
@@ -208,7 +209,14 @@ def main() -> int:
     }
     if source_kind:
         normalized_request["source_kind"] = source_kind
-    for key in ("source_brief_id", "source_brief_version", "source_confirmation_snapshot_id", "source_discovery_session_id", "source_project_key"):
+    for key in (
+        "source_brief_id",
+        "source_brief_version",
+        "source_handoff_status",
+        "source_confirmation_snapshot_id",
+        "source_discovery_session_id",
+        "source_project_key",
+    ):
         value = normalize_text(request.get(key))
         if value:
             normalized_request[key] = value
@@ -271,6 +279,7 @@ def main() -> int:
         concept_record["discovery_session_id"] = normalize_text(request.get("source_discovery_session_id"))
         concept_record["brief_id"] = normalize_text(request.get("source_brief_id"))
         concept_record["brief_version"] = normalize_text(request.get("source_brief_version"))
+        concept_record["handoff_status"] = normalize_text(request.get("source_handoff_status"))
         concept_record["confirmation_snapshot_id"] = normalize_text(request.get("source_confirmation_snapshot_id"))
         confirmation_snapshot = raw_payload.get("confirmation_snapshot", {}) if isinstance(raw_payload.get("confirmation_snapshot"), dict) else {}
         factory_handoff_record = raw_payload.get("factory_handoff_record", {}) if isinstance(raw_payload.get("factory_handoff_record"), dict) else {}

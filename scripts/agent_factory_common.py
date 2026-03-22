@@ -157,6 +157,13 @@ DISCOVERY_CONTRADICTION_RULESETS = [
         "message": "Ограничения описывают текстовый-only сценарий, а пример требует обработку документов или вложений.",
     },
 ]
+TRANSPORT_PATH_LEAK_PATTERNS = (
+    re.compile(r"/Users/[^\s]+"),
+    re.compile(r"/opt/[^\s]+"),
+    re.compile(r"/home/[^\s]+"),
+    re.compile(r"\bdata/agent-factory/[^\s]+"),
+    re.compile(r"\b\.beads/[^\s]+"),
+)
 
 
 def utc_now() -> str:
@@ -672,6 +679,323 @@ def normalize_download_artifacts(value: Any) -> list[dict[str, Any]]:
         )
 
     return download_artifacts
+
+
+def sanitize_transport_text(value: Any) -> str:
+    text = normalize_text(value)
+    if not text:
+        return ""
+    sanitized = text
+    for pattern in TRANSPORT_PATH_LEAK_PATTERNS:
+        sanitized = pattern.sub("[скрыто]", sanitized)
+    return sanitized
+
+
+def telegram_user_visible_status(adapter_status: Any, *, next_action: Any = "") -> str:
+    status = normalize_text(adapter_status)
+    action = normalize_text(next_action)
+    if status in {"error", "blocked", "gate_pending"}:
+        return "needs_attention"
+    if status in {"awaiting_confirmation", "reopened"}:
+        return "awaiting_confirmation"
+    if status in {"confirmed", "handoff_running"} or action in {"run_factory_intake", "generate_artifacts", "publish_downloads"}:
+        return "handoff_running"
+    if status in {"completed", "download_ready"}:
+        return "completed"
+    return "awaiting_user_reply"
+
+
+def telegram_user_visible_status_label(status: Any) -> str:
+    normalized = normalize_text(status)
+    if normalized == "needs_attention":
+        return "Нужно внимание оператора"
+    if normalized == "awaiting_confirmation":
+        return "Brief ждёт подтверждения"
+    if normalized == "handoff_running":
+        return "Фабрика обрабатывает confirmed brief"
+    if normalized == "completed":
+        return "Артефакты отправлены пользователю"
+    return "Сбор требований продолжается"
+
+
+def telegram_brief_status_label(status: Any) -> str:
+    normalized = normalize_text(status)
+    if normalized == "reopened":
+        return "Brief переоткрыт и ждет повторного подтверждения"
+    if normalized == "awaiting_confirmation":
+        return "Brief ожидает подтверждения"
+    if normalized == "confirmed":
+        return "Brief подтвержден"
+    return "Brief в работе"
+
+
+def telegram_next_action_label(action: Any) -> str:
+    normalized = normalize_text(action)
+    if normalized == "ask_next_question":
+        return "Ответить на следующий вопрос"
+    if normalized == "resolve_clarification":
+        return "Уточнить недостающие детали"
+    if normalized in {"request_explicit_confirmation", "await_for_confirmation", "confirm_brief"}:
+        return "Подтвердить brief"
+    if normalized == "request_brief_correction":
+        return "Внести правку в brief"
+    if normalized in {"run_factory_intake", "generate_artifacts", "publish_downloads"}:
+        return "Дождаться генерации и доставки артефактов"
+    if normalized == "request_status":
+        return "Проверить текущий статус"
+    return "Ожидать следующий шаг"
+
+
+def telegram_session_runtime_status(adapter_status: Any, *, next_action: Any = "") -> str:
+    user_status = telegram_user_visible_status(adapter_status, next_action=next_action)
+    if user_status == "needs_attention":
+        return "error"
+    if user_status == "awaiting_confirmation":
+        return "awaiting_confirmation"
+    if user_status == "handoff_running":
+        return "handoff_running"
+    if user_status == "completed":
+        return "completed"
+    return "awaiting_user_reply"
+
+
+def build_telegram_status_snapshot(
+    telegram_adapter_session_id: Any,
+    project_key: Any,
+    *,
+    adapter_status: Any,
+    next_action: Any,
+    brief: dict[str, Any] | None,
+    now: str,
+) -> dict[str, Any]:
+    user_status = telegram_user_visible_status(adapter_status, next_action=next_action)
+    return {
+        "telegram_status_snapshot_id": f"tg-status-{normalize_text(telegram_adapter_session_id) or normalize_text(project_key) or 'session'}",
+        "telegram_adapter_session_id": normalize_text(telegram_adapter_session_id),
+        "project_key": normalize_text(project_key),
+        "user_visible_status": user_status,
+        "user_visible_status_label": telegram_user_visible_status_label(user_status),
+        "brief_status": normalize_text((brief or {}).get("status")),
+        "brief_status_label": telegram_brief_status_label((brief or {}).get("status")),
+        "brief_version": normalize_text((brief or {}).get("version")),
+        "next_recommended_action": normalize_text(next_action),
+        "next_recommended_action_label": telegram_next_action_label(next_action),
+        "captured_at": now,
+    }
+
+
+def build_telegram_resume_projection(runtime_response: dict[str, Any]) -> dict[str, Any]:
+    resume_context = runtime_response.get("resume_context", {}) if isinstance(runtime_response.get("resume_context"), dict) else {}
+    if not resume_context:
+        return {}
+    summary_text = sanitize_transport_text(resume_context.get("summary_text"))
+    pending_question = sanitize_transport_text(resume_context.get("pending_question"))
+    if not summary_text and not pending_question:
+        return {}
+    return {
+        "summary_text": summary_text,
+        "pending_question": pending_question,
+        "remaining_topics": normalize_list(resume_context.get("remaining_topics")),
+        "latest_brief_version": normalize_text(resume_context.get("latest_brief_version")),
+    }
+
+
+def split_telegram_chunks(value: Any, *, chunk_size: int = 1200) -> list[str]:
+    text = sanitize_transport_text(value)
+    if not text:
+        return []
+    normalized_lines = [line.rstrip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for line in normalized_lines:
+        if not line.strip():
+            if current:
+                paragraphs.append("\n".join(current).strip())
+                current = []
+            continue
+        current.append(line)
+    if current:
+        paragraphs.append("\n".join(current).strip())
+    if not paragraphs:
+        paragraphs = [text]
+
+    chunks: list[str] = []
+    current_chunk = ""
+    for paragraph in paragraphs:
+        if not paragraph:
+            continue
+        candidate = f"{current_chunk}\n\n{paragraph}".strip() if current_chunk else paragraph
+        if len(candidate) <= chunk_size:
+            current_chunk = candidate
+            continue
+        if current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = ""
+        while len(paragraph) > chunk_size:
+            chunks.append(paragraph[:chunk_size].rstrip())
+            paragraph = paragraph[chunk_size:].lstrip()
+        current_chunk = paragraph
+    if current_chunk:
+        chunks.append(current_chunk)
+    return [chunk for chunk in chunks if chunk]
+
+
+def build_telegram_brief_summary_payloads(
+    runtime_response: dict[str, Any],
+    *,
+    telegram_adapter_session_id: Any,
+    now: str,
+    max_chunks: int = 6,
+) -> list[dict[str, Any]]:
+    discovery_session = runtime_response.get("discovery_session", {}) if isinstance(runtime_response.get("discovery_session"), dict) else {}
+    requirement_brief = runtime_response.get("requirement_brief", {}) if isinstance(runtime_response.get("requirement_brief"), dict) else {}
+    factory_handoff = runtime_response.get("factory_handoff_record", {}) if isinstance(runtime_response.get("factory_handoff_record"), dict) else {}
+    brief_version = normalize_text(requirement_brief.get("version")) or "без версии"
+    brief_markdown = normalize_text(runtime_response.get("brief_markdown"))
+    if not brief_markdown:
+        return []
+
+    chunks = split_telegram_chunks(brief_markdown)
+    if max_chunks > 0:
+        chunks = chunks[:max_chunks]
+    if not chunks:
+        return []
+
+    total = len(chunks)
+    payloads: list[dict[str, Any]] = []
+    for index, chunk in enumerate(chunks, start=1):
+        header = f"Summary brief v{brief_version} ({index}/{total})\n"
+        payloads.append(
+            build_telegram_reply_payload(
+                "brief_summary",
+                rendered_text=f"{header}{chunk}",
+                telegram_adapter_session_id=telegram_adapter_session_id,
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                chunk_index=index,
+                chunk_total=total,
+                now=now,
+            )
+        )
+    return payloads
+
+
+def build_telegram_reply_payload(
+    reply_kind: str,
+    *,
+    rendered_text: Any,
+    telegram_adapter_session_id: Any = "",
+    linked_discovery_session_id: Any = "",
+    linked_brief_id: Any = "",
+    linked_handoff_id: Any = "",
+    chunk_index: int = 1,
+    chunk_total: int = 1,
+    now: str = "",
+) -> dict[str, Any]:
+    now_value = now or utc_now()
+    text = sanitize_transport_text(rendered_text)
+    return {
+        "telegram_reply_payload_id": f"tg-reply-{slugify(f'{reply_kind}-{chunk_index}-{now_value}', 'tg-reply')}",
+        "telegram_adapter_session_id": normalize_text(telegram_adapter_session_id),
+        "reply_kind": normalize_text(reply_kind) or "status_update",
+        "rendered_text": text,
+        "chunk_index": chunk_index,
+        "chunk_total": max(chunk_total, chunk_index),
+        "parse_mode": "",
+        "reply_markup": {},
+        "linked_discovery_session_id": normalize_text(linked_discovery_session_id),
+        "linked_brief_id": normalize_text(linked_brief_id),
+        "linked_handoff_id": normalize_text(linked_handoff_id),
+        "created_at": now_value,
+    }
+
+
+def build_telegram_reply_payloads(
+    runtime_response: dict[str, Any],
+    *,
+    telegram_adapter_session_id: Any,
+    now: str,
+) -> list[dict[str, Any]]:
+    discovery_session = runtime_response.get("discovery_session", {}) if isinstance(runtime_response.get("discovery_session"), dict) else {}
+    requirement_brief = runtime_response.get("requirement_brief", {}) if isinstance(runtime_response.get("requirement_brief"), dict) else {}
+    factory_handoff = runtime_response.get("factory_handoff_record", {}) if isinstance(runtime_response.get("factory_handoff_record"), dict) else {}
+    status = normalize_text(runtime_response.get("status"))
+    next_action = normalize_text(runtime_response.get("next_action"))
+    next_question = sanitize_transport_text(runtime_response.get("next_question"))
+    project_key = normalize_text(discovery_session.get("project_key")) or normalize_text(runtime_response.get("project_key"))
+
+    snapshot = build_telegram_status_snapshot(
+        telegram_adapter_session_id,
+        project_key,
+        adapter_status=status,
+        next_action=next_action,
+        brief=requirement_brief,
+        now=now,
+    )
+    brief_status = normalize_text(requirement_brief.get("status"))
+    if brief_status == "reopened":
+        status_text = (
+            f"{snapshot['brief_status_label']}. "
+            "Проверь обновленную версию brief и подтверди ее повторно."
+        )
+    else:
+        status_text = (
+            f"{snapshot['user_visible_status_label']}. "
+            f"Следующий шаг: {snapshot['next_recommended_action_label'].lower()}."
+        )
+    payloads = [
+        build_telegram_reply_payload(
+            "status_update",
+            rendered_text=status_text,
+            telegram_adapter_session_id=telegram_adapter_session_id,
+            linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+            linked_brief_id=requirement_brief.get("brief_id"),
+            linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+            now=now,
+        )
+    ]
+
+    is_confirmation_stage = status in {"awaiting_confirmation", "reopened"} or next_action in {
+        "request_explicit_confirmation",
+        "await_for_confirmation",
+        "confirm_brief",
+    }
+
+    if is_confirmation_stage:
+        payloads.extend(
+            build_telegram_brief_summary_payloads(
+                runtime_response,
+                telegram_adapter_session_id=telegram_adapter_session_id,
+                now=now,
+            )
+        )
+        prompt_text = next_question or "Проверь brief и либо отправь правку, либо явно подтверди текущую версию."
+        payloads.append(
+            build_telegram_reply_payload(
+                "confirmation_prompt",
+                rendered_text=prompt_text,
+                telegram_adapter_session_id=telegram_adapter_session_id,
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                now=now,
+            )
+        )
+    elif next_question:
+        reply_kind = "clarification_prompt" if next_action == "resolve_clarification" else "discovery_question"
+        payloads.append(
+            build_telegram_reply_payload(
+                reply_kind,
+                rendered_text=next_question,
+                telegram_adapter_session_id=telegram_adapter_session_id,
+                linked_discovery_session_id=discovery_session.get("discovery_session_id"),
+                linked_brief_id=requirement_brief.get("brief_id"),
+                linked_handoff_id=factory_handoff.get("factory_handoff_id"),
+                now=now,
+            )
+        )
+    return payloads
 
 
 def web_user_visible_status(

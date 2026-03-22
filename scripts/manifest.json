@@ -131,6 +131,26 @@
         "MOLTIS_FACTORY_PRIMARY_DEMO_DOMAIN"
       ]
     },
+    "agent-factory-telegram-adapter.py": {
+      "version": "1.0.0",
+      "description": "Handle Telegram adapter updates and route them into the factory discovery and handoff runtime",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "agent-factory-telegram-adapter-handle-update",
+        "agent-factory-telegram-adapter-deliver-reply"
+      ],
+      "env_vars": [
+        "MOLTIS_FACTORY_TELEGRAM_ADAPTER_SCRIPT",
+        "MOLTIS_FACTORY_TELEGRAM_OUTPUT_ROOT",
+        "MOLTIS_FACTORY_TELEGRAM_SESSION_SUBDIR",
+        "MOLTIS_FACTORY_TELEGRAM_DELIVERY_SUBDIR",
+        "MOLTIS_FACTORY_TELEGRAM_HISTORY_SUBDIR",
+        "TELEGRAM_BOT_TOKEN"
+      ]
+    },
     "agent-factory-review.py": {
       "version": "1.0.0",
       "description": "Record defense review outcomes, structured feedback, and approval state for the agent factory MVP0 flow",
@@ -731,6 +751,25 @@
         "telegram",
         "bot-api",
         "send-message"
+      ],
+      "env_vars": [
+        "TELEGRAM_BOT_TOKEN",
+        "MOLTIS_ENV_FILE",
+        "TELEGRAM_TIMEOUT_SECONDS"
+      ]
+    },
+    "telegram-bot-send-document.sh": {
+      "version": "1.0.0",
+      "description": "Send Telegram documents from CLI as bot via Bot API multipart upload",
+      "entrypoint": true,
+      "requires": [
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "telegram",
+        "bot-api",
+        "send-document"
       ],
       "env_vars": [
         "TELEGRAM_BOT_TOKEN",

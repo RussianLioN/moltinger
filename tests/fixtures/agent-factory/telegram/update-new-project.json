@@ -1,0 +1,17 @@
+{
+  "update_id": 880010001,
+  "message": {
+    "message_id": 4501,
+    "date": 1774000000,
+    "chat": {
+      "id": 262872984,
+      "type": "private"
+    },
+    "from": {
+      "id": 262872984,
+      "first_name": "Сергей",
+      "language_code": "ru"
+    },
+    "text": "Нужно автоматизировать подготовку one-page summary по клиенту для кредитного комитета."
+  }
+}

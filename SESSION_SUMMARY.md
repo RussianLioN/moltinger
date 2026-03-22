@@ -50,6 +50,28 @@ GitOps Compliance: Enforced ✅
 **Feature Complete**: 001-docker-deploy-improvements (2026-03-02)
 **Test Suite**: Added comprehensive CI/CD test integration
 
+### Current Session Update (2026-03-22)
+
+- Завершены `US3` и `US4` для Telegram adapter в `specs/023-telegram-factory-adapter`:
+  - auto handoff + concept-pack delivery после explicit `confirm_brief`;
+  - resume/status/project-selection внутри Telegram (`/projects`, `/project <key>`), сохранение per-project state в `data/agent-factory/telegram/sessions/*.json`.
+- В `scripts/agent-factory-telegram-adapter.py` добавлены:
+  - `project_registry` c активным проектом и снапшотами runtime по проектам;
+  - intent-роутинг `list_projects`/`select_project`;
+  - восстановление активного проекта и продолжение discovery по выбранной ветке без потери истории;
+  - сохранение/возврат `project_registry` в adapter response.
+- В `scripts/agent_factory_common.py` добавлены:
+  - `telegram_brief_status_label` для отдельной формулировки `reopened`;
+  - `build_telegram_resume_projection` для user-facing resume summary.
+- Добавлены/обновлены тесты:
+  - `tests/integration_local/test_agent_factory_telegram_resume.sh` (новый);
+  - `tests/live_external/test_telegram_external_smoke.sh` расширен `/projects` probe;
+  - Telegram component + integration suites прогнаны зелёным.
+- Quickstart/fixtures/docs синхронизированы:
+  - добавлен отсутствующий fixture `tests/fixtures/agent-factory/telegram/update-resume-status.json`;
+  - обновлён runbook `docs/runbooks/agent-factory-telegram-adapter.md`;
+  - `specs/023-telegram-factory-adapter/tasks.md` и `checklists/requirements.md` reconciled по Phase 6/7.
+
 ### Current Session Update (2026-03-18)
 
 - Восстановлена корректная привязка ворктри `moltinger-019-asc-fabrique-prototype` к canonical gitdir (`/Users/rl/coding/moltinger/moltinger-main/.git/worktrees/moltinger-019-asc-fabrique-prototype`) и обновлён guard через `scripts/git-session-guard.sh --refresh`.
