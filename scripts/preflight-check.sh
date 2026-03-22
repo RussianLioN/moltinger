@@ -75,6 +75,9 @@ CLAWDIY_POLICY_TELEGRAM_REF=""
 CLAWDIY_POLICY_ALLOWLIST_REF=""
 CLAWDIY_POLICY_PROVIDER_REF=""
 
+# Moltis runtime cache
+MOLTIS_TELEGRAM_ALLOWLIST=""
+
 # Helper functions
 log_info() {
     if [[ "$OUTPUT_JSON" == "false" ]]; then
@@ -136,6 +139,7 @@ configure_target() {
         moltis)
             REQUIRED_SECRETS=(
                 "moltis_password"
+                "moltinger_service_token"
                 "telegram_bot_token"
                 "tavily_api_key"
                 "glm_api_key"
@@ -488,6 +492,71 @@ check_ollama_secret() {
     fi
 }
 
+read_moltis_auth_contract() {
+    local config_path="$PROJECT_ROOT/config/moltis.toml"
+
+    if [[ ! -f "$config_path" ]]; then
+        add_check "moltis_auth_contract" "fail" "Moltis config not found: $(basename "$config_path")" "error"
+        return 1
+    fi
+
+    local contract_json=""
+    if ! contract_json="$(python3 - "$config_path" <<'PY'
+import json
+import sys
+import tomllib
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+with config_path.open("rb") as fh:
+    data = tomllib.load(fh)
+
+env = data.get("env") or {}
+telegram = ((data.get("channels") or {}).get("telegram") or {}).get("moltis-bot") or {}
+allowlist = telegram.get("allowlist")
+
+if not isinstance(allowlist, list):
+    allowlist = []
+
+print(json.dumps({
+    "service_token_env": env.get("MOLTIS_FLEET_SERVICE_TOKEN_ENV") or "",
+    "telegram_dm_policy": telegram.get("dm_policy") or "",
+    "telegram_allowlist": [str(value).strip() for value in allowlist if str(value).strip()],
+}))
+PY
+)"; then
+        add_check "moltis_auth_contract" "fail" "Could not parse Moltis auth contract from config/moltis.toml" "error"
+        return 1
+    fi
+
+    local service_token_env telegram_dm_policy allowlist_csv allowlist_len
+    service_token_env="$(printf '%s' "$contract_json" | jq -r '.service_token_env')"
+    telegram_dm_policy="$(printf '%s' "$contract_json" | jq -r '.telegram_dm_policy')"
+    allowlist_csv="$(printf '%s' "$contract_json" | jq -r '.telegram_allowlist | join(",")')"
+    allowlist_len="$(printf '%s' "$contract_json" | jq -r '.telegram_allowlist | length')"
+
+    if [[ "$service_token_env" != "MOLTINGER_SERVICE_TOKEN" ]]; then
+        add_check "moltis_service_auth_contract" "fail" "config/moltis.toml must keep MOLTIS_FLEET_SERVICE_TOKEN_ENV bound to MOLTINGER_SERVICE_TOKEN" "error"
+        return 1
+    fi
+
+    if [[ "$telegram_dm_policy" != "allowlist" || "$allowlist_len" == "0" ]]; then
+        add_check "moltis_telegram_contract" "fail" "config/moltis.toml must keep Telegram dm_policy=allowlist with a non-empty tracked allowlist" "error"
+        return 1
+    fi
+
+    MOLTIS_TELEGRAM_ALLOWLIST="$allowlist_csv"
+    add_check "moltis_auth_contract" "pass" "Moltis auth contract keeps MOLTINGER_SERVICE_TOKEN and a tracked Telegram allowlist in config/moltis.toml" "error"
+
+    if [[ -n "${TELEGRAM_ALLOWED_USERS:-}" ]]; then
+        if [[ "${TELEGRAM_ALLOWED_USERS}" == "$MOLTIS_TELEGRAM_ALLOWLIST" ]]; then
+            add_check "moltis_telegram_allowlist_mirror" "pass" "TELEGRAM_ALLOWED_USERS mirror matches the tracked Telegram allowlist" "warning"
+        else
+            add_check "moltis_telegram_allowlist_mirror" "fail" "TELEGRAM_ALLOWED_USERS diverges from the tracked Telegram allowlist in config/moltis.toml" "error"
+        fi
+    fi
+}
+
 check_clawdiy_runtime_config() {
     local rendered_runtime_config="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
     if [[ -f "$rendered_runtime_config" ]]; then
@@ -771,6 +840,9 @@ check_clawdiy_topology_alignment() {
 
 check_target_specific_config() {
     case "$TARGET" in
+        moltis)
+            read_moltis_auth_contract
+            ;;
         clawdiy)
             check_clawdiy_runtime_config
             check_clawdiy_runtime_home

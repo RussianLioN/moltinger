@@ -587,6 +587,26 @@
       ],
       "ci": true
     },
+    "moltis-session-reconcile.sh": {
+      "version": "1.0.0",
+      "description": "Resolve, patch, and reset Moltis UI or Telegram-bound sessions onto the canonical model contract",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "jq",
+        "node"
+      ],
+      "provides": [
+        "moltis-session-reconcile"
+      ],
+      "env_vars": [
+        "MOLTIS_URL",
+        "MOLTIS_ENV_FILE",
+        "EXPECTED_MODEL"
+      ],
+      "ci": true
+    },
     "build-lessons-index.sh": {
       "version": "1.0.0",
       "description": "Generate lessons learned index from RCA reports",
@@ -742,10 +762,25 @@
       "requires": [
         "bash",
         "cat",
-        "mkdir"
+        "mkdir",
+        "python3"
       ],
       "provides": [
         "render-moltis-env"
+      ],
+      "env_vars": [
+        "MOLTIS_PASSWORD",
+        "MOLTINGER_SERVICE_TOKEN",
+        "GLM_API_KEY",
+        "OLLAMA_API_KEY",
+        "TAVILY_API_KEY",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "TELEGRAM_WEBHOOK_URL",
+        "TELEGRAM_WEBHOOK_SECRET",
+        "MOLTIS_DOMAIN",
+        "MOLTIS_RUNTIME_CONFIG_DIR",
+        "MOLTIS_CONFIG_PATH"
       ],
       "gitops": true,
       "ci": true

@@ -39,6 +39,12 @@ RUNTIME_ENV_FILE="${BACKUP_ENV_FILE:-$PROJECT_ROOT/.env}"
 COMPOSE_FILE_MAIN="${BACKUP_COMPOSE_FILE_MAIN:-$PROJECT_ROOT/docker-compose.yml}"
 COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod.yml}"
 BACKUP_RESTORE_RUNTIME_FILES="${BACKUP_RESTORE_RUNTIME_FILES:-true}"
+MOLTIS_RUNTIME_CONFIG_DIR="${BACKUP_RUNTIME_CONFIG_DIR:-${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}}"
+MOLTIS_RUNTIME_HOME_DIR="${BACKUP_RUNTIME_HOME_DIR:-}"
+MOLTIS_RUNTIME_HOME_VOLUME="${BACKUP_RUNTIME_HOME_VOLUME:-moltis-data}"
+MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME="${MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME:-moltis-runtime-config.tar.gz}"
+MOLTIS_RUNTIME_HOME_ARCHIVE_NAME="${MOLTIS_RUNTIME_HOME_ARCHIVE_NAME:-moltis-runtime-home.tar.gz}"
+MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME="${MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME:-moltis-runtime-evidence-manifest.json}"
 CLAWDIY_BACKUP_ENABLED="${CLAWDIY_BACKUP_ENABLED:-true}"
 CLAWDIY_CONFIG_DIR="${CLAWDIY_CONFIG_DIR:-$PROJECT_ROOT/config/clawdiy}"
 CLAWDIY_RUNTIME_DIR="${CLAWDIY_RUNTIME_DIR:-$PROJECT_ROOT/data/clawdiy/runtime}"
@@ -116,6 +122,9 @@ LOG_DIR="${BACKUP_LOG_DIR:-${LOG_DIR:-/var/log/moltis}}"
 RUNTIME_ENV_FILE="${BACKUP_ENV_FILE:-${RUNTIME_ENV_FILE:-$PROJECT_ROOT/.env}}"
 COMPOSE_FILE_MAIN="${BACKUP_COMPOSE_FILE_MAIN:-${COMPOSE_FILE_MAIN:-$PROJECT_ROOT/docker-compose.yml}}"
 COMPOSE_FILE_PROD="${BACKUP_COMPOSE_FILE_PROD:-${COMPOSE_FILE_PROD:-$PROJECT_ROOT/docker-compose.prod.yml}}"
+MOLTIS_RUNTIME_CONFIG_DIR="${BACKUP_RUNTIME_CONFIG_DIR:-${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}}"
+MOLTIS_RUNTIME_HOME_DIR="${BACKUP_RUNTIME_HOME_DIR:-${MOLTIS_RUNTIME_HOME_DIR:-}}"
+MOLTIS_RUNTIME_HOME_VOLUME="${BACKUP_RUNTIME_HOME_VOLUME:-${MOLTIS_RUNTIME_HOME_VOLUME:-moltis-data}}"
 
 # Setup logging (with fallback if permission denied)
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
@@ -165,6 +174,44 @@ clawdiy_inventory_present() {
     [[ -e "$CLAWDIY_CONFIG_DIR" || -e "$CLAWDIY_RUNTIME_DIR" || -e "$CLAWDIY_STATE_DIR" || -e "$CLAWDIY_AUDIT_DIR" ]]
 }
 
+resolve_moltis_runtime_home_source() {
+    if [[ -n "$MOLTIS_RUNTIME_HOME_DIR" ]]; then
+        if [[ -d "$MOLTIS_RUNTIME_HOME_DIR" ]]; then
+            printf '%s\n' "$MOLTIS_RUNTIME_HOME_DIR"
+        fi
+        return 0
+    fi
+
+    if docker volume inspect "$MOLTIS_RUNTIME_HOME_VOLUME" >/dev/null 2>&1; then
+        docker volume inspect "$MOLTIS_RUNTIME_HOME_VOLUME" --format '{{.Mountpoint}}' 2>/dev/null || true
+    fi
+}
+
+ensure_moltis_runtime_home_target() {
+    local target_dir=""
+
+    if [[ -n "$MOLTIS_RUNTIME_HOME_DIR" ]]; then
+        mkdir -p "$MOLTIS_RUNTIME_HOME_DIR"
+        printf '%s\n' "$MOLTIS_RUNTIME_HOME_DIR"
+        return 0
+    fi
+
+    if ! docker volume inspect "$MOLTIS_RUNTIME_HOME_VOLUME" >/dev/null 2>&1; then
+        docker volume create "$MOLTIS_RUNTIME_HOME_VOLUME" >/dev/null
+    fi
+
+    target_dir="$(docker volume inspect "$MOLTIS_RUNTIME_HOME_VOLUME" --format '{{.Mountpoint}}' 2>/dev/null || true)"
+    [[ -n "$target_dir" ]] || return 1
+    mkdir -p "$target_dir"
+    printf '%s\n' "$target_dir"
+}
+
+moltis_runtime_inventory_present() {
+    local runtime_home_source
+    runtime_home_source="$(resolve_moltis_runtime_home_source)"
+    [[ -d "$MOLTIS_RUNTIME_CONFIG_DIR" || -d "$runtime_home_source" ]]
+}
+
 count_files_under() {
     local root="$1"
 
@@ -202,6 +249,28 @@ current_time_ms() {
     else
         echo "$(($(date +%s) * 1000))"
     fi
+}
+
+archive_directory_contents() {
+    local source_dir="$1"
+    local output_file="$2"
+
+    [[ -d "$source_dir" ]] || return 1
+    tar -czf "$output_file" -C "$source_dir" . 2>/dev/null
+}
+
+restore_directory_archive() {
+    local archive_file="$1"
+    local target_dir="$2"
+    local temp_dir=""
+
+    [[ -f "$archive_file" ]] || return 0
+
+    temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/moltis-runtime-restore.XXXXXX")"
+    tar -xzf "$archive_file" -C "$temp_dir"
+    mkdir -p "$target_dir"
+    rsync -av --delete "$temp_dir/" "$target_dir/"
+    rm -rf "$temp_dir"
 }
 
 write_sha256_file() {
@@ -624,6 +693,9 @@ create_backup() {
     local env_included=false
     local compose_main_included=false
     local compose_prod_included=false
+    local runtime_config_included=false
+    local runtime_home_included=false
+    local runtime_home_source=""
     local moltis_restore_ready=false
 
     log_info "Creating $BACKUP_TYPE backup: $backup_name"
@@ -684,9 +756,54 @@ EOF
         log_warn "Production compose file missing from backup scope: $COMPOSE_FILE_PROD"
     fi
 
-    if [[ "$env_included" == "true" && "$compose_main_included" == "true" && "$compose_prod_included" == "true" ]]; then
+    if [[ -d "$MOLTIS_RUNTIME_CONFIG_DIR" ]]; then
+        runtime_config_included=true
+        archive_directory_contents "$MOLTIS_RUNTIME_CONFIG_DIR" "$tmp_dir/$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME" || {
+            log_error "Failed to archive Moltis runtime config dir: $MOLTIS_RUNTIME_CONFIG_DIR"
+            rm -rf "$tmp_dir"
+            return 1
+        }
+    else
+        log_warn "Moltis runtime config dir missing from backup scope: $MOLTIS_RUNTIME_CONFIG_DIR"
+    fi
+
+    runtime_home_source="$(resolve_moltis_runtime_home_source)"
+    if [[ -n "$runtime_home_source" && -d "$runtime_home_source" ]]; then
+        runtime_home_included=true
+        archive_directory_contents "$runtime_home_source" "$tmp_dir/$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME" || {
+            log_error "Failed to archive Moltis runtime home source: $runtime_home_source"
+            rm -rf "$tmp_dir"
+            return 1
+        }
+    else
+        log_warn "Moltis runtime home source missing from backup scope: ${MOLTIS_RUNTIME_HOME_DIR:-$MOLTIS_RUNTIME_HOME_VOLUME}"
+    fi
+
+    if [[ "$env_included" == "true" && "$compose_main_included" == "true" && "$compose_prod_included" == "true" && "$runtime_config_included" == "true" && "$runtime_home_included" == "true" ]]; then
         moltis_restore_ready=true
     fi
+
+    cat > "$tmp_dir/$MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME" <<EOF
+{
+  "schema_version": "v1",
+  "captured_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "runtime_config_dir": "$MOLTIS_RUNTIME_CONFIG_DIR",
+  "runtime_config_present": $(json_bool "$( [[ -d "$MOLTIS_RUNTIME_CONFIG_DIR" ]] && echo true || echo false )"),
+  "runtime_config_file_count": $(count_files_under "$MOLTIS_RUNTIME_CONFIG_DIR"),
+  "runtime_config_latest_artifact": $(latest_file_under "$MOLTIS_RUNTIME_CONFIG_DIR" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "runtime_config_oauth_tokens_present": $(json_bool "$( [[ -f "$MOLTIS_RUNTIME_CONFIG_DIR/oauth_tokens.json" ]] && echo true || echo false )"),
+  "runtime_config_provider_keys_present": $(json_bool "$( [[ -f "$MOLTIS_RUNTIME_CONFIG_DIR/provider_keys.json" ]] && echo true || echo false )"),
+  "runtime_home_source": $(printf '%s' "$runtime_home_source" | jq -Rsc 'if . == "" then null else . end'),
+  "runtime_home_source_kind": $(if [[ -n "$MOLTIS_RUNTIME_HOME_DIR" ]]; then printf '"directory"'; else printf '"docker_volume"'; fi),
+  "runtime_home_volume": $(printf '%s' "$MOLTIS_RUNTIME_HOME_VOLUME" | jq -Rsc '.'),
+  "runtime_home_present": $(json_bool "$( [[ -n "$runtime_home_source" && -d "$runtime_home_source" ]] && echo true || echo false )"),
+  "runtime_home_file_count": $(count_files_under "$runtime_home_source"),
+  "runtime_home_latest_artifact": $(latest_file_under "$runtime_home_source" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "session_file_count": $(count_files_under "$runtime_home_source/sessions"),
+  "memory_file_count": $(count_files_under "$runtime_home_source/memory"),
+  "codex_update_file_count": $(count_files_under "$runtime_home_source/codex-update")
+}
+EOF
 
     # Create metadata
     cat > "$tmp_dir/backup-metadata.json" <<EOF
@@ -719,6 +836,16 @@ EOF
         "compose_file_prod": {
             "path": "$COMPOSE_FILE_PROD",
             "included": $(json_bool "$compose_prod_included")
+        },
+        "runtime_config_archive": {
+            "path": "$MOLTIS_RUNTIME_CONFIG_DIR",
+            "included": $(json_bool "$runtime_config_included"),
+            "archive": "$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME"
+        },
+        "runtime_home_archive": {
+            "path": "${runtime_home_source:-$MOLTIS_RUNTIME_HOME_VOLUME}",
+            "included": $(json_bool "$runtime_home_included"),
+            "archive": "$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME"
         }
     },
     "restore_readiness": {
@@ -730,8 +857,13 @@ EOF
                 "data/",
                 ".env",
                 "docker-compose.yml",
-                "docker-compose.prod.yml"
+                "docker-compose.prod.yml",
+                "$MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME",
+                "$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME",
+                "$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME"
             ],
+            "runtime_config_dir": "$MOLTIS_RUNTIME_CONFIG_DIR",
+            "runtime_home_source": "${runtime_home_source:-$MOLTIS_RUNTIME_HOME_VOLUME}",
             "clawdiy_runtime_dir": "$CLAWDIY_RUNTIME_DIR"
         }
     },
@@ -756,6 +888,18 @@ EOF
 
     if [[ -f "$tmp_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME" ]]; then
         tar_args+=(-C "$tmp_dir" "$CLAWDIY_EVIDENCE_MANIFEST_NAME")
+    fi
+
+    if [[ -f "$tmp_dir/$MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME" ]]; then
+        tar_args+=(-C "$tmp_dir" "$MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME")
+    fi
+
+    if [[ -f "$tmp_dir/$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME" ]]; then
+        tar_args+=(-C "$tmp_dir" "$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME")
+    fi
+
+    if [[ -f "$tmp_dir/$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME" ]]; then
+        tar_args+=(-C "$tmp_dir" "$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME")
     fi
 
     if [[ -f "$RUNTIME_ENV_FILE" ]]; then
@@ -942,6 +1086,9 @@ validate_restore_readiness() {
     local extracted_dir="$1"
     local metadata_file="$extracted_dir/backup-metadata.json"
     local expected_manifest="$extracted_dir/$CLAWDIY_EVIDENCE_MANIFEST_NAME"
+    local runtime_manifest="$extracted_dir/$MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME"
+    local runtime_config_archive="$extracted_dir/$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME"
+    local runtime_home_archive="$extracted_dir/$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME"
 
     if [[ ! -f "$metadata_file" ]]; then
         log_error "Restore payload is missing backup-metadata.json"
@@ -975,6 +1122,26 @@ validate_restore_readiness() {
 
     if ! jq -e '.restore_readiness.moltis.ready == true' "$metadata_file" >/dev/null 2>&1; then
         log_error "Backup metadata does not mark Moltis restore readiness as ready"
+        return 1
+    fi
+
+    if [[ ! -f "$runtime_manifest" ]]; then
+        log_error "Restore payload is missing $MOLTIS_RUNTIME_EVIDENCE_MANIFEST_NAME"
+        return 1
+    fi
+
+    if [[ ! -f "$runtime_config_archive" ]]; then
+        log_error "Restore payload is missing $MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME"
+        return 1
+    fi
+
+    if [[ ! -f "$runtime_home_archive" ]]; then
+        log_error "Restore payload is missing $MOLTIS_RUNTIME_HOME_ARCHIVE_NAME"
+        return 1
+    fi
+
+    if ! jq -e '.runtime_files.runtime_config_archive.included == true and .runtime_files.runtime_home_archive.included == true' "$metadata_file" >/dev/null 2>&1; then
+        log_error "Backup metadata does not mark Moltis runtime state archives as included"
         return 1
     fi
 
@@ -1079,6 +1246,7 @@ restore_backup() {
     local clawdiy_container_present=false
     local clawdiy_restore_expected=false
     local metadata_file=""
+    local runtime_home_target=""
 
     log_info "Starting restore from: $backup_file"
     log_warn "This will OVERWRITE existing data!"
@@ -1119,6 +1287,21 @@ restore_backup() {
         restore_runtime_file "$restore_dir/.env" "$RUNTIME_ENV_FILE"
         restore_runtime_file "$restore_dir/docker-compose.yml" "$COMPOSE_FILE_MAIN"
         restore_runtime_file "$restore_dir/docker-compose.prod.yml" "$COMPOSE_FILE_PROD"
+    fi
+
+    if [[ -f "$restore_dir/$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME" ]]; then
+        log_info "Restoring Moltis runtime config state..."
+        restore_directory_archive "$restore_dir/$MOLTIS_RUNTIME_CONFIG_ARCHIVE_NAME" "$MOLTIS_RUNTIME_CONFIG_DIR"
+    fi
+
+    if [[ -f "$restore_dir/$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME" ]]; then
+        runtime_home_target="$(ensure_moltis_runtime_home_target)"
+        if [[ -z "$runtime_home_target" ]]; then
+            log_error "Could not resolve a writable Moltis runtime home target for restore"
+            return 1
+        fi
+        log_info "Restoring Moltis runtime home state into $runtime_home_target..."
+        restore_directory_archive "$restore_dir/$MOLTIS_RUNTIME_HOME_ARCHIVE_NAME" "$runtime_home_target"
     fi
 
     if string_is_true "$CLAWDIY_BACKUP_ENABLED" && [[ -e "$restore_dir/config/clawdiy" || -e "$restore_dir/data/clawdiy" ]]; then

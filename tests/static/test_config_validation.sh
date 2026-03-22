@@ -33,6 +33,7 @@ TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
+SELF_LEARNING_DOC="$PROJECT_ROOT/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md"
 
 validate_toml() {
     local file_path="$1"
@@ -256,6 +257,21 @@ PY
         test_fail "Primary Moltis config must not declare enabled=true under [channels.telegram] because Moltis parses it as a bogus Telegram account entry"
     fi
 
+    test_start "static_moltis_auth_ownership_contract_stays_aligned"
+    if rg -Fq 'MOLTIS_FLEET_SERVICE_TOKEN_ENV = "MOLTINGER_SERVICE_TOKEN"' "$TOML_CONFIG" && \
+       rg -Fq 'MOLTINGER_SERVICE_TOKEN: ${{ secrets.MOLTINGER_SERVICE_TOKEN }}' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'MOLTINGER_SERVICE_TOKEN: ${{ secrets.MOLTINGER_SERVICE_TOKEN }}' "$UAT_GATE_WORKFLOW" && \
+       ! rg -Fq 'TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_ALLOWED_USERS }}' "$DEPLOY_WORKFLOW" && \
+       ! rg -Fq 'TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_ALLOWED_USERS }}' "$UAT_GATE_WORKFLOW" && \
+       rg -Fq 'TELEGRAM_ALLOWED_USERS diverges from tracked Telegram allowlist' "$MOLTIS_ENV_RENDER_SCRIPT" && \
+       rg -Fq 'Moltis auth contract keeps MOLTINGER_SERVICE_TOKEN and a tracked Telegram allowlist in config/moltis.toml' "$PREFLIGHT_SCRIPT" && \
+       rg -Fq 'dm_policy = "allowlist"' "$SELF_LEARNING_DOC" && \
+       ! rg -Fq 'allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"' "$SELF_LEARNING_DOC"; then
+        test_pass
+    else
+        test_fail "Moltis auth ownership must keep MOLTINGER_SERVICE_TOKEN end-to-end and treat the tracked Telegram allowlist as the single runtime source of truth"
+    fi
+
     test_start "static_codex_cli_update_delivery_script_is_executable"
     if [[ -x "$PROJECT_ROOT/scripts/codex-cli-update-delivery.sh" ]]; then
         test_pass
@@ -283,6 +299,18 @@ PY
         test_pass
     else
         test_fail "Canonical Moltis smoke proof must be able to enforce provider/model/reply expectations and explicitly support restart-survival verification"
+    fi
+
+    test_start "static_session_reconcile_runbook_uses_shared_operator_script"
+    if rg -Fq 'moltis-session-reconcile.sh --session-key main' "$PROJECT_ROOT/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md" && \
+       rg -Fq 'moltis-session-reconcile.sh --telegram-chat-id 262872984' "$PROJECT_ROOT/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md" && \
+       rg -Fq 'SESSION_KEY=""' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh" && \
+       rg -Fq 'TELEGRAM_CHAT_ID=""' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh" && \
+       rg -Fq 'sessions.patch' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh" && \
+       rg -Fq 'sessions.reset' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh"; then
+        test_pass
+    else
+        test_fail "Session reconcile automation must be documented in the runbook and implemented through the shared moltis-session-reconcile.sh script"
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"

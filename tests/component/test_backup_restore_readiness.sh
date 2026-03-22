@@ -41,19 +41,25 @@ run_component_backup_restore_readiness_tests() {
 
     test_start "component_backup_restore_check_requires_runtime_files"
 
-    local fixture_root fake_bin project_dir backup_dir backup_conf backup_json backup_path extract_dir
+    local fixture_root fake_bin project_dir backup_dir backup_conf backup_json backup_path extract_dir runtime_config_dir runtime_home_dir
     fixture_root="$(mktemp -d /tmp/moltis-backup-component.XXXXXX)"
     fake_bin="$(create_fake_docker_bin "$fixture_root")"
     project_dir="${fixture_root}/project"
     backup_dir="${fixture_root}/backups"
     extract_dir="${fixture_root}/extract"
+    runtime_config_dir="${fixture_root}/runtime-config"
+    runtime_home_dir="${fixture_root}/runtime-home"
 
-    mkdir -p "${project_dir}/config" "${project_dir}/data"
+    mkdir -p "${project_dir}/config" "${project_dir}/data" "${runtime_config_dir}" "${runtime_home_dir}/sessions" "${runtime_home_dir}/memory"
     printf '[server]\nbind = "0.0.0.0"\n' > "${project_dir}/config/moltis.toml"
     printf 'state\n' > "${project_dir}/data/runtime.txt"
     printf 'MOLTIS_PASSWORD=test-password\n' > "${project_dir}/.env"
     printf 'services:\n  moltis:\n    image: ghcr.io/moltis-org/moltis:v1.8.0\n' > "${project_dir}/docker-compose.yml"
     printf 'services:\n  moltis:\n    image: ghcr.io/moltis-org/moltis:v1.8.0\n' > "${project_dir}/docker-compose.prod.yml"
+    printf 'oauth\n' > "${runtime_config_dir}/oauth_tokens.json"
+    printf 'providers\n' > "${runtime_config_dir}/provider_keys.json"
+    printf 'session\n' > "${runtime_home_dir}/sessions/main.jsonl"
+    printf 'knowledge\n' > "${runtime_home_dir}/memory/project-knowledge.md"
 
     backup_conf="${fixture_root}/backup.conf"
     cat > "$backup_conf" <<EOF
@@ -67,6 +73,8 @@ BACKUP_DATA_DIR="${project_dir}/data"
 BACKUP_ENV_FILE="${project_dir}/.env"
 BACKUP_COMPOSE_FILE_MAIN="${project_dir}/docker-compose.yml"
 BACKUP_COMPOSE_FILE_PROD="${project_dir}/docker-compose.prod.yml"
+BACKUP_RUNTIME_CONFIG_DIR="${runtime_config_dir}"
+BACKUP_RUNTIME_HOME_DIR="${runtime_home_dir}"
 CLAWDIY_BACKUP_ENABLED=false
 EOF
 
@@ -90,15 +98,20 @@ EOF
     if [[ -f "${extract_dir}/.env" ]] && \
        [[ -f "${extract_dir}/docker-compose.yml" ]] && \
        [[ -f "${extract_dir}/docker-compose.prod.yml" ]] && \
+       [[ -f "${extract_dir}/moltis-runtime-evidence-manifest.json" ]] && \
+       [[ -f "${extract_dir}/moltis-runtime-config.tar.gz" ]] && \
+       [[ -f "${extract_dir}/moltis-runtime-home.tar.gz" ]] && \
        jq -e '.restore_readiness.moltis.ready == true
          and .runtime_files.env_file.included == true
          and .runtime_files.compose_file_main.included == true
-         and .runtime_files.compose_file_prod.included == true' "${extract_dir}/backup-metadata.json" >/dev/null 2>&1; then
+         and .runtime_files.compose_file_prod.included == true
+         and .runtime_files.runtime_config_archive.included == true
+         and .runtime_files.runtime_home_archive.included == true' "${extract_dir}/backup-metadata.json" >/dev/null 2>&1; then
         rm -rf "$fixture_root"
         test_pass
     else
         rm -rf "$fixture_root"
-        test_fail "Backup archive should contain runtime files and mark Moltis restore readiness as ready"
+        test_fail "Backup archive should contain Moltis runtime state inventory and mark restore readiness as ready only when runtime state archives are included"
     fi
 
     generate_report

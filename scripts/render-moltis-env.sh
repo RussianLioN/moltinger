@@ -3,13 +3,19 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 OUTPUT_PATH=""
 MOLTIS_DOMAIN_VALUE="${MOLTIS_DOMAIN:-moltis.ainetic.tech}"
 MOLTIS_RUNTIME_CONFIG_DIR_VALUE="${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
+MOLTIS_CONFIG_PATH="${MOLTIS_CONFIG_PATH:-$PROJECT_ROOT/config/moltis.toml}"
+MOLTINGER_SERVICE_TOKEN_VALUE="${MOLTINGER_SERVICE_TOKEN:-}"
+TELEGRAM_ALLOWED_USERS_VALUE="${TELEGRAM_ALLOWED_USERS:-}"
 
 usage() {
     cat <<'EOF'
-Usage: render-moltis-env.sh --output <path> [--domain <domain>] [--runtime-config-dir <path>]
+Usage: render-moltis-env.sh --output <path> [--domain <domain>] [--runtime-config-dir <path>] [--config <path>]
 
 Renders the Moltis .env payload from environment variables provided by CI.
 EOF
@@ -37,6 +43,44 @@ assert_non_empty() {
     fi
 }
 
+derive_telegram_allowed_users_from_config() {
+    local config_path="$1"
+
+    python3 - "$config_path" <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+if not config_path.is_file():
+    raise SystemExit(f"render-moltis-env.sh: Moltis config not found: {config_path}")
+
+with config_path.open("rb") as fh:
+    data = tomllib.load(fh)
+
+channels = data.get("channels") or {}
+telegram = channels.get("telegram") or {}
+account = telegram.get("moltis-bot") or {}
+allowlist = account.get("allowlist")
+
+if not isinstance(allowlist, list) or not allowlist:
+    raise SystemExit(
+        "render-moltis-env.sh: tracked Telegram allowlist is missing or empty in config/moltis.toml"
+    )
+
+entries = []
+for value in allowlist:
+    entry = str(value).strip()
+    if not entry:
+        raise SystemExit(
+            "render-moltis-env.sh: tracked Telegram allowlist contains an empty entry in config/moltis.toml"
+        )
+    entries.append(entry)
+
+print(",".join(entries))
+PY
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --output)
@@ -49,6 +93,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --runtime-config-dir)
             MOLTIS_RUNTIME_CONFIG_DIR_VALUE="${2:-}"
+            shift 2
+            ;;
+        --config)
+            MOLTIS_CONFIG_PATH="${2:-}"
             shift 2
             ;;
         -h|--help)
@@ -69,21 +117,33 @@ if [[ -z "$OUTPUT_PATH" ]]; then
     exit 2
 fi
 
+TRACKED_TELEGRAM_ALLOWED_USERS="$(derive_telegram_allowed_users_from_config "$MOLTIS_CONFIG_PATH")"
+
+if [[ -z "$TELEGRAM_ALLOWED_USERS_VALUE" ]]; then
+    TELEGRAM_ALLOWED_USERS_VALUE="$TRACKED_TELEGRAM_ALLOWED_USERS"
+elif [[ "$TELEGRAM_ALLOWED_USERS_VALUE" != "$TRACKED_TELEGRAM_ALLOWED_USERS" ]]; then
+    echo "render-moltis-env.sh: TELEGRAM_ALLOWED_USERS diverges from tracked Telegram allowlist in $MOLTIS_CONFIG_PATH" >&2
+    exit 2
+fi
+
 assert_single_line "MOLTIS_PASSWORD" "${MOLTIS_PASSWORD:-}"
+assert_single_line "MOLTINGER_SERVICE_TOKEN" "$MOLTINGER_SERVICE_TOKEN_VALUE"
 assert_single_line "GLM_API_KEY" "${GLM_API_KEY:-}"
 assert_single_line "OLLAMA_API_KEY" "${OLLAMA_API_KEY:-}"
 assert_single_line "TAVILY_API_KEY" "${TAVILY_API_KEY:-}"
 assert_single_line "TELEGRAM_BOT_TOKEN" "${TELEGRAM_BOT_TOKEN:-}"
-assert_single_line "TELEGRAM_ALLOWED_USERS" "${TELEGRAM_ALLOWED_USERS:-}"
+assert_single_line "TELEGRAM_ALLOWED_USERS" "$TELEGRAM_ALLOWED_USERS_VALUE"
 assert_single_line "TELEGRAM_WEBHOOK_URL" "${TELEGRAM_WEBHOOK_URL:-}"
 assert_single_line "TELEGRAM_WEBHOOK_SECRET" "${TELEGRAM_WEBHOOK_SECRET:-}"
 assert_single_line "MOLTIS_DOMAIN" "$MOLTIS_DOMAIN_VALUE"
 assert_single_line "MOLTIS_RUNTIME_CONFIG_DIR" "$MOLTIS_RUNTIME_CONFIG_DIR_VALUE"
 
 assert_non_empty "MOLTIS_PASSWORD" "${MOLTIS_PASSWORD:-}"
+assert_non_empty "MOLTINGER_SERVICE_TOKEN" "$MOLTINGER_SERVICE_TOKEN_VALUE"
 assert_non_empty "GLM_API_KEY" "${GLM_API_KEY:-}"
 assert_non_empty "TAVILY_API_KEY" "${TAVILY_API_KEY:-}"
 assert_non_empty "TELEGRAM_BOT_TOKEN" "${TELEGRAM_BOT_TOKEN:-}"
+assert_non_empty "TELEGRAM_ALLOWED_USERS" "$TELEGRAM_ALLOWED_USERS_VALUE"
 assert_non_empty "MOLTIS_DOMAIN" "$MOLTIS_DOMAIN_VALUE"
 assert_non_empty "MOLTIS_RUNTIME_CONFIG_DIR" "$MOLTIS_RUNTIME_CONFIG_DIR_VALUE"
 
@@ -95,6 +155,7 @@ cat > "$OUTPUT_PATH" <<EOF
 
 # Authentication
 MOLTIS_PASSWORD=${MOLTIS_PASSWORD:-}
+MOLTINGER_SERVICE_TOKEN=${MOLTINGER_SERVICE_TOKEN_VALUE}
 
 # LLM Provider - GLM (Zhipu AI)
 GLM_API_KEY=${GLM_API_KEY:-}
@@ -107,7 +168,8 @@ TAVILY_API_KEY=${TAVILY_API_KEY:-}
 
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:-}
+# Derived from tracked config/moltis.toml for operator tooling parity.
+TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS_VALUE}
 TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
 TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
 

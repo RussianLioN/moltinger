@@ -92,14 +92,19 @@ cd /opt/moltinger-jb6-gpt54-primary
 ln -sfn /opt/moltinger-jb6-gpt54-primary /opt/moltinger-active
 ```
 
-## 3. Back up runtime config before touching the container
+## 3. Back up runtime config and runtime home before touching the container
 
 ```bash
 mkdir -p /var/backups/moltis/manual-hotfix
 cp -a /opt/moltinger-state/config-runtime /var/backups/moltis/manual-hotfix/config-runtime.$(date +%s) 2>/dev/null || true
+docker run --rm -v moltis-data:/from -v /var/backups/moltis/manual-hotfix:/to alpine \
+  sh -c 'tar -czf /to/moltis-data.$(date +%s).tar.gz -C /from .'
 ```
 
-This is required because `oauth_tokens.json` lives there.
+This is required because:
+
+- `oauth_tokens.json` and `provider_keys.json` live in runtime config
+- sessions, memory, and other durable runtime state live under `~/.moltis`
 
 ## 4. Prepare runtime config from static config
 
@@ -316,7 +321,16 @@ Likely cause:
 
 Fix:
 
-- open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
+- operator path:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-session-reconcile.sh --session-key main
+bash ./scripts/moltis-session-reconcile.sh --session-key main --apply
+```
+
+- UI fallback:
+  - open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
 
 ### Symptom: Telegram still replies with an old model or `Activity log ...` after OAuth/runtime recovery
 
@@ -326,9 +340,24 @@ Likely cause:
 
 Fix:
 
-- inspect the active channel session via `sessions.list`
-- patch that session to `openai-codex::gpt-5.4`
-- reset the same session to clear contaminated tool/context history
+- operator dry-run:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-session-reconcile.sh --telegram-chat-id 262872984
+```
+
+- operator apply:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-session-reconcile.sh --telegram-chat-id 262872984 --apply
+```
+
+- what it does:
+  - resolves the unique active Telegram-bound session for that chat id
+  - patches the session to `openai-codex::gpt-5.4`
+  - resets the same session to clear contaminated tool/context history
 - rerun authoritative Telegram `/status` and confirm the reply itself mentions `openai-codex::gpt-5.4`
 
 ### Symptom: Traefik looks healthy, but chat still fails
@@ -362,6 +391,7 @@ Do not do any of the following:
 - [ ] `oauth_tokens.json` exists in runtime config dir
 - [ ] `docker exec moltis moltis auth status` is healthy
 - [ ] Container survives restart without losing auth
+- [ ] `moltis-session-reconcile.sh` dry-run resolves the expected UI/Telegram session after provider recovery
 - [ ] UI loads cleanly
 - [ ] WebSocket handshake completes
 - [ ] `GPT 5.4 (Codex/OAuth)` is selectable

@@ -144,6 +144,7 @@ This is where Moltis persists runtime-managed files such as:
 
 - Configuration files (`./config/`)
 - Runtime config state (`${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}`)
+- Runtime home state (`/home/moltis/.moltis`, typically via Docker volume `moltis-data`)
 - Data directory (`./data/`)
 - Container state (metadata)
 - Encryption (AES-256-CBC)

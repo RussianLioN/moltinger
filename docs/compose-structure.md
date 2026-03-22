@@ -141,6 +141,7 @@ services:
       <<: *common-env           # Anchor: common environment
       MOLTIS_PORT: 13131
       MOLTIS_PASSWORD_FILE: /run/secrets/moltis_password
+      MOLTINGER_SERVICE_TOKEN: ${MOLTINGER_SERVICE_TOKEN:-}
       TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram_bot_token
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS}
       TAVILY_API_KEY_FILE: /run/secrets/tavily_api_key
@@ -164,6 +165,8 @@ Production note:
 
 - `./config/` remains the Git-synced static source of truth
 - `${MOLTIS_RUNTIME_CONFIG_DIR}` is the writable live config/auth directory used by the container
+- `MOLTINGER_SERVICE_TOKEN` must be present in the rendered runtime env for fleet handoffs
+- `TELEGRAM_ALLOWED_USERS` in `.env` is a derived mirror for auxiliary scripts; runtime Telegram auth still comes from tracked `config/moltis.toml`
 - prepare it before restart/deploy with `scripts/prepare-moltis-runtime-config.sh`
 
 ---

@@ -791,11 +791,11 @@ test_render_moltis_env_script_renders_runtime_contract() {
     output_file="$tmp_dir/moltis.env"
 
     if ! MOLTIS_PASSWORD="secret" \
+        MOLTINGER_SERVICE_TOKEN="service-token" \
         GLM_API_KEY="glm-key" \
         OLLAMA_API_KEY="ollama-key" \
         TAVILY_API_KEY="tavily-key" \
         TELEGRAM_BOT_TOKEN="telegram-token" \
-        TELEGRAM_ALLOWED_USERS="123,456" \
         TELEGRAM_WEBHOOK_URL="https://example.com/hook" \
         TELEGRAM_WEBHOOK_SECRET="hook-secret" \
         MOLTIS_DOMAIN="moltis.example.com" \
@@ -807,7 +807,9 @@ test_render_moltis_env_script_renders_runtime_contract() {
     fi
 
     if ! grep -Fq "MOLTIS_PASSWORD=secret" "$output_file" || \
+       ! grep -Fq "MOLTINGER_SERVICE_TOKEN=service-token" "$output_file" || \
        ! grep -Fq "GLM_API_KEY=glm-key" "$output_file" || \
+       ! grep -Fq "TELEGRAM_ALLOWED_USERS=262872984" "$output_file" || \
        ! grep -Fq "MOLTIS_DOMAIN=moltis.example.com" "$output_file" || \
        ! grep -Fq "MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config" "$output_file"; then
         test_fail "render-moltis-env.sh output is missing required runtime contract keys"
@@ -833,6 +835,7 @@ test_render_moltis_env_script_rejects_empty_required_auth_secrets() {
 
     set +e
     MOLTIS_PASSWORD="" \
+        MOLTINGER_SERVICE_TOKEN="service-token" \
         GLM_API_KEY="glm-key" \
         TELEGRAM_BOT_TOKEN="telegram-token" \
         MOLTIS_DOMAIN="moltis.example.com" \
@@ -843,6 +846,40 @@ test_render_moltis_env_script_rejects_empty_required_auth_secrets() {
 
     if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "MOLTIS_PASSWORD is required" "$tmp_dir/output.log"; then
         test_fail "render-moltis-env.sh must reject empty required auth secrets"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_render_moltis_env_script_rejects_empty_service_auth_secret() {
+    test_start "Shared Moltis env renderer should fail closed on empty MOLTINGER_SERVICE_TOKEN"
+
+    if [[ ! -f "$ENV_RENDER_SCRIPT" ]]; then
+        test_skip "Missing script file: $ENV_RENDER_SCRIPT"
+        return
+    fi
+
+    local tmp_dir output_file exit_code
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/moltis.env"
+
+    set +e
+    MOLTIS_PASSWORD="secret" \
+        MOLTINGER_SERVICE_TOKEN="" \
+        GLM_API_KEY="glm-key" \
+        TAVILY_API_KEY="tavily-key" \
+        TELEGRAM_BOT_TOKEN="telegram-token" \
+        MOLTIS_DOMAIN="moltis.example.com" \
+        MOLTIS_RUNTIME_CONFIG_DIR="/opt/moltinger-state/config-runtime" \
+        bash "$ENV_RENDER_SCRIPT" --output "$output_file" >"$tmp_dir/output.log" 2>&1
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "MOLTINGER_SERVICE_TOKEN is required" "$tmp_dir/output.log"; then
+        test_fail "render-moltis-env.sh must reject an empty MOLTINGER_SERVICE_TOKEN"
         rm -rf "$tmp_dir"
         return
     fi
@@ -865,6 +902,7 @@ test_render_moltis_env_script_rejects_empty_tavily_key() {
 
     set +e
     MOLTIS_PASSWORD="secret" \
+        MOLTINGER_SERVICE_TOKEN="service-token" \
         GLM_API_KEY="glm-key" \
         TAVILY_API_KEY="" \
         TELEGRAM_BOT_TOKEN="telegram-token" \
@@ -876,6 +914,41 @@ test_render_moltis_env_script_rejects_empty_tavily_key() {
 
     if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "TAVILY_API_KEY is required" "$tmp_dir/output.log"; then
         test_fail "render-moltis-env.sh must reject an empty TAVILY_API_KEY when Tavily MCP is part of the tracked runtime"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_render_moltis_env_script_rejects_mismatched_telegram_allowlist_override() {
+    test_start "Shared Moltis env renderer should reject TELEGRAM_ALLOWED_USERS drift from tracked config"
+
+    if [[ ! -f "$ENV_RENDER_SCRIPT" ]]; then
+        test_skip "Missing script file: $ENV_RENDER_SCRIPT"
+        return
+    fi
+
+    local tmp_dir output_file exit_code
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/moltis.env"
+
+    set +e
+    MOLTIS_PASSWORD="secret" \
+        MOLTINGER_SERVICE_TOKEN="service-token" \
+        GLM_API_KEY="glm-key" \
+        TAVILY_API_KEY="tavily-key" \
+        TELEGRAM_BOT_TOKEN="telegram-token" \
+        TELEGRAM_ALLOWED_USERS="123,456" \
+        MOLTIS_DOMAIN="moltis.example.com" \
+        MOLTIS_RUNTIME_CONFIG_DIR="/opt/moltinger-state/config-runtime" \
+        bash "$ENV_RENDER_SCRIPT" --output "$output_file" >"$tmp_dir/output.log" 2>&1
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "TELEGRAM_ALLOWED_USERS diverges from tracked Telegram allowlist" "$tmp_dir/output.log"; then
+        test_fail "render-moltis-env.sh must reject TELEGRAM_ALLOWED_USERS overrides that diverge from config/moltis.toml"
         rm -rf "$tmp_dir"
         return
     fi
@@ -1322,7 +1395,9 @@ run_all_tests() {
     test_gitops_sync_script_dry_run_covers_managed_surface
     test_render_moltis_env_script_renders_runtime_contract
     test_render_moltis_env_script_rejects_empty_required_auth_secrets
+    test_render_moltis_env_script_rejects_empty_service_auth_secret
     test_render_moltis_env_script_rejects_empty_tavily_key
+    test_render_moltis_env_script_rejects_mismatched_telegram_allowlist_override
     test_tracked_deploy_script_dry_run_reports_control_plane_steps
     test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields
     test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields

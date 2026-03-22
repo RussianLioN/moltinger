@@ -186,6 +186,7 @@ bash|component_moltis_codex_update_state|Moltis Codex update state component|$SC
 bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh
 bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh
 bash|component_moltis_canonical_smoke|Moltis canonical smoke component|$SCRIPT_DIR/component/test_moltis_canonical_smoke.sh
+bash|component_moltis_session_reconcile|Moltis session reconcile component|$SCRIPT_DIR/component/test_moltis_session_reconcile.sh
 bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh
 bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
 bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh

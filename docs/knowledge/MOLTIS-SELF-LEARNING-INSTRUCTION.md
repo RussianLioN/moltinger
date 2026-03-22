@@ -207,7 +207,8 @@ enabled = true
 
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
-allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"  # Comma-separated user IDs from env
+dm_policy = "allowlist"
+allowlist = ["262872984"]  # Tracked runtime source of truth; .env mirror is for auxiliary scripts only
 ```
 
 ### 2.4 Формат SKILL.md

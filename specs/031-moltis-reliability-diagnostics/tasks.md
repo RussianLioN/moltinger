@@ -58,10 +58,10 @@
 - [x] T040 Record the config/auth/session durability consilium and capture the architectural hardening backlog in tracked artifacts
 - [x] T041 Make `scripts/render-moltis-env.sh` fail closed on empty required auth and provider secrets and cover it with targeted tests
 - [x] T042 Pin production `MOLTIS_RUNTIME_CONFIG_DIR` to the canonical runtime path or an explicit allowlist and validate that exact path during deploy
-- [ ] T043 Reconcile auth ownership across `config/moltis.toml`, secrets docs, deploy workflow, preflight, and runtime strategy including `MOLTINGER_SERVICE_TOKEN` and Telegram allowlist source of truth
-- [ ] T044 Upgrade deploy and smoke proof from transport green to canonical provider/model proof including `openai-codex::gpt-5.4` and restart survival
-- [ ] T045 Add explicit session reconcile/reset automation and runbook gates after provider/catalog recovery for Telegram and UI sessions
-- [ ] T046 Audit and preserve durable runtime state outside tracked config, including `~/.moltis`, with a manifest or contract suitable for backup/restore validation
+- [x] T043 Reconcile auth ownership across `config/moltis.toml`, secrets docs, deploy workflow, preflight, and runtime strategy including `MOLTINGER_SERVICE_TOKEN` and Telegram allowlist source of truth
+- [x] T044 Upgrade deploy and smoke proof from transport green to canonical provider/model proof including `openai-codex::gpt-5.4` and restart survival
+- [x] T045 Add explicit session reconcile/reset automation and runbook gates after provider/catalog recovery for Telegram and UI sessions
+- [x] T046 Audit and preserve durable runtime state outside tracked config, including `~/.moltis`, with a manifest or contract suitable for backup/restore validation
 - [ ] T047 Expand authoritative UAT semantics for `/status`, wrong-target chat, verification-gate replies, and exercised-surface matrices for browser/search/repo-context paths
 - [ ] T048 Design immutable production release roots plus runtime attestation/drift detection so runtime provenance cannot silently fall off tracked intent
 

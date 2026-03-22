@@ -21,7 +21,7 @@
 Bot Username: @moltinger_bot
 Status: ✅ WORKING
 Token: GitHub Secret (TELEGRAM_BOT_TOKEN)
-Allowed Users: GitHub Secret (TELEGRAM_ALLOWED_USERS)
+Allowed Users: tracked `config/moltis.toml` allowlist
 ```
 
 ### Как отправить сообщение боту
@@ -137,7 +137,7 @@ make logs LOGS_OPTS=-f
 | Secret | Status | Purpose |
 |--------|--------|---------|
 | TELEGRAM_BOT_TOKEN | ✅ | Bot token |
-| TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
+| MOLTINGER_SERVICE_TOKEN | ✅ | Internal fleet bearer auth |
 | OLLAMA_API_KEY | ✅/optional | Ollama Cloud first fallback |
 | GLM_API_KEY | ✅ | GLM-5 last fallback + AI workflows |
 | SSH_PRIVATE_KEY | ✅ | Deploy |
@@ -148,6 +148,7 @@ Runtime-only auth state:
 - OAuth state lives in `${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}`
 - normal deploy/restart must preserve it
 - re-auth only on expiry, revocation, corruption, or explicit rotation
+- Telegram ingress allowlist is tracked in `config/moltis.toml`; `/opt/moltinger/.env` only carries a derived mirror for auxiliary scripts
 
 Workflow variable:
 - `AI_REVIEW_PROVIDER` (`zai` by default, `off` for emergency fallback-only mode)
