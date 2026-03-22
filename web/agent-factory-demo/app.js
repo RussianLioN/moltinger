@@ -235,6 +235,7 @@
     connectionMode: "booting",
     requestCounter: 0,
     sidebarVisible: true,
+    layoutModeMobile: null,
     sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
     panelWidth: PANEL_WIDTH_DEFAULT,
     activeProjectId: "",
@@ -492,6 +493,29 @@
 
   function isMobileLayout() {
     return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+  }
+
+  function collapseSidebarOnMobile() {
+    if (!isMobileLayout() || state.sidebarVisible === false) {
+      return false;
+    }
+    state.sidebarVisible = false;
+    closeProjectActionsMenu();
+    return true;
+  }
+
+  function syncSidebarForLayout(options = {}) {
+    const mobileLayout = isMobileLayout();
+    const layoutChanged = state.layoutModeMobile !== mobileLayout;
+    state.layoutModeMobile = mobileLayout;
+    if (!layoutChanged) {
+      return false;
+    }
+    const changed = collapseSidebarOnMobile();
+    if (changed && options.persist) {
+      persist();
+    }
+    return changed;
   }
 
   function sidebarMaxByViewport() {
@@ -3069,6 +3093,7 @@
       state.activeProjectId = reusable.id;
       reusable.updatedAt = nowIso();
       clearComposerNotice();
+      collapseSidebarOnMobile();
       if (options.activate !== false) {
         renderAll();
       }
@@ -3079,6 +3104,7 @@
     state.projects.unshift(project);
     state.activeProjectId = project.id;
     clearComposerNotice();
+    collapseSidebarOnMobile();
     if (options.activate !== false) {
       renderAll();
     }
@@ -3109,6 +3135,7 @@
     }
     state.activeProjectId = projectId;
     clearComposerNotice();
+    collapseSidebarOnMobile();
     persist();
     renderAll();
     const active = getActiveProject();
@@ -3912,10 +3939,9 @@
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
       if (downloadsReady) {
-        project.panelModeOverride = keepPreviewMode ? "preview" : "downloads";
-        if (!keepPreviewMode) {
-          project.previewArtifactKind = "";
-        }
+        const previewArtifact = selectedPreviewArtifact(project) || primaryArtifact(project);
+        project.panelModeOverride = "preview";
+        project.previewArtifactKind = normalizeArtifactKind(previewArtifact?.artifact_kind);
       } else {
         project.panelModeOverride = "downloads";
         project.previewArtifactKind = "";
@@ -4276,6 +4302,9 @@
 
       window.addEventListener("resize", () => {
         let persisted = false;
+        if (syncSidebarForLayout()) {
+          persisted = true;
+        }
         const clamped = clampSidebarWidth(state.sidebarWidth);
         if (clamped !== state.sidebarWidth) {
           updateSidebarWidth(clamped, { persist: true });
@@ -4755,6 +4784,8 @@
 
   function init() {
     hydrate();
+    state.layoutModeMobile = isMobileLayout();
+    collapseSidebarOnMobile();
     bindEvents();
     const restoredToken = normalizeText(state.accessToken);
     state.accessToken = "";
