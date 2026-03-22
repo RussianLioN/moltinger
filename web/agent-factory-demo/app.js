@@ -666,6 +666,7 @@
       sidePanelOpen: Boolean(project.sidePanelOpen),
       sidePanelFullscreen: Boolean(project.sidePanelFullscreen),
       panelManuallyClosed: Boolean(project.panelManuallyClosed),
+      panelHasBeenPresented: Boolean(project.panelHasBeenPresented),
       lastPanelMode: normalizeText(project.lastPanelMode),
       panelModeOverride: normalizeText(project.panelModeOverride),
       previewArtifactKind: normalizeText(project.previewArtifactKind),
@@ -706,6 +707,7 @@
       sidePanelOpen: Boolean(record.sidePanelOpen),
       sidePanelFullscreen: Boolean(record.sidePanelFullscreen),
       panelManuallyClosed: Boolean(record.panelManuallyClosed),
+      panelHasBeenPresented: Boolean(record.panelHasBeenPresented),
       lastPanelMode: normalizeText(record.lastPanelMode),
       panelModeOverride: normalizeText(record.panelModeOverride),
       previewArtifactKind: normalizeText(record.previewArtifactKind),
@@ -742,6 +744,7 @@
       sidePanelOpen: false,
       sidePanelFullscreen: false,
       panelManuallyClosed: false,
+      panelHasBeenPresented: false,
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
@@ -1719,6 +1722,7 @@
     project.sidePanelOpen = mode !== "hidden";
     project.sidePanelFullscreen = mode === "hidden" ? false : Boolean(project.sidePanelFullscreen);
     project.panelManuallyClosed = false;
+    project.panelHasBeenPresented = mode !== "hidden";
     project.panelModeOverride = mode === "preview" || mode === "downloads" ? mode : "";
     project.previewArtifactKind = mode === "preview"
       ? normalizeArtifactKind(artifactKind || primaryArtifact(project)?.artifact_kind)
@@ -2192,14 +2196,12 @@
     const mode = sidePanelMode(project);
     const canOpenPanel = mode !== "hidden";
     const isOpen = canOpenPanel && Boolean(project?.sidePanelOpen);
-    dom.sidePanelToggle.hidden = false;
+    dom.sidePanelToggle.hidden = !canOpenPanel;
     dom.sidePanelToggle.disabled = !canOpenPanel;
     dom.sidePanelToggle.dataset.state = isOpen ? "active" : "inactive";
     dom.sidePanelToggle.setAttribute("aria-pressed", isOpen ? "true" : "false");
     dom.sidePanelToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     if (!canOpenPanel) {
-      dom.sidePanelToggle.setAttribute("aria-label", "Правая панель недоступна");
-      dom.sidePanelToggle.title = "Правая панель недоступна";
       return;
     }
     dom.sidePanelToggle.setAttribute(
@@ -3933,10 +3935,9 @@
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
+      project.panelHasBeenPresented = false;
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
-    } else if (panelMode !== previousPanelMode && !manualPanelClose) {
-      project.sidePanelOpen = !isMobileLayout();
     }
     if (!["downloads", "preview"].includes(panelMode)) {
       project.panelModeOverride = "";
@@ -3963,28 +3964,33 @@
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
     const mobileLayout = isMobileLayout();
+    const panelHasBeenPresented = Boolean(project.panelHasBeenPresented);
     const keepPreviewMode = downloadsReady
       && normalizeText(project.panelModeOverride) === "preview"
       && Boolean(selectedPreviewArtifact(project));
     const shouldAutoOpenPostConfirm = sourceAction === "confirm_brief"
       || submitTurnConfirmation
-      || (isPostConfirmState && !manualPanelClose);
+      || isPostConfirmState;
     if (shouldAutoOpenPostConfirm) {
-      project.sidePanelOpen = !mobileLayout;
-      project.sidePanelFullscreen = false;
-      project.panelManuallyClosed = false;
-      if (downloadsReady) {
-        const previewArtifact = selectedPreviewArtifact(project) || primaryArtifact(project);
-        project.panelModeOverride = "preview";
-        project.previewArtifactKind = normalizeArtifactKind(previewArtifact?.artifact_kind);
-      } else {
-        project.panelModeOverride = "downloads";
-        project.previewArtifactKind = "";
+      if (!manualPanelClose && !panelHasBeenPresented) {
+        project.sidePanelOpen = !mobileLayout;
+        project.sidePanelFullscreen = false;
+        project.panelManuallyClosed = false;
+        project.panelHasBeenPresented = true;
+        if (downloadsReady) {
+          const previewArtifact = selectedPreviewArtifact(project) || primaryArtifact(project);
+          project.panelModeOverride = "preview";
+          project.previewArtifactKind = normalizeArtifactKind(previewArtifact?.artifact_kind);
+        } else {
+          project.panelModeOverride = "downloads";
+          project.previewArtifactKind = "";
+        }
       }
-    } else if (downloadsReady && syncReason === "handoff_poll" && !manualPanelClose) {
+    } else if (downloadsReady && syncReason === "handoff_poll" && !manualPanelClose && !panelHasBeenPresented) {
       project.sidePanelOpen = !mobileLayout;
       project.sidePanelFullscreen = false;
       project.panelManuallyClosed = false;
+      project.panelHasBeenPresented = true;
       project.panelModeOverride = keepPreviewMode ? "preview" : "downloads";
       if (!keepPreviewMode) {
         project.previewArtifactKind = "";
@@ -4231,6 +4237,7 @@
       }
       if (project && hasPanelContent(project)) {
         project.sidePanelOpen = true;
+        project.panelHasBeenPresented = true;
         project.briefEditOpen = false;
         project.currentAction = action;
         persist();
@@ -4246,6 +4253,7 @@
     if (action === "request_brief_correction") {
       if (project) {
         project.sidePanelOpen = true;
+        project.panelHasBeenPresented = true;
         project.briefEditOpen = true;
         persist();
         renderAll();
@@ -4495,6 +4503,7 @@
         project.panelManuallyClosed = true;
       } else {
         project.panelManuallyClosed = false;
+        project.panelHasBeenPresented = true;
       }
       persist();
       renderAll();

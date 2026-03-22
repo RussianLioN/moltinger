@@ -28,6 +28,7 @@
   --sidebar-width-effective: 236px;
   --sidebar-divider-width: 1px;
   --panel-width: 356px;
+  --panel-width-expanded: 560px;
   --panel-divider-width: 1px;
   --chat-scroll-padding-top: 78px;
   --chat-scroll-padding-bottom: 132px;
@@ -644,7 +645,7 @@ code {
 }
 
 .workspace-shell[data-panel-open="true"][data-panel-fullscreen="true"] {
-  grid-template-columns: 0 0 minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--panel-divider-width) minmax(420px, min(var(--panel-width-expanded), 48vw));
 }
 
 .workspace-shell__divider {
@@ -699,16 +700,6 @@ code {
   overflow: hidden;
 }
 
-.workspace-shell[data-panel-fullscreen="true"] .workspace {
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.workspace-shell[data-panel-fullscreen="true"] .workspace-shell__divider {
-  visibility: hidden;
-  pointer-events: none;
-}
-
 .workspace-topbar {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
@@ -718,7 +709,7 @@ code {
   position: sticky;
   top: 0;
   z-index: 64;
-  min-height: 42px;
+  min-height: 38px;
   padding: 4px 0 7px;
   background: color-mix(in oklab, var(--bg-soft) 90%, black);
   border-bottom: 1px solid var(--border);
@@ -795,7 +786,7 @@ code {
   gap: var(--space-2);
   flex-wrap: nowrap;
   flex: 0 0 auto;
-  min-width: 136px;
+  min-width: 112px;
   justify-content: flex-end;
 }
 
@@ -1653,6 +1644,10 @@ code {
 }
 
 @media (max-width: 1180px) {
+  .workspace-topbar__eyebrow {
+    display: none;
+  }
+
   .workspace-shell[data-panel-open="true"] {
     grid-template-columns: minmax(0, 1fr) var(--panel-divider-width) minmax(300px, min(var(--panel-width), 46vw));
   }
@@ -1763,7 +1758,7 @@ code {
   }
 
   .workspace-topbar h1 {
-    font-size: 1.94rem;
+    font-size: 1.12rem;
   }
 
   .composer__footer {
