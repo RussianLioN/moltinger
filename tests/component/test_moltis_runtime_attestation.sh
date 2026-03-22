@@ -162,7 +162,8 @@ EOF
         bash "$ATTESTATION_SCRIPT" \
             --json \
             --deploy-path "$workspace_root" \
-            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr.log"; then
+            --active-path "$active_root" \
+            --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr.log"; then
         test_fail "Runtime attestation should pass for matching live provenance"
         rm -rf "$fixture_root"
         return
@@ -174,7 +175,9 @@ EOF
        [[ "$(jq -r '.details.recorded_git_sha' "$output_json")" != "$live_sha" ]] || \
        [[ "$(jq -r '.details.live_version' "$output_json")" != "0.10.18" ]] || \
        [[ "$(jq -r '.details.runtime_config_source' "$output_json")" != "$runtime_config_dir_canonical" ]] || \
-       [[ "$(jq -r '.details.runtime_config_rw' "$output_json")" != "true" ]]; then
+       [[ "$(jq -r '.details.runtime_config_rw' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
+       [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
         rm -rf "$fixture_root"
         return
@@ -215,6 +218,46 @@ EOF
        [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
        ! jq -e '.errors[] | select(.code == "WORKSPACE_PROVENANCE_MISMATCH")' "$output_json" >/dev/null 2>&1; then
         test_fail "Runtime attestation should fail when the live /server mount source drifts from the active deploy root"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    cat >"$mounts_file" <<EOF
+[
+  {
+    "Mounts": [
+      {"Destination": "/server", "Source": "$workspace_root", "RW": false},
+      {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+    ]
+  }
+]
+EOF
+
+    test_start "component_runtime_attestation_fails_when_expected_auth_provider_is_invalid"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        FAKE_AUTH_STATUS="other-provider [valid (10m remaining)]" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" \
+            --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr-auth.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "AUTH_PROVIDER_INVALID")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when the expected auth provider is not valid in live auth status"
         rm -rf "$fixture_root"
         return
     fi
