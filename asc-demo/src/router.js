@@ -8,7 +8,7 @@ import {
   buildHandoffRunningResponse,
   normalizeBrowserUploads,
 } from "./response-builder.js";
-import { generateBrief, reviseBrief } from "./brief.js";
+import { generateBrief, reviseBrief, syncSessionTopicAnswersFromBrief } from "./brief.js";
 import { evaluateDiscoveryContract, getDiscoveryTopics, processDiscoveryTurn } from "./discovery.js";
 import { generateArtifacts } from "./summary-generator.js";
 import { getOrCreateSession, setSessionArtifacts, setSessionResponse, setSessionSummaryPromise, updateSession } from "./sessions.js";
@@ -369,7 +369,23 @@ function isLowConfidenceBriefCorrectionText(text) {
   if (!normalized || normalized.length < 12) {
     return true;
   }
-  return NON_CORRECTION_FOLLOWUP_MARKERS.some((marker) => normalized === marker || normalized.includes(marker));
+  const compact = normalized
+    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tokens = compact ? compact.split(" ") : [];
+  return NON_CORRECTION_FOLLOWUP_MARKERS.some((marker) => {
+    if (!marker) {
+      return false;
+    }
+    if (marker.length <= 3) {
+      return tokens.includes(marker);
+    }
+    if (marker.includes(" ")) {
+      return compact.includes(marker);
+    }
+    return compact === marker || compact.startsWith(`${marker} `);
+  });
 }
 
 function isProductionSimulationRequest(text) {
@@ -382,11 +398,13 @@ function isProductionSimulationRequest(text) {
 
 async function ensureBriefReady(session) {
   if (normalizeText(session.briefText)) {
+    syncSessionTopicAnswersFromBrief(session, session.briefText);
     return session.briefText;
   }
   const briefText = await generateBrief(session);
   session.briefText = briefText;
   session.briefVersion = Math.max(1, Number(session.briefVersion || 0) + 1);
+  syncSessionTopicAnswersFromBrief(session, briefText);
   return briefText;
 }
 
@@ -708,6 +726,19 @@ export async function handleTurn(payload = {}) {
     const explicitSectionUpdates = payload?.brief_section_updates
       && typeof payload.brief_section_updates === "object"
       && Object.keys(payload.brief_section_updates).length > 0;
+    const explicitCorrectionTargets = new Set();
+    const explicitTargetHint = normalizeText(payload?.brief_feedback_target);
+    if (explicitTargetHint) {
+      explicitCorrectionTargets.add(explicitTargetHint);
+    }
+    if (explicitSectionUpdates) {
+      Object.keys(payload.brief_section_updates || {}).forEach((topicId) => {
+        const normalizedTopic = normalizeText(topicId);
+        if (normalizedTopic) {
+          explicitCorrectionTargets.add(normalizedTopic);
+        }
+      });
+    }
     const lowConfidenceCorrection = hasUserText && isLowConfidenceBriefCorrectionText(userText);
     const correctionAllowedByText = hasUserText && (!lowConfidenceCorrection || explicitSectionUpdates);
 
@@ -757,9 +788,12 @@ export async function handleTurn(payload = {}) {
         );
       } else {
       pushUserMessage(session, userText, incomingUploads);
-      const revised = await reviseBrief(session, userText);
+      const revised = await reviseBrief(session, userText, {
+        explicitTargets: Array.from(explicitCorrectionTargets),
+      });
       session.briefText = revised;
       session.briefVersion = Math.max(1, Number(session.briefVersion || 0) + 1);
+      syncSessionTopicAnswersFromBrief(session, revised);
       session.stage = "awaiting_confirmation";
       session.handoffGenerationId = Number(session.handoffGenerationId || 0) + 1;
       session.summaryPromise = null;
@@ -767,6 +801,7 @@ export async function handleTurn(payload = {}) {
       session.artifacts = [];
       response = buildAwaitingConfirmationResponse(session, payload, {
         theatreMessage: "Правки применены. Проверь обновлённый brief и подтверди версию.",
+        nextQuestion: "Правку применил. Проверь обновлённый brief: если всё верно — подтверди, иначе отправь следующую правку.",
         uploadedFiles: session.uploadedFiles,
       });
       pushAssistantMessage(session, response.next_question);

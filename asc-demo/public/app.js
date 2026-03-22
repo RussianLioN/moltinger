@@ -14,8 +14,8 @@
   const SIDEBAR_WIDTH_DEFAULT = 264;
   const SIDEBAR_WIDTH_MIN = 220;
   const SIDEBAR_WIDTH_MAX = 560;
-  const PANEL_WIDTH_DEFAULT = 460;
-  const PANEL_WIDTH_MIN = 320;
+  const PANEL_WIDTH_DEFAULT = 420;
+  const PANEL_WIDTH_MIN = 300;
   const PANEL_WIDTH_MAX = 720;
   const SCROLL_BOTTOM_THRESHOLD = 80;
   const MOBILE_LAYOUT_QUERY = "(max-width: 920px)";
@@ -504,7 +504,7 @@
       dom.workspaceShell?.clientWidth || 0,
       window.innerWidth - occupiedSidebar - 48,
     );
-    const minCenterWidth = 300;
+    const minCenterWidth = isMobileLayout() ? 300 : 720;
     const available = Math.max(PANEL_WIDTH_MIN, shellWidth - minCenterWidth - 20);
     return Math.max(PANEL_WIDTH_MIN, Math.min(Math.max(PANEL_WIDTH_MAX, 1040), available));
   }
@@ -553,8 +553,8 @@
       dom.sidebarToggle.dataset.state = visible ? "active" : "inactive";
       dom.sidebarToggle.setAttribute("aria-pressed", visible ? "true" : "false");
       dom.sidebarToggle.setAttribute("aria-expanded", visible ? "true" : "false");
-      dom.sidebarToggle.setAttribute("aria-label", visible ? "Свернуть левую панель" : "Развернуть левую панель");
-      dom.sidebarToggle.title = visible ? "Свернуть левую панель" : "Развернуть левую панель";
+      dom.sidebarToggle.setAttribute("aria-label", visible ? "Скрыть проекты" : "Показать проекты");
+      dom.sidebarToggle.title = visible ? "Скрыть проекты" : "Показать проекты";
     }
   }
 
@@ -624,7 +624,7 @@
       titleEdited: Boolean(project.titleEdited),
       sidePanelOpen: Boolean(project.sidePanelOpen),
       sidePanelFullscreen: Boolean(project.sidePanelFullscreen),
-      panelDismissedMode: normalizeText(project.panelDismissedMode),
+      panelManuallyClosed: Boolean(project.panelManuallyClosed),
       lastPanelMode: normalizeText(project.lastPanelMode),
       panelModeOverride: normalizeText(project.panelModeOverride),
       previewArtifactKind: normalizeText(project.previewArtifactKind),
@@ -664,7 +664,7 @@
       titleEdited: Boolean(record.titleEdited),
       sidePanelOpen: Boolean(record.sidePanelOpen),
       sidePanelFullscreen: Boolean(record.sidePanelFullscreen),
-      panelDismissedMode: normalizeText(record.panelDismissedMode),
+      panelManuallyClosed: Boolean(record.panelManuallyClosed),
       lastPanelMode: normalizeText(record.lastPanelMode),
       panelModeOverride: normalizeText(record.panelModeOverride),
       previewArtifactKind: normalizeText(record.previewArtifactKind),
@@ -700,7 +700,7 @@
       mockStage: "gate_pending",
       sidePanelOpen: false,
       sidePanelFullscreen: false,
-      panelDismissedMode: "",
+      panelManuallyClosed: false,
       lastPanelMode: "",
       lastAutoFollowupSource: "",
       lastResumeFingerprint: "",
@@ -979,10 +979,71 @@
     return markers.some((marker) => normalized.includes(marker));
   }
 
+  function isLikelyActionableBriefFeedbackText(text) {
+    const normalized = normalizeText(text).toLowerCase();
+    if (!normalized || normalized.length < 12) {
+      return false;
+    }
+    if (hasBriefConfirmationIntent(normalized)) {
+      return false;
+    }
+    if (isLikelyStatusRefreshText(normalized)) {
+      return false;
+    }
+    if (isLikelyProductionSimulationRequestText(normalized)) {
+      return false;
+    }
+    if (/^(переоткрой|пересобери)\s+brief/i.test(normalized)) {
+      return true;
+    }
+    const intentMarkers = [
+      "исправ",
+      "обнов",
+      "уточн",
+      "поправ",
+      "добав",
+      "замен",
+      "удал",
+      "убер",
+      "перепиши",
+      "перефраз",
+      "помен",
+      "правка",
+    ];
+    const sectionMarkers = [
+      "проблем",
+      "пользоват",
+      "выгодоприобрет",
+      "процесс",
+      "входн",
+      "пример",
+      "файл",
+      "ожидаем",
+      "результ",
+      "формат",
+      "огранич",
+      "исключ",
+      "правил",
+      "метрик",
+      "kpi",
+      "sla",
+      "one-page",
+      "onepage",
+      "pdf",
+      "docx",
+      "ppt",
+      "summary",
+    ];
+    const hasIntent = intentMarkers.some((marker) => normalized.includes(marker));
+    const hasSection = sectionMarkers.some((marker) => normalized.includes(marker));
+    return hasIntent && hasSection;
+  }
+
   function resolveComposerAction(project, text) {
+    const requestedAction = normalizeText(project?.currentAction, "submit_turn");
     const normalizedText = normalizeText(text);
     if (!normalizedText) {
-      return normalizeText(project?.currentAction, "submit_turn");
+      return requestedAction;
     }
     const status = currentStatus(project);
     const response = currentResponse(project) || {};
@@ -991,31 +1052,77 @@
     const simulationRequest = isLikelyProductionSimulationRequestText(normalizedText);
     const confirmationRequest = hasBriefConfirmationIntent(normalizedText);
     const correctionRequest = isLikelyBriefCorrectionText(normalizedText);
-    if (isLikelyStatusRefreshText(normalizedText)) {
-      return "request_status";
-    }
+    const explicitRefresh = isLikelyStatusRefreshText(normalizedText);
+    const actionableFeedback = isLikelyActionableBriefFeedbackText(normalizedText);
     const reviewStage =
       ["awaiting_confirmation", "reopened"].includes(status)
       || (
         normalizeText(response?.ui_projection?.side_panel_mode) === "brief_review"
         && !postBriefMode
       );
+    const knownComposerActions = new Set([
+      "submit_turn",
+      "request_status",
+      "request_brief_review",
+      "request_brief_correction",
+      "confirm_brief",
+      "reopen_brief",
+    ]);
     if (reviewStage) {
       if (confirmationRequest) {
         return "confirm_brief";
       }
-      if (correctionRequest) {
-        return "request_brief_correction";
+      if (explicitRefresh) {
+        return "request_status";
       }
-      return "submit_turn";
+      return "request_brief_correction";
     }
+
+    if (
+      confirmationRequest
+      && ["confirm_brief", "request_brief_correction", "request_brief_review"].includes(requestedAction)
+      && !postBriefMode
+    ) {
+      return "confirm_brief";
+    }
+
     if (simulationRequest && postBriefMode) {
       return "request_status";
     }
-    if (postBriefMode && correctionRequest) {
-      return "reopen_brief";
+    if (postBriefMode && !knownComposerActions.has(requestedAction)) {
+      return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
     }
-    return "submit_turn";
+    if (requestedAction === "confirm_brief") {
+      if (confirmationRequest) {
+        return "confirm_brief";
+      }
+      return correctionRequest ? "request_brief_correction" : "request_status";
+    }
+    if (requestedAction === "request_status") {
+      if (["awaiting_confirmation", "reopened"].includes(status)) {
+        if (confirmationRequest) {
+          return "confirm_brief";
+        }
+        return correctionRequest ? "request_brief_correction" : "request_status";
+      }
+      if (isPostBriefStatus(status)) {
+        return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
+      }
+      return "submit_turn";
+    }
+    if (requestedAction === "request_brief_review") {
+      if (["awaiting_confirmation", "reopened"].includes(status)) {
+        return correctionRequest ? "request_brief_correction" : "request_status";
+      }
+      if (isPostBriefStatus(status)) {
+        return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
+      }
+      return "submit_turn";
+    }
+    if (requestedAction === "submit_turn" && isPostBriefStatus(status)) {
+      return correctionRequest || actionableFeedback ? "reopen_brief" : "request_status";
+    }
+    return requestedAction;
   }
 
   function statusLabel(project) {
@@ -1081,7 +1188,7 @@
       return "Фабрика готовит материалы. Можно дождаться обновления статуса или отправить правку brief.";
     }
     if (isPostBriefStatus(status)) {
-      return "Опиши правку brief или запроси имитацию запуска.";
+      return "Напиши «обнови статус» или «переоткрой brief: <правка>».";
     }
     if (topic === "input_examples") {
       return "Приведи 1–2 примера или прикрепи файл.";
@@ -1310,9 +1417,6 @@
     }
     dom.agentStatus.hidden = !state.awaitingResponse;
     dom.agentStatus.dataset.state = state.awaitingResponse ? "thinking" : "idle";
-    if (dom.composerThinking) {
-      dom.composerThinking.hidden = !state.awaitingResponse;
-    }
   }
 
   function isPanelOnlyAction(action) {
@@ -1514,11 +1618,12 @@
     if (!project) {
       return;
     }
-    if (mode !== "hidden" && state.panelWidth < 420) {
-      updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+    if (mode !== "hidden" && state.panelWidth < PANEL_WIDTH_MIN) {
+      updatePanelWidth(Math.min(PANEL_WIDTH_DEFAULT, panelMaxByViewport()), { persist: true });
     }
     project.sidePanelOpen = mode !== "hidden";
     project.sidePanelFullscreen = mode === "hidden" ? false : Boolean(project.sidePanelFullscreen);
+    project.panelManuallyClosed = false;
     project.panelModeOverride = mode === "preview" || mode === "downloads" ? mode : "";
     project.previewArtifactKind = mode === "preview"
       ? normalizeArtifactKind(artifactKind || primaryArtifact(project)?.artifact_kind)
@@ -1776,6 +1881,46 @@
     }
   }
 
+  function isReviewPromptMessage(message) {
+    if (!message || typeof message !== "object") {
+      return false;
+    }
+    if (normalizeText(message.role) !== "agent") {
+      return false;
+    }
+    const body = normalizeText(message.body).toLowerCase();
+    if (!body) {
+      return false;
+    }
+    return body.includes("проверь brief")
+      || body.includes("правку применил. проверь обновлённый brief");
+  }
+
+  function dropTrailingReviewPrompt(project, action) {
+    if (!project || !Array.isArray(project.timeline)) {
+      return;
+    }
+    if (action !== "request_brief_correction") {
+      return;
+    }
+    for (let index = project.timeline.length - 1; index >= 0; index -= 1) {
+      const item = project.timeline[index];
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      if (normalizeText(item.role) === "user") {
+        return;
+      }
+      if (isReviewPromptMessage(item)) {
+        project.timeline.splice(index, 1);
+        return;
+      }
+      if (normalizeText(item.role) === "agent") {
+        return;
+      }
+    }
+  }
+
   function isChatNearBottom() {
     if (!dom.chatLog) {
       return true;
@@ -1790,6 +1935,19 @@
     }
     const maxTop = Math.max(0, dom.chatLog.scrollHeight - dom.chatLog.clientHeight);
     dom.chatLog.scrollTop = maxTop;
+  }
+
+  function updateChatScrollPadding() {
+    if (!dom.root) {
+      return;
+    }
+    const topbarHeight = Math.max(0, Math.round(dom.workspaceTopbar?.offsetHeight || 0));
+    const composerDock = dom.composerForm?.closest(".composer-dock");
+    const composerHeight = Math.max(0, Math.round(composerDock?.offsetHeight || dom.composerForm?.offsetHeight || 0));
+    const topPadding = Math.max(64, topbarHeight + 12);
+    const bottomPadding = Math.max(108, composerHeight + 16);
+    dom.root.style.setProperty("--chat-scroll-padding-top", `${topPadding}px`);
+    dom.root.style.setProperty("--chat-scroll-padding-bottom", `${bottomPadding}px`);
   }
 
   function scrollChatToLatestAgentMessage() {
@@ -1808,8 +1966,8 @@
     const targetHeight = Math.max(1, targetRect.height);
     const targetTop = targetRect.top - logRect.top + dom.chatLog.scrollTop;
     const targetBottom = targetTop + targetHeight;
-    const topPadding = 8;
-    const bottomPadding = 12;
+    const topPadding = 16;
+    const bottomPadding = 20;
     const visibleTop = dom.chatLog.scrollTop + topPadding;
     const visibleBottom = dom.chatLog.scrollTop + dom.chatLog.clientHeight - bottomPadding;
     const alreadyVisible = targetTop >= visibleTop && targetBottom <= visibleBottom;
@@ -1858,7 +2016,7 @@
       dom.chatLog.appendChild(createMessageNode(message));
     });
     if (keepBottom) {
-      scheduleScrollChatToBottom({ strictBottom: forceBottom });
+      scheduleScrollChatToBottom({ strictBottom: forceBottom || state.forceScrollToBottom });
     }
   }
 
@@ -1913,30 +2071,29 @@
   }
 
   function renderHome(project) {
-    const hasAccess = Boolean(state.accessToken);
-    dom.homePanel.hidden = true;
-    dom.threadPanel.hidden = !hasAccess;
+    dom.homePanel.hidden = !state.accessToken || hasConversationActivity(project);
+    dom.threadPanel.hidden = !state.accessToken || !hasConversationActivity(project);
   }
 
   function renderSidePanelToggle(project) {
     const mode = sidePanelMode(project);
     const canOpenPanel = mode !== "hidden";
     const isOpen = canOpenPanel && Boolean(project?.sidePanelOpen);
-    dom.sidePanelToggle.hidden = !canOpenPanel;
+    dom.sidePanelToggle.hidden = false;
     dom.sidePanelToggle.disabled = !canOpenPanel;
     dom.sidePanelToggle.dataset.state = isOpen ? "active" : "inactive";
     dom.sidePanelToggle.setAttribute("aria-pressed", isOpen ? "true" : "false");
     dom.sidePanelToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     if (!canOpenPanel) {
-      dom.sidePanelToggle.setAttribute("aria-label", "Правая панель пока недоступна");
+      dom.sidePanelToggle.setAttribute("aria-label", "Правая панель недоступна");
       dom.sidePanelToggle.title = "Правая панель недоступна";
       return;
     }
     dom.sidePanelToggle.setAttribute(
       "aria-label",
-      isOpen ? "Свернуть правую панель" : "Развернуть правую панель",
+      isOpen ? "Скрыть правую панель" : "Показать правую панель",
     );
-    dom.sidePanelToggle.title = isOpen ? "Свернуть правую панель" : "Развернуть правую панель";
+    dom.sidePanelToggle.title = isOpen ? "Скрыть правую панель" : "Показать правую панель";
   }
 
   function mockArtifactMarkdown(project, artifact) {
@@ -2300,8 +2457,8 @@
     const mode = sidePanelMode(project);
     const open = Boolean(project?.sidePanelOpen) && mode !== "hidden";
     const mobileLayout = isMobileLayout();
-    if (open && state.panelWidth < 420) {
-      updatePanelWidth(PANEL_WIDTH_DEFAULT, { persist: true });
+    if (open && state.panelWidth < PANEL_WIDTH_MIN) {
+      updatePanelWidth(Math.min(PANEL_WIDTH_DEFAULT, panelMaxByViewport()), { persist: true });
     }
     const fullscreen = open && (mobileLayout || Boolean(project?.sidePanelFullscreen));
     dom.workspaceShell.dataset.panelOpen = open ? "true" : "false";
@@ -2368,9 +2525,9 @@
       dom.sidePanelFullscreen.setAttribute("aria-expanded", fullscreen ? "true" : "false");
       dom.sidePanelFullscreen.setAttribute(
         "aria-label",
-        fullscreen ? "Свернуть правую панель" : "Развернуть правую панель на весь экран",
+        fullscreen ? "Вернуть обычную ширину правой панели" : "Развернуть правую панель на весь экран",
       );
-      dom.sidePanelFullscreen.title = fullscreen ? "Свернуть правую панель" : "Развернуть на весь экран";
+      dom.sidePanelFullscreen.title = fullscreen ? "Вернуть обычную ширину" : "Развернуть на весь экран";
     }
 
     dom.panelCardList.innerHTML = "";
@@ -2449,7 +2606,9 @@
     if (dom.composerLead) {
       dom.composerLead.hidden = !state.accessToken;
     }
-    dom.composerMode.textContent = state.awaitingResponse ? "Архитектор формирует ответ…" : modeTextFor(project);
+    if (dom.composerThinking) {
+      dom.composerThinking.hidden = !state.awaitingResponse;
+    }
     dom.composerForm.classList.toggle("is-pending", state.awaitingResponse);
     if (dom.composerHelperExample) {
       dom.composerHelperExample.textContent = "";
@@ -2464,7 +2623,8 @@
     dom.composerNotice.hidden = !notice.text;
     dom.composerNotice.dataset.tone = notice.tone;
     dom.composerInput.value = normalizeText(project?.draftText);
-    resizeComposerInput();
+    const keepBottom = state.forceScrollToBottom || isChatNearBottom();
+    resizeComposerInput({ keepBottom });
   }
 
   function renderAll() {
@@ -2480,23 +2640,30 @@
     renderTopbar(project);
     renderHome(project);
     renderStatus(project);
-    renderTimeline(project);
     renderAttachmentList(project);
+    renderTimeline(project);
     renderComposer(project);
     renderSidePanel(project);
     renderProjectActionsMenu();
   }
 
-  function resizeComposerInput() {
+  function resizeComposerInput(options = {}) {
     if (!dom.composerInput) {
       return;
     }
+    const keepBottom = Boolean(options.keepBottom);
     const minHeight = 44;
     const maxHeight = 220;
     dom.composerInput.style.height = "auto";
     const nextHeight = Math.min(Math.max(dom.composerInput.scrollHeight, minHeight), maxHeight);
     dom.composerInput.style.height = `${nextHeight}px`;
     dom.composerInput.style.overflowY = dom.composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
+    window.requestAnimationFrame(() => {
+      updateChatScrollPadding();
+      if (keepBottom) {
+        scheduleScrollChatToBottom({ strictBottom: state.forceScrollToBottom });
+      }
+    });
   }
 
   function setProjectAction(project, action) {
@@ -3018,6 +3185,12 @@
 
     const mapping = [
       {
+        target: "problem",
+        patterns: [
+          /(?:business\s*problem|проблема|бизнес[-\s]*проблем)/,
+        ],
+      },
+      {
         target: "input_examples",
         patterns: [
           /(?:input\s*examples?|входн(?:ые)?\s+(?:примеры|данн(?:ые)?))/,
@@ -3036,27 +3209,21 @@
         ],
       },
       {
-        target: "current_process",
+        target: "current_workflow",
         patterns: [
           /(?:current\s*process|workflow|текущ(?:ий|ая)\s+процесс)/,
         ],
       },
       {
-        target: "constraints",
+        target: "branching_rules",
         patterns: [
-          /(?:constraints?|ограничени(?:е|я)|compliance|policy)/,
+          /(?:constraints?|ограничени(?:е|я)|compliance|policy|business\s*rules?|бизнес[-\s]*правила|\bправила\b|исключени(?:е|я))/,
         ],
       },
       {
         target: "success_metrics",
         patterns: [
           /(?:success\s*metrics?|kpi|sla|метрик(?:а|и)\s+успеха?)/,
-        ],
-      },
-      {
-        target: "business_rules",
-        patterns: [
-          /(?:business\s*rules?|бизнес[-\s]*правила|\bправила\b)/,
         ],
       },
     ];
@@ -3076,6 +3243,9 @@
     const briefFeedbackTarget = shouldSendBriefFeedbackTarget
       ? detectExplicitBriefFeedbackTarget(normalizedUserText)
       : "";
+    const briefSectionUpdates = shouldSendBriefFeedbackTarget && briefFeedbackTarget && normalizedUserText
+      ? { [briefFeedbackTarget]: normalizedUserText }
+      : undefined;
     return {
       working_language: "ru",
       project_key: last.browser_project_pointer?.project_key || "",
@@ -3113,6 +3283,7 @@
         linked_brief_id: last.web_conversation_envelope?.linked_brief_id || "",
       },
       brief_feedback_target: briefFeedbackTarget || undefined,
+      brief_section_updates: briefSectionUpdates,
       discovery_runtime_state: last.discovery_runtime_state || {},
       uploaded_files: queuedUploads.length ? serializeUploadsForTransport(queuedUploads) : undefined,
     };
@@ -3531,7 +3702,7 @@
         active.lastAutoFollowupSource = "";
         persist();
         if (state.activeProjectId === active.id) {
-          showComposerNotice("Фабрика ещё формирует материалы. Нажми «Обновить», чтобы проверить статус позже.", "info", active.id);
+          showComposerNotice("Фабрика ещё формирует материалы. Напиши «обнови статус» чуть позже.", "info", active.id);
           renderComposer(active);
         }
         return;
@@ -3543,7 +3714,11 @@
       }
       active.handoffPollAttempt = attempt + 1;
       persist();
-      dispatchTurn("request_status", "", { skipUserMessage: true }).finally(() => {
+      dispatchTurn("request_status", "", {
+        skipUserMessage: true,
+        projectId,
+        syncReason: "handoff_poll",
+      }).finally(() => {
         const latest = state.projects.find((item) => item.id === projectId);
         if (!latest || latest.lastAutoFollowupSource !== sourceRequestId) {
           return;
@@ -3560,6 +3735,8 @@
   function applyResponse(project, response, connectionMode, options = {}) {
     const appendReplyMessages = options.appendReplyMessages !== false;
     const syncReason = normalizeText(options.syncReason);
+    const previousPanelMode = normalizeText(project.lastPanelMode);
+    const manualPanelClose = Boolean(project.panelManuallyClosed);
 
     if (responseRequiresAccessGate(response)) {
       project.lastResponse = response;
@@ -3596,22 +3773,14 @@
     ].find((action) => isComposerAction(action));
     project.currentAction = suggestedComposerAction || "submit_turn";
     const panelMode = sidePanelMode(project);
-    const previousPanelMode = normalizeText(project.lastPanelMode);
-    const dismissedMode = normalizeText(project.panelDismissedMode);
     if (panelMode === "hidden") {
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = false;
       project.panelModeOverride = "";
       project.previewArtifactKind = "";
-      project.panelDismissedMode = "";
-    } else {
-      if (dismissedMode && panelMode !== dismissedMode) {
-        project.panelDismissedMode = "";
-      }
-      const effectiveDismissedMode = normalizeText(project.panelDismissedMode);
-      if (panelMode !== previousPanelMode && effectiveDismissedMode !== panelMode) {
-        project.sidePanelOpen = true;
-      }
+    } else if (panelMode !== previousPanelMode && !manualPanelClose) {
+      project.sidePanelOpen = true;
     }
     if (!["downloads", "preview"].includes(panelMode)) {
       project.panelModeOverride = "";
@@ -3637,12 +3806,13 @@
     const isPostConfirmState = responseStatus === "confirmed" || briefRuntimeStatus === "confirmed";
     const hasDownloads = Array.isArray(response.download_artifacts) && response.download_artifacts.length > 0;
     const downloadsReady = hasDownloads || isDownloadsReadyStatus(currentStatus(project));
-    const canAutoOpenPanel = normalizeText(project.panelDismissedMode) !== panelMode;
-    const shouldForceOpenAfterConfirm = sourceAction === "confirm_brief" || submitTurnConfirmation;
-    const shouldAutoOpenByState = isPostConfirmState && canAutoOpenPanel;
-    if (shouldForceOpenAfterConfirm || shouldAutoOpenByState) {
+    const shouldAutoOpenPostConfirm = sourceAction === "confirm_brief"
+      || submitTurnConfirmation
+      || (isPostConfirmState && !manualPanelClose);
+    if (shouldAutoOpenPostConfirm) {
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = false;
       if (downloadsReady) {
         const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
         project.panelModeOverride = "preview";
@@ -3651,14 +3821,13 @@
         project.panelModeOverride = "downloads";
         project.previewArtifactKind = "";
       }
-      project.panelDismissedMode = "";
-    } else if (downloadsReady && syncReason === "handoff_poll" && canAutoOpenPanel) {
+    } else if (downloadsReady && syncReason === "handoff_poll" && !manualPanelClose) {
       const preferredPreview = primaryArtifact(project)?.artifact_kind || "one_page_summary";
       project.sidePanelOpen = true;
       project.sidePanelFullscreen = false;
+      project.panelManuallyClosed = false;
       project.panelModeOverride = "preview";
       project.previewArtifactKind = normalizeArtifactKind(preferredPreview);
-      project.panelDismissedMode = "";
     }
 
     persist();
@@ -3684,7 +3853,10 @@
     if (!ensureWorkspaceAccess()) {
       return;
     }
-    const project = getActiveProject();
+    const targetProjectId = normalizeText(options.projectId);
+    const project = targetProjectId
+      ? state.projects.find((item) => item.id === targetProjectId) || getActiveProject()
+      : getActiveProject();
     if (!project) {
       return;
     }
@@ -3706,6 +3878,7 @@
     const pendingStartedAt = Date.now();
 
     if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
+      dropTrailingReviewPrompt(project, action);
       project.timeline.push({
         role: "user",
         kind: action,
@@ -3723,7 +3896,6 @@
         actions: [],
       });
       project.updatedAt = nowIso();
-      renderTimeline(project, { forceBottom: true });
     }
 
     clearComposerNotice();
@@ -3740,9 +3912,15 @@
     setBusy(true);
     renderAgentStatus();
     renderComposer(project);
+    if (!options.skipUserMessage && (normalizedUserText || queuedUploads.length)) {
+      renderTimeline(project, { forceBottom: true });
+    }
     try {
       const response = await postTurn(payload, { signal: abortController.signal });
-      applyResponse(project, response, "live");
+      // Switch UI out of pending mode before applying the received projection.
+      state.awaitingResponse = false;
+      setBusy(false);
+      applyResponse(project, response, "live", { syncReason: normalizeText(options.syncReason) });
     } catch (error) {
       if (error?.name === "TimeoutError") {
         timedOut = true;
@@ -3797,7 +3975,7 @@
       state.activeRequest = null;
       renderAll();
       if (state.forceScrollToBottom) {
-        scheduleScrollChatToBottom();
+        scheduleScrollChatToBottom({ strictBottom: true });
       }
       state.forceScrollToBottom = false;
       setBusy(false);
@@ -4004,6 +4182,9 @@
           persist();
         }
         renderAll();
+        window.requestAnimationFrame(() => {
+          updateChatScrollPadding();
+        });
       });
     }
 
@@ -4087,6 +4268,15 @@
         closeProjectActionsMenu();
         persist();
         renderAll();
+        window.requestAnimationFrame(() => {
+          if (state.sidebarVisible) {
+            const activeProjectButton = dom.projectList?.querySelector(".project-card.is-active .project-card__main")
+              || dom.projectList?.querySelector(".project-card__main");
+            activeProjectButton?.focus();
+            return;
+          }
+          dom.sidebarToggle?.focus();
+        });
       });
     }
 
@@ -4126,12 +4316,20 @@
       project.sidePanelOpen = !project.sidePanelOpen;
       if (!project.sidePanelOpen) {
         project.sidePanelFullscreen = false;
-        project.panelDismissedMode = sidePanelMode(project);
+        project.panelManuallyClosed = true;
       } else {
-        project.panelDismissedMode = "";
+        project.panelManuallyClosed = false;
       }
       persist();
       renderAll();
+      window.requestAnimationFrame(() => {
+        if (project.sidePanelOpen) {
+          const sidePanelPrimaryAction = dom.briefEditToggle || dom.briefConfirm || dom.sidePanelClose;
+          sidePanelPrimaryAction?.focus();
+          return;
+        }
+        dom.sidePanelToggle?.focus();
+      });
     });
 
     if (dom.sidePanelFullscreen) {
@@ -4143,6 +4341,9 @@
         project.sidePanelFullscreen = !project.sidePanelFullscreen;
         persist();
         renderAll();
+        window.requestAnimationFrame(() => {
+          dom.sidePanelFullscreen?.focus();
+        });
       });
     }
 
@@ -4153,9 +4354,12 @@
       }
       project.sidePanelOpen = false;
       project.sidePanelFullscreen = false;
-      project.panelDismissedMode = sidePanelMode(project);
+      project.panelManuallyClosed = true;
       persist();
       renderAll();
+      window.requestAnimationFrame(() => {
+        dom.sidePanelToggle?.focus();
+      });
     });
 
     if (dom.briefEditToggle) {

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatCompletion, isLLMConfigured } from "./llm.js";
+import { extractStructuredBriefAnswers } from "./brief.js";
 import { normalizeText } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -108,6 +109,25 @@ function buildProjectDoc(session) {
   return lines.join("\n");
 }
 
+function resolvedAnswersFromSession(session) {
+  return extractStructuredBriefAnswers(session.briefText, session.topicAnswers || {});
+}
+
+function stripLeadingLabel(value, labels = []) {
+  const text = normalizeText(value);
+  if (!text) {
+    return "";
+  }
+  for (const label of labels) {
+    const escaped = String(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`^${escaped}\\s*[:\\-—]?\\s*`, "i");
+    if (pattern.test(text)) {
+      return text.replace(pattern, "").trim();
+    }
+  }
+  return text;
+}
+
 function buildAgentSpec(session) {
   const lines = [
     "# Agent Spec",
@@ -132,19 +152,20 @@ function buildAgentSpec(session) {
 }
 
 function buildPresentation(session) {
+  const answers = resolvedAnswersFromSession(session);
   const lines = [
     "# Presentation",
     "",
     "## Слайд 1 — Проблема",
-    normalizeText(session.topicAnswers?.problem, "Требуется уточнение."),
+    normalizeText(answers.problem, "Требуется уточнение."),
     "",
     "## Слайд 2 — Пользователи и процесс",
-    `Пользователь: ${normalizeText(session.topicAnswers?.target_users, "Требуется уточнение.")}`,
-    `Текущий процесс: ${normalizeText(session.topicAnswers?.current_workflow, "Требуется уточнение.")}`,
+    `Пользователь: ${stripLeadingLabel(normalizeText(answers.target_users, "Требуется уточнение."), ["Пользователь", "Пользователи"])}`,
+    `Текущий процесс: ${stripLeadingLabel(normalizeText(answers.current_workflow, "Требуется уточнение."), ["Текущий процесс", "Процесс"])}`,
     "",
     "## Слайд 3 — Решение и метрики",
-    `Ожидаемый результат: ${normalizeText(session.topicAnswers?.expected_outputs, "Требуется уточнение.")}`,
-    `Метрики: ${normalizeText(session.topicAnswers?.success_metrics, "Требуется уточнение.")}`,
+    `Ожидаемый результат: ${stripLeadingLabel(normalizeText(answers.expected_outputs, "Требуется уточнение."), ["Ожидаемый результат", "Выходы", "Результат"])}`,
+    `Метрики: ${stripLeadingLabel(normalizeText(answers.success_metrics, "Требуется уточнение."), ["Метрики", "KPI", "SLA"])}`,
     "",
     "## Слайд 4 — Статус",
     `Confirmed brief: v${session.briefVersion || 1}`,
@@ -220,7 +241,7 @@ async function generateOnePageFromSession(session) {
 }
 
 function fallbackOnePageFromSession(session) {
-  const answers = session.topicAnswers || {};
+  const answers = resolvedAnswersFromSession(session);
   const lines = [
     "# One-page Summary",
     "",
@@ -228,16 +249,16 @@ function fallbackOnePageFromSession(session) {
     normalizeText(answers.problem, "Данные отсутствуют."),
     "",
     "## Целевые пользователи и текущий процесс",
-    `Пользователи: ${normalizeText(answers.target_users, "Не указаны.")}`,
-    `Текущий процесс: ${normalizeText(answers.current_workflow, "Не описан.")}`,
+    `Пользователи: ${stripLeadingLabel(normalizeText(answers.target_users, "Не указаны."), ["Пользователь", "Пользователи"])}`,
+    `Текущий процесс: ${stripLeadingLabel(normalizeText(answers.current_workflow, "Не описан."), ["Текущий процесс", "Процесс"])}`,
     "",
     "## Входные данные и ожидаемые результаты",
-    `Входы: ${normalizeText(answers.input_examples, "Не указаны.")}`,
-    `Выходы: ${normalizeText(answers.expected_outputs, "Не указаны.")}`,
+    `Входы: ${stripLeadingLabel(normalizeText(answers.input_examples, "Не указаны."), ["Входы", "Входные данные", "Примеры входов"])}`,
+    `Выходы: ${stripLeadingLabel(normalizeText(answers.expected_outputs, "Не указаны."), ["Выходы", "Ожидаемый результат", "Результат"])}`,
     "",
     "## Ключевые правила, метрики и критерии успеха",
-    `Правила: ${normalizeText(answers.branching_rules, "Не указаны.")}`,
-    `Метрики: ${normalizeText(answers.success_metrics, "Не указаны.")}`,
+    `Правила: ${stripLeadingLabel(normalizeText(answers.branching_rules, "Не указаны."), ["Правила", "Ограничения", "Исключения"])}`,
+    `Метрики: ${stripLeadingLabel(normalizeText(answers.success_metrics, "Не указаны."), ["Метрики", "KPI", "SLA"])}`,
   ];
   const uploads = (session.uploadedFiles || []).filter((f) => normalizeText(f.excerpt));
   if (uploads.length) {

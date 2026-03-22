@@ -366,7 +366,7 @@ export function buildAwaitingConfirmationResponse(
 }
 
 export function buildHandoffRunningResponse(session, payload, theatreMessage = "") {
-  const nextQuestion = "Brief подтвержден. Фабрика готовит материалы. Нажми «Обновить», чтобы проверить готовность.";
+  const nextQuestion = "Brief подтвержден. Фабрика готовит материалы. Напиши «обнови статус», если нужно проверить готовность.";
   return responseBase(session, payload, {
     status: "confirmed",
     nextAction: "start_concept_pack_handoff",
@@ -415,7 +415,7 @@ export function buildDownloadsReadyResponse(session, payload, theatreMessage = "
   const nextQuestion = primaryArtifact
     ? (preferredKind === "production_simulation"
       ? "Имитация запуска цифрового сотрудника готова. Открой artefact production simulation в preview и проверь стартовый результат."
-      : "Фабрика создала цифровой актив. Открой one-page summary в preview и при необходимости скачай остальные материалы.")
+      : "Материалы готовы. Открой one-page summary в preview или скачай артефакты.")
     : "Производство завершено. Артефакты готовы к скачиванию.";
   const secondarySummary = secondaryArtifacts.length
     ? ` Дополнительно доступны: ${secondaryArtifacts.map((item) => item.download_name).join(", ")}.`
@@ -449,8 +449,8 @@ export function buildDownloadsReadyResponse(session, payload, theatreMessage = "
         card_kind: "factory_result",
         title: "Цифровой актив создан",
         body_text: primaryArtifact
-          ? `Фабрика завершила работу. Основной результат: ${primaryArtifact.download_name}.${secondarySummary}`
-          : `Фабрика завершила работу. Материалы доступны в панели загрузок.${secondarySummary}`,
+          ? `Готово: ${primaryArtifact.download_name}.${secondarySummary}`
+          : `Готово: материалы доступны в панели загрузок.${secondarySummary}`,
         action_hints: ["preview_one_page", "download_artifact", "request_status"],
       },
     ],

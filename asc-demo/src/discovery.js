@@ -167,6 +167,16 @@ const QUALITY_METRIC_MARKERS = [
   "сократ",
 ];
 
+const TOPIC_VALIDATION_MARKERS = {
+  problem: ["проблем", "боль", "долго", "ошиб", "автомат", "сократ", "ускор", "потер"],
+  target_users: ["пользоват", "клиент", "роль", "команда", "выгодоприобрет", "менеджер", "комитет"],
+  current_workflow: ["процесс", "сейчас", "шаг", "этап", "вруч", "excel", "word", "pdf", "выгруз", "сверк"],
+  input_examples: ["вход", "данн", "файл", "пример", "csv", "json", "xlsx", "выгруз", "документ"],
+  expected_outputs: [...RESULT_FORMAT_MARKERS, ...OUTPUT_STRUCTURE_MARKERS],
+  branching_rules: PROCESSING_RULE_MARKERS,
+  success_metrics: QUALITY_METRIC_MARKERS,
+};
+
 const CONTRACT_FOLLOWUP_BY_GAP = {
   result_format: {
     topicId: "expected_outputs",
@@ -316,18 +326,26 @@ function canonicalInputExamplesAnswer(session, userText, uploadedFiles = []) {
   return normalizedText;
 }
 
-function syncTopicAnswers(session, userText, newCoverage, uploadedFiles = []) {
+function syncTopicAnswers(session, userText, topicsToSync, uploadedFiles = []) {
   const text = normalizeText(userText);
   const effectiveText = text || buildUploadedFilesAnswer(uploadedFiles);
+  const hasFiles = Array.isArray(uploadedFiles) && uploadedFiles.length > 0;
+  const syncTopics = topicsToSync instanceof Set ? topicsToSync : new Set(topicsToSync || []);
+  if (hasFiles) {
+    syncTopics.add("input_examples");
+  }
   if (!effectiveText) {
     return;
   }
-  newCoverage.forEach((topicId) => {
+  syncTopics.forEach((topicId) => {
+    if (!topicId || !getTopicById(topicId)) {
+      return;
+    }
     if (topicId === "input_examples") {
       const existing = normalizeText(session.topicAnswers?.input_examples);
       const shouldReplaceExisting = !existing
         || isNoisyInputExamplesAnswer(existing)
-        || (Array.isArray(uploadedFiles) && uploadedFiles.length > 0 && !/приложены файлы/i.test(existing));
+        || (hasFiles && !/приложены файлы/i.test(existing));
       if (shouldReplaceExisting) {
         session.topicAnswers.input_examples = canonicalInputExamplesAnswer(session, userText, uploadedFiles);
       }
@@ -337,6 +355,43 @@ function syncTopicAnswers(session, userText, newCoverage, uploadedFiles = []) {
       session.topicAnswers[topicId] = effectiveText;
     }
   });
+}
+
+function hasTopicEvidence(topicId, lowerText, uploadedFiles = []) {
+  const text = normalizeText(lowerText).toLowerCase();
+  const hasFiles = Array.isArray(uploadedFiles) && uploadedFiles.length > 0;
+  if (!topicId) {
+    return false;
+  }
+  if (topicId === "input_examples") {
+    return hasFiles || hasAnyMarker(text, TOPIC_VALIDATION_MARKERS.input_examples) || hasFileAcknowledgement(text);
+  }
+  if (!text) {
+    return false;
+  }
+  const markers = TOPIC_VALIDATION_MARKERS[topicId] || [];
+  if (hasAnyMarker(text, markers)) {
+    return true;
+  }
+  if (topicId === "problem") {
+    return text.length >= 42 && /(нужн|важн|автомат|проблем|ошиб|время|долго|срок)/i.test(text);
+  }
+  if (topicId === "current_workflow") {
+    return text.length >= 42 && /(сейчас|процесс|шаг|этап|вруч|дела|формир|экспорт|соглас)/i.test(text);
+  }
+  if (topicId === "expected_outputs") {
+    return text.length >= 36 && /(выход|результ|должен|получ|формат|pdf|docx|ppt|summary|one-page)/i.test(text);
+  }
+  if (topicId === "branching_rules") {
+    return text.length >= 24 && /(если|иначе|правил|огранич|исключ|алгорит|эскала)/i.test(text);
+  }
+  if (topicId === "success_metrics") {
+    return text.length >= 18 && /(метрик|kpi|sla|время|ошиб|качеств|доля|%|точност)/i.test(text);
+  }
+  if (topicId === "target_users") {
+    return text.length >= 16 && /(пользоват|роль|клиент|комитет|менеджер|выгодоприобрет)/i.test(text);
+  }
+  return false;
 }
 
 function isLikelyNonAnswerText(lowerText) {
@@ -395,6 +450,15 @@ function hasAnyMarker(text, markers = []) {
     return false;
   }
   return markers.some((marker) => lower.includes(marker));
+}
+
+function normalizeCoveredTopics(rawCoveredTopics) {
+  if (!Array.isArray(rawCoveredTopics)) {
+    return [];
+  }
+  return rawCoveredTopics
+    .map((topicId) => normalizeText(topicId))
+    .filter((topicId, index, all) => Boolean(getTopicById(topicId)) && all.indexOf(topicId) === index);
 }
 
 function compactSummary(text, fallback = "не указан") {
@@ -498,7 +562,12 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
     && session.topicAnswers?.[activeTopic.id]
     && hasAlreadyAnsweredMarker(lowerText),
   );
-  const meaningfulTextForCurrentTopic = hasText && !isLikelyNonAnswerText(lowerText);
+  const activeTopicHasEvidence = activeTopic
+    ? hasTopicEvidence(activeTopic.id, lowerText, uploadedFiles)
+    : false;
+  const meaningfulTextForCurrentTopic = hasText
+    && !isLikelyNonAnswerText(lowerText)
+    && (!activeTopic || activeTopicHasEvidence);
   const activeTopicCoveredByText = meaningfulTextForCurrentTopic
     || alreadyAnsweredCurrentTopic
     || Boolean(
@@ -524,11 +593,9 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   }
 
   const fallback = defaultQuestion(step.coveredTopics);
-  let nextTopic = fallback.nextTopic;
+  let nextTopic = getTopicById(step.nextTopic) ? step.nextTopic : fallback.nextTopic;
   if (step.lowSignal && activeTopic) {
     nextTopic = activeTopic.id;
-  } else if (!nextTopic && getTopicById(step.nextTopic)) {
-    nextTopic = step.nextTopic;
   }
 
   const shouldSkipInputExamplesReask = nextTopic === "input_examples"
@@ -542,9 +609,19 @@ function finalizeDiscoveryStep(session, step, userText, uploadedFiles = []) {
   const nextTopicMeta = getTopicById(nextTopic);
   const whyAskingNow = nextTopicMeta?.why || fallback.whyAskingNow;
   const fallbackQuestion = nextTopicMeta?.question || fallback.nextQuestion;
-  const nextQuestion = step.lowSignal
+  const adaptiveQuestion = sanitizeNextQuestion(step.nextQuestion, fallbackQuestion);
+  const needsTopicClarification = Boolean(
+    activeTopic
+    && hasText
+    && !step.lowSignal
+    && !activeTopicCovered
+    && !hasFiles,
+  );
+  const nextQuestion = needsTopicClarification
+    ? `Ответ пока не закрыл текущий вопрос. Уточни, пожалуйста: ${activeTopic.question}`
+    : step.lowSignal
     ? `Ответ пока слишком общий. Уточни, пожалуйста: ${fallbackQuestion}`
-    : fallbackQuestion;
+    : adaptiveQuestion;
 
   return {
     ...step,
@@ -587,10 +664,15 @@ function applyAntiLoopGuard(session, finalized) {
   const nextQuestion = normalizeText(finalized.nextQuestion).toLowerCase();
   const repeatedTopic = previousTopic && finalized.nextTopic === previousTopic;
   const repeatedQuestion = previousQuestion && nextQuestion === previousQuestion;
+  const previousTopicStillMissing = previousTopic && !finalized.coveredTopics.has(previousTopic);
   const reaskingCoveredTopic = finalized.nextTopic
     && finalized.coveredTopics.has(finalized.nextTopic);
   const anonymizedLoopQuestion = /обезлич|аноним|реквизит|контрагент|example-case/i.test(nextQuestion)
     && finalized.coveredTopics.has("input_examples");
+
+  if (previousTopicStillMissing && (repeatedTopic || repeatedQuestion)) {
+    return finalized;
+  }
 
   if (!repeatedTopic && !repeatedQuestion && !reaskingCoveredTopic && !anonymizedLoopQuestion) {
     return finalized;
@@ -622,12 +704,18 @@ async function getArchitectSystemPrompt() {
 
 function sanitizeLLMAnswer(data, coveredTopics) {
   const mergedCoverage = new Set(coveredTopics);
+  normalizeCoveredTopics(data?.covered_topics).forEach((topicId) => {
+    mergedCoverage.add(topicId);
+  });
 
   const defaultNext = defaultQuestion(mergedCoverage);
-  const nextTopic = getTopicById(data?.next_topic) ? data.next_topic : defaultNext.nextTopic;
+  let nextTopic = getTopicById(data?.next_topic) ? data.next_topic : defaultNext.nextTopic;
+  if (nextTopic && mergedCoverage.has(nextTopic)) {
+    nextTopic = defaultNext.nextTopic;
+  }
   const topic = getTopicById(nextTopic);
   const whyAskingNow = normalizeText(data?.why_asking_now, topic?.why || defaultNext.whyAskingNow);
-  const nextQuestion = normalizeText(data?.next_question, topic?.question || defaultNext.nextQuestion);
+  const nextQuestion = sanitizeNextQuestion(data?.next_question, topic?.question || defaultNext.nextQuestion);
 
   return {
     coveredTopics: mergedCoverage,
@@ -698,6 +786,7 @@ export function getDiscoveryTopics() {
 export async function processDiscoveryTurn(session, userText, uploadedFiles = []) {
   const lowSignal = isLowSignal(userText, uploadedFiles);
   const activeTopic = normalizeText(session.currentTopic);
+  const previousCoverage = new Set(session.coveredTopics || []);
   const lowerText = normalizeText(userText).toLowerCase();
   const canTreatAsInputExamplesFollowup = lowSignal
     && activeTopic === "input_examples"
@@ -723,8 +812,18 @@ export async function processDiscoveryTurn(session, userText, uploadedFiles = []
     finalizeDiscoveryStep(session, step, userText, uploadedFiles),
   );
 
+  const newlyCoveredTopics = new Set(
+    Array.from(finalized.coveredTopics).filter((topicId) => !previousCoverage.has(topicId)),
+  );
+  if (finalized.acknowledgedTopic) {
+    newlyCoveredTopics.add(finalized.acknowledgedTopic);
+  }
+  if ((uploadedFiles || []).length > 0) {
+    newlyCoveredTopics.add("input_examples");
+  }
+
   session.coveredTopics = finalized.coveredTopics;
-  syncTopicAnswers(session, userText, finalized.coveredTopics, uploadedFiles);
+  syncTopicAnswers(session, userText, newlyCoveredTopics, uploadedFiles);
   session.currentQuestion = finalized.nextQuestion;
   session.currentTopic = finalized.nextTopic;
   session.whyAskingNow = finalized.whyAskingNow;

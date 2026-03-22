@@ -104,6 +104,32 @@ run_component_agent_factory_web_brief_tests() {
     assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.expected_outputs[] | contains("прикрепленный ранее файл")] | any' "$tmpdir/brief-correction-input-examples-route-out.json")" "Expected outputs section must not be polluted by input-examples correction text"
     test_pass
 
+    local expected_outputs_payload
+    expected_outputs_payload="$tmpdir/brief-correction-expected-outputs-targeted.json"
+    jq '
+      .web_conversation_envelope.ui_action = "request_brief_correction"
+      | .web_conversation_envelope.user_text = "Исправь ожидаемые результаты: добавь обязательный блок KPI клиента и итоговый рекомендуемый лимит."
+      | .brief_feedback_target = "expected_outputs"
+      | .brief_section_updates = {
+          "expected_outputs": "добавь обязательный блок KPI клиента и итоговый рекомендуемый лимит"
+        }
+    ' "$BRIEF_FIXTURE" > "$expected_outputs_payload"
+
+    if ! python3 "$WEB_ADAPTER_SCRIPT" handle-turn --source "$expected_outputs_payload" --state-root "$tmpdir/state-expected-outputs" --output "$tmpdir/brief-correction-expected-outputs-out.json" >/dev/null; then
+        test_start "component_agent_factory_web_brief_expected_outputs_targeted_correction_executes"
+        test_fail "Targeted expected-outputs correction should execute safely"
+        generate_report
+        return
+    fi
+
+    test_start "component_agent_factory_web_brief_applies_targeted_expected_outputs_correction_without_metrics_pollution"
+    assert_eq "awaiting_confirmation" "$(jq -r '.status' "$tmpdir/brief-correction-expected-outputs-out.json")" "Targeted expected-outputs correction should keep brief in confirmation stage"
+    assert_eq "1.1" "$(jq -r '.status_snapshot.brief_version' "$tmpdir/brief-correction-expected-outputs-out.json")" "Targeted expected-outputs correction should bump brief version"
+    assert_contains "$(jq -r '.next_question' "$tmpdir/brief-correction-expected-outputs-out.json")" "Правку применил" "Targeted correction should return applied-correction follow-up instead of low-confidence fallback"
+    assert_contains "$(jq -r '.discovery_runtime_state.requirement_brief.expected_outputs | join("\n")' "$tmpdir/brief-correction-expected-outputs-out.json")" "блок KPI клиента" "Expected outputs section should include targeted correction content"
+    assert_eq "false" "$(jq -r '[.discovery_runtime_state.requirement_brief.success_metrics[] | contains("блок KPI клиента")] | any' "$tmpdir/brief-correction-expected-outputs-out.json")" "Success metrics section must not be polluted by targeted expected-outputs correction"
+    test_pass
+
     generate_report
 }
 

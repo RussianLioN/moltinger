@@ -12,6 +12,9 @@ const BRIEF_SECTION_ORDER = [
 ];
 const SYNTHETIC_DATA_NOTE = "Все данные во вложениях считаются синтетическими: не относятся к реальным лицам/контрагентам, любые совпадения случайны.";
 const BRIEF_SECTION_TITLES = Object.fromEntries(BRIEF_SECTION_ORDER);
+const BRIEF_TOPIC_IDS_BY_TITLE = new Map(
+  BRIEF_SECTION_ORDER.map(([topicId, title]) => [normalizeText(title), topicId]),
+);
 const CORRECTION_TOPIC_HINTS = [
   {
     topicId: "problem",
@@ -126,6 +129,15 @@ const EXPECTED_OUTPUT_STRONG_CONTEXT_MARKERS = [
   "expected output",
 ];
 
+function normalizeExplicitCorrectionTargets(explicitTargets = []) {
+  const list = Array.isArray(explicitTargets) ? explicitTargets : [explicitTargets];
+  return Array.from(new Set(
+    list
+      .map((topicId) => normalizeText(topicId))
+      .filter((topicId) => Boolean(BRIEF_SECTION_TITLES[topicId])),
+  ));
+}
+
 const SERVICE_PHRASE_PATTERNS = [
   /Требуется уточнение\.?/g,
   /Файлы в discovery не загружались\.?/g,
@@ -237,14 +249,18 @@ function buildTopicSummary(session) {
   return lines.join("\n");
 }
 
-function inferCorrectionTargets(correctionText) {
+function inferCorrectionTargets(correctionText, explicitTargets = []) {
+  const normalizedExplicitTargets = normalizeExplicitCorrectionTargets(explicitTargets);
+  if (normalizedExplicitTargets.length) {
+    return normalizedExplicitTargets;
+  }
   const normalized = normalizeText(correctionText).toLowerCase();
   if (!normalized) {
     return [];
   }
-  const explicitTargets = inferExplicitSectionTargets(correctionText);
-  if (explicitTargets.length) {
-    return explicitTargets;
+  const inferredExplicitTargets = inferExplicitSectionTargets(correctionText);
+  if (inferredExplicitTargets.length) {
+    return inferredExplicitTargets;
   }
   const targets = CORRECTION_TOPIC_HINTS
     .filter((hint) => hint.keywords.some((keyword) => normalized.includes(keyword)))
@@ -334,7 +350,68 @@ function cleanExpectedOutputHint(value) {
     )
     .replace(/\s+и\s+без\s+цитир[^.]+\.?$/i, "")
     .trim();
+  text = text
+    .replace(/(?:^|[.;]\s*)метрик[^\n.;:]*не\s*(?:меняй|трогай|изменяй)[^\n.;]*[.;]?/gi, " ")
+    .replace(/(?:^|[.;]\s*)раздел\s+метрик[^\n.;]*[.;]?/gi, " ")
+    .replace(/(?:^|[.;]\s*)входн[^\n.;:]*не\s*(?:меняй|трогай|изменяй)[^\n.;]*[.;]?/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, "")
+    .trim();
+  if (/^(добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|сделай|сделайте|сформируй|сформируйте)(?=\s|$)/i.test(text)) {
+    const payload = text
+      .replace(/^(добав(?:ь|ьте)|включ(?:и|ите)|укаж(?:и|ите)|сделай|сделайте|сформируй|сформируйте)(?=\s|$)\s*/i, "")
+      .trim();
+    if (payload) {
+      text = `Итоговый документ должен содержать ${payload}`;
+    }
+  }
   return text;
+}
+
+function cleanSectionReplacementText(value) {
+  let text = normalizeText(value)
+    .replace(/^["«]+/, "")
+    .replace(/[»"]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) {
+    return "";
+  }
+  text = text
+    .replace(/^(исправь|внеси|добавь|обнови|уточни|поправь)\s*(brief|бриф)?\s*[:\-]\s*/i, "")
+    .replace(/^в\s+разделе\s+[^:]+:\s*/i, "")
+    .replace(/^раздел\s+[^:]+:\s*/i, "")
+    .replace(/^дополнительная\s+правка:\s*/i, "")
+    .trim();
+  return text;
+}
+
+function extractSectionReplacement(topicId, correctionText, session) {
+  if (topicId === "input_examples") {
+    return canonicalInputExamplesContent(session, correctionText);
+  }
+  if (topicId === "expected_outputs") {
+    return extractExpectedOutputHint(correctionText, session);
+  }
+  const normalized = cleanSectionReplacementText(correctionText);
+  if (!normalized) {
+    return "";
+  }
+  const markerPatterns = {
+    problem: [/бизнес-проблема[^:]*:\s*(.+)$/i, /проблема[^:]*:\s*(.+)$/i],
+    target_users: [/пользовател[^:]*:\s*(.+)$/i, /выгодоприобретател[^:]*:\s*(.+)$/i],
+    current_workflow: [/текущий процесс[^:]*:\s*(.+)$/i, /процесс[^:]*:\s*(.+)$/i],
+    branching_rules: [/правил[^:]*:\s*(.+)$/i, /исключени[^:]*:\s*(.+)$/i],
+    success_metrics: [/метрик[^:]*:\s*(.+)$/i, /(kpi|sla)[^:]*:\s*(.+)$/i],
+  };
+  const patterns = markerPatterns[topicId] || [];
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match) {
+      return cleanSectionReplacementText(match[match.length - 1]);
+    }
+  }
+  return normalized;
 }
 
 function extractExpectedOutputHint(correctionText, session) {
@@ -399,13 +476,13 @@ function protectUntargetedSections(session, revisedBrief, correctionTargets) {
   return protected_;
 }
 
-function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
+function sanitizeRevisedBrief(session, revisedBrief, correctionText, explicitTargets = []) {
   let normalized = normalizeBrief(revisedBrief);
   if (!normalized) {
     return normalized;
   }
   const correction = normalizeText(correctionText);
-  const targets = inferCorrectionTargets(correctionText);
+  const targets = inferCorrectionTargets(correctionText, explicitTargets);
   if (targets.length) {
     normalized = protectUntargetedSections(session, normalized, targets);
   }
@@ -471,8 +548,8 @@ function sanitizeRevisedBrief(session, revisedBrief, correctionText) {
   return merged;
 }
 
-function buildCorrectionGuidance(session, correctionText) {
-  const targets = inferCorrectionTargets(correctionText);
+function buildCorrectionGuidance(session, correctionText, explicitTargets = []) {
+  const targets = inferCorrectionTargets(correctionText, explicitTargets);
   if (!targets.length) {
     return "Явная тематическая секция не распознана. Обнови только те части brief, которых касается смысл правки.";
   }
@@ -515,6 +592,32 @@ function parseBriefSections(briefText) {
   return sections;
 }
 
+export function extractStructuredBriefAnswers(briefText, fallbackAnswers = {}) {
+  const sections = parseBriefSections(briefText);
+  const nextAnswers = { ...fallbackAnswers };
+  sections.forEach((content, title) => {
+    const topicId = BRIEF_TOPIC_IDS_BY_TITLE.get(normalizeText(title));
+    if (!topicId) {
+      return;
+    }
+    const normalizedContent = normalizeText(content);
+    if (!normalizedContent) {
+      return;
+    }
+    nextAnswers[topicId] = normalizedContent;
+  });
+  return nextAnswers;
+}
+
+export function syncSessionTopicAnswersFromBrief(session, briefText) {
+  if (!session || typeof session !== "object") {
+    return {};
+  }
+  const merged = extractStructuredBriefAnswers(briefText, session.topicAnswers || {});
+  session.topicAnswers = { ...(session.topicAnswers || {}), ...merged };
+  return session.topicAnswers;
+}
+
 function replaceSectionContent(briefText, sectionTitle, nextContent) {
   const normalizedBrief = normalizeBrief(briefText);
   const content = normalizeText(nextContent);
@@ -544,11 +647,11 @@ function canonicalInputExamplesContent(session, correctionText = "") {
   return `Входные данные зафиксированы как обезличенные и синтетические. ${SYNTHETIC_DATA_NOTE}`;
 }
 
-function buildFallbackRevision(session, correctionText) {
+function buildFallbackRevision(session, correctionText, explicitTargets = []) {
   const note = normalizeText(correctionText, "Пользователь запросил уточнение, но не добавил текст.");
   const baseBrief = normalizeBrief(session.briefText) || fallbackBrief(session);
   const sections = parseBriefSections(baseBrief);
-  const targets = inferCorrectionTargets(correctionText);
+  const targets = inferCorrectionTargets(correctionText, explicitTargets);
   const expectedHint = extractExpectedOutputHint(correctionText, session);
 
   if (!targets.length) {
@@ -564,8 +667,9 @@ function buildFallbackRevision(session, correctionText) {
       sections.set(title, expectedHint);
       return;
     }
-    if (topicId === "input_examples") {
-      sections.set(title, canonicalInputExamplesContent(session, correctionText));
+    const directReplacement = extractSectionReplacement(topicId, correctionText, session);
+    if (directReplacement) {
+      sections.set(title, directReplacement);
       return;
     }
     const current = normalizeText(sections.get(title), "Требуется уточнение.");
@@ -626,8 +730,14 @@ export async function generateBrief(session) {
   }
 }
 
-export async function reviseBrief(session, correctionText) {
-  const fallback = sanitizeRevisedBrief(session, buildFallbackRevision(session, correctionText), correctionText);
+export async function reviseBrief(session, correctionText, options = {}) {
+  const explicitTargets = normalizeExplicitCorrectionTargets(options.explicitTargets || []);
+  const fallback = sanitizeRevisedBrief(
+    session,
+    buildFallbackRevision(session, correctionText, explicitTargets),
+    correctionText,
+    explicitTargets,
+  );
 
   if (!isLLMConfigured()) {
     return fallback;
@@ -654,7 +764,7 @@ export async function reviseBrief(session, correctionText) {
         "Подтвержденный discovery context:",
         buildTopicSummary(session),
         "",
-        buildCorrectionGuidance(session, correctionText),
+        buildCorrectionGuidance(session, correctionText, explicitTargets),
         "",
         "Текущий brief:",
         normalizeBrief(session.briefText) || fallbackBrief(session),
@@ -671,7 +781,7 @@ export async function reviseBrief(session, correctionText) {
   try {
     const completion = await chatCompletion(messages, { temperature: 0.1, maxTokens: 2000 });
     const revised = normalizeBrief(completion) || fallback;
-    return sanitizeRevisedBrief(session, revised, correctionText) || fallback;
+    return sanitizeRevisedBrief(session, revised, correctionText, explicitTargets) || fallback;
   } catch (error) {
     console.error("[asc-demo] brief.reviseBrief:", error?.message || error);
     return fallback;
