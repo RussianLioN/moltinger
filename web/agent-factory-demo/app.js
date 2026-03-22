@@ -3440,6 +3440,13 @@
     if (/^(ок|ага|угу|да|нет|норм|понял|поняла|хз|лол|test|ping|123+|qwe+)$/i.test(normalized)) {
       return true;
     }
+    if (
+      hasBriefConfirmationIntent(normalized)
+      || isLikelyStatusRefreshText(normalized)
+      || isLikelyBriefCorrectionText(normalized)
+    ) {
+      return true;
+    }
     const words = normalized.split(/\s+/).filter(Boolean);
     return words.length <= 2 && normalized.length < 18;
   }

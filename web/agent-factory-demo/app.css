@@ -1,21 +1,21 @@
 :root {
-  --bg: #0b0d10;
-  --bg-soft: #0f1115;
-  --bg-elevated: #14171c;
-  --bg-sidebar: #111317;
-  --surface: #13171d;
-  --surface-strong: #171c24;
-  --surface-hover: #1b212a;
-  --border: rgba(255, 255, 255, 0.048);
-  --border-strong: rgba(255, 255, 255, 0.1);
-  --text: rgba(246, 248, 250, 0.92);
+  --bg: #0d0f12;
+  --bg-soft: #111317;
+  --bg-elevated: #15181d;
+  --bg-sidebar: #101216;
+  --surface: #171a20;
+  --surface-strong: #1b2027;
+  --surface-hover: #222831;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: rgba(244, 246, 248, 0.9);
   --text-strong: #ffffff;
-  --muted: rgba(230, 234, 239, 0.58);
-  --muted-strong: rgba(237, 240, 245, 0.74);
-  --accent: #e6e9ee;
+  --muted: rgba(228, 232, 238, 0.56);
+  --muted-strong: rgba(232, 236, 241, 0.72);
+  --accent: #d7dbe1;
   --accent-ink: #0f1115;
-  --attention: #e7c46a;
-  --success: #93c9aa;
+  --attention: #b7a36a;
+  --success: #7ea98f;
   --radius-2xl: 12px;
   --radius-xl: 10px;
   --radius-lg: 8px;
@@ -278,7 +278,7 @@ code {
 .composer textarea:focus {
   outline: none;
   border-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--border-strong), 0 0 0 3px rgba(241, 237, 226, 0.045);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 0 0 3px rgba(210, 216, 226, 0.05);
 }
 
 .button {
@@ -324,9 +324,9 @@ code {
   min-width: 38px;
   min-height: 38px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: transparent;
+  background: var(--surface);
   color: var(--muted-strong);
   cursor: pointer;
   transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease, opacity 0.14s ease;
@@ -334,7 +334,7 @@ code {
 
 .icon-button:hover,
 .icon-button:focus-visible {
-  border-color: transparent;
+  border-color: var(--border-strong);
   background: var(--surface-hover);
   color: var(--text-strong);
   outline: none;
@@ -717,10 +717,10 @@ code {
   position: sticky;
   top: 0;
   z-index: 64;
-  min-height: 40px;
-  padding: 4px 0 6px;
-  background: var(--bg-soft);
-  border-bottom: 1px solid color-mix(in oklab, var(--border) 86%, transparent);
+  min-height: 44px;
+  padding: 6px 0 8px;
+  background: color-mix(in oklab, var(--bg-soft) 90%, black);
+  border-bottom: 1px solid var(--border);
   backdrop-filter: none;
 }
 
@@ -1027,15 +1027,20 @@ code {
 
 .message {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   align-self: flex-start;
   width: fit-content;
-  max-width: min(72ch, 74%);
-  padding: 8px 10px;
-  border: 1px solid color-mix(in oklab, var(--border) 85%, transparent);
-  border-radius: 11px;
+  max-width: min(70ch, 72%);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--border) 92%, transparent);
+  border-radius: 12px;
   background: var(--surface);
   box-shadow: none;
+}
+
+.message--agent {
+  border-color: color-mix(in oklab, var(--border) 92%, transparent);
+  background: color-mix(in oklab, var(--surface) 94%, black);
 }
 
 .message__meta {
@@ -1097,8 +1102,8 @@ code {
 
 .message--user {
   align-self: flex-end;
-  border-color: rgba(222, 226, 233, 0.16);
-  background: rgba(45, 49, 58, 0.62);
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(58, 63, 72, 0.42);
 }
 
 .message--system {
@@ -1116,7 +1121,7 @@ code {
   bottom: 0;
   z-index: 3;
   padding-bottom: 2px;
-  background: linear-gradient(180deg, rgba(13, 15, 18, 0) 0%, rgba(13, 15, 18, 0.62) 30%, rgba(13, 15, 18, 0.95) 100%);
+  background: linear-gradient(180deg, rgba(13, 15, 18, 0) 0%, rgba(13, 15, 18, 0.72) 28%, rgba(13, 15, 18, 0.97) 100%);
 }
 
 .composer {
@@ -1125,7 +1130,7 @@ code {
   padding: 8px;
   border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
   border-radius: 12px;
-  background: rgba(17, 20, 26, 0.9);
+  background: rgba(20, 23, 28, 0.94);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
@@ -1279,7 +1284,7 @@ code {
   min-height: 34px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(241, 234, 219, 0.95);
+  background: #d3d7de;
   color: #111214;
   font-size: 1rem;
   line-height: 1;
@@ -1289,7 +1294,8 @@ code {
 
 .composer-send:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.62;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .composer-send[data-mode="stop"] {
@@ -1301,7 +1307,7 @@ code {
 }
 
 .composer.is-pending .composer-send[data-mode="stop"] {
-  box-shadow: 0 0 0 3px rgba(243, 237, 226, 0.08);
+  box-shadow: 0 0 0 3px rgba(210, 216, 226, 0.08);
 }
 
 .composer.is-pending .composer-send[data-mode="stop"]::after {
@@ -1309,7 +1315,7 @@ code {
   position: absolute;
   inset: -5px;
   border-radius: 999px;
-  border: 1px solid rgba(241, 234, 219, 0.26);
+  border: 1px solid rgba(210, 216, 226, 0.28);
   animation: composer-stop-pulse 1.2s ease-out infinite;
 }
 
@@ -1338,8 +1344,8 @@ code {
   gap: 8px;
   min-height: 0;
   padding: 9px 11px;
-  border-left: 1px solid color-mix(in oklab, var(--border) 58%, transparent);
-  background: var(--bg-soft);
+  border-left: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-soft) 82%, black);
   backdrop-filter: none;
   overflow: hidden;
   min-width: 0;
@@ -1377,16 +1383,16 @@ code {
 }
 
 .side-panel__icon-button[data-state="active"] {
-  border-color: rgba(214, 218, 224, 0.36);
-  background: rgba(214, 218, 224, 0.14);
-  color: #f7f8fa;
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text-strong);
 }
 
 .side-panel__icon-button[aria-pressed="true"],
 .side-panel__icon-button[aria-expanded="true"] {
-  border-color: rgba(214, 218, 224, 0.36);
-  background: rgba(214, 218, 224, 0.14);
-  color: #f7f8fa;
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text-strong);
 }
 
 .panel-card-list,
