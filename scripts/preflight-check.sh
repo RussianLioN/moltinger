@@ -119,6 +119,27 @@ to_env_name() {
     printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
 
+read_env_file_secret() {
+    local env_file="$1"
+    local key="$2"
+
+    if [[ -z "$env_file" || ! -f "$env_file" ]]; then
+        return 1
+    fi
+
+    local line
+    line=$(grep -E "^${key}=" "$env_file" | tail -1 || true)
+    if [[ -z "$line" ]]; then
+        return 1
+    fi
+
+    local value="${line#*=}"
+    value="${value%\"}"
+    value="${value#\"}"
+
+    [[ -n "$value" ]]
+}
+
 normalize_host() {
     printf '%s' "$1" \
         | sed -E 's#^[A-Za-z]+://##' \
@@ -209,6 +230,15 @@ secret_present() {
 
     if [[ -n "${!env_name:-}" ]]; then
         return 0
+    fi
+
+    # ASC demo contract also allows required values from ASC_DEMO_ENV_FILE
+    # because remote rollout renders this file from secrets during deploy.
+    if [[ "$TARGET" == "asc-demo" ]]; then
+        local env_file="${ASC_DEMO_ENV_FILE:-$PROJECT_ROOT/.env.asc}"
+        if read_env_file_secret "$env_file" "$env_name"; then
+            return 0
+        fi
     fi
 
     return 1
