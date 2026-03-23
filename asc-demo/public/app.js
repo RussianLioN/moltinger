@@ -1509,11 +1509,11 @@
     if (!dom.agentStatus) {
       return;
     }
-    const visible = Boolean(state.accessToken);
+    const visible = Boolean(state.accessToken) && Boolean(state.awaitingResponse);
     dom.agentStatus.hidden = !visible;
     dom.agentStatus.dataset.state = state.awaitingResponse ? "thinking" : "idle";
     if (dom.agentStatusLabel) {
-      dom.agentStatusLabel.textContent = state.awaitingResponse ? "Агент думает" : "Агент готов";
+      dom.agentStatusLabel.textContent = state.awaitingResponse ? "Агент думает" : "";
     }
   }
 

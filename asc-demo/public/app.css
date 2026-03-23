@@ -703,14 +703,14 @@ code {
 .workspace-topbar {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
   position: sticky;
   top: 0;
   z-index: 64;
-  min-height: 38px;
-  padding: 4px 0 7px;
+  min-height: 34px;
+  padding: 2px 0 4px;
   background: color-mix(in oklab, var(--bg-soft) 90%, black);
   border-bottom: 1px solid var(--border);
   backdrop-filter: none;
@@ -728,20 +728,21 @@ code {
 }
 
 .workspace-topbar__main {
-  display: grid;
-  gap: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
 .workspace-topbar__title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   min-width: 0;
 }
 
 .workspace-topbar h1 {
-  font-size: clamp(1.22rem, 1.6vw, 1.42rem);
+  font-size: clamp(1.03rem, 1.35vw, 1.2rem);
   line-height: 1.2;
   min-width: 0;
   display: block;
@@ -749,8 +750,8 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
-  letter-spacing: -0.02em;
-  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-weight: 640;
 }
 
 .workspace-topbar__menu {
@@ -769,24 +770,20 @@ code {
 }
 
 .workspace-topbar__subtitle {
-  font-size: 0.83rem;
-  line-height: 1.4;
-  color: rgba(232, 236, 241, 0.56);
+  display: none;
 }
 
 .workspace-topbar__eyebrow {
-  font-size: 0.69rem;
-  color: rgba(255, 255, 255, 0.36);
-  letter-spacing: 0.08em;
+  display: none;
 }
 
 .workspace-topbar__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   flex-wrap: nowrap;
   flex: 0 0 auto;
-  min-width: 112px;
+  min-width: 72px;
   justify-content: flex-end;
 }
 
@@ -901,9 +898,9 @@ code {
 .workspace-agent-state {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 0 8px;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 7px;
   border: 1px solid color-mix(in oklab, var(--border) 92%, transparent);
   border-radius: 999px;
   background: color-mix(in oklab, var(--surface) 84%, transparent);
@@ -924,7 +921,7 @@ code {
 }
 
 .workspace-agent-state__label {
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   letter-spacing: 0.03em;
 }
 
@@ -1121,15 +1118,15 @@ code {
   bottom: 0;
   z-index: 3;
   padding-bottom: 2px;
-  background: linear-gradient(180deg, rgba(13, 15, 18, 0) 0%, rgba(13, 15, 18, 0.72) 28%, rgba(13, 15, 18, 0.97) 100%);
+  background: linear-gradient(180deg, rgba(13, 15, 18, 0) 0%, rgba(13, 15, 18, 0.58) 24%, rgba(13, 15, 18, 0.94) 100%);
 }
 
 .composer {
   display: grid;
-  gap: 5px;
-  padding: 8px;
+  gap: 4px;
+  padding: 6px;
   border: 1px solid color-mix(in oklab, var(--border) 96%, transparent);
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(in oklab, var(--bg-panel, var(--bg-sidebar)) 88%, transparent);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
@@ -1152,7 +1149,7 @@ code {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 20px;
+  min-height: 17px;
 }
 
 .composer__lead[hidden] {
@@ -1166,16 +1163,20 @@ code {
 .composer__lead-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 1.3rem;
-  padding: 0 2px;
+  gap: 6px;
+  min-height: 1.15rem;
+  padding: 0 1px;
 }
 
 .composer__question {
   color: rgba(230, 236, 247, 0.78);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 480;
-  line-height: 1.3;
+  line-height: 1.2;
+}
+
+.composer__lead-label {
+  display: none;
 }
 
 .composer-thinking {
@@ -1202,13 +1203,13 @@ code {
 }
 
 .composer textarea {
-  min-height: 42px;
+  min-height: 36px;
   max-height: 180px;
-  padding: 8px 10px;
-  line-height: 1.45;
+  padding: 7px 9px;
+  line-height: 1.4;
   resize: none;
   overflow-y: hidden;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .composer__footer {
@@ -1228,11 +1229,11 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  min-height: 26px;
+  min-width: 24px;
+  min-height: 24px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--muted-strong);
   cursor: pointer;
@@ -1280,8 +1281,8 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 34px;
-  min-height: 34px;
+  min-width: 32px;
+  min-height: 32px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: #d3d7de;
