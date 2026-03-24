@@ -74,7 +74,7 @@
 - [x] T052 Extend deploy verification and runtime attestation so stale writable `moltis.toml` fails closed against tracked `config/moltis.toml`
 - [x] T053 Add or update component/static coverage for runtime-config parity enforcement
 - [x] T054 Record RCA, consilium, and an explicit rule for embedding/runtime drift; rebuild lessons index
-- [ ] T055 Prepare a runtime-only `PR1` carrier for `main` that includes only the embedding/Ollama fix path plus blocking verification lanes
+- [x] T055 Prepare a runtime-only `PR1` carrier for `main` that includes only the embedding/Ollama fix path plus blocking verification lanes
 - [ ] T056 Merge `PR1` into `main`, run the canonical production deploy from `main`, and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
 - [ ] T057 Only after successful live verification, land `PR2` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md`
 
