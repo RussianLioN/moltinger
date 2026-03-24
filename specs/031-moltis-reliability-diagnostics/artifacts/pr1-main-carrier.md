@@ -10,6 +10,15 @@ Consilium consensus for this incident:
 - `PR1` must include runtime attestation and force-recreate behavior, not just `config + compose`.
 - `PR2` must stay deferred until after successful live verification from `main`.
 
+## Executable Artifacts
+
+- `apply_pr1_main_carrier.py`
+  - deterministic applicator that mutates a `main` checkout tree in place and fails fast if `origin/main` anchors drift
+- `pr1-main-carrier.patch`
+  - generated unified diff emitted by the applicator against a clean `origin/main` snapshot
+- `pr1-main-carrier-validation.md`
+  - proof that the applicator ran successfully on a clean exported `origin/main` tree and that the emitted patch also passes `patch --dry-run`
+
 ## Source Deltas
 
 The carrier should be sourced from these already-proven branch deltas, but not cherry-picked wholesale:
@@ -122,6 +131,22 @@ bash tests/unit/test_deploy_workflow_guards.sh
 bash tests/component/test_moltis_runtime_attestation.sh
 bash tests/component/test_moltis_search_memory_diagnostics.sh
 ```
+
+## Carrier Usage
+
+Generate or refresh the carrier against a clean `main` tree:
+
+```bash
+tmp_root="$(mktemp -d /tmp/pr1-main-carrier.XXXXXX)"
+mkdir -p "$tmp_root/main"
+git archive origin/main | tar -x -C "$tmp_root/main"
+python3 specs/031-moltis-reliability-diagnostics/artifacts/apply_pr1_main_carrier.py \
+  --target-tree "$tmp_root/main" \
+  --emit-patch "$tmp_root/pr1-main-carrier.patch"
+patch --dry-run -p1 -d "$tmp_root/main" < "$tmp_root/pr1-main-carrier.patch"
+```
+
+The committed `pr1-main-carrier.patch` is the already validated output of that flow, not a hand-written diff.
 
 ## Post-Deploy Live Proof From `main`
 
