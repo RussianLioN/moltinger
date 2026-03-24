@@ -2251,10 +2251,10 @@ set_finish_next_steps() {
     add_next_step "${plain_bd_bootstrap}"
   fi
   add_next_step "bd preflight --check"
-  add_next_step "bd sync"
+  add_next_step "bd status"
   add_next_step "$(build_finish_commit_command)"
   add_next_step "git pull --rebase"
-  add_next_step "bd sync"
+  add_next_step "bd status"
   add_next_step "git push -u origin $(shell_quote "${report_branch_name}")"
 
   if close_command="$(build_finish_close_command)"; then

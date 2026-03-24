@@ -67,7 +67,8 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd status             # Inspect the current Beads state
+bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
 ```
 
 ## ⚠️ Pre-Change Checklists
@@ -210,7 +211,7 @@ ANY command with exit code != 0
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd status
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -595,7 +596,7 @@ bd close ID --reason "Done"        # Complete task
 /push patch                        # Commit
 
 # END (MANDATORY!)
-bd sync
+bd status
 git push
 ```
 

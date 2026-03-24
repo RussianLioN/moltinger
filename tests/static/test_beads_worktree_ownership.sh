@@ -27,6 +27,9 @@ BEADS_WORKFLOWS="$PROJECT_ROOT/.claude/skills/beads/resources/WORKFLOWS.md"
 WORKTREE_COMMAND="$PROJECT_ROOT/.claude/commands/worktree.md"
 SHARED_CORE_INSTRUCTIONS="$PROJECT_ROOT/.ai/instructions/shared-core.md"
 ROOT_AGENTS="$PROJECT_ROOT/AGENTS.md"
+CLAUDE_DOC="$PROJECT_ROOT/CLAUDE.md"
+BEADS_STATE_AGENTS="$PROJECT_ROOT/.beads/AGENTS.md"
+BEADS_STATE_CONFIG="$PROJECT_ROOT/.beads/config.yaml"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -103,6 +106,15 @@ run_static_beads_worktree_ownership_tests() {
         fi
     else
         test_pass
+    fi
+
+    test_start "static_active_instruction_surfaces_retire_bd_sync_guidance"
+    if ! rg -q 'bd sync' "$CLAUDE_DOC" "$BEADS_STATE_AGENTS" "$BEADS_STATE_CONFIG" && \
+       ! rg -q 'add_next_step "bd sync"' "$WORKTREE_READY_SCRIPT" && \
+       rg -q 'bd status' "$CLAUDE_DOC" "$BEADS_STATE_AGENTS"; then
+        test_pass
+    else
+        test_fail "Active instruction surfaces must not reintroduce retired bd sync guidance"
     fi
 
     test_start "static_codex_launcher_bootstraps_repo_local_plain_bd"
