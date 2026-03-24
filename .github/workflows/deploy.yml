@@ -375,6 +375,7 @@ jobs:
 
           if [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
             echo "::error::Production deploys must run from main. Current ref: ${{ github.ref_name }}"
+            echo "::error::For feature branches, use workflow_dispatch on .github/workflows/feature-diagnostics.yml to collect read-only evidence."
             exit 1
           fi
 
@@ -858,6 +859,11 @@ jobs:
     environment:
       name: production
       url: https://moltis.ainetic.tech
+    env:
+      MOLTINGER_PROD_GUARD_APPROVED: "true"
+      MOLTINGER_PROD_GUARD_REF_NAME: ${{ github.ref_name }}
+      MOLTINGER_PROD_GUARD_REF_TYPE: ${{ github.ref_type }}
+      MOLTINGER_PROD_GUARD_SHA: ${{ github.sha }}
     outputs:
       auto_rollback_performed: ${{ steps.deploy_tracked.outputs.rolled_back }}
 
@@ -905,7 +911,13 @@ jobs:
         run: |
           echo "::group::Updating active deploy root"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            "bash '${{ env.DEPLOY_PATH }}/scripts/update-active-deploy-root.sh' \
+            "MOLTINGER_PROD_GUARD_APPROVED='${{ env.MOLTINGER_PROD_GUARD_APPROVED }}' \
+             MOLTINGER_PROD_GUARD_REF_NAME='${{ env.MOLTINGER_PROD_GUARD_REF_NAME }}' \
+             MOLTINGER_PROD_GUARD_REF_TYPE='${{ env.MOLTINGER_PROD_GUARD_REF_TYPE }}' \
+             MOLTINGER_PROD_GUARD_SHA='${{ env.MOLTINGER_PROD_GUARD_SHA }}' \
+             GITHUB_ACTIONS='true' \
+             GITHUB_RUN_ID='${{ github.run_id }}' \
+             bash '${{ env.DEPLOY_PATH }}/scripts/update-active-deploy-root.sh' \
               --target-path '${{ env.DEPLOY_PATH }}' \
               --active-path '${{ env.DEPLOY_ACTIVE_PATH }}'"
           echo "::endgroup::"
@@ -917,7 +929,13 @@ jobs:
         run: |
           echo "::group::Applying Moltis host automation from active deploy root"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            "bash '${{ env.DEPLOY_PATH }}/scripts/apply-moltis-host-automation.sh' \
+            "MOLTINGER_PROD_GUARD_APPROVED='${{ env.MOLTINGER_PROD_GUARD_APPROVED }}' \
+             MOLTINGER_PROD_GUARD_REF_NAME='${{ env.MOLTINGER_PROD_GUARD_REF_NAME }}' \
+             MOLTINGER_PROD_GUARD_REF_TYPE='${{ env.MOLTINGER_PROD_GUARD_REF_TYPE }}' \
+             MOLTINGER_PROD_GUARD_SHA='${{ env.MOLTINGER_PROD_GUARD_SHA }}' \
+             GITHUB_ACTIONS='true' \
+             GITHUB_RUN_ID='${{ github.run_id }}' \
+             bash '${{ env.DEPLOY_PATH }}/scripts/apply-moltis-host-automation.sh' \
               --active-root '${{ env.DEPLOY_ACTIVE_PATH }}'"
           echo "::endgroup::"
 

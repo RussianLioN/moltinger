@@ -28,6 +28,8 @@ Operational policy in this repository:
 
 - Do not update Moltis by editing files directly on the server.
 - Do not use `sed` on the server to bump image tags.
+- Do not replay production deploy steps manually from a feature branch after workflow branch guards block promotion.
+- Use `.github/workflows/feature-diagnostics.yml` for read-only branch evidence, then promote to `main` before production rollout.
 - Do not pin a GitHub release tag unless the matching GHCR container tag is actually published.
 - Do not keep a leading `v` in tracked GHCR tags (use `0.10.18`, not `v0.10.18`).
 - Do not pull or restart a new Moltis image without a fresh pre-update backup.

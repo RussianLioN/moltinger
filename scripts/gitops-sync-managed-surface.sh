@@ -90,6 +90,13 @@ fi
 SOURCE_ROOT="$(cd "$SOURCE_ROOT" && pwd)"
 SSH_TARGET="${SSH_USER}@${SSH_HOST}"
 
+if [[ "$DRY_RUN" != "true" ]]; then
+    bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+        --action "gitops-sync-managed-surface" \
+        --target-host "$SSH_HOST" \
+        --target-path "$DEPLOY_PATH"
+fi
+
 run_local() {
     if [[ "$DRY_RUN" == "true" ]]; then
         printf '+'

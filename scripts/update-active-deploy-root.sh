@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
     cat >&2 <<'EOF'
 Usage:
@@ -66,6 +68,10 @@ if [[ "$ACTIVE_PATH" == "$TARGET_PATH" ]]; then
     error "Active deploy root path must differ from target path: $ACTIVE_PATH"
     exit 1
 fi
+
+bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+    --action "update-active-deploy-root" \
+    --target-path "$TARGET_PATH"
 
 # Legacy migration: ln -sfn does NOT replace an existing real directory.
 # In that case it creates a nested link and test -L fails.

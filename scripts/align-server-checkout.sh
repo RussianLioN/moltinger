@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
     cat >&2 <<'EOF'
 Usage:
@@ -117,5 +119,10 @@ if [[ "$DRY_RUN" == "true" ]]; then
     printf 'REMOTE_SCRIPT\n'
     exit 0
 fi
+
+bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+    --action "align-server-checkout" \
+    --target-host "$SSH_HOST" \
+    --target-path "$DEPLOY_PATH"
 
 emit_remote_script | ssh "$SSH_TARGET" 'bash -seu'

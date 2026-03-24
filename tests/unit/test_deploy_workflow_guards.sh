@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 UAT_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
+FEATURE_DIAGNOSTICS_WORKFLOW="$PROJECT_ROOT/.github/workflows/feature-diagnostics.yml"
 ACTIVE_ROOT_SCRIPT="$PROJECT_ROOT/scripts/update-active-deploy-root.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
@@ -17,6 +18,7 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
 EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
 EXPECTED_CHECKOUT_ALIGN_SCRIPT="scripts/align-server-checkout.sh"
@@ -1070,6 +1072,81 @@ test_active_root_script_requires_existing_target_directory() {
     test_pass
 }
 
+test_prod_mutation_guard_denies_unapproved_production_replay() {
+    test_start "Production mutation guard should fail closed without workflow approval"
+
+    if [[ ! -f "$PROD_MUTATION_GUARD_SCRIPT" ]]; then
+        test_skip "Missing script file: $PROD_MUTATION_GUARD_SCRIPT"
+        return
+    fi
+
+    local output_file tmp_dir
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/output.log"
+
+    if bash "$PROD_MUTATION_GUARD_SCRIPT" \
+        --action "unit-test" \
+        --target-host "ainetic.tech" \
+        --target-path "/opt/moltinger" >"$output_file" 2>&1; then
+        test_fail "prod-mutation-guard.sh must deny production mutation without workflow approval"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "Production mutation denied" "$output_file" || \
+       ! grep -Fq "feature-diagnostics.yml" "$output_file"; then
+        test_fail "Guard denial should explain the sanctioned diagnostics/promote path"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_prod_mutation_guard_allows_main_ci_context() {
+    test_start "Production mutation guard should allow main branch GitHub Actions context"
+
+    if [[ ! -f "$PROD_MUTATION_GUARD_SCRIPT" ]]; then
+        test_skip "Missing script file: $PROD_MUTATION_GUARD_SCRIPT"
+        return
+    fi
+
+    if env \
+        GITHUB_ACTIONS=true \
+        GITHUB_RUN_ID=12345 \
+        MOLTINGER_PROD_GUARD_APPROVED=true \
+        MOLTINGER_PROD_GUARD_REF_NAME=main \
+        MOLTINGER_PROD_GUARD_REF_TYPE=branch \
+        MOLTINGER_PROD_GUARD_SHA=deadbeef \
+        bash "$PROD_MUTATION_GUARD_SCRIPT" \
+            --action "unit-test" \
+            --target-host "ainetic.tech" \
+            --target-path "/opt/moltinger" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "prod-mutation-guard.sh should allow sanctioned main-branch CI context"
+    fi
+}
+
+test_feature_diagnostics_workflow_exists_as_read_only_path() {
+    test_start "Feature diagnostics workflow should exist as the sanctioned read-only branch path"
+
+    if [[ ! -f "$FEATURE_DIAGNOSTICS_WORKFLOW" ]]; then
+        test_fail "Missing workflow file: $FEATURE_DIAGNOSTICS_WORKFLOW"
+        return
+    fi
+
+    if ! grep -Fq "name: Feature Diagnostics" "$FEATURE_DIAGNOSTICS_WORKFLOW" || \
+       ! grep -Fq "collect-feature-diagnostics.sh" "$FEATURE_DIAGNOSTICS_WORKFLOW" || \
+       ! grep -Fq "upload-artifact" "$FEATURE_DIAGNOSTICS_WORKFLOW"; then
+        test_fail "Feature diagnostics workflow must collect and publish read-only evidence"
+        return
+    fi
+
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -1104,6 +1181,9 @@ run_all_tests() {
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
     test_active_root_script_migrates_legacy_directory
     test_active_root_script_requires_existing_target_directory
+    test_prod_mutation_guard_denies_unapproved_production_replay
+    test_prod_mutation_guard_allows_main_ci_context
+    test_feature_diagnostics_workflow_exists_as_read_only_path
 
     generate_report
 }

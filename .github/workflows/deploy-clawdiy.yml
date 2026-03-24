@@ -77,6 +77,28 @@ jobs:
           fi
           echo "clawdiy_image=${{ github.event.inputs.clawdiy_image }}" >> "$GITHUB_OUTPUT"
 
+      - name: Enforce production promotion source
+        run: |
+          if [ "${{ github.event.inputs.environment }}" != "production" ]; then
+            echo "::error::Deploy Clawdiy workflow supports production target only."
+            exit 1
+          fi
+
+          if [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::Production Clawdiy deploys must run from main. Current ref: ${{ github.ref_name }}"
+            echo "::error::Feature branches must use non-mutating diagnostics and then promote to main."
+            exit 1
+          fi
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            git fetch --no-tags --depth=1 origin main
+            MAIN_HEAD="$(git rev-parse origin/main)"
+            if [ "$MAIN_HEAD" != "${{ github.sha }}" ]; then
+              echo "::error::Production tag deploy is blocked: tag must point to current origin/main HEAD ($MAIN_HEAD), got ${{ github.sha }}."
+              exit 1
+            fi
+          fi
+
       - name: Validate required secrets
         run: |
           missing=0

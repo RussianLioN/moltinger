@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 ACTIVE_ROOT=""
 DRY_RUN=false
 HOST_CRON_DIR="${MOLTIS_HOST_CRON_DIR:-/etc/cron.d}"
@@ -63,6 +65,12 @@ fi
 if [[ ! -d "$ACTIVE_ROOT" ]]; then
     echo "apply-moltis-host-automation.sh: active root does not exist: $ACTIVE_ROOT" >&2
     exit 1
+fi
+
+if [[ "$DRY_RUN" != "true" ]]; then
+    bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+        --action "apply-moltis-host-automation" \
+        --target-path "$ACTIVE_ROOT"
 fi
 
 CRON_DIR="$ACTIVE_ROOT/scripts/cron.d"

@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
     cat >&2 <<'EOF'
 Usage:
@@ -110,6 +112,13 @@ fi
 if [[ -z "$DEPLOY_PATH" || -z "$BACKUP_PATH" || -z "$TARGET_REF" || -z "$TARGET_SHA" || -z "$RUN_ID" || -z "$REPOSITORY" ]]; then
     usage
     exit 64
+fi
+
+if [[ -n "$SSH_HOST" ]]; then
+    bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+        --action "gitops-repair-managed-checkout" \
+        --target-host "$SSH_HOST" \
+        --target-path "$DEPLOY_PATH"
 fi
 
 DRIFT_SNAPSHOT="$(
