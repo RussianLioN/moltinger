@@ -80,10 +80,19 @@ extract_field() {
     grep "^$field:" "$file" 2>/dev/null | head -1 | sed "s/^$field: *//" | tr -d '"\r' || echo ""
 }
 
+has_lessons_section() {
+    local file="$1"
+    grep -Eq '^## (Уроки|Lessons)' "$file" 2>/dev/null
+}
+
 # Extract lessons section
 extract_lessons() {
     local file="$1"
-    sed -n '/^## Уроки/,/^## /p' "$file" 2>/dev/null | head -20 || echo ""
+    awk '
+        /^## (Уроки|Lessons)/ {in_section=1; next}
+        /^## / && in_section {exit}
+        in_section {print}
+    ' "$file" 2>/dev/null | head -20 || echo ""
 }
 
 # Check if file matches filters
@@ -158,7 +167,7 @@ count=0
 while IFS= read -r file; do
     if [[ "$SHOW_ALL" == true ]] || matches_filters "$file"; then
         # Check if file has lessons section
-        if grep -q "^## Уроки" "$file" 2>/dev/null; then
+        if has_lessons_section "$file"; then
             display_lesson "$file"
             count=$((count + 1))
         fi

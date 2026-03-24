@@ -65,12 +65,26 @@
 - [x] T047 Expand authoritative UAT semantics for `/status`, wrong-target chat, verification-gate replies, and exercised-surface matrices for browser/search/repo-context paths
 - [x] T048 Design immutable production release roots plus runtime attestation/drift detection so runtime provenance cannot silently fall off tracked intent
 
+---
+
+## Phase 6: Embedding And Ollama Root-Cause Closure
+
+- [x] T050 Reconcile Speckit artifacts for the `memory_search` / missing Ollama provider incident and encode the runtime-config parity + `OLLAMA_API_KEY` hypotheses
+- [x] T051 Forward `OLLAMA_API_KEY` into the production `moltis` container and add static coverage for the contract
+- [x] T052 Extend deploy verification and runtime attestation so stale writable `moltis.toml` fails closed against tracked `config/moltis.toml`
+- [x] T053 Add or update component/static coverage for runtime-config parity enforcement
+- [x] T054 Record RCA, consilium, and an explicit rule for embedding/runtime drift; rebuild lessons index
+- [ ] T055 Redeploy production from this branch and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
+- [ ] T056 Reconcile `tasks.md` after the embedding/Ollama closure lands
+
 ## Dependencies & Execution Order
 
 - Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
+- Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and closes the highest-priority remaining live blocker for this slice.
 - Phase 2 and Phase 3 are the only repository-safe implementation phases in this slice.
 - Phase 4 depends on operator action against the shared remote runtime after repository guardrails are merged.
 - Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
+- Phase 6 returns to an operator-driven live fix, but only after new repository guardrails and RCA artifacts are in place.
 
 ## Implementation Strategy
 
@@ -79,3 +93,4 @@
 - Then refresh the operator smoke diagnostic so it tests the current Moltis API surface instead of stale endpoints.
 - Leave live runtime repair, session cleanup, and memory/browser operational work as explicit follow-up actions.
 - Use Phase 5 backlog items to drive the next durability-focused slice once the current operational backlog is under control.
+- Close the embedding/Ollama incident by proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery.

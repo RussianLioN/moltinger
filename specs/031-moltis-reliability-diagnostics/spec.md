@@ -59,6 +59,8 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - What happens when the MCP search server is intermittently available and the runtime must distinguish transport flakiness from config drift?
 - What happens when Tavily MCP depends on SSE plus `TAVILY_API_KEY`, but the tracked env render path allows that secret to go empty or the runtime has no dedicated Tavily health proof?
 - What happens when `memory_search` auto-detects embedding providers from the chat chain and starts sending embeddings traffic to the Z.ai Coding endpoint, returning `400 Bad Request` while a stale Groq entry returns `401 Unauthorized`?
+- What happens when tracked `config/moltis.toml` pins `[memory] provider = "ollama"` and `model = "nomic-embed-text"`, but the writable runtime copy still carries an older auto-detect memory contract?
+- What happens when the server `.env` contains `OLLAMA_API_KEY`, but the production `moltis` container does not receive it and therefore never exposes cloud-backed Ollama chat models such as `gemini-3-flash-preview:cloud`?
 - What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
 - What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
 - What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
@@ -85,6 +87,9 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-015**: The package MUST surface Tavily SSE instability and `memory_search` embedding-provider failures as the highest-priority unresolved live blockers after OAuth/runtime-contract recovery.
 - **FR-016**: The repository MUST provide a read-only diagnostic entrypoint that summarizes the tracked Tavily/memory contract plus an optional runtime-log failure taxonomy for Tavily and embeddings.
 - **FR-017**: The shared Moltis env renderer MUST fail closed when `TAVILY_API_KEY` is empty if the tracked runtime depends on Tavily MCP search.
+- **FR-018**: Production deploy/runtime verification MUST reject a runtime where `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` diverges from tracked `config/moltis.toml`.
+- **FR-019**: The production `moltis` container MUST receive `OLLAMA_API_KEY` whenever the tracked provider surface depends on cloud-backed Ollama models.
+- **FR-020**: The repository MUST record an RCA and an explicit rule for embedding/runtime drift so future sessions check runtime config parity and `OLLAMA_API_KEY` delivery before blaming provider auth or embeddings APIs.
 
 ### Key Entities
 
@@ -114,3 +119,6 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **SC-007**: The package records follow-up backlog items for auth secret rendering, runtime-dir pinning, session reconciliation, semantic UAT hardening, and release-root/runtime-attestation drift control.
 - **SC-008**: The Speckit backlog explicitly ranks Tavily SSE failures and `memory_search` embedding-provider failures above browser and long-tail cleanup work.
 - **SC-009**: A repository-managed diagnostic script can emit a machine-readable summary of tracked search/memory contract plus Tavily/embedding failure signals from a provided log sample.
+- **SC-010**: Deploy/runtime attestation fails when the live writable `moltis.toml` is stale relative to tracked `config/moltis.toml`.
+- **SC-011**: Static validation fails if `docker-compose.prod.yml` stops forwarding `OLLAMA_API_KEY` into the `moltis` container.
+- **SC-012**: The incident is preserved in tracked RCA/rules/lessons artifacts so the repair path is discoverable in future sessions.

@@ -250,6 +250,7 @@ What this attests:
 - container `working_dir` is still `/server`
 - live `/server` mount source matches the resolved active root target
 - live runtime config mount source still matches `MOLTIS_RUNTIME_CONFIG_DIR` and remains writable
+- live runtime `moltis.toml` still matches tracked `config/moltis.toml`
 - durable `~/.moltis` mount still exists
 - `data/.deployed-sha` and `data/.deployment-info` still match live git SHA/ref and runtime version
 
@@ -287,6 +288,8 @@ Interpretation rules:
 - if `openai_embeddings_endpoint_mismatch_suspected=true`, do not assume OpenAI OAuth is broken; `memory_search` is likely hitting the Z.ai Coding endpoint with an embeddings path it does not support
 - if `groq_runtime_drift_suspected=true` while tracked env does not provide a Groq key, treat it as stale runtime/provider drift until proven otherwise
 - if `memory_provider_autodetect=true` and `memory_missing_watch_dirs=true`, memory is still nondeterministic even before vector backfill work starts
+- if `/opt/moltinger-state/config-runtime/moltis.toml` differs from `/opt/moltinger-active/config/moltis.toml`, fix runtime config drift first; otherwise `memory_search` can keep using old auto-detect settings even when tracked config is already correct
+- if the running `moltis` container does not expose `OLLAMA_API_KEY`, do not expect `ollama::...:cloud` chat models to appear in the live provider catalog
 
 Useful live log filter:
 
@@ -300,6 +303,14 @@ Expected proof lines:
 - `starting streaming agent loop provider="openai-codex"`
 - `openai-codex stream_with_tools request model=gpt-5.4`
 - `agent run complete ... response=OK`
+
+Fast live checks for this specific incident class:
+
+```bash
+diff -u /opt/moltinger-active/config/moltis.toml /opt/moltinger-state/config-runtime/moltis.toml | sed -n '1,160p'
+docker exec moltis sh -lc 'env | grep ^OLLAMA_API_KEY= || true'
+docker exec moltis sh -lc 'curl -sf http://ollama:11434/api/tags'
+```
 
 ## Known Failure Patterns And Fixes
 

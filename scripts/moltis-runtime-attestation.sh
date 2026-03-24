@@ -292,6 +292,8 @@ LIVE_VERSION=""
 RUNTIME_CONFIG_RW=""
 AUTH_STATUS_RAW=""
 AUTH_STATUS_VALID=""
+TRACKED_RUNTIME_TOML=""
+RUNTIME_RUNTIME_TOML=""
 
 if [[ ! -L "$ACTIVE_PATH" ]]; then
     fail_with "ACTIVE_ROOT_NOT_SYMLINK" "Active deploy root is not a symlink: $ACTIVE_PATH"
@@ -406,6 +408,15 @@ if [[ "$RUNTIME_CONFIG_RW" != "true" ]]; then
     fail_with "RUNTIME_CONFIG_NOT_WRITABLE" "Runtime config mount for /home/moltis/.config/moltis must be writable"
 fi
 
+TRACKED_RUNTIME_TOML="$ACTIVE_TARGET/config/moltis.toml"
+RUNTIME_RUNTIME_TOML="$EXPECTED_RUNTIME_CONFIG/moltis.toml"
+if [[ ! -f "$TRACKED_RUNTIME_TOML" || ! -f "$RUNTIME_RUNTIME_TOML" ]]; then
+    fail_with "RUNTIME_CONFIG_FILE_MISSING" "Tracked or runtime moltis.toml is missing; expected '$TRACKED_RUNTIME_TOML' and '$RUNTIME_RUNTIME_TOML'"
+fi
+if ! cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"; then
+    fail_with "RUNTIME_CONFIG_FILE_MISMATCH" "Runtime moltis.toml diverges from tracked config/moltis.toml"
+fi
+
 RUNTIME_HOME_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "/home/moltis/.moltis")"
 if [[ -z "$RUNTIME_HOME_SOURCE" ]]; then
     fail_with "RUNTIME_HOME_MOUNT_MISSING" "Moltis runtime home mount /home/moltis/.moltis is missing"
@@ -461,6 +472,8 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg live_git_ref "$LIVE_GIT_REF" \
         --arg live_version "$LIVE_VERSION" \
         --arg runtime_config_rw "$RUNTIME_CONFIG_RW" \
+        --arg tracked_runtime_toml "$TRACKED_RUNTIME_TOML" \
+        --arg runtime_runtime_toml "$RUNTIME_RUNTIME_TOML" \
         --arg expected_auth_provider "$EXPECTED_AUTH_PROVIDER" \
         --arg auth_status_valid "$AUTH_STATUS_VALID" \
         '{
@@ -489,6 +502,8 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             live_git_ref: (if $live_git_ref == "" then null else $live_git_ref end),
             live_version: (if $live_version == "" then null else $live_version end),
             runtime_config_rw: (if $runtime_config_rw == "" then null else $runtime_config_rw end),
+            tracked_runtime_toml: (if $tracked_runtime_toml == "" then null else $tracked_runtime_toml end),
+            runtime_runtime_toml: (if $runtime_runtime_toml == "" then null else $runtime_runtime_toml end),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
             auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end)
           },
@@ -509,6 +524,8 @@ live_git_sha=${LIVE_GIT_SHA:-unknown}
 recorded_version=${RECORDED_VERSION:-unknown}
 live_version=${LIVE_VERSION:-unknown}
 runtime_config_rw=${RUNTIME_CONFIG_RW:-unknown}
+tracked_runtime_toml=${TRACKED_RUNTIME_TOML:-unknown}
+runtime_runtime_toml=${RUNTIME_RUNTIME_TOML:-unknown}
 expected_auth_provider=${EXPECTED_AUTH_PROVIDER:-none}
 auth_status_valid=${AUTH_STATUS_VALID:-skipped}
 EOF

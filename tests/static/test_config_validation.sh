@@ -255,6 +255,13 @@ PY
         test_fail "Primary Moltis config must pin the memory embeddings backend, use the root Ollama endpoint for model probes, and keep repo-visible watch_dirs instead of relying on auto-detect"
     fi
 
+    test_start "static_moltis_compose_forwards_ollama_cloud_key_to_runtime"
+    if rg -Fq 'OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}' "$COMPOSE_PROD"; then
+        test_pass
+    else
+        test_fail "Production Moltis container must receive OLLAMA_API_KEY so cloud-backed Ollama chat models can appear in the runtime provider catalog"
+    fi
+
     test_start "static_config_avoids_top_level_telegram_boolean_accounts"
     if ! rg -Uq '^\[channels\.telegram\]\nenabled = true$' "$TOML_CONFIG"; then
         test_pass
@@ -501,6 +508,18 @@ PY
         test_pass
     else
         test_fail "Tracked deploy control-plane must attest live runtime provenance through the shared runtime attestation script"
+    fi
+
+    test_start "static_runtime_contract_enforces_tracked_runtime_config_parity"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'runtime moltis.toml diverges from tracked config/moltis.toml' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'RUNTIME_CONFIG_FILE_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy verification and runtime attestation must fail closed when live runtime moltis.toml drifts from tracked config/moltis.toml"
     fi
 
     test_start "static_gitops_drift_detection_uses_shared_runtime_attestation_wrapper"

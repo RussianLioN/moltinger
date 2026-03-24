@@ -14,6 +14,11 @@ find_rca_files() {
     find "$RCA_DIR" -name "*.md" ! -name "INDEX.md" ! -name "TEMPLATE.md" ! -name "LESSONS*" -type f 2>/dev/null | sort -r
 }
 
+has_lessons_section() {
+    local file="$1"
+    grep -Eq '^## (Уроки|Lessons)' "$file" 2>/dev/null
+}
+
 # Extract frontmatter field
 extract_field() {
     local file="$1"
@@ -35,7 +40,7 @@ mkdir -p /tmp/claude
 
 total=0
 while IFS= read -r file; do
-    if ! grep -q "^## Уроки" "$file" 2>/dev/null; then
+    if ! has_lessons_section "$file"; then
         continue
     fi
 

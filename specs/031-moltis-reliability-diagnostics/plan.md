@@ -5,7 +5,7 @@
 
 ## Summary
 
-Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers are Tavily SSE instability and `memory_search` embedding-provider failures. This slice documents the evidence, separates configuration faults from operational drift, and lands only the safest repository-managed fixes: deploy-time/runtime contract checks, a current API/RPC smoke diagnostic, and a read-only search/memory diagnostic entrypoint.
+Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. This slice therefore extends the safe repository-managed fixes with runtime-config parity enforcement, explicit Ollama cloud env forwarding, RCA/rule capture, and live validation against the remote target.
 
 ## Technical Context
 
@@ -52,6 +52,8 @@ No constitution exception is required.
 - Runtime logs show browser image pull failures due Docker socket permission errors; official docs also require Docker-aware browser container connectivity for sibling browser containers.
 - Tavily MCP search intermittently fails its SSE handshake and auto-restart sequence.
 - Runtime logs show repeated `memory_search` failures where the fallback chain hits `https://api.z.ai/api/coding/paas/v4/embeddings` with `400 Bad Request`, then Groq embeddings with `401 Unauthorized`.
+- Live runtime diff shows tracked `config/moltis.toml` already pins `[memory] provider = "ollama"` with `model = "nomic-embed-text"` and repo-visible `watch_dirs`, while `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` still carries the older default commented memory block and `http://localhost:11434/v1`.
+- Server `.env` already contains `OLLAMA_API_KEY`, but the running `moltis` container environment does not, so cloud-backed Ollama models such as `gemini-3-flash-preview:cloud` never enter the live provider catalog.
 - Telegram authoritative testing returns `model 'openai-codex::gpt-5.3-codex-spark' not found`, matching stale provider/model state rather than the tracked provider surface.
 - Runtime logs show `provider_keys.json.tmp... read-only file system`, proving the live config mount is incompatible with runtime-managed auth/key persistence.
 
@@ -70,6 +72,7 @@ No constitution exception is required.
 2. Browser automation is enabled, but the configuration does not explicitly set the Docker-in-Docker browser connectivity contract documented by Moltis for Docker deployments.
 3. Built-in web search is disabled while production depends entirely on a remote Tavily MCP path that is already showing transport instability.
 4. Memory embeddings are left on auto-detect, so the runtime can infer a chat-provider chain that is unsuitable for embeddings, including the Z.ai Coding endpoint under `[providers.openai]`.
+5. The tracked compose contract forwarded `OLLAMA_API_KEY` to the Ollama sidecar but not to the `moltis` container itself, so cloud-backed Ollama chat models could be configured in git but remain invisible at runtime.
 
 ### Missing Integration
 
@@ -77,6 +80,7 @@ No constitution exception is required.
 2. Repo knowledge cannot flow into vector memory because the runtime neither sees the repository nor watches repository docs/knowledge paths.
 3. The tracked codex-update runtime contract depends on container-visible `/server/...` paths; those integrations are unreachable while `/server` is absent.
 4. Search and memory health have no dedicated repository-managed proof today, so transport-green deploy/UAT signals can miss Tavily SSE churn and embedding-provider drift.
+5. Deploy/runtime attestation proved mount source and writability, but did not yet prove that the writable runtime `moltis.toml` still matched tracked `config/moltis.toml`.
 
 ### Bugs
 
@@ -114,6 +118,14 @@ The following actions are intentionally **not** auto-applied in this slice and m
 - stabilize Tavily SSE search or replace it with a less fragile search path
 - arrest `memory_search` embedding failures by pinning a deterministic memory contract or explicitly forcing keyword-only fallback until a supported embedding backend is validated
 - add live search/memory proof once the runtime contract is healthy
+
+### Phase 4a - Embedding And Ollama Contract Repair
+
+The current incident narrows the highest-priority live work to one concrete contract:
+
+- deploy/runtime verification must fail if writable runtime `moltis.toml` drifts away from tracked `config/moltis.toml`
+- the `moltis` container must receive `OLLAMA_API_KEY` so cloud-backed Ollama chat models can be discovered
+- operator runbooks and RCA/lessons must point first to runtime-config parity and env delivery before blaming provider auth or third-party embeddings endpoints
 
 ### Phase 5 - Remaining Live-Only Remediation
 
@@ -163,6 +175,12 @@ This keeps the work safe, auditable, and aligned with GitOps.
 
 - Rank Tavily SSE failures and `memory_search` embedding failures above browser and stale-context cleanup.
 - Keep their remediation explicit and operator-driven until a deterministic provider contract is chosen.
+
+### Phase 4a: Embedding/Ollama Primary Cause Closure
+
+- Forward `OLLAMA_API_KEY` into the `moltis` container.
+- Extend deploy/runtime attestation to reject stale writable runtime `moltis.toml`.
+- Capture the incident in RCA, rules, and lessons so future sessions start from the right first checks.
 
 ### Phase 5: Handoff
 

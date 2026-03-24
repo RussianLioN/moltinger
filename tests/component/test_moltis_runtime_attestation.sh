@@ -94,12 +94,19 @@ EOF
 create_workspace_fixture() {
     local workspace_root="$1"
 
-    mkdir -p "$workspace_root/data" "$workspace_root/skills"
+    mkdir -p "$workspace_root/data" "$workspace_root/skills" "$workspace_root/config"
     git -C "$workspace_root" init -q
     git -C "$workspace_root" config user.name "Codex Test"
     git -C "$workspace_root" config user.email "codex@example.com"
     printf 'runtime\n' >"$workspace_root/runtime.txt"
+    cat >"$workspace_root/config/moltis.toml" <<'EOF'
+[memory]
+provider = "ollama"
+base_url = "http://ollama:11434"
+model = "nomic-embed-text"
+EOF
     git -C "$workspace_root" add runtime.txt
+    git -C "$workspace_root" add config/moltis.toml
     git -C "$workspace_root" commit -q -m "fixture"
 }
 
@@ -121,6 +128,7 @@ run_component_moltis_runtime_attestation_tests() {
     workspace_root_canonical="$(cd "$workspace_root" && pwd -P)"
     runtime_config_dir_canonical="$(cd "$runtime_config_dir" && pwd -P)"
     live_sha="$(git -C "$workspace_root" rev-parse HEAD)"
+    cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
 
     cat >"$workspace_root/.env" <<EOF
 MOLTIS_RUNTIME_CONFIG_DIR=$runtime_config_dir
@@ -176,6 +184,8 @@ EOF
        [[ "$(jq -r '.details.live_version' "$output_json")" != "0.10.18" ]] || \
        [[ "$(jq -r '.details.runtime_config_source' "$output_json")" != "$runtime_config_dir_canonical" ]] || \
        [[ "$(jq -r '.details.runtime_config_rw' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.tracked_runtime_toml' "$output_json")" != "$workspace_root_canonical/config/moltis.toml" ]] || \
+       [[ "$(jq -r '.details.runtime_runtime_toml' "$output_json")" != "$runtime_config_dir_canonical/moltis.toml" ]] || \
        [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
@@ -183,6 +193,36 @@ EOF
         return
     fi
     test_pass
+
+    printf '[memory]\nprovider = "openai"\n' >"$runtime_config_dir/moltis.toml"
+
+    test_start "component_runtime_attestation_fails_when_runtime_config_drifted_from_tracked_contract"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-runtime-config.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "RUNTIME_CONFIG_FILE_MISMATCH")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when runtime moltis.toml drifts from the tracked config contract"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
 
     cat >"$mounts_file" <<EOF
 [

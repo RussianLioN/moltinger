@@ -1273,6 +1273,7 @@ verify_deployment() {
         local expected_workspace expected_runtime_config
         local actual_workspace_source actual_runtime_config_source
         local actual_runtime_config_rw working_dir
+        local tracked_runtime_toml runtime_runtime_toml
 
         working_dir="$(docker inspect --format '{{.Config.WorkingDir}}' "$TARGET_CONTAINER" 2>/dev/null || echo "")"
         if [[ "$working_dir" != "/server" ]]; then
@@ -1314,6 +1315,17 @@ verify_deployment() {
         actual_runtime_config_rw="$(container_mount_rw "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
         if [[ "$actual_runtime_config_rw" != "true" ]]; then
             log_error "Moltis runtime contract mismatch: runtime config mount must be writable for runtime-managed auth/key files"
+            return 1
+        fi
+
+        tracked_runtime_toml="$PROJECT_ROOT/config/moltis.toml"
+        runtime_runtime_toml="$expected_runtime_config/moltis.toml"
+        if [[ ! -f "$tracked_runtime_toml" || ! -f "$runtime_runtime_toml" ]]; then
+            log_error "Moltis runtime contract mismatch: tracked or runtime moltis.toml is missing"
+            return 1
+        fi
+        if ! cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"; then
+            log_error "Moltis runtime contract mismatch: runtime moltis.toml diverges from tracked config/moltis.toml"
             return 1
         fi
 
