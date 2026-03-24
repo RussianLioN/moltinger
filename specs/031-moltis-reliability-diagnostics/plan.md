@@ -5,7 +5,7 @@
 
 ## Summary
 
-Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. This slice therefore extends the safe repository-managed fixes with runtime-config parity enforcement, explicit Ollama cloud env forwarding, RCA/rule capture, and live validation against the remote target.
+Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. Production policy adds one more hard constraint: shared production deploys are allowed only from `main`. This slice therefore extends the safe repository-managed fixes with runtime-config parity enforcement and explicit Ollama cloud env forwarding, but lands them through a two-stage strategy: `PR1` to `main` contains only runtime-critical fixes plus blocking verification lanes, then canonical deploy/live verification happens from `main`, and only after that does `PR2` carry RCA/rules/lessons/spec updates.
 
 ## Technical Context
 
@@ -16,7 +16,7 @@ Production Moltis currently exhibits several symptoms that look unrelated from t
 **Target Platform**: Shared remote Moltis deployment in Docker, plus repository validation in this worktree  
 **Project Type**: Diagnostics and guardrail hardening for an existing production runtime  
 **Performance Goals**: Fail fast on invalid runtime contract; keep smoke diagnostics lightweight and operator-friendly  
-**Constraints**: No speculative destructive server changes, official-docs-first setup guidance, remote target remains authoritative, preserve GitOps discipline  
+**Constraints**: No speculative destructive server changes, official-docs-first setup guidance, remote target remains authoritative, preserve GitOps discipline, and respect the deploy-only-from-`main` production policy
 **Scale/Scope**: Single Moltis deployment, one repository-managed runtime contract, one safe-fix slice
 
 ## Constitution Check
@@ -127,11 +127,49 @@ The current incident narrows the highest-priority live work to one concrete cont
 - the `moltis` container must receive `OLLAMA_API_KEY` so cloud-backed Ollama chat models can be discovered
 - operator runbooks and RCA/lessons must point first to runtime-config parity and env delivery before blaming provider auth or third-party embeddings endpoints
 
+### Phase 4b - Mainline Landing Strategy (Solution 3)
+
+Because production deploys are blocked from feature branches, incident closure must be split deliberately instead of merging this entire branch into `main`.
+
+`PR1` to `main` should carry only the production-critical embedding/Ollama delta plus blocking proof:
+
+- source the runtime-only carrier from the already proven technical deltas in this branch, not by merging the whole branch
+  - `95a0feb`: pin memory embeddings to Ollama and repo-visible `watch_dirs`
+  - `81ebeaa`: force-recreate Moltis on deploy so env/config changes actually take effect
+  - `a1829bf` + `87a39fc`: live runtime attestation plus component proof
+  - `e7f3066`: forward `OLLAMA_API_KEY` into `moltis` and fail closed on runtime `moltis.toml` drift
+- `config/moltis.toml`
+  - keep only the `[memory]` pin to `provider = "ollama"`, the verified Ollama embeddings endpoint/model, and repo-visible `watch_dirs`
+- `docker-compose.prod.yml`
+  - forward `OLLAMA_API_KEY` into the `moltis` container
+- `scripts/deploy.sh`
+  - force-recreate the Moltis runtime during deploy so new env/config take effect immediately
+  - fail deploy when writable runtime `moltis.toml` diverges from tracked `config/moltis.toml`
+- `scripts/moltis-runtime-attestation.sh`
+  - include runtime-config parity proof in post-deploy attestation so the same drift cannot pass as healthy
+- workflow/control-plane plumbing only as needed to execute the attestation during canonical deploy from `main`
+  - `.github/workflows/deploy.yml`
+  - `.github/workflows/uat-gate.yml`
+  - `scripts/run-tracked-moltis-deploy.sh`
+- blocking tests for that runtime-only carrier
+  - `tests/static/test_config_validation.sh`
+  - `tests/unit/test_deploy_workflow_guards.sh`
+  - `tests/component/test_moltis_runtime_attestation.sh`
+  - `tests/component/test_moltis_search_memory_diagnostics.sh`
+
+`PR2` should stay deferred until after successful live verification from `main` and carry the mutable post-incident knowledge layer:
+
+- RCA / consilium / rules / runbook updates
+- lessons index tooling and lessons content
+- Speckit artifact finalization that depends on live outcome wording
+- any browser/Tavily or other reliability hardening not strictly required to clear the current embedding/Ollama blocker
+- do not blindly drag unrelated browser/Tavily/runtime-hardening commits from this branch into `PR1`; if they are still desired, land them later as separate reviewed work after the current blocker is closed
+
 ### Phase 5 - Remaining Live-Only Remediation
 
 The following actions remain deferred and must stay operator-driven after the highest-priority Tavily/memory blockers are addressed:
 
-- redeploy production so the tracked runtime contract is actually applied
+- merge the runtime-only `PR1` into `main`, then redeploy production from `main` so the tracked runtime contract is actually applied
 - clear or migrate stale session/model state that still references removed models
 - repair browser Docker access or runtime permissions on the target host
 - explicitly wire repository docs/knowledge into memory watch/index scope and then backfill embeddings
@@ -182,10 +220,17 @@ This keeps the work safe, auditable, and aligned with GitOps.
 - Extend deploy/runtime attestation to reject stale writable runtime `moltis.toml`.
 - Capture the incident in RCA, rules, and lessons so future sessions start from the right first checks.
 
+### Phase 4b: Mainline PR Split And Canonical Rollout
+
+- Prepare the exact `PR1` carrier for `main` and validate it with hermetic blocking lanes only.
+- Merge `PR1` into `main` and use the standard production deploy workflow from `main`.
+- Prove the live fix remotely with authoritative `memory_search` and Ollama provider/model checks.
+- Only then land `PR2` with the mutable documentation/process layer.
+
 ### Phase 5: Handoff
 
 - Update `tasks.md` with completed safe fixes.
-- Leave a precise operational follow-up list for the actual live repair.
+- Leave a precise operational follow-up list for the `main`-based live repair and the deferred `PR2`.
 
 ### Phase 6: Architectural Hardening Backlog
 

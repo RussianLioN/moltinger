@@ -61,6 +61,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - What happens when `memory_search` auto-detects embedding providers from the chat chain and starts sending embeddings traffic to the Z.ai Coding endpoint, returning `400 Bad Request` while a stale Groq entry returns `401 Unauthorized`?
 - What happens when tracked `config/moltis.toml` pins `[memory] provider = "ollama"` and `model = "nomic-embed-text"`, but the writable runtime copy still carries an older auto-detect memory contract?
 - What happens when the server `.env` contains `OLLAMA_API_KEY`, but the production `moltis` container does not receive it and therefore never exposes cloud-backed Ollama chat models such as `gemini-3-flash-preview:cloud`?
+- What happens when the fix lives on a feature branch, but production policy allows deploys only from `main`, so incident closure must be split into a runtime-only `PR1` and a deferred documentation `PR2`?
 - What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
 - What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
 - What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
@@ -90,6 +91,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-018**: Production deploy/runtime verification MUST reject a runtime where `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` diverges from tracked `config/moltis.toml`.
 - **FR-019**: The production `moltis` container MUST receive `OLLAMA_API_KEY` whenever the tracked provider surface depends on cloud-backed Ollama models.
 - **FR-020**: The repository MUST record an RCA and an explicit rule for embedding/runtime drift so future sessions check runtime config parity and `OLLAMA_API_KEY` delivery before blaming provider auth or embeddings APIs.
+- **FR-021**: When production deploy policy allows deploys only from `main`, the incident closure MUST define a two-stage landing strategy: `PR1` contains only production-critical runtime fixes plus blocking verification lanes, and `PR2` carries RCA/consilium/rules/lessons/spec updates only after live verification succeeds.
 
 ### Key Entities
 
@@ -105,6 +107,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - The authoritative target for current behavior is the shared remote Moltis deployment, not a local replacement stack.
 - Telegram bot ownership already lives inside Moltis; user-facing tests should therefore use the real Telegram path or authoritative server-side tooling.
 - Existing repository scripts and tests may lag the current Moltis runtime surface and need to be verified before they are trusted as diagnostics.
+- Production deploy policy is authoritative: the shared remote may be smoke-tested from a branch only through read-only or contract-safe UAT paths, but the actual production rollout must happen from `main`.
 
 ## Success Criteria *(mandatory)*
 
@@ -122,3 +125,4 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **SC-010**: Deploy/runtime attestation fails when the live writable `moltis.toml` is stale relative to tracked `config/moltis.toml`.
 - **SC-011**: Static validation fails if `docker-compose.prod.yml` stops forwarding `OLLAMA_API_KEY` into the `moltis` container.
 - **SC-012**: The incident is preserved in tracked RCA/rules/lessons artifacts so the repair path is discoverable in future sessions.
+- **SC-013**: The Speckit artifacts explicitly separate `PR1` production-critical runtime changes from `PR2` deferred documentation/process artifacts so the canonical deploy path can proceed from `main` without dragging along mutable post-incident docs.

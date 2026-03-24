@@ -74,17 +74,18 @@
 - [x] T052 Extend deploy verification and runtime attestation so stale writable `moltis.toml` fails closed against tracked `config/moltis.toml`
 - [x] T053 Add or update component/static coverage for runtime-config parity enforcement
 - [x] T054 Record RCA, consilium, and an explicit rule for embedding/runtime drift; rebuild lessons index
-- [ ] T055 Redeploy production from this branch and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
-- [ ] T056 Reconcile `tasks.md` after the embedding/Ollama closure lands
+- [ ] T055 Prepare a runtime-only `PR1` carrier for `main` that includes only the embedding/Ollama fix path plus blocking verification lanes
+- [ ] T056 Merge `PR1` into `main`, run the canonical production deploy from `main`, and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
+- [ ] T057 Only after successful live verification, land `PR2` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md`
 
 ## Dependencies & Execution Order
 
 - Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
-- Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and closes the highest-priority remaining live blocker for this slice.
+- Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and now lands through `PR1 -> main deploy -> PR2` rather than direct feature-branch rollout.
 - Phase 2 and Phase 3 are the only repository-safe implementation phases in this slice.
 - Phase 4 depends on operator action against the shared remote runtime after repository guardrails are merged.
 - Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
-- Phase 6 returns to an operator-driven live fix, but only after new repository guardrails and RCA artifacts are in place.
+- Phase 6 returns to an operator-driven live fix, but only after the runtime-only `PR1` is merged to `main` and deployed through the canonical production workflow.
 
 ## Implementation Strategy
 
@@ -93,4 +94,4 @@
 - Then refresh the operator smoke diagnostic so it tests the current Moltis API surface instead of stale endpoints.
 - Leave live runtime repair, session cleanup, and memory/browser operational work as explicit follow-up actions.
 - Use Phase 5 backlog items to drive the next durability-focused slice once the current operational backlog is under control.
-- Close the embedding/Ollama incident by proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery.
+- Close the embedding/Ollama incident by first preparing a minimal `PR1` for `main`, then proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery, and only after that landing the deferred `PR2` documentation layer.
