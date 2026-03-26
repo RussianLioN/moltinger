@@ -76,7 +76,7 @@
 - [x] T054 Record RCA, consilium, and an explicit rule for embedding/runtime drift; rebuild lessons index
 - [x] T055 Prepare a runtime-only `PR1` carrier for `main` that includes only the embedding/Ollama fix path plus blocking verification lanes
 - [x] T056 Merge `PR1` into `main`, run the canonical production deploy from `main`, and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
-- [ ] T057 Only after successful live verification, land `PR2` via a fresh docs-only carrier from verified `main` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md`
+- [x] T057 Only after successful live verification, land `PR2` via a fresh docs-only carrier from verified `main` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md` (landed as PR #101)
 
 ## Dependencies & Execution Order
 
