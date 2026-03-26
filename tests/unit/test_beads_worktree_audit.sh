@@ -26,11 +26,12 @@ create_fake_system_bd_bin() {
     local fake_bin="${fixture_root}/system-bd-bin"
 
     mkdir -p "${fake_bin}"
-    cat > "${fake_bin}/bd" <<'EOF'
+cat > "${fake_bin}/bd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
 db_path=""
+args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --db)
@@ -42,14 +43,30 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
+      args+=("$1")
       shift
       ;;
   esac
 done
 
+if [[ "${args[0]:-}" == "bootstrap" ]]; then
+  mkdir -p ".beads/dolt/beads/.dolt"
+  exit 0
+fi
+
+if [[ "${args[0]:-}" == "import" ]]; then
+  mkdir -p ".beads/dolt/beads/.dolt"
+  : > ".beads/last-touched"
+  exit 0
+fi
+
 if [[ -n "${db_path}" ]]; then
   mkdir -p "$(dirname "${db_path}")"
-  : > "${db_path}"
+  if [[ -d "${db_path}" ]]; then
+    : > "${db_path}/.fake-db-touch"
+  else
+    : > "${db_path}"
+  fi
 fi
 EOF
     chmod +x "${fake_bin}/bd"
@@ -140,8 +157,8 @@ test_audit_apply_safe_localizes_redirected_sibling() {
     if [[ -f "${worktree_path}/.beads/redirect" ]]; then
         test_fail "Safe apply should remove redirect metadata from migratable siblings"
     fi
-    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
-        test_fail "Safe apply should materialize a local beads.db for migratable siblings"
+    if [[ ! -d "${worktree_path}/.beads/dolt/beads/.dolt" || ! -f "${worktree_path}/.beads/last-touched" ]]; then
+        test_fail "Safe apply should materialize a named local Beads runtime for migratable siblings"
     fi
     assert_contains "${output}" "Actions: 1" "Audit should report one localization action"
 
@@ -182,8 +199,8 @@ test_audit_apply_safe_bootstraps_damaged_sibling() {
     if [[ -f "${worktree_path}/.beads/redirect" ]]; then
         test_fail "Safe apply should remove redirect metadata from bootstrap-repair siblings"
     fi
-    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
-        test_fail "Safe apply should materialize a local beads.db for bootstrap-repair siblings"
+    if [[ ! -d "${worktree_path}/.beads/dolt/beads/.dolt" || ! -f "${worktree_path}/.beads/last-touched" ]]; then
+        test_fail "Safe apply should materialize a named local Beads runtime for bootstrap-repair siblings"
     fi
     if [[ ! -f "${worktree_path}/bin/bd" || ! -f "${worktree_path}/scripts/beads-resolve-db.sh" ]]; then
         test_fail "Safe apply should restore the plain bd toolchain for bootstrap-repair siblings"

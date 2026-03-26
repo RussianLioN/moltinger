@@ -14,9 +14,9 @@ Usage:
 
 Description:
   Localize Beads ownership for an existing git worktree by removing legacy
-  redirect residue and materializing a worktree-local SQLite DB from the local
-  JSONL/config foundation when that is safe to do. For older worktrees that
-  still lack the plain-bd foundation, `--bootstrap-source` can import the
+  redirect residue and materializing a worktree-local Beads runtime from the
+  local JSONL/config foundation when that is safe to do. For older worktrees
+  that still lack the plain-bd foundation, `--bootstrap-source` can import the
   tracked recovery files before localization.
 EOF
 }
@@ -194,7 +194,7 @@ classify_state() {
   if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
     report_state="partial_foundation"
     report_action="rebuild_local_foundation"
-    report_message="Local Beads foundation exists, but the SQLite DB must be materialized in place."
+    report_message="Local Beads foundation exists, but the named local Beads runtime must be materialized in place."
     return 0
   fi
 
@@ -232,14 +232,44 @@ bootstrap_foundation() {
 
 materialize_local_db() {
   local system_bd="${BEADS_SYSTEM_BD:-}"
+  local beads_dir="${target_path}/.beads"
+  local dolt_path="${beads_dir}/dolt"
+  local recovery_dir="${beads_dir}/recovery"
+  local recovery_path=""
+  local timestamp=""
+  local artifact=""
+  local -a stale_runtime_artifacts=(
+    "metadata.json"
+    "interactions.jsonl"
+    "dolt-server.lock"
+    "dolt-server.log"
+    "dolt-server.pid"
+    "dolt-server.port"
+  )
 
   if [[ -z "${system_bd}" ]]; then
     system_bd="$(beads_resolve_find_system_bd "${REPO_ROOT}/bin/bd")" || die "Could not locate the system bd binary"
   fi
 
+  if [[ ! -d "${dolt_path}/beads" && ! -d "${dolt_path}/beads/.dolt" ]] && \
+     [[ -d "${dolt_path}" || -e "${beads_dir}/metadata.json" || -e "${beads_dir}/interactions.jsonl" ]]; then
+    timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    recovery_path="${recovery_dir}/runtime-pre-init-${timestamp}"
+    mkdir -p "${recovery_path}"
+    if [[ -d "${dolt_path}" ]]; then
+      mv "${dolt_path}" "${recovery_path}/dolt"
+    fi
+    for artifact in "${stale_runtime_artifacts[@]}"; do
+      if [[ -e "${beads_dir}/${artifact}" ]]; then
+        mv "${beads_dir}/${artifact}" "${recovery_path}/${artifact}"
+      fi
+    done
+  fi
+
   (
     cd "${target_path}"
-    "${system_bd}" --db "${report_db_path}" info >/dev/null
+    "${system_bd}" bootstrap >/dev/null 2>&1
+    "${system_bd}" --db "${report_db_path}" import "${beads_dir}/issues.jsonl" >/dev/null 2>&1
   )
 }
 

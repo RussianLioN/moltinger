@@ -69,6 +69,8 @@ run_static_beads_worktree_ownership_tests() {
        rg -q 'partial_foundation' "$LOCALIZE_SCRIPT" && \
        rg -q 'post_migration_runtime_only' "$LOCALIZE_SCRIPT" && \
        rg -q 'bootstrap_required' "$LOCALIZE_SCRIPT" && \
+       rg -q '"\$\{system_bd\}" bootstrap' "$LOCALIZE_SCRIPT" && \
+       rg -q '"\$\{system_bd\}" --db "\$\{report_db_path\}" import "\$\{beads_dir\}/issues\.jsonl"' "$LOCALIZE_SCRIPT" && \
        rg -q -- '--bootstrap-source' "$LOCALIZE_SCRIPT"; then
         test_pass
     else
