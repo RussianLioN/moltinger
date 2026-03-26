@@ -118,7 +118,9 @@ if [[ -n "$SSH_HOST" ]]; then
     bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
         --action "gitops-repair-managed-checkout" \
         --target-host "$SSH_HOST" \
-        --target-path "$DEPLOY_PATH"
+        --target-path "$DEPLOY_PATH" \
+        --expected-ref "$TARGET_REF" \
+        --expected-sha "$TARGET_SHA"
 fi
 
 DRIFT_SNAPSHOT="$(

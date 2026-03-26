@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   SSH_HOST: ainetic.tech

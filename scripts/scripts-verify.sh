@@ -64,7 +64,7 @@ validate_scripts_exist() {
     while IFS= read -r script; do
         if [[ ! -f "$SCRIPT_DIR/$script" ]]; then
             log_error "Missing script: $script"
-            ((errors++))
+            errors=$((errors + 1))
         else
             log_success "Found: $script"
         fi
@@ -84,7 +84,7 @@ validate_no_orphans() {
 
         if ! jq -e ".scripts[\"$basename\"]" "$MANIFEST_FILE" >/dev/null 2>&1; then
             log_warn "Orphan script not in manifest: $basename"
-            ((orphans++))
+            orphans=$((orphans + 1))
         fi
     done
 
@@ -149,7 +149,7 @@ verify_hashes() {
                     log_warn "CHANGED: $script"
                     log_info "  Old: $stored_hash"
                     log_info "  New: $hash"
-                    ((changed++))
+                    changed=$((changed + 1))
                 else
                     log_info "NEW: $script"
                 fi
@@ -180,7 +180,7 @@ check_dependencies() {
     while IFS= read -r dep; do
         if ! command -v "$dep" &>/dev/null; then
             log_error "Missing dependency: $dep"
-            ((missing++))
+            missing=$((missing + 1))
         else
             log_success "Dependency OK: $dep"
         fi
@@ -233,12 +233,12 @@ main() {
 
     local errors=0
 
-    validate_manifest_syntax || ((errors++))
-    validate_scripts_exist || ((errors++))
+    validate_manifest_syntax || errors=$((errors + 1))
+    validate_scripts_exist || errors=$((errors + 1))
     validate_no_orphans
     validate_permissions "$fix_mode"
     verify_hashes
-    check_dependencies || ((errors++))
+    check_dependencies || errors=$((errors + 1))
     generate_summary
 
     if [[ $errors -gt 0 ]]; then

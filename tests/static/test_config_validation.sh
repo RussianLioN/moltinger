@@ -367,6 +367,8 @@ PY
 
     test_start "static_prod_mutation_guard_is_wired_into_key_moltinger_mutators"
     if [[ -f "$PROD_MUTATION_GUARD_SCRIPT" ]] && \
+       rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$PROD_MUTATION_GUARD_SCRIPT" && \
+       rg -q 'api.github.com/repos/' "$PROD_MUTATION_GUARD_SCRIPT" && \
        rg -q 'prod-mutation-guard\.sh' "$CHECKOUT_ALIGN_SCRIPT" && \
        rg -q 'prod-mutation-guard\.sh' "$SYNC_SURFACE_SCRIPT" && \
        rg -q 'prod-mutation-guard\.sh' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
@@ -386,6 +388,20 @@ PY
         test_pass
     else
         test_fail "UAT and Clawdiy workflows must explicitly block feature-branch promotion and point operators to sanctioned paths"
+    fi
+
+    test_start "static_production_workflows_pass_guard_github_identity_context"
+    if rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_REPOSITORY' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_WORKFLOW' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'permissions:' "$DEPLOY_WORKFLOW" && \
+       rg -q 'actions: read' "$DEPLOY_WORKFLOW" && \
+       rg -q 'actions: read' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'actions: read' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Production-adjacent workflows must pass GitHub identity context to the mutation guard and grant actions:read"
     fi
 
     test_start "static_tracked_deploy_detects_missing_json_contract_from_deploy_sh"

@@ -3,6 +3,10 @@
 
 name: Deploy Moltis
 
+permissions:
+  contents: read
+  actions: read
+
 # Prevent parallel remote mutations on production target.
 # This lock must stay shared with uat-gate.yml deploy job.
 concurrency:
@@ -861,6 +865,9 @@ jobs:
       url: https://moltis.ainetic.tech
     env:
       MOLTINGER_PROD_GUARD_APPROVED: "true"
+      MOLTINGER_PROD_GUARD_GITHUB_TOKEN: ${{ github.token }}
+      MOLTINGER_PROD_GUARD_REPOSITORY: ${{ github.repository }}
+      MOLTINGER_PROD_GUARD_WORKFLOW: "Deploy Moltis"
       MOLTINGER_PROD_GUARD_REF_NAME: ${{ github.ref_name }}
       MOLTINGER_PROD_GUARD_REF_TYPE: ${{ github.ref_type }}
       MOLTINGER_PROD_GUARD_SHA: ${{ github.sha }}
@@ -912,6 +919,9 @@ jobs:
           echo "::group::Updating active deploy root"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
             "MOLTINGER_PROD_GUARD_APPROVED='${{ env.MOLTINGER_PROD_GUARD_APPROVED }}' \
+             MOLTINGER_PROD_GUARD_GITHUB_TOKEN='${{ env.MOLTINGER_PROD_GUARD_GITHUB_TOKEN }}' \
+             MOLTINGER_PROD_GUARD_REPOSITORY='${{ env.MOLTINGER_PROD_GUARD_REPOSITORY }}' \
+             MOLTINGER_PROD_GUARD_WORKFLOW='${{ env.MOLTINGER_PROD_GUARD_WORKFLOW }}' \
              MOLTINGER_PROD_GUARD_REF_NAME='${{ env.MOLTINGER_PROD_GUARD_REF_NAME }}' \
              MOLTINGER_PROD_GUARD_REF_TYPE='${{ env.MOLTINGER_PROD_GUARD_REF_TYPE }}' \
              MOLTINGER_PROD_GUARD_SHA='${{ env.MOLTINGER_PROD_GUARD_SHA }}' \
@@ -930,6 +940,9 @@ jobs:
           echo "::group::Applying Moltis host automation from active deploy root"
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
             "MOLTINGER_PROD_GUARD_APPROVED='${{ env.MOLTINGER_PROD_GUARD_APPROVED }}' \
+             MOLTINGER_PROD_GUARD_GITHUB_TOKEN='${{ env.MOLTINGER_PROD_GUARD_GITHUB_TOKEN }}' \
+             MOLTINGER_PROD_GUARD_REPOSITORY='${{ env.MOLTINGER_PROD_GUARD_REPOSITORY }}' \
+             MOLTINGER_PROD_GUARD_WORKFLOW='${{ env.MOLTINGER_PROD_GUARD_WORKFLOW }}' \
              MOLTINGER_PROD_GUARD_REF_NAME='${{ env.MOLTINGER_PROD_GUARD_REF_NAME }}' \
              MOLTINGER_PROD_GUARD_REF_TYPE='${{ env.MOLTINGER_PROD_GUARD_REF_TYPE }}' \
              MOLTINGER_PROD_GUARD_SHA='${{ env.MOLTINGER_PROD_GUARD_SHA }}' \

@@ -789,7 +789,9 @@
       "description": "Fail-closed guard for production-mutating entrypoints on the canonical Moltinger target",
       "entrypoint": true,
       "requires": [
-        "bash"
+        "bash",
+        "curl",
+        "jq"
       ],
       "provides": [
         "prod-mutation-guard"
@@ -921,6 +923,35 @@
       ],
       "gitops": true,
       "ci": true
+    },
+    "moltis-runtime-attestation.sh": {
+      "version": "1.0.0",
+      "description": "Verify the live Moltis runtime provenance against the tracked deploy contract",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "grep",
+        "jq"
+      ],
+      "provides": [
+        "moltis-runtime-attestation"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "moltis-search-memory-diagnostics.sh": {
+      "version": "1.0.0",
+      "description": "Emit tracked Tavily search and memory diagnostics from config and optional runtime logs",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "moltis-search-memory-diagnostics"
+      ]
     },
     "query-lessons.sh": {
       "version": "1.0.0",

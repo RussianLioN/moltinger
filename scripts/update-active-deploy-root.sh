@@ -71,7 +71,8 @@ fi
 
 bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
     --action "update-active-deploy-root" \
-    --target-path "$TARGET_PATH"
+    --target-path "$TARGET_PATH" \
+    --target-path "$ACTIVE_PATH"
 
 # Legacy migration: ln -sfn does NOT replace an existing real directory.
 # In that case it creates a nested link and test -L fails.

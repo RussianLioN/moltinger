@@ -89,12 +89,18 @@ fi
 
 SOURCE_ROOT="$(cd "$SOURCE_ROOT" && pwd)"
 SSH_TARGET="${SSH_USER}@${SSH_HOST}"
+SOURCE_SHA=""
+
+if git -C "$SOURCE_ROOT" rev-parse HEAD >/dev/null 2>&1; then
+    SOURCE_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
+fi
 
 if [[ "$DRY_RUN" != "true" ]]; then
     bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
         --action "gitops-sync-managed-surface" \
         --target-host "$SSH_HOST" \
-        --target-path "$DEPLOY_PATH"
+        --target-path "$DEPLOY_PATH" \
+        ${SOURCE_SHA:+--expected-sha "$SOURCE_SHA"}
 fi
 
 run_local() {

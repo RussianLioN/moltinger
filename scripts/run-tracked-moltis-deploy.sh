@@ -453,7 +453,9 @@ fi
 
 bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
     --action "run-tracked-moltis-deploy" \
-    --target-path "$DEPLOY_PATH"
+    --target-path "$DEPLOY_PATH" \
+    --expected-ref "$GIT_REF" \
+    --expected-sha "$GIT_SHA"
 
 log_info "Preparing writable Moltis runtime config"
 if ! prepare_runtime_config; then
