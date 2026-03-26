@@ -15,6 +15,146 @@ setup_remote_uat_contract_fixture() {
 
     cat > "$TEST_TMPDIR/telegram-web-user-monitor.sh" <<'SH'
 #!/usr/bin/env bash
+mode="${TELEGRAM_WEB_STUB_MODE:-send_failure}"
+
+if [[ "$mode" == "status_semantic_mismatch" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "## Статус системы\nМодель: zai::glm-5",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "verification_gate_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "To use this bot, please enter the verification code.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "activity_log_emoji_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -type...` • 🧠 Searching memory...",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "pre_send_invalid_incoming_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Сначала проверю память и каталог навыков.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven",
+    "last_pre_send_activity": {
+      "observed_max_mid": 40,
+      "messages": [
+        {
+          "mid": 40,
+          "direction": "in",
+          "text": "📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -type...`"
+        }
+      ]
+    }
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 base_payload="$(cat <<'JSON'
 {
   "ok": false,
@@ -123,6 +263,79 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Review-safe artifact must redact token/session/state-path and keep restricted debug only in the debug bundle"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_status_reply_without_canonical_model"
+    if TELEGRAM_WEB_STUB_MODE=status_semantic_mismatch \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "/status" \
+        --output "$TEST_TMPDIR/result-status-mismatch.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when /status reply omits the canonical model contract"
+    else
+        if jq -e '.failure.code == "semantic_status_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.expected_model == "openai-codex::gpt-5.4"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must surface semantic /status mismatches as a failed authoritative verdict"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_verification_gate_reply_even_after_attributable_pass"
+    if TELEGRAM_WEB_STUB_MODE=verification_gate_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "/status" \
+        --output "$TEST_TMPDIR/result-verification-gate-primary.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the attributable /status reply is a verification gate"
+    else
+        if jq -e '.failure.code == "verification_gate_reply" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-verification-gate-primary.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must mark verification-gate replies as non-green authoritative outcomes"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_emoji_prefixed_activity_log_reply_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=activity_log_emoji_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Проверь память и каталог навыков" \
+        --output "$TEST_TMPDIR/result-activity-log.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the helper falsely passes an emoji-prefixed internal activity reply"
+    else
+        if jq -e '.failure.code == "semantic_activity_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-activity-log.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must surface emoji-prefixed activity-log replies as failed authoritative outcomes"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_recent_invalid_pre_send_activity_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=pre_send_invalid_incoming_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Проверь память и каталог навыков" \
+        --output "$TEST_TMPDIR/result-pre-send-activity.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when recent invalid incoming activity already contaminated the chat before send"
+    else
+        if jq -e '.failure.code == "semantic_pre_send_activity_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-pre-send-activity.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must fail on recent invalid pre-send activity leakage even when the helper payload is otherwise green"
         fi
     fi
 

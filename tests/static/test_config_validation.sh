@@ -30,6 +30,7 @@ TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webh
 TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
+TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
@@ -129,6 +130,15 @@ PY
         test_fail "Expected environment variable substitution in config files"
     fi
 
+    test_start "static_identity_prompt_forbids_internal_activity_leaks_in_telegram"
+    if rg -Fq 'В пользовательских мессенджер-каналах, особенно Telegram, никогда не отправляй внутренние activity/tool-progress трассы.' "$TOML_CONFIG" && \
+       rg -Fq 'Запрещено публиковать как обычный ответ `Activity log`, `Running`, `Searching memory`, `thinking`' "$TOML_CONFIG" && \
+       rg -Fq 'Разрешено максимум одно короткое человеческое префейс-сообщение' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
+    fi
+
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
     if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
        bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
@@ -162,6 +172,18 @@ PY
         test_pass
     else
         test_fail "MTProto user-monitor cron should be opt-in and disabled by default to avoid unsolicited chat noise"
+    fi
+
+    test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"
