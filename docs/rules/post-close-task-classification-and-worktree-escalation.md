@@ -14,16 +14,20 @@ Use this rule before starting implementation, not after changes already spilled 
 
 Use this default unless a more specific rule overrides it:
 
-`same root cause + same slice + same owner + no scope expansion => continue`
+`same root cause + same slice + same owning lane + no scope expansion => continue`
 
 Anything else should be treated as a new lane.
+
+Definition:
+
+`same owning lane` means the same active branch/PR/worktree still owns the acceptance boundary and is not yet logically closed.
 
 ## Outcomes
 
 The classifier must produce exactly one of these outcomes:
 
 1. `continue-current-lane`
-2. `new-worktree-same-branch`
+2. `reuse-existing-worktree`
 3. `new-branch-new-worktree-from-main`
 4. `consilium-required`
 
@@ -54,6 +58,10 @@ Treat these as shared or governance-sensitive by default:
 
 If yes, choose `new-branch-new-worktree-from-main`.
 
+Exception:
+
+If the current slice is still active, not yet merged, and already owns these files, a narrow review-fix or bounded follow-up may remain in the current lane. Do not open a new lane for routine review fixes inside the same active PR just because the touched files live in a shared surface.
+
 ### 3. Is the current lane already logically closed?
 
 Treat the current lane as logically closed if any of these are true:
@@ -63,16 +71,18 @@ Treat the current lane as logically closed if any of these are true:
 - the relevant PRs are already merged;
 - the user is now asking for generalized policy, architecture, or follow-up capability work.
 
-If yes, prefer `new-branch-new-worktree-from-main`.
+If yes, choose `new-branch-new-worktree-from-main`.
 
-### 4. Do we only need fresh filesystem/session isolation, not a new intent?
+### 4. Do we only need to return to the existing authoritative worktree, not create a new lane?
 
-Choose `new-worktree-same-branch` only if all of these are true:
+Choose `reuse-existing-worktree` only if all of these are true:
 
 - the root cause and slice are still the same;
+- the same active branch still owns the work;
+- the branch already has an authoritative worktree that should be reused instead of duplicated;
 - a new branch would not improve review or rollback boundaries;
-- the main reason is clean local state, parallel verification, or context reset;
-- the expected changes are still small enough to belong to the same branch intent.
+- the main reason is clean local state, returning to the right lane, parallel verification, or context reset;
+- the expected changes remain bounded and non-substantial.
 
 If not, do not use this outcome.
 
@@ -100,17 +110,17 @@ Allowed profile:
 
 Stop and reclassify immediately if the change starts to spread.
 
-### `new-worktree-same-branch`
+### `reuse-existing-worktree`
 
-Use when the branch intent is still correct, but the working state needs isolation.
+Use when the branch intent is still correct and the right answer is to return to the branch's existing authoritative worktree.
 
 Typical reasons:
 
-- current worktree is cluttered;
-- you need a clean verification lane;
-- you need a parallel shell/editor state without changing branch ownership.
+- current session is not in the branch's authoritative worktree;
+- the authoritative worktree is cleaner than the current local state;
+- you need a bounded verification pass without changing branch ownership.
 
-This is a local isolation tool, not a new product-scope signal.
+This is a lane-reuse outcome, not permission to create another substantial checkout on the same branch.
 
 ### `new-branch-new-worktree-from-main`
 
@@ -125,7 +135,7 @@ This is the default for:
 
 ### `consilium-required`
 
-Use `/consilium` when cost pressure tempts the operator to stay in the current lane even though the scope is drifting.
+Use the `consilium` skill/workflow when cost pressure tempts the operator to stay in the current lane even though the scope is drifting.
 
 The goal is not bureaucracy. The goal is to prevent hidden scope creep.
 
@@ -139,6 +149,13 @@ When this rule is used manually or via a skill, return:
 4. `Recommended lane`
 5. `Prepared prompt`
 6. `Need consilium`
+
+`Prepared prompt` must be:
+
+- `n/a` for `continue-current-lane`
+- a short lane-reuse handoff for `reuse-existing-worktree`
+- the full prompt template below for `new-branch-new-worktree-from-main`
+- `defer until consilium verdict` for `consilium-required`
 
 ## Prepared Prompt Template
 
@@ -171,7 +188,19 @@ Use this template when the outcome is `new-branch-new-worktree-from-main`:
 - <check 2>
 - <check 3>
 
-Если по ходу появляются спорные решения, собери /consilium релевантных экспертов и исполни их консолидированное решение.
+Если по ходу появляются спорные решения, используй `consilium` skill/workflow и исполни его консолидированное решение.
+```
+
+## Lane-Reuse Handoff Template
+
+Use this template when the outcome is `reuse-existing-worktree`:
+
+```text
+Продолжай в существующем authoritative worktree:
+- branch: <branch>
+- worktree: <path>
+- why reuse: <same-slice bounded continuation reason>
+- next action: вернуться в этот worktree и выполнить узкий follow-up без расширения scope
 ```
 
 ## Examples
@@ -185,8 +214,8 @@ Use this template when the outcome is `new-branch-new-worktree-from-main`:
 ### Example 2: Same branch, but clean local state needed
 
 - Situation: the same branch still owns the incident, but you need a clean verification worktree.
-- Verdict: `new-worktree-same-branch`
-- Why: the intent did not change; only local isolation is needed.
+- Verdict: `reuse-existing-worktree`
+- Why: the intent did not change; the right move is to return to the branch's existing authoritative worktree.
 
 ### Example 3: Post-merge regression in shared runtime behavior
 
@@ -211,6 +240,12 @@ Use this template when the outcome is `new-branch-new-worktree-from-main`:
 - Situation: the new request sounds related, but it may also require architecture, workflow, and runtime changes.
 - Verdict: `consilium-required`
 - Why: the operator should not guess through a governance-sensitive boundary.
+
+### Example 7: Review fix inside the same active PR
+
+- Situation: an active unmerged PR that already owns `docs/rules/` or `skills/` needs one narrow wording fix from review.
+- Verdict: `continue-current-lane`
+- Why: the slice is still active, the owning lane has not changed, and this is not a new governance story.
 
 ## Why This Rule Exists
 
