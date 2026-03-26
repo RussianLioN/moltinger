@@ -15,31 +15,47 @@ create_fake_bd_bin() {
     local fake_bin="${fixture_root}/bin"
 
     mkdir -p "${fake_bin}"
-    cat > "${fake_bin}/bd" <<'EOF'
+cat > "${fake_bin}/bd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${1:-}" == "--no-daemon" ]]; then
-  shift
-fi
+db_path=""
+args=()
 
-if [[ "${1:-}" == "--db" ]]; then
-  db_path="${2:-}"
-  shift 2
-  if [[ "${1:-}" == "info" ]]; then
-    mkdir -p "$(dirname "${db_path}")"
-    : > "${db_path}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --db)
+      db_path="${2:-}"
+      shift 2
+      ;;
+    --db=*)
+      db_path="${1#--db=}"
+      shift
+      ;;
+    --no-daemon)
+      shift
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+case "${args[0]:-}" in
+  bootstrap)
+    mkdir -p ".beads/dolt/beads/.dolt"
     exit 0
-  fi
-fi
-
-if [[ "${1:-}" == "list" ]]; then
-  if [[ -n "${BEADS_DB:-}" ]]; then
-    mkdir -p "$(dirname "${BEADS_DB}")"
-    : > "${BEADS_DB}"
-  fi
-  exit 0
-fi
+    ;;
+  import)
+    mkdir -p ".beads/dolt/beads/.dolt"
+    : > ".beads/last-touched"
+    exit 0
+    ;;
+  list)
+    exit 0
+    ;;
+esac
 
 printf 'unsupported fake bd invocation\n' >&2
 exit 1
@@ -105,8 +121,11 @@ test_phase_a_create_from_base_anchors_new_branch_to_main() {
     assert_eq "$base_sha" "$branch_sha" "New branch should be created exactly at canonical main"
     assert_eq "$base_sha" "$worktree_sha" "New worktree HEAD should match canonical main"
     assert_file_missing "${target_path}/.beads/redirect" "Phase A create should not leave redirect metadata in the new worktree"
-    if [[ ! -f "${target_path}/.beads/beads.db" ]]; then
-        test_fail "Phase A create should bootstrap a local beads.db in the new worktree"
+    if [[ ! -d "${target_path}/.beads/dolt/beads/.dolt" ]]; then
+        test_fail "Phase A create should bootstrap a named local Beads runtime in the new worktree"
+    fi
+    if [[ ! -f "${target_path}/.beads/last-touched" ]]; then
+        test_fail "Phase A create should import the tracked issues into the new runtime"
     fi
 
     rm -rf "$fixture_root"

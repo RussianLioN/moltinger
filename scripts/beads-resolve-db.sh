@@ -733,11 +733,19 @@ beads_localize_worktree() {
   local current_config=""
   local current_issues=""
   local system_bd=""
-  local tmp_db=""
-  local backup_dir=""
   local timestamp=""
-  local backup_path=""
+  local recovery_dir=""
+  local recovery_path=""
+  local artifact=""
   local has_local_runtime="false"
+  local -a stale_runtime_artifacts=(
+    "metadata.json"
+    "interactions.jsonl"
+    "dolt-server.lock"
+    "dolt-server.log"
+    "dolt-server.pid"
+    "dolt-server.port"
+  )
 
   BEADS_LOCALIZE_FORMAT="${output_format}"
 
@@ -798,40 +806,42 @@ beads_localize_worktree() {
   fi
 
   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  tmp_db="${repo_root}/.beads/beads.db.tmp.$$"
-  backup_dir="${repo_root}/.beads/backups"
-  backup_path=""
+  recovery_dir="${repo_root}/.beads/recovery"
 
-  cleanup_tmp_db() {
-    rm -f "${tmp_db}"
-  }
-  trap cleanup_tmp_db EXIT
-
-  mkdir -p "${repo_root}/.beads"
-  if [[ -f "${current_db}" ]]; then
-    mkdir -p "${backup_dir}"
-    backup_path="${backup_dir}/beads-${timestamp}.db"
-    cp "${current_db}" "${backup_path}"
+  if [[ ! -d "${current_dolt}/beads" && ! -d "${current_dolt}/beads/.dolt" ]] && \
+     [[ -d "${current_dolt}" || -e "${repo_root}/.beads/metadata.json" || -e "${repo_root}/.beads/interactions.jsonl" ]]; then
+    recovery_path="${recovery_dir}/runtime-pre-init-${timestamp}"
+    mkdir -p "${recovery_path}"
+    if [[ -d "${current_dolt}" ]]; then
+      mv "${current_dolt}" "${recovery_path}/dolt"
+    fi
+    for artifact in "${stale_runtime_artifacts[@]}"; do
+      if [[ -e "${repo_root}/.beads/${artifact}" ]]; then
+        mv "${repo_root}/.beads/${artifact}" "${recovery_path}/${artifact}"
+      fi
+    done
   fi
 
-  rm -f "${tmp_db}"
-  "${system_bd}" --db "${tmp_db}" import -i "${current_issues}" --force --strict >/dev/null
-  mv "${tmp_db}" "${current_db}"
+  (
+    cd "${repo_root}"
+    "${system_bd}" bootstrap >/dev/null 2>&1
+    "${system_bd}" --db "${current_db}" import "${current_issues}" >/dev/null 2>&1
+  )
   rm -f "${current_redirect}"
 
   if [[ "${output_format}" == "env" ]]; then
     printf 'result=%q\n' "localized"
     printf 'repo_root=%q\n' "${repo_root}"
     printf 'db_path=%q\n' "${current_db}"
-    if [[ -n "${backup_path}" ]]; then
-      printf 'backup_path=%q\n' "${backup_path}"
+    if [[ -n "${recovery_path}" ]]; then
+      printf 'backup_path=%q\n' "${recovery_path}"
     fi
     return 0
   fi
 
-  printf 'Localized Beads state to %s\n' "${current_db}"
-  if [[ -n "${backup_path}" ]]; then
-    printf 'Backup: %s\n' "${backup_path}"
+  printf 'Localized Beads state to the named runtime behind %s\n' "${current_db}"
+  if [[ -n "${recovery_path}" ]]; then
+    printf 'Backup: %s\n' "${recovery_path}"
   fi
 }
 

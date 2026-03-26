@@ -13,7 +13,7 @@ create_fake_system_bd_bin() {
     local fake_bin="${fixture_root}/system-bd-bin"
 
     mkdir -p "${fake_bin}"
-    cat > "${fake_bin}/bd" <<'EOF'
+cat > "${fake_bin}/bd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -36,6 +36,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${args[0]:-}" == "bootstrap" ]]; then
+  mkdir -p ".beads/dolt/beads/.dolt"
+  printf 'BOOTSTRAP_DB=beads\n'
+  exit 0
+fi
+
+if [[ "${args[0]:-}" == "import" ]]; then
+  mkdir -p ".beads/dolt/beads/.dolt"
+  : > ".beads/last-touched"
+  printf 'IMPORTED=%s\n' "${args[1]:-}"
+  exit 0
+fi
 
 if [[ -n "${db_path}" ]]; then
   mkdir -p "$(dirname "${db_path}")"
@@ -160,6 +173,18 @@ canonicalize_path() {
         cd "${target_path}"
         pwd -P
     )
+}
+
+assert_named_beads_runtime_present() {
+    local worktree_path="$1"
+    local message="$2"
+
+    if [[ ! -d "${worktree_path}/.beads/dolt/beads/.dolt" ]]; then
+        test_fail "${message} (missing named beads runtime)"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/last-touched" ]]; then
+        test_fail "${message} (missing import marker)"
+    fi
 }
 
 test_plain_bd_executes_against_worktree_local_db() {
@@ -557,9 +582,7 @@ test_localize_materializes_local_db_and_removes_redirect() {
     if [[ -f "${worktree_path}/.beads/redirect" ]]; then
         test_fail "Localization should remove legacy redirect metadata"
     fi
-    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
-        test_fail "Localization should materialize the local beads.db"
-    fi
+    assert_named_beads_runtime_present "${worktree_path}" "Localization should materialize the named local Beads runtime"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -609,8 +632,34 @@ test_localize_bootstraps_missing_foundation_from_source_ref() {
     if [[ ! -f "${worktree_path}/bin/bd" || ! -f "${worktree_path}/scripts/beads-resolve-db.sh" ]]; then
         test_fail "Bootstrap localization should restore the plain bd toolchain"
     fi
-    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
-        test_fail "Bootstrap localization should materialize the local beads.db"
+    assert_named_beads_runtime_present "${worktree_path}" "Bootstrap localization should materialize the named local Beads runtime"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_repairs_stale_dolt_shell_before_reinit() {
+    test_start "localize_repairs_stale_dolt_shell_before_reinit"
+
+    local fixture_root repo_dir worktree_path fake_bin output recovery_shell
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-stale-shell-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/stale-shell-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_local_beads_foundation "${worktree_path}"
+    mkdir -p "${worktree_path}/.beads/dolt/.dolt"
+    : > "${worktree_path}/.beads/metadata.json"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: current" "Localization should recover from a stale Dolt shell and finish current"
+    assert_named_beads_runtime_present "${worktree_path}" "Localization should rebuild the named local Beads runtime after stale-shell repair"
+    recovery_shell="$(find "${worktree_path}/.beads/recovery" -path '*/dolt/.dolt' -print -quit 2>/dev/null || true)"
+    if [[ -z "${recovery_shell}" ]]; then
+        test_fail "Localization should preserve the broken Dolt shell under .beads/recovery before re-init"
     fi
 
     rm -rf "${fixture_root}"
@@ -645,6 +694,7 @@ run_all_tests() {
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref
+    test_localize_repairs_stale_dolt_shell_before_reinit
     generate_report
 }
 
