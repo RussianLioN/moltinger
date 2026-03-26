@@ -4,6 +4,7 @@
 set -euo pipefail
 
 OUTPUT_JSON=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_PATH="$(pwd)"
 ACTIVE_PATH="/opt/moltinger-active"
 MOLTIS_CONTAINER="moltis"
@@ -15,6 +16,9 @@ EXPECTED_RUNTIME_CONFIG_DIR=""
 EXPECTED_AUTH_PROVIDER=""
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+AUTH_PROVIDER_CANARY_PROMPT="${AUTH_PROVIDER_CANARY_PROMPT:-Reply with exactly OK and nothing else.}"
+AUTH_PROVIDER_CANARY_WAIT_MS="${AUTH_PROVIDER_CANARY_WAIT_MS:-3000}"
+AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS="${AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS:-25}"
 
 timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -107,6 +111,88 @@ read_env_file_value() {
     printf '%s' "$value"
 }
 
+auth_status_provider_line() {
+    local raw="$1"
+    local provider="$2"
+
+    if [[ -z "$raw" || -z "$provider" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "$raw" | grep -F "$provider" | head -n 1 || true
+}
+
+auth_status_provider_is_valid() {
+    local provider_line="${1:-}"
+    [[ -n "$provider_line" ]] || return 1
+    grep -F '[valid' >/dev/null 2>&1 <<<"$provider_line"
+}
+
+auth_status_provider_is_expired() {
+    local provider_line="${1:-}"
+    [[ -n "$provider_line" ]] || return 1
+    grep -F '[expired' >/dev/null 2>&1 <<<"$provider_line"
+}
+
+oauth_tokens_have_refresh_token() {
+    local runtime_config_dir="$1"
+    local provider="$2"
+    local oauth_tokens_file="$runtime_config_dir/oauth_tokens.json"
+
+    [[ -f "$oauth_tokens_file" ]] || return 1
+
+    jq -e \
+        --arg provider "$provider" \
+        '((.[$provider].refresh_token // "") | type == "string") and ((.[$provider].refresh_token // "") | length > 0)' \
+        "$oauth_tokens_file" >/dev/null 2>&1
+}
+
+run_auth_provider_canary() {
+    local base_url="$1"
+    local password="$2"
+    local ws_rpc_cli script_ws_rpc_cli active_ws_rpc_cli deploy_ws_rpc_cli params_json
+
+    [[ -n "$password" ]] || return 1
+    command -v node >/dev/null 2>&1 || return 1
+
+    script_ws_rpc_cli="$SCRIPT_DIR/../tests/lib/ws_rpc_cli.mjs"
+    active_ws_rpc_cli="$ACTIVE_TARGET/tests/lib/ws_rpc_cli.mjs"
+    deploy_ws_rpc_cli="$DEPLOY_PATH/tests/lib/ws_rpc_cli.mjs"
+    if [[ -f "$script_ws_rpc_cli" ]]; then
+        ws_rpc_cli="$script_ws_rpc_cli"
+    elif [[ -f "$active_ws_rpc_cli" ]]; then
+        ws_rpc_cli="$active_ws_rpc_cli"
+    elif [[ -f "$deploy_ws_rpc_cli" ]]; then
+        ws_rpc_cli="$deploy_ws_rpc_cli"
+    else
+        return 1
+    fi
+
+    params_json="$(jq -nc --arg text "$AUTH_PROVIDER_CANARY_PROMPT" '{text: $text}')"
+    AUTH_CANARY_OUTPUT="$(
+        TEST_BASE_URL="$base_url" \
+        MOLTIS_PASSWORD="$password" \
+        TEST_TIMEOUT="$AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS" \
+        node "$ws_rpc_cli" \
+            request \
+            --method chat.send \
+            --params "$params_json" \
+            --wait-ms "$AUTH_PROVIDER_CANARY_WAIT_MS" \
+            --subscribe chat 2>/dev/null || true
+    )"
+
+    if ! jq -e '
+        .ok == true and
+        .result.ok == true and
+        .result.payload.ok == true and
+        ([.events[]? | select(.event == "chat" and .payload.state == "final")] | length) >= 1
+    ' >/dev/null 2>&1 <<<"$AUTH_CANARY_OUTPUT"; then
+        return 1
+    fi
+
+    return 0
+}
+
 container_mount_source() {
     local container="$1"
     local destination="$2"
@@ -178,6 +264,13 @@ emit_failure_json() {
         --arg http_code "$http_code" \
         --arg recorded_git_sha "$recorded_git_sha" \
         --arg live_git_sha "$live_git_sha" \
+        --arg expected_auth_provider "${EXPECTED_AUTH_PROVIDER:-}" \
+        --arg auth_status_raw "${AUTH_STATUS_RAW:-}" \
+        --arg auth_status_post_canary "${AUTH_STATUS_POST_CANARY:-}" \
+        --arg auth_status_valid "${AUTH_STATUS_VALID:-}" \
+        --arg auth_validation_path "${AUTH_VALIDATION_PATH:-}" \
+        --arg auth_canary_attempted "${AUTH_CANARY_ATTEMPTED:-}" \
+        --arg auth_canary_succeeded "${AUTH_CANARY_SUCCEEDED:-}" \
         '{
           status: $status,
           target: $target,
@@ -191,7 +284,14 @@ emit_failure_json() {
             container_state: $container_state,
             http_code: $http_code,
             recorded_git_sha: (if $recorded_git_sha == "" then null else $recorded_git_sha end),
-            live_git_sha: (if $live_git_sha == "" then null else $live_git_sha end)
+            live_git_sha: (if $live_git_sha == "" then null else $live_git_sha end),
+            expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
+            auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
+            auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
+            auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end),
+            auth_validation_path: (if $auth_validation_path == "" then null else $auth_validation_path end),
+            auth_canary_attempted: (if $auth_canary_attempted == "" then null else ($auth_canary_attempted == "true") end),
+            auth_canary_succeeded: (if $auth_canary_succeeded == "" then null else ($auth_canary_succeeded == "true") end)
           },
           errors: [{code: $code, message: $message}]
         }'
@@ -291,7 +391,12 @@ LIVE_GIT_REF=""
 LIVE_VERSION=""
 RUNTIME_CONFIG_RW=""
 AUTH_STATUS_RAW=""
+AUTH_STATUS_POST_CANARY=""
 AUTH_STATUS_VALID=""
+AUTH_VALIDATION_PATH=""
+AUTH_CANARY_ATTEMPTED=""
+AUTH_CANARY_SUCCEEDED=""
+AUTH_CANARY_OUTPUT=""
 TRACKED_RUNTIME_TOML=""
 RUNTIME_RUNTIME_TOML=""
 
@@ -440,10 +545,31 @@ fi
 
 if [[ -n "$EXPECTED_AUTH_PROVIDER" ]]; then
     AUTH_STATUS_RAW="$(docker exec "$MOLTIS_CONTAINER" moltis auth status 2>/dev/null || true)"
-    if ! printf '%s\n' "$AUTH_STATUS_RAW" | grep -F "$EXPECTED_AUTH_PROVIDER" | grep -F '[valid' >/dev/null 2>&1; then
+    AUTH_PROVIDER_STATUS_LINE="$(auth_status_provider_line "$AUTH_STATUS_RAW" "$EXPECTED_AUTH_PROVIDER" || true)"
+
+    if auth_status_provider_is_valid "$AUTH_PROVIDER_STATUS_LINE"; then
+        AUTH_STATUS_VALID="true"
+        AUTH_VALIDATION_PATH="status"
+    elif auth_status_provider_is_expired "$AUTH_PROVIDER_STATUS_LINE" && oauth_tokens_have_refresh_token "$EXPECTED_RUNTIME_CONFIG" "$EXPECTED_AUTH_PROVIDER"; then
+        AUTH_CANARY_ATTEMPTED="true"
+        AUTH_CANARY_PASSWORD="$(read_env_file_value "$ENV_FILE" "MOLTIS_PASSWORD" || true)"
+
+        if run_auth_provider_canary "$MOLTIS_URL" "$AUTH_CANARY_PASSWORD"; then
+            AUTH_CANARY_SUCCEEDED="true"
+            AUTH_STATUS_POST_CANARY="$(docker exec "$MOLTIS_CONTAINER" moltis auth status 2>/dev/null || true)"
+            AUTH_PROVIDER_STATUS_LINE="$(auth_status_provider_line "$AUTH_STATUS_POST_CANARY" "$EXPECTED_AUTH_PROVIDER" || true)"
+            if auth_status_provider_is_valid "$AUTH_PROVIDER_STATUS_LINE"; then
+                AUTH_STATUS_VALID="true"
+                AUTH_VALIDATION_PATH="refreshable-canary"
+            else
+                fail_with "AUTH_PROVIDER_INVALID_AFTER_CANARY" "Expected auth provider '$EXPECTED_AUTH_PROVIDER' remained non-valid after successful refresh canary"
+            fi
+        else
+            fail_with "AUTH_PROVIDER_CANARY_FAILED" "Expected auth provider '$EXPECTED_AUTH_PROVIDER' was refreshable-but-expired and the runtime canary did not recover it"
+        fi
+    else
         fail_with "AUTH_PROVIDER_INVALID" "Expected valid auth provider '$EXPECTED_AUTH_PROVIDER' was not found in live Moltis auth status"
     fi
-    AUTH_STATUS_VALID="true"
 fi
 
 if [[ "$OUTPUT_JSON" == "true" ]]; then
@@ -475,7 +601,12 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg tracked_runtime_toml "$TRACKED_RUNTIME_TOML" \
         --arg runtime_runtime_toml "$RUNTIME_RUNTIME_TOML" \
         --arg expected_auth_provider "$EXPECTED_AUTH_PROVIDER" \
+        --arg auth_status_raw "$AUTH_STATUS_RAW" \
+        --arg auth_status_post_canary "$AUTH_STATUS_POST_CANARY" \
         --arg auth_status_valid "$AUTH_STATUS_VALID" \
+        --arg auth_validation_path "$AUTH_VALIDATION_PATH" \
+        --arg auth_canary_attempted "$AUTH_CANARY_ATTEMPTED" \
+        --arg auth_canary_succeeded "$AUTH_CANARY_SUCCEEDED" \
         '{
           status: $status,
           target: $target,
@@ -505,7 +636,12 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             tracked_runtime_toml: (if $tracked_runtime_toml == "" then null else $tracked_runtime_toml end),
             runtime_runtime_toml: (if $runtime_runtime_toml == "" then null else $runtime_runtime_toml end),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
-            auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end)
+            auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
+            auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
+            auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end),
+            auth_validation_path: (if $auth_validation_path == "" then null else $auth_validation_path end),
+            auth_canary_attempted: (if $auth_canary_attempted == "" then null else ($auth_canary_attempted == "true") end),
+            auth_canary_succeeded: (if $auth_canary_succeeded == "" then null else ($auth_canary_succeeded == "true") end)
           },
           errors: []
         }'
@@ -527,6 +663,11 @@ runtime_config_rw=${RUNTIME_CONFIG_RW:-unknown}
 tracked_runtime_toml=${TRACKED_RUNTIME_TOML:-unknown}
 runtime_runtime_toml=${RUNTIME_RUNTIME_TOML:-unknown}
 expected_auth_provider=${EXPECTED_AUTH_PROVIDER:-none}
+auth_status_raw=${AUTH_STATUS_RAW:-none}
+auth_status_post_canary=${AUTH_STATUS_POST_CANARY:-none}
 auth_status_valid=${AUTH_STATUS_VALID:-skipped}
+auth_validation_path=${AUTH_VALIDATION_PATH:-skipped}
+auth_canary_attempted=${AUTH_CANARY_ATTEMPTED:-false}
+auth_canary_succeeded=${AUTH_CANARY_SUCCEEDED:-false}
 EOF
 fi

@@ -17,6 +17,29 @@ create_fake_runtime_bin() {
 #!/usr/bin/env bash
 set -euo pipefail
 
+read_auth_status() {
+  if [[ -n "${FAKE_AUTH_STATUS_SEQUENCE_FILE:-}" && -f "${FAKE_AUTH_STATUS_SEQUENCE_FILE:-}" ]]; then
+    local state_file="${FAKE_AUTH_STATUS_SEQUENCE_STATE_FILE:-${FAKE_AUTH_STATUS_SEQUENCE_FILE}.state}"
+    local index=1
+    if [[ -f "$state_file" ]]; then
+      index="$(cat "$state_file")"
+    fi
+
+    local line
+    line="$(sed -n "${index}p" "$FAKE_AUTH_STATUS_SEQUENCE_FILE")"
+    if [[ -z "$line" ]]; then
+      line="$(tail -n 1 "$FAKE_AUTH_STATUS_SEQUENCE_FILE")"
+    else
+      printf '%s\n' "$((index + 1))" >"$state_file"
+    fi
+
+    printf '%s\n' "$line"
+    return 0
+  fi
+
+  printf '%s\n' "${FAKE_AUTH_STATUS:-openai-codex [valid (10m remaining)]}"
+}
+
 case "${1:-}" in
   inspect)
     if [[ "${2:-}" == "--format" ]]; then
@@ -50,7 +73,7 @@ case "${1:-}" in
       exit 0
     fi
     if [[ "${1:-}" == "moltis" && "${2:-}" == "moltis" && "${3:-}" == "auth" && "${4:-}" == "status" ]]; then
-      printf '%s\n' "${FAKE_AUTH_STATUS:-openai-codex [valid (10m remaining)]}"
+      read_auth_status
       exit 0
     fi
     printf 'unsupported docker exec invocation: %s\n' "$*" >&2
@@ -67,6 +90,36 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s' "${FAKE_CURL_HTTP_CODE:-200}"
+EOF
+
+    cat >"$fake_bin/node" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == *"/tests/lib/ws_rpc_cli.mjs" ]]; then
+  if [[ "${FAKE_AUTH_CANARY_RESULT:-success}" == "success" ]]; then
+    cat <<'JSON'
+{
+  "ok": true,
+  "login": { "status": 200 },
+  "result": { "ok": true, "payload": { "ok": true } },
+  "events": [{ "event": "chat", "payload": { "state": "final" } }]
+}
+JSON
+    exit 0
+  fi
+
+  cat <<'JSON'
+{
+  "ok": false,
+  "message": "canary failed"
+}
+JSON
+  exit "${FAKE_AUTH_CANARY_EXIT_CODE:-1}"
+fi
+
+printf 'unsupported fake node invocation: %s\n' "$*" >&2
+exit 1
 EOF
 
     cat >"$fake_bin/git" <<'EOF'
@@ -87,7 +140,7 @@ printf 'unsupported fake git invocation: %s\n' "$*" >&2
 exit 1
 EOF
 
-    chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/git"
+    chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/node" "$fake_bin/git"
     printf '%s\n' "$fake_bin"
 }
 
@@ -132,6 +185,7 @@ run_component_moltis_runtime_attestation_tests() {
 
     cat >"$workspace_root/.env" <<EOF
 MOLTIS_RUNTIME_CONFIG_DIR=$runtime_config_dir
+MOLTIS_PASSWORD=test-password
 EOF
     printf '%s\n' "$live_sha" >"$workspace_root/data/.deployed-sha"
     cat >"$workspace_root/data/.deployment-info" <<EOF
@@ -187,7 +241,8 @@ EOF
        [[ "$(jq -r '.details.tracked_runtime_toml' "$output_json")" != "$workspace_root_canonical/config/moltis.toml" ]] || \
        [[ "$(jq -r '.details.runtime_runtime_toml' "$output_json")" != "$runtime_config_dir_canonical/moltis.toml" ]] || \
        [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
-       [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]]; then
+       [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "status" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
         rm -rf "$fixture_root"
         return
@@ -274,6 +329,85 @@ EOF
   }
 ]
 EOF
+
+    cat >"$runtime_config_dir/oauth_tokens.json" <<'EOF'
+{
+  "openai-codex": {
+    "refresh_token": "refresh-token"
+  }
+}
+EOF
+    cat >"$fixture_root/auth-status-sequence.txt" <<'EOF'
+openai-codex [expired]
+openai-codex [valid (10m remaining)]
+EOF
+
+    test_start "component_runtime_attestation_recovers_refreshable_expired_auth_provider_via_canary"
+    if ! PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        FAKE_AUTH_STATUS_SEQUENCE_FILE="$fixture_root/auth-status-sequence.txt" \
+        FAKE_AUTH_CANARY_RESULT="success" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" \
+            --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr-auth-refresh.log"; then
+        test_fail "Runtime attestation should recover a refreshable expired auth provider via canary"
+        rm -rf "$fixture_root"
+        return
+    fi
+
+    if [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "refreshable-canary" ]] || \
+       [[ "$(jq -r '.details.auth_canary_attempted' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.auth_canary_succeeded' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.auth_status_raw' "$output_json")" != "openai-codex [expired]" ]] || \
+       [[ "$(jq -r '.details.auth_status_post_canary' "$output_json")" != "openai-codex [valid (10m remaining)]" ]]; then
+        test_fail "Runtime attestation should record refreshable auth recovery details after a successful canary"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    cat >"$fixture_root/auth-status-sequence.txt" <<'EOF'
+openai-codex [expired]
+openai-codex [expired]
+EOF
+
+    test_start "component_runtime_attestation_fails_when_refreshable_expired_auth_provider_does_not_recover"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        FAKE_AUTH_STATUS_SEQUENCE_FILE="$fixture_root/auth-status-sequence.txt" \
+        FAKE_AUTH_CANARY_RESULT="failure" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" \
+            --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr-auth-refresh-fail.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "AUTH_PROVIDER_CANARY_FAILED")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when a refreshable expired auth provider does not recover after canary"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
 
     test_start "component_runtime_attestation_fails_when_expected_auth_provider_is_invalid"
     set +e
