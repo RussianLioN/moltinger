@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-24
-**Total Lessons**: 55
+**Generated**: 2026-03-26
+**Total Lessons**: 56
 
 ---
 
@@ -58,7 +58,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (13 lessons)
+#### P3 (14 lessons)
+- [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
 - [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
 - [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
@@ -118,7 +119,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (15 lessons)
+#### process (16 lessons)
+- [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
 - [Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies](../docs/rca/2026-03-21-moltis-telegram-session-context-drift.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
 - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
@@ -153,10 +155,10 @@
 - `gitops` (17 lessons)
 - `moltis` (14 lessons)
 - `deploy` (14 lessons)
+- `rca` (13 lessons)
 - `github-actions` (13 lessons)
-- `rca` (12 lessons)
+- `lessons` (11 lessons)
 - `cicd` (11 lessons)
-- `lessons` (10 lessons)
 - `process` (9 lessons)
 - `clawdiy` (8 lessons)
 - `telegram` (7 lessons)
@@ -168,10 +170,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 55 |
+| Total Lessons | 56 |
 | Critical (P0/P1) | 21 |
 | Categories | 6 |
-| Unique Tags | 124 |
+| Unique Tags | 127 |
 
 ---
 

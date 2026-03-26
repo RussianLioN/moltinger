@@ -1,6 +1,6 @@
 diff -urN a/config/moltis.toml b/config/moltis.toml
---- a/config/moltis.toml	2026-03-24 23:01:02.000000000 +0300
-+++ b/config/moltis.toml	2026-03-24 23:56:39.247094372 +0300
+--- a/config/moltis.toml	2026-03-25 00:01:05.000000000 +0300
++++ b/config/moltis.toml	2026-03-26 19:49:11.883645784 +0300
 @@ -654,21 +654,21 @@
  [memory]
  llm_reranking = false
@@ -31,8 +31,8 @@ diff -urN a/config/moltis.toml b/config/moltis.toml
  # ══════════════════════════════════════════════════════════════════════════════
  # CHANNELS
 diff -urN a/docker-compose.prod.yml b/docker-compose.prod.yml
---- a/docker-compose.prod.yml	2026-03-24 23:01:02.000000000 +0300
-+++ b/docker-compose.prod.yml	2026-03-24 23:56:39.247228372 +0300
+--- a/docker-compose.prod.yml	2026-03-25 00:01:05.000000000 +0300
++++ b/docker-compose.prod.yml	2026-03-26 19:49:11.883816200 +0300
 @@ -65,6 +65,8 @@
        TAVILY_API_KEY: ${TAVILY_API_KEY}
        # GLM-5 API key for Z.ai Coding Plan (OpenAI-compatible)
@@ -43,8 +43,8 @@ diff -urN a/docker-compose.prod.yml b/docker-compose.prod.yml
      # Resource limits for production
      deploy:
 diff -urN a/scripts/deploy.sh b/scripts/deploy.sh
---- a/scripts/deploy.sh	2026-03-24 23:01:02.000000000 +0300
-+++ b/scripts/deploy.sh	2026-03-24 23:56:39.247817412 +0300
+--- a/scripts/deploy.sh	2026-03-25 00:01:05.000000000 +0300
++++ b/scripts/deploy.sh	2026-03-26 19:49:11.884485116 +0300
 @@ -26,6 +26,8 @@
  MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
  CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
@@ -936,7 +936,7 @@ diff -urN a/scripts/moltis-search-memory-diagnostics.sh b/scripts/moltis-search-
 +)
 +PY
 diff -urN a/scripts/run-tracked-moltis-deploy.sh b/scripts/run-tracked-moltis-deploy.sh
---- a/scripts/run-tracked-moltis-deploy.sh	2026-03-24 23:01:02.000000000 +0300
+--- a/scripts/run-tracked-moltis-deploy.sh	2026-03-25 00:01:05.000000000 +0300
 +++ b/scripts/run-tracked-moltis-deploy.sh	2026-03-22 22:38:43.061849893 +0300
 @@ -13,6 +13,9 @@
  TRACKED_VERSION=""
@@ -1588,8 +1588,8 @@ diff -urN a/tests/component/test_moltis_search_memory_diagnostics.sh b/tests/com
 +    run_component_moltis_search_memory_diagnostics_tests
 +fi
 diff -urN a/tests/static/test_config_validation.sh b/tests/static/test_config_validation.sh
---- a/tests/static/test_config_validation.sh	2026-03-24 23:01:02.000000000 +0300
-+++ b/tests/static/test_config_validation.sh	2026-03-24 23:56:39.253032398 +0300
+--- a/tests/static/test_config_validation.sh	2026-03-25 00:01:05.000000000 +0300
++++ b/tests/static/test_config_validation.sh	2026-03-26 19:49:11.886246781 +0300
 @@ -31,6 +31,7 @@
  MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
  TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
@@ -1668,8 +1668,8 @@ diff -urN a/tests/static/test_config_validation.sh b/tests/static/test_config_va
      if rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$DEPLOY_WORKFLOW" && \
         rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$CLAWDIY_WORKFLOW" && \
 diff -urN a/tests/unit/test_deploy_workflow_guards.sh b/tests/unit/test_deploy_workflow_guards.sh
---- a/tests/unit/test_deploy_workflow_guards.sh	2026-03-24 23:01:02.000000000 +0300
-+++ b/tests/unit/test_deploy_workflow_guards.sh	2026-03-24 23:56:39.254193853 +0300
+--- a/tests/unit/test_deploy_workflow_guards.sh	2026-03-25 00:01:05.000000000 +0300
++++ b/tests/unit/test_deploy_workflow_guards.sh	2026-03-26 19:49:11.887463030 +0300
 @@ -233,6 +233,44 @@
      test_pass
  }
@@ -1715,7 +1715,7 @@ diff -urN a/tests/unit/test_deploy_workflow_guards.sh b/tests/unit/test_deploy_w
  test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
      test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
  
-@@ -696,10 +734,12 @@
+@@ -696,10 +734,11 @@
      mkdir -p "$project_root/config" "$project_root/scripts"
      printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
      printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
@@ -1725,11 +1725,10 @@ diff -urN a/tests/unit/test_deploy_workflow_guards.sh b/tests/unit/test_deploy_w
      : > "$project_root/scripts/moltis-version.sh"
      : > "$project_root/scripts/deploy.sh"
 +    : > "$project_root/scripts/moltis-runtime-attestation.sh"
-+    : > "$project_root/scripts/moltis-runtime-attestation.sh"
  
      if ! bash "$TRACKED_DEPLOY_SCRIPT" \
          --dry-run \
-@@ -717,7 +757,8 @@
+@@ -717,7 +756,8 @@
      if ! grep -Fq '"status": "dry-run"' "$output_file" || \
         ! grep -Fq '"prepare-runtime-config"' "$output_file" || \
         ! grep -Fq '"align-server-checkout"' "$output_file" || \
@@ -1739,7 +1738,7 @@ diff -urN a/tests/unit/test_deploy_workflow_guards.sh b/tests/unit/test_deploy_w
          test_fail "Tracked deploy dry-run output should describe the shared control-plane contract"
          rm -rf "$tmp_dir"
          return
-@@ -743,7 +784,7 @@
+@@ -743,10 +783,11 @@
      mkdir -p "$project_root/config" "$project_root/scripts"
      printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
      printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
@@ -1748,6 +1747,10 @@ diff -urN a/tests/unit/test_deploy_workflow_guards.sh b/tests/unit/test_deploy_w
      : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
      : > "$project_root/scripts/moltis-version.sh"
      : > "$project_root/scripts/deploy.sh"
++    : > "$project_root/scripts/moltis-runtime-attestation.sh"
+ 
+     if ! bash "$TRACKED_DEPLOY_SCRIPT" \
+         --dry-run \
 @@ -766,7 +807,7 @@
         [[ "$(jq -r '.details.git_ref' "$output_json")" != "main" ]] || \
         [[ "$(jq -r '.details.workflow_run' "$output_json")" != "123456" ]] || \

@@ -603,8 +603,29 @@ def apply_runtime_carrier(source_repo: pathlib.Path, target_root: pathlib.Path) 
     )
     replace_once(
         path,
-        '    : > "$project_root/scripts/deploy.sh"',
-        '    : > "$project_root/scripts/deploy.sh"\n    : > "$project_root/scripts/moltis-runtime-attestation.sh"',
+        join_lines(
+            '    output_file="$tmp_dir/output.json"',
+            "",
+            '    mkdir -p "$project_root/config" "$project_root/scripts"',
+            "    printf 'services: {}\\n' > \"$project_root/docker-compose.prod.yml\"",
+            "    printf 'name = \"moltis\"\\n' > \"$project_root/config/moltis.toml\"",
+            "    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\\n' > \"$project_root/.env\"",
+            '    : > "$project_root/scripts/prepare-moltis-runtime-config.sh"',
+            '    : > "$project_root/scripts/moltis-version.sh"',
+            '    : > "$project_root/scripts/deploy.sh"',
+        ),
+        join_lines(
+            '    output_file="$tmp_dir/output.json"',
+            "",
+            '    mkdir -p "$project_root/config" "$project_root/scripts"',
+            "    printf 'services: {}\\n' > \"$project_root/docker-compose.prod.yml\"",
+            "    printf 'name = \"moltis\"\\n' > \"$project_root/config/moltis.toml\"",
+            "    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\\n' > \"$project_root/.env\"",
+            '    : > "$project_root/scripts/prepare-moltis-runtime-config.sh"',
+            '    : > "$project_root/scripts/moltis-version.sh"',
+            '    : > "$project_root/scripts/deploy.sh"',
+            '    : > "$project_root/scripts/moltis-runtime-attestation.sh"',
+        ),
         "unit attestation file 1",
     )
     replace_once(
@@ -628,8 +649,29 @@ def apply_runtime_carrier(source_repo: pathlib.Path, target_root: pathlib.Path) 
     )
     replace_once(
         path,
-        '    : > "$project_root/scripts/deploy.sh"',
-        '    : > "$project_root/scripts/deploy.sh"\n    : > "$project_root/scripts/moltis-runtime-attestation.sh"',
+        join_lines(
+            '    output_json="$tmp_dir/output.json"',
+            "",
+            '    mkdir -p "$project_root/config" "$project_root/scripts"',
+            "    printf 'services: {}\\n' > \"$project_root/docker-compose.prod.yml\"",
+            "    printf 'name = \"moltis\"\\n' > \"$project_root/config/moltis.toml\"",
+            "    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\\n' > \"$project_root/.env\"",
+            '    : > "$project_root/scripts/prepare-moltis-runtime-config.sh"',
+            '    : > "$project_root/scripts/moltis-version.sh"',
+            '    : > "$project_root/scripts/deploy.sh"',
+        ),
+        join_lines(
+            '    output_json="$tmp_dir/output.json"',
+            "",
+            '    mkdir -p "$project_root/config" "$project_root/scripts"',
+            "    printf 'services: {}\\n' > \"$project_root/docker-compose.prod.yml\"",
+            "    printf 'name = \"moltis\"\\n' > \"$project_root/config/moltis.toml\"",
+            "    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\\n' > \"$project_root/.env\"",
+            '    : > "$project_root/scripts/prepare-moltis-runtime-config.sh"',
+            '    : > "$project_root/scripts/moltis-version.sh"',
+            '    : > "$project_root/scripts/deploy.sh"',
+            '    : > "$project_root/scripts/moltis-runtime-attestation.sh"',
+        ),
         "unit attestation file 2",
     )
     replace_once(
