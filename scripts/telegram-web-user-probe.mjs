@@ -19,6 +19,8 @@ const DEFAULT_MIN_REPLY_LEN = Number(process.env.TELEGRAM_WEB_MIN_REPLY_LEN || 2
 const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIES || 2);
 const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
+const INTERNAL_TELEMETRY_RE =
+  /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b)/iu;
 
 function getArg(name, fallback = "") {
   const idx = process.argv.indexOf(name);
@@ -42,7 +44,7 @@ const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
 const ERROR_RE =
-  /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|^\s*activity log(?:\s*[•:-]|\b)|missing\s+'action'\s+parameter)/i;
+  /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|missing\s+'action'\s+parameter)/i;
 const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 
 let stage = "login";
@@ -61,7 +63,8 @@ function normalizeMessageText(value) {
 }
 
 export function isReplyErrorSignature(value) {
-  return ERROR_RE.test(normalizeMessageText(value));
+  const normalized = normalizeMessageText(value);
+  return ERROR_RE.test(normalized) || INTERNAL_TELEMETRY_RE.test(normalized);
 }
 
 function safeMid(value) {
@@ -135,6 +138,19 @@ export function findAttributedReplies(messages, sentMid) {
     .sort((left, right) => left.mid - right.mid);
 }
 
+export function findInvalidIncomingActivityMessages(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .map(normalizeProbeMessage)
+    .filter(
+      (message) =>
+        message.direction === "in" &&
+        message.text.length > 0 &&
+        isReplyErrorSignature(message.text)
+    )
+    .map(summarizeMessage)
+    .filter(Boolean);
+}
+
 function summarizeMessage(message) {
   if (!message) return null;
   const normalized = normalizeProbeMessage(message);
@@ -203,6 +219,12 @@ export function classifyFailure(code, stageName = stage) {
       actionability: "operator",
       fallback_relevant: false,
       recommended_action: "Wait for the chat to settle or isolate the chat noise, then rerun the authoritative check.",
+    },
+    pre_send_invalid_activity: {
+      summary: "A recent incoming Telegram message already leaked internal activity/tool-progress before the probe began",
+      actionability: "operator",
+      fallback_relevant: false,
+      recommended_action: "Clear or reconcile the chat/session noise and rerun the authoritative check after the last invalid incoming reply is no longer present.",
     },
     send_failure: {
       summary: "The probe message was not observed after the send action",
@@ -939,6 +961,35 @@ async function main() {
     );
     const quietWindowWaitMs = quietWindow.quietWindowWaitMs;
     const lastPreSendActivity = quietWindow.lastActivity;
+    const preSendInvalidIncoming = findInvalidIncomingActivityMessages(lastPreSendActivity?.messages || []);
+
+    if (preSendInvalidIncoming.length > 0) {
+      const correlation = buildCorrelationWindow({
+        quietWindowMs,
+        quietWindowWaitMs,
+        baselineMaxMid: beforeMaxMid,
+        sentObservedAtMs: null,
+        replyObservedAtMs: null,
+        sentMessage: null,
+        replyMessage: null,
+        latestIncoming: null,
+        lastPreSendActivity,
+      });
+      console.log(
+        JSON.stringify(
+          failurePayload({
+            code: "pre_send_invalid_activity",
+            correlation,
+            diagnosticContext: {
+              target,
+              recent_invalid_incoming: preSendInvalidIncoming,
+            },
+            stats: await pageStats(page),
+          })
+        )
+      );
+      process.exit(3);
+    }
 
     stage = "composer";
     let composer = await locateComposer(page);

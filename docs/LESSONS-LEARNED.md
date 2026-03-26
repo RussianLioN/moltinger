@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-26
-**Total Lessons**: 59
+**Total Lessons**: 60
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (22 lessons)
+#### P1 (23 lessons)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
+- [Telegram leaked internal activity log to the user while authoritative UAT still passed because reply-quality checks were blind to telemetry variants and pre-send contamination](../docs/rca/2026-03-26-telegram-activity-log-leak-and-uat-blind-spot.md)
 - [Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together](../docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
 - [Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies](../docs/rca/2026-03-21-moltis-telegram-session-context-drift.md)
@@ -122,8 +123,9 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (19 lessons)
+#### process (20 lessons)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
+- [Telegram leaked internal activity log to the user while authoritative UAT still passed because reply-quality checks were blind to telemetry variants and pre-send contamination](../docs/rca/2026-03-26-telegram-activity-log-leak-and-uat-blind-spot.md)
 - [PR2 docs carrier drifted because patch generation targeted the wrong base and ignored new docs](../docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md)
 - [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
@@ -159,15 +161,15 @@
 ### Popular Tags
 
 - `gitops` (18 lessons)
-- `rca` (16 lessons)
-- `moltis` (14 lessons)
+- `rca` (17 lessons)
+- `moltis` (15 lessons)
 - `deploy` (14 lessons)
 - `github-actions` (13 lessons)
 - `lessons` (12 lessons)
 - `cicd` (11 lessons)
 - `process` (10 lessons)
+- `telegram` (8 lessons)
 - `clawdiy` (8 lessons)
-- `telegram` (7 lessons)
 
 
 ---
@@ -176,10 +178,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 59 |
-| Critical (P0/P1) | 23 |
+| Total Lessons | 60 |
+| Critical (P0/P1) | 24 |
 | Categories | 6 |
-| Unique Tags | 131 |
+| Unique Tags | 134 |
 
 ---
 

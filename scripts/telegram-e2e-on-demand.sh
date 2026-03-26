@@ -168,6 +168,20 @@ normalize_message_text() {
   printf '%s' "${1:-}" | tr '\r\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
 }
 
+reply_has_internal_activity() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  case "$normalized" in
+    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 write_report() {
   local debug_available="false"
   if [[ -n "$DEBUG_OUTPUT_PATH" ]]; then
@@ -239,6 +253,41 @@ evaluate_authoritative_semantics() {
   local normalized_message reply_text
   normalized_message="$(normalize_message_text "$MESSAGE")"
   reply_text="$(jq -r '.reply_text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null || true)"
+
+  if reply_has_internal_activity "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_activity_leak" "$RUN_STAGE" "Authoritative Telegram reply exposed internal activity/tool-progress instead of a user-facing answer" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{observed_reply:$reply_text, failure:"semantic_activity_leak"}}')"
+    RECOMMENDED_ACTION="Reconcile the active Telegram session/runtime so internal activity logs stop reaching the user-facing chat, then rerun the authoritative check."
+    return 0
+  fi
+
+  local pre_send_activity_leak
+  pre_send_activity_leak="$(
+    jq -r '.attribution_evidence.last_pre_send_activity.messages[]?.text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null \
+      | while IFS= read -r line; do
+          if reply_has_internal_activity "$line"; then
+            printf '%s\n' "$line"
+            break
+          fi
+        done
+  )"
+
+  if [[ -n "$pre_send_activity_leak" ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_pre_send_activity_leak" "$RUN_STAGE" "Authoritative Telegram chat already contained a recent internal activity/tool-progress leak before the probe send" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg activity_text "$pre_send_activity_leak" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{recent_invalid_incoming:$activity_text, failure:"semantic_pre_send_activity_leak"}}')"
+    RECOMMENDED_ACTION="Clear or reconcile the contaminated Telegram chat/session and rerun authoritative UAT only after the last invalid incoming activity message is gone."
+    return 0
+  fi
 
   if [[ "$normalized_message" != "/status" ]]; then
     return 0

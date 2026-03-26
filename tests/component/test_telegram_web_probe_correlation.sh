@@ -249,6 +249,50 @@ NODE
         test_fail "Activity-log timeout summaries must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_rejects_emoji_prefixed_internal_telemetry_replies"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -type...` • 🧠 Searching memory...",
+  "💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -print`",
+  "🧠 Searching memory..."
+];
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected telemetry reply to be rejected: ${badReply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Emoji-prefixed activity/tool-progress replies must be rejected by reply-quality checks"
+    fi
+
+    test_start "component_telegram_web_probe_detects_recent_invalid_pre_send_incoming_activity"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { findInvalidIncomingActivityMessages } = await import(process.env.NODE_SCRIPT);
+const invalid = findInvalidIncomingActivityMessages([
+  { mid: 77, direction: "out", text: "/status" },
+  { mid: 78, direction: "in", text: "📋 Activity log • 💻 Running: `find ...`" },
+  { mid: 79, direction: "in", text: "🧠 Searching memory..." },
+  { mid: 80, direction: "in", text: "Нормальный человеческий ответ" }
+]);
+if (!Array.isArray(invalid) || invalid.length !== 2) {
+  throw new Error(`expected two invalid incoming activity messages, got ${JSON.stringify(invalid)}`);
+}
+if (invalid[0].mid !== 78 || invalid[1].mid !== 79) {
+  throw new Error(`unexpected invalid incoming mids: ${JSON.stringify(invalid)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must classify recent incoming activity/tool-progress leakage before send attribution begins"
+    fi
+
     generate_report
 }
 

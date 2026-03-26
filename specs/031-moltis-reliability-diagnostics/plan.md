@@ -5,7 +5,7 @@
 
 ## Summary
 
-Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. Production policy adds one more hard constraint: shared production deploys are allowed only from `main`. This slice therefore extends the safe repository-managed fixes with runtime-config parity enforcement and explicit Ollama cloud env forwarding, but lands them through a two-stage strategy: `PR1` to `main` contains only runtime-critical fixes plus blocking verification lanes, then canonical deploy/live verification happens from `main`, and only after that does `PR2` carry RCA/rules/lessons/spec updates.
+Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. A new live-authoritative Telegram pass on 2026-03-26 then exposed another user-facing regression: the bot can emit internal telemetry replies like `📋 Activity log`, `💻 Running`, and `🧠 Searching memory...`, while the current authoritative UAT still passes because its reply-quality gate only recognizes plain ASCII `Activity log ...` forms and ignores recent invalid pre-send incoming activity. Production policy adds one more hard constraint: shared production deploys are allowed only from `main`. This slice therefore extends the safe repository-managed fixes with a fail-closed Telegram channel-output guardrail plus authoritative UAT hardening, while keeping any live repair or rollout on the canonical `main` path.
 
 ## Technical Context
 
@@ -73,6 +73,7 @@ No constitution exception is required.
 3. Built-in web search is disabled while production depends entirely on a remote Tavily MCP path that is already showing transport instability.
 4. Memory embeddings are left on auto-detect, so the runtime can infer a chat-provider chain that is unsuitable for embeddings, including the Z.ai Coding endpoint under `[providers.openai]`.
 5. The tracked compose contract forwarded `OLLAMA_API_KEY` to the Ollama sidecar but not to the `moltis` container itself, so cloud-backed Ollama chat models could be configured in git but remain invisible at runtime.
+6. The tracked Moltis identity/prompt contract does not explicitly forbid internal activity/tool-progress traces in user-facing messaging channels, so the repo has no fail-closed prompt guard against `Activity log`, `Running`, or `Searching memory` style replies.
 
 ### Missing Integration
 
@@ -87,6 +88,8 @@ No constitution exception is required.
 1. `scripts/test-moltis-api.sh` still uses the retired `/login` form flow and `/api/v1/chat`, so it misdiagnoses current runtimes.
 2. Session/model state appears to survive provider-surface drift without auto-healing; this is a runtime bug candidate, but fixing it is deferred until the tracked runtime contract is restored.
 3. Browser tool startup currently fails at Docker access; if permission and connectivity are both required, the runtime may be missing a clearer preflight error path. That remains a runtime bug candidate, not a repository-managed fix in this slice.
+4. The authoritative Telegram UAT reply-quality gate is emoji-blind for internal telemetry replies, so it can return green on `📋 Activity log`, `💻 Running`, and `🧠 Searching memory...`.
+5. The authoritative Telegram UAT does not fail when the quiet window immediately before the probe already contains a recent invalid incoming Telegram reply, so chat contamination can slip through as a false pass.
 
 ## Minimal Safe Fix Plan
 
@@ -177,6 +180,23 @@ The following actions remain deferred and must stay operator-driven after the hi
 - repair browser Docker access or runtime permissions on the target host
 - explicitly wire repository docs/knowledge into memory watch/index scope and then backfill embeddings
 
+### Phase 5a - Telegram Activity Leakage Closure
+
+The next reliability pass closes the new Telegram user-facing regression in the narrowest repo-controlled way available:
+
+1. Add an explicit fail-closed rule to the tracked Moltis identity prompt:
+   - user-facing messaging channels such as Telegram must never emit internal activity/tool-progress traces like `Activity log`, `Running`, `Searching memory`, `thinking`, raw tool names, or raw shell commands
+   - at most one short human-facing progress preface is allowed before the final answer
+2. Harden `scripts/telegram-web-user-probe.mjs` so emoji-prefixed telemetry replies are classified as failures, not green replies.
+3. Harden authoritative Telegram UAT so a recent invalid pre-send incoming Telegram reply also invalidates the run.
+4. Record the incident in RCA/rules/lessons with the live evidence from the 2026-03-26 authoritative Telegram runs.
+
+This does not claim to patch an upstream Telegram adapter implementation that is not present in this repository. It instead establishes the strongest repo-owned barriers available now:
+
+- fail-closed prompt/channel contract
+- fail-closed authoritative UAT
+- explicit RCA for any remaining upstream/runtime behavior
+
 ## Structure Decision
 
 Keep this slice intentionally narrow:
@@ -239,3 +259,9 @@ This keeps the work safe, auditable, and aligned with GitOps.
 
 - Record the consilium-backed backlog for fail-closed auth/config durability so follow-up work is driven by tracked artifacts rather than chat history.
 - Prioritize secret/env hardening, runtime-dir pinning, semantic proof of health, session reconciliation, durable-state audit, and immutable release-root design.
+
+### Phase 7: Telegram Activity-Log And UAT Hardening
+
+- Extend the current slice with a dedicated Telegram user-facing reliability pass.
+- Treat `Activity log`/tool-progress leakage as a first-class reliability defect, not just as operator noise.
+- Prove the fix with targeted component tests plus authoritative Telegram revalidation.

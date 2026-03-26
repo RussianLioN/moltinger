@@ -78,10 +78,22 @@
 - [x] T056 Merge `PR1` into `main`, run the canonical production deploy from `main`, and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
 - [x] T057 Only after successful live verification, land `PR2` via a fresh docs-only carrier from verified `main` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md` (landed as PR #101)
 
+---
+
+## Phase 7: Telegram Activity-Log Leak Closure
+
+- [x] T060 Reconcile Speckit artifacts for the Telegram `Activity log` leak and encode the authoritative-UAT false-pass hypotheses
+- [x] T061 Add an explicit tracked Moltis identity/channel-output guardrail that forbids internal activity/tool-progress dumps in user-facing messaging channels
+- [x] T062 Harden `scripts/telegram-web-user-probe.mjs` so emoji-prefixed telemetry replies and recent invalid pre-send incoming activity fail closed
+- [x] T063 Extend Telegram component coverage for emoji-prefixed telemetry replies and authoritative pre-send contamination
+- [x] T064 Record RCA/rules/lessons for the Telegram activity-log leak plus authoritative-UAT blind spot
+- [x] T065 Re-run authoritative Telegram validation against the shared remote runtime and reconcile `tasks.md` with the verified outcome
+
 ## Dependencies & Execution Order
 
-- Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
+- Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7
 - Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and now lands through `PR1 -> main deploy -> PR2` rather than direct feature-branch rollout.
+- Phase 7 depends on the completed Telegram/session reliability work from Phases 4 and 5 and adds a narrower user-facing channel-output/UAT closure pass.
 - Phase 2 and Phase 3 are the only repository-safe implementation phases in this slice.
 - Phase 4 depends on operator action against the shared remote runtime after repository guardrails are merged.
 - Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
@@ -95,3 +107,4 @@
 - Leave live runtime repair, session cleanup, and memory/browser operational work as explicit follow-up actions.
 - Use Phase 5 backlog items to drive the next durability-focused slice once the current operational backlog is under control.
 - Close the embedding/Ollama incident by first preparing a minimal `PR1` for `main`, then proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery, and only after that landing the deferred `PR2` documentation layer.
+- Close the Telegram activity-log incident by layering a fail-closed prompt/channel contract under a fail-closed authoritative UAT gate, then validating the shared remote behavior with a real Telegram run.

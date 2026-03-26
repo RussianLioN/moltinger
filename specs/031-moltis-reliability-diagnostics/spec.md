@@ -62,6 +62,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - What happens when tracked `config/moltis.toml` pins `[memory] provider = "ollama"` and `model = "nomic-embed-text"`, but the writable runtime copy still carries an older auto-detect memory contract?
 - What happens when the server `.env` contains `OLLAMA_API_KEY`, but the production `moltis` container does not receive it and therefore never exposes cloud-backed Ollama chat models such as `gemini-3-flash-preview:cloud`?
 - What happens when the fix lives on a feature branch, but production policy allows deploys only from `main`, so incident closure must be split into a runtime-only `PR1` and a deferred documentation `PR2`?
+- What happens when a Telegram user-visible reply is an internal tool/activity trace such as `📋 Activity log`, `💻 Running`, or `🧠 Searching memory...`, but the authoritative UAT quality gate still marks that reply as clean?
 - What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
 - What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
 - What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
@@ -92,6 +93,11 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-019**: The production `moltis` container MUST receive `OLLAMA_API_KEY` whenever the tracked provider surface depends on cloud-backed Ollama models.
 - **FR-020**: The repository MUST record an RCA and an explicit rule for embedding/runtime drift so future sessions check runtime config parity and `OLLAMA_API_KEY` delivery before blaming provider auth or embeddings APIs.
 - **FR-021**: When production deploy policy allows deploys only from `main`, the incident closure MUST define a two-stage landing strategy: `PR1` contains only production-critical runtime fixes plus blocking verification lanes, and `PR2` carries RCA/consilium/rules/lessons/spec updates only after live verification succeeds via a fresh docs-only carrier based on the verified `main` state.
+- **FR-022**: The tracked Moltis identity/prompt contract MUST explicitly forbid internal activity/tool-progress traces such as `Activity log`, `Running`, `Searching memory`, `thinking`, raw tool names, or raw shell commands from being sent as user-facing replies in messaging channels like Telegram.
+- **FR-023**: The tracked channel-output guardrail MUST allow at most one short human-facing progress preface in Telegram, followed by a normal final assistant answer, while keeping detailed tool telemetry internal-only by default.
+- **FR-024**: The authoritative Telegram reply-quality gate MUST classify emoji-prefixed internal telemetry replies such as `📋 Activity log`, `💻 Running`, and `🧠 Searching memory...` as failures instead of green replies.
+- **FR-025**: The authoritative Telegram reply-quality gate MUST fail when the quiet window immediately before a probe already contains a recent invalid incoming Telegram reply with internal activity/tool-progress leakage.
+- **FR-026**: The package MUST record a new RCA and lessons entry for the Telegram activity-log leak plus the UAT emoji blind spot, including live evidence and the chosen repo-controlled mitigation path.
 
 ### Key Entities
 
@@ -126,3 +132,6 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **SC-011**: Static validation fails if `docker-compose.prod.yml` stops forwarding `OLLAMA_API_KEY` into the `moltis` container.
 - **SC-012**: The incident is preserved in tracked RCA/rules/lessons artifacts so the repair path is discoverable in future sessions.
 - **SC-013**: The Speckit artifacts explicitly separate `PR1` production-critical runtime changes from `PR2` deferred documentation/process artifacts so the canonical deploy path can proceed from `main` without dragging along mutable post-incident docs.
+- **SC-014**: Authoritative Telegram probing fails on emoji-prefixed internal activity/tool-progress replies instead of treating them as clean replies.
+- **SC-015**: Authoritative Telegram probing fails when a recent pre-send incoming Telegram message already contains an invalid internal activity/tool-progress leak.
+- **SC-016**: The tracked Moltis identity prompt contains an explicit fail-closed rule that user-facing messaging channels must never emit internal activity/tool-progress dumps.

@@ -167,6 +167,15 @@ PY
         test_fail "Primary Moltis identity prompt must forbid implicit Tavily country usage and require lowercase English country values when country is explicitly needed"
     fi
 
+    test_start "static_identity_prompt_forbids_internal_activity_leaks_in_telegram"
+    if rg -Fq 'В пользовательских мессенджер-каналах, особенно Telegram, никогда не отправляй внутренние activity/tool-progress трассы.' "$TOML_CONFIG" && \
+       rg -Fq 'Запрещено публиковать как обычный ответ `Activity log`, `Running`, `Searching memory`, `thinking`' "$TOML_CONFIG" && \
+       rg -Fq 'Разрешено максимум одно короткое человеческое префейс-сообщение' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
+    fi
+
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
     if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
        bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
@@ -328,11 +337,13 @@ PY
     test_start "static_telegram_remote_uat_enforces_status_semantics"
     if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
         test_pass
     else
-        test_fail "Authoritative Telegram remote UAT must fail when /status hits a verification gate or omits the canonical model contract"
+        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches"
     fi
 
     test_start "static_uat_gate_exercises_browser_search_and_repo_context_surfaces"
