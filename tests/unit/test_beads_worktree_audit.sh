@@ -73,7 +73,8 @@ EOF
 seed_post_migration_runtime_foundation() {
     local worktree_dir="$1"
 
-    mkdir -p "${worktree_dir}/.beads/beads.db"
+    mkdir -p "${worktree_dir}/.beads"
+    : > "${worktree_dir}/.beads/beads.db"
     cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
 issue-prefix: "demo"
 auto-start-daemon: false
