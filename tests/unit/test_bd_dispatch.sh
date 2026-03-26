@@ -54,6 +54,23 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+create_fake_repo_local_bd_wrapper_bin() {
+    local wrapper_root="$1"
+
+    mkdir -p "${wrapper_root}/bin" "${wrapper_root}/scripts"
+    cat > "${wrapper_root}/bin/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'WRONG_WRAPPER=%s\n' "$0"
+exit 97
+EOF
+    chmod +x "${wrapper_root}/bin/bd"
+    : > "${wrapper_root}/scripts/beads-resolve-db.sh"
+
+    printf '%s\n' "${wrapper_root}/bin"
+}
+
 seed_repo_local_bd_tools() {
     local repo_dir="$1"
 
@@ -114,6 +131,17 @@ run_plain_bd() {
     )
 }
 
+run_plain_bd_with_path_prefix() {
+    local worktree_dir="$1"
+    local path_prefix="$2"
+    shift 2
+
+    (
+        cd "${worktree_dir}"
+        PATH="${path_prefix}:$PATH" bd "$@"
+    )
+}
+
 run_localize() {
     local worktree_dir="$1"
     local fake_bin="$2"
@@ -152,6 +180,35 @@ test_plain_bd_executes_against_worktree_local_db() {
 
     assert_contains "${output}" "DB=${expected_db}" "Plain bd should pin the local worktree DB"
     assert_contains "${output}" "ARGS=info" "Plain bd should forward the original arguments"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_skips_sibling_repo_wrapper_when_finding_system_bd() {
+    test_start "plain_bd_skips_sibling_repo_wrapper_when_finding_system_bd"
+
+    local fixture_root repo_dir worktree_path fake_bin sibling_wrapper_bin output rc expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-safe-worktree"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/safe-local" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_local_beads_foundation "${worktree_path}"
+    sibling_wrapper_bin="$(create_fake_repo_local_bd_wrapper_bin "${fixture_root}/sibling-wrapper")"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(
+        set +e
+        run_plain_bd_with_path_prefix "${worktree_path}" "${worktree_path}/bin:${sibling_wrapper_bin}:${fake_bin}" info 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Plain bd should skip sibling repo-local wrappers while resolving the system bd"
+    assert_contains "${output}" "DB=${expected_db}" "Plain bd should still pin the local worktree DB after skipping sibling wrappers"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -572,6 +629,7 @@ run_all_tests() {
     fi
 
     test_plain_bd_executes_against_worktree_local_db
+    test_plain_bd_skips_sibling_repo_wrapper_when_finding_system_bd
     test_canonical_root_plain_bd_allows_read_only_commands
     test_canonical_root_plain_bd_blocks_mutation_by_default
     test_canonical_root_plain_bd_allows_explicit_root_db_override

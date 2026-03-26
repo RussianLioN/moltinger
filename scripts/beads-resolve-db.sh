@@ -372,6 +372,22 @@ beads_resolve_has_local_runtime() {
   return 1
 }
 
+beads_resolve_is_repo_local_wrapper_candidate() {
+  local candidate_path="$1"
+  local candidate_dir=""
+  local candidate_repo_root=""
+
+  [[ -n "${candidate_path}" ]] || return 1
+  [[ "$(basename "${candidate_path}")" == "bd" ]] || return 1
+
+  candidate_dir="$(dirname "${candidate_path}")"
+  [[ "$(basename "${candidate_dir}")" == "bin" ]] || return 1
+
+  candidate_repo_root="$(cd "${candidate_dir}/.." && pwd -P 2>/dev/null || true)"
+  [[ -n "${candidate_repo_root}" ]] || return 1
+  [[ -f "${candidate_repo_root}/scripts/beads-resolve-db.sh" ]]
+}
+
 beads_resolve_is_migration_legacy_command() {
   local command=""
 
@@ -656,6 +672,10 @@ beads_resolve_find_system_bd() {
 
     candidate_real="$(beads_resolve_normalize_path "${candidate}")"
     if [[ "${candidate_real}" == "${self_real}" ]]; then
+      continue
+    fi
+
+    if beads_resolve_is_repo_local_wrapper_candidate "${candidate_real}"; then
       continue
     fi
 
