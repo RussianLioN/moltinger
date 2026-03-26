@@ -28,16 +28,11 @@ If the value is found in these sources, do not ask the user for it again.
 ## Known Critical Variables
 
 - `TELEGRAM_BOT_TOKEN`
-- `MOLTINGER_SERVICE_TOKEN`
+- `TELEGRAM_ALLOWED_USERS`
 - `GLM_API_KEY`
 - `TAVILY_API_KEY`
 - `MOLTIS_PASSWORD`
 - `OLLAMA_API_KEY` (optional)
-
-Notes:
-
-- For Moltis Telegram ingress, the tracked allowlist in `config/moltis.toml` is authoritative.
-- `/opt/moltinger/.env` may still contain `TELEGRAM_ALLOWED_USERS`, but that value is a derived mirror for auxiliary scripts, not the primary auth source.
 
 ## When Asking the User Is Allowed
 
