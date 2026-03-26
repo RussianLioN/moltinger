@@ -130,6 +130,14 @@ check_instruction_references() {
     failures=1
   fi
 
+  if grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/commands/worktree.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/skills/beads/SKILL.md"; then
+    log_error "Source worktree/beads skill artifacts must not reintroduce retired bd sync guidance"
+    failures=1
+  else
+    log_success "Verified source worktree/beads skill artifacts retire bd sync guidance"
+  fi
+
   return "${failures}"
 }
 

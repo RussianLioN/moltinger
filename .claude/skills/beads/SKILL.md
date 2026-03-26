@@ -37,7 +37,7 @@ bd close ID --reason "Done"        # Complete task
 /push patch                        # Commit
 
 # END (MANDATORY!)
-bd sync
+bd status
 git push
 ```
 
