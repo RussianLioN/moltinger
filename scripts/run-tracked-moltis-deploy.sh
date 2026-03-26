@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 OUTPUT_JSON=false
 DRY_RUN=false
 DEPLOY_PATH="$(pwd)"
@@ -448,6 +450,12 @@ if [[ "$DRY_RUN" == "true" ]]; then
         }'
     exit 0
 fi
+
+bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+    --action "run-tracked-moltis-deploy" \
+    --target-path "$DEPLOY_PATH" \
+    --expected-ref "$GIT_REF" \
+    --expected-sha "$GIT_SHA"
 
 log_info "Preparing writable Moltis runtime config"
 if ! prepare_runtime_config; then

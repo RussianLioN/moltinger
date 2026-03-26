@@ -8,7 +8,7 @@ This document defines the repo-specific operating model for local Codex CLI sess
 
 This policy sets the baseline for local Codex usage in this repository.
 
-If the task is about adding, migrating, or reviewing Moltis skills/agents, read [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md) before editing `skills/`, `config/moltis.toml`, workspace prompt files, or migration docs.
+If the task is about adding, migrating, or reviewing Moltis skills/agents, read [docs/moltis-skill-agent-authoring.md](./moltis-skill-agent-authoring.md) before editing `skills/`, `config/moltis.toml`, workspace prompt files, or migration docs.
 
 It does not change:
 

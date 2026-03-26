@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 UAT_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
+FEATURE_DIAGNOSTICS_WORKFLOW="$PROJECT_ROOT/.github/workflows/feature-diagnostics.yml"
 ACTIVE_ROOT_SCRIPT="$PROJECT_ROOT/scripts/update-active-deploy-root.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
@@ -17,6 +18,7 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 EXPECTED_LOCK_GROUP="prod-remote-ainetic-tech-opt-moltinger"
 EXPECTED_ACTIVE_ROOT_SCRIPT="scripts/update-active-deploy-root.sh"
 EXPECTED_CHECKOUT_ALIGN_SCRIPT="scripts/align-server-checkout.sh"
@@ -1070,6 +1072,182 @@ test_active_root_script_requires_existing_target_directory() {
     test_pass
 }
 
+test_prod_mutation_guard_denies_unapproved_production_replay() {
+    test_start "Production mutation guard should fail closed without workflow approval"
+
+    if [[ ! -f "$PROD_MUTATION_GUARD_SCRIPT" ]]; then
+        test_skip "Missing script file: $PROD_MUTATION_GUARD_SCRIPT"
+        return
+    fi
+
+    local output_file tmp_dir
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/output.log"
+
+    if bash "$PROD_MUTATION_GUARD_SCRIPT" \
+        --action "unit-test" \
+        --target-host "ainetic.tech" \
+        --target-path "/opt/moltinger" >"$output_file" 2>&1; then
+        test_fail "prod-mutation-guard.sh must deny production mutation without workflow approval"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "Production mutation denied" "$output_file" || \
+       ! grep -Fq "feature-diagnostics.yml" "$output_file"; then
+        test_fail "Guard denial should explain the sanctioned diagnostics/promote path"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_prod_mutation_guard_rejects_spoofed_ci_context_without_github_proof() {
+    test_start "Production mutation guard should reject spoofed CI env without GitHub run proof"
+
+    if [[ ! -f "$PROD_MUTATION_GUARD_SCRIPT" ]]; then
+        test_skip "Missing script file: $PROD_MUTATION_GUARD_SCRIPT"
+        return
+    fi
+
+    local output_file tmp_dir
+    tmp_dir="$(mktemp -d)"
+    output_file="$tmp_dir/output.log"
+
+    if env \
+        GITHUB_ACTIONS=true \
+        GITHUB_RUN_ID=12345 \
+        MOLTINGER_PROD_GUARD_APPROVED=true \
+        MOLTINGER_PROD_GUARD_REPOSITORY=RussianLioN/moltinger \
+        MOLTINGER_PROD_GUARD_WORKFLOW="Deploy Moltis" \
+        MOLTINGER_PROD_GUARD_REF_NAME=main \
+        MOLTINGER_PROD_GUARD_REF_TYPE=branch \
+        MOLTINGER_PROD_GUARD_SHA=deadbeef \
+        bash "$PROD_MUTATION_GUARD_SCRIPT" \
+            --action "unit-test" \
+            --target-host "ainetic.tech" \
+            --target-path "/opt/moltinger" >"$output_file" 2>&1; then
+        test_fail "prod-mutation-guard.sh must reject spoofed CI context without GitHub token proof"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "Missing approved workflow identity" "$output_file" && \
+       ! grep -Fq "Unable to verify GitHub token identity" "$output_file"; then
+        test_fail "Spoofed CI denial should explain missing GitHub proof"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_prod_mutation_guard_allows_main_ci_context() {
+    test_start "Production mutation guard should allow main branch GitHub Actions context"
+
+    if [[ ! -f "$PROD_MUTATION_GUARD_SCRIPT" ]]; then
+        test_skip "Missing script file: $PROD_MUTATION_GUARD_SCRIPT"
+        return
+    fi
+
+    local tmp_dir fake_bin
+    tmp_dir="$(mktemp -d)"
+    fake_bin="$tmp_dir/bin"
+    mkdir -p "$fake_bin"
+
+    cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  *"/user"*)
+    printf '%s\n' '{"login":"github-actions[bot]"}'
+    ;;
+  *"/repos/RussianLioN/moltinger/actions/runs/12345"*)
+    printf '%s\n' '{"name":"Deploy Moltis","event":"workflow_dispatch","head_sha":"deadbeef","head_branch":"main"}'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF
+    chmod +x "$fake_bin/curl"
+
+    if env \
+        PATH="$fake_bin:$PATH" \
+        GITHUB_ACTIONS=true \
+        GITHUB_RUN_ID=12345 \
+        MOLTINGER_PROD_GUARD_APPROVED=true \
+        MOLTINGER_PROD_GUARD_GITHUB_TOKEN=fake-token \
+        MOLTINGER_PROD_GUARD_REPOSITORY=RussianLioN/moltinger \
+        MOLTINGER_PROD_GUARD_WORKFLOW="Deploy Moltis" \
+        MOLTINGER_PROD_GUARD_REF_NAME=main \
+        MOLTINGER_PROD_GUARD_REF_TYPE=branch \
+        MOLTINGER_PROD_GUARD_SHA=deadbeef \
+        bash "$PROD_MUTATION_GUARD_SCRIPT" \
+            --action "unit-test" \
+            --target-host "ainetic.tech" \
+            --target-path "/opt/moltinger" >/dev/null 2>&1; then
+        rm -rf "$tmp_dir"
+        test_pass
+    else
+        rm -rf "$tmp_dir"
+        test_fail "prod-mutation-guard.sh should allow sanctioned main-branch CI context"
+    fi
+}
+
+test_feature_diagnostics_workflow_exists_as_read_only_path() {
+    test_start "Feature diagnostics workflow should exist as the sanctioned read-only branch path"
+
+    if [[ ! -f "$FEATURE_DIAGNOSTICS_WORKFLOW" ]]; then
+        test_fail "Missing workflow file: $FEATURE_DIAGNOSTICS_WORKFLOW"
+        return
+    fi
+
+    if ! grep -Fq "name: Feature Diagnostics" "$FEATURE_DIAGNOSTICS_WORKFLOW" || \
+       ! grep -Fq "collect-feature-diagnostics.sh" "$FEATURE_DIAGNOSTICS_WORKFLOW" || \
+       ! grep -Fq "upload-artifact" "$FEATURE_DIAGNOSTICS_WORKFLOW"; then
+        test_fail "Feature diagnostics workflow must collect and publish read-only evidence"
+        return
+    fi
+
+    test_pass
+}
+
+test_active_root_script_blocks_prod_active_path_without_guard_proof() {
+    test_start "Shared active-root script should block production active-path mutations without guard proof"
+
+    if [[ ! -f "$ACTIVE_ROOT_SCRIPT" ]]; then
+        test_skip "Missing script file: $ACTIVE_ROOT_SCRIPT"
+        return
+    fi
+
+    local tmp_dir target_path output_file
+    tmp_dir="$(mktemp -d)"
+    target_path="$tmp_dir/target"
+    output_file="$tmp_dir/output.log"
+    mkdir -p "$target_path"
+
+    if bash "$ACTIVE_ROOT_SCRIPT" \
+        --target-path "$target_path" \
+        --active-path "/opt/moltinger-active" >"$output_file" 2>&1; then
+        test_fail "update-active-deploy-root.sh must deny production active-path mutation without GitHub guard proof"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "Production mutation denied" "$output_file"; then
+        test_fail "Active-root denial should come from the production mutation guard"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -1104,6 +1282,11 @@ run_all_tests() {
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
     test_active_root_script_migrates_legacy_directory
     test_active_root_script_requires_existing_target_directory
+    test_prod_mutation_guard_denies_unapproved_production_replay
+    test_prod_mutation_guard_rejects_spoofed_ci_context_without_github_proof
+    test_prod_mutation_guard_allows_main_ci_context
+    test_feature_diagnostics_workflow_exists_as_read_only_path
+    test_active_root_script_blocks_prod_active_path_without_guard_proof
 
     generate_report
 }

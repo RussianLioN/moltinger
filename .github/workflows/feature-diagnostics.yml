@@ -1,0 +1,54 @@
+name: Feature Diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SSH_HOST: ainetic.tech
+  SSH_USER: root
+  DEPLOY_PATH: /opt/moltinger
+  DEPLOY_ACTIVE_PATH: /opt/moltinger-active
+
+jobs:
+  diagnostics:
+    name: Read-only Branch Diagnostics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Collect feature diagnostics
+        run: |
+          mkdir -p test-results/feature-diagnostics
+          bash ./scripts/collect-feature-diagnostics.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --active-path "${{ env.DEPLOY_ACTIVE_PATH }}" \
+            --git-ref "${{ github.ref_name }}" \
+            --git-sha "${{ github.sha }}" \
+            --output-dir test-results/feature-diagnostics
+
+      - name: Publish summary
+        run: |
+          cat test-results/feature-diagnostics/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostics artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-diagnostics-${{ github.run_id }}
+          path: test-results/feature-diagnostics/

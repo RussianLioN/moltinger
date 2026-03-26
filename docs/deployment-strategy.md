@@ -12,6 +12,7 @@ This document is the operator summary for deploying the two-agent platform:
 | Unit | Workflow / entrypoint | Scope |
 |------|------------------------|-------|
 | Moltinger baseline | `.github/workflows/deploy.yml` | Main application deploy and shared platform baseline |
+| Feature diagnostics | `.github/workflows/feature-diagnostics.yml` | Read-only branch diagnostics against the live target without production mutation |
 | Moltis version update runbook | `docs/runbooks/moltis-backup-safe-update.md` | Backup-safe image bump with restore-check and rollback evidence |
 | Clawdiy same-host rollout | `.github/workflows/deploy-clawdiy.yml` | Clawdiy-only deploy, smoke, auth rendering, restore-readiness checks |
 | Rollback drill | `.github/workflows/rollback-drill.yml` | Backup integrity and restore-readiness verification |
@@ -135,6 +136,8 @@ During the gateway-auth migration, `CLAWDIY_PASSWORD` remains an accepted compat
 
 ## Non-Negotiable Rules
 
+- Do not replay production deploy steps manually after a branch/ref guard blocks the workflow.
+- Do use `feature-diagnostics.yml` for read-only evidence from feature branches, then promote to `main`.
 - Do not reuse Moltinger secrets for Clawdiy.
 - Do not expose machine handoffs through the public subdomain.
 - Do not treat Telegram success as proof that machine handoff works.

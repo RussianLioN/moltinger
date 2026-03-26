@@ -662,6 +662,22 @@
       "gitops": true,
       "ci": true
     },
+    "collect-feature-diagnostics.sh": {
+      "version": "1.0.0",
+      "description": "Collect read-only feature-branch diagnostics and dry-run rollout evidence against the live Moltis target",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "docker",
+        "jq",
+        "ssh"
+      ],
+      "provides": [
+        "collect-feature-diagnostics"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "apply-moltis-host-automation.sh": {
       "version": "1.0.0",
       "description": "Apply Moltis post-sync host automation from the active deploy root without mutating the git-synced tree",
@@ -767,6 +783,21 @@
         "gitops_guard_deploy",
         "gitops_guard_config"
       ]
+    },
+    "prod-mutation-guard.sh": {
+      "version": "1.0.0",
+      "description": "Fail-closed guard for production-mutating entrypoints on the canonical Moltinger target",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "jq"
+      ],
+      "provides": [
+        "prod-mutation-guard"
+      ],
+      "gitops": true,
+      "ci": true
     },
     "gitops-repair-managed-checkout.sh": {
       "version": "1.0.0",
@@ -892,6 +923,35 @@
       ],
       "gitops": true,
       "ci": true
+    },
+    "moltis-runtime-attestation.sh": {
+      "version": "1.0.0",
+      "description": "Verify the live Moltis runtime provenance against the tracked deploy contract",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "grep",
+        "jq"
+      ],
+      "provides": [
+        "moltis-runtime-attestation"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "moltis-search-memory-diagnostics.sh": {
+      "version": "1.0.0",
+      "description": "Emit tracked Tavily search and memory diagnostics from config and optional runtime logs",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "moltis-search-memory-diagnostics"
+      ]
     },
     "query-lessons.sh": {
       "version": "1.0.0",

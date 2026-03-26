@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
     cat >&2 <<'EOF'
 Usage:
@@ -104,6 +106,15 @@ emit_remote_script() {
     printf 'GIT_REF=%s\n' "$(shell_quote "$GIT_REF")"
     printf 'WORKFLOW_RUN=%s\n' "$(shell_quote "$WORKFLOW_RUN")"
     printf 'EXPECTED_VERSION=%s\n' "$(shell_quote "$EXPECTED_VERSION")"
+    printf 'export MOLTINGER_PROD_GUARD_APPROVED=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_APPROVED:-}")"
+    printf 'export MOLTINGER_PROD_GUARD_GITHUB_TOKEN=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_GITHUB_TOKEN:-}")"
+    printf 'export MOLTINGER_PROD_GUARD_REPOSITORY=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_REPOSITORY:-}")"
+    printf 'export MOLTINGER_PROD_GUARD_WORKFLOW=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_WORKFLOW:-}")"
+    printf 'export MOLTINGER_PROD_GUARD_REF_NAME=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_REF_NAME:-}")"
+    printf 'export MOLTINGER_PROD_GUARD_REF_TYPE=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_REF_TYPE:-}")"
+    printf 'export MOLTINGER_PROD_GUARD_SHA=%s\n' "$(shell_quote "${MOLTINGER_PROD_GUARD_SHA:-}")"
+    printf 'export GITHUB_ACTIONS=%s\n' "$(shell_quote "${GITHUB_ACTIONS:-}")"
+    printf 'export GITHUB_RUN_ID=%s\n' "$(shell_quote "${GITHUB_RUN_ID:-$WORKFLOW_RUN}")"
     cat <<'EOF'
 cd "$DEPLOY_PATH"
 
@@ -130,5 +141,12 @@ if [[ "$DRY_RUN" == "true" ]]; then
     printf 'REMOTE_SCRIPT\n'
     exit 0
 fi
+
+bash "$SCRIPT_DIR/prod-mutation-guard.sh" \
+    --action "ssh-run-tracked-moltis-deploy" \
+    --target-host "$SSH_HOST" \
+    --target-path "$DEPLOY_PATH" \
+    --expected-ref "$GIT_REF" \
+    --expected-sha "$GIT_SHA"
 
 emit_remote_script | ssh "$SSH_TARGET" 'bash -seu'

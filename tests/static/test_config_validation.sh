@@ -14,6 +14,7 @@ DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
+FEATURE_DIAGNOSTICS_WORKFLOW="$PROJECT_ROOT/.github/workflows/feature-diagnostics.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 TEST_WORKFLOW="$PROJECT_ROOT/.github/workflows/test.yml"
 TEST_RUNNER_DOCKERFILE="$PROJECT_ROOT/tests/Dockerfile.runner"
@@ -34,6 +35,8 @@ SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.s
 RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
+FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
+PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -324,6 +327,33 @@ PY
         test_fail "Workflows must stay aligned with the tracked deploy JSON contract they parse"
     fi
 
+    test_start "static_feature_diagnostics_workflow_stays_read_only"
+    if [[ -f "$FEATURE_DIAGNOSTICS_WORKFLOW" ]] && \
+       rg -q 'collect-feature-diagnostics\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'prod-remote-ainetic-tech-opt-moltinger' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'gitops-sync-managed-surface\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'update-active-deploy-root\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'render-moltis-env\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'scp ' "$FEATURE_DIAGNOSTICS_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Feature diagnostics workflow must remain read-only and must not reuse the production mutation path"
+    fi
+
+    test_start "static_feature_diagnostics_script_collects_evidence_without_mutation"
+    if [[ -f "$FEATURE_DIAGNOSTICS_SCRIPT" ]] && \
+       rg -q 'preflight-check\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q -- '--ci --json' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q -- '--dry-run' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q 'align-server-checkout\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       ! rg -q 'gitops-sync-managed-surface\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       ! rg -q 'scp ' "$FEATURE_DIAGNOSTICS_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Feature diagnostics script must collect evidence via read-only checks and dry-run plans only"
+    fi
+
     test_start "static_tracked_deploy_propagates_ci_context_for_noninteractive_guarded_deploy"
     if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
        rg -Fq 'GITHUB_ACTIONS="${GITHUB_ACTIONS:-true}"' "$TRACKED_DEPLOY_SCRIPT" && \
@@ -333,6 +363,45 @@ PY
         test_pass
     else
         test_fail "Tracked deploy script must propagate CI context and skip interactive GitOps confirmation when invoking deploy.sh over remote SSH orchestration"
+    fi
+
+    test_start "static_prod_mutation_guard_is_wired_into_key_moltinger_mutators"
+    if [[ -f "$PROD_MUTATION_GUARD_SCRIPT" ]] && \
+       rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$PROD_MUTATION_GUARD_SCRIPT" && \
+       rg -q 'api.github.com/repos/' "$PROD_MUTATION_GUARD_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$CHECKOUT_ALIGN_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$SYNC_SURFACE_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'prod-mutation-guard\.sh' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$HOST_AUTOMATION_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$PROJECT_ROOT/scripts/update-active-deploy-root.sh"; then
+        test_pass
+    else
+        test_fail "Key Moltinger production-mutating entrypoints must be protected by the shared production mutation guard"
+    fi
+
+    test_start "static_uat_and_clawdiy_workflows_block_feature_branch_promotion"
+    if rg -q 'feature-diagnostics\.yml' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'UAT promotion to production is blocked for feature branches' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'Production Clawdiy deploys must run from main' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "UAT and Clawdiy workflows must explicitly block feature-branch promotion and point operators to sanctioned paths"
+    fi
+
+    test_start "static_production_workflows_pass_guard_github_identity_context"
+    if rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_REPOSITORY' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_WORKFLOW' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'permissions:' "$DEPLOY_WORKFLOW" && \
+       rg -q 'actions: read' "$DEPLOY_WORKFLOW" && \
+       rg -q 'actions: read' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'actions: read' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Production-adjacent workflows must pass GitHub identity context to the mutation guard and grant actions:read"
     fi
 
     test_start "static_tracked_deploy_detects_missing_json_contract_from_deploy_sh"
