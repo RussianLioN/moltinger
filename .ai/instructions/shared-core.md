@@ -26,6 +26,18 @@ Use `refresh --write-doc` only for explicit topology snapshot publication from a
 In Codex/App sessions, `refresh --write-doc` may require approval if the shared repo `.git` directory is outside the current writable boundary.
 Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
+## Post-Close Task Classification
+
+If the active branch/worktree has already completed its planned tasks and the user brings a new task, do not continue in the same lane by default.
+
+- First classify the request with `docs/rules/post-close-task-classification-and-worktree-escalation.md`.
+- Default heuristic:
+  - same root cause + same slice + same owning lane + no scope expansion => current lane may continue
+  - otherwise => open a new lane
+- If the slice is already logically closed or already merged, and the new task touches `rules`, `AGENTS.md`, `skills`, auth, CI, deploy, runtime, topology, or other shared contracts, you must use a fresh branch/worktree from `main`.
+- Narrow fixes inside the same active, unmerged slice that already owns those files may stay in the current lane.
+- If the criteria conflict or the risk is ambiguous, use the `consilium` skill/workflow before choosing the lane.
+
 ## Quick Reference
 
 ```bash
