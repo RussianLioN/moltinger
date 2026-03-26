@@ -31,6 +31,11 @@ If you haven't completed Phase 1, you cannot propose fixes.
 
 ❌ ОШИБКА: [описание]
 
+📚 СНАЧАЛА ПРОВЕРИТЬ УРОКИ:
+1. docs/LESSONS-LEARNED.md
+2. ./scripts/query-lessons.sh --tag/--category/--severity ...
+3. Похожие RCA и уже известные guards/checks
+
 📝 Вопрос 1: Почему [ошибка]?
    → [ответ]
 
@@ -88,6 +93,12 @@ You MUST complete each phase before proceeding to the next.
 ### Phase 1: Root Cause Investigation
 
 **BEFORE attempting ANY fix:**
+
+**Preflight: Check Past Lessons**
+- Read `docs/LESSONS-LEARNED.md` for the relevant domain
+- Run `./scripts/query-lessons.sh` with the closest tag/category/severity
+- Note which old RCA already cover the incident and what remains genuinely new
+- Do not start fresh hypotheses until this comparison is explicit
 
 1. **Read Error Messages Carefully**
    - Don't skip past errors or warnings
