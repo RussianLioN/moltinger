@@ -11,7 +11,7 @@ WRAPPER_SCRIPT="$PROJECT_ROOT/scripts/bd-local.sh"
 install_fake_bd() {
     local repo_dir="$1"
 
-    mkdir -p "${repo_dir}/bin"
+    mkdir -p "${repo_dir}/bin" "${repo_dir}/scripts"
     cat > "${repo_dir}/bin/bd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -19,6 +19,8 @@ printf 'BEADS_DB=%s\n' "${BEADS_DB:-}"
 printf 'ARGS=%s\n' "$*"
 EOF
     chmod +x "${repo_dir}/bin/bd"
+    cp "${PROJECT_ROOT}/scripts/beads-resolve-db.sh" "${repo_dir}/scripts/beads-resolve-db.sh"
+    chmod +x "${repo_dir}/scripts/beads-resolve-db.sh"
 }
 
 seed_local_beads_state() {
@@ -29,24 +31,40 @@ seed_local_beads_state() {
     printf '{"id":"demo-1","title":"seed"}\n' > "${repo_dir}/.beads/issues.jsonl"
 }
 
+seed_post_migration_runtime_state() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads/beads.db" "${repo_dir}/.beads/dolt/beads/.dolt"
+    printf 'issue-prefix: "demo"\n' > "${repo_dir}/.beads/config.yaml"
+}
+
+seed_broken_post_migration_runtime_state() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads/dolt/.dolt"
+    printf 'issue-prefix: "demo"\n' > "${repo_dir}/.beads/config.yaml"
+}
+
 test_bd_local_exports_worktree_local_beads_db() {
     test_start "bd_local_exports_worktree_local_beads_db"
 
-    local fixture_root repo_dir physical_repo_dir output
+    local fixture_root repo_dir worktree_path physical_repo_dir output
     fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-safe"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/safe-local" "main"
 
-    install_fake_bd "${repo_dir}"
-    seed_local_beads_state "${repo_dir}"
-    physical_repo_dir="$(cd "${repo_dir}" && pwd -P)"
+    install_fake_bd "${worktree_path}"
+    seed_local_beads_state "${worktree_path}"
+    physical_repo_dir="$(cd "${worktree_path}" && pwd -P)"
 
     output="$(
-        cd "${repo_dir}"
-        "${WRAPPER_SCRIPT}" sync
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" status
     )"
 
     assert_contains "${output}" "BEADS_DB=${physical_repo_dir}/.beads/beads.db" "Wrapper must pin BEADS_DB to the current worktree"
-    assert_contains "${output}" "ARGS=sync" "Wrapper must forward the original bd arguments"
+    assert_contains "${output}" "ARGS=status" "Wrapper must forward the original bd arguments"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -55,23 +73,26 @@ test_bd_local_exports_worktree_local_beads_db() {
 test_bd_local_blocks_redirected_worktrees() {
     test_start "bd_local_blocks_redirected_worktrees"
 
-    local fixture_root repo_dir output rc
+    local fixture_root repo_dir worktree_path output rc
     fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-redirected"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/redirected" "main"
 
-    install_fake_bd "${repo_dir}"
-    seed_local_beads_state "${repo_dir}"
-    printf '%s\n' "${fixture_root}/canonical-root/.beads" > "${repo_dir}/.beads/redirect"
+    install_fake_bd "${worktree_path}"
+    seed_local_beads_state "${worktree_path}"
+    printf '%s\n' "${repo_dir}/.beads" > "${worktree_path}/.beads/redirect"
 
     output="$(
         set +e
-        cd "${repo_dir}"
-        "${WRAPPER_SCRIPT}" sync 2>&1
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
 
-    assert_eq "3" "${rc}" "Wrapper must fail closed when redirect metadata is present"
+    assert_eq "23" "${rc}" "Wrapper must fail closed when redirect metadata is present"
+    assert_contains "${output}" "legacy Beads redirect metadata" "Wrapper must explain the redirect ownership failure"
     assert_contains "${output}" "beads-worktree-localize.sh" "Wrapper must point operators to localization when redirect metadata exists"
 
     rm -rf "${fixture_root}"
@@ -81,24 +102,108 @@ test_bd_local_blocks_redirected_worktrees() {
 test_bd_local_blocks_missing_foundation_files() {
     test_start "bd_local_blocks_missing_foundation_files"
 
-    local fixture_root repo_dir output rc
+    local fixture_root repo_dir worktree_path output rc
     fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-missing"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/missing" "main"
 
-    install_fake_bd "${repo_dir}"
-    mkdir -p "${repo_dir}/.beads"
+    install_fake_bd "${worktree_path}"
+    mkdir -p "${worktree_path}/.beads"
 
     output="$(
         set +e
-        cd "${repo_dir}"
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "Wrapper must fail closed when local Beads foundation files are missing"
+    assert_contains "${output}" ".beads/config.yaml" "Wrapper must report missing config.yaml"
+    assert_contains "${output}" ".beads/issues.jsonl" "Wrapper must report missing issues.jsonl"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl() {
+    test_start "bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl"
+
+    local fixture_root repo_dir worktree_path physical_repo_dir output
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-post-migration-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/post-migration-runtime" "main"
+
+    install_fake_bd "${worktree_path}"
+    seed_post_migration_runtime_state "${worktree_path}"
+    physical_repo_dir="$(cd "${worktree_path}" && pwd -P)"
+
+    output="$(
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" status
+    )"
+
+    assert_contains "${output}" "BEADS_DB=${physical_repo_dir}/.beads/beads.db" "Wrapper must keep using the local runtime after tracked JSONL retirement"
+    assert_contains "${output}" "ARGS=status" "Wrapper must preserve the read-only command in post-migration runtime-only state"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_bd_local_blocks_deprecated_sync_with_modern_guidance() {
+    test_start "bd_local_blocks_deprecated_sync_with_modern_guidance"
+
+    local fixture_root repo_dir worktree_path output rc
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-runtime-only-sync"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-sync" "main"
+
+    install_fake_bd "${worktree_path}"
+    seed_post_migration_runtime_state "${worktree_path}"
+
+    output="$(
+        set +e
+        cd "${worktree_path}"
         "${WRAPPER_SCRIPT}" sync 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
 
-    assert_eq "4" "${rc}" "Wrapper must fail closed when local Beads foundation files are missing"
-    assert_contains "${output}" ".beads/config.yaml" "Wrapper must report missing config.yaml"
-    assert_contains "${output}" ".beads/issues.jsonl" "Wrapper must report missing issues.jsonl"
+    assert_eq "28" "${rc}" "bd-local must surface deprecated sync guidance instead of suggesting pilot mode"
+    assert_contains "${output}" "'sync' is retired" "bd-local must explain that bd sync is retired"
+    assert_contains "${output}" "bd dolt push / bd dolt pull" "bd-local must point operators to the modern Dolt workflow"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
+    test_start "bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance"
+
+    local fixture_root repo_dir worktree_path output rc
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-broken-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime" "main"
+
+    install_fake_bd "${worktree_path}"
+    seed_broken_post_migration_runtime_state "${worktree_path}"
+
+    output="$(
+        set +e
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "bd-local must fail closed when the Dolt runtime exists only as an incomplete shell"
+    assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "bd-local must describe the failure as a runtime repair problem"
+    assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "bd-local must not ask operators to restore retired JSONL"
+    assert_contains "${output}" "bd bootstrap" "bd-local must point operators to bootstrap recovery for runtime-only failures"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -124,6 +229,9 @@ run_all_tests() {
     test_bd_local_exports_worktree_local_beads_db
     test_bd_local_blocks_redirected_worktrees
     test_bd_local_blocks_missing_foundation_files
+    test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl
+    test_bd_local_blocks_deprecated_sync_with_modern_guidance
+    test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance
     generate_report
 }
 
