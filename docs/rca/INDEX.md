@@ -1,42 +1,40 @@
 # RCA Index
 
-**Last Updated**: 2026-03-26
-**Version**: 1.12.0
+**Last Updated**: 2026-03-14
+**Version**: 1.10.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 20 |
+| Total RCA | 18 |
 | Avg Resolution Time | N/A |
-| This Month | 20 |
+| This Month | 18 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 21% |
-| process | 10 | 50% |
-| cicd | 4 | 20% |
-| security | 1 | 5% |
-| shell | 1 | 5% |
+| generic | 4 | 22% |
+| process | 8 | 44% |
+| cicd | 4 | 22% |
+| security | 1 | 6% |
+| shell | 1 | 6% |
 
 ## By Severity
 
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 6 | High - production impact |
+| P1 | 5 | High - production impact |
 | P2 | 7 | Medium - process issue |
-| P3 | 5 | Low - minor issue |
+| P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
 
 ## Registry
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
-| RCA-020 | 2026-03-26 | process | P3 | resolved | The first `PR2` docs-carrier patch was generated from the wrong comparison boundary and omitted new untracked docs, so it did not faithfully target verified `main` | regenerated the carrier against real `origin/main`, included new docs via `--no-index`, and validated with `patch --dry-run` |
-| RCA-019 | 2026-03-21 | process | P1 | resolved | After provider recovery, the active Telegram-bound session still carried an old session model and contaminated tool context, but the recovery path did not explicitly reconcile/reset that channel session | patched the active Telegram session to `gpt-5.4`, reset stale context, and hardened Telegram UAT error signatures for activity-log/tool-error replies |
 | RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
 | RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
 | RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |
