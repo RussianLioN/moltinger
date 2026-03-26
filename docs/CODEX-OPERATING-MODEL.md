@@ -8,7 +8,7 @@ This document defines the repo-specific operating model for local Codex CLI sess
 
 This policy sets the baseline for local Codex usage in this repository.
 
-If the task is about adding, migrating, or reviewing Moltis skills/agents, read [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md) before editing `skills/`, `config/moltis.toml`, workspace prompt files, or migration docs.
+If the task is about adding, migrating, or reviewing Moltis skills/agents, read [docs/moltis-skill-agent-authoring.md](./moltis-skill-agent-authoring.md) before editing `skills/`, `config/moltis.toml`, workspace prompt files, or migration docs.
 
 It does not change:
 
@@ -92,12 +92,12 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 
 ## Worktree Naming Policy
 
-1. `/Users/rl/coding/moltinger` remains the canonical `main` worktree.
+1. `/Users/rl/coding/moltinger/moltinger-main` is the canonical `main` worktree.
 2. Any substantial change should use a dedicated worktree and branch.
 3. Preferred worktree path pattern:
 
 ```bash
-/Users/rl/coding/moltinger-<branch-slug>
+/Users/rl/coding/moltinger/moltinger-<branch-slug>
 ```
 
 4. `branch-slug` should be the branch name with `/` replaced by `-`.
@@ -108,21 +108,36 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 9. `/tmp` worktrees are acceptable for disposable or emergency lanes, but the preferred long-lived pattern is the sibling path above.
 10. If the topology registry disagrees with live `git` state, live `git` state wins.
 
+### Path Relocation Recovery
+
+If main/worktree directories were moved manually and `codex resume` stops showing expected sessions without `--all`, run:
+
+```bash
+scripts/codex-session-path-repair.sh --apply --repair-git-worktrees
+```
+
+This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived session headers + live rollout session headers under `~/.codex/sessions/**`) and repairs git worktree links for the relocated directories.
+
 ## Beads Ownership Policy
 
 1. Managed sibling worktrees in this repo must keep Beads tracker ownership local to the checked-out branch/worktree.
-2. `.beads/issues.jsonl` and `.beads/config.yaml` are branch-local git state; `.beads/beads.db` must resolve to the current worktree, not the canonical root.
-3. `.beads/issues.jsonl` dependency arrays must stay in deterministic canonical order; use the tracked pre-commit normalization flow and do not hand-edit reorder-only noise.
-4. `.envrc` is a convenience bootstrap only: it should prepend the current worktree `bin/` directory to `PATH`, but dedicated-worktree safety must not depend solely on `direnv`.
-5. The normal repo-local command is plain `bd`, provided by `bin/bd`; managed Codex/worktree handoff flows and tracked git hooks must also prepend the current worktree `bin/` directory so the repo-local shim wins even when `direnv` is inactive.
-6. In the canonical root, plain `bd` is read-mostly by default: safe inspection commands may pass through, but mutating commands must not auto-discover or silently reuse the root tracker.
-7. Intentional canonical-root Beads mutation must be explicit. Use an explicit target such as `bd --db <canonical-root>/.beads/beads.db ...` (or another deliberate troubleshooting path) when root-scoped admin work is truly intended.
-8. `./scripts/bd-local.sh` remains a compatibility/troubleshooting helper, not the normal daily entrypoint; if `.beads/redirect` is present, localize that worktree before resuming plain `bd`.
-9. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
-10. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
-11. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
-12. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
-13. Canonical root cleanup is a separate gated action and must not happen in the same command that performs recovery apply.
+2. `.beads/config.yaml` remains branch-local git state; `.beads/beads.db` or `.beads/dolt/` must resolve to the current worktree, not the canonical root.
+3. If tracked `.beads/issues.jsonl` is still present in a branch, treat it as a temporary compatibility/bootstrap artifact rather than the authoritative backlog source. Until the compatibility layer is fully retired, keep its dependency arrays in deterministic canonical order and do not hand-edit reorder-only noise.
+4. After the Dolt migration and local-only cleanup, an intentionally missing tracked `.beads/issues.jsonl` does not mean the backlog is gone; the operational source of truth may live only in the local Dolt-backed Beads runtime.
+5. Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion or proof that the backlog is unavailable.
+6. When that happens, agents should keep using the local Beads database for read-only task inspection (`bd status`, `bd list`, `bd ready`, `bd show`) and describe any failure as a local Beads repair problem rather than falling back to ad-hoc plan files as the primary backlog.
+7. If a preserved sibling worktree still cannot open its local Beads state after JSONL retirement, split the diagnosis: if ownership is already local but the runtime cannot open the named `beads` DB, run read-only diagnostics first (`/usr/local/bin/bd doctor --json`) and then `bd bootstrap`; if ownership is missing, redirected, or legacy, use `./scripts/beads-worktree-localize.sh --path <worktree>`.
+8. A bare `.beads/dolt/` directory is not enough to call the local runtime healthy; if the named `beads` DB is missing, treat that as local runtime repair drift and recover with `bd bootstrap` rather than restoring `.beads/issues.jsonl`.
+9. `.envrc` is a convenience bootstrap only: it should prepend the current worktree `bin/` directory to `PATH`, but dedicated-worktree safety must not depend solely on `direnv`.
+10. The normal repo-local command is plain `bd`, provided by `bin/bd`; managed Codex/worktree handoff flows and tracked git hooks must also prepend the current worktree `bin/` directory so the repo-local shim wins even when `direnv` is inactive.
+11. In the canonical root, plain `bd` is read-mostly by default: safe inspection commands may pass through, but mutating commands must not auto-discover or silently reuse the root tracker.
+12. Intentional canonical-root Beads mutation must be explicit. Use an explicit target such as `bd --db <canonical-root>/.beads/beads.db ...` (or another deliberate troubleshooting path) when root-scoped admin work is truly intended.
+13. The normal daily entrypoint is plain `bd` (via `bin/bd`); `./scripts/bd-local.sh` is deprecated and should not be used. If `.beads/redirect` is present, localize that worktree with `scripts/beads-worktree-localize.sh` before resuming plain `bd`.
+14. Do not use raw `bd worktree create` in this repository. It installs `.beads/redirect` to the canonical root and can silently route tracker writes into another worktree.
+15. If one issue leaked only into the canonical root tracker, recover it from the owner worktree with `scripts/beads-recover-issue.sh --issue <id> --apply` after localizing that worktree.
+16. For multi-issue leakage, run `scripts/beads-recovery-batch.sh audit` first, review the generated plan, and only then run `scripts/beads-recovery-batch.sh apply --plan ...`.
+17. Ambiguous owner mappings belong in `docs/beads-recovery-ownership.json`; do not guess ownership during automatic recovery.
+18. Canonical root cleanup is a separate gated action and must not happen in the same command that performs recovery apply.
 
 ### Preferred Branch Prefixes
 
@@ -140,19 +155,14 @@ For Beads in dedicated worktrees, ordinary work should use plain `bd`.
 1. The ownership source of truth is the current worktree's local `.beads/` state.
 2. The repo-local bootstrap path comes from `.envrc`, the managed worktree/Codex handoff, or tracked git-hook bootstrap, not from asking the user to choose a wrapper.
 3. If a dedicated worktree has legacy redirect residue or a partial local foundation, recover it in place with `./scripts/beads-worktree-localize.sh --path <worktree>`.
-4. Silent fallback to the canonical root tracker is not an acceptable recovery path.
-5. Canonical-root mutating `bd` commands are blocked by default unless the operator supplies an explicit root target on purpose.
-6. Residual cleanup in canonical `main` is a separate follow-up and must not be mixed into day-to-day worktree recovery.
+4. If ownership is already local but the runtime still cannot open the named `beads` DB, classify it as `runtime_bootstrap_required`: run `/usr/local/bin/bd doctor --json`, then `bd bootstrap`, and do not reintroduce `.beads/issues.jsonl`.
+5. Silent fallback to the canonical root tracker is not an acceptable recovery path.
+6. Canonical-root mutating `bd` commands are blocked by default unless the operator supplies an explicit root target on purpose.
+7. Residual cleanup in canonical `main` is a separate follow-up and must not be mixed into day-to-day worktree recovery.
 
-### Pilot Mode
+### Historical Migration Note
 
-When one dedicated worktree enters the Beads Dolt-native pilot:
-
-1. Enable it with `./scripts/beads-dolt-pilot.sh enable`.
-2. Treat `.beads/pilot-mode.json` as the local marker that pilot interception is active.
-3. In that worktree, do not use `bd sync` as the everyday review path.
-4. Use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface.
-5. Keep pilot mode isolated to one worktree until the pilot verdict is explicit.
+The dedicated Beads Dolt migration helper scripts lived only in the migration branches that introduced the cutover. Ordinary branches created from `main` should use the ordinary plain-`bd` contract unless a branch explicitly ships its own branch-local migration helpers and instructions.
 
 ## Local Instruction Split
 

@@ -122,12 +122,35 @@ check_instruction_references() {
   fi
   assert_contains ".ai/instructions/codex-adapter.md" "docs/CODEX-OPERATING-MODEL.md" "operating model reference" || failures=1
   assert_contains ".ai/instructions/codex-adapter.md" "make codex-check" "Codex governance check command" || failures=1
-  if grep -Fq -- "./scripts/bd-local.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md" || \
-     grep -Fq -- "plain `bd`" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md"; then
+  if grep -Fq -- 'plain `bd`' "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md"; then
     log_success "Verified local Beads ownership guidance in docs/CODEX-OPERATING-MODEL.md"
   else
     log_error "Missing local Beads ownership guidance in docs/CODEX-OPERATING-MODEL.md"
     failures=1
+  fi
+
+  if [[ ! -f "${REPO_ROOT}/scripts/beads-dolt-pilot.sh" && ! -f "${REPO_ROOT}/scripts/beads-dolt-rollout.sh" ]]; then
+    if grep -Fq -- "beads-dolt-pilot.sh" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+       grep -Fq -- "beads-dolt-rollout.sh" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
+       grep -Fq -- "beads-dolt-pilot.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md" || \
+       grep -Fq -- "beads-dolt-rollout.sh" "${REPO_ROOT}/docs/CODEX-OPERATING-MODEL.md"; then
+      log_error "Ordinary source branches must not reference Beads migration review scripts that are absent from the repo"
+      failures=1
+    else
+      log_success "Verified ordinary branches do not reference absent Beads migration review scripts"
+    fi
+  fi
+
+  if grep -Fq -- "bd sync" "${REPO_ROOT}/CLAUDE.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.beads/AGENTS.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.beads/config.yaml" || \
+     grep -Fq -- 'add_next_step "bd sync"' "${REPO_ROOT}/scripts/worktree-ready.sh" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/commands/worktree.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/skills/beads/SKILL.md"; then
+    log_error "High-traffic instruction surfaces must not reintroduce retired bd sync guidance"
+    failures=1
+  else
+    log_success "Verified high-traffic instruction surfaces retire bd sync guidance"
   fi
 
   return "${failures}"
@@ -136,9 +159,16 @@ check_instruction_references() {
 check_deprecated_references() {
   log_info "Checking for deprecated Codex/model references..."
 
-  local pattern='gpt-5\.2(-codex)?|gpt 5\.2|openai-codex|providers\.openai-codex'
+  # OpenAI/GPT-5.* model names are intentionally allowed in this repository.
+  # Keep this pattern empty unless we have an explicitly approved deprecation.
+  local pattern=''
   local matches
   local filtered_matches
+
+  if [[ -z "${pattern}" ]]; then
+    log_warn "No deprecated model patterns configured; skipping deprecated-reference scan"
+    return 0
+  fi
 
   if command -v rg >/dev/null 2>&1; then
     matches="$(cd "${REPO_ROOT}" && rg -n -S "${pattern}" . -g '!scripts/codex-check.sh' || true)"

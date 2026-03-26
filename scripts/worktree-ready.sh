@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=scripts/beads-resolve-db.sh
+source "${SCRIPT_DIR}/beads-resolve-db.sh"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -91,6 +96,8 @@ report_status="action_required"
 report_env_state="unknown"
 report_guard_state="unknown"
 report_beads_state="missing"
+report_beads_runtime_state="unknown"
+report_beads_runtime_reason=""
 report_handoff_mode="manual"
 report_requested_handoff_mode="manual"
 report_topology_state="unavailable"
@@ -117,6 +124,9 @@ discovered_worktree_name=""
 discovered_worktree_path=""
 discovered_branch_name=""
 discovered_beads_state=""
+discovered_beads_runtime_state=""
+discovered_beads_runtime_probe_state="not_run"
+discovered_beads_runtime_reason=""
 discovered_redirect_target=""
 
 guard_probe_path=""
@@ -344,6 +354,7 @@ normalize_issue_key() {
 infer_issue_id_from_branch_name() {
   local branch_name="$1"
   local stripped_branch=""
+  local issues_file=""
   local candidate_issue=""
   local normalized_issue=""
   local matched_issue=""
@@ -351,6 +362,12 @@ infer_issue_id_from_branch_name() {
   local seen_matches=":"
 
   if [[ -z "${branch_name}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
+  if [[ ! -f "${issues_file}" ]]; then
     printf '\n'
     return 0
   fi
@@ -378,7 +395,7 @@ infer_issue_id_from_branch_name() {
       matched_issue_count=$((matched_issue_count + 1))
       matched_issue="${candidate_issue}"
     fi
-  done < <(iter_known_issue_ids)
+  done < <(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "${issues_file}")
 
   if [[ "${matched_issue_count}" -eq 1 ]]; then
     printf '%s\n' "${matched_issue}"
@@ -433,13 +450,13 @@ resolve_issue_jsonl_line() {
   awk -v issue="${requested_issue}" 'index($0, "\"id\":\"" issue "\"") { print; exit }' "${issues_file}"
 }
 
-extract_issue_artifact_paths_from_text() {
-  local issue_text="$1"
+extract_issue_artifact_paths_from_jsonl_line() {
+  local issue_line="$1"
   local candidate_path=""
   local normalized_path=""
   local seen_paths=""
 
-  if [[ -z "${issue_text}" ]]; then
+  if [[ -z "${issue_line}" ]]; then
     return 0
   fi
 
@@ -466,7 +483,7 @@ extract_issue_artifact_paths_from_text() {
     seen_paths="${seen_paths}:${normalized_path}"
     printf '%s\n' "${normalized_path}"
   done < <(
-    printf '%s\n' "${issue_text}" \
+    printf '%s\n' "${issue_line}" \
       | grep -oE '([A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+' \
       || true
   )
@@ -479,10 +496,6 @@ target_has_issue_record() {
 
   if [[ -z "${issue_key}" || -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
     return 1
-  fi
-
-  if path_has_live_beads_runtime "${worktree_path}" && resolve_issue_live_object_json_for_path "${worktree_path}" "${issue_key}" >/dev/null 2>&1; then
-    return 0
   fi
 
   target_issues_file="${worktree_path}/.beads/issues.jsonl"
@@ -593,6 +606,24 @@ resolve_bd_command_for_path() {
   resolve_bd_command
 }
 
+resolve_system_bd_command_for_path() {
+  local worktree_path="${1:-}"
+  local bd_self_path=""
+
+  if [[ -n "${worktree_path}" && -x "${worktree_path}/bin/bd" ]]; then
+    bd_self_path="${worktree_path}/bin/bd"
+  elif [[ -x "${resolved_repo_root}/bin/bd" ]]; then
+    bd_self_path="${resolved_repo_root}/bin/bd"
+  fi
+
+  if [[ -n "${bd_self_path}" ]]; then
+    beads_resolve_find_system_bd "${bd_self_path}" && return 0
+  fi
+
+  command -v bd >/dev/null 2>&1 || return 1
+  command -v bd
+}
+
 run_bd_json_command_for_path() {
   local worktree_path="${1:-}"
   local bd_command=""
@@ -619,7 +650,155 @@ path_has_live_beads_runtime() {
   fi
 
   beads_dir="${worktree_path}/.beads"
-  [[ -d "${beads_dir}/dolt" || -d "${beads_dir}/beads.db" || -f "${beads_dir}/beads.db" || -f "${beads_dir}/dolt-server.port" || -f "${beads_dir}/metadata.json" ]]
+  beads_resolve_has_local_runtime "${beads_dir}"
+}
+
+WORKTREE_READY_LAST_BD_OUTPUT=""
+WORKTREE_READY_LAST_BD_RC=0
+WORKTREE_READY_LAST_BD_TIMED_OUT="false"
+
+run_bd_probe_for_path() {
+  local worktree_path="${1:-}"
+  local capture_stderr="$2"
+  shift 2
+
+  local timeout_seconds="${WORKTREE_READY_BD_TIMEOUT_SECONDS:-8}"
+  local command_path=""
+  local stdout_file=""
+  local stderr_file=""
+  local timed_out_file=""
+  local command_pid=""
+  local watchdog_pid=""
+  local rc=0
+  local output=""
+
+  if [[ -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
+    return 1
+  fi
+
+  command_path="$(resolve_bd_command_for_path "${worktree_path}")" || return 1
+
+  stdout_file="$(mktemp)"
+  stderr_file="$(mktemp)"
+  timed_out_file="$(mktemp)"
+
+  (
+    cd "${worktree_path}"
+    "${command_path}" "$@" >"${stdout_file}" 2>"${stderr_file}"
+  ) &
+  command_pid=$!
+
+  (
+    sleep "${timeout_seconds}"
+    if kill -0 "${command_pid}" 2>/dev/null; then
+      printf 'true\n' >"${timed_out_file}"
+      kill -TERM "${command_pid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL "${command_pid}" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  set +e
+  wait "${command_pid}"
+  rc=$?
+  set -e
+
+  kill "${watchdog_pid}" 2>/dev/null || true
+  wait "${watchdog_pid}" 2>/dev/null || true
+
+  WORKTREE_READY_LAST_BD_OUTPUT="$(cat "${stdout_file}")"
+  if [[ "${capture_stderr}" == "true" ]]; then
+    output="$(cat "${stderr_file}")"
+    if [[ -n "${output}" ]]; then
+      if [[ -n "${WORKTREE_READY_LAST_BD_OUTPUT}" ]]; then
+        WORKTREE_READY_LAST_BD_OUTPUT+=$'\n'
+      fi
+      WORKTREE_READY_LAST_BD_OUTPUT+="${output}"
+    fi
+  fi
+
+  WORKTREE_READY_LAST_BD_TIMED_OUT="false"
+  WORKTREE_READY_LAST_BD_RC="${rc}"
+  if [[ -s "${timed_out_file}" ]]; then
+    WORKTREE_READY_LAST_BD_TIMED_OUT="true"
+    WORKTREE_READY_LAST_BD_RC=124
+  fi
+
+  rm -f "${stdout_file}" "${stderr_file}" "${timed_out_file}"
+  return 0
+}
+
+run_system_bd_probe_for_path() {
+  local worktree_path="${1:-}"
+  local capture_stderr="$2"
+  shift 2
+
+  local timeout_seconds="${WORKTREE_READY_BD_TIMEOUT_SECONDS:-8}"
+  local command_path=""
+  local stdout_file=""
+  local stderr_file=""
+  local timed_out_file=""
+  local command_pid=""
+  local watchdog_pid=""
+  local rc=0
+  local output=""
+
+  if [[ -z "${worktree_path}" || ! -d "${worktree_path}" ]]; then
+    return 1
+  fi
+
+  command_path="$(resolve_system_bd_command_for_path "${worktree_path}")" || return 1
+
+  stdout_file="$(mktemp)"
+  stderr_file="$(mktemp)"
+  timed_out_file="$(mktemp)"
+
+  (
+    cd "${worktree_path}"
+    "${command_path}" "$@" >"${stdout_file}" 2>"${stderr_file}"
+  ) &
+  command_pid=$!
+
+  (
+    sleep "${timeout_seconds}"
+    if kill -0 "${command_pid}" 2>/dev/null; then
+      printf 'true\n' >"${timed_out_file}"
+      kill -TERM "${command_pid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL "${command_pid}" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  set +e
+  wait "${command_pid}"
+  rc=$?
+  set -e
+
+  kill "${watchdog_pid}" 2>/dev/null || true
+  wait "${watchdog_pid}" 2>/dev/null || true
+
+  WORKTREE_READY_LAST_BD_OUTPUT="$(cat "${stdout_file}")"
+  if [[ "${capture_stderr}" == "true" ]]; then
+    output="$(cat "${stderr_file}")"
+    if [[ -n "${output}" ]]; then
+      if [[ -n "${WORKTREE_READY_LAST_BD_OUTPUT}" ]]; then
+        WORKTREE_READY_LAST_BD_OUTPUT+=$'\n'
+      fi
+      WORKTREE_READY_LAST_BD_OUTPUT+="${output}"
+    fi
+  fi
+
+  WORKTREE_READY_LAST_BD_TIMED_OUT="false"
+  WORKTREE_READY_LAST_BD_RC="${rc}"
+  if [[ -s "${timed_out_file}" ]]; then
+    WORKTREE_READY_LAST_BD_TIMED_OUT="true"
+    WORKTREE_READY_LAST_BD_RC=124
+  fi
+
+  rm -f "${stdout_file}" "${stderr_file}" "${timed_out_file}"
+  return 0
 }
 
 iter_known_issue_ids() {
@@ -755,14 +934,13 @@ build_finish_review_command() {
     return 0
   fi
 
-  return 1
+  printf 'bd status\n'
 }
 
 discover_issue_context() {
   local resolved_issue=""
-  local issue_context_json=""
-  local issue_context_source=""
-  local issue_text=""
+  local issues_file=""
+  local issue_line=""
   local artifact_path=""
   local artifact_report=""
   local has_research_artifact=0
@@ -772,21 +950,22 @@ discover_issue_context() {
     return 0
   fi
 
-  issue_context_json="$(resolve_issue_context_json "${resolved_issue}" 2>/dev/null || true)"
-  if [[ -z "${issue_context_json}" ]]; then
+  issues_file="${resolved_repo_root}/.beads/issues.jsonl"
+  if [[ ! -f "${issues_file}" ]]; then
     return 0
   fi
 
-  report_issue_title="$(printf '%s\n' "${issue_context_json}" | jq -r '.title // empty')"
-  issue_context_source="$(printf '%s\n' "${issue_context_json}" | jq -r '.source // empty')"
-  issue_text="$(printf '%s\n' "${issue_context_json}" | jq -r '.text // empty')"
+  issue_line="$(resolve_issue_jsonl_line "${resolved_issue}")"
+  if [[ -z "${issue_line}" ]]; then
+    return 0
+  fi
+
+  report_issue_title="$(extract_issue_title_from_jsonl_line "${issue_line}")"
   report_bootstrap_source_ref="$(resolve_bootstrap_source_ref)"
 
   if report_worktree_path_exists && ! target_has_issue_record "${resolved_issue}" "${report_worktree_path}"; then
-    add_warning "Issue '${resolved_issue}' is not present in target worktree Beads state; rely on the handoff context until local bd bootstrap completes."
-    if [[ "${issue_context_source}" == "jsonl" ]]; then
-      add_bootstrap_path ".beads/issues.jsonl"
-    fi
+    add_warning "Issue '${resolved_issue}' is not present in target worktree Beads state; rely on the handoff context instead of local bd show."
+    add_bootstrap_path ".beads/issues.jsonl"
   fi
 
   while IFS= read -r artifact_path; do
@@ -807,7 +986,7 @@ discover_issue_context() {
     fi
 
     report_issue_artifacts+=("${artifact_report}")
-  done < <(extract_issue_artifact_paths_from_text "${issue_text}")
+  done < <(extract_issue_artifact_paths_from_jsonl_line "${issue_line}")
 
   if [[ "${has_research_artifact}" -eq 1 && -e "${resolved_repo_root}/docs/research/README.md" ]] && ! target_worktree_has_path "docs/research/README.md"; then
     add_bootstrap_path "docs/research/README.md"
@@ -816,8 +995,7 @@ discover_issue_context() {
 
 speckit_branching_enabled() {
   local requested_issue="${issue_id:-}"
-  local issue_context_json=""
-  local issue_text=""
+  local issue_line=""
 
   if [[ "${speckit_mode}" == "true" ]]; then
     return 0
@@ -827,13 +1005,12 @@ speckit_branching_enabled() {
     return 1
   fi
 
-  issue_context_json="$(resolve_issue_context_json "${requested_issue}" 2>/dev/null || true)"
-  if [[ -z "${issue_context_json}" ]]; then
+  issue_line="$(resolve_issue_jsonl_line "${requested_issue}")"
+  if [[ -z "${issue_line}" ]]; then
     return 1
   fi
 
-  issue_text="$(printf '%s\n' "${issue_context_json}" | jq -r '.text // empty')"
-  [[ "${issue_text}" =~ [Ss]peckit|/speckit|spec\.md|plan\.md|tasks\.md|specs/ ]]
+  [[ "${issue_line}" =~ [Ss]peckit|/speckit|spec\.md|plan\.md|tasks\.md|specs/ ]]
 }
 
 issue_requests_speckit() {
@@ -1160,6 +1337,9 @@ reset_discovery() {
   discovered_branch_name=""
   discovered_beads_state=""
   discovered_beads_probe_state="not_run"
+  discovered_beads_runtime_state=""
+  discovered_beads_runtime_probe_state="not_run"
+  discovered_beads_runtime_reason=""
   discovered_redirect_target=""
 }
 
@@ -1575,6 +1755,102 @@ discover_target_state() {
   fi
 }
 
+discover_beads_runtime_state() {
+  local worktree_path=""
+  local beads_dir=""
+  local config_path=""
+  local issues_path=""
+  local has_local_runtime="false"
+  local has_runtime_shell="false"
+  local doctor_output=""
+
+  discovered_beads_runtime_state=""
+  discovered_beads_runtime_probe_state="not_run"
+  discovered_beads_runtime_reason=""
+
+  if [[ -n "${discovered_worktree_path}" && -d "${discovered_worktree_path}" ]]; then
+    worktree_path="${discovered_worktree_path}"
+  elif [[ -n "${target_path}" && -d "${target_path}" ]]; then
+    worktree_path="${target_path}"
+  else
+    return 0
+  fi
+
+  beads_dir="${worktree_path}/.beads"
+  config_path="${beads_dir}/config.yaml"
+  issues_path="${beads_dir}/issues.jsonl"
+
+  if [[ ! -f "${config_path}" ]]; then
+    discovered_beads_runtime_state="missing"
+    discovered_beads_runtime_probe_state="filesystem"
+    discovered_beads_runtime_reason="No local .beads/config.yaml was found in the target worktree."
+    return 0
+  fi
+
+  if beads_resolve_has_local_runtime "${beads_dir}"; then
+    has_local_runtime="true"
+  fi
+  if beads_resolve_has_runtime_shell "${beads_dir}"; then
+    has_runtime_shell="true"
+  fi
+
+  if [[ "${has_local_runtime}" == "true" ]]; then
+    if run_bd_probe_for_path "${worktree_path}" true status; then
+      if [[ "${WORKTREE_READY_LAST_BD_TIMED_OUT}" == "true" ]]; then
+        discovered_beads_runtime_state="probe_unavailable"
+        discovered_beads_runtime_probe_state="timed_out"
+        discovered_beads_runtime_reason="The local plain bd status probe timed out before the target worktree proved runtime health."
+        return 0
+      fi
+
+      if [[ "${WORKTREE_READY_LAST_BD_RC}" -eq 0 ]]; then
+        discovered_beads_runtime_state="healthy"
+        discovered_beads_runtime_probe_state="ok"
+        discovered_beads_runtime_reason="The local plain bd status probe opened the target runtime successfully."
+        return 0
+      fi
+    else
+      discovered_beads_runtime_state="probe_unavailable"
+      discovered_beads_runtime_probe_state="probe_unavailable"
+      discovered_beads_runtime_reason="The local plain bd status probe could not be executed from this session."
+      return 0
+    fi
+
+    if run_system_bd_probe_for_path "${worktree_path}" true doctor --json; then
+      if [[ "${WORKTREE_READY_LAST_BD_TIMED_OUT}" == "true" ]]; then
+        discovered_beads_runtime_state="probe_unavailable"
+        discovered_beads_runtime_probe_state="timed_out"
+        discovered_beads_runtime_reason="The fallback system bd doctor probe timed out before runtime health could be confirmed."
+        return 0
+      fi
+
+      doctor_output="${WORKTREE_READY_LAST_BD_OUTPUT}"
+      if [[ "${doctor_output}" == *'database "beads" not found'* || "${doctor_output}" == *'metadata.json is missing'* ]]; then
+        discovered_beads_runtime_state="runtime_bootstrap_required"
+        discovered_beads_runtime_probe_state="doctor"
+        discovered_beads_runtime_reason="The local runtime exists only as a partial Dolt shell; the named 'beads' DB is not materialized yet."
+        return 0
+      fi
+    fi
+
+    discovered_beads_runtime_state="probe_unavailable"
+    discovered_beads_runtime_probe_state="status_failed"
+    discovered_beads_runtime_reason="The local runtime exists, but the current session could not prove that plain bd can read it safely."
+    return 0
+  fi
+
+  if [[ "${has_runtime_shell}" == "true" || ! -f "${issues_path}" ]]; then
+    discovered_beads_runtime_state="runtime_bootstrap_required"
+    discovered_beads_runtime_probe_state="filesystem"
+    discovered_beads_runtime_reason="A local Dolt-backed Beads runtime shell exists, but the named 'beads' database is not materialized yet."
+    return 0
+  fi
+
+  discovered_beads_runtime_state="partial_foundation"
+  discovered_beads_runtime_probe_state="filesystem"
+  discovered_beads_runtime_reason="Local Beads foundation files exist, but no local runtime is materialized yet."
+}
+
 resolve_guard_probe_path() {
   if [[ -n "${discovered_worktree_path}" && -d "${discovered_worktree_path}" ]]; then
     printf '%s\n' "${discovered_worktree_path}"
@@ -1744,6 +2020,8 @@ reset_report() {
   report_env_state="unknown"
   report_guard_state="unknown"
   report_beads_state="missing"
+  report_beads_runtime_state="unknown"
+  report_beads_runtime_reason=""
   report_handoff_mode="manual"
   report_requested_handoff_mode="${handoff_profile}"
   report_topology_state="${topology_registry_state}"
@@ -1787,6 +2065,12 @@ apply_discovery_to_report() {
   if [[ -n "${discovered_beads_state}" ]]; then
     report_beads_state="${discovered_beads_state}"
   fi
+  if [[ -n "${discovered_beads_runtime_state}" ]]; then
+    report_beads_runtime_state="${discovered_beads_runtime_state}"
+  fi
+  if [[ -n "${discovered_beads_runtime_reason}" ]]; then
+    report_beads_runtime_reason="${discovered_beads_runtime_reason}"
+  fi
 
   if [[ -n "${discovered_worktree_path}" && -n "${target_path}" && "${discovered_worktree_path}" != "${target_path}" ]]; then
     if [[ "${mode}" == "doctor" && "${path_preview}" != "${target_path}" ]]; then
@@ -1805,6 +2089,18 @@ apply_discovery_to_report() {
   if [[ "${discovered_beads_probe_state}" == "probe_unavailable" ]]; then
     add_warning "Beads worktree state could not be probed from this session."
   fi
+
+  case "${discovered_beads_runtime_state}" in
+    runtime_bootstrap_required)
+      add_warning "${discovered_beads_runtime_reason:-The local Beads runtime needs bootstrap repair before handoff.}"
+      ;;
+    partial_foundation)
+      add_warning "${discovered_beads_runtime_reason:-The local Beads foundation exists, but no local runtime is materialized yet.}"
+      ;;
+    probe_unavailable)
+      add_warning "${discovered_beads_runtime_reason:-The target Beads runtime could not be verified from this session.}"
+      ;;
+  esac
 }
 
 apply_guard_probe_to_report() {
@@ -1886,6 +2182,11 @@ set_readiness_status() {
     return 0
   fi
 
+  if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" || "${report_beads_runtime_state}" == "partial_foundation" ]]; then
+    report_status="action_required"
+    return 0
+  fi
+
   if report_worktree_path_exists; then
     if [[ "${report_beads_state}" == "missing" && -n "${discovered_worktree_path}" ]]; then
       add_warning "The target worktree exists, but worktree-local Beads ownership could not be confirmed."
@@ -1932,6 +2233,11 @@ set_doctor_status() {
   if [[ "${report_beads_state}" == "redirected" ]]; then
     report_status="action_required"
     add_warning "The target worktree still points at a redirected Beads tracker."
+    return 0
+  fi
+
+  if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" || "${report_beads_runtime_state}" == "partial_foundation" ]]; then
+    report_status="action_required"
     return 0
   fi
 
@@ -1983,6 +2289,11 @@ set_finish_status() {
   if [[ "${report_beads_state}" == "redirected" ]]; then
     report_status="action_required"
     add_warning "The target worktree still points at a redirected Beads tracker."
+    return 0
+  fi
+
+  if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" || "${report_beads_runtime_state}" == "partial_foundation" ]]; then
+    report_status="action_required"
     return 0
   fi
 
@@ -2161,7 +2472,10 @@ set_readiness_next_steps() {
         create|attach)
           if [[ -n "${discovered_worktree_path}" ]]; then
             add_next_step "cd $(shell_quote "${report_worktree_path}")"
-            if [[ "${report_beads_state}" == "redirected" ]]; then
+            if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" ]]; then
+              add_next_step "/usr/local/bin/bd doctor --json"
+              add_next_step "bd bootstrap"
+            elif [[ "${report_beads_runtime_state}" == "partial_foundation" || "${report_beads_state}" == "redirected" ]]; then
               add_next_step "./scripts/beads-worktree-localize.sh"
             else
               add_next_step "Inspect the existing worktree and fix the reported prerequisites"
@@ -2214,6 +2528,11 @@ set_doctor_next_steps() {
 
   if [[ "${report_guard_state}" == "drift" ]]; then
     add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
+  elif [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && /usr/local/bin/bd doctor --json"
+    add_next_step "cd $(shell_quote "${worktree_target}") && bd bootstrap"
+  elif [[ "${report_beads_runtime_state}" == "partial_foundation" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
   elif [[ "${report_guard_state}" == "missing" ]]; then
     add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
   elif [[ "${guard_probe_status}" == "script_unavailable" ]]; then
@@ -2337,7 +2656,6 @@ set_finish_next_steps() {
   local worktree_target="${report_worktree_path}"
   local plain_bd_bootstrap=""
   local close_command=""
-  local review_command=""
   local refspec=""
 
   if [[ "${branch_resolution_state}" == "missing" ]]; then
@@ -2370,6 +2688,17 @@ set_finish_next_steps() {
     return 0
   fi
 
+  if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && /usr/local/bin/bd doctor --json"
+    add_next_step "cd $(shell_quote "${worktree_target}") && bd bootstrap"
+    return 0
+  fi
+
+  if [[ "${report_beads_runtime_state}" == "partial_foundation" ]]; then
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
+    return 0
+  fi
+
   if [[ "${report_beads_state}" == "missing" && "${discovered_beads_probe_state}" == "ok" && "${worktree_target}" != "${resolved_repo_root}" ]]; then
     add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
     return 0
@@ -2385,18 +2714,11 @@ set_finish_next_steps() {
     add_next_step "${plain_bd_bootstrap}"
   fi
   add_next_step "bd preflight --check"
-  if review_command="$(build_finish_review_command "${worktree_target}")"; then
-    add_next_step "${review_command}"
-  else
-    add_next_step "bd sync"
-  fi
+  review_command="$(build_finish_review_command "${worktree_target}")"
+  add_next_step "${review_command}"
   add_next_step "$(build_finish_commit_command)"
   add_next_step "git pull --rebase"
-  if [[ -n "${review_command}" ]]; then
-    add_next_step "${review_command}"
-  else
-    add_next_step "bd sync"
-  fi
+  add_next_step "${review_command}"
   add_next_step "git push -u origin $(shell_quote "${report_branch_name}")"
 
   if close_command="$(build_finish_close_command)"; then
@@ -2601,6 +2923,10 @@ render_readiness_report() {
     render_env_kv "env_state" "${report_env_state}"
     render_env_kv "guard_state" "${report_guard_state}"
     render_env_kv "beads_state" "${report_beads_state}"
+    render_env_kv "beads_runtime_state" "${report_beads_runtime_state}"
+    if [[ -n "${report_beads_runtime_reason}" ]]; then
+      render_env_kv "beads_runtime_reason" "${report_beads_runtime_reason}"
+    fi
     render_env_kv "handoff_mode" "${report_handoff_mode}"
     render_env_kv "requested_handoff" "${report_requested_handoff_mode}"
     render_env_kv "approval_required" "${report_approval_required}"
@@ -2654,6 +2980,10 @@ render_readiness_report() {
   printf 'Env: %s\n' "${report_env_state}"
   printf 'Guard: %s\n' "${report_guard_state}"
   printf 'Beads: %s\n' "${report_beads_state}"
+  printf 'Beads Runtime: %s\n' "${report_beads_runtime_state}"
+  if [[ -n "${report_beads_runtime_reason}" ]]; then
+    printf 'Beads Runtime Reason: %s\n' "${report_beads_runtime_reason}"
+  fi
   printf 'Handoff: %s\n' "${report_handoff_mode}"
   printf 'Approval Required: %s\n' "${report_approval_required}"
   if [[ "${report_requested_handoff_mode}" != "${report_handoff_mode}" ]]; then
@@ -2696,6 +3026,10 @@ render_finish_report() {
     render_env_kv "topology_state" "${report_topology_state}"
     render_env_kv "guard_state" "${report_guard_state}"
     render_env_kv "beads_state" "${report_beads_state}"
+    render_env_kv "beads_runtime_state" "${report_beads_runtime_state}"
+    if [[ -n "${report_beads_runtime_reason}" ]]; then
+      render_env_kv "beads_runtime_reason" "${report_beads_runtime_reason}"
+    fi
     render_env_kv "close_action" "${report_close_action}"
     if [[ -n "${report_close_command}" ]]; then
       render_env_kv "close_command" "${report_close_command}"
@@ -2722,6 +3056,10 @@ render_finish_report() {
   printf 'Topology: %s\n' "${report_topology_state}"
   printf 'Guard: %s\n' "${report_guard_state}"
   printf 'Beads: %s\n' "${report_beads_state}"
+  printf 'Beads Runtime: %s\n' "${report_beads_runtime_state}"
+  if [[ -n "${report_beads_runtime_reason}" ]]; then
+    printf 'Beads Runtime Reason: %s\n' "${report_beads_runtime_reason}"
+  fi
   printf 'Close: %s\n' "${report_close_command:-${report_close_action}}"
   if [[ -n "${report_repair_command}" ]]; then
     printf 'Repair Command: %s\n' "${report_repair_command}"
@@ -3083,6 +3421,7 @@ prepare_create_context() {
 
   discover_topology_registry_state
   discover_target_state
+  discover_beads_runtime_state
   discover_guard_state
   discover_environment_state
 }
@@ -3105,6 +3444,7 @@ prepare_attach_context() {
 
   discover_topology_registry_state
   discover_target_state
+  discover_beads_runtime_state
   discover_guard_state
   discover_environment_state
 }
@@ -3132,6 +3472,7 @@ prepare_doctor_context() {
 
   discover_topology_registry_state
   discover_target_state
+  discover_beads_runtime_state
   discover_guard_state
   discover_environment_state
 }
@@ -3159,6 +3500,7 @@ prepare_finish_context() {
 
   discover_topology_registry_state
   discover_target_state
+  discover_beads_runtime_state
   discover_guard_state
   discover_environment_state
 }
@@ -3185,6 +3527,7 @@ prepare_handoff_context() {
 
   discover_topology_registry_state
   discover_target_state
+  discover_beads_runtime_state
   discover_guard_state
   discover_environment_state
 }

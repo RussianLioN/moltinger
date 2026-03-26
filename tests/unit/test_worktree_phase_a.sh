@@ -31,6 +31,11 @@ if [[ "${1:-}" == "--db" ]]; then
     : > "${db_path}"
     exit 0
   fi
+  if [[ "${1:-}" == "import" ]]; then
+    mkdir -p .beads/dolt/beads/.dolt
+    : > .beads/last-touched
+    exit 0
+  fi
 fi
 
 if [[ "${1:-}" == "list" ]]; then
@@ -38,6 +43,17 @@ if [[ "${1:-}" == "list" ]]; then
     mkdir -p "$(dirname "${BEADS_DB}")"
     : > "${BEADS_DB}"
   fi
+  exit 0
+fi
+
+if [[ "${1:-}" == "bootstrap" ]]; then
+  if [[ "${FAKE_BD_BOOTSTRAP_MODE:-success}" != "success" ]]; then
+    printf 'simulated bootstrap failure\n' >&2
+    exit 1
+  fi
+
+  mkdir -p .beads/dolt/beads/.dolt
+  printf '{"role":"maintainer"}\n' > .beads/metadata.json
   exit 0
 fi
 
@@ -105,8 +121,11 @@ test_phase_a_create_from_base_anchors_new_branch_to_main() {
     assert_eq "$base_sha" "$branch_sha" "New branch should be created exactly at canonical main"
     assert_eq "$base_sha" "$worktree_sha" "New worktree HEAD should match canonical main"
     assert_file_missing "${target_path}/.beads/redirect" "Phase A create should not leave redirect metadata in the new worktree"
-    if [[ ! -f "${target_path}/.beads/beads.db" ]]; then
-        test_fail "Phase A create should bootstrap a local beads.db in the new worktree"
+    if [[ ! -d "${target_path}/.beads/dolt/beads/.dolt" ]]; then
+        test_fail "Phase A create should bootstrap a named local Beads runtime in the new worktree"
+    fi
+    if [[ ! -f "${target_path}/.beads/last-touched" ]]; then
+        test_fail "Phase A create should import the tracked issues into the new runtime"
     fi
 
     rm -rf "$fixture_root"
@@ -150,6 +169,81 @@ test_phase_a_create_blocks_existing_branch_on_wrong_base() {
     test_pass
 }
 
+test_phase_a_create_bootstraps_runtime_shell_when_named_db_missing() {
+    test_start "worktree_phase_a_create_bootstraps_runtime_shell_when_named_db_missing"
+
+    local fixture_root repo_dir fake_bin target_path output
+    fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    target_path="${fixture_root}/moltinger-bootstrap-runtime"
+
+    mkdir -p "${repo_dir}/.beads"
+    printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
+    printf '{"id":"molt-1","title":"fixture"}\n' > "${repo_dir}/.beads/issues.jsonl"
+    printf '{"role":"maintainer"}\n' > "${repo_dir}/.beads/metadata.json"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl .beads/metadata.json
+        git commit -m "fixture: track broken dolt runtime shell" >/dev/null
+    )
+
+    output="$(run_phase_a_create "$fake_bin" \
+        --canonical-root "$repo_dir" \
+        --base-ref main \
+        --branch feat/bootstrap-runtime \
+        --path "$target_path" \
+        --format env)"
+
+    assert_contains "$output" 'result=created_from_base' "Phase A should still succeed after bootstrap repair"
+    if [[ ! -d "${target_path}/.beads/dolt/beads/.dolt" ]]; then
+        test_fail "Phase A should materialize the named beads DB when bootstrap repair is required"
+    fi
+    if [[ ! -f "${target_path}/.beads/metadata.json" ]]; then
+        test_fail "Phase A should leave bootstrap metadata in place after runtime repair"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair() {
+    test_start "worktree_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair"
+
+    local fixture_root repo_dir fake_bin target_path output rc
+    fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    target_path="${fixture_root}/moltinger-bootstrap-runtime-fail"
+
+    mkdir -p "${repo_dir}/.beads"
+    printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
+    printf '{"id":"molt-1","title":"fixture"}\n' > "${repo_dir}/.beads/issues.jsonl"
+    printf '{"role":"maintainer"}\n' > "${repo_dir}/.beads/metadata.json"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl .beads/metadata.json
+        git commit -m "fixture: track unrepaired dolt runtime shell" >/dev/null
+    )
+
+    output="$(
+        set +e
+        FAKE_BD_BOOTSTRAP_MODE="fail" run_phase_a_create "$fake_bin" \
+            --canonical-root "$repo_dir" \
+            --base-ref main \
+            --branch feat/bootstrap-runtime-fail \
+            --path "$target_path" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Phase A must fail closed when runtime bootstrap does not repair the new worktree"
+    assert_contains "$output" "named 'beads' database is not materialized yet" "Phase A must surface the runtime bootstrap blocker explicitly"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -169,6 +263,8 @@ run_all_tests() {
 
     test_phase_a_create_from_base_anchors_new_branch_to_main
     test_phase_a_create_blocks_existing_branch_on_wrong_base
+    test_phase_a_create_bootstraps_runtime_shell_when_named_db_missing
+    test_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair
     generate_report
 }
 

@@ -3,6 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/beads-resolve-db.sh
+source "${SCRIPT_DIR}/beads-resolve-db.sh"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -124,6 +127,97 @@ render_success() {
   printf 'Result: created_from_base\n'
 }
 
+phase_a_probe_localize_state() {
+  local worktree_path="$1"
+  local output=""
+  local rc=0
+
+  phase_a_localize_state=""
+  phase_a_localize_action=""
+  phase_a_localize_message=""
+  phase_a_localize_notice=""
+
+  set +e
+  output="$("${SCRIPT_DIR}/beads-worktree-localize.sh" --check --format env --path "${worktree_path}" 2>/dev/null)"
+  rc=$?
+  set -e
+
+  unset schema worktree state action db_path message notice bootstrap_source
+  eval "${output}"
+
+  phase_a_localize_state="${state:-}"
+  phase_a_localize_action="${action:-}"
+  phase_a_localize_message="${message:-}"
+  phase_a_localize_notice="${notice:-}"
+  return "${rc}"
+}
+
+phase_a_runtime_bootstrap_command() {
+  local bd_self_path="${target_path}/bin/bd"
+  local system_bd="${BEADS_SYSTEM_BD:-}"
+
+  if [[ -z "${system_bd}" ]]; then
+    if [[ ! -x "${bd_self_path}" ]]; then
+      bd_self_path="${canonical_root}/bin/bd"
+    fi
+    system_bd="$(beads_resolve_find_system_bd "${bd_self_path}")" || die "Could not locate the system bd binary for runtime bootstrap"
+  fi
+
+  printf '%s\n' "${system_bd}"
+}
+
+phase_a_fail_runtime() {
+  local state="${1:-unknown}"
+  local message="${2:-Beads runtime could not be prepared in the new worktree.}"
+  local notice="${3:-Run /usr/local/bin/bd doctor --json and bd bootstrap inside the target worktree before continuing.}"
+
+  echo "[worktree-phase-a] ${message}" >&2
+  if [[ -n "${notice}" ]]; then
+    echo "[worktree-phase-a] ${notice}" >&2
+  fi
+  echo "[worktree-phase-a] state=${state}" >&2
+  exit 23
+}
+
+phase_a_prepare_beads_runtime() {
+  local loop_count=0
+  local bootstrap_attempted="false"
+  local system_bd=""
+
+  [[ -x "${SCRIPT_DIR}/beads-worktree-localize.sh" ]] || die "Missing beads-worktree-localize.sh; cannot verify worktree-local Beads ownership"
+
+  while [[ "${loop_count}" -lt 4 ]]; do
+    loop_count=$((loop_count + 1))
+    phase_a_probe_localize_state "${target_path}" || true
+
+    case "${phase_a_localize_state}" in
+      current|post_migration_runtime_only)
+        return 0
+        ;;
+      migratable_legacy|bootstrap_required|partial_foundation)
+        "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null \
+          || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        ;;
+      runtime_bootstrap_required)
+        if [[ "${bootstrap_attempted}" == "true" ]]; then
+          phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        fi
+        system_bd="$(phase_a_runtime_bootstrap_command)"
+        (
+          cd "${target_path}"
+          "${system_bd}" bootstrap >/dev/null
+        ) || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        bootstrap_attempted="true"
+        ;;
+      *)
+        phase_a_fail_runtime "${phase_a_localize_state:-unknown}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        ;;
+    esac
+  done
+
+  phase_a_fail_runtime "${phase_a_localize_state:-unknown}" "Beads runtime did not converge to a healthy localized state during Phase A." "${phase_a_localize_notice}"
+}
+
 create_from_base() {
   local base_sha=""
   local branch_exists=0
@@ -147,10 +241,7 @@ create_from_base() {
   fi
 
   git -C "${canonical_root}" worktree add "${target_path}" "${branch}" >/dev/null
-
-  if [[ -x "${SCRIPT_DIR}/beads-worktree-localize.sh" ]]; then
-    "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null
-  fi
+  phase_a_prepare_beads_runtime
 
   head_sha="$(git -C "${target_path}" rev-parse HEAD)"
   if [[ "${head_sha}" != "${base_sha}" ]]; then
