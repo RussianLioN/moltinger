@@ -412,7 +412,7 @@ PY
         test_fail "UAT and Clawdiy workflows must explicitly block feature-branch promotion and point operators to sanctioned paths"
     fi
 
-    test_start "static_production_workflows_pass_guard_github_identity_context"
+    test_start "static_production_workflows_pass_guard_github_run_context"
     if rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$DEPLOY_WORKFLOW" && \
        rg -q 'MOLTINGER_PROD_GUARD_REPOSITORY' "$DEPLOY_WORKFLOW" && \
        rg -q 'MOLTINGER_PROD_GUARD_WORKFLOW' "$DEPLOY_WORKFLOW" && \
@@ -423,7 +423,7 @@ PY
        rg -q 'actions: read' "$CLAWDIY_WORKFLOW"; then
         test_pass
     else
-        test_fail "Production-adjacent workflows must pass GitHub identity context to the mutation guard and grant actions:read"
+        test_fail "Production-adjacent workflows must pass GitHub run context to the mutation guard and grant actions:read"
     fi
 
     test_start "static_tracked_deploy_detects_missing_json_contract_from_deploy_sh"
