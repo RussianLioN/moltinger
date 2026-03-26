@@ -13,7 +13,7 @@ create_fake_system_bd_bin() {
     local fake_bin="${fixture_root}/system-bd-bin"
 
     mkdir -p "${fake_bin}"
-    cat > "${fake_bin}/bd" <<'EOF'
+cat > "${fake_bin}/bd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -36,6 +36,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${args[0]:-}" == "bootstrap" ]]; then
+  mkdir -p ".beads/dolt/beads/.dolt"
+  printf 'BOOTSTRAP_DB=beads\n'
+  exit 0
+fi
+
+if [[ "${args[0]:-}" == "import" ]]; then
+  mkdir -p ".beads/dolt/beads/.dolt"
+  : > ".beads/last-touched"
+  printf 'IMPORTED=%s\n' "${args[1]:-}"
+  exit 0
+fi
 
 if [[ -n "${db_path}" ]]; then
   mkdir -p "$(dirname "${db_path}")"
@@ -120,6 +133,19 @@ auto-start-daemon: false
 EOF
 }
 
+seed_broken_runtime_shell_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/dolt/.dolt"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+    cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+}
+
 run_plain_bd() {
     local worktree_dir="$1"
     local fake_bin="$2"
@@ -160,6 +186,18 @@ canonicalize_path() {
         cd "${target_path}"
         pwd -P
     )
+}
+
+assert_named_beads_runtime_present() {
+    local worktree_path="$1"
+    local message="$2"
+
+    if [[ ! -d "${worktree_path}/.beads/dolt/beads/.dolt" ]]; then
+        test_fail "${message} (missing named beads runtime)"
+    fi
+    if [[ ! -f "${worktree_path}/.beads/last-touched" ]]; then
+        test_fail "${message} (missing import marker)"
+    fi
 }
 
 test_plain_bd_executes_against_worktree_local_db() {
@@ -537,6 +575,63 @@ test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state()
     test_pass
 }
 
+test_plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance() {
+    test_start "plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-broken-runtime-shell"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime-shell" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_shell_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${worktree_path}" "${fake_bin}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "Runtime shell without a named beads DB must fail closed even when tracked JSONL still exists"
+    assert_contains "${output}" "named 'beads' database is not materialized yet" "Dispatch must describe the missing named DB explicitly"
+    assert_contains "${output}" "bd bootstrap" "Dispatch must point operators to bootstrap repair for broken runtime shells"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell() {
+    test_start "localize_reports_runtime_bootstrap_required_for_broken_runtime_shell"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-broken-runtime-shell-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime-shell-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_shell_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_localize "${worktree_path}" "${fake_bin}" --check --path "${worktree_path}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "${rc}" "Localization helper must stop and report when a named DB is missing behind a Dolt runtime shell"
+    assert_contains "${output}" "State: runtime_bootstrap_required" "Localization helper must expose runtime_bootstrap_required for broken runtime shells"
+    assert_contains "${output}" "named 'beads' database is not materialized yet" "Localization helper must explain the named DB problem directly"
+    assert_contains "${output}" "bd bootstrap" "Localization helper must route broken runtime shells to bootstrap recovery"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_materializes_local_db_and_removes_redirect() {
     test_start "localize_materializes_local_db_and_removes_redirect"
 
@@ -557,9 +652,7 @@ test_localize_materializes_local_db_and_removes_redirect() {
     if [[ -f "${worktree_path}/.beads/redirect" ]]; then
         test_fail "Localization should remove legacy redirect metadata"
     fi
-    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
-        test_fail "Localization should materialize the local beads.db"
-    fi
+    assert_named_beads_runtime_present "${worktree_path}" "Localization should materialize the named local Beads runtime"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -609,9 +702,38 @@ test_localize_bootstraps_missing_foundation_from_source_ref() {
     if [[ ! -f "${worktree_path}/bin/bd" || ! -f "${worktree_path}/scripts/beads-resolve-db.sh" ]]; then
         test_fail "Bootstrap localization should restore the plain bd toolchain"
     fi
-    if [[ ! -f "${worktree_path}/.beads/beads.db" ]]; then
-        test_fail "Bootstrap localization should materialize the local beads.db"
-    fi
+    assert_named_beads_runtime_present "${worktree_path}" "Bootstrap localization should materialize the named local Beads runtime"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_blocks_stale_dolt_shell_and_routes_to_bootstrap() {
+    test_start "localize_blocks_stale_dolt_shell_and_routes_to_bootstrap"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-stale-shell-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/stale-shell-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_local_beads_foundation "${worktree_path}"
+    mkdir -p "${worktree_path}/.beads/dolt/.dolt"
+    : > "${worktree_path}/.beads/metadata.json"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "${rc}" "Localization must fail closed when a stale Dolt shell hides a missing named beads DB"
+    assert_contains "${output}" "State: runtime_bootstrap_required" "Localization must classify stale shells as runtime_bootstrap_required"
+    assert_contains "${output}" "named 'beads' database is not materialized yet" "Localization must explain the missing named DB directly"
+    assert_contains "${output}" "bd bootstrap" "Localization must route stale-shell repair through bootstrap"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -643,8 +765,11 @@ run_all_tests() {
     test_localize_recognizes_post_migration_runtime_only_state
     test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state
+    test_plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance
+    test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref
+    test_localize_blocks_stale_dolt_shell_and_routes_to_bootstrap
     generate_report
 }
 

@@ -59,24 +59,39 @@ beads_localize_notice() {
 beads_resolve_normalize_path() {
   local input_path="$1"
   local base_path="${2:-$PWD}"
+  local probe_path=""
+  local suffix=""
+  local next_probe=""
 
   if [[ -z "${input_path}" ]]; then
     return 1
   fi
 
   if [[ "${input_path}" == /* ]]; then
+    probe_path="${input_path}"
+    while [[ ! -e "${probe_path}" ]]; do
+      next_probe="$(dirname "${probe_path}")"
+      if [[ "${next_probe}" == "${probe_path}" ]]; then
+        return 1
+      fi
+      suffix="/$(basename "${probe_path}")${suffix}"
+      probe_path="${next_probe}"
+    done
+
+    if [[ ! -d "${probe_path}" ]]; then
+      suffix="/$(basename "${probe_path}")${suffix}"
+      probe_path="$(dirname "${probe_path}")"
+    fi
+
     (
-      cd "$(dirname "${input_path}")"
-      printf '%s/%s\n' "$(pwd -P)" "$(basename "${input_path}")"
+      cd "${probe_path}"
+      printf '%s%s\n' "$(pwd -P)" "${suffix}"
     )
     return 0
   fi
 
-  (
-    cd "${base_path}"
-    cd "$(dirname "${input_path}")"
-    printf '%s/%s\n' "$(pwd -P)" "$(basename "${input_path}")"
-  )
+  probe_path="${base_path}/${input_path}"
+  beads_resolve_normalize_path "${probe_path}"
 }
 
 beads_resolve_git() {
@@ -245,6 +260,22 @@ beads_resolve_is_explicit_troubleshooting() {
   return 1
 }
 
+beads_resolve_is_runtime_repair_command() {
+  local command=""
+
+  beads_resolve_extract_command "$@"
+  command="${BEADS_RESOLVE_COMMAND}"
+
+  case "${command}" in
+    bootstrap|doctor|dolt|init|backup)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 beads_resolve_requests_readonly_mode() {
   local arg=""
 
@@ -372,6 +403,21 @@ beads_resolve_has_local_runtime() {
   return 1
 }
 
+beads_resolve_has_runtime_shell() {
+  local beads_dir="$1"
+  local db_path="${beads_dir}/beads.db"
+
+  if [[ -d "${beads_dir}/dolt" || -f "${beads_dir}/metadata.json" || -f "${beads_dir}/dolt-server.port" || -f "${beads_dir}/dolt-server.pid" ]]; then
+    return 0
+  fi
+
+  if [[ -d "${db_path}" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 beads_resolve_is_repo_local_wrapper_candidate() {
   local candidate_path="$1"
   local candidate_dir=""
@@ -469,6 +515,7 @@ beads_resolve_dispatch() {
   local redirect_target=""
   local root_db_path=""
   local has_local_runtime="false"
+  local has_runtime_shell="false"
   local recovery_hint=""
   local root_cleanup_notice=""
   local migration_mode=""
@@ -560,6 +607,9 @@ beads_resolve_dispatch() {
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
   fi
+  if beads_resolve_has_runtime_shell "${beads_dir}"; then
+    has_runtime_shell="true"
+  fi
 
   if [[ -f "${redirect_path}" ]]; then
     redirect_target="$(cat "${redirect_path}")"
@@ -594,6 +644,21 @@ beads_resolve_dispatch() {
       25 \
       "bd: local Beads foundation is incomplete in ${repo_root}. Required files: .beads/config.yaml and .beads/issues.jsonl." \
       "${recovery_hint}"
+    return 0
+  fi
+
+  if [[ "${has_local_runtime}" != "true" && "${has_runtime_shell}" == "true" ]]; then
+    if beads_resolve_is_runtime_repair_command "$@"; then
+      beads_resolve_set_decision "allow_explicit_troubleshooting" "runtime_repair" 0
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "$( [[ ! -f "${issues_path}" ]] && printf '%s' "runtime_only_worktree" || printf '%s' "dedicated_worktree" )" \
+      25 \
+      "bd: local Dolt-backed Beads runtime is incomplete in ${repo_root}. A runtime shell exists, but the named 'beads' database is not materialized yet. $( [[ ! -f "${issues_path}" ]] && printf '%s' "Tracked .beads/issues.jsonl is retired here; repair the local runtime instead of restoring JSONL." || printf '%s' "Repair the local runtime in place instead of rebuilding it from legacy artifacts." )" \
+      "/usr/local/bin/bd doctor --json && bd bootstrap"
     return 0
   fi
 
