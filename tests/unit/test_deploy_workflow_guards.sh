@@ -1135,7 +1135,7 @@ test_prod_mutation_guard_rejects_spoofed_ci_context_without_github_proof() {
     fi
 
     if ! grep -Fq "Missing approved workflow identity" "$output_file" && \
-       ! grep -Fq "Unable to verify GitHub token identity" "$output_file"; then
+       ! grep -Fq "Unable to verify GitHub Actions run" "$output_file"; then
         test_fail "Spoofed CI denial should explain missing GitHub proof"
         rm -rf "$tmp_dir"
         return
@@ -1162,11 +1162,8 @@ test_prod_mutation_guard_allows_main_ci_context() {
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-  *"/user"*)
-    printf '%s\n' '{"login":"github-actions[bot]"}'
-    ;;
   *"/repos/RussianLioN/moltinger/actions/runs/12345"*)
-    printf '%s\n' '{"name":"Deploy Moltis","event":"workflow_dispatch","head_sha":"deadbeef","head_branch":"main"}'
+    printf '%s\n' '{"name":"Deploy Moltis","event":"workflow_dispatch","head_sha":"deadbeef","head_branch":"main","repository":{"full_name":"RussianLioN/moltinger"}}'
     ;;
   *)
     exit 1

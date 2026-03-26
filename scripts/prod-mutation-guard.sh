@@ -149,28 +149,23 @@ if ! command -v jq >/dev/null 2>&1; then
     deny "jq is required for production mutation guard verification."
 fi
 
-USER_JSON="$(api_get "https://api.github.com/user" 2>/dev/null || true)"
-if [[ -z "$USER_JSON" ]]; then
-    deny "Unable to verify GitHub token identity."
-fi
-
-USER_LOGIN="$(jq -r '.login // empty' <<<"$USER_JSON" 2>/dev/null || true)"
-if [[ "$USER_LOGIN" != "github-actions[bot]" ]]; then
-    deny "Guard token is not a GitHub Actions token."
-fi
-
 RUN_JSON="$(api_get "https://api.github.com/repos/$REPOSITORY_VALUE/actions/runs/${GITHUB_RUN_ID}" 2>/dev/null || true)"
 if [[ -z "$RUN_JSON" ]]; then
-    deny "Unable to verify GitHub Actions run ${GITHUB_RUN_ID}."
+    deny "Unable to verify GitHub Actions run ${GITHUB_RUN_ID} with the approved guard token."
 fi
 
 RUN_NAME="$(jq -r '.name // empty' <<<"$RUN_JSON" 2>/dev/null || true)"
 RUN_EVENT="$(jq -r '.event // empty' <<<"$RUN_JSON" 2>/dev/null || true)"
 RUN_HEAD_SHA="$(jq -r '.head_sha // empty' <<<"$RUN_JSON" 2>/dev/null || true)"
 RUN_HEAD_BRANCH="$(jq -r '.head_branch // empty' <<<"$RUN_JSON" 2>/dev/null || true)"
+RUN_REPOSITORY="$(jq -r '.repository.full_name // empty' <<<"$RUN_JSON" 2>/dev/null || true)"
 
 if [[ "$RUN_NAME" != "$WORKFLOW_VALUE" ]]; then
     deny "Guard workflow mismatch: expected '$WORKFLOW_VALUE', got '$RUN_NAME'."
+fi
+
+if [[ "$RUN_REPOSITORY" != "$REPOSITORY_VALUE" ]]; then
+    deny "Guard run repository mismatch: expected '$REPOSITORY_VALUE', got '$RUN_REPOSITORY'."
 fi
 
 if [[ "$RUN_HEAD_SHA" != "$REF_SHA" ]]; then
