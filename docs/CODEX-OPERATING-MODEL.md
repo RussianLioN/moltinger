@@ -121,8 +121,8 @@ This updates Codex session CWD metadata (`~/.codex/state_5.sqlite` + archived se
 ## Beads Ownership Policy
 
 1. Managed sibling worktrees in this repo must keep Beads tracker ownership local to the checked-out branch/worktree.
-2. `.beads/issues.jsonl` and `.beads/config.yaml` are branch-local git state; `.beads/beads.db` must resolve to the current worktree, not the canonical root.
-3. `.beads/issues.jsonl` dependency arrays must stay in deterministic canonical order; use the tracked pre-commit normalization flow and do not hand-edit reorder-only noise.
+2. `.beads/config.yaml` remains branch-local git state; `.beads/beads.db` or `.beads/dolt/` must resolve to the current worktree, not the canonical root.
+3. If tracked `.beads/issues.jsonl` is still present in a branch, treat it as a temporary compatibility/bootstrap artifact rather than the authoritative backlog source. Until the compatibility layer is fully retired, keep its dependency arrays in deterministic canonical order and do not hand-edit reorder-only noise.
 4. After the Dolt migration and local-only cleanup, an intentionally missing tracked `.beads/issues.jsonl` does not mean the backlog is gone; the operational source of truth may live only in the local Dolt-backed Beads runtime.
 5. Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion or proof that the backlog is unavailable.
 6. When that happens, agents should keep using the local Beads database for read-only task inspection (`bd status`, `bd list`, `bd ready`, `bd show`) and describe any failure as a local Beads repair problem rather than falling back to ad-hoc plan files as the primary backlog.

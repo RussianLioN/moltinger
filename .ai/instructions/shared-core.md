@@ -55,6 +55,7 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 
 - The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
 - Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
+- If tracked `.beads/issues.jsonl` is still present in a branch, treat it as a temporary compatibility/bootstrap artifact, not as the authoritative backlog source after the Dolt migration.
 - Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion. Continue with local `bd` read-only inspection first.
 - Do not treat a bare `.beads/dolt/` directory as proof that the local runtime is healthy. If the named `beads` DB is missing, classify it as local runtime repair drift and recover with `/usr/local/bin/bd doctor --json` followed by `bd bootstrap`; do not restore `.beads/issues.jsonl`.
 - For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.

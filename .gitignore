@@ -16,7 +16,7 @@ config/provider_keys.json
 .telegram-web-state.json
 data/.telegram-web-state.json
 
-# Beads local (but track issues.jsonl for sync)
+# Beads local. Keep config tracked; issues.jsonl remains temporarily tracked only as a compatibility/bootstrap artifact.
 .beads/*
 !.beads/issues.jsonl
 !.beads/config.yaml
