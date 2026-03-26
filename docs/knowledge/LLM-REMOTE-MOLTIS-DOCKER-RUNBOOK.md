@@ -49,6 +49,9 @@ If `/opt/moltinger` is dirty, deploy from a separate server-side worktree.
 7. Never let cron/systemd point directly at a historical worktree.
 All installed automation must execute via `/opt/moltinger-active`, which is a symlink to the current live deploy root.
 
+8. Never let sibling browser sandboxes use a container-only profile path.
+When Moltis talks to the host Docker socket from inside a container, browser profile bind sources like `/home/moltis/.moltis/...` are interpreted on the host, not inside the Moltis container. In this deployment, keep `[tools.browser] profile_dir = "/tmp/moltis-browser-profile/shared"`, mount `/tmp/moltis-browser-profile` into the Moltis container at the same absolute path, and prepare it writable before deploy.
+
 ## Canonical Deploy Sequence
 
 ### 1. Inspect the live state first
@@ -89,14 +92,19 @@ cd /opt/moltinger-jb6-gpt54-primary
 ln -sfn /opt/moltinger-jb6-gpt54-primary /opt/moltinger-active
 ```
 
-## 3. Back up runtime config before touching the container
+## 3. Back up runtime config and runtime home before touching the container
 
 ```bash
 mkdir -p /var/backups/moltis/manual-hotfix
 cp -a /opt/moltinger-state/config-runtime /var/backups/moltis/manual-hotfix/config-runtime.$(date +%s) 2>/dev/null || true
+docker run --rm -v moltis-data:/from -v /var/backups/moltis/manual-hotfix:/to alpine \
+  sh -c 'tar -czf /to/moltis-data.$(date +%s).tar.gz -C /from .'
 ```
 
-This is required because `oauth_tokens.json` lives there.
+This is required because:
+
+- `oauth_tokens.json` and `provider_keys.json` live in runtime config
+- sessions, memory, and other durable runtime state live under `~/.moltis`
 
 ## 4. Prepare runtime config from static config
 
@@ -218,6 +226,71 @@ The strongest user-facing proof is:
 - prompt returns successfully
 - logs confirm the same model
 
+## Runtime Attestation
+
+Before calling a deploy, repair, or drift investigation "done", prove that the live container
+still runs from the intended deploy root rather than only looking at `/health`.
+
+Canonical command:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-runtime-attestation.sh \
+  --json \
+  --deploy-path /opt/moltinger \
+  --active-path /opt/moltinger-active \
+  --container moltis \
+  --base-url http://localhost:13131 \
+  --expected-runtime-config-dir /opt/moltinger-state/config-runtime | jq .
+```
+
+What this attests:
+
+- `/opt/moltinger-active` is still the authoritative live-root symlink
+- container `working_dir` is still `/server`
+- live `/server` mount source matches the resolved active root target
+- live runtime config mount source still matches `MOLTIS_RUNTIME_CONFIG_DIR` and remains writable
+- live runtime `moltis.toml` still matches tracked `config/moltis.toml`
+- durable `~/.moltis` mount still exists
+- `data/.deployed-sha` and `data/.deployment-info` still match live git SHA/ref and runtime version
+
+For periodic drift detection, do not override expected SHA/ref/version from repo HEAD. Let the attestation
+read deployed markers from the active root so scheduled checks validate the live runtime against what is
+actually deployed, not against a newer commit that may not be on the server yet.
+
+If this check fails, treat it as runtime provenance drift first. Do not jump straight to
+fresh OAuth or provider reconfiguration.
+
+## Search And Memory Triage
+
+Before changing providers or re-authing anything for search/memory symptoms, take a read-only snapshot first.
+
+Tracked contract only:
+
+```bash
+cd /opt/moltinger-active
+bash ./scripts/moltis-search-memory-diagnostics.sh --config ./config/moltis.toml
+```
+
+Tracked contract plus recent runtime log sample:
+
+```bash
+docker exec moltis sh -lc 'tail -n 400 /server/data/logs.jsonl' >/tmp/moltis-runtime.log
+cd /opt/moltinger-active
+bash ./scripts/moltis-search-memory-diagnostics.sh \
+  --config ./config/moltis.toml \
+  --log-file /tmp/moltis-runtime.log
+```
+
+Interpretation rules:
+
+- if `risk_summary.tavily_transport_unstable=true`, treat Tavily SSE as a live blocker even when `/health` and basic chat remain green
+- if `openai_embeddings_endpoint_mismatch_suspected=true`, do not assume OpenAI OAuth is broken; `memory_search` is likely hitting the Z.ai Coding endpoint with an embeddings path it does not support
+- if `groq_runtime_drift_suspected=true` while tracked env does not provide a Groq key, treat it as stale runtime/provider drift until proven otherwise
+- if `memory_provider_autodetect=true` and `memory_missing_watch_dirs=true`, memory is still nondeterministic even before vector backfill work starts
+- if `/opt/moltinger-state/config-runtime/moltis.toml` differs from `/opt/moltinger-active/config/moltis.toml`, fix runtime config drift first; otherwise `memory_search` can keep using old auto-detect settings even when tracked config is already correct
+- if the running `moltis` container does not expose `OLLAMA_API_KEY`, do not expect `ollama::...:cloud` chat models to appear in the live provider catalog
+
 Useful live log filter:
 
 ```bash
@@ -230,6 +303,14 @@ Expected proof lines:
 - `starting streaming agent loop provider="openai-codex"`
 - `openai-codex stream_with_tools request model=gpt-5.4`
 - `agent run complete ... response=OK`
+
+Fast live checks for this specific incident class:
+
+```bash
+diff -u /opt/moltinger-active/config/moltis.toml /opt/moltinger-state/config-runtime/moltis.toml | sed -n '1,160p'
+docker exec moltis sh -lc 'env | grep ^OLLAMA_API_KEY= || true'
+docker exec moltis sh -lc 'curl -sf http://ollama:11434/api/tags'
+```
 
 ## Known Failure Patterns And Fixes
 
@@ -285,7 +366,44 @@ Likely cause:
 
 Fix:
 
-- open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
+- operator path:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-session-reconcile.sh --session-key main
+bash ./scripts/moltis-session-reconcile.sh --session-key main --apply
+```
+
+- UI fallback:
+  - open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
+
+### Symptom: Telegram still replies with an old model or `Activity log ...` after OAuth/runtime recovery
+
+Likely cause:
+
+- the active Telegram-bound session still carries stale session-level model/context state
+
+Fix:
+
+- operator dry-run:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-session-reconcile.sh --telegram-chat-id 262872984
+```
+
+- operator apply:
+
+```bash
+cd /opt/moltinger
+bash ./scripts/moltis-session-reconcile.sh --telegram-chat-id 262872984 --apply
+```
+
+- what it does:
+  - resolves the unique active Telegram-bound session for that chat id
+  - patches the session to `openai-codex::gpt-5.4`
+  - resets the same session to clear contaminated tool/context history
+- rerun authoritative Telegram `/status` and confirm the reply itself mentions `openai-codex::gpt-5.4`
 
 ### Symptom: Traefik looks healthy, but chat still fails
 
@@ -318,10 +436,12 @@ Do not do any of the following:
 - [ ] `oauth_tokens.json` exists in runtime config dir
 - [ ] `docker exec moltis moltis auth status` is healthy
 - [ ] Container survives restart without losing auth
+- [ ] `moltis-session-reconcile.sh` dry-run resolves the expected UI/Telegram session after provider recovery
 - [ ] UI loads cleanly
 - [ ] WebSocket handshake completes
 - [ ] `GPT 5.4 (Codex/OAuth)` is selectable
 - [ ] Live prompt succeeds on `openai-codex::gpt-5.4`
+- [ ] UAT gate surface matrix passes for browser/search/repo-context
 
 ## Final Instruction To Future LLM Sessions
 
