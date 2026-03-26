@@ -384,21 +384,81 @@ inventory_add_pilot_aware_surface() {
 inventory_run_bd_command() {
   local repo_root="$1"
   shift
-
-  (
-    cd "${repo_root}"
-    "$@" 2>/dev/null
-  )
+  inventory_run_bd_probe "${repo_root}" false "$@"
+  printf '%s' "${INVENTORY_LAST_COMMAND_OUTPUT}"
+  return "${INVENTORY_LAST_COMMAND_RC}"
 }
 
 inventory_run_bd_command_capture() {
   local repo_root="$1"
   shift
+  inventory_run_bd_probe "${repo_root}" true "$@"
+  printf '%s' "${INVENTORY_LAST_COMMAND_OUTPUT}"
+  return "${INVENTORY_LAST_COMMAND_RC}"
+}
+
+inventory_run_bd_probe() {
+  local repo_root="$1"
+  local capture_stderr="$2"
+  shift 2
+
+  local timeout_seconds="${BEADS_INVENTORY_BD_TIMEOUT_SECONDS:-8}"
+  local stdout_file=""
+  local stderr_file=""
+  local timed_out_file=""
+  local command_pid=""
+  local watchdog_pid=""
+  local rc=0
+  local output=""
+
+  stdout_file="$(mktemp)"
+  stderr_file="$(mktemp)"
+  timed_out_file="$(mktemp)"
 
   (
     cd "${repo_root}"
-    "$@" 2>&1
-  )
+    "$@" >"${stdout_file}" 2>"${stderr_file}"
+  ) &
+  command_pid=$!
+
+  (
+    sleep "${timeout_seconds}"
+    if kill -0 "${command_pid}" 2>/dev/null; then
+      printf 'true\n' >"${timed_out_file}"
+      kill -TERM "${command_pid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL "${command_pid}" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  set +e
+  wait "${command_pid}"
+  rc=$?
+  set -e
+
+  kill "${watchdog_pid}" 2>/dev/null || true
+  wait "${watchdog_pid}" 2>/dev/null || true
+
+  INVENTORY_LAST_COMMAND_OUTPUT="$(cat "${stdout_file}")"
+  if [[ "${capture_stderr}" == "true" ]]; then
+    output="$(cat "${stderr_file}")"
+    if [[ -n "${output}" ]]; then
+      if [[ -n "${INVENTORY_LAST_COMMAND_OUTPUT}" ]]; then
+        INVENTORY_LAST_COMMAND_OUTPUT+=$'\n'
+      fi
+      INVENTORY_LAST_COMMAND_OUTPUT+="${output}"
+    fi
+  fi
+
+  INVENTORY_LAST_COMMAND_TIMED_OUT="false"
+  INVENTORY_LAST_COMMAND_RC="${rc}"
+  if [[ -s "${timed_out_file}" ]]; then
+    INVENTORY_LAST_COMMAND_TIMED_OUT="true"
+    INVENTORY_LAST_COMMAND_RC=124
+  fi
+
+  rm -f "${stdout_file}" "${stderr_file}" "${timed_out_file}"
 }
 
 inventory_doctor_check_field() {
@@ -414,9 +474,17 @@ inventory_collect_runtime_surfaces() {
   local normalized_command_path=""
   local bd_version=""
   local info_output=""
+  local info_rc="0"
+  local info_timed_out="false"
   local info_fallback_output=""
+  local info_fallback_rc="0"
+  local info_fallback_timed_out="false"
   local backend_output=""
+  local backend_rc="0"
+  local backend_timed_out="false"
   local doctor_json=""
+  local doctor_rc="0"
+  local doctor_timed_out="false"
   local doctor_backend=""
   local doctor_database_status=""
   local doctor_database_message=""
@@ -468,7 +536,8 @@ inventory_collect_runtime_surfaces() {
     command_signals+=("command-missing")
   fi
 
-  bd_version="$(inventory_run_bd_command "${report_repo_root}" bd --version || true)"
+  inventory_run_bd_probe "${report_repo_root}" false bd --version
+  bd_version="${INVENTORY_LAST_COMMAND_OUTPUT}"
   if [[ -n "${bd_version}" ]]; then
     command_signals+=("version:${bd_version}")
   fi
@@ -485,9 +554,15 @@ inventory_collect_runtime_surfaces() {
     "${command_reason}" \
     "$(inventory_json_array_from_args "${command_signals[@]:-}")"
 
-  info_output="$(inventory_run_bd_command "${report_repo_root}" bd --no-daemon info || true)"
-  if [[ -z "${info_output}" ]]; then
-    info_fallback_output="$(inventory_run_bd_command_capture "${report_repo_root}" bd info || true)"
+  inventory_run_bd_probe "${report_repo_root}" false bd --no-daemon info
+  info_output="${INVENTORY_LAST_COMMAND_OUTPUT}"
+  info_rc="${INVENTORY_LAST_COMMAND_RC}"
+  info_timed_out="${INVENTORY_LAST_COMMAND_TIMED_OUT}"
+  if [[ -z "${info_output}" && "${info_timed_out}" != "true" ]]; then
+    inventory_run_bd_probe "${report_repo_root}" true bd info
+    info_fallback_output="${INVENTORY_LAST_COMMAND_OUTPUT}"
+    info_fallback_rc="${INVENTORY_LAST_COMMAND_RC}"
+    info_fallback_timed_out="${INVENTORY_LAST_COMMAND_TIMED_OUT}"
     if [[ -n "${info_fallback_output}" ]]; then
       info_output="${info_fallback_output}"
       info_signals+=("fallback:bd-info")
@@ -544,6 +619,15 @@ inventory_collect_runtime_surfaces() {
       info_reason_detail="Read-only no-daemon info produced a non-standard Beads database path that still needs migration review."
       info_signals+=("non-standard-db")
     fi
+  elif [[ "${info_timed_out}" == "true" ]]; then
+    info_signals+=("info-timeout")
+    info_reason_detail="Could not collect 'bd --no-daemon info' from the current worktree because the probe timed out after ${BEADS_INVENTORY_BD_TIMEOUT_SECONDS:-8}s."
+  elif [[ "${info_fallback_timed_out}" == "true" ]]; then
+    info_signals+=("fallback:bd-info")
+    info_signals+=("info-fallback-timeout")
+    info_reason_detail="Fallback 'bd info' timed out after ${BEADS_INVENTORY_BD_TIMEOUT_SECONDS:-8}s while probing the current worktree."
+  elif [[ "${info_rc}" != "0" || "${info_fallback_rc}" != "0" ]]; then
+    info_signals+=("info-command-failed")
   else
     info_signals+=("info-command-failed")
   fi
@@ -560,9 +644,15 @@ inventory_collect_runtime_surfaces() {
     "${info_reason_detail}" \
     "$(inventory_json_array_from_args "${info_signals[@]:-}")"
 
-  backend_output="$(inventory_run_bd_command "${report_repo_root}" bd backend show || true)"
-  if [[ -z "${backend_output}" ]]; then
-    doctor_json="$(inventory_run_bd_command_capture "${report_repo_root}" bd doctor --json || true)"
+  inventory_run_bd_probe "${report_repo_root}" false bd backend show
+  backend_output="${INVENTORY_LAST_COMMAND_OUTPUT}"
+  backend_rc="${INVENTORY_LAST_COMMAND_RC}"
+  backend_timed_out="${INVENTORY_LAST_COMMAND_TIMED_OUT}"
+  if [[ -z "${backend_output}" && "${backend_timed_out}" != "true" ]]; then
+    inventory_run_bd_probe "${report_repo_root}" true bd doctor --json
+    doctor_json="${INVENTORY_LAST_COMMAND_OUTPUT}"
+    doctor_rc="${INVENTORY_LAST_COMMAND_RC}"
+    doctor_timed_out="${INVENTORY_LAST_COMMAND_TIMED_OUT}"
     if [[ -n "${doctor_json}" ]] && printf '%s\n' "${doctor_json}" | jq -e . >/dev/null 2>&1; then
       backend_probe_succeeded="true"
       backend_signals+=("fallback:doctor-json")
@@ -652,6 +742,13 @@ inventory_collect_runtime_surfaces() {
       backend_reason_detail="Backend metadata already matches a Dolt-native worktree-local target."
       backend_signals+=("backend-ready")
     fi
+  elif [[ "${backend_timed_out}" == "true" ]]; then
+    backend_signals+=("backend-show-timeout")
+    backend_reason_detail="Could not collect 'bd backend show' from the current worktree because the probe timed out after ${BEADS_INVENTORY_BD_TIMEOUT_SECONDS:-8}s."
+  elif [[ "${doctor_timed_out}" == "true" ]]; then
+    backend_signals+=("fallback:doctor-json")
+    backend_signals+=("doctor-json-timeout")
+    backend_reason_detail="Fallback 'bd doctor --json' timed out after ${BEADS_INVENTORY_BD_TIMEOUT_SECONDS:-8}s while probing the current worktree."
   elif [[ "${backend_probe_succeeded}" != "true" ]]; then
     backend_signals+=("backend-command-failed")
   fi
