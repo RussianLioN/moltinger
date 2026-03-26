@@ -654,21 +654,21 @@ reset_on_exit = true              # Reset serve/funnel when gateway shuts down
 [memory]
 llm_reranking = false
 session_export = false
-# provider = "local"              # Embedding provider:
+provider = "ollama"              # Pin embeddings to Ollama instead of chat-provider auto-detect
                                   #   "local"   - Built-in local embeddings
                                   #   "ollama"  - Ollama server
                                   #   "openai"  - OpenAI API
                                   #   "custom"  - Custom endpoint
                                   #   (none)    - Auto-detect from available providers
-# base_url = "http://localhost:11434/v1"  # API endpoint for embeddings
-# model = "nomic-embed-text"      # Embedding model name
+base_url = "http://ollama:11434"  # Root Ollama endpoint keeps model probes/pulls on /api/* working in Docker
+model = "nomic-embed-text"       # Lightweight embedding model verified on the live Ollama sidecar
 # api_key = "..."                 # API key (optional for local endpoints like Ollama)
 
 # Knowledge base directories for RAG (semantic search)
-# watch_dirs = [
-#   "~/.moltis/memory",           # Default memory location
-#   "/server/knowledge",          # Project knowledge base
-# ]
+watch_dirs = [
+  "~/.moltis/memory",            # Default memory location
+  "/server/knowledge",           # Project knowledge base
+]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CHANNELS

@@ -31,6 +31,7 @@ HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
+RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 
@@ -202,6 +203,24 @@ PY
         test_fail "Primary Moltis config must use container-visible /server paths for codex-update skill code and ~/.moltis paths for writable state"
     fi
 
+    test_start "static_config_pins_memory_provider_and_repo_watch_dirs"
+    if rg -Fq 'provider = "ollama"' "$TOML_CONFIG" && \
+       rg -Fq 'base_url = "http://ollama:11434"' "$TOML_CONFIG" && \
+       rg -Fq 'model = "nomic-embed-text"' "$TOML_CONFIG" && \
+       rg -Fq '"~/.moltis/memory"' "$TOML_CONFIG" && \
+       rg -Fq '"/server/knowledge"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must pin the memory embeddings backend, use the root Ollama endpoint for model probes, and keep repo-visible watch_dirs instead of relying on auto-detect"
+    fi
+
+    test_start "static_moltis_compose_forwards_ollama_cloud_key_to_runtime"
+    if rg -Fq 'OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}' "$COMPOSE_PROD"; then
+        test_pass
+    else
+        test_fail "Production Moltis container must receive OLLAMA_API_KEY so cloud-backed Ollama chat models can appear in the runtime provider catalog"
+    fi
+
     test_start "static_codex_cli_update_delivery_script_is_executable"
     if [[ -x "$PROJECT_ROOT/scripts/codex-cli-update-delivery.sh" ]]; then
         test_pass
@@ -340,10 +359,11 @@ PY
     test_start "static_deploy_script_scopes_moltis_rollout_to_core_and_sidecars"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        rg -Fq 'TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'compose_cmd normal up -d --remove-orphans "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
+       rg -Fq 'deploy_args+=(--force-recreate)' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Moltis deploy path must target only moltis + required sidecars so unrelated monitoring services cannot block tracked upgrades"
+        test_fail "Moltis deploy path must target only moltis + required sidecars and force-recreate the runtime so config changes take effect immediately"
     fi
 
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
@@ -501,6 +521,29 @@ PY
         test_pass
     else
         test_fail "UAT gate must derive the Moltis version from git and deploy only through the shared tracked deploy entrypoint backed by deploy.sh"
+    fi
+
+    test_start "static_tracked_deploy_attests_live_runtime_provenance"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'moltis-runtime-attestation.sh' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq '"attest-live-runtime"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'runtime_attestation' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy control-plane must attest live runtime provenance through the shared runtime attestation script"
+    fi
+
+    test_start "static_runtime_contract_enforces_tracked_runtime_config_parity"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'runtime moltis.toml diverges from tracked config/moltis.toml' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'RUNTIME_CONFIG_FILE_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy verification and runtime attestation must fail closed when live runtime moltis.toml drifts from tracked config/moltis.toml"
     fi
 
     test_start "static_production_workflows_share_remote_lock_group"
