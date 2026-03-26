@@ -54,6 +54,23 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+create_fake_repo_local_bd_wrapper_bin() {
+    local wrapper_root="$1"
+
+    mkdir -p "${wrapper_root}/bin" "${wrapper_root}/scripts"
+    cat > "${wrapper_root}/bin/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'WRONG_WRAPPER=%s\n' "$0"
+exit 97
+EOF
+    chmod +x "${wrapper_root}/bin/bd"
+    : > "${wrapper_root}/scripts/beads-resolve-db.sh"
+
+    printf '%s\n' "${wrapper_root}/bin"
+}
+
 seed_repo_local_bd_tools() {
     local repo_dir="$1"
 
@@ -86,7 +103,17 @@ EOF
 seed_pilot_ready_dolt_foundation() {
     local worktree_dir="$1"
 
-    mkdir -p "${worktree_dir}/.beads/beads.db"
+    mkdir -p "${worktree_dir}/.beads/beads.db" "${worktree_dir}/.beads/dolt/beads/.dolt"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+}
+
+seed_broken_runtime_only_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/dolt/.dolt"
     cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
 issue-prefix: "demo"
 auto-start-daemon: false
@@ -101,6 +128,17 @@ run_plain_bd() {
     (
         cd "${worktree_dir}"
         PATH="${worktree_dir}/bin:${fake_bin}:$PATH" bd "$@"
+    )
+}
+
+run_plain_bd_with_path_prefix() {
+    local worktree_dir="$1"
+    local path_prefix="$2"
+    shift 2
+
+    (
+        cd "${worktree_dir}"
+        PATH="${path_prefix}:$PATH" bd "$@"
     )
 }
 
@@ -142,6 +180,35 @@ test_plain_bd_executes_against_worktree_local_db() {
 
     assert_contains "${output}" "DB=${expected_db}" "Plain bd should pin the local worktree DB"
     assert_contains "${output}" "ARGS=info" "Plain bd should forward the original arguments"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_skips_sibling_repo_wrapper_when_finding_system_bd() {
+    test_start "plain_bd_skips_sibling_repo_wrapper_when_finding_system_bd"
+
+    local fixture_root repo_dir worktree_path fake_bin sibling_wrapper_bin output rc expected_db
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-safe-worktree"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/safe-local" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_local_beads_foundation "${worktree_path}"
+    sibling_wrapper_bin="$(create_fake_repo_local_bd_wrapper_bin "${fixture_root}/sibling-wrapper")"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_db="${worktree_path}/.beads/beads.db"
+
+    output="$(
+        set +e
+        run_plain_bd_with_path_prefix "${worktree_path}" "${worktree_path}/bin:${sibling_wrapper_bin}:${fake_bin}" info 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Plain bd should skip sibling repo-local wrappers while resolving the system bd"
+    assert_contains "${output}" "DB=${expected_db}" "Plain bd should still pin the local worktree DB after skipping sibling wrappers"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -412,6 +479,64 @@ test_localize_recognizes_post_migration_runtime_only_state() {
     test_pass
 }
 
+test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance() {
+    test_start "plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-broken-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_only_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${worktree_path}" "${fake_bin}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "Runtime-only worktrees with a missing beads named DB must fail closed"
+    assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "Dispatch must classify the failure as runtime repair, not backlog loss"
+    assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "Dispatch must keep retired JSONL retired during runtime repair"
+    assert_contains "${output}" "bd bootstrap" "Dispatch must point operators to the official bootstrap recovery path"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state() {
+    test_start "localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-broken-runtime-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_only_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_localize "${worktree_path}" "${fake_bin}" --check --path "${worktree_path}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "${rc}" "Localization helper must stop and report when a runtime-only worktree needs bootstrap repair"
+    assert_contains "${output}" "State: runtime_bootstrap_required" "Localization helper must expose a dedicated runtime-bootstrap-required state"
+    assert_contains "${output}" "bd bootstrap" "Localization helper must point operators to bootstrap recovery"
+    assert_contains "${output}" "Do not restore JSONL" "Localization helper must preserve retired JSONL semantics during repair"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_materializes_local_db_and_removes_redirect() {
     test_start "localize_materializes_local_db_and_removes_redirect"
 
@@ -504,6 +629,7 @@ run_all_tests() {
     fi
 
     test_plain_bd_executes_against_worktree_local_db
+    test_plain_bd_skips_sibling_repo_wrapper_when_finding_system_bd
     test_canonical_root_plain_bd_allows_read_only_commands
     test_canonical_root_plain_bd_blocks_mutation_by_default
     test_canonical_root_plain_bd_allows_explicit_root_db_override
@@ -515,6 +641,8 @@ run_all_tests() {
     test_plain_bd_allows_mutation_for_post_migration_runtime_only_state
     test_plain_bd_blocks_deprecated_sync_with_modern_guidance
     test_localize_recognizes_post_migration_runtime_only_state
+    test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance
+    test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref
     generate_report

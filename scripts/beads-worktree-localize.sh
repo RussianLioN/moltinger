@@ -183,6 +183,14 @@ classify_state() {
     return 0
   fi
 
+  if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
+    report_state="runtime_bootstrap_required"
+    report_action="stop_and_report"
+    report_message="Tracked .beads/issues.jsonl is already retired for this worktree, but the local Dolt-backed Beads runtime is incomplete."
+    report_notice="Run /usr/local/bin/bd doctor --json first, then bd bootstrap. Do not restore JSONL."
+    return 0
+  fi
+
   if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
     report_state="partial_foundation"
     report_action="rebuild_local_foundation"
@@ -245,6 +253,9 @@ localize_state() {
       ;;
     post_migration_runtime_only)
       return 0
+      ;;
+    runtime_bootstrap_required)
+      return 1
       ;;
     migratable_legacy)
       rm -f "${redirect_path}"

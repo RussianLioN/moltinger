@@ -354,8 +354,38 @@ beads_resolve_has_local_runtime() {
   local beads_dir="$1"
   local db_path="${beads_dir}/beads.db"
   local dolt_dir="${beads_dir}/dolt"
+  local db_entry=""
 
-  [[ -e "${db_path}" || -d "${dolt_dir}" ]]
+  if [[ -f "${db_path}" || -L "${db_path}" ]]; then
+    return 0
+  fi
+
+  if [[ -d "${dolt_dir}/beads" || -d "${dolt_dir}/beads/.dolt" ]]; then
+    return 0
+  fi
+
+  if [[ -d "${db_path}" ]]; then
+    db_entry="$(find "${db_path}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)"
+    [[ -n "${db_entry}" ]] && return 0
+  fi
+
+  return 1
+}
+
+beads_resolve_is_repo_local_wrapper_candidate() {
+  local candidate_path="$1"
+  local candidate_dir=""
+  local candidate_repo_root=""
+
+  [[ -n "${candidate_path}" ]] || return 1
+  [[ "$(basename "${candidate_path}")" == "bd" ]] || return 1
+
+  candidate_dir="$(dirname "${candidate_path}")"
+  [[ "$(basename "${candidate_dir}")" == "bin" ]] || return 1
+
+  candidate_repo_root="$(cd "${candidate_dir}/.." && pwd -P 2>/dev/null || true)"
+  [[ -n "${candidate_repo_root}" ]] || return 1
+  [[ -f "${candidate_repo_root}/scripts/beads-resolve-db.sh" ]]
 }
 
 beads_resolve_is_migration_legacy_command() {
@@ -524,6 +554,9 @@ beads_resolve_dispatch() {
   redirect_path="${beads_dir}/redirect"
   root_db_path="${canonical_root}/.beads/beads.db"
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
+  if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
+    recovery_hint="/usr/local/bin/bd doctor --json && bd bootstrap"
+  fi
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
   fi
@@ -573,6 +606,27 @@ beads_resolve_dispatch() {
     return 0
   fi
 
+  if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
+    if [[ -f "${root_db_path}" ]]; then
+      beads_resolve_set_decision \
+        "block_root_fallback" \
+        "runtime_only_worktree" \
+        24 \
+        "bd: local Dolt-backed Beads runtime is incomplete in ${repo_root}, and falling back to the canonical root tracker is blocked." \
+        "${recovery_hint}" \
+        "Tracked .beads/issues.jsonl is retired in this state; repair the local runtime instead of restoring JSONL."
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "runtime_only_worktree" \
+      25 \
+      "bd: local Dolt-backed Beads runtime is incomplete in ${repo_root}. Tracked .beads/issues.jsonl is retired here; repair the local runtime instead of restoring JSONL." \
+      "${recovery_hint}"
+    return 0
+  fi
+
   if [[ ! -f "${issues_path}" ]]; then
     if [[ -f "${root_db_path}" ]]; then
       beads_resolve_set_decision \
@@ -618,6 +672,10 @@ beads_resolve_find_system_bd() {
 
     candidate_real="$(beads_resolve_normalize_path "${candidate}")"
     if [[ "${candidate_real}" == "${self_real}" ]]; then
+      continue
+    fi
+
+    if beads_resolve_is_repo_local_wrapper_candidate "${candidate_real}"; then
       continue
     fi
 

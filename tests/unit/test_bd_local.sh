@@ -34,7 +34,14 @@ seed_local_beads_state() {
 seed_post_migration_runtime_state() {
     local repo_dir="$1"
 
-    mkdir -p "${repo_dir}/.beads/beads.db"
+    mkdir -p "${repo_dir}/.beads/beads.db" "${repo_dir}/.beads/dolt/beads/.dolt"
+    printf 'issue-prefix: "demo"\n' > "${repo_dir}/.beads/config.yaml"
+}
+
+seed_broken_post_migration_runtime_state() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads/dolt/.dolt"
     printf 'issue-prefix: "demo"\n' > "${repo_dir}/.beads/config.yaml"
 }
 
@@ -173,6 +180,35 @@ test_bd_local_blocks_deprecated_sync_with_modern_guidance() {
     test_pass
 }
 
+test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
+    test_start "bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance"
+
+    local fixture_root repo_dir worktree_path output rc
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-broken-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime" "main"
+
+    install_fake_bd "${worktree_path}"
+    seed_broken_post_migration_runtime_state "${worktree_path}"
+
+    output="$(
+        set +e
+        cd "${worktree_path}"
+        "${WRAPPER_SCRIPT}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "bd-local must fail closed when the Dolt runtime exists only as an incomplete shell"
+    assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "bd-local must describe the failure as a runtime repair problem"
+    assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "bd-local must not ask operators to restore retired JSONL"
+    assert_contains "${output}" "bd bootstrap" "bd-local must point operators to bootstrap recovery for runtime-only failures"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -195,6 +231,7 @@ run_all_tests() {
     test_bd_local_blocks_missing_foundation_files
     test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl
     test_bd_local_blocks_deprecated_sync_with_modern_guidance
+    test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance
     generate_report
 }
 
