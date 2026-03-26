@@ -32,6 +32,18 @@ Use `refresh --write-doc` only for explicit topology snapshot publication from a
 In Codex/App sessions, `refresh --write-doc` may require approval if the shared repo `.git` directory is outside the current writable boundary.
 Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
+## Post-Close Task Classification
+
+If the active branch/worktree has already completed its planned tasks and the user brings a new task, do not continue in the same lane by default.
+
+- First classify the request with `docs/rules/post-close-task-classification-and-worktree-escalation.md`.
+- Default heuristic:
+  - same root cause + same slice + same owning lane + no scope expansion => current lane may continue
+  - otherwise => open a new lane
+- If the slice is already logically closed or already merged, and the new task touches `rules`, `AGENTS.md`, `skills`, auth, CI, deploy, runtime, topology, or other shared contracts, you must use a fresh branch/worktree from `main`.
+- Narrow fixes inside the same active, unmerged slice that already owns those files may stay in the current lane.
+- If the criteria conflict or the risk is ambiguous, use the `consilium` skill/workflow before choosing the lane.
+
 ## Quick Reference
 
 ```bash
@@ -49,13 +61,14 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 
 - The intended ownership model is worktree-local: the source of truth is the current worktree's `.beads/` state, not a shared redirect in canonical `main`.
 - Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
+- If tracked `.beads/issues.jsonl` is still present in a branch, treat it as a temporary compatibility/bootstrap artifact, not as the authoritative backlog source after the Dolt migration.
 - Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion. Continue with local `bd` read-only inspection first.
 - Do not treat a bare `.beads/dolt/` directory as proof that the local runtime is healthy. If the named `beads` DB is missing, classify it as local runtime repair drift and recover with `/usr/local/bin/bd doctor --json` followed by `bd bootstrap`; do not restore `.beads/issues.jsonl`.
 - For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.
-- `bd sync` is retired in this branch too. Use `bd status` for local inspection, and use `bd dolt push` / `bd dolt pull` only when this worktree is configured with a Dolt remote.
-- If a preserved sibling worktree still cannot open local Beads state after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. First run `/usr/local/bin/bd doctor --json`, then repair with `bd init && bd backup restore` or `bd bootstrap` as appropriate.
-- Branch note for `031-moltis-reliability-diagnostics`: this worktree was recovered from a local Dolt branch-switch failure on 2026-03-21. If `bd` regresses to `database "beads" not found` while `.beads/backup/` still exists, treat it as local Dolt DB bootstrap drift, not backlog loss. Repair the local runtime from `.beads/backup`, keep `.beads/issues.jsonl` retired, and do not reintroduce legacy `bd sync`.
-- If a dedicated worktree reports missing or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree.
+- `bd sync` is retired in this repository. Use `bd status` for local inspection, and use `bd dolt push` / `bd dolt pull` only when this worktree is configured with a Dolt remote.
+- If a preserved sibling worktree still reports incomplete local foundation after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. If ownership is already local but the runtime cannot open the named `beads` DB, run `/usr/local/bin/bd doctor --json` first and then `bd bootstrap`. Use `./scripts/beads-worktree-localize.sh --path .` only for missing, redirected, or legacy ownership state.
+- Branch note for `031-moltis-reliability-diagnostics`: this worktree previously regressed to `database "beads" not found` after a local Dolt branch-switch failure. Treat that as local runtime bootstrap drift, not backlog loss. Start with `/usr/local/bin/bd doctor --json`, prefer `bd bootstrap`, and only reach for backup restore if the sanctioned bootstrap path cannot repair the runtime.
+- If a dedicated worktree reports missing, redirected, or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree. If ownership is already local but runtime health is broken, stop and repair the runtime instead of re-localizing ownership.
 - Do not replace the Beads backlog with ad-hoc plan files just because `.beads/issues.jsonl` is absent; use plans only as supplemental execution context.
 - Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.
 
@@ -130,7 +143,7 @@ Forbidden:
    git push
    git status  # MUST show "up to date with origin"
    ```
-   If the project still uses an explicit remote Dolt sync step, run `bd dolt push` before `git push`.
+   If a Dolt remote is configured for the project, run `bd dolt push` before `git push`.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
@@ -140,14 +153,6 @@ Forbidden:
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
-## Completion Report Format
-
-For every task-completion report to the user, include:
-
-- A brief plain-language summary of what was done and what outcome was achieved.
-- A current checklist or status snapshot showing what is done, what remains, and any blocked items.
-- A proposed next step and why it is the right next move. If no next step is needed, say that explicitly.
 
 ## Codex Adapter
 

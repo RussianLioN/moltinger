@@ -158,7 +158,8 @@ run_static_beads_worktree_ownership_tests() {
     if rg -q 'plain `bd`' "$QUICKSTART_RU" && \
        rg -q 'plain `bd`' "$QUICKSTART_EN" && \
        rg -q 'plain `bd`' "$BEADS_SKILL" && \
-       ! rg -q 'bd-local' "$QUICKSTART_RU" "$QUICKSTART_EN" "$BEADS_SKILL" "$BEADS_COMMAND_QUICKREF" "$BEADS_WORKFLOWS"; then
+       ! rg -q 'bd-local' "$QUICKSTART_RU" "$QUICKSTART_EN" "$BEADS_SKILL" "$BEADS_COMMAND_QUICKREF" "$BEADS_WORKFLOWS" && \
+       ! rg -q 'bd sync' "$BEADS_SKILL"; then
         test_pass
     else
         test_fail "High-traffic Beads docs must use the plain bd contract without wrapper-choice drift"
@@ -168,7 +169,8 @@ run_static_beads_worktree_ownership_tests() {
     if [[ -f "$WORKTREE_COMMAND" ]] && \
        rg -q 'plain `bd`' "$WORKTREE_COMMAND" && \
        rg -q 'Issue: n/a' "$WORKTREE_COMMAND" && \
-       ! rg -q 'bd-local\.sh' "$WORKTREE_COMMAND"; then
+       ! rg -q 'bd-local\.sh' "$WORKTREE_COMMAND" && \
+       ! rg -q 'bd sync' "$WORKTREE_COMMAND"; then
         test_pass
     else
         test_fail "Ordinary worktree/finish contract must use plain bd and skip close when issue resolution is ambiguous"

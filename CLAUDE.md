@@ -58,7 +58,8 @@ Run `check` before branch cleanup, worktree operations, or session handoff. Run 
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-In this repository, ordinary repo-local Beads work should use plain `bd`. The repo-local shim in `bin/bd` keeps dedicated-worktree ownership local, and `./scripts/bd-local.sh` remains a compatibility helper only when you need an explicit recovery/troubleshooting path.
+In this repository, ordinary repo-local Beads work should use plain `bd`. The repo-local shim in `bin/bd` keeps dedicated-worktree ownership local and is the only supported entrypoint.
+If a worktree has `.beads/dolt/` but Beads still cannot open the local backlog, apply `docs/rules/beads-dolt-runtime-shell-is-not-a-healthy-runtime.md` before restoring any JSONL artifact.
 
 ## Quick Reference
 
@@ -67,7 +68,8 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd status             # Inspect the current Beads state
+bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
 ```
 
 ## ⚠️ Pre-Change Checklists
@@ -210,7 +212,7 @@ ANY command with exit code != 0
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd status
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -595,7 +597,7 @@ bd close ID --reason "Done"        # Complete task
 /push patch                        # Commit
 
 # END (MANDATORY!)
-bd sync
+bd status
 git push
 ```
 

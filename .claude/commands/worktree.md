@@ -313,6 +313,7 @@ Related diagnostics rules:
 - If a branch exists but no worktree is attached, route the user back into the managed attach flow instead of suggesting raw `bd worktree create`.
 - Distinguish missing readiness state from unavailable probes: do not claim beads or guard are missing when the probe itself could not be executed.
 - If the Beads probe shows missing local ownership in an existing dedicated worktree, route recovery through `./scripts/beads-worktree-localize.sh --path <worktree>` and keep any canonical-root cleanup note separate from that recovery step.
+- If Beads ownership is already local but the target runtime still cannot open the named `beads` DB, route recovery through `/usr/local/bin/bd doctor --json` followed by `bd bootstrap`; do not send that case through generic localize guidance.
 
 ## Finish Workflow
 
@@ -328,12 +329,12 @@ Process:
 3. Run quality gate:
    - `bd preflight --check`
    - if unavailable, fallback to project default fast checks.
-4. `bd sync`
+4. `bd status`
 5. If working tree has changes:
    - create commit message (short, include issue id)
    - `git add -A && git commit -m "..."`
 6. `git pull --rebase`
-7. `bd sync`
+7. `bd status`
 8. `git push -u origin <current-branch>`
 9. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
    - if stale, report: `Publish the topology snapshot later from a dedicated non-main topology-publish worktree/branch using command-git-topology or scripts/git-topology-registry.sh refresh --write-doc`
