@@ -46,7 +46,7 @@ canonical_root="$(cd "${repo_root}" && cd "$(git rev-parse --git-common-dir)/.."
 
 if [[ "${1:-}" == "--version" ]]; then
   case "${mode}" in
-    modern-dolt-missing)
+    modern-dolt-missing|modern-dolt-hanging-doctor)
       printf 'bd version 0.61.0 (fixture)\n'
       ;;
     *)
@@ -94,6 +94,12 @@ Install from: https://docs.dolthub.com/introduction/installation
 EOT
       exit 1
       ;;
+    modern-dolt-hanging-doctor)
+      cat >&2 <<'EOT'
+Error: failed to open database: Dolt server unreachable at 127.0.0.1:0 and auto-start failed: pending local runtime bootstrap
+EOT
+      exit 1
+      ;;
   esac
 fi
 
@@ -116,6 +122,9 @@ Current backend: dolt
 EOT
       ;;
     modern-dolt-missing)
+      exit 1
+      ;;
+    modern-dolt-hanging-doctor)
       exit 1
       ;;
     *)
@@ -156,6 +165,10 @@ if [[ "${1:-}" == "doctor" && "${2:-}" == "--json" ]]; then
   }
 }
 EOT
+      exit 0
+      ;;
+    modern-dolt-hanging-doctor)
+      sleep "${FAKE_BD_DOCTOR_SLEEP_SECONDS:-3}"
       exit 0
       ;;
   esac
@@ -375,6 +388,33 @@ test_inventory_uses_doctor_json_fallback_for_modern_bd() {
     test_pass
 }
 
+test_inventory_times_out_hanging_doctor_probe() {
+    test_start "inventory_times_out_hanging_doctor_probe"
+
+    local fixture_root repo_dir fake_bin json
+    fixture_root="$(mktemp -d /tmp/beads-dolt-inventory.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    git_topology_fixture_seed_beads_migration_surface_layout "${repo_dir}" legacy
+    git_topology_fixture_seed_legacy_jsonl_first_state "${repo_dir}"
+    seed_inventory_script "${repo_dir}"
+    commit_fixture_state "${repo_dir}" "fixture: seed hanging doctor fallback state"
+    fake_bin="$(create_fake_inventory_bd_bin "${fixture_root}")"
+
+    json="$(
+        BEADS_INVENTORY_BD_TIMEOUT_SECONDS=1 \
+        FAKE_BD_DOCTOR_SLEEP_SECONDS=3 \
+        run_inventory "${repo_dir}" "${fake_bin}" modern-dolt-hanging-doctor --format json
+    )"
+
+    assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .classification' "blocked" "A hanging doctor fallback must still classify backend state as blocked"
+    assert_json_array_contains "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .signals' "fallback:doctor-json" "Timed-out fallback must still record doctor-json fallback intent"
+    assert_json_array_contains "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .signals' "doctor-json-timeout" "Timed-out doctor fallback must emit an explicit timeout signal"
+    assert_json_value "${json}" '.surfaces[] | select(.id == "runtime.backend_state") | .reason' "Fallback 'bd doctor --json' timed out after 1s while probing the current worktree." "Timed-out doctor fallback must surface bounded timeout guidance"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_inventory_machine_readable_report_can_pass_pilot_gate() {
     test_start "inventory_machine_readable_report_can_pass_pilot_gate"
 
@@ -418,6 +458,7 @@ run_test_beads_dolt_inventory() {
     test_inventory_detects_blocked_sibling_and_bootstrap_variance
     test_inventory_scopes_pilot_gate_to_current_worktree
     test_inventory_uses_doctor_json_fallback_for_modern_bd
+    test_inventory_times_out_hanging_doctor_probe
     test_inventory_machine_readable_report_can_pass_pilot_gate
     generate_report
 }
