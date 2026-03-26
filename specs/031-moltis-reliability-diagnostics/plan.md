@@ -157,13 +157,16 @@ Because production deploys are blocked from feature branches, incident closure m
   - `tests/component/test_moltis_runtime_attestation.sh`
   - `tests/component/test_moltis_search_memory_diagnostics.sh`
 
-`PR2` should stay deferred until after successful live verification from `main` and carry the mutable post-incident knowledge layer:
+As of 2026-03-26, `PR1` has been merged to `main`, the canonical production deploy from `main` succeeded, and the authoritative remote runtime has proven the fix via successful live `memory_search` plus Ollama provider/model availability checks.
+
+`PR2` should stay deferred until after successful live verification from `main` and carry the mutable post-incident knowledge layer through a fresh docs-only carrier based on the verified `main` state, not by opening this mixed-scope branch directly:
 
 - RCA / consilium / rules / runbook updates
 - lessons index tooling and lessons content
 - Speckit artifact finalization that depends on live outcome wording
 - any browser/Tavily or other reliability hardening not strictly required to clear the current embedding/Ollama blocker
 - do not blindly drag unrelated browser/Tavily/runtime-hardening commits from this branch into `PR1`; if they are still desired, land them later as separate reviewed work after the current blocker is closed
+- do not open `PR2` directly from `031-moltis-reliability-diagnostics`; materialize a narrow docs/process carrier from `main` so the deferred learning layer stays reviewable and rollback-safe
 
 ### Phase 5 - Remaining Live-Only Remediation
 

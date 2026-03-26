@@ -1,0 +1,2422 @@
+diff --git a/docs/LESSONS-LEARNED.md b/docs/LESSONS-LEARNED.md
+index 3381969..2540aca 100644
+--- a/docs/LESSONS-LEARNED.md
++++ b/docs/LESSONS-LEARNED.md
+@@ -1,7 +1,7 @@
+ # Lessons Learned (Auto-generated)
+ 
+-**Generated**: 2026-03-24
+-**Total Lessons**: 49
++**Generated**: 2026-03-26
++**Total Lessons**: 58
+ 
+ ---
+ 
+@@ -14,8 +14,10 @@
+ #### P0 (1 lessons)
+ - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
+ 
+-#### P1 (19 lessons)
++#### P1 (21 lessons)
++- [Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together](../docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md)
+ - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
++- [Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies](../docs/rca/2026-03-21-moltis-telegram-session-context-drift.md)
+ - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
+ - [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
+ - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
+@@ -35,7 +37,8 @@
+ - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
+ - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
+ 
+-#### P2 (19 lessons)
++#### P2 (20 lessons)
++- [Moltis auth and durable runtime state drifted because ownership was split across tracked config, rendered env, and backup inventory](../docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md)
+ - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
+ - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
+ - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
+@@ -56,8 +59,14 @@
+ - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
+ - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
+ 
+-#### P3 (9 lessons)
++#### P3 (15 lessons)
++- [PR2 docs carrier drifted because patch generation targeted the wrong base and ignored new docs](../docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md)
++- [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
++- [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
++- [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
+ - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
++- [2026-03-20-production-deploy-collision-guard](../docs/rca/2026-03-20-production-deploy-collision-guard.md)
++- [2026-03-20-pr76-policy-and-contract-drift](../docs/rca/2026-03-20-pr76-policy-and-contract-drift.md)
+ - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
+ - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
+ - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
+@@ -98,15 +107,25 @@
+ - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
+ - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
+ 
+-#### generic (5 lessons)
++#### configuration (2 lessons)
++- [Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together](../docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md)
++- [Moltis auth and durable runtime state drifted because ownership was split across tracked config, rendered env, and backup inventory](../docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md)
++
++#### generic (8 lessons)
++- [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
++- [2026-03-20-production-deploy-collision-guard](../docs/rca/2026-03-20-production-deploy-collision-guard.md)
++- [2026-03-20-pr76-policy-and-contract-drift](../docs/rca/2026-03-20-pr76-policy-and-contract-drift.md)
+ - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
+ - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
+ - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
+ - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
+ - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
+ 
+-#### process (15 lessons)
++#### process (18 lessons)
++- [PR2 docs carrier drifted because patch generation targeted the wrong base and ignored new docs](../docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md)
++- [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
+ - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
++- [Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies](../docs/rca/2026-03-21-moltis-telegram-session-context-drift.md)
+ - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
+ - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
+ - [Moltis update proposal had contract drift: manual compare fallback existed in code but was not formalized as governance contract](../docs/rca/2026-03-20-moltis-update-proposal-manual-compare-contract-governance.md)
+@@ -125,7 +144,8 @@
+ #### security (1 lessons)
+ - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
+ 
+-#### shell (6 lessons)
++#### shell (7 lessons)
++- [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
+ - [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
+ - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
+ - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
+@@ -136,16 +156,16 @@
+ 
+ ### Popular Tags
+ 
+-- `gitops` (15 lessons)
++- `gitops` (18 lessons)
++- `rca` (15 lessons)
++- `moltis` (14 lessons)
++- `deploy` (14 lessons)
+ - `github-actions` (13 lessons)
+-- `deploy` (13 lessons)
++- `lessons` (12 lessons)
+ - `cicd` (11 lessons)
+-- `process` (9 lessons)
+-- `moltis` (9 lessons)
+-- `lessons` (9 lessons)
+-- `rca` (8 lessons)
++- `process` (10 lessons)
+ - `clawdiy` (8 lessons)
+-- `openclaw` (6 lessons)
++- `telegram` (7 lessons)
+ 
+ 
+ ---
+@@ -154,10 +174,10 @@
+ 
+ | Metric | Value |
+ |--------|-------|
+-| Total Lessons | 49 |
+-| Critical (P0/P1) | 20 |
+-| Categories | 5 |
+-| Unique Tags | 113 |
++| Total Lessons | 58 |
++| Critical (P0/P1) | 22 |
++| Categories | 6 |
++| Unique Tags | 130 |
+ 
+ ---
+ 
+diff --git a/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md b/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md
+index 7bd8c03..e130a5d 100644
+--- a/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md
++++ b/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md
+@@ -49,6 +49,9 @@ If `/opt/moltinger` is dirty, deploy from a separate server-side worktree.
+ 7. Never let cron/systemd point directly at a historical worktree.
+ All installed automation must execute via `/opt/moltinger-active`, which is a symlink to the current live deploy root.
+ 
++8. Never let sibling browser sandboxes use a container-only profile path.
++When Moltis talks to the host Docker socket from inside a container, browser profile bind sources like `/home/moltis/.moltis/...` are interpreted on the host, not inside the Moltis container. In this deployment, keep `[tools.browser] profile_dir = "/tmp/moltis-browser-profile/shared"`, mount `/tmp/moltis-browser-profile` into the Moltis container at the same absolute path, and prepare it writable before deploy.
++
+ ## Canonical Deploy Sequence
+ 
+ ### 1. Inspect the live state first
+@@ -89,14 +92,19 @@ cd /opt/moltinger-jb6-gpt54-primary
+ ln -sfn /opt/moltinger-jb6-gpt54-primary /opt/moltinger-active
+ ```
+ 
+-## 3. Back up runtime config before touching the container
++## 3. Back up runtime config and runtime home before touching the container
+ 
+ ```bash
+ mkdir -p /var/backups/moltis/manual-hotfix
+ cp -a /opt/moltinger-state/config-runtime /var/backups/moltis/manual-hotfix/config-runtime.$(date +%s) 2>/dev/null || true
++docker run --rm -v moltis-data:/from -v /var/backups/moltis/manual-hotfix:/to alpine \
++  sh -c 'tar -czf /to/moltis-data.$(date +%s).tar.gz -C /from .'
+ ```
+ 
+-This is required because `oauth_tokens.json` lives there.
++This is required because:
++
++- `oauth_tokens.json` and `provider_keys.json` live in runtime config
++- sessions, memory, and other durable runtime state live under `~/.moltis`
+ 
+ ## 4. Prepare runtime config from static config
+ 
+@@ -218,6 +226,71 @@ The strongest user-facing proof is:
+ - prompt returns successfully
+ - logs confirm the same model
+ 
++## Runtime Attestation
++
++Before calling a deploy, repair, or drift investigation "done", prove that the live container
++still runs from the intended deploy root rather than only looking at `/health`.
++
++Canonical command:
++
++```bash
++cd /opt/moltinger
++bash ./scripts/moltis-runtime-attestation.sh \
++  --json \
++  --deploy-path /opt/moltinger \
++  --active-path /opt/moltinger-active \
++  --container moltis \
++  --base-url http://localhost:13131 \
++  --expected-runtime-config-dir /opt/moltinger-state/config-runtime | jq .
++```
++
++What this attests:
++
++- `/opt/moltinger-active` is still the authoritative live-root symlink
++- container `working_dir` is still `/server`
++- live `/server` mount source matches the resolved active root target
++- live runtime config mount source still matches `MOLTIS_RUNTIME_CONFIG_DIR` and remains writable
++- live runtime `moltis.toml` still matches tracked `config/moltis.toml`
++- durable `~/.moltis` mount still exists
++- `data/.deployed-sha` and `data/.deployment-info` still match live git SHA/ref and runtime version
++
++For periodic drift detection, do not override expected SHA/ref/version from repo HEAD. Let the attestation
++read deployed markers from the active root so scheduled checks validate the live runtime against what is
++actually deployed, not against a newer commit that may not be on the server yet.
++
++If this check fails, treat it as runtime provenance drift first. Do not jump straight to
++fresh OAuth or provider reconfiguration.
++
++## Search And Memory Triage
++
++Before changing providers or re-authing anything for search/memory symptoms, take a read-only snapshot first.
++
++Tracked contract only:
++
++```bash
++cd /opt/moltinger-active
++bash ./scripts/moltis-search-memory-diagnostics.sh --config ./config/moltis.toml
++```
++
++Tracked contract plus recent runtime log sample:
++
++```bash
++docker exec moltis sh -lc 'tail -n 400 /server/data/logs.jsonl' >/tmp/moltis-runtime.log
++cd /opt/moltinger-active
++bash ./scripts/moltis-search-memory-diagnostics.sh \
++  --config ./config/moltis.toml \
++  --log-file /tmp/moltis-runtime.log
++```
++
++Interpretation rules:
++
++- if `risk_summary.tavily_transport_unstable=true`, treat Tavily SSE as a live blocker even when `/health` and basic chat remain green
++- if `openai_embeddings_endpoint_mismatch_suspected=true`, do not assume OpenAI OAuth is broken; `memory_search` is likely hitting the Z.ai Coding endpoint with an embeddings path it does not support
++- if `groq_runtime_drift_suspected=true` while tracked env does not provide a Groq key, treat it as stale runtime/provider drift until proven otherwise
++- if `memory_provider_autodetect=true` and `memory_missing_watch_dirs=true`, memory is still nondeterministic even before vector backfill work starts
++- if `/opt/moltinger-state/config-runtime/moltis.toml` differs from `/opt/moltinger-active/config/moltis.toml`, fix runtime config drift first; otherwise `memory_search` can keep using old auto-detect settings even when tracked config is already correct
++- if the running `moltis` container does not expose `OLLAMA_API_KEY`, do not expect `ollama::...:cloud` chat models to appear in the live provider catalog
++
+ Useful live log filter:
+ 
+ ```bash
+@@ -231,6 +304,14 @@ Expected proof lines:
+ - `openai-codex stream_with_tools request model=gpt-5.4`
+ - `agent run complete ... response=OK`
+ 
++Fast live checks for this specific incident class:
++
++```bash
++diff -u /opt/moltinger-active/config/moltis.toml /opt/moltinger-state/config-runtime/moltis.toml | sed -n '1,160p'
++docker exec moltis sh -lc 'env | grep ^OLLAMA_API_KEY= || true'
++docker exec moltis sh -lc 'curl -sf http://ollama:11434/api/tags'
++```
++
+ ## Known Failure Patterns And Fixes
+ 
+ ### Symptom: UI floods with `Handshake failed: WebSocket disconnected`
+@@ -285,7 +366,44 @@ Likely cause:
+ 
+ Fix:
+ 
+-- open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
++- operator path:
++
++```bash
++cd /opt/moltinger
++bash ./scripts/moltis-session-reconcile.sh --session-key main
++bash ./scripts/moltis-session-reconcile.sh --session-key main --apply
++```
++
++- UI fallback:
++  - open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
++
++### Symptom: Telegram still replies with an old model or `Activity log ...` after OAuth/runtime recovery
++
++Likely cause:
++
++- the active Telegram-bound session still carries stale session-level model/context state
++
++Fix:
++
++- operator dry-run:
++
++```bash
++cd /opt/moltinger
++bash ./scripts/moltis-session-reconcile.sh --telegram-chat-id 262872984
++```
++
++- operator apply:
++
++```bash
++cd /opt/moltinger
++bash ./scripts/moltis-session-reconcile.sh --telegram-chat-id 262872984 --apply
++```
++
++- what it does:
++  - resolves the unique active Telegram-bound session for that chat id
++  - patches the session to `openai-codex::gpt-5.4`
++  - resets the same session to clear contaminated tool/context history
++- rerun authoritative Telegram `/status` and confirm the reply itself mentions `openai-codex::gpt-5.4`
+ 
+ ### Symptom: Traefik looks healthy, but chat still fails
+ 
+@@ -318,10 +436,12 @@ Do not do any of the following:
+ - [ ] `oauth_tokens.json` exists in runtime config dir
+ - [ ] `docker exec moltis moltis auth status` is healthy
+ - [ ] Container survives restart without losing auth
++- [ ] `moltis-session-reconcile.sh` dry-run resolves the expected UI/Telegram session after provider recovery
+ - [ ] UI loads cleanly
+ - [ ] WebSocket handshake completes
+ - [ ] `GPT 5.4 (Codex/OAuth)` is selectable
+ - [ ] Live prompt succeeds on `openai-codex::gpt-5.4`
++- [ ] UAT gate surface matrix passes for browser/search/repo-context
+ 
+ ## Final Instruction To Future LLM Sessions
+ 
+diff --git a/docs/rca/2026-03-21-moltis-openai-oauth-runtime-drift.md b/docs/rca/2026-03-21-moltis-openai-oauth-runtime-drift.md
+new file mode 100644
+index 0000000..e9a38c1
+--- /dev/null
++++ b/docs/rca/2026-03-21-moltis-openai-oauth-runtime-drift.md
+@@ -0,0 +1,113 @@
++---
++title: "Moltis lost OpenAI Codex OAuth at runtime because production was still running an old mainline checkout and old compose contract"
++date: 2026-03-21
++status: closed
++tags: [moltis, oauth, openai-codex, gpt-5.4, gitops, deploy, runtime-drift, rca]
++---
++
++# RCA: Moltis lost OpenAI Codex OAuth at runtime because production was still running an old mainline checkout and old compose contract
++
++## Summary
++
++Production Moltis on `ainetic.tech` stopped exposing `openai-codex::gpt-5.4`, even though the OAuth token store still existed on disk.
++
++The live failure was not “OAuth expired” and not “OpenAI auth code was removed from git”.
++The actual problem was operational drift:
++
++- `/opt/moltinger` on the server was still on old `main` commit `3cf6a5c`
++- old `docker-compose.prod.yml` mounted `./config:/home/moltis/.config/moltis:ro`
++- the running container therefore did **not** mount `/opt/moltinger-state/config-runtime`
++- `oauth_tokens.json` still existed in `/opt/moltinger-state/config-runtime`, but live Moltis was not reading it
++- the live runtime config also lacked `openai-codex` in `[providers].offered`
++
++Once the server checkout was moved to tracked branch `031-moltis-reliability-diagnostics`, `MOLTIS_VERSION=latest` was removed from `.env`, and tracked deploy was re-run, Moltis came back with:
++
++- `/server` mounted
++- `/home/moltis/.config/moltis` mounted from `/opt/moltinger-state/config-runtime`
++- `openai-codex [valid ... remaining]`
++- successful live canary on `openai-codex::gpt-5.4`
++
++## Error
++
++OpenAI Codex OAuth appeared “broken” in production Moltis, and chat requests were failing with model-not-found symptoms even though OAuth had worked earlier.
++
++## 5 Whys
++
++### 1. Why did Moltis report that `openai-codex::gpt-5.4` was not available?
++
++Because the live runtime provider surface no longer included `openai-codex`, so chat fell back to a stale or incompatible provider/model view.
++
++### 2. Why did the live runtime provider surface no longer include `openai-codex`?
++
++Because the running container was reading an old `moltis.toml` from `/opt/moltinger/config`, and that config only offered `openai` (Z.ai) rather than the later GitOps `openai-codex -> ollama -> zai` chain.
++
++### 3. Why was the running container reading `/opt/moltinger/config` instead of the runtime config dir?
++
++Because the server was still running an old `docker-compose.prod.yml` that mounted `./config:/home/moltis/.config/moltis:ro` and did not mount `/server` or `${MOLTIS_RUNTIME_CONFIG_DIR}`.
++
++### 4. Why was production still on that old compose contract?
++
++Because the server checkout `/opt/moltinger` had drifted to an old `main` commit (`3cf6a5c`) instead of the tracked branch/commit where the `gpt-5.4` OAuth path and writable runtime config contract were already established.
++
++### 5. Why did that drift survive long enough to look like an auth outage?
++
++Because the live runtime still had a preserved `oauth_tokens.json`, but deploy/runtime verification had not yet forced the container to prove it was actually mounted to the runtime config dir. The token store survived, but the container was disconnected from it.
++
++## Root Cause
++
++Production was not running the tracked GitOps checkout and compose contract that carries the canonical Moltis OAuth path.
++
++The real breakage was:
++
++1. old server checkout on `main`
++2. old read-only config mount
++3. missing `/server` workspace mount
++4. stale runtime config without `openai-codex`
++
++OAuth state itself still existed and became valid again as soon as the runtime was reattached to the correct config mount.
++
++## Evidence
++
++- Server checkout before repair: `/opt/moltinger` on branch `main`, commit `3cf6a5c`
++- Old compose on server mounted only:
++  - `./config:/home/moltis/.config/moltis:ro`
++  - `moltis-data:/home/moltis/.moltis`
++  - `/var/run/docker.sock:/var/run/docker.sock:ro`
++- Preserved token store found at:
++  - `/opt/moltinger-state/config-runtime/oauth_tokens.json`
++- Running container after repair mounts:
++  - `/opt/moltinger -> /server (ro)`
++  - `/opt/moltinger-state/config-runtime -> /home/moltis/.config/moltis (rw)`
++- `docker exec moltis moltis auth status` after repair:
++  - `openai-codex [valid (... remaining)]`
++- Live canary after repair returned final response:
++  - provider `openai-codex`
++  - model `openai-codex::gpt-5.4`
++  - text `OK`
++
++## Corrective Actions
++
++1. Moved the server checkout to tracked branch `031-moltis-reliability-diagnostics` at commit `bb2e04e6f542797671d40b2c4d409f2aaf22cc01`.
++2. Removed `MOLTIS_VERSION=latest` override from `/opt/moltinger/.env`.
++3. Re-ran tracked deploy, which prepared `/opt/moltinger-state/config-runtime` while preserving `oauth_tokens.json`.
++4. Verified:
++   - runtime config mount source
++   - `/server` mount
++   - `openai-codex` auth status
++   - live chat canary on `gpt-5.4`
++
++## Preventive Actions
++
++1. Keep tracked deploy/runtime contract verification enabled so a container with healthy `/health` but wrong mounts fails deploy.
++2. Do not keep `MOLTIS_VERSION` in `.env`; version must live only in tracked compose files.
++3. When Moltis OAuth “disappears”, check mounts and active checkout before starting a fresh OAuth login.
++4. Preserve `oauth_tokens.json` only in `${MOLTIS_RUNTIME_CONFIG_DIR}`, never in git-synced `config/`.
++
++## Operator Notes
++
++- This incident looked like an authentication regression but was actually a GitOps/runtime drift incident.
++- Re-auth was **not** required for recovery.
++- The correct first checks for future incidents are:
++  1. `git branch --show-current && git rev-parse HEAD` in `/opt/moltinger`
++  2. `docker inspect moltis --format '{{json .Mounts}}'`
++  3. `docker exec moltis moltis auth status`
+diff --git a/docs/rca/2026-03-21-moltis-telegram-session-context-drift.md b/docs/rca/2026-03-21-moltis-telegram-session-context-drift.md
+new file mode 100644
+index 0000000..9e88536
+--- /dev/null
++++ b/docs/rca/2026-03-21-moltis-telegram-session-context-drift.md
+@@ -0,0 +1,65 @@
++---
++title: "Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies"
++date: 2026-03-21
++severity: P1
++category: process
++tags: [moltis, telegram, session-state, model-routing, context-drift, oauth, rca]
++root_cause: "After provider recovery, the active Telegram-bound session still carried an old session model and contaminated tool context, but the recovery path did not explicitly reconcile/reset that channel session."
++---
++
++# RCA: Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies
++
++**Дата:** 2026-03-21  
++**Статус:** Resolved  
++**Влияние:** После восстановления `openai-codex` в runtime Telegram-путь всё ещё давал неверные пользовательские ответы: `/status` сообщал `zai::glm-5`, а затем authoritative UAT мог видеть reply вида `Activity log • nodes_list • sessions_list • cron`, хотя сама OAuth уже была исправна.
++
++## Ошибка
++
++Runtime-auth и provider catalog уже были восстановлены, но Telegram active session для чата `262872984` продолжала жить со stale session state:
++
++- `sessions.list` показывал `activeChannel=true` для `session:a59b6137-6531-4046-91c2-f7ee13a3c9da`
++- эта сессия была на `openai-codex::gpt-5.3-codex-spark`, а не на canonical `openai-codex::gpt-5.4`
++- `sessions.preview` подтверждал, что `/status` был сгенерирован провайдером `openai-codex`, но сам текст ответа утверждал `модель: zai::glm-5`
++- позднее authoritative Telegram UAT получил reply `Activity log • nodes_list • sessions_list • cron`, то есть сессия уже тащила за собой загрязнённый tool/error context
++
++## Анализ 5 Почему
++
++| Уровень | Вопрос | Ответ | Evidence |
++|---------|--------|-------|----------|
++| 1 | Почему Telegram продолжал отвечать некорректно после восстановления OAuth? | Потому что отвечал не свежий runtime baseline, а уже существующая channel-bound session с собственным сохранённым model/context state. | `sessions.list`: активная channel session `session:a59b...` для `chat_id=262872984`. |
++| 2 | Почему эта session state осталась неверной? | Потому что session-level модель была закреплена на `openai-codex::gpt-5.3-codex-spark`, а не на canonical `openai-codex::gpt-5.4`. | `sessions.list` / `sessions.patch key-only` до фикса показывали `model="openai-codex::gpt-5.3-codex-spark"`. |
++| 3 | Почему пользователь видел `zai::glm-5`, хотя сам ответ шёл через `openai-codex`? | Потому что сессия несла старый conversational/tool context, и модель опиралась на него при генерации `/status`, а не на актуальный session contract. | `sessions.preview`: assistant message с `provider="openai-codex"` и `model="openai-codex::gpt-5.3-codex-spark"` содержал текст `модель: zai::glm-5`. |
++| 4 | Почему после patch на `gpt-5.4` reply всё ещё мог быть плохим? | Потому что кроме неверной model selection в active session уже накопился tool/error контекст (`sessions_list`, `nodes_list`, `cron` без `action`), который продолжал протекать в новые ответы. | authoritative run `20260321T210206Z-684954`: reply `Activity log • nodes_list • sessions_list • cron`. |
++| 5 | Почему этот хвост не был частью стандартного recovery path? | Потому что recovery path был сосредоточен на provider/runtime mounts, но не содержал обязательного шага reconcile/reset для активной Telegram channel session после provider recovery. | Предыдущий runbook фиксировал runtime recovery, но не session repair для Telegram-bound channel state. |
++
++## Корневая причина
++
++После восстановления provider/runtime слоя активная Telegram channel session осталась на старом session-level model/context состоянии. Recovery process возвращал `openai-codex` в runtime, но не выравнивал и не очищал именно ту channel-bound session, через которую продолжал общаться Telegram.
++
++## Принятые меры
++
++1. **Session model repair:**
++   - `sessions.patch` для active Telegram session:
++     - `key = session:a59b6137-6531-4046-91c2-f7ee13a3c9da`
++     - `model = openai-codex::gpt-5.4`
++2. **Session context cleanup:**
++   - `sessions.reset` для той же active session, чтобы убрать загрязнённый tool/error context.
++3. **UAT hardening:**
++   - `scripts/telegram-web-user-probe.mjs` теперь классифицирует replies, начинающиеся с `Activity log ...`, и tool-error summaries вроде `missing 'action' parameter` как error signatures, а не как валидный ответ.
++   - Добавлен regression test в `tests/component/test_telegram_web_probe_correlation.sh`.
++
++## Подтверждение устранения
++
++- До reset:
++  - authoritative run `20260321T210206Z-684954` matched reply:
++    - `Activity log • nodes_list • sessions_list • cron`
++- После patch + reset:
++  - `sessions.list` показывал active Telegram session на `openai-codex::gpt-5.4`
++  - authoritative run `20260321T210324Z-686381` matched reply:
++    - `... Модель: openai-codex::gpt-5.4 ...`
++
++## Уроки
++
++1. **Provider recovery ≠ channel-session recovery**: после ремонта OAuth/provider слоя нужно отдельно проверять активную channel-bound session.
++2. **Session-level model state имеет приоритет над операторскими ожиданиями**: если чат живёт на старой session model, пользователь будет видеть старое поведение даже при исправном runtime.
++3. **Reply-quality gate должен ловить tool-trace summaries**, а не только generic timeouts и `model not found`.
+diff --git a/docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md b/docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md
+new file mode 100644
+index 0000000..eaf9632
+--- /dev/null
++++ b/docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md
+@@ -0,0 +1,91 @@
++---
++title: "Moltis auth and durable runtime state drifted because ownership was split across tracked config, rendered env, and backup inventory"
++date: 2026-03-22
++severity: P2
++category: configuration
++tags: [moltis, auth, telegram, backup, runtime-state, gitops, rca]
++root_cause: "The repository treated auth, allowlist, and runtime-state durability as related concerns but did not enforce one canonical ownership contract across config, CI env rendering, preflight, compose, and backup readiness."
++---
++
++# RCA: Moltis auth and durable runtime state drifted because ownership was split across tracked config, rendered env, and backup inventory
++
++## Summary
++
++While closing the durability backlog, two related gaps surfaced:
++
++1. `MOLTINGER_SERVICE_TOKEN` was declared as the fleet auth contract in `config/moltis.toml` and policy metadata, but CI did not render it into `/opt/moltinger/.env`, and the Moltis container did not receive it explicitly.
++2. Telegram allowlist ownership was ambiguous: real Moltis ingress was tracked in `config/moltis.toml`, while auxiliary tooling still looked at `TELEGRAM_ALLOWED_USERS` as if it were an independent source of truth.
++3. Backup restore-readiness covered tracked config and data, but not the full Moltis runtime state split across `${MOLTIS_RUNTIME_CONFIG_DIR}` and `~/.moltis`.
++
++None of these gaps had to be live incidents every time, but together they made the deployment fragile and easy to misdiagnose.
++
++## Error
++
++The repository had a split-brain contract for Moltis runtime durability:
++
++- one source defined auth intent
++- another source rendered runtime env
++- a third source carried Telegram allowlist assumptions
++- backup inventory omitted part of the actual runtime state
++
++This created a high chance of silent drift, confusing troubleshooting, and incomplete recovery.
++
++## 5 Whys
++
++1. Why could Moltis auth/runtime drift silently?
++   Because required runtime auth/state lived across tracked config, CI-rendered `.env`, writable runtime config, and `~/.moltis`, but not all layers were validated together.
++2. Why were those layers not validated together?
++   Because hardening landed incrementally around specific incidents such as OAuth/runtime mount drift, not as one explicit ownership contract.
++3. Why did `MOLTINGER_SERVICE_TOKEN` specifically fall through?
++   Because it was modeled in tracked config and fleet policy, but the shared Moltis env renderer and deploy workflows never rendered it into the server `.env`.
++4. Why was Telegram allowlist still confusing?
++   Because runtime ingress auth had already moved to tracked `config/moltis.toml`, but docs and auxiliary tooling still treated `TELEGRAM_ALLOWED_USERS` like a primary auth source.
++5. Why did backup/restore remain incomplete?
++   Because restore-readiness originally focused on git-synced config plus `data/`, while Moltis durable runtime state also lives in `${MOLTIS_RUNTIME_CONFIG_DIR}` and `~/.moltis`.
++
++## Root Cause
++
++The repository lacked a single enforced ownership model for Moltis auth and durable runtime state. The intent existed, but the enforcement boundary between tracked config, rendered env, runtime mounts, and recovery artifacts was incomplete.
++
++## Evidence
++
++- `config/moltis.toml` bound fleet service auth to `MOLTINGER_SERVICE_TOKEN`.
++- `config/moltis.toml` already used tracked Telegram `dm_policy = "allowlist"` with explicit `allowlist = [...]`.
++- `.github/workflows/deploy.yml` and `.github/workflows/uat-gate.yml` rendered Moltis `.env` without `MOLTINGER_SERVICE_TOKEN`.
++- `scripts/render-moltis-env.sh` previously accepted `TELEGRAM_ALLOWED_USERS` as free input instead of deriving or validating it against tracked config.
++- `scripts/backup-moltis-enhanced.sh` previously marked restore readiness without archiving `${MOLTIS_RUNTIME_CONFIG_DIR}` and the Moltis runtime home.
++
++## Fix
++
++1. Added fail-closed rendering of `MOLTINGER_SERVICE_TOKEN` into the shared Moltis `.env` renderer.
++2. Made `TELEGRAM_ALLOWED_USERS` in the rendered `.env` derive from tracked `config/moltis.toml`, and fail if an override diverges from tracked allowlist intent.
++3. Updated deploy/UAT workflows to pass `MOLTINGER_SERVICE_TOKEN` and stop treating `TELEGRAM_ALLOWED_USERS` GitHub Secret input as the deploy-time source of truth.
++4. Added preflight validation that Moltis keeps:
++   - `MOLTIS_FLEET_SERVICE_TOKEN_ENV = "MOLTINGER_SERVICE_TOKEN"`
++   - Telegram `dm_policy = "allowlist"`
++   - non-empty tracked Telegram allowlist
++5. Extended backup restore-readiness to archive and verify:
++   - `${MOLTIS_RUNTIME_CONFIG_DIR}`
++   - Moltis runtime home (`~/.moltis` / `moltis-data`)
++   - runtime evidence manifest
++
++## Verification
++
++- `bash tests/component/test_backup_restore_readiness.sh` -> `1/1 PASS`
++- `bash tests/unit/test_deploy_workflow_guards.sh` -> `30/30 PASS`
++- `bash tests/static/test_config_validation.sh` -> `104/104 PASS`
++- `bash tests/component/test_moltis_session_reconcile.sh` -> `2/2 PASS`
++
++## Preventive Actions
++
++1. Keep tracked config as the authoritative Moltis Telegram ingress allowlist.
++2. Treat `/opt/moltinger/.env` as a rendered runtime mirror, not as an independent configuration source.
++3. Keep `MOLTINGER_SERVICE_TOKEN` in the shared env renderer, workflows, and compose contract together.
++4. Keep restore-readiness fail-closed unless runtime config and runtime home archives are both present.
++5. Update operator docs and self-learning docs when auth ownership rules change, so future sessions do not revive retired assumptions.
++
++## Lessons
++
++1. “Secret exists somewhere” is not enough; the repository must prove it reaches the exact runtime surface that consumes it.
++2. If a config value is authoritative in git, any `.env` mirror must be derived or validated against that tracked value rather than maintained manually.
++3. Backup contracts for agent runtimes must include writable runtime config and runtime home, not just tracked config plus one generic data directory.
+diff --git a/docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md b/docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md
+new file mode 100644
+index 0000000..15606e9
+--- /dev/null
++++ b/docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md
+@@ -0,0 +1,142 @@
++---
++title: "Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive"
++date: 2026-03-22
++status: closed
++tags: [moltis, browser, browserless, docker, tavily, memory, smoke, session, rca]
++---
++
++# RCA: Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive
++
++## Summary
++
++After OpenAI OAuth/runtime recovery, live Moltis on `ainetic.tech` still had three user-visible reliability defects:
++
++- browser runs failed after the `browser` tool started
++- operator smoke could misreport stale results because it reused polluted chat state
++- Tavily and memory needed fresh post-restart proof, and Tavily search remained brittle when the model filled `country` implicitly
++
++The browser outage was two-layered:
++
++1. The sibling Docker browser container inherited a persistent profile contract that was not valid for the host-visible browser runtime. Chrome failed with:
++   - `Failed to create /data/browser-profile/SingletonLock: Permission denied (13)`
++2. After bypassing that lock-file failure, Moltis still connected to the sandbox at root websocket `ws://host.docker.internal:<port>`, while the local shim only proxied explicit `/devtools/browser/...` paths. That produced:
++   - `browser launch failed: failed to connect to containerized browser at ws://host.docker.internal:<port>: HTTP error: 404 Not Found`
++
++Separately:
++
++- `scripts/test-moltis-api.sh` reused the `main` chat session without clearing it first, so authoritative smoke runs could inherit stale context.
++- Tavily search succeeded eventually, but one live run first failed when the model passed `country="Russia"`. The latest guarded run succeeded on the first Tavily tool call after adding a prompt-level constraint around Tavily country usage.
++
++## Error
++
++Moltis looked transport-healthy, but browser automation still failed in real chat runs, memory/search smoke could be contaminated by stale session context, and Tavily search could emit avoidable first-call failures.
++
++## 5 Whys
++
++### 1. Why did browser tasks still fail after Docker socket access was restored?
++
++Because the browser sandbox had deeper runtime contract mismatches beyond socket access.
++
++### 2. Why did the sandbox mismatch matter?
++
++Because Chrome first tried to persist a profile under a bind-mounted host-visible path that was not writable for the transient sibling container.
++
++### 3. Why did browser still fail after that persistence issue was bypassed?
++
++Because Moltis connected to the sandbox over the root websocket URL, but the local CDP shim initially forwarded only the explicit DevTools websocket path.
++
++### 4. Why could memory/search smoke still look wrong even when live tools were healthy?
++
++Because the operator smoke script reused stale `main` session context instead of clearing it before `chat.send`.
++
++### 5. Why did Tavily still show fragility after transport recovery?
++
++Because the model could still fill Tavily's optional `country` argument implicitly, and that caused avoidable tool-call variability until we added an explicit prompt guardrail.
++
++## Root Cause
++
++There were three root causes:
++
++1. **Browser runtime misconfiguration and shim gap**: sibling-browser profile persistence assumed a writable host-visible profile path, and the local browser shim did not initially resolve root websocket upgrades to the active DevTools browser websocket.
++2. **Operator smoke drift**: the authoritative smoke script reused stale chat session history.
++3. **Tavily tool-call permissiveness**: the prompt contract allowed the model to infer Tavily `country` values when the user had not asked for geographic filtering.
++
++## Evidence
++
++- Live browser container logs showed:
++  - `Failed to create /data/browser-profile/SingletonLock: Permission denied (13)`
++- Independent host reproduction proved:
++  - `browserless/chrome` with bind-mounted `/data/browser-profile` failed
++  - Chrome with container-local `/tmp/browser-profile` became healthy
++- Live Moltis logs later showed a second browser failure layer:
++  - browser readiness on `/json/version` passed
++  - Moltis connected to `ws://host.docker.internal:<port>`
++  - the sandbox returned `HTTP error: 404 Not Found`
++- After the root websocket CDP fix, live Moltis logs showed:
++  - `sandboxed browser connected successfully`
++  - `created new page with viewport`
++  - `navigated to URL`
++  - `tool execution succeeded tool=browser`
++- Before smoke hardening, operator smoke reused the `main` session.
++- After smoke hardening, live logs showed:
++  - `chat.clear session=main`
++- Memory recovery proof after restart showed:
++  - `memory system initialized embeddings=true`
++  - `memory: status ... model=nomic-embed-text`
++  - `tool execution succeeded tool=memory_search`
++  - final response `/server`
++- Tavily recovery proof after the final prompt guard showed:
++  - `tool execution succeeded tool=mcp__tavily__tavily_search`
++  - no preceding Tavily tool failure in the same latest run
++  - final response `docs.moltis.org`
++
++## Fix
++
++- Kept sibling-browser mode on the official Docker path, but moved Chrome startup in the tracked local sandbox image to container-local `/tmp/browser-profile` with `PREBOOT_CHROME=false`.
++- Added a CDP proxy that:
++  - rewrites `/json/version`
++  - caches the active browser websocket path
++  - resolves root websocket upgrades to the active `/devtools/browser/...` target
++- Kept the tracked Docker runtime contract for:
++  - `container_host = "host.docker.internal"`
++  - live Docker socket GID injection
++  - prebuilt local sandbox image pre-pull/build during deploy
++- Updated `scripts/test-moltis-api.sh` to run `chat.clear` before `chat.send`.
++- Pinned memory embeddings to Ollama root endpoint `http://ollama:11434` and kept repo knowledge sync into Moltis memory.
++- Added a prompt-level Tavily guard in `config/moltis.toml`:
++  - do not set `country` unless the user explicitly asks for geographic filtering
++  - when needed, use Tavily schema-compatible lowercase English country values
++
++## Verification
++
++Repository checks:
++
++- `node --check docker/moltis-browser-sandbox/cdp-proxy.mjs`
++- `bash tests/unit/test_deploy_workflow_guards.sh` -> `27/27 PASS`
++- `bash tests/static/test_config_validation.sh` -> `101/101 PASS`
++- `git diff --check` clean
++
++Live tracked deploys:
++
++- `1f98a41` deployed successfully and restored browser end-to-end
++- `bd35a53` deployed successfully and removed the observed first-call Tavily failure in the latest canary
++
++Live authoritative canaries after the final deploy:
++
++- Browser:
++  - prompt: `Используй browser, открой https://docs.moltis.org/ и ответь только заголовком страницы.`
++  - final reply: `Introduction - Moltis Documentation`
++- Memory:
++  - prompt: `Используй memory_search. В каком пути внутри runtime Moltis находится checkout репозитория? Ответь только одним путем.`
++  - final reply: `/server`
++- Tavily:
++  - prompt: `Используй Tavily search. Найди официальный сайт документации Moltis и ответь только доменом.`
++  - final reply: `docs.moltis.org`
++  - final run completed with one Tavily tool call and no intermediate Tavily tool failure
++
++## Уроки
++
++1. **Sibling-browser success needs both profile-path correctness and websocket-path correctness**: fixing filesystem permissions was necessary but not sufficient.
++2. **Operator smoke must clear state before proof runs**: a clean runtime still looks broken if the canary reuses polluted chat history.
++3. **Tool-call reliability needs guardrails at the tool-usage contract layer**: optional search parameters should not be inferred casually when the user did not ask for them.
++4. **Transport-green deploys are not enough**: browser, memory, and Tavily need exercised-surface proof after each runtime repair.
+diff --git a/docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md b/docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md
+new file mode 100644
+index 0000000..2886a8f
+--- /dev/null
++++ b/docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md
+@@ -0,0 +1,97 @@
++---
++title: "Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container"
++date: 2026-03-22
++severity: P3
++category: shell
++tags: [moltis, shell, runtime, container, rca]
++root_cause: "The cleanup script relied on a hidden Perl module dependency that was not part of the actual Moltis container contract."
++---
++
++# RCA: Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container
++
++## Summary
++
++While closing `T036`, the new `scripts/moltis-runtime-context-cleanup.sh` passed locally but failed on the live Moltis container during the first dry-run. The script assumed that `perl -MJSON::PP` would work because `perl` existed in the image. In reality, the container had only a minimal userspace with `awk` and `sed`, so the dry-run aborted before cleanup.
++
++## Error
++
++Live command:
++
++```bash
++docker exec moltis bash /server/scripts/moltis-runtime-context-cleanup.sh --runtime-home /home/moltis/.moltis
++```
++
++failed with:
++
++```text
++Can't locate JSON/PP.pm in @INC ...
++BEGIN failed--compilation aborted.
++```
++
++## 5 Whys
++
++1. Why did the live dry-run fail?
++   Because the script called `perl -MJSON::PP`, and that module was unavailable inside the running Moltis container.
++2. Why did the script rely on `JSON::PP`?
++   Because the JSON output helper was implemented with Perl instead of plain shell primitives.
++3. Why was that implementation chosen?
++   Because local validation checked repo-side execution, not the actual minimal userspace of the live Moltis image.
++4. Why did local validation miss it?
++   Because we verified `perl` availability conceptually, but not the presence of the specific Perl module set inside the container.
++5. Why could that happen again?
++   Because the script contract was not reduced to the real lowest-common-denominator runtime tools, and the manifest still advertised the wrong dependency.
++
++## Root Cause
++
++The script had a hidden runtime dependency on `JSON::PP` that was not part of the actual Moltis container contract. This was an implementation-assumption error, not a Moltis product failure.
++
++## Evidence
++
++- Live container capability check showed:
++  - present: `/usr/bin/awk`, `/usr/bin/sed`
++  - absent: `jq`, `python3`, `node`
++- First live dry-run failed with:
++  - `Can't locate JSON/PP.pm in @INC`
++- After rewriting the JSON emitter to `bash + awk`, the same live dry-run succeeded and reported exactly three stale candidates.
++- Live apply then removed only:
++  - `/home/moltis/.moltis/oauth-config/moltis.toml.runtime-test.bak`
++  - `/home/moltis/.moltis/oauth-runtime-test-config-v1`
++  - `/home/moltis/.moltis/oauth-runtime-test-data-v1`
++- Post-check confirmed:
++  - `oauth_tokens.json` still present
++  - `sessions/main.jsonl` still present
++  - smoke reply still returned `OK` on `openai-codex::gpt-5.4`
++
++## Fix
++
++- Replaced Perl-based JSON rendering in `scripts/moltis-runtime-context-cleanup.sh` with a shell-safe `awk` emitter.
++- Updated `scripts/manifest.json` so the script now declares `awk` instead of `perl`.
++- Re-ran local checks:
++  - `bash -n scripts/moltis-runtime-context-cleanup.sh`
++  - `bash tests/component/test_moltis_runtime_context_cleanup.sh`
++  - manifest JSON parse
++- Re-ran live dry-run, live apply, and post-cleanup smoke.
++
++## Verification
++
++- Local:
++  - `bash tests/component/test_moltis_runtime_context_cleanup.sh` -> `2/2 PASS`
++- Live dry-run:
++  - `candidate_count: 3`
++  - `removed_count: 0`
++- Live apply:
++  - `removed_count: 3`
++- Live post-check:
++  - no remaining `oauth-runtime-test-*`
++  - `RUNTIME_TEST_BAK_REMOVED`
++  - `TOKENS_OK`
++  - `MAIN_SESSION_OK`
++- Live smoke:
++  - final response `OK`
++  - model `openai-codex::gpt-5.4`
++
++## Уроки
++
++1. Для скриптов, которые запускаются внутри Moltis-контейнера, надо проектировать контракт под минимальный runtime, а не под локальную машину разработчика.
++2. Наличие бинарника не означает наличие его модулей или стандартной библиотеки в ожидаемом составе.
++3. Для operational cleanup-скриптов правильнее сначала опираться на `bash`/`awk`/`sed`, а уже потом добавлять более тяжёлые зависимости.
+diff --git a/docs/rca/2026-03-22-telegram-uat-status-semantic-gap.md b/docs/rca/2026-03-22-telegram-uat-status-semantic-gap.md
+new file mode 100644
+index 0000000..8b08763
+--- /dev/null
++++ b/docs/rca/2026-03-22-telegram-uat-status-semantic-gap.md
+@@ -0,0 +1,65 @@
++---
++title: "Authoritative Telegram UAT still had semantic false-green gaps for /status and exercised surfaces"
++date: 2026-03-22
++severity: P2
++category: qa
++tags: [telegram, uat, semantic-validation, browser, search, repo-context, rca]
++root_cause: "The authoritative UAT stack proved transport and attribution more strongly than semantic correctness, so verification-gate replies, stale /status content, and unexercised tool surfaces could still slip through as green."
++---
++
++# RCA: Authoritative Telegram UAT still had semantic false-green gaps for /status and exercised surfaces
++
++## Summary
++
++After the main Moltis runtime paths were repaired, authoritative Telegram UAT was already much better than plain transport checks, but it still had two blind spots:
++
++1. an attributable `/status` reply could be treated as green even if it did not mention the canonical model or if it was actually a verification-gate reply;
++2. the production UAT gate still proved provider/model health without explicitly exercising browser, search, and repo-context surfaces.
++
++That meant a deploy could be transport-green and even attribution-green while still missing semantic confidence on the real operator path.
++
++## Error
++
++The UAT contract still answered “did we get a reply?” more reliably than “did we get the right reply from the right recovered runtime surface?”.
++
++## 5 Whys
++
++1. Why could `/status` still false-pass?
++   Because the wrapper accepted the authoritative helper’s green verdict without checking whether the final `/status` text actually mentioned the canonical model.
++2. Why was a verification-gate reply still risky?
++   Because a direct verification-code prompt is not a transport error, so it could survive generic reply-quality checks unless it was treated as a semantic failure.
++3. Why were browser/search/repo-context regressions still possible after a green canonical smoke?
++   Because canonical smoke proved provider/model/restart survival, but not the exercised tool surfaces that had recently regressed in production.
++4. Why did this remain after earlier UAT fixes?
++   Because previous hardening focused on attribution and known error signatures first, not on message-specific semantic contracts and exercised-surface breadth.
++5. Why is that dangerous operationally?
++   Because operators use authoritative Telegram UAT and UAT gate outputs as rollout evidence; semantic false-green delays detection of real regressions.
++
++## Root Cause
++
++The authoritative UAT stack still lacked one final layer of semantic validation: message-specific `/status` contract checks and explicit exercised-surface coverage for browser, search, and repo-context.
++
++## Fix
++
++1. Hardened `scripts/telegram-e2e-on-demand.sh` so authoritative `/status` now fails if:
++   - the reply is a verification-gate message;
++   - the reply does not mention the canonical model `openai-codex::gpt-5.4`.
++2. Added `scripts/moltis-exercised-surface-matrix.sh` to run deterministic browser/search/repo-context prompts through the canonical Moltis chat contract.
++3. Updated `.github/workflows/uat-gate.yml` so post-deploy UAT now exercises:
++   - browser -> `Introduction - Moltis Documentation`
++   - search -> `docs.moltis.org`
++   - repo-context -> `/server`
++4. Added regression coverage for both the stricter Telegram semantics and the exercised-surface matrix.
++
++## Verification
++
++- `bash tests/component/test_telegram_remote_uat_contract.sh` -> `6/6 PASS`
++- `bash tests/component/test_moltis_exercised_surface_matrix.sh` -> `1/1 PASS`
++- `bash tests/static/test_config_validation.sh` -> `106/106 PASS`
++
++## Preventive Actions
++
++1. Keep authoritative `/status` tied to a canonical model string, not just a reply-presence check.
++2. Treat verification-gate replies as failed authoritative outcomes on the allowlisted operator path.
++3. Keep exercised-surface proof in UAT for any surface that previously regressed in production.
++4. When new user-facing tool paths are added, extend the surface matrix instead of relying on generic smoke alone.
+diff --git a/docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md b/docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md
+new file mode 100644
+index 0000000..cc9b8cb
+--- /dev/null
++++ b/docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md
+@@ -0,0 +1,98 @@
++---
++title: "Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together"
++date: 2026-03-24
++severity: P1
++category: configuration
++tags: [moltis, memory, embeddings, ollama, runtime-drift, gitops, deploy, rca, lessons]
++root_cause: "Tracked config already pinned the correct memory contract, but deploy/runtime verification did not prove writable runtime moltis.toml parity and compose did not deliver OLLAMA_API_KEY into the moltis container that needed cloud-backed Ollama model discovery."
++---
++
++# RCA: Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together
++
++## Summary
++
++Two blocking Moltis symptoms looked like provider breakage, but both came from runtime contract drift:
++
++1. `memory_search` failed with `openai ... /embeddings -> 400` against the Z.ai Coding endpoint and `groq ... /embeddings -> 401`.
++2. Cloud-backed Ollama models such as `ollama::gemini-3-flash-preview:cloud` were missing from the live provider catalog.
++
++Tracked git config was already correct:
++
++- `config/moltis.toml` pinned `[memory] provider = "ollama"` with `model = "nomic-embed-text"`
++- tracked memory `watch_dirs` already included repo-visible paths
++- tracked provider config already referenced `OLLAMA_API_KEY` for cloud-backed Ollama models
++
++The live runtime was wrong in two different layers:
++
++- writable runtime `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` was stale and no longer matched tracked `config/moltis.toml`
++- server `.env` contained `OLLAMA_API_KEY`, but the running `moltis` container did not receive it
++
++As a result, live Moltis kept using an older auto-detect memory path for embeddings and could not discover the Ollama Cloud model catalog needed for `gemini-3-flash-preview:cloud`.
++
++## Error
++
++Moltis looked as if embeddings providers and Ollama provider auth were broken, even though the repository already defined the correct memory backend and the server already had the Ollama Cloud secret.
++
++## 5 Whys
++
++| Level | Question | Answer | Evidence |
++| --- | --- | --- | --- |
++| 1 | Why did `memory_search` hit Z.ai and Groq embeddings instead of Ollama? | Because the live writable runtime `moltis.toml` still carried an older auto-detect memory contract instead of the tracked pinned `[memory] provider = "ollama"` contract. | Diff between `/opt/moltinger-active/config/moltis.toml` and `/opt/moltinger-state/config-runtime/moltis.toml`; live logs showed `openai ... /embeddings -> 400` and `groq ... /embeddings -> 401`. |
++| 2 | Why was the live writable runtime config stale? | Because deploy/runtime guards proved mount source and writability, but did not yet prove file parity between tracked `config/moltis.toml` and writable runtime `moltis.toml`. | `scripts/deploy.sh` and `scripts/moltis-runtime-attestation.sh` lacked a config-parity check before this fix. |
++| 3 | Why were Ollama cloud models missing even though the secret existed on the server? | Because `OLLAMA_API_KEY` was rendered into `/opt/moltinger/.env` and forwarded to the Ollama sidecar, but not to the `moltis` container that performs provider discovery. | Server `.env` contained `OLLAMA_API_KEY`; `docker exec moltis env` did not. `docker-compose.prod.yml` forwarded the key only to `ollama` before this fix. |
++| 4 | Why did the incident look like provider/API breakage instead of runtime drift? | Because the tracked config already expressed the intended provider surface, but the live runtime silently diverged in a writable config copy and in container env delivery. | `config/moltis.toml` already pinned `provider = "ollama"` and `model = "nomic-embed-text"`; runtime still behaved as if memory were on auto-detect and Ollama Cloud were unauthenticated. |
++| 5 | Why could this survive into user-visible degradation? | Because the production contract was split across tracked config, rendered env, writable runtime config, and container env, but verification did not yet enforce those layers together as one end-to-end invariant. | Deploy/runtime attestation was transport/mount-aware, but not config-parity-aware or container-env-delivery-aware for this path. |
++
++## Root Cause
++
++The repository had the right Moltis memory and Ollama intent in git, but did not fully enforce that intent at the live runtime boundary.
++
++Two specific enforcement gaps caused the incident:
++
++1. writable runtime `moltis.toml` could drift away from tracked `config/moltis.toml` without failing deploy/runtime attestation
++2. `OLLAMA_API_KEY` could exist in the rendered server `.env` and sidecar env, yet never reach the `moltis` container that actually needs it for cloud model discovery
++
++## Evidence
++
++- `config/moltis.toml` contains:
++  - `[memory] provider = "ollama"`
++  - `base_url = "http://ollama:11434"`
++  - `model = "nomic-embed-text"`
++  - repo-visible `watch_dirs`
++- Live writable runtime config on the server still showed the default commented memory block and old `http://localhost:11434/v1` pattern.
++- Live logs contained:
++  - `openai: HTTP status client error (400 Bad Request) for url (https://api.z.ai/api/coding/paas/v4/embeddings)`
++  - `groq: HTTP status client error (401 Unauthorized) for url (https://api.groq.com/openai/v1/embeddings)`
++- `curl http://localhost:11434/api/tags` and `docker exec moltis curl http://ollama:11434/api/tags` both showed Ollama reachable with `nomic-embed-text`.
++- `/opt/moltinger/.env` on the server already contained `OLLAMA_API_KEY=...`.
++- `docker exec moltis sh -lc 'env | grep ^OLLAMA_API_KEY='` returned nothing before the fix.
++
++## Fix
++
++1. Forwarded `OLLAMA_API_KEY` into the production `moltis` container in `docker-compose.prod.yml`.
++2. Extended `scripts/deploy.sh` so deploy verification fails closed if writable runtime `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` diverges from tracked `config/moltis.toml`.
++3. Extended `scripts/moltis-runtime-attestation.sh` with the same parity check and explicit machine-readable failure code `RUNTIME_CONFIG_FILE_MISMATCH`.
++4. Added repository coverage for both contracts:
++   - component test for runtime config parity failure
++   - static validation for `OLLAMA_API_KEY` forwarding and parity enforcement
++5. Updated the remote Moltis runbook to make runtime config parity and `OLLAMA_API_KEY` delivery first-line diagnostics for this incident class.
++
++## Verification
++
++- `bash tests/component/test_moltis_runtime_attestation.sh` -> `4/4 PASS`
++- `bash tests/static/test_config_validation.sh` -> `112/112 PASS`
++- `bash tests/unit/test_deploy_workflow_guards.sh` -> `34/34 PASS`
++
++## Preventive Actions
++
++1. Treat tracked `config/moltis.toml` and writable runtime `moltis.toml` as one contract that must stay byte-for-byte aligned after render/copy.
++2. Treat “secret exists in `.env`” as insufficient proof; verify the exact consuming container receives it.
++3. When `memory_search` shows embeddings traffic against chat-provider endpoints, check runtime-config parity before reconfiguring providers.
++4. When cloud-backed Ollama models disappear, check `docker exec moltis env | grep ^OLLAMA_API_KEY=` before blaming OAuth or provider bugs.
++5. Keep operator runbooks, RCA, and tests aligned so future sessions start from the right first checks.
++
++## Lessons
++
++1. Runtime mount provenance is necessary but not sufficient; writable config copies must also be checked for content parity.
++2. Container-env delivery is part of the runtime contract. A rendered secret that never reaches the consuming process is operationally equivalent to a missing secret.
++3. Embeddings failures can be a downstream sign of runtime drift, not proof that the embeddings provider itself is misconfigured.
+diff --git a/docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md b/docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md
+new file mode 100644
+index 0000000..eca27a1
+--- /dev/null
++++ b/docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md
+@@ -0,0 +1,69 @@
++---
++title: "PR1 main carrier replay drifted because the applicator used a non-unique test anchor"
++date: 2026-03-26
++severity: P3
++category: process
++tags: [carrier, main-pr, applicator, tests, rca, lessons]
++root_cause: "The PR1 carrier applicator updated tests with repeated replace_once() calls keyed to the same short line, so the first dry-run block was patched twice and the ABI dry-run block was left stale."
++---
++
++# RCA: PR1 main carrier replay drifted because the applicator used a non-unique test anchor
++
++## Summary
++
++While validating the runtime-only `PR1` carrier against a clean `origin/main` export, the transformed tree failed the blocking unit lane:
++
++- `tests/unit/test_deploy_workflow_guards.sh` -> `22/23 PASS`
++- failing case: `Tracked deploy dry-run JSON should expose the workflow ABI contract fields`
++
++The runtime carrier itself was not wrong. The applicator that materializes the carrier onto `origin/main` patched one dry-run test block twice and skipped the second one. As a result, the transformed tree required `scripts/moltis-runtime-attestation.sh` in the shared tracked-deploy script, but the ABI dry-run test fixture still did not create that file.
++
++## Error
++
++Carrier validation failed on a clean `origin/main` replay even though the intended runtime-only delta was otherwise correct.
++
++## 5 Whys
++
++| Level | Question | Answer | Evidence |
++| --- | --- | --- | --- |
++| 1 | Why did the transformed `origin/main` tree fail the ABI dry-run test? | Because `run-tracked-moltis-deploy.sh --dry-run` now requires `scripts/moltis-runtime-attestation.sh`, but the ABI test fixture did not create it. | Replay output returned `Missing required file: .../scripts/moltis-runtime-attestation.sh`. |
++| 2 | Why did the ABI test fixture not create the attestation stub? | Because the carrier applicator did not patch that specific fixture block in `tests/unit/test_deploy_workflow_guards.sh`. | Fresh replay showed the first dry-run test contained two attestation stub lines while the ABI test still had none. |
++| 3 | Why did the applicator patch the wrong block? | Because it used two `replace_once(...)` calls against the same short anchor line `: > "$project_root/scripts/deploy.sh"`. | The second replacement matched the first function again, since the first function still contained the same line after the first insertion. |
++| 4 | Why was a non-unique anchor used in the applicator? | Because the carrier generator was optimized for minimal selected-hunk transfer and assumed the repeated line was safe enough as a unique matcher. | `apply_pr1_main_carrier.py` used repeated short replacements instead of anchoring on function-local context like `output_file` vs `output_json`. |
++| 5 | Why did this reach validation instead of being caught earlier? | Because the original carrier validation proved `py_compile`, applicator execution, and `patch --dry-run`, but did not yet rerun the blocking lanes on a freshly transformed `origin/main` tree after the later applicator edits. | The stale temp replay exposed the failure only when the transformed tree was exercised with `tests/unit/test_deploy_workflow_guards.sh`. |
++
++## Root Cause
++
++The PR1 carrier applicator relied on a non-unique line anchor inside a test file with repeated fixture setup blocks. That made the selected-hunk transfer mechanically valid as a patch, but semantically wrong for one of the dry-run tests.
++
++## Fix
++
++1. Replaced the short repeated anchor with function-specific multi-line anchors keyed to the surrounding `output_file` and `output_json` contexts.
++2. Replayed the applicator onto a fresh exported `origin/main` tree.
++3. Reran the blocking hermetic lanes on the transformed tree:
++   - `bash tests/unit/test_deploy_workflow_guards.sh`
++   - `bash tests/component/test_moltis_runtime_attestation.sh`
++   - `bash tests/component/test_moltis_search_memory_diagnostics.sh`
++   - `bash tests/static/test_config_validation.sh`
++4. Regenerated `specs/031-moltis-reliability-diagnostics/artifacts/pr1-main-carrier.patch`.
++5. Updated `pr1-main-carrier-validation.md` with the corrected replay evidence.
++
++## Verification
++
++- Fresh transformed `origin/main` tree:
++  - `tests/unit/test_deploy_workflow_guards.sh` -> `23/23 PASS`
++  - `tests/component/test_moltis_runtime_attestation.sh` -> `4/4 PASS`
++  - `tests/component/test_moltis_search_memory_diagnostics.sh` -> `2/2 PASS`
++  - `tests/static/test_config_validation.sh` -> `98/98 PASS`
++- Regenerated patch passed `patch --dry-run` against a second clean `origin/main` export.
++
++## Preventive Actions
++
++1. Do not use repeated one-line anchors for carrier applicators when the target file contains duplicated fixture setup blocks.
++2. Require transformed-tree test execution, not only patch materialization, for any future selected-hunk `main` carrier.
++3. Keep carrier validation notes current with the latest replay, not only the first successful `patch --dry-run`.
++
++## Lessons
++
++1. A carrier can be mechanically patchable and still semantically wrong; replay tests on the transformed target are the real proof.
++2. For selected-hunk applicators, anchor specificity is part of the contract, not an implementation detail.
+diff --git a/docs/rca/INDEX.md b/docs/rca/INDEX.md
+index 4bbb2c8..aef78f1 100644
+--- a/docs/rca/INDEX.md
++++ b/docs/rca/INDEX.md
+@@ -1,40 +1,42 @@
+ # RCA Index
+ 
+-**Last Updated**: 2026-03-14
+-**Version**: 1.10.0
++**Last Updated**: 2026-03-26
++**Version**: 1.12.0
+ 
+ ## Statistics
+ 
+ | Metric | Value |
+ |--------|-------|
+-| Total RCA | 18 |
++| Total RCA | 20 |
+ | Avg Resolution Time | N/A |
+-| This Month | 18 |
++| This Month | 20 |
+ 
+ ## By Category
+ 
+ | Category | Count | Percentage |
+ |----------|-------|------------|
+-| generic | 4 | 22% |
+-| process | 8 | 44% |
+-| cicd | 4 | 22% |
+-| security | 1 | 6% |
+-| shell | 1 | 6% |
++| generic | 4 | 21% |
++| process | 10 | 50% |
++| cicd | 4 | 20% |
++| security | 1 | 5% |
++| shell | 1 | 5% |
+ 
+ ## By Severity
+ 
+ | Severity | Count | Description |
+ |----------|-------|-------------|
+ | P0 | 1 | Critical - blocks release |
+-| P1 | 5 | High - production impact |
++| P1 | 6 | High - production impact |
+ | P2 | 7 | Medium - process issue |
+-| P3 | 4 | Low - minor issue |
++| P3 | 5 | Low - minor issue |
+ | P4 | 1 | Backlog |
+ 
+ ## Registry
+ 
+ | ID | Date | Category | Severity | Status | Root Cause | Fix |
+ |----|------|----------|----------|--------|------------|-----|
++| RCA-020 | 2026-03-26 | process | P3 | resolved | The first `PR2` docs-carrier patch was generated from the wrong comparison boundary and omitted new untracked docs, so it did not faithfully target verified `main` | regenerated the carrier against real `origin/main`, included new docs via `--no-index`, and validated with `patch --dry-run` |
++| RCA-019 | 2026-03-21 | process | P1 | resolved | After provider recovery, the active Telegram-bound session still carried an old session model and contaminated tool context, but the recovery path did not explicitly reconcile/reset that channel session | patched the active Telegram session to `gpt-5.4`, reset stale context, and hardened Telegram UAT error signatures for activity-log/tool-error replies |
+ | RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
+ | RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
+ | RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |
+diff --git a/docs/reports/consilium/2026-03-22-moltis-config-durability-hardening.md b/docs/reports/consilium/2026-03-22-moltis-config-durability-hardening.md
+new file mode 100644
+index 0000000..c824965
+--- /dev/null
++++ b/docs/reports/consilium/2026-03-22-moltis-config-durability-hardening.md
+@@ -0,0 +1,80 @@
++# Consilium Report
++
++## Question
++How should Moltis be hardened so configuration, OAuth state, provider catalog, and channel sessions cannot be silently broken again by deploy drift, secret drift, or stale runtime state?
++
++## Execution Mode
++Mode B (parallel expert review plus live UI/runtime verification)
++
++## Evidence
++- Live UI at `https://moltis.ainetic.tech` shows a built-in branch banner: `Running on: 031-moltis-reliability-diagnostics`. The rendered DOM includes the comment `Git branch banner (shown when running on a non-main branch)` and `window.__MOLTIS__.git_branch="031-moltis-reliability-diagnostics"`. This proves the runtime is intentionally exposing branch provenance and is currently running a non-`main` branch.
++- Canonical provider/model baseline is tracked in [config/moltis.toml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/config/moltis.toml): `openai-codex` as primary provider and `openai-codex::gpt-5.4` as the production baseline.
++- Writable OAuth/auth state is intentionally split out of git and preserved in the runtime config directory by [scripts/prepare-moltis-runtime-config.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/prepare-moltis-runtime-config.sh) and documented in [LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md).
++- The March 21 OAuth RCA proved the primary failure mode was runtime drift, not token loss: the token store survived, but the live container was detached from the correct runtime config and provider catalog. See [2026-03-21-moltis-openai-oauth-runtime-drift.md](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docs/rca/2026-03-21-moltis-openai-oauth-runtime-drift.md).
++- The March 21 Telegram RCA proved a second durable-state fault: even after OAuth/provider repair, the active Telegram session kept stale model/context state until explicit session reconcile/reset. See [2026-03-21-moltis-telegram-session-context-drift.md](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docs/rca/2026-03-21-moltis-telegram-session-context-drift.md).
++- Current deploy/runtime guards are materially better than before, but some surfaces are still mutable by env drift or validated only at transport level. Relevant files: [scripts/deploy.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/deploy.sh), [scripts/render-moltis-env.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/render-moltis-env.sh), [docker-compose.prod.yml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docker-compose.prod.yml), [scripts/test-moltis-api.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/test-moltis-api.sh), [scripts/telegram-web-user-probe.mjs](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/telegram-web-user-probe.mjs).
++
++## Expert Opinions
++
++### Architect
++- Root issue is not one broken file but split-brain across git-tracked config, rendered `.env`, writable runtime auth state, and persisted channel sessions.
++- Silent drift remains possible unless runtime provenance and durable state ownership become explicit contracts.
++
++### DevOps / GitOps
++- A green `/health` is not enough. Runtime proof must include exact mount sources, exact runtime config path, exact provider catalog, and live canary on the canonical model.
++- Production should not depend on a mutable checkout root. Immutable release roots plus attestation are the correct next hardening move.
++
++### Security
++- OAuth/auth files must stay outside git, but the path to them must be pinned and fail-closed.
++- Rendering `.env` with empty auth values is too permissive; required auth secrets need hard failure at render/preflight time.
++
++### QA / UAT
++- Transport-level green is insufficient. `/status` and Telegram probes still allow semantic false-green unless they validate expected model, target chat, and failure classes such as verification gates or wrong-target replies.
++- Recovery is incomplete until authoritative Telegram `/status` proves the repaired runtime state end-to-end.
++
++### Moltis Domain Specialist
++- Session-level model/context can outlive provider repairs.
++- Durable Moltis state lives in more than one place: runtime config, `~/.moltis`, and per-channel sessions each need explicit ownership and recovery rules.
++
++## Root Cause Analysis
++- Primary root cause: Moltis durable state is split across four layers with incomplete ownership enforcement: tracked config, rendered server `.env`, writable runtime config/auth state, and channel/session state.
++- Contributing factors:
++  - production can still drift by path/source even when the container is healthy;
++  - some auth/runtime inputs are mutable through env rendering rather than a pinned production contract;
++  - operator diagnostics still prove transport more strongly than semantics;
++  - recovery paths historically repaired provider state without reconciling active sessions.
++- Confidence: High.
++
++## Solution Options
++1. Keep current guardrails and rely on runbooks. Lowest cost, highest repeat risk.
++2. Strengthen smoke/UAT only. Good near-term value, but does not remove config mutability.
++3. Make secret/env/runtime-dir contracts fail-closed. Strong P0 protection against accidental auth loss.
++4. Add automated session reconciliation after provider/catalog recovery. Closes Telegram/UI stale-state failures.
++5. Move production to immutable release roots plus runtime attestation and drift detection. Best long-term fix for silent runtime drift.
++6. Treat recovery as complete only after authoritative Telegram and canonical model canary succeed. Strong operational guardrail.
++
++## Recommended Plan
++1. Make auth/config ownership fail-closed:
++   - required auth secrets must not render as empty;
++   - production runtime config dir must be pinned to the canonical path or an explicit allowlist.
++2. Upgrade proof of health:
++   - deploy verification should prove canonical provider/model, not only transport;
++   - recovery should require restart survival plus authoritative Telegram `/status`.
++3. Close stale-state gaps:
++   - add explicit session reconcile/reset after provider/catalog changes;
++   - document and audit `~/.moltis` as durable runtime state, not incidental cache.
++4. Remove mutable-root drift:
++   - design immutable release roots and runtime attestation;
++   - add periodic drift detection outside the deploy path.
++
++## Rollback Plan
++- Keep all new hardening in tracked scripts/docs only; do not mutate live auth state speculatively.
++- Before future state-migration work, back up both runtime config and `~/.moltis`.
++- If a new guardrail blocks valid deploys, revert the guardrail commit and fall back to the current tracked runbook while preserving live state.
++
++## Verification Checklist
++- [x] Live UI branch banner explained from rendered DOM and runtime metadata
++- [x] OAuth drift RCA reviewed
++- [x] Telegram stale-session RCA reviewed
++- [x] Config/runtime/auth ownership gaps identified
++- [x] Backlog hardening items defined for follow-up
+diff --git a/docs/reports/consilium/2026-03-22-moltis-runtime-provenance-attestation-consilium.md b/docs/reports/consilium/2026-03-22-moltis-runtime-provenance-attestation-consilium.md
+new file mode 100644
+index 0000000..d89e334
+--- /dev/null
++++ b/docs/reports/consilium/2026-03-22-moltis-runtime-provenance-attestation-consilium.md
+@@ -0,0 +1,69 @@
++# Consilium Report
++
++## Question
++What is the minimal safe way to close `T048` so Moltis production runtime provenance cannot silently drift away from tracked intent, while keeping the eventual move to immutable release roots realistic and low-risk?
++
++## Execution Mode
++Mode B (parallel expert review plus local evidence synthesis)
++
++## Evidence
++- [scripts/run-tracked-moltis-deploy.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/run-tracked-moltis-deploy.sh) already records deploy markers and aligns the server checkout, but without a shared live provenance attestation the workflow can still prove transport more strongly than container origin.
++- [scripts/deploy.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/deploy.sh) already verifies `/server`, runtime-config mount source, and writable runtime config during deploy, which means the repo already knows the right invariants.
++- [.github/workflows/gitops-drift-detection.yml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/.github/workflows/gitops-drift-detection.yml) historically focused on file-hash drift and therefore could miss a live container whose mount sources no longer matched the intended runtime provenance.
++- [docs/rca/2026-03-21-moltis-openai-oauth-runtime-drift.md](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docs/rca/2026-03-21-moltis-openai-oauth-runtime-drift.md) proved that OAuth was not lost; the live container had drifted off the correct `/server` and runtime-config mounts.
++- [docs/reports/consilium/2026-03-22-moltis-config-durability-hardening.md](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docs/reports/consilium/2026-03-22-moltis-config-durability-hardening.md) already recommended immutable release roots plus runtime attestation as the long-term answer, but did not yet land the shared attestation contract.
++- [docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md) already treats `/opt/moltinger-active` as the canonical automation root, which makes it the right provenance anchor for the attestation contract.
++
++## Expert Opinions
++### Architect / GitOps
++- Opinion: Close `T048` in two layers, not one jump.
++- Key points: land a shared runtime attestation contract now; describe immutable release roots as the next explicit rollout phase instead of mixing a topology migration into the same production hardening slice.
++
++### SRE
++- Opinion: Periodic drift checks must attest live container provenance, not only hash synced files.
++- Key points: compare actual `/server` mount source, runtime-config mount source and writability, recorded deploy metadata, live git SHA/ref, live binary version, and health.
++
++### DevOps / CI
++- Opinion: The attestation contract must live in versioned scripts and be consumed by workflows through shared entrypoints.
++- Key points: `run-tracked-moltis-deploy.sh` should block success on attestation; `gitops-drift-detection.yml` should use a dedicated SSH wrapper rather than inline remote shell composition; scheduled drift must compare against deployed markers, not branch HEAD.
++
++### Security / Runtime State
++- Opinion: Provenance hardening must not re-centralize OAuth state into git.
++- Key points: keep OAuth and provider keys outside git in runtime-config, but fail closed if the live mount source or writability diverges from the contract.
++
++### QA / UAT
++- Opinion: Semantic chat proof and provenance proof are different checks and both are needed.
++- Key points: keep canonical smoke/UAT for provider/model behavior, but make provenance attestation the lower-level guard that catches “healthy but wrong runtime” failures before semantic probes mislead operators.
++
++## Root Cause Analysis
++- Primary root cause: production runtime provenance remained partially implicit, so a live container could detach from tracked `/server` and runtime-config intent while still presenting a superficially healthy service.
++- Contributing factors:
++  - file-hash drift checks were weaker than container-mount provenance checks;
++  - deploy recorded metadata but did not yet treat post-deploy attestation as a blocking contract;
++  - the current mutable checkout root makes silent drift possible unless the active root and live container are explicitly tied together.
++- Confidence: High.
++
++## Solution Options
++1. Keep current file-hash drift detection only. Low effort, high repeat risk.
++2. Jump straight to immutable release roots in this branch. Best long-term topology, but too risky for a mixed design-and-hardening slice on shared production.
++3. Add shared runtime attestation now and leave file hashes as secondary diagnostics. Best minimal-safe step.
++4. Add only more UAT smoke coverage. Useful, but still misses wrong-mount provenance failures.
++5. Add attestation plus a phase-2 release-root plan with explicit future host layout. Best balance of safety and durability.
++
++## Recommended Plan
++1. Land a shared `moltis-runtime-attestation.sh` contract that proves live `/server`, runtime-config source/writability, runtime-home mount presence, recorded deploy metadata, live git SHA/ref, live version, and health.
++2. Make `run-tracked-moltis-deploy.sh` block final success until that attestation passes.
++3. Make `gitops-drift-detection.yml` call the same attestation contract through a shared SSH wrapper and treat file-hash drift as secondary evidence, not primary provenance proof.
++4. Keep scheduled drift marker-driven by reading expected SHA/ref/version from deployed markers on the active root, not from `${{ github.sha }}`.
++5. Document the future immutable release-root layout as a dedicated phase-2 migration, with `/opt/moltinger-active` continuing to be the authoritative live-root pointer.
++
++## Rollback Plan
++- Revert the attestation/wrapper/workflow commit if a false-positive blocks valid deploys.
++- Keep deploy markers, runtime config, and `~/.moltis` untouched by the rollback; this slice changes verification and documentation, not durable state layout.
++- Fall back to the previous tracked deploy plus canonical smoke path while analyzing the attestation false-positive.
++
++## Verification Checklist
++- [x] Shared runtime attestation script exists in `scripts/`
++- [x] Tracked deploy blocks success on attestation
++- [x] Periodic drift detection uses the shared SSH wrapper for attestation
++- [x] Immutable release roots are documented as the next explicit phase, not silently implied
+diff --git a/docs/reports/consilium/2026-03-22-tavily-memory-reliability-consilium.md b/docs/reports/consilium/2026-03-22-tavily-memory-reliability-consilium.md
+new file mode 100644
+index 0000000..5001d00
+--- /dev/null
++++ b/docs/reports/consilium/2026-03-22-tavily-memory-reliability-consilium.md
+@@ -0,0 +1,97 @@
++# Consilium Report
++
++## Question
++
++Как безопасно и надёжно остановить деградацию Moltis по двум главным оставшимся направлениям: Tavily search и `memory_search`/embeddings, не ломая рабочий OpenAI OAuth path и не внося новую конфигурационную хрупкость?
++
++## Execution Mode
++
++Mode A
++
++## Evidence
++
++- Tracked config отключает built-in web search и опирается на Tavily MCP по SSE: [config/moltis.toml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/config/moltis.toml#L423), [config/moltis.toml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/config/moltis.toml#L548)
++- Tracked memory остаётся на auto-detect без `provider`, `model` и `watch_dirs`: [config/moltis.toml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/config/moltis.toml#L654)
++- Preflight уже считает `tavily_api_key` обязательным, но env render раньше не fail-closed на пустой `TAVILY_API_KEY`: [scripts/preflight-check.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/preflight-check.sh#L140), [scripts/render-moltis-env.sh](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/scripts/render-moltis-env.sh#L68)
++- Live runtime logs показывают Tavily SSE handshake/auto-restart failures при наличии успешных `mcp__tavily__tavily_search` вызовов; это указывает на нестабильный transport path, а не на полный outage.
++- Live runtime logs показывают `memory_search` fallback chain: `https://api.z.ai/api/coding/paas/v4/embeddings -> 400` и `https://api.groq.com/openai/v1/embeddings -> 401`.
++- Официальные docs Moltis разделяют memory embeddings provider contract и chat providers, а docs providers показывают first-class `zai` provider отдельно от generic `openai`: https://docs.moltis.org/memory.html, https://docs.moltis.org/providers.html
++- Официальные docs Tavily MCP допускают remote MCP по query-key URL; текущий syntax сам по себе не доказывает misconfig: https://docs.tavily.com/documentation/mcp
++
++## Expert Opinions
++
++### Architect
++
++- Opinion: Tavily и `memory_search` сейчас не один баг, а два разных systemic failure modes поверх хрупкого runtime contract.
++- Key points: Tavily нужно лечить как transport/dependency reliability problem. Memory нужно лечить как deterministic-contract problem, потому что auto-detect уводит embeddings на неподходящий chat endpoint.
++
++### SRE
++
++- Opinion: Основная ошибка процесса в том, что текущие deploy/UAT сигналы недостаточно семантичны.
++- Key points: `/health`, auth и базовый chat ещё не доказывают readiness search и memory surfaces; нужны отдельные probes и fail taxonomy.
++
++### DevOps
++
++- Opinion: Самый безопасный repo-side шаг сейчас это fail-closed secrets/render + read-only diagnostics, а не немедленная смена production memory provider.
++- Key points: `TAVILY_API_KEY` должен стать обязательным уже на render stage. Для memory provider сначала нужен диагностический контракт, потом live pinning.
++
++### Security
++
++- Opinion: Нельзя продолжать дебажить это через произвольные правки runtime secrets/state.
++- Key points: Любая ручная чистка provider state без дифференциации tracked config vs runtime drift повышает шанс снести OAuth или вернуть старую нестабильность.
++
++### QA
++
++- Opinion: Нужно отделить transport-green от capability-green.
++- Key points: Необходимо добавить machine-readable diagnostics для Tavily/memory и acceptance criteria, которые явно считают `400/401` embeddings chain failure и SSE churn деградацией.
++
++### Domain Specialist (Moltis)
++
++- Opinion: `memory_search` нельзя оставлять на auto-detect в текущем проекте.
++- Key points: Repo уже использует Z.ai Coding endpoint как chat fallback через `[providers.openai]`; для embeddings это плохой implicit match. До выбора поддержанного embedding backend безопаснее иметь deterministic memory contract либо keyword-only fallback.
++
++### GitOps / Delivery
++
++- Opinion: Все follow-up fixes должны оставаться в tracked artifacts и guardrails, а не в устных договорённостях.
++- Key points: Backlog обязан ранжировать Tavily и memory выше браузера и хвостовой уборки, а runbooks должны давать один канонический read-only diagnostic path.
++
++## Root Cause Analysis
++
++- Primary root cause: Неполный repository-managed runtime contract. Tavily и memory surfaces не имеют детерминированного и проверяемого контракта уровня deploy/UAT.
++- Contributing factors:
++  - search зависит от удалённого Tavily SSE transport без отдельного capability-proof
++  - memory embeddings оставлены на auto-detect и подхватывают chat-oriented provider chain
++  - `TAVILY_API_KEY` до этого не fail-closed в env render path
++  - runtime drift может возвращать лишние providers вроде Groq в embedding chain
++- Confidence: High
++
++## Solution Options
++
++1. Ничего не менять в repo и чинить только live runtime руками — Pros: быстро локально. Cons: повторяемость нулевая, высокий риск снова снести OAuth или drift guard. Risk: High. Effort: Low.
++2. Сразу пинить memory на новый embedding provider в tracked config — Pros: потенциально быстро уберёт `memory_search` errors. Cons: high-risk config/provider change без отдельной live validation. Risk: High. Effort: Medium.
++3. Временно перевести memory в keyword-only mode и отложить embeddings — Pros: быстро убирает noisy provider-chain failures. Cons: режет vector semantics до следующего этапа. Risk: Medium. Effort: Low.
++4. Оставить behavior как есть, но добавить fail-closed env rendering и read-only diagnostics — Pros: безопасно, не ломает working OAuth/chat path, улучшает observability. Cons: не чинит сам runtime behavior целиком. Risk: Low. Effort: Low.
++5. Добавить fail-closed env rendering, read-only diagnostics, а затем отдельно принять deterministic memory contract после live probe supported backend — Pros: минимальный риск, хороший audit trail, лучший порядок для следующего этапа. Cons: требует ещё один follow-up шаг для окончательного memory fix. Risk: Low. Effort: Medium.
++6. Заменить Tavily remote SSE на другой search path немедленно — Pros: может устранить transport fragility. Cons: нет доказанного safer replacement в этой ветке, высокий риск нового drift. Risk: Medium. Effort: Medium.
++
++## Recommended Plan
++
++1. Немедленно поднять Tavily и `memory_search` в backlog как P0 unresolved blockers.
++2. Сделать `TAVILY_API_KEY` обязательным уже на `render-moltis-env.sh`, чтобы пустой search secret не проходил в runtime.
++3. Добавить канонический read-only diagnostic entrypoint для tracked Tavily/memory contract и runtime log taxonomy.
++4. Расширить runbook и UAT/backlog так, чтобы Tavily SSE churn и `400/401` embeddings chain считались явной деградацией.
++5. Отдельным следующим slice выбрать deterministic memory contract: либо supported embedding backend, либо временный keyword-only fallback до live validation.
++
++## Rollback Plan
++
++- Для repo-side fixes: revert commit с `render-moltis-env.sh`, новым diagnostic script и docs/tasks changes.
++- Не выполнять rollback через удаление runtime auth/state файлов.
++- Если новый render guard неожиданно блокирует deploy, сначала восстановить недостающий `TAVILY_API_KEY`, а не ослаблять guard.
++
++## Verification Checklist
++
++- [ ] `scripts/render-moltis-env.sh` падает на пустом `TAVILY_API_KEY`
++- [ ] diagnostic script выдаёт JSON по tracked config без логов
++- [ ] diagnostic script корректно считает Tavily SSE и embeddings failure taxonomy на sample/runtime logs
++- [ ] Speckit backlog ранжирует Tavily и `memory_search` выше browser/runtime cleanup
++- [ ] Runbook содержит канонический read-only triage path для search/memory
+diff --git a/docs/reports/consilium/2026-03-24-moltis-embedding-runtime-contract-consilium.md b/docs/reports/consilium/2026-03-24-moltis-embedding-runtime-contract-consilium.md
+new file mode 100644
+index 0000000..55c506c
+--- /dev/null
++++ b/docs/reports/consilium/2026-03-24-moltis-embedding-runtime-contract-consilium.md
+@@ -0,0 +1,87 @@
++# Consilium Report
++
++## Question
++What is the minimum safe way to restore Moltis embeddings and Ollama provider availability without papering over the real cause, and what contract should prevent this incident from recurring?
++
++## Execution Mode
++Mode B (evidence-first expert matrix inside the main session; sub-agent mode was unavailable because the environment had already reached the active agent-thread limit)
++
++## Evidence
++- Tracked [config/moltis.toml](/Users/rl/coding/moltinger/moltinger-main-031-moltis-reliability-diagnostics/config/moltis.toml) already pins `[memory] provider = "ollama"`, `base_url = "http://ollama:11434"`, and `model = "nomic-embed-text"`.
++- Tracked config also references cloud-backed Ollama models such as `ollama::gemini-3-flash-preview:cloud`.
++- Live writable runtime `moltis.toml` on the server diverged from tracked config and still carried the older auto-detect memory defaults.
++- Live logs showed `memory_search` falling through to:
++  - `https://api.z.ai/api/coding/paas/v4/embeddings` with `400 Bad Request`
++  - `https://api.groq.com/openai/v1/embeddings` with `401 Unauthorized`
++- Server `.env` already contained `OLLAMA_API_KEY`, but the running `moltis` container environment did not expose it.
++- Ollama sidecar reachability was healthy and exposed `nomic-embed-text`, so the failure was not basic Ollama network availability.
++
++## Expert Opinions
++
++### Architect
++- The root problem is contract fragmentation across tracked config, writable runtime config, rendered `.env`, and container env.
++- Any fix that changes only provider settings without restoring those invariants will be another short-lived workaround.
++
++### SRE
++- Deploy/runtime attestation must prove both mount provenance and config content parity.
++- Post-deploy validation must include a live check that `memory_search` no longer hits Z.ai/Groq embeddings and that the `moltis` container actually exposes `OLLAMA_API_KEY`.
++
++### DevOps
++- `docker-compose.prod.yml` must forward `OLLAMA_API_KEY` into `moltis`, not only into the Ollama sidecar.
++- The rollout should remain GitOps-driven so the fix is reproducible and auditable.
++
++### Security
++- Secrets should stay out of git, but “secret rendered to `.env`” is not sufficient evidence.
++- The safe boundary is: rendered secret -> compose env -> exact consuming container.
++
++### QA
++- Repository proof is necessary but not enough; the authoritative target is the remote Moltis runtime.
++- The incident is only closed after a live canary confirms both embeddings and provider/model availability.
++
++### Moltis Domain Specialist
++- The tracked memory config is already correct, so the symptom strongly indicates runtime drift rather than a bad baseline.
++- Cloud-backed Ollama model discovery depends on the runtime process seeing `OLLAMA_API_KEY`.
++
++### Delivery / GitOps
++- This is a classic “green transport, broken semantics” incident.
++- The right fix is fail-closed attestation plus redeploy from the tracked branch, not ad-hoc hand edits on the server.
++
++## Root Cause Analysis
++- Primary root cause: the live Moltis runtime was not forced to keep writable runtime `moltis.toml` aligned with tracked `config/moltis.toml`, and the live `moltis` container did not receive `OLLAMA_API_KEY` even though the rendered server `.env` already had it.
++- Contributing factors:
++  - existing runtime attestation checked mount source/writability, but not file parity
++  - compose forwarded the Ollama key to the sidecar but not the Moltis process that performs provider discovery
++  - user-visible symptoms looked like provider breakage, which can misdirect debugging away from runtime drift
++- Confidence: High
++
++## Solution Options
++1. Reconfigure memory providers only in runtime state. Pros: fast. Cons: drift-prone, non-GitOps. Risk: high. Effort: low.
++2. Add only an operator runbook note. Pros: cheap. Cons: does not prevent recurrence. Risk: high. Effort: low.
++3. Forward `OLLAMA_API_KEY` into `moltis` only. Pros: restores cloud model discovery. Cons: leaves stale runtime `moltis.toml` unresolved. Risk: medium. Effort: low.
++4. Enforce runtime `moltis.toml` parity only. Pros: fixes embeddings drift. Cons: cloud-backed Ollama models can still stay invisible. Risk: medium. Effort: low.
++5. Combine config-parity attestation, `OLLAMA_API_KEY` forwarding, tests, RCA/rule docs, and GitOps redeploy. Pros: closes both failure paths and prevents silent recurrence. Cons: broader change set. Risk: low. Effort: medium.
++
++## Recommended Plan
++1. Keep tracked `config/moltis.toml` as the source of truth and fail deploy/runtime attestation if writable runtime `moltis.toml` diverges.
++2. Forward `OLLAMA_API_KEY` into the `moltis` container and keep static coverage for that compose contract.
++3. Capture the incident in RCA, rules, and runbook guidance so future triage starts with parity and env-delivery checks.
++4. Redeploy from this branch through the tracked GitOps path.
++5. Validate live with:
++   - runtime config parity
++   - `docker exec moltis env | grep ^OLLAMA_API_KEY=`
++   - successful `memory_search`
++   - visible Ollama provider/model surface
++
++## Rollback Plan
++- Revert the repo-side hardening commit if it blocks a valid deploy unexpectedly.
++- Preserve runtime config and Moltis runtime home before any deeper state migration.
++- Do not hand-edit provider state on the server unless GitOps rollout fails and the emergency path is explicitly justified.
++
++## Verification Checklist
++- [x] Tracked config confirmed to pin the correct memory backend
++- [x] Live runtime drift confirmed in writable `moltis.toml`
++- [x] Missing `OLLAMA_API_KEY` delivery into `moltis` confirmed
++- [x] Safe repo-side fix identified
++- [ ] GitOps redeploy completed
++- [ ] Live `memory_search` validated
++- [ ] Live Ollama provider/model availability validated
+diff --git a/docs/rules/context-discovery-before-questions.md b/docs/rules/context-discovery-before-questions.md
+index ecf17d9..f5e6fdd 100644
+--- a/docs/rules/context-discovery-before-questions.md
++++ b/docs/rules/context-discovery-before-questions.md
+@@ -28,12 +28,17 @@ If the value is found in these sources, do not ask the user for it again.
+ ## Known Critical Variables
+ 
+ - `TELEGRAM_BOT_TOKEN`
+-- `TELEGRAM_ALLOWED_USERS`
++- `MOLTINGER_SERVICE_TOKEN`
+ - `GLM_API_KEY`
+ - `TAVILY_API_KEY`
+ - `MOLTIS_PASSWORD`
+ - `OLLAMA_API_KEY` (optional)
+ 
++Notes:
++
++- For Moltis Telegram ingress, the tracked allowlist in `config/moltis.toml` is authoritative.
++- `/opt/moltinger/.env` may still contain `TELEGRAM_ALLOWED_USERS`, but that value is a derived mirror for auxiliary scripts, not the primary auth source.
++
+ ## When Asking the User Is Allowed
+ 
+ Only ask the user if:
+diff --git a/docs/rules/moltis-runtime-memory-contract-and-ollama-cloud-env.md b/docs/rules/moltis-runtime-memory-contract-and-ollama-cloud-env.md
+new file mode 100644
+index 0000000..b5733e8
+--- /dev/null
++++ b/docs/rules/moltis-runtime-memory-contract-and-ollama-cloud-env.md
+@@ -0,0 +1,46 @@
++# Moltis runtime memory contract and Ollama Cloud env must stay end-to-end aligned (RCA-022)
++
++**Status:** Active  
++**Effective date:** 2026-03-24  
++**Scope:** `config/moltis.toml`, `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml`, `docker-compose.prod.yml`, deploy/runtime attestation, remote Moltis operator diagnostics
++
++## Problem This Rule Prevents
++
++Tracked Moltis config can already contain the correct memory and provider baseline while the live runtime still behaves as if embeddings and Ollama Cloud are broken.
++
++The specific failure pattern is:
++
++- tracked `config/moltis.toml` pins memory to `ollama/nomic-embed-text`
++- writable runtime `moltis.toml` drifts back to an older auto-detect contract
++- `OLLAMA_API_KEY` exists in rendered server `.env`, but the `moltis` container does not receive it
++- operators see `memory_search` hit Z.ai or Groq embeddings and assume provider auth is broken
++
++## Mandatory Protocol
++
++Before declaring an embeddings or Ollama provider incident, verify these checks in order:
++
++1. Runtime config parity:
++   - tracked `config/moltis.toml`
++   - writable runtime `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml`
++   - they must match
++2. Runtime env delivery:
++   - `docker exec moltis sh -lc 'env | grep ^OLLAMA_API_KEY='`
++   - if absent, cloud-backed Ollama models are not expected to appear
++3. Ollama reachability:
++   - `docker exec moltis sh -lc 'curl -sf http://ollama:11434/api/tags'`
++4. Only after those checks:
++   - inspect provider-specific auth or third-party API behavior
++
++## Hard Guardrail
++
++Production deploy and runtime attestation must fail closed if:
++
++- writable runtime `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` diverges from tracked `config/moltis.toml`
++- `docker-compose.prod.yml` stops forwarding `OLLAMA_API_KEY` into the `moltis` container while tracked config still references cloud-backed Ollama models
++
++## Expected Behavior
++
++- Tracked config expresses the intended memory/provider contract.
++- Runtime config is a writable mirror of that tracked contract, not an independently drifting source of truth.
++- Server `.env` rendering alone is not accepted as proof; the consuming container must expose the key.
++- Operator diagnostics start with parity/env checks before provider blame.
+diff --git a/docs/rules/production-deploy-single-writer.md b/docs/rules/production-deploy-single-writer.md
+index e38b85f..0d5bc13 100644
+--- a/docs/rules/production-deploy-single-writer.md
++++ b/docs/rules/production-deploy-single-writer.md
+@@ -9,12 +9,18 @@ Mandatory requirements:
+ 3. Any active-root symlink update must migrate legacy non-symlink paths before `ln -sfn`.
+ 4. Active-root mutation logic must live in one versioned script entrypoint, not duplicated inline across workflow YAML files.
+ 5. Tracked Moltis deploy orchestration must live in one versioned script entrypoint, not duplicated across `deploy.yml` and `uat-gate.yml`.
++6. Live runtime provenance attestation must live in one versioned script entrypoint and remain a blocking part of tracked deploy success.
++7. Periodic drift detection must call the shared runtime attestation entrypoint instead of inlining remote container provenance logic in workflow YAML.
++8. Scheduled drift attestation must be marker-driven: compare live runtime to deployed markers under the active root, not to repository HEAD or the workflow's current `${github.sha}`.
+ 
+ Implementation baseline:
+ 
+ - Lock group: `prod-remote-ainetic-tech-opt-moltinger`
+ - Shared entrypoint: `scripts/update-active-deploy-root.sh`
+ - Shared tracked deploy entrypoint: `scripts/run-tracked-moltis-deploy.sh`
++- Shared runtime attestation entrypoints:
++  - `scripts/moltis-runtime-attestation.sh`
++  - `scripts/ssh-run-moltis-runtime-attestation.sh`
+ - Guard pattern:
+   - `if [ -e "$ACTIVE" ] && [ ! -L "$ACTIVE" ]; then mv "$ACTIVE" "$ACTIVE.legacy-<timestamp>"; fi`
+   - `ln -sfn "$TARGET" "$ACTIVE"`
+diff --git a/knowledge/references/moltis-runtime-contract.md b/knowledge/references/moltis-runtime-contract.md
+new file mode 100644
+index 0000000..c2a0cb0
+--- /dev/null
++++ b/knowledge/references/moltis-runtime-contract.md
+@@ -0,0 +1,45 @@
++---
++title: "Moltis Runtime Contract"
++category: "reference"
++tags: ["moltis", "runtime", "deploy", "oauth", "memory"]
++source: "original"
++date: "2026-03-22"
++confidence: "high"
++---
++
++# Moltis Runtime Contract
++
++## Summary
++
++Production Moltis is considered correctly deployed only when the live process is
++running against the tracked repository workspace, the writable runtime config
++directory, and the intended provider catalog.
++
++## Key Concepts
++
++- **Workspace mount**: The live container must see the active deploy checkout at
++  `/server`, not an old image-only filesystem.
++- **Writable runtime config**: OAuth tokens and runtime-managed auth files must
++  live in `/home/moltis/.config/moltis` backed by a writable host path.
++- **Runtime restart**: Changes to `moltis.toml` only take effect after the Moltis
++  process is recreated or restarted.
++- **Canonical memory path**: The built-in memory backend always supports
++  `~/.moltis/MEMORY.md` and `~/.moltis/memory/*.md`; rely on that path for
++  durable project knowledge.
++
++## Details
++
++The most important live invariants are:
++
++- `/server` points to the tracked checkout for the active branch or release.
++- `/home/moltis/.config/moltis` points to the canonical runtime config directory.
++- The runtime config mount is writable so OAuth and provider state survive restarts.
++- The live process has actually restarted after tracked config changes.
++- `openai-codex::gpt-5.4` remains available after restart.
++
++When any of these invariants drift, the typical user-facing symptoms are:
++
++- OpenAI OAuth appears "lost" even though tokens still exist on disk.
++- `memory_search` falls back to the wrong embedding providers.
++- Browser or MCP tools disappear from the registered tool surface.
++- Deploy looks healthy on `/health`, but the running process still uses stale state.
+diff --git a/knowledge/troubleshooting/moltis-memory-and-search-recovery.md b/knowledge/troubleshooting/moltis-memory-and-search-recovery.md
+new file mode 100644
+index 0000000..95ea423
+--- /dev/null
++++ b/knowledge/troubleshooting/moltis-memory-and-search-recovery.md
+@@ -0,0 +1,50 @@
++---
++title: "Moltis Memory And Search Recovery"
++category: "troubleshooting"
++tags: ["moltis", "memory", "search", "tavily", "embeddings", "deploy"]
++source: "original"
++date: "2026-03-22"
++confidence: "high"
++---
++
++# Moltis Memory And Search Recovery
++
++## Summary
++
++If `memory_search` starts failing with embedding-provider errors or Tavily
++search disappears, first verify that the live Moltis process was recreated after
++config changes and that the current tool surface matches the tracked runtime.
++
++## Symptoms
++
++- `memory_search` reports `all embedding providers failed`.
++- Logs show `https://api.z.ai/.../embeddings` with `400 Bad Request`.
++- Logs show `https://api.groq.com/openai/v1/embeddings` with `401 Unauthorized`.
++- Tavily tools are missing from the registered tool list.
++- Logs show `MCP SSE initialize handshake failed`.
++
++## Diagnosis
++
++1. Confirm the container start time is newer than the config update time.
++2. Check startup logs for the active memory provider and model.
++3. Check whether Tavily MCP initialized and synced tools into the registry.
++4. Inspect live canary runs, not only `/health`.
++
++## Actions
++
++1. Recreate Moltis during deploy so runtime config changes are applied immediately.
++2. Pin `memory.provider = "ollama"` and `model = "nomic-embed-text"` to stop
++   embeddings from auto-detecting chat-oriented providers.
++3. Exercise `memory_search` after restart and ensure it succeeds without `z.ai`
++   or `groq` embedding fallback errors.
++4. Exercise `mcp__tavily__tavily_search` after restart and ensure it succeeds
++   without fresh SSE handshake failures.
++5. Mirror tracked project knowledge into `~/.moltis/memory/*.md` so the built-in
++   backend can index repository knowledge through the officially supported path.
++
++## Expected Healthy Signals
++
++- Startup logs show `memory: fallback chain configured` with `active":"ollama"`.
++- Startup logs show `memory: status` with `model":"nomic-embed-text"`.
++- A live `memory_search` tool call finishes with `tool execution succeeded`.
++- A live `mcp__tavily__tavily_search` tool call finishes with `tool execution succeeded`.
+diff --git a/specs/031-moltis-reliability-diagnostics/plan.md b/specs/031-moltis-reliability-diagnostics/plan.md
+new file mode 100644
+index 0000000..4d3889c
+--- /dev/null
++++ b/specs/031-moltis-reliability-diagnostics/plan.md
+@@ -0,0 +1,241 @@
++# Implementation Plan: Moltis Reliability Diagnostics and Runtime Guardrails
++
++**Branch**: `031-moltis-reliability-diagnostics` | **Date**: 2026-03-21 | **Spec**: [spec.md](./spec.md)  
++**Input**: Feature specification from `/specs/031-moltis-reliability-diagnostics/spec.md`
++
++## Summary
++
++Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. Production policy adds one more hard constraint: shared production deploys are allowed only from `main`. This slice therefore extends the safe repository-managed fixes with runtime-config parity enforcement and explicit Ollama cloud env forwarding, but lands them through a two-stage strategy: `PR1` to `main` contains only runtime-critical fixes plus blocking verification lanes, then canonical deploy/live verification happens from `main`, and only after that does `PR2` carry RCA/rules/lessons/spec updates.
++
++## Technical Context
++
++**Language/Version**: Bash, TOML, Speckit Markdown, Docker Compose, Moltis 0.10.18 tracked image contract  
++**Primary Dependencies**: `config/moltis.toml`, `docker-compose.prod.yml`, `scripts/deploy.sh`, `scripts/run-tracked-moltis-deploy.sh`, `scripts/test-moltis-api.sh`, `tests/lib/http.sh`, `tests/lib/rpc.sh`, `tests/lib/ws_rpc_cli.mjs`  
++**Storage**: Runtime config under `${MOLTIS_RUNTIME_CONFIG_DIR}`, persistent Moltis state under `/home/moltis/.moltis`, repo-managed config/docs/scripts in the checkout mounted as `/server`  
++**Testing**: Targeted shell tests, static config validation, script syntax checks, authoritative remote Telegram probing, remote runtime inspection  
++**Target Platform**: Shared remote Moltis deployment in Docker, plus repository validation in this worktree  
++**Project Type**: Diagnostics and guardrail hardening for an existing production runtime  
++**Performance Goals**: Fail fast on invalid runtime contract; keep smoke diagnostics lightweight and operator-friendly  
++**Constraints**: No speculative destructive server changes, official-docs-first setup guidance, remote target remains authoritative, preserve GitOps discipline, and respect the deploy-only-from-`main` production policy
++**Scale/Scope**: Single Moltis deployment, one repository-managed runtime contract, one safe-fix slice
++
++## Constitution Check
++
++*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
++
++- Context-First Development: PASS. Root instructions, memory/session files, local `AGENTS.md`, tracked config, runtime scripts, live container state, Telegram authoritative probe, and official Moltis docs were reviewed before proposing fixes.
++- Single Source of Truth: PASS. The tracked repository remains the intended source for config, compose, scripts, and skills, while the investigation explicitly calls out where the live runtime drifted away from that source.
++- Library-First Development: PASS. Safe fixes reuse existing deploy and test helpers instead of inventing parallel runtime control planes.
++- Code Reuse & DRY: PASS. The smoke script will reuse the shared auth/RPC helpers already used by integration tests.
++- Strict Type Safety: PASS for the Speckit artifact layer and JSON/RPC contract reuse; no new loose data shape is introduced.
++- Atomic Task Execution: PASS. The slice is decomposed into evidence capture, guardrail hardening, diagnostic script refresh, and validation.
++- Quality Gates: PASS. Planned fixes will be validated with targeted shell/static tests.
++- Progressive Specification: PASS. Diagnostics are captured in the spec package before expanding implementation.
++
++No constitution exception is required.
++
++## Evidence Snapshot
++
++### Tracked Intent
++
++- `docker-compose.prod.yml` expects the Moltis container to use `working_dir: /server`, mount the repository checkout as `./:/server:ro`, and mount `${MOLTIS_RUNTIME_CONFIG_DIR}` into `/home/moltis/.config/moltis`.
++- `config/moltis.toml` expects repo-visible skills at `/server/skills`, repo-visible scripts under `/server/scripts`, and writable runtime state under `/home/moltis/.moltis`.
++- `scripts/prepare-moltis-runtime-config.sh` is already designed to copy static config into a writable runtime directory while preserving runtime-managed auth files.
++- Static tests already assert some of this contract, but only at the tracked-file layer.
++
++### Live Production Facts
++
++- The running Moltis container does **not** mount `/server` at all and runs from `/home/moltis`.
++- The running Moltis container mounts `/opt/moltinger/config` read-only into `/home/moltis/.config/moltis` instead of the prepared runtime config directory.
++- Runtime logs show `skills: 2 enabled, 0 repos`; repo skills from `/server/skills` are absent.
++- Runtime logs show `memory system initialized` with `chunks: 0` and watch scope limited to `~/.moltis`, so project docs are not entering useful vector memory.
++- Runtime logs show browser image pull failures due Docker socket permission errors; official docs also require Docker-aware browser container connectivity for sibling browser containers.
++- Tavily MCP search intermittently fails its SSE handshake and auto-restart sequence.
++- Runtime logs show repeated `memory_search` failures where the fallback chain hits `https://api.z.ai/api/coding/paas/v4/embeddings` with `400 Bad Request`, then Groq embeddings with `401 Unauthorized`.
++- Live runtime diff shows tracked `config/moltis.toml` already pins `[memory] provider = "ollama"` with `model = "nomic-embed-text"` and repo-visible `watch_dirs`, while `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` still carries the older default commented memory block and `http://localhost:11434/v1`.
++- Server `.env` already contains `OLLAMA_API_KEY`, but the running `moltis` container environment does not, so cloud-backed Ollama models such as `gemini-3-flash-preview:cloud` never enter the live provider catalog.
++- Telegram authoritative testing returns `model 'openai-codex::gpt-5.3-codex-spark' not found`, matching stale provider/model state rather than the tracked provider surface.
++- Runtime logs show `provider_keys.json.tmp... read-only file system`, proving the live config mount is incompatible with runtime-managed auth/key persistence.
++
++## Root Cause Classification
++
++### Operational Drift
++
++1. The running Moltis container no longer matches tracked compose intent: `/server` is missing, the working directory is wrong, and the runtime config mount points at a stale read-only path.
++2. The active `moltis.toml` inside the container differs materially from tracked `config/moltis.toml`, including provider surface and skill autoload behavior.
++3. Persisted session/model state still references removed `openai-codex::*` models, which leaks stale runtime assumptions into Telegram chat behavior.
++4. `~/.moltis/MEMORY.md` and adjacent runtime context contain stale content unrelated to the current repository contract.
++
++### Misconfiguration
++
++1. `config/moltis.toml` leaves memory watch scope effectively pointed away from repository knowledge, so even a healthy runtime will not build useful project vector memory by default.
++2. Browser automation is enabled, but the configuration does not explicitly set the Docker-in-Docker browser connectivity contract documented by Moltis for Docker deployments.
++3. Built-in web search is disabled while production depends entirely on a remote Tavily MCP path that is already showing transport instability.
++4. Memory embeddings are left on auto-detect, so the runtime can infer a chat-provider chain that is unsuitable for embeddings, including the Z.ai Coding endpoint under `[providers.openai]`.
++5. The tracked compose contract forwarded `OLLAMA_API_KEY` to the Ollama sidecar but not to the `moltis` container itself, so cloud-backed Ollama chat models could be configured in git but remain invisible at runtime.
++
++### Missing Integration
++
++1. Repo-managed skills and scripts are not visible to the running container because the checkout is not mounted as `/server`.
++2. Repo knowledge cannot flow into vector memory because the runtime neither sees the repository nor watches repository docs/knowledge paths.
++3. The tracked codex-update runtime contract depends on container-visible `/server/...` paths; those integrations are unreachable while `/server` is absent.
++4. Search and memory health have no dedicated repository-managed proof today, so transport-green deploy/UAT signals can miss Tavily SSE churn and embedding-provider drift.
++5. Deploy/runtime attestation proved mount source and writability, but did not yet prove that the writable runtime `moltis.toml` still matched tracked `config/moltis.toml`.
++
++### Bugs
++
++1. `scripts/test-moltis-api.sh` still uses the retired `/login` form flow and `/api/v1/chat`, so it misdiagnoses current runtimes.
++2. Session/model state appears to survive provider-surface drift without auto-healing; this is a runtime bug candidate, but fixing it is deferred until the tracked runtime contract is restored.
++3. Browser tool startup currently fails at Docker access; if permission and connectivity are both required, the runtime may be missing a clearer preflight error path. That remains a runtime bug candidate, not a repository-managed fix in this slice.
++
++## Minimal Safe Fix Plan
++
++### Phase 1 - Lock The Diagnosis Into Artifacts
++
++1. Create the Speckit package and record the exact tracked-vs-live evidence, root-cause categories, and safe remediation order.
++2. Keep deferred operational actions explicit so repository fixes are not mistaken for live repair completion.
++
++### Phase 2 - Fail Fast On Broken Runtime Contract
++
++1. Extend deploy verification so Moltis is considered healthy only if:
++   - the working directory is `/server`
++   - the checkout is mounted into `/server`
++   - `/server/skills` is visible inside the container
++   - `/home/moltis/.config/moltis` is mounted from the configured runtime config directory
++   - the runtime config directory is writable for runtime-managed files
++2. Cover the new guardrail with targeted repository tests so future drift cannot silently re-enter through script edits.
++
++### Phase 3 - Refresh Operator Diagnostics
++
++1. Update `scripts/test-moltis-api.sh` to use the current `/api/auth/*` contract and the current WebSocket RPC chat/status path.
++2. Reuse existing shared test helpers instead of duplicating auth or RPC logic.
++3. Add a read-only `moltis-search-memory-diagnostics.sh` entrypoint that summarizes tracked Tavily/memory contract plus optional runtime-log failure taxonomy without mutating live state.
++
++### Phase 4 - Highest-Priority Live Follow-Up
++
++The following actions are intentionally **not** auto-applied in this slice and must remain operator-driven after the repository guardrails land:
++
++- stabilize Tavily SSE search or replace it with a less fragile search path
++- arrest `memory_search` embedding failures by pinning a deterministic memory contract or explicitly forcing keyword-only fallback until a supported embedding backend is validated
++- add live search/memory proof once the runtime contract is healthy
++
++### Phase 4a - Embedding And Ollama Contract Repair
++
++The current incident narrows the highest-priority live work to one concrete contract:
++
++- deploy/runtime verification must fail if writable runtime `moltis.toml` drifts away from tracked `config/moltis.toml`
++- the `moltis` container must receive `OLLAMA_API_KEY` so cloud-backed Ollama chat models can be discovered
++- operator runbooks and RCA/lessons must point first to runtime-config parity and env delivery before blaming provider auth or third-party embeddings endpoints
++
++### Phase 4b - Mainline Landing Strategy (Solution 3)
++
++Because production deploys are blocked from feature branches, incident closure must be split deliberately instead of merging this entire branch into `main`.
++
++`PR1` to `main` should carry only the production-critical embedding/Ollama delta plus blocking proof:
++
++- source the runtime-only carrier from the already proven technical deltas in this branch, not by merging the whole branch
++  - `95a0feb`: pin memory embeddings to Ollama and repo-visible `watch_dirs`
++  - `81ebeaa`: force-recreate Moltis on deploy so env/config changes actually take effect
++  - `a1829bf` + `87a39fc`: live runtime attestation plus component proof
++  - `e7f3066`: forward `OLLAMA_API_KEY` into `moltis` and fail closed on runtime `moltis.toml` drift
++- `config/moltis.toml`
++  - keep only the `[memory]` pin to `provider = "ollama"`, the verified Ollama embeddings endpoint/model, and repo-visible `watch_dirs`
++- `docker-compose.prod.yml`
++  - forward `OLLAMA_API_KEY` into the `moltis` container
++- `scripts/deploy.sh`
++  - force-recreate the Moltis runtime during deploy so new env/config take effect immediately
++  - fail deploy when writable runtime `moltis.toml` diverges from tracked `config/moltis.toml`
++- `scripts/moltis-runtime-attestation.sh`
++  - include runtime-config parity proof in post-deploy attestation so the same drift cannot pass as healthy
++- workflow/control-plane plumbing only as needed to execute the attestation during canonical deploy from `main`
++  - `.github/workflows/deploy.yml`
++  - `.github/workflows/uat-gate.yml`
++  - `scripts/run-tracked-moltis-deploy.sh`
++- blocking tests for that runtime-only carrier
++  - `tests/static/test_config_validation.sh`
++  - `tests/unit/test_deploy_workflow_guards.sh`
++  - `tests/component/test_moltis_runtime_attestation.sh`
++  - `tests/component/test_moltis_search_memory_diagnostics.sh`
++
++As of 2026-03-26, `PR1` has been merged to `main`, the canonical production deploy from `main` succeeded, and the authoritative remote runtime has proven the fix via successful live `memory_search` plus Ollama provider/model availability checks.
++
++`PR2` should stay deferred until after successful live verification from `main` and carry the mutable post-incident knowledge layer through a fresh docs-only carrier based on the verified `main` state, not by opening this mixed-scope branch directly:
++
++- RCA / consilium / rules / runbook updates
++- lessons index tooling and lessons content
++- Speckit artifact finalization that depends on live outcome wording
++- any browser/Tavily or other reliability hardening not strictly required to clear the current embedding/Ollama blocker
++- do not blindly drag unrelated browser/Tavily/runtime-hardening commits from this branch into `PR1`; if they are still desired, land them later as separate reviewed work after the current blocker is closed
++- do not open `PR2` directly from `031-moltis-reliability-diagnostics`; materialize a narrow docs/process carrier from `main` so the deferred learning layer stays reviewable and rollback-safe
++
++### Phase 5 - Remaining Live-Only Remediation
++
++The following actions remain deferred and must stay operator-driven after the highest-priority Tavily/memory blockers are addressed:
++
++- merge the runtime-only `PR1` into `main`, then redeploy production from `main` so the tracked runtime contract is actually applied
++- clear or migrate stale session/model state that still references removed models
++- repair browser Docker access or runtime permissions on the target host
++- explicitly wire repository docs/knowledge into memory watch/index scope and then backfill embeddings
++
++## Structure Decision
++
++Keep this slice intentionally narrow:
++
++- Speckit artifacts under `specs/031-moltis-reliability-diagnostics/`
++- deploy/runtime verification hardening in existing deploy scripts
++- operator smoke diagnostic refresh in the existing Moltis API test script
++- read-only search/memory diagnostics as a separate operator entrypoint
++- no speculative production state mutation inside repository code
++
++This keeps the work safe, auditable, and aligned with GitOps.
++
++## Phase Breakdown
++
++### Phase 0: Evidence Capture
++
++- Capture tracked config intent and live runtime evidence.
++- Cross-check key assumptions against official Moltis docs.
++
++### Phase 1: Artifact Creation
++
++- Write `spec.md`, `plan.md`, and `tasks.md`.
++- Encode root-cause categories and remediation order.
++
++### Phase 2: Guardrail Hardening
++
++- Add Moltis runtime contract verification to deploy checks.
++- Add targeted repository validation for the new guardrails.
++
++### Phase 3: Diagnostic Tool Refresh
++
++- Refresh `scripts/test-moltis-api.sh` to current auth/RPC behavior.
++- Add a read-only Tavily/memory diagnostic entrypoint for tracked config plus optional runtime logs.
++- Validate the updated diagnostics with syntax and targeted contract checks.
++
++### Phase 4: Highest-Priority Live Backlog
++
++- Rank Tavily SSE failures and `memory_search` embedding failures above browser and stale-context cleanup.
++- Keep their remediation explicit and operator-driven until a deterministic provider contract is chosen.
++
++### Phase 4a: Embedding/Ollama Primary Cause Closure
++
++- Forward `OLLAMA_API_KEY` into the `moltis` container.
++- Extend deploy/runtime attestation to reject stale writable runtime `moltis.toml`.
++- Capture the incident in RCA, rules, and lessons so future sessions start from the right first checks.
++
++### Phase 4b: Mainline PR Split And Canonical Rollout
++
++- Prepare the exact `PR1` carrier for `main` and validate it with hermetic blocking lanes only.
++- Merge `PR1` into `main` and use the standard production deploy workflow from `main`.
++- Prove the live fix remotely with authoritative `memory_search` and Ollama provider/model checks.
++- Only then land `PR2` with the mutable documentation/process layer.
++
++### Phase 5: Handoff
++
++- Update `tasks.md` with completed safe fixes.
++- Leave a precise operational follow-up list for the `main`-based live repair and the deferred `PR2`.
++
++### Phase 6: Architectural Hardening Backlog
++
++- Record the consilium-backed backlog for fail-closed auth/config durability so follow-up work is driven by tracked artifacts rather than chat history.
++- Prioritize secret/env hardening, runtime-dir pinning, semantic proof of health, session reconciliation, durable-state audit, and immutable release-root design.
+diff --git a/specs/031-moltis-reliability-diagnostics/spec.md b/specs/031-moltis-reliability-diagnostics/spec.md
+new file mode 100644
+index 0000000..2bd43c1
+--- /dev/null
++++ b/specs/031-moltis-reliability-diagnostics/spec.md
+@@ -0,0 +1,128 @@
++# Feature Specification: Moltis Reliability Diagnostics and Runtime Guardrails
++
++**Feature Branch**: `031-moltis-reliability-diagnostics`  
++**Created**: 2026-03-21  
++**Status**: Draft  
++**Input**: Production Moltis is degraded on simple Telegram interactions, browser/search execution, tool-calling reliability, and memory/vector behavior. The work must first establish a fact-based diagnosis from tracked config, runtime evidence, official Moltis documentation, and live logs, then land only the safest repository-managed fixes.
++
++## User Scenarios & Testing *(mandatory)*
++
++### User Story 1 - Operators Can Explain The Degradation With Evidence (Priority: P1)
++
++An operator can inspect one spec package and understand why Moltis is degraded across model selection, browser/search, tool-calling, skills visibility, and memory/vector storage without guessing.
++
++**Why this priority**: The current failure pattern is cross-cutting. Fixes will be unsafe unless the runtime symptoms are tied to concrete tracked-vs-live evidence first.
++
++**Independent Test**: Review `spec.md`, `plan.md`, and `tasks.md` and confirm that each major symptom is backed by a concrete source such as tracked config, live runtime inspection, logs, or official Moltis docs.
++
++**Acceptance Scenarios**:
++
++1. **Given** the tracked repository config and the live production runtime, **When** the operator compares them, **Then** the spec package names the exact drift and does not collapse unrelated symptoms into one vague cause.
++2. **Given** browser/search, tool-calling, memory, and Telegram symptoms, **When** the operator reads the package, **Then** each symptom is classified as misconfiguration, missing integration, bug, or operational drift.
++3. **Given** official Moltis docs for Docker, browser automation, memory, MCP, and prompts, **When** the operator reviews the package, **Then** the recommended baseline aligns with official behavior before any custom project assumptions.
++
++---
++
++### User Story 2 - Deploys Fail Fast When The Runtime Contract Drifts (Priority: P1)
++
++An operator should not get a green deploy if Moltis starts with a healthy HTTP endpoint but cannot see `/server`, cannot load repo skills, or mounts the wrong runtime config surface.
++
++**Why this priority**: The current production degradation is compatible with a superficially healthy container. That makes rollback and deploy signals misleading.
++
++**Independent Test**: Run the tracked deploy verification path against a runtime that lacks the `/server` mount, uses the wrong config mount, or has a non-writable runtime config directory and confirm the deployment verification fails.
++
++**Acceptance Scenarios**:
++
++1. **Given** the Moltis container starts successfully but `/server` is missing, **When** deployment verification runs, **Then** the deployment is rejected as unhealthy.
++2. **Given** the Moltis container mounts a read-only tracked config instead of the writable runtime config directory, **When** deployment verification runs, **Then** the deployment is rejected as unhealthy.
++3. **Given** the Moltis container exposes `/health = 200` but repo skills are not visible, **When** deployment verification runs, **Then** the deployment is rejected as unhealthy.
++
++---
++
++### User Story 3 - Smoke Diagnostics Use Current Moltis Interfaces (Priority: P2)
++
++An operator can run a repo-managed Moltis smoke script and test authentication plus a simple chat/status path using the current auth and RPC interfaces rather than obsolete endpoints.
++
++**Why this priority**: One of the diagnostic tools in the repository is stale and currently reports failures that are caused by API drift in the script itself, not by Moltis.
++
++**Independent Test**: Run the updated diagnostic script against a healthy Moltis instance and confirm it authenticates via the current auth endpoint and exercises the current RPC transport.
++
++**Acceptance Scenarios**:
++
++1. **Given** a valid Moltis password, **When** the smoke script runs, **Then** it authenticates through the current `/api/auth/login` flow instead of the retired `/login` form flow.
++2. **Given** an authenticated session, **When** the smoke script sends a chat request, **Then** it uses the current RPC transport and surfaces the final response payload.
++3. **Given** logout support is healthy, **When** the smoke script finishes, **Then** it invalidates the session and reports the result cleanly.
++
++### Edge Cases
++
++- What happens when a stale persisted session still points to a removed model even after the tracked provider catalog has been corrected?
++- What happens when the MCP search server is intermittently available and the runtime must distinguish transport flakiness from config drift?
++- What happens when Tavily MCP depends on SSE plus `TAVILY_API_KEY`, but the tracked env render path allows that secret to go empty or the runtime has no dedicated Tavily health proof?
++- What happens when `memory_search` auto-detects embedding providers from the chat chain and starts sending embeddings traffic to the Z.ai Coding endpoint, returning `400 Bad Request` while a stale Groq entry returns `401 Unauthorized`?
++- What happens when tracked `config/moltis.toml` pins `[memory] provider = "ollama"` and `model = "nomic-embed-text"`, but the writable runtime copy still carries an older auto-detect memory contract?
++- What happens when the server `.env` contains `OLLAMA_API_KEY`, but the production `moltis` container does not receive it and therefore never exposes cloud-backed Ollama chat models such as `gemini-3-flash-preview:cloud`?
++- What happens when the fix lives on a feature branch, but production policy allows deploys only from `main`, so incident closure must be split into a runtime-only `PR1` and a deferred documentation `PR2`?
++- What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
++- What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
++- What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
++- What happens when the live UI itself proves the server is running a non-`main` branch and operators need that branch/runtime provenance to be deliberate rather than accidental drift?
++
++## Requirements *(mandatory)*
++
++### Functional Requirements
++
++- **FR-001**: The feature MUST create `specs/031-moltis-reliability-diagnostics/spec.md`, `plan.md`, and `tasks.md` as the source of truth for this investigation.
++- **FR-002**: The diagnostic package MUST inventory facts for `config/moltis.toml`, prompts/context, skills/agents bridge, tool-calling, browser/search integration, memory/vector storage, runtime constraints, logs, and current guardrails.
++- **FR-003**: Each major production problem MUST be classified as `misconfiguration`, `missing integration`, `bug`, or `operational drift`.
++- **FR-004**: The plan MUST propose a minimal safe remediation order that favors repository-managed guardrails before runtime-behavior changes.
++- **FR-005**: Repository-managed fixes in this slice MUST stay safe, reversible, and non-destructive; live server state MUST NOT be mutated speculatively.
++- **FR-006**: Moltis deploy verification MUST reject a runtime where the container working directory is not `/server`.
++- **FR-007**: Moltis deploy verification MUST reject a runtime where the checkout is not mounted into the container as `/server`.
++- **FR-008**: Moltis deploy verification MUST reject a runtime where `/server/skills` is not visible from inside the running Moltis container.
++- **FR-009**: Moltis deploy verification MUST reject a runtime where `/home/moltis/.config/moltis` is not mounted from the configured writable runtime config directory.
++- **FR-010**: Moltis deploy verification MUST reject a runtime where the runtime config directory is not writable for Moltis runtime-managed files such as `provider_keys.json`.
++- **FR-011**: The repository smoke script for Moltis API diagnostics MUST use the current auth surface and current chat/status transport.
++- **FR-012**: The package MUST explicitly distinguish safe repository fixes from deferred operational actions such as redeploying production, clearing stale session state, or backfilling memory indexes.
++- **FR-013**: The package MUST preserve the target-boundary rule: local fixture results may validate repo contracts, but only remote checks may prove the shared live runtime behavior.
++- **FR-014**: The package MUST record a concrete architectural hardening backlog for fail-closed config/auth/session durability beyond the safe-fix slice.
++- **FR-015**: The package MUST surface Tavily SSE instability and `memory_search` embedding-provider failures as the highest-priority unresolved live blockers after OAuth/runtime-contract recovery.
++- **FR-016**: The repository MUST provide a read-only diagnostic entrypoint that summarizes the tracked Tavily/memory contract plus an optional runtime-log failure taxonomy for Tavily and embeddings.
++- **FR-017**: The shared Moltis env renderer MUST fail closed when `TAVILY_API_KEY` is empty if the tracked runtime depends on Tavily MCP search.
++- **FR-018**: Production deploy/runtime verification MUST reject a runtime where `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` diverges from tracked `config/moltis.toml`.
++- **FR-019**: The production `moltis` container MUST receive `OLLAMA_API_KEY` whenever the tracked provider surface depends on cloud-backed Ollama models.
++- **FR-020**: The repository MUST record an RCA and an explicit rule for embedding/runtime drift so future sessions check runtime config parity and `OLLAMA_API_KEY` delivery before blaming provider auth or embeddings APIs.
++- **FR-021**: When production deploy policy allows deploys only from `main`, the incident closure MUST define a two-stage landing strategy: `PR1` contains only production-critical runtime fixes plus blocking verification lanes, and `PR2` carries RCA/consilium/rules/lessons/spec updates only after live verification succeeds via a fresh docs-only carrier based on the verified `main` state.
++
++### Key Entities
++
++- **RuntimeContractCheck**: Repository-managed verification that the running Moltis container matches the required `/server`, runtime config, and skills visibility contract.
++- **RootCauseFinding**: A diagnostic record that ties one symptom to evidence, a category, and a recommended remediation sequence.
++- **RuntimeDriftEvidence**: Concrete live facts such as mounts, logs, session state, health endpoints, or Telegram responses showing divergence from tracked intent.
++- **SmokeDiagnostic**: A reproducible operator entrypoint that validates auth, status, and a basic chat flow against current Moltis interfaces.
++- **DeferredOperationalFix**: A necessary live follow-up that should not be auto-applied by repository code in this slice.
++
++### Assumptions & Dependencies
++
++- Official Moltis docs remain the baseline for Docker, browser automation, memory, prompts, and MCP integration.
++- The authoritative target for current behavior is the shared remote Moltis deployment, not a local replacement stack.
++- Telegram bot ownership already lives inside Moltis; user-facing tests should therefore use the real Telegram path or authoritative server-side tooling.
++- Existing repository scripts and tests may lag the current Moltis runtime surface and need to be verified before they are trusted as diagnostics.
++- Production deploy policy is authoritative: the shared remote may be smoke-tested from a branch only through read-only or contract-safe UAT paths, but the actual production rollout must happen from `main`.
++
++## Success Criteria *(mandatory)*
++
++### Measurable Outcomes
++
++- **SC-001**: The `031-moltis-reliability-diagnostics` spec package exists and documents the runtime evidence for the major degradation symptoms.
++- **SC-002**: The final diagnostic package contains a root-cause classification matrix covering memory/vector behavior, simple chat failures, browser/search failures, tool-calling reliability, and missing repo-skill integration.
++- **SC-003**: Repository deploy verification fails when Moltis is healthy at `/health` but missing `/server`, missing `/server/skills`, or using the wrong runtime config mount.
++- **SC-004**: The repository Moltis smoke script authenticates through the current auth surface and exercises the current chat/status path.
++- **SC-005**: Safe fixes landed in this slice are validated by targeted repository checks.
++- **SC-006**: Deferred live actions are explicitly listed so operators can finish the repair without guessing which remaining steps are operational rather than code changes.
++- **SC-007**: The package records follow-up backlog items for auth secret rendering, runtime-dir pinning, session reconciliation, semantic UAT hardening, and release-root/runtime-attestation drift control.
++- **SC-008**: The Speckit backlog explicitly ranks Tavily SSE failures and `memory_search` embedding-provider failures above browser and long-tail cleanup work.
++- **SC-009**: A repository-managed diagnostic script can emit a machine-readable summary of tracked search/memory contract plus Tavily/embedding failure signals from a provided log sample.
++- **SC-010**: Deploy/runtime attestation fails when the live writable `moltis.toml` is stale relative to tracked `config/moltis.toml`.
++- **SC-011**: Static validation fails if `docker-compose.prod.yml` stops forwarding `OLLAMA_API_KEY` into the `moltis` container.
++- **SC-012**: The incident is preserved in tracked RCA/rules/lessons artifacts so the repair path is discoverable in future sessions.
++- **SC-013**: The Speckit artifacts explicitly separate `PR1` production-critical runtime changes from `PR2` deferred documentation/process artifacts so the canonical deploy path can proceed from `main` without dragging along mutable post-incident docs.
+diff --git a/specs/031-moltis-reliability-diagnostics/tasks.md b/specs/031-moltis-reliability-diagnostics/tasks.md
+new file mode 100644
+index 0000000..b458b1e
+--- /dev/null
++++ b/specs/031-moltis-reliability-diagnostics/tasks.md
+@@ -0,0 +1,97 @@
++# Tasks: Moltis Reliability Diagnostics and Runtime Guardrails
++
++**Input**: Design documents from `/specs/031-moltis-reliability-diagnostics/`  
++**Prerequisites**: plan.md, spec.md
++
++## Phase 0: Planning And Evidence
++
++- [x] P001 Read root and local instructions, memory/session context, and confirm the work stays in branch `031-moltis-reliability-diagnostics`
++- [x] P002 Collect tracked facts for `config/moltis.toml`, prompts/context, skills bridge, tool-calling, browser/search, memory/vector storage, runtime constraints, and current guardrails
++- [x] P003 Collect authoritative live evidence from production runtime, logs, and Telegram user-path probing
++- [x] P004 Cross-check the intended baseline against official Moltis documentation before proposing fixes
++
++---
++
++## Phase 1: Speckit Package
++
++- [x] T001 Create `specs/031-moltis-reliability-diagnostics/spec.md`
++- [x] T002 Create `specs/031-moltis-reliability-diagnostics/plan.md`
++- [x] T003 Create `specs/031-moltis-reliability-diagnostics/tasks.md`
++- [x] T004 Record the root-cause matrix and classify issues into `misconfiguration`, `missing integration`, `bugs`, and `operational drift`
++- [x] T005 Define the minimal safe remediation order and clearly separate deferred operational actions from repository-safe fixes
++
++---
++
++## Phase 2: Runtime Guardrails
++
++- [x] T010 Add Moltis deploy/runtime contract verification for `/server`, repo skills visibility, runtime config mount source, and writable runtime config behavior
++- [x] T011 Add targeted repository test coverage for the new runtime contract guardrails
++- [x] T012 Reconcile `tasks.md` after the guardrail changes land
++
++---
++
++## Phase 3: Diagnostic Tooling
++
++- [x] T020 Refresh `scripts/test-moltis-api.sh` to the current `/api/auth/*` and RPC contract
++- [x] T021 Validate the refreshed smoke script with targeted checks
++- [x] T022 Reconcile `tasks.md` after the diagnostic script changes land
++- [x] T023 Add a read-only Tavily/memory diagnostic script that summarizes tracked search/memory contract plus optional runtime-log failure taxonomy
++- [x] T024 Validate the new diagnostic script with targeted repository coverage
++- [x] T025 Reconcile `tasks.md` after the search/memory diagnostic additions land
++
++---
++
++## Phase 4: Highest-Priority Live Reliability Follow-Up
++
++- [x] T030 Redeploy production so the tracked runtime contract is actually applied on the server
++- [x] T031 Clear or migrate stale session/model state that still references removed provider catalogs
++- [x] T032 [P0] Stabilize Tavily search integration or replace it with a less fragile search path; include dedicated health proof beyond transport-green deploy/UAT
++- [x] T033 [P0] Arrest `memory_search` embedding-provider failures by pinning a deterministic memory contract or explicit keyword-only fallback before broader memory rollout
++- [x] T034 Restore browser runtime health by fixing Docker access/connectivity on the target host
++- [x] T035 Configure repository-visible memory watch/index scope and backfill embeddings for useful vector memory after the provider contract is deterministic
++- [x] T036 Clean stale runtime context files in `~/.moltis` that conflict with the current project/runtime identity
++
++---
++
++## Phase 5: Architectural Hardening Backlog
++
++- [x] T040 Record the config/auth/session durability consilium and capture the architectural hardening backlog in tracked artifacts
++- [x] T041 Make `scripts/render-moltis-env.sh` fail closed on empty required auth and provider secrets and cover it with targeted tests
++- [x] T042 Pin production `MOLTIS_RUNTIME_CONFIG_DIR` to the canonical runtime path or an explicit allowlist and validate that exact path during deploy
++- [x] T043 Reconcile auth ownership across `config/moltis.toml`, secrets docs, deploy workflow, preflight, and runtime strategy including `MOLTINGER_SERVICE_TOKEN` and Telegram allowlist source of truth
++- [x] T044 Upgrade deploy and smoke proof from transport green to canonical provider/model proof including `openai-codex::gpt-5.4` and restart survival
++- [x] T045 Add explicit session reconcile/reset automation and runbook gates after provider/catalog recovery for Telegram and UI sessions
++- [x] T046 Audit and preserve durable runtime state outside tracked config, including `~/.moltis`, with a manifest or contract suitable for backup/restore validation
++- [x] T047 Expand authoritative UAT semantics for `/status`, wrong-target chat, verification-gate replies, and exercised-surface matrices for browser/search/repo-context paths
++- [x] T048 Design immutable production release roots plus runtime attestation/drift detection so runtime provenance cannot silently fall off tracked intent
++
++---
++
++## Phase 6: Embedding And Ollama Root-Cause Closure
++
++- [x] T050 Reconcile Speckit artifacts for the `memory_search` / missing Ollama provider incident and encode the runtime-config parity + `OLLAMA_API_KEY` hypotheses
++- [x] T051 Forward `OLLAMA_API_KEY` into the production `moltis` container and add static coverage for the contract
++- [x] T052 Extend deploy verification and runtime attestation so stale writable `moltis.toml` fails closed against tracked `config/moltis.toml`
++- [x] T053 Add or update component/static coverage for runtime-config parity enforcement
++- [x] T054 Record RCA, consilium, and an explicit rule for embedding/runtime drift; rebuild lessons index
++- [x] T055 Prepare a runtime-only `PR1` carrier for `main` that includes only the embedding/Ollama fix path plus blocking verification lanes
++- [x] T056 Merge `PR1` into `main`, run the canonical production deploy from `main`, and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
++- [ ] T057 Only after successful live verification, land `PR2` via a fresh docs-only carrier from verified `main` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md`
++
++## Dependencies & Execution Order
++
++- Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
++- Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and now lands through `PR1 -> main deploy -> PR2` rather than direct feature-branch rollout.
++- Phase 2 and Phase 3 are the only repository-safe implementation phases in this slice.
++- Phase 4 depends on operator action against the shared remote runtime after repository guardrails are merged.
++- Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
++- Phase 6 returns to an operator-driven live fix, but only after the runtime-only `PR1` is merged to `main` and deployed through the canonical production workflow.
++
++## Implementation Strategy
++
++- First freeze the diagnosis into Speckit artifacts so the repair path is evidence-based.
++- Then prevent future silent drift by hardening deploy/runtime verification.
++- Then refresh the operator smoke diagnostic so it tests the current Moltis API surface instead of stale endpoints.
++- Leave live runtime repair, session cleanup, and memory/browser operational work as explicit follow-up actions.
++- Use Phase 5 backlog items to drive the next durability-focused slice once the current operational backlog is under control.
++- Close the embedding/Ollama incident by first preparing a minimal `PR1` for `main`, then proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery, and only after that landing the deferred `PR2` documentation layer.
+diff --git a/docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md b/docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md
+new file mode 100644
+index 0000000..17ea3c5
+--- /dev/null
++++ b/docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md
+@@ -0,0 +1,88 @@
++---
++title: "PR2 docs carrier drifted because patch generation targeted the wrong base and ignored new docs"
++date: 2026-03-26
++severity: P3
++category: process
++tags: [carrier, patch, gitops, docs, process, rca, lessons]
++root_cause: "Carrier generation reused branch-diff habits instead of building a worktree-to-target-base patch and therefore first targeted merge-base, then omitted untracked docs."
++---
++
++# RCA: PR2 carrier used the wrong diff base and dropped new docs
++
++**Date:** 2026-03-26  
++**Status:** Resolved  
++**Severity:** P3  
++**Category:** process  
++**Impact:** The first materialized `PR2` docs-only carrier patch was not trustworthy because it targeted the wrong comparison boundary and omitted a newly created consilium report.
++
++## Error
++
++While materializing `specs/031-moltis-reliability-diagnostics/artifacts/pr2-main-docs-carrier.patch`, the first patch was generated from a merge-base-oriented diff and then from a commit-range diff that ignored new untracked docs. The result did not faithfully represent “apply this to verified `main`”.
++
++## Lessons Pre-Check
++
++Reviewed before running RCA:
++
++- `./scripts/query-lessons.sh --tag gitops`
++- `./scripts/query-lessons.sh --tag patch`
++- `./scripts/query-lessons.sh --tag deployment`
++
++Relevant prior lesson:
++
++- `docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md`
++  already established that remediation artifacts must be validated against the real target boundary instead of a convenient proxy.
++
++What was new here:
++
++- the failure happened in carrier generation, not in live deploy/runtime
++- untracked docs required explicit inclusion via `--no-index`
++
++## 5 Whys
++
++### Why 1
++
++Why was the first `PR2` carrier patch invalid?
++
++Because `patch --dry-run` against a clean `origin/main` export showed reversed/already-applied behavior, and later the patch still omitted a newly created consilium report.
++
++### Why 2
++
++Why did `patch --dry-run` show reversed/already-applied behavior?
++
++Because the first patch was generated with a `three-dot` diff, which targeted the merge base instead of the actual verified `origin/main` state.
++
++### Why 3
++
++Why was the second patch still incomplete after switching away from `three-dot`?
++
++Because it used a commit-range diff against `origin/main..HEAD`, which still ignored newly created untracked files in the current worktree.
++
++### Why 4
++
++Why were those comparison modes chosen?
++
++Because the carrier-generation step reused branch-diff habits instead of explicitly modeling the artifact as “patch current worktree onto target base”.
++
++### Why 5
++
++Why was that process ambiguity possible?
++
++Because there was no explicit local rule stating that `main`-targeting carrier patches must be built against the real target base and must account for untracked docs before validation.
++
++## Root Cause
++
++Carrier generation lacked an explicit target-base rule, so branch-oriented diff habits (`three-dot`, then commit-range diff) were used instead of a true “worktree against verified target base” patch build.
++
++## Resolution
++
++The carrier was regenerated correctly with:
++
++1. tracked changes diffed against `origin/main`
++2. new docs added explicitly via `git diff --no-index -- /dev/null <new-file>`
++3. `patch --dry-run` executed against a clean `git archive origin/main` export
++
++## Lessons
++
++1. A carrier patch meant for verified `main` must be generated against the actual target base, not the merge base.
++2. New docs do not appear in ordinary `git diff <base>` output until tracked; docs-only carriers must include untracked files explicitly or stage them intentionally.
++3. A carrier is not “validated” until it survives `patch --dry-run` on a clean export of the exact target branch.
+diff --git a/docs/reports/consilium/2026-03-26-pr2-docs-carrier-scope-consilium.md b/docs/reports/consilium/2026-03-26-pr2-docs-carrier-scope-consilium.md
+new file mode 100644
+index 0000000..0281407
+--- /dev/null
++++ b/docs/reports/consilium/2026-03-26-pr2-docs-carrier-scope-consilium.md
+@@ -0,0 +1,98 @@
++# Consilium Report
++
++## Question
++
++After `PR1` has already landed in `main` and production has been restored, should `PR2` be opened directly from `031-moltis-reliability-diagnostics`, or should it be rebuilt as a narrower carrier?
++
++## Execution Mode
++
++Mode A: parallel expert review with architect, SRE, DevOps/CI, GitOps, QA, security, and Moltis domain perspectives.
++
++## Evidence
++
++- `PR1` runtime carrier has already landed in `main` and production was redeployed successfully from `main`.
++- Authoritative live validation succeeded:
++  - `memory_search` completed successfully and returned `/server`
++  - live runtime config uses `provider = "ollama"` and `model = "nomic-embed-text"`
++  - `OLLAMA_API_KEY` is present in the running `moltis` container
++  - `gemini-3-flash-preview:cloud` is visible through the live Ollama health path
++- `031-moltis-reliability-diagnostics` still differs from `origin/main` by a mixed-scope change set spanning 95 files, including runtime scripts, workflows, tests, and documentation.
++- The Speckit contract already scopes `PR2` to deferred RCA/consilium/rules/lessons/spec work after successful live verification.
++
++## Expert Opinions
++
++### Architect
++- Do not open `PR2` directly from this branch.
++- Use a fresh docs-only carrier from verified `main` so the change set matches the intent of post-incident closure.
++
++### SRE
++- The production incident is already closed at runtime.
++- `PR2` should now preserve evidence and lessons, not re-expand rollout blast radius.
++
++### DevOps / CI
++- A docs-only carrier keeps CI/review noise low and avoids retesting unrelated runtime/workflow deltas under a misleading PR label.
++
++### GitOps / Delivery
++- Change scope should mirror delivery intent.
++- If the intent is “deferred documentation/process layer”, the carrier must be narrow and `main`-based.
++
++### QA
++- A mixed branch makes it hard to prove that `PR2` is only retrospective/process work.
++- A docs-only carrier is the easiest path to clear review and validation.
++
++### Security / Governance
++- Opening `PR2` straight from the current branch risks smuggling runtime-affecting files behind a docs/process label.
++- A narrow carrier materially reduces blast radius and audit ambiguity.
++
++### Moltis Domain
++- `PR1 -> main -> deploy -> live verify` already closed the live embedding/Ollama incident.
++- `PR2` should capture learnings, not continue runtime remediation under the same carrier.
++
++## Root Cause Analysis
++
++- Primary root cause: after `PR1` landed, the remaining branch delta stayed too broad to qualify as the promised deferred documentation/process layer.
++- Contributing factors:
++  - the feature branch accumulated runtime hardening, browser/search work, workflow updates, and tests alongside incident documentation
++  - the production policy requires `main` as the canonical landing root
++  - the post-incident contract now demands a clean separation between runtime remediation and retrospective artifacts
++- Confidence: High
++
++## Solution Options
++
++1. Open `PR2` directly from `031-moltis-reliability-diagnostics`
++Pros: fastest mechanically.
++Cons: misleading scope, higher review risk, larger blast radius.
++
++2. Create a fresh docs-only carrier from verified `main`
++Pros: clean review scope, matches Speckit contract, safer rollback.
++Cons: requires explicit allowlist selection.
++
++3. Cherry-pick only docs commits into a fresh `main`-based branch
++Pros: preserves some history while staying narrow.
++Cons: commit boundaries may still need cleanup.
++
++4. Recreate only the final docs/process artifacts on a fresh `main`-based branch
++Pros: smallest clean diff.
++Cons: loses some intermediate artifact history.
++
++5. Leave the branch as evidence only and defer `PR2`
++Pros: zero immediate merge risk.
++Cons: leaves post-incident documentation incomplete.
++
++## Recommended Plan
++
++1. Treat `T056` as complete because `PR1`, canonical deploy, and live verification have already succeeded.
++2. Build a fresh docs-only `PR2` carrier from verified `main`.
++3. Include only RCA, consilium, rules, runbook, lessons, and Speckit reconciliation artifacts in that carrier.
++4. Keep runtime/workflow/test deltas out of `PR2`; land them later as separate reviewed work if still needed.
++
++## Rollback Plan
++
++- If a runtime-affecting file appears in the `PR2` carrier, discard that carrier and rebuild it from `main` with a stricter allowlist.
++
++## Verification Checklist
++
++- [ ] `PR2` base is verified `main`
++- [ ] `PR2` diff contains only docs/process artifacts
++- [ ] no `scripts/`, `tests/`, `.github/`, `docker-compose*`, `config/`, or runtime code changes enter the carrier
++- [ ] Speckit artifacts match the actual landing strategy
+diff --git a/docs/rules/main-carriers-must-target-real-base.md b/docs/rules/main-carriers-must-target-real-base.md
+new file mode 100644
+index 0000000..19da95e
+--- /dev/null
++++ b/docs/rules/main-carriers-must-target-real-base.md
+@@ -0,0 +1,15 @@
++# Rule: Main Carriers Must Target The Real Base
++
++When preparing a carrier patch intended to be applied to the current `main` state:
++
++1. Generate tracked-file changes against the real target base, not the merge base.
++   Use the equivalent of `git diff origin/main -- <paths>`, not `git diff origin/main...HEAD -- <paths>`.
++2. If the carrier includes newly created files, include them explicitly.
++   One safe path is `git diff --no-index -- /dev/null <new-file>`.
++3. Validate the carrier with `patch --dry-run` against a clean export of the exact target branch before calling it ready.
++
++Why:
++
++- merge-base diffs describe branch history, not the current target branch surface
++- plain diffs omit untracked files
++- carrier patches are operational artifacts and must reflect the exact landing base

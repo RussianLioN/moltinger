@@ -91,7 +91,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-018**: Production deploy/runtime verification MUST reject a runtime where `${MOLTIS_RUNTIME_CONFIG_DIR}/moltis.toml` diverges from tracked `config/moltis.toml`.
 - **FR-019**: The production `moltis` container MUST receive `OLLAMA_API_KEY` whenever the tracked provider surface depends on cloud-backed Ollama models.
 - **FR-020**: The repository MUST record an RCA and an explicit rule for embedding/runtime drift so future sessions check runtime config parity and `OLLAMA_API_KEY` delivery before blaming provider auth or embeddings APIs.
-- **FR-021**: When production deploy policy allows deploys only from `main`, the incident closure MUST define a two-stage landing strategy: `PR1` contains only production-critical runtime fixes plus blocking verification lanes, and `PR2` carries RCA/consilium/rules/lessons/spec updates only after live verification succeeds.
+- **FR-021**: When production deploy policy allows deploys only from `main`, the incident closure MUST define a two-stage landing strategy: `PR1` contains only production-critical runtime fixes plus blocking verification lanes, and `PR2` carries RCA/consilium/rules/lessons/spec updates only after live verification succeeds via a fresh docs-only carrier based on the verified `main` state.
 
 ### Key Entities
 

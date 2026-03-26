@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-24
-**Total Lessons**: 49
+**Generated**: 2026-03-26
+**Total Lessons**: 58
 
 ---
 
@@ -14,8 +14,10 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (19 lessons)
+#### P1 (21 lessons)
+- [Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together](../docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
+- [Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies](../docs/rca/2026-03-21-moltis-telegram-session-context-drift.md)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
 - [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
 - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
@@ -35,7 +37,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (19 lessons)
+#### P2 (20 lessons)
+- [Moltis auth and durable runtime state drifted because ownership was split across tracked config, rendered env, and backup inventory](../docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
 - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
@@ -56,8 +59,14 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (9 lessons)
+#### P3 (15 lessons)
+- [PR2 docs carrier drifted because patch generation targeted the wrong base and ignored new docs](../docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md)
+- [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
+- [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
+- [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
+- [2026-03-20-production-deploy-collision-guard](../docs/rca/2026-03-20-production-deploy-collision-guard.md)
+- [2026-03-20-pr76-policy-and-contract-drift](../docs/rca/2026-03-20-pr76-policy-and-contract-drift.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
@@ -98,15 +107,25 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### generic (5 lessons)
+#### configuration (2 lessons)
+- [Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together](../docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md)
+- [Moltis auth and durable runtime state drifted because ownership was split across tracked config, rendered env, and backup inventory](../docs/rca/2026-03-22-moltis-auth-runtime-state-ownership-split-brain.md)
+
+#### generic (8 lessons)
+- [Moltis browser, memory, and Tavily degraded because sibling-browser runtime assumptions drifted, operator smoke reused stale chat state, and Tavily tool args were too permissive](../docs/rca/2026-03-22-moltis-browser-sandbox-profile-and-smoke-session-drift.md)
+- [2026-03-20-production-deploy-collision-guard](../docs/rca/2026-03-20-production-deploy-collision-guard.md)
+- [2026-03-20-pr76-policy-and-contract-drift](../docs/rca/2026-03-20-pr76-policy-and-contract-drift.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
 - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (15 lessons)
+#### process (18 lessons)
+- [PR2 docs carrier drifted because patch generation targeted the wrong base and ignored new docs](../docs/rca/2026-03-26-pr2-carrier-target-base-and-untracked-doc-drift.md)
+- [PR1 main carrier replay drifted because the applicator used a non-unique test anchor](../docs/rca/2026-03-26-pr1-main-carrier-applicator-anchor-drift.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
+- [Moltis Telegram kept stale session-level model/context after OAuth recovery and continued to emit misleading status replies](../docs/rca/2026-03-21-moltis-telegram-session-context-drift.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
 - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
 - [Moltis update proposal had contract drift: manual compare fallback existed in code but was not formalized as governance contract](../docs/rca/2026-03-20-moltis-update-proposal-manual-compare-contract-governance.md)
@@ -125,7 +144,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (6 lessons)
+#### shell (7 lessons)
+- [Moltis runtime cleanup dry-run failed because the script assumed Perl JSON::PP inside a minimal container](../docs/rca/2026-03-22-moltis-runtime-cleanup-hidden-perl-dependency.md)
 - [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
@@ -136,16 +156,16 @@
 
 ### Popular Tags
 
-- `gitops` (15 lessons)
+- `gitops` (18 lessons)
+- `rca` (15 lessons)
+- `moltis` (14 lessons)
+- `deploy` (14 lessons)
 - `github-actions` (13 lessons)
-- `deploy` (13 lessons)
+- `lessons` (12 lessons)
 - `cicd` (11 lessons)
-- `process` (9 lessons)
-- `moltis` (9 lessons)
-- `lessons` (9 lessons)
-- `rca` (8 lessons)
+- `process` (10 lessons)
 - `clawdiy` (8 lessons)
-- `openclaw` (6 lessons)
+- `telegram` (7 lessons)
 
 
 ---
@@ -154,10 +174,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 49 |
-| Critical (P0/P1) | 20 |
-| Categories | 5 |
-| Unique Tags | 113 |
+| Total Lessons | 58 |
+| Critical (P0/P1) | 22 |
+| Categories | 6 |
+| Unique Tags | 130 |
 
 ---
 
