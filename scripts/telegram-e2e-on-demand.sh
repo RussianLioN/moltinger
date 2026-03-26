@@ -30,6 +30,7 @@ SHARED_TARGET_LOCK="${SHARED_TARGET_LOCK:-/tmp/moltinger-telegram-remote-uat.loc
 SERIALIZE_SHARED_TARGET="${SERIALIZE_SHARED_TARGET:-true}"
 MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
+STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"
 
 RUN_ID=""
 STARTED_AT=""
@@ -163,6 +164,24 @@ sanitize_json_for_operator() {
   ' <<< "$input_json"
 }
 
+normalize_message_text() {
+  printf '%s' "${1:-}" | tr '\r\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
+}
+
+reply_has_internal_activity() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  case "$normalized" in
+    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 write_report() {
   local debug_available="false"
   if [[ -n "$DEBUG_OUTPUT_PATH" ]]; then
@@ -224,6 +243,83 @@ write_report() {
 
   write_json_file "$OUTPUT_PATH" "$report_json"
   log "Review-safe artifact written to $OUTPUT_PATH"
+}
+
+evaluate_authoritative_semantics() {
+  if [[ "$VERDICT" != "passed" ]]; then
+    return 0
+  fi
+
+  local normalized_message reply_text
+  normalized_message="$(normalize_message_text "$MESSAGE")"
+  reply_text="$(jq -r '.reply_text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null || true)"
+
+  if reply_has_internal_activity "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_activity_leak" "$RUN_STAGE" "Authoritative Telegram reply exposed internal activity/tool-progress instead of a user-facing answer" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{observed_reply:$reply_text, failure:"semantic_activity_leak"}}')"
+    RECOMMENDED_ACTION="Reconcile the active Telegram session/runtime so internal activity logs stop reaching the user-facing chat, then rerun the authoritative check."
+    return 0
+  fi
+
+  local pre_send_activity_leak
+  pre_send_activity_leak="$(
+    jq -r '.attribution_evidence.last_pre_send_activity.messages[]?.text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null \
+      | while IFS= read -r line; do
+          if reply_has_internal_activity "$line"; then
+            printf '%s\n' "$line"
+            break
+          fi
+        done
+  )"
+
+  if [[ -n "$pre_send_activity_leak" ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_pre_send_activity_leak" "$RUN_STAGE" "Authoritative Telegram chat already contained a recent internal activity/tool-progress leak before the probe send" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg activity_text "$pre_send_activity_leak" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{recent_invalid_incoming:$activity_text, failure:"semantic_pre_send_activity_leak"}}')"
+    RECOMMENDED_ACTION="Clear or reconcile the contaminated Telegram chat/session and rerun authoritative UAT only after the last invalid incoming activity message is gone."
+    return 0
+  fi
+
+  if [[ "$normalized_message" != "/status" ]]; then
+    return 0
+  fi
+
+  local verification_gate_re
+  verification_gate_re='verification code|enter the verification code'
+
+  if printf '%s' "$reply_text" | grep -Eiq "$verification_gate_re"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "verification_gate_reply" "$RUN_STAGE" "Authoritative /status reply hit a verification gate and is not comparable to the allowlisted operator path" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg expected_model "$STATUS_EXPECTED_MODEL" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:"/status", expected_model:$expected_model, observed_reply:$reply_text, failure:"verification_gate_reply"}}')"
+    RECOMMENDED_ACTION="Reconcile Telegram allowlist/session state and rerun authoritative /status after removing the verification gate."
+    return 0
+  fi
+
+  if [[ -n "$STATUS_EXPECTED_MODEL" ]] && [[ "$reply_text" != *"$STATUS_EXPECTED_MODEL"* ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_status_mismatch" "$RUN_STAGE" "Authoritative /status reply was attributable but did not mention the canonical model contract" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg expected_model "$STATUS_EXPECTED_MODEL" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:"/status", expected_model:$expected_model, observed_reply:$reply_text, failure:"semantic_status_mismatch"}}')"
+    RECOMMENDED_ACTION="Reset or reconcile the active session/runtime and rerun authoritative /status until the reply itself mentions the canonical model."
+  fi
 }
 
 write_debug_bundle() {
@@ -827,6 +923,7 @@ main() {
   case "$MODE" in
     authoritative|telegram_web)
       run_authoritative_telegram_web
+      evaluate_authoritative_semantics
       if [[ "$VERDICT" == "failed" ]]; then
         evaluate_secondary_mtproto
         finish_with_status 3
