@@ -233,6 +233,44 @@ test_tracked_deploy_workflows_use_shared_script_entrypoint() {
     test_pass
 }
 
+test_deploy_script_verifies_live_moltis_runtime_contract() {
+    test_start "Deploy verification should enforce the live Moltis runtime contract"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" ]]; then
+        test_skip "Missing deploy script"
+        return
+    fi
+
+    if ! grep -Fq "working_dir is" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "/server mount is missing" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "/server/skills" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "MOLTIS_RUNTIME_CONFIG_DIR" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "provider_keys.json.tmp.contract-check" "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "deploy.sh must verify /server visibility, runtime config mount source, and writable runtime config behavior for Moltis"
+        return
+    fi
+
+    test_pass
+}
+
+test_deploy_script_force_recreates_moltis_runtime_on_rollout() {
+    test_start "Deploy rollout should force-recreate Moltis so runtime config changes are applied"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" ]]; then
+        test_skip "Missing deploy script"
+        return
+    fi
+
+    if ! grep -Fq 'deploy_args+=(--force-recreate)' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'bind-mounted config' "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "deploy.sh must force-recreate Moltis during deploy so updated runtime config is not left pending until a manual restart"
+        return
+    fi
+
+    test_pass
+}
+
 test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string() {
     test_start "Tracked deploy workflows should pass remote args safely without inline command strings"
 
@@ -696,10 +734,11 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     mkdir -p "$project_root/config" "$project_root/scripts"
     printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
     printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
-    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$project_root/.env"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\n' > "$project_root/.env"
     : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
     : > "$project_root/scripts/moltis-version.sh"
     : > "$project_root/scripts/deploy.sh"
+    : > "$project_root/scripts/moltis-runtime-attestation.sh"
 
     if ! bash "$TRACKED_DEPLOY_SCRIPT" \
         --dry-run \
@@ -717,7 +756,8 @@ test_tracked_deploy_script_dry_run_reports_control_plane_steps() {
     if ! grep -Fq '"status": "dry-run"' "$output_file" || \
        ! grep -Fq '"prepare-runtime-config"' "$output_file" || \
        ! grep -Fq '"align-server-checkout"' "$output_file" || \
-       ! grep -Fq '"/srv/runtime-config"' "$output_file"; then
+       ! grep -Fq '"attest-live-runtime"' "$output_file" || \
+       ! grep -Fq '"/opt/moltinger-state/config-runtime"' "$output_file"; then
         test_fail "Tracked deploy dry-run output should describe the shared control-plane contract"
         rm -rf "$tmp_dir"
         return
@@ -743,10 +783,11 @@ test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields() {
     mkdir -p "$project_root/config" "$project_root/scripts"
     printf 'services: {}\n' > "$project_root/docker-compose.prod.yml"
     printf 'name = "moltis"\n' > "$project_root/config/moltis.toml"
-    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config\n' > "$project_root/.env"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=/opt/moltinger-state/config-runtime\n' > "$project_root/.env"
     : > "$project_root/scripts/prepare-moltis-runtime-config.sh"
     : > "$project_root/scripts/moltis-version.sh"
     : > "$project_root/scripts/deploy.sh"
+    : > "$project_root/scripts/moltis-runtime-attestation.sh"
 
     if ! bash "$TRACKED_DEPLOY_SCRIPT" \
         --dry-run \
@@ -766,7 +807,7 @@ test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields() {
        [[ "$(jq -r '.details.git_ref' "$output_json")" != "main" ]] || \
        [[ "$(jq -r '.details.workflow_run' "$output_json")" != "123456" ]] || \
        [[ "$(jq -r '.details.tracked_version' "$output_json")" != "1.2.3" ]] || \
-       [[ "$(jq -r '.details.runtime_config_dir' "$output_json")" != "/srv/runtime-config" ]]; then
+       [[ "$(jq -r '.details.runtime_config_dir' "$output_json")" != "/opt/moltinger-state/config-runtime" ]]; then
         test_fail "Tracked deploy dry-run JSON must preserve the workflow ABI fields consumed by GitHub Actions"
         rm -rf "$tmp_dir"
         return
@@ -795,7 +836,8 @@ test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields() {
     : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
     : > "$deploy_dir/scripts/moltis-version.sh"
     : > "$deploy_dir/scripts/deploy.sh"
-    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh"
+    : > "$deploy_dir/scripts/moltis-runtime-attestation.sh"
+    chmod +x "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" "$deploy_dir/scripts/moltis-version.sh" "$deploy_dir/scripts/deploy.sh" "$deploy_dir/scripts/moltis-runtime-attestation.sh"
 
     if bash "$TRACKED_DEPLOY_SCRIPT" \
         --json \
@@ -903,11 +945,12 @@ EOF
 #!/bin/bash
 exit 0
 EOF
-    chmod +x "$scripts_dir/prepare-moltis-runtime-config.sh" "$scripts_dir/moltis-version.sh" "$scripts_dir/deploy.sh"
+    : > "$scripts_dir/moltis-runtime-attestation.sh"
+    chmod +x "$scripts_dir/prepare-moltis-runtime-config.sh" "$scripts_dir/moltis-version.sh" "$scripts_dir/deploy.sh" "$scripts_dir/moltis-runtime-attestation.sh"
     printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
     printf '[server]\nport = 13131\n' > "$config_dir/moltis.toml"
 
-    if ! output_json="$(bash "$TRACKED_DEPLOY_SCRIPT" \
+    if ! output_json="$(MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_dir" bash "$TRACKED_DEPLOY_SCRIPT" \
         --deploy-path "$deploy_dir" \
         --git-sha "deadbeef" \
         --git-ref "feature/unsafe'quote" \
@@ -1045,6 +1088,8 @@ run_all_tests() {
     test_gitops_sync_workflows_use_shared_script_entrypoint
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
+    test_deploy_script_verifies_live_moltis_runtime_contract
+    test_deploy_script_force_recreates_moltis_runtime_on_rollout
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_checkout_align_script_dry_run_uses_constant_remote_command

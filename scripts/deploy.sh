@@ -26,6 +26,8 @@ FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
 CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
 CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
+CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
+MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -333,6 +335,81 @@ read_env_file_value() {
     fi
 
     printf '%s' "$value"
+}
+
+canonicalize_existing_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        return 1
+    fi
+
+    if [[ -d "$path" ]]; then
+        (cd "$path" && pwd -P)
+        return 0
+    fi
+
+    if [[ -e "$path" ]]; then
+        local parent base
+        parent="$(dirname "$path")"
+        base="$(basename "$path")"
+        printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$base"
+        return 0
+    fi
+
+    return 1
+}
+
+normalize_runtime_config_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        return 1
+    fi
+
+    while [[ "$path" != "/" && "$path" == */ ]]; do
+        path="${path%/}"
+    done
+
+    printf '%s' "$path"
+}
+
+runtime_config_dir_allowed() {
+    local candidate="$1"
+    local normalized_candidate normalized_allowlist entry
+    normalized_candidate="$(normalize_runtime_config_path "$candidate" || true)"
+    [[ -n "$normalized_candidate" ]] || return 1
+
+    local old_ifs="$IFS"
+    IFS=':'
+    for entry in $MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST; do
+        normalized_allowlist="$(normalize_runtime_config_path "$entry" || true)"
+        if [[ -n "$normalized_allowlist" && "$normalized_candidate" == "$normalized_allowlist" ]]; then
+            IFS="$old_ifs"
+            return 0
+        fi
+    done
+    IFS="$old_ifs"
+
+    return 1
+}
+
+container_mount_source() {
+    local container="$1"
+    local destination="$2"
+
+    docker inspect "$container" 2>/dev/null | \
+        jq -r --arg destination "$destination" '.[0].Mounts[]? | select(.Destination == $destination) | .Source' | \
+        head -n 1
+}
+
+container_mount_rw() {
+    local container="$1"
+    local destination="$2"
+
+    docker inspect "$container" 2>/dev/null | \
+        jq -r --arg destination "$destination" '.[0].Mounts[]? | select(.Destination == $destination) | .RW' | \
+        head -n 1
 }
 
 tracked_moltis_version() {
@@ -1085,6 +1162,7 @@ pull_images() {
 deploy_containers() {
     log_info "Deploying containers for target $TARGET..."
     local -a deploy_services=("$TARGET_SERVICE")
+    local -a deploy_args=(up -d --remove-orphans)
     local service
 
     for service in "${TARGET_AUXILIARY_SERVICES[@]}"; do
@@ -1092,7 +1170,13 @@ deploy_containers() {
         deploy_services+=("$service")
     done
 
-    compose_cmd normal up -d --remove-orphans "${deploy_services[@]}"
+    if [[ "$TARGET" == "moltis" ]]; then
+        # Moltis loads runtime config at process start, so bind-mounted config
+        # changes must force a recreate to avoid stale live state.
+        deploy_args+=(--force-recreate)
+    fi
+
+    compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"
     log_success "Containers deployed for target $TARGET"
 }
 
@@ -1167,6 +1251,79 @@ verify_deployment() {
         http_code=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_METRICS_URL" 2>/dev/null || echo "000")
         if [[ "$http_code" != "200" ]]; then
             log_warn "Metrics endpoint returned HTTP $http_code for target $TARGET (non-critical)"
+        fi
+    fi
+
+    if [[ "$TARGET" == "moltis" ]]; then
+        local expected_workspace expected_runtime_config
+        local actual_workspace_source actual_runtime_config_source
+        local actual_runtime_config_rw working_dir
+        local tracked_runtime_toml runtime_runtime_toml
+
+        working_dir="$(docker inspect --format '{{.Config.WorkingDir}}' "$TARGET_CONTAINER" 2>/dev/null || echo "")"
+        if [[ "$working_dir" != "/server" ]]; then
+            log_error "Moltis runtime contract mismatch: working_dir is '$working_dir', expected '/server'"
+            return 1
+        fi
+
+        expected_workspace="$(canonicalize_existing_path "$PROJECT_ROOT" || printf '%s\n' "$PROJECT_ROOT")"
+        actual_workspace_source="$(container_mount_source "$TARGET_CONTAINER" "/server")"
+        if [[ -z "$actual_workspace_source" ]]; then
+            log_error "Moltis runtime contract mismatch: /server mount is missing in container $TARGET_CONTAINER"
+            return 1
+        fi
+        actual_workspace_source="$(canonicalize_existing_path "$actual_workspace_source" || printf '%s\n' "$actual_workspace_source")"
+        if [[ "$actual_workspace_source" != "$expected_workspace" ]]; then
+            log_error "Moltis runtime contract mismatch: /server source is '$actual_workspace_source', expected '$expected_workspace'"
+            return 1
+        fi
+
+        expected_runtime_config="$(read_env_file_value "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
+        expected_runtime_config="${expected_runtime_config:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+        expected_runtime_config="$(normalize_runtime_config_path "$expected_runtime_config")"
+        if ! runtime_config_dir_allowed "$expected_runtime_config"; then
+            log_error "Moltis runtime contract mismatch: runtime config dir '$expected_runtime_config' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
+            return 1
+        fi
+        expected_runtime_config="$(canonicalize_existing_path "$expected_runtime_config" || printf '%s\n' "$expected_runtime_config")"
+        actual_runtime_config_source="$(container_mount_source "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
+        if [[ -z "$actual_runtime_config_source" ]]; then
+            log_error "Moltis runtime contract mismatch: runtime config mount is missing for /home/moltis/.config/moltis"
+            return 1
+        fi
+        actual_runtime_config_source="$(canonicalize_existing_path "$actual_runtime_config_source" || printf '%s\n' "$actual_runtime_config_source")"
+        if [[ "$actual_runtime_config_source" != "$expected_runtime_config" ]]; then
+            log_error "Moltis runtime contract mismatch: runtime config source is '$actual_runtime_config_source', expected '$expected_runtime_config'"
+            return 1
+        fi
+
+        actual_runtime_config_rw="$(container_mount_rw "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
+        if [[ "$actual_runtime_config_rw" != "true" ]]; then
+            log_error "Moltis runtime contract mismatch: runtime config mount must be writable for runtime-managed auth/key files"
+            return 1
+        fi
+
+        tracked_runtime_toml="$PROJECT_ROOT/config/moltis.toml"
+        runtime_runtime_toml="$expected_runtime_config/moltis.toml"
+        if [[ ! -f "$tracked_runtime_toml" || ! -f "$runtime_runtime_toml" ]]; then
+            log_error "Moltis runtime contract mismatch: tracked or runtime moltis.toml is missing"
+            return 1
+        fi
+        if ! cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"; then
+            log_error "Moltis runtime contract mismatch: runtime moltis.toml diverges from tracked config/moltis.toml"
+            return 1
+        fi
+
+        if ! docker exec "$TARGET_CONTAINER" sh -lc '
+            test -d /server &&
+            test -d /server/skills &&
+            test -f /home/moltis/.config/moltis/moltis.toml &&
+            tmp_path="/home/moltis/.config/moltis/provider_keys.json.tmp.contract-check.$$" &&
+            : > "$tmp_path" &&
+            rm -f "$tmp_path"
+        ' >/dev/null 2>&1; then
+            log_error "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
+            return 1
         fi
     fi
 
