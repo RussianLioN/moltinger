@@ -152,6 +152,12 @@ docker exec moltis moltis auth status
 If `auth status` is healthy, do not re-auth.
 Ordinary deploy/restart must not require a fresh OAuth login.
 
+If `oauth_tokens.json` still exists and `auth status` shows `openai-codex [expired]`,
+do not jump straight to interactive re-auth. First run a real operator-path canary
+that forces ordinary chat execution and then re-check `auth status`.
+This deployment flow now does that automatically in runtime attestation for the
+refreshable OAuth case.
+
 ## 8. Only if OAuth is missing, run interactive login
 
 Run inside the live container:
