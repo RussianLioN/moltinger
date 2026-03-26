@@ -94,6 +94,8 @@ scripts/worktree-ready.sh create --branch <branch> --path <path> --handoff manua
 scripts/worktree-ready.sh attach --branch <existing-branch> --handoff manual
 scripts/worktree-ready.sh doctor --branch <branch-or-path>
 scripts/worktree-ready.sh finish --branch <branch-or-path>
+scripts/worktree-ready.sh cleanup --branch <branch> [--delete-branch]
+scripts/worktree-ready.sh cleanup --path <absolute-path> [--delete-branch]
 ```
 
 Important:
@@ -123,6 +125,10 @@ Canonical finish vocabulary:
 - `blocked_guard_drift`
 - `blocked_missing_branch`
 - `blocked_action_required`
+
+Canonical cleanup vocabulary:
+- `cleanup_complete`
+- `cleanup_blocked`
 
 Canonical handoff final states:
 - `handoff_ready`
@@ -358,14 +364,25 @@ Usage:
 - `/worktree cleanup <issue-or-worktree> [--delete-branch]`
 
 Process:
-1. Resolve target worktree name/path.
-2. `bd worktree remove <name>` (safety checks enabled).
-3. If `--delete-branch`:
-   - verify branch is merged into `origin/main`
-   - delete local + remote branch
-4. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
+1. Cleanup is canonical-root-only.
+   - if invoked from a linked worktree, rerun it from the canonical root worktree
+2. Resolve the target branch/path and run the helper lifecycle flow:
+   - `scripts/worktree-ready.sh cleanup --branch <branch> [--delete-branch]`
+   - or `scripts/worktree-ready.sh cleanup --path <absolute-path> [--delete-branch]`
+3. Let the helper remove the linked worktree via plain `bd worktree remove <absolute-path>`.
+   - do not fall back to raw `git worktree remove` in the ordinary skill path
+   - treat the helper lifecycle report as authoritative
+4. The helper must verify actual removal against `git worktree list --porcelain`.
+   - already-missing worktrees are idempotent success, not opaque failure
+   - stale `prunable` entries may be pruned before the final lifecycle verdict
+5. If `--delete-branch`:
+   - prove merge safety with `git merge-base --is-ancestor` against the default remote branch first
+   - if git ancestry is inconclusive and `origin` is GitHub, allow an authenticated `gh` fallback that confirms a merged PR for the same branch, base branch, and head SHA
+   - if the GitHub fallback proves a squash/rebase-merged branch, local branch deletion may require `git branch -D` because `git branch -d` will still reject the non-ancestor tip
+   - if neither proof succeeds, block remote deletion and print the exact manual verification steps
+6. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
    - if stale, report the dedicated topology publish next step instead of auto-running `refresh --write-doc`
-5. Print cleanup report.
+7. Print cleanup report.
    - cleanup reports are lifecycle reports, not readiness handoffs
    - use `Status: cleanup_complete` on success
    - use `Status: cleanup_blocked` on failure
@@ -380,7 +397,7 @@ Process:
 ## Safety Rules
 
 - Never force-delete branches/worktrees unless user explicitly requests force.
-- Never delete remote branch without merged check against `origin/main`.
+- Never delete remote branch without merged proof from git ancestry or the explicit GitHub merged-PR fallback.
 - Stop and report on failed quality gates, rebase conflicts, or push failures.
 - Prefer helper output over ad hoc prose when the helper is available.
 - If topology registry is stale, treat live `git` as authoritative for conflict detection and report the dedicated publish path instead of auto-refreshing the tracked snapshot.
@@ -421,6 +438,27 @@ Boundary: stop_before_finish
 Final State: <finish_ready|blocked_*>
 Close: <exact bd close command or skip>
 Repair Command: <exact repair command when present>
+Next:
+  1. <first exact step>
+  2. <second exact step if needed>
+```
+
+For lifecycle `cleanup`, the helper may instead render:
+
+```text
+Worktree: <absolute-path>
+Preview: <path-preview>
+Branch: <branch-name>
+Status: <cleanup_complete|cleanup_blocked>
+Phase: cleanup
+Boundary: none
+Final State: <cleanup_complete|cleanup_blocked>
+Topology: <clean|stale|unknown>
+Worktree Action: <removed|already_missing|blocked|failed>
+Local Branch Action: <deleted|already_missing|blocked|not_requested>
+Remote Branch Action: <deleted|already_missing|blocked|not_requested>
+Merge Check: <git_ancestor_*|github_pr_merged|github_unavailable|not_merged|not_requested>
+Repair Command: <exact cleanup retry command when present>
 Next:
   1. <first exact step>
   2. <second exact step if needed>

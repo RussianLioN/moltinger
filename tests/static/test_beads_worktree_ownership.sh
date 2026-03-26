@@ -72,6 +72,16 @@ run_static_beads_worktree_ownership_tests() {
         test_fail "The resolver must fail closed on legacy redirect, root fallback, and default canonical-root mutation states"
     fi
 
+    test_start "static_resolver_allows_only_narrow_canonical_root_cleanup_admin_path"
+    if [[ -x "$RESOLVE_SCRIPT" ]] && \
+       rg -q 'beads_resolve_is_canonical_root_cleanup_admin_command' "$RESOLVE_SCRIPT" && \
+       rg -q 'pass_through_root_cleanup_admin' "$RESOLVE_SCRIPT" && \
+       rg -q 'worktree list --porcelain' "$RESOLVE_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Canonical-root cleanup allowance must stay narrow, helper-backed, and rooted in live git worktree state"
+    fi
+
     test_start "static_localize_helper_exists_for_compatibility_migration"
     if [[ -x "$LOCALIZE_SCRIPT" ]] && \
        rg -q 'migratable_legacy' "$LOCALIZE_SCRIPT" && \
@@ -232,6 +242,17 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "Worktree command docs must separate the Phase A executor from the create helper explicitly"
+    fi
+
+    test_start "static_worktree_helper_integration_includes_cleanup_mode"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'scripts/worktree-ready\.sh cleanup --branch <branch> \[--delete-branch\]' "$WORKTREE_COMMAND" && \
+       rg -q 'scripts/worktree-ready\.sh cleanup --path <absolute-path> \[--delete-branch\]' "$WORKTREE_COMMAND" && \
+       rg -q 'Cleanup is canonical-root-only\.' "$WORKTREE_COMMAND" && \
+       rg -q 'Status: <cleanup_complete\|cleanup_blocked>' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Worktree helper integration must advertise the cleanup helper contract and canonical-root boundary explicitly"
     fi
 
     generate_report

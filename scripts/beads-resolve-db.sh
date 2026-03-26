@@ -488,6 +488,82 @@ beads_resolve_is_canonical_root_read_only_command() {
   esac
 }
 
+beads_resolve_extract_worktree_remove_target() {
+  local -a args=("$@")
+  local index=0
+  local arg=""
+
+  while [[ "${index}" -lt "${#args[@]}" ]]; do
+    arg="${args[$index]}"
+    case "${arg}" in
+      --)
+        ((index += 1))
+        break
+        ;;
+      --actor|--lock-timeout|--db)
+        ((index += 2))
+        continue
+        ;;
+      --actor=*|--lock-timeout=*|--db=*|--allow-stale|--json|--no-auto-flush|--no-auto-import|--no-daemon|--no-db|--profile|--readonly|--sandbox|-h|--help|-q|--quiet|-v|--verbose|-V|--version)
+        ((index += 1))
+        continue
+        ;;
+      -*)
+        ((index += 1))
+        continue
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if [[ "${args[$index]:-}" != "worktree" || "${args[$((index + 1))]:-}" != "remove" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${args[$((index + 2))]:-}"
+}
+
+beads_resolve_is_canonical_root_cleanup_admin_command() {
+  local repo_root="$1"
+  local canonical_root="$2"
+  shift 2
+
+  local target_arg=""
+  local normalized_target=""
+  local line=""
+  local current_path=""
+  local candidate_path=""
+
+  target_arg="$(beads_resolve_extract_worktree_remove_target "$@")" || return 1
+  [[ -n "${target_arg}" ]] || return 1
+
+  normalized_target="$(beads_resolve_normalize_path "${target_arg}" "${repo_root}" 2>/dev/null || true)"
+  [[ -n "${normalized_target}" ]] || return 1
+  [[ "${normalized_target}" != "${canonical_root}" ]] || return 1
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      worktree\ *)
+        current_path="$(beads_resolve_normalize_path "${line#worktree }" "/" 2>/dev/null || true)"
+        ;;
+      "")
+        if [[ -n "${current_path}" && "${current_path}" == "${normalized_target}" ]]; then
+          return 0
+        fi
+        current_path=""
+        ;;
+    esac
+  done < <(beads_resolve_git -C "${repo_root}" worktree list --porcelain 2>/dev/null)
+
+  if [[ -n "${current_path}" && "${current_path}" == "${normalized_target}" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 beads_resolve_set_decision() {
   local decision="$1"
   local context="$2"
@@ -588,6 +664,11 @@ beads_resolve_dispatch() {
   if [[ "${repo_root}" == "${canonical_root}" ]]; then
     if beads_resolve_requests_readonly_mode "$@" || beads_resolve_is_canonical_root_read_only_command "$@"; then
       beads_resolve_set_decision "pass_through_root_readonly" "canonical_root" 0
+      return 0
+    fi
+
+    if beads_resolve_is_canonical_root_cleanup_admin_command "${repo_root}" "${canonical_root}" "$@"; then
+      beads_resolve_set_decision "pass_through_root_cleanup_admin" "canonical_root" 0
       return 0
     fi
 

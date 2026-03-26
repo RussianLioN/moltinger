@@ -229,6 +229,17 @@
 
 ---
 
+## Phase 7I: Cleanup Contract Hardening
+
+**Purpose**: Close the remaining cleanup/admin-path gaps so the documented lifecycle flow matches the real helper behavior in canonical-root cleanup scenarios.
+
+- [x] T058 [EXECUTOR: worker] [SEQUENTIAL] Extend `scripts/worktree-ready.sh` with helper-backed `cleanup` / `remove` lifecycle reporting, canonical-root enforcement, idempotent stale-entry handling, and GitHub-aware merge proof fallback
+- [x] T059 [EXECUTOR: worker] [SEQUENTIAL] Narrow `scripts/beads-resolve-db.sh` and `bin/bd` so canonical root allows only the linked-worktree `bd worktree remove <absolute-path>` admin path instead of broad mutation passthrough
+- [x] T060 [EXECUTOR: worker] [SEQUENTIAL] Add cleanup lifecycle, degraded GitHub fallback, and canonical-root admin-path regression coverage in `tests/unit/test_worktree_ready.sh`, `tests/unit/test_bd_dispatch.sh`, and `tests/static/test_beads_worktree_ownership.sh`
+- [x] T061 [EXECUTOR: MAIN] [SEQUENTIAL] Reconcile `.claude/commands/worktree.md`, `specs/005-worktree-ready-flow/contracts/`, `quickstart.md`, `validation.md`, and a durable cleanup review report with the hardened cleanup contract
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

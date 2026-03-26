@@ -17,6 +17,7 @@ Modes:
   attach    Prepare a worktree flow for an existing branch
   doctor    Diagnose readiness for an existing worktree
   finish    Prepare the safe ordinary finish contract for a target worktree
+  cleanup   Execute the safe cleanup lifecycle for a target worktree
   handoff   Render or execute a handoff profile for a prepared worktree
 
 Common Options:
@@ -27,6 +28,7 @@ Common Options:
   --path <path>              Explicit worktree path override
   --repo <path>              Repository root override
   --handoff <profile>        Handoff profile (manual|terminal|codex)
+  --delete-branch            Delete local + remote branch after cleanup when merged proof exists
   --pending-summary <text>   Concrete deferred Phase B summary for handoff output
   --phase-b-seed-payload <text>
                             Structured deferred Phase B payload for rich handoff output
@@ -41,6 +43,7 @@ Examples:
   scripts/worktree-ready.sh attach --branch codex/gitops-metrics-fix
   scripts/worktree-ready.sh doctor --path ../moltinger-0308-005-worktree-ready-flow
   scripts/worktree-ready.sh finish --branch feat/remote-uat-hardening
+  scripts/worktree-ready.sh cleanup --branch feat/remote-uat-hardening --delete-branch
   scripts/worktree-ready.sh handoff --handoff codex --path ../moltinger-0308-005-worktree-ready-flow
 EOF
 }
@@ -78,12 +81,14 @@ speckit_mode="false"
 target_path=""
 repo_root=""
 handoff_profile="manual"
+delete_branch_requested="false"
 existing_branch=""
 output_format="human"
 pending_summary=""
 phase_b_seed_payload=""
 path_preview=""
 resolved_repo_root=""
+resolved_canonical_root=""
 resolved_common_dir=""
 canonical_repo_name=""
 resolved_bd_command=""
@@ -114,6 +119,10 @@ report_issue_title=""
 report_bootstrap_source_ref=""
 report_close_action="skip"
 report_close_command=""
+report_local_branch_action="not_requested"
+report_remote_branch_action="not_requested"
+report_merge_check="not_requested"
+report_default_branch_name=""
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
@@ -139,9 +148,11 @@ guard_current_branch=""
 guard_current_worktree=""
 guard_raw_status=""
 guard_state="unknown"
+guard_probe_status="not_run"
 branch_resolution_state="not_required"
 environment_probe_path=""
 environment_state="unknown"
+environment_probe_status="not_run"
 handoff_support_state="unknown"
 handoff_fallback_reason=""
 handoff_launch_command=""
@@ -163,7 +174,7 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      plan|create|attach|doctor|finish|handoff)
+      plan|create|attach|doctor|finish|cleanup|remove|handoff)
         if [[ -n "${mode}" ]]; then
           die "Mode already set to '${mode}', got extra mode '${1}'."
         fi
@@ -215,6 +226,10 @@ parse_args() {
           die "--handoff requires a value"
         fi
         shift 2
+        ;;
+      --delete-branch)
+        delete_branch_requested="true"
+        shift
         ;;
       --pending-summary)
         pending_summary="${2:-}"
@@ -954,6 +969,226 @@ build_finish_review_command() {
   printf 'bd status\n'
 }
 
+resolve_default_branch_name() {
+  local default_branch=""
+  local repo_json=""
+
+  default_branch="$(git -C "${resolved_repo_root}" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  default_branch="${default_branch#origin/}"
+  if [[ -n "${default_branch}" ]]; then
+    printf '%s\n' "${default_branch}"
+    return 0
+  fi
+
+  if origin_uses_github && gh_available_and_authenticated && command -v jq >/dev/null 2>&1; then
+    repo_json="$(gh repo view --json defaultBranchRef 2>/dev/null || true)"
+    default_branch="$(printf '%s\n' "${repo_json}" | jq -r '.defaultBranchRef.name // empty' 2>/dev/null || true)"
+    if [[ -n "${default_branch}" ]]; then
+      printf '%s\n' "${default_branch}"
+      return 0
+    fi
+  fi
+
+  printf 'main\n'
+}
+
+origin_uses_github() {
+  local origin_url=""
+
+  if [[ "${WORKTREE_READY_ASSUME_GITHUB_ORIGIN:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  origin_url="$(git -C "${resolved_repo_root}" remote get-url origin 2>/dev/null || true)"
+  [[ "${origin_url}" == *github.com* ]]
+}
+
+gh_available_and_authenticated() {
+  command -v gh >/dev/null 2>&1 || return 1
+  gh auth status -h github.com >/dev/null 2>&1
+}
+
+resolve_ref_sha() {
+  local ref_name="$1"
+
+  git -C "${resolved_repo_root}" rev-parse --verify "${ref_name}^{commit}" 2>/dev/null || true
+}
+
+ref_is_ancestor_of_remote_default() {
+  local candidate_ref="$1"
+  local default_branch_name="$2"
+
+  git -C "${resolved_repo_root}" merge-base --is-ancestor "${candidate_ref}" "refs/remotes/origin/${default_branch_name}" 2>/dev/null
+}
+
+git_worktree_record_for_path() {
+  local search_path="$1"
+  local normalized_search_path=""
+  local line=""
+  local current_path=""
+  local current_branch=""
+  local current_prunable=""
+  local current_locked=""
+
+  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      worktree\ *)
+        current_path="$(normalize_path "${line#worktree }" "/")"
+        current_branch=""
+        current_prunable=""
+        current_locked=""
+        ;;
+      branch\ refs/heads/*)
+        current_branch="${line#branch refs/heads/}"
+        ;;
+      prunable*)
+        current_prunable="${line#prunable }"
+        [[ "${current_prunable}" == "${line}" ]] && current_prunable="true"
+        ;;
+      locked*)
+        current_locked="${line#locked }"
+        [[ "${current_locked}" == "${line}" ]] && current_locked="true"
+        ;;
+      "")
+        if [[ -n "${current_path}" && "${current_path}" == "${normalized_search_path}" ]]; then
+          printf '%s\t%s\t%s\t%s\n' "${current_path}" "${current_branch}" "${current_prunable}" "${current_locked}"
+          return 0
+        fi
+        current_path=""
+        current_branch=""
+        current_prunable=""
+        current_locked=""
+        ;;
+    esac
+  done < <(git -C "${resolved_repo_root}" worktree list --porcelain)
+
+  if [[ -n "${current_path}" && "${current_path}" == "${normalized_search_path}" ]]; then
+    printf '%s\t%s\t%s\t%s\n' "${current_path}" "${current_branch}" "${current_prunable}" "${current_locked}"
+    return 0
+  fi
+
+  return 1
+}
+
+worktree_path_is_prunable() {
+  local worktree_path="$1"
+  local record=""
+  local prunable_reason=""
+
+  record="$(git_worktree_record_for_path "${worktree_path}" || true)"
+  if [[ -z "${record}" ]]; then
+    return 1
+  fi
+
+  IFS=$'\t' read -r _ _ prunable_reason _ <<< "${record}"
+  [[ -n "${prunable_reason}" ]]
+}
+
+wait_for_worktree_removal() {
+  local worktree_path="$1"
+  local attempt=0
+
+  while [[ "${attempt}" -lt 5 ]]; do
+    if [[ ! -d "${worktree_path}" ]] && ! git_worktree_record_for_path "${worktree_path}" >/dev/null 2>&1; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  return 1
+}
+
+resolve_cleanup_merge_proof() {
+  local cleanup_branch="$1"
+  local default_branch_name="$2"
+  local local_sha=""
+  local remote_sha=""
+  local expected_sha=""
+  local repo_json=""
+  local pr_json=""
+  local repo_delete_branch_on_merge=""
+  local match_count=""
+  local merged_url=""
+
+  report_merge_check="not_requested"
+  report_default_branch_name="${default_branch_name}"
+
+  if local_branch_exists "${cleanup_branch}"; then
+    local_sha="$(resolve_ref_sha "refs/heads/${cleanup_branch}")"
+    if [[ -n "${local_sha}" ]] && ref_is_ancestor_of_remote_default "refs/heads/${cleanup_branch}" "${default_branch_name}"; then
+      report_merge_check="git_ancestor_local"
+      return 0
+    fi
+  fi
+
+  if remote_branch_exists "${cleanup_branch}"; then
+    remote_sha="$(resolve_ref_sha "refs/remotes/origin/${cleanup_branch}")"
+    if [[ -n "${remote_sha}" ]] && ref_is_ancestor_of_remote_default "refs/remotes/origin/${cleanup_branch}" "${default_branch_name}"; then
+      report_merge_check="git_ancestor_remote"
+      return 0
+    fi
+  fi
+
+  expected_sha="${remote_sha:-${local_sha}}"
+  if [[ -z "${expected_sha}" ]]; then
+    report_merge_check="missing_branch_tip"
+    return 1
+  fi
+
+  if ! origin_uses_github; then
+    report_merge_check="not_merged"
+    return 1
+  fi
+
+  if ! gh_available_and_authenticated || ! command -v jq >/dev/null 2>&1; then
+    report_merge_check="github_unavailable"
+    return 1
+  fi
+
+  repo_json="$(gh repo view --json deleteBranchOnMerge,defaultBranchRef 2>/dev/null || true)"
+  repo_delete_branch_on_merge="$(printf '%s\n' "${repo_json}" | jq -r '.deleteBranchOnMerge // empty' 2>/dev/null || true)"
+  if [[ -z "${report_default_branch_name}" ]]; then
+    report_default_branch_name="$(printf '%s\n' "${repo_json}" | jq -r '.defaultBranchRef.name // empty' 2>/dev/null || true)"
+  fi
+  if [[ -n "${repo_delete_branch_on_merge}" && "${repo_delete_branch_on_merge}" == "false" ]]; then
+    add_warning "GitHub auto-delete for merged head branches is disabled for this repository; cleanup must explicitly remove remote branches when merge proof exists."
+  fi
+
+  pr_json="$(gh pr list --state merged --head "${cleanup_branch}" --json number,state,mergedAt,headRefName,headRefOid,baseRefName,isCrossRepository,url,title 2>/dev/null || true)"
+  match_count="$(
+    printf '%s\n' "${pr_json}" | jq -r \
+      --arg branch "${cleanup_branch}" \
+      --arg base "${default_branch_name}" \
+      --arg head_sha "${expected_sha}" \
+      '[ .[] | select(.state == "MERGED" and .mergedAt != null and .headRefName == $branch and .baseRefName == $base and (.isCrossRepository | not) and .headRefOid == $head_sha) ] | length' \
+      2>/dev/null || printf '0'
+  )"
+
+  if [[ "${match_count}" == "1" ]]; then
+    merged_url="$(printf '%s\n' "${pr_json}" | jq -r \
+      --arg branch "${cleanup_branch}" \
+      --arg base "${default_branch_name}" \
+      --arg head_sha "${expected_sha}" \
+      '.[] | select(.state == "MERGED" and .mergedAt != null and .headRefName == $branch and .baseRefName == $base and (.isCrossRepository | not) and .headRefOid == $head_sha) | .url' \
+      2>/dev/null || true)"
+    report_merge_check="github_pr_merged"
+    if [[ -n "${merged_url}" ]]; then
+      add_warning "GitHub merged PR fallback confirmed safe branch deletion via ${merged_url}."
+    fi
+    return 0
+  fi
+
+  if [[ "${match_count}" =~ ^[0-9]+$ ]] && [[ "${match_count}" -gt 1 ]]; then
+    report_merge_check="github_pr_ambiguous"
+  else
+    report_merge_check="not_merged"
+  fi
+  return 1
+}
+
 discover_issue_context() {
   local resolved_issue=""
   local issues_file=""
@@ -1310,6 +1545,7 @@ resolve_repo_root() {
   fi
 
   resolved_repo_root="$(normalize_path "${detected_root}" "/")"
+  resolved_canonical_root="$(beads_resolve_canonical_root "${resolved_repo_root}" 2>/dev/null || printf '%s\n' "${resolved_repo_root}")"
   detected_common_dir="$(git -C "${resolved_repo_root}" rev-parse --git-common-dir 2>/dev/null || printf '.git')"
   resolved_common_dir="$(normalize_path "${detected_common_dir}" "${resolved_repo_root}")"
   if [[ "$(basename "${resolved_common_dir}")" == ".git" ]]; then
@@ -2055,6 +2291,10 @@ reset_report() {
   report_bootstrap_source_ref=""
   report_close_action="skip"
   report_close_command=""
+  report_local_branch_action="not_requested"
+  report_remote_branch_action="not_requested"
+  report_merge_check="not_requested"
+  report_default_branch_name=""
   report_next_steps=()
   report_warnings=()
   report_issue_artifacts=()
@@ -2428,6 +2668,20 @@ set_command_exit_code_from_readiness() {
   esac
 }
 
+set_command_exit_code_from_cleanup() {
+  case "${report_final_state}" in
+    cleanup_complete)
+      command_exit_code=0
+      ;;
+    cleanup_blocked)
+      command_exit_code=23
+      ;;
+    *)
+      command_exit_code=30
+      ;;
+  esac
+}
+
 set_readiness_next_steps() {
   local mode_name="$1"
   local bootstrap_command=""
@@ -2750,6 +3004,254 @@ set_finish_next_steps() {
   fi
 
   add_warning "If bd preflight --check is unavailable, run the project default fast checks before closing."
+}
+
+execute_cleanup_worktree_action() {
+  local cleanup_path="${report_worktree_path:-${target_path:-}}"
+  local record=""
+  local prunable_reason=""
+  local locked_reason=""
+  local bd_command=""
+  local output=""
+  local rc=0
+
+  if [[ -z "${cleanup_path}" || "${cleanup_path}" == "n/a" ]]; then
+    report_worktree_action="already_missing"
+    return 0
+  fi
+
+  if [[ "${cleanup_path}" == "${resolved_canonical_root}" || "${cleanup_path}" == "${resolved_repo_root}" ]]; then
+    report_worktree_action="blocked"
+    report_repair_command="Refusing to remove the canonical root worktree"
+    add_warning "Cleanup refuses to remove the canonical root worktree."
+    add_next_step "Retry cleanup with a linked worktree path instead of ${cleanup_path}"
+    return 1
+  fi
+
+  record="$(git_worktree_record_for_path "${cleanup_path}" || true)"
+  if [[ -z "${record}" ]]; then
+    if [[ -d "${cleanup_path}" ]]; then
+      report_worktree_action="blocked"
+      add_warning "Target path exists, but git does not recognize it as a managed linked worktree."
+      add_next_step "Inspect $(shell_quote "${cleanup_path}") and retry cleanup with a managed linked worktree target"
+      return 1
+    fi
+
+    report_worktree_action="already_missing"
+    return 0
+  fi
+
+  IFS=$'\t' read -r _ _ prunable_reason locked_reason <<< "${record}"
+  if [[ -n "${locked_reason}" ]]; then
+    report_worktree_action="blocked"
+    add_warning "Cleanup refuses to remove a locked worktree at ${cleanup_path}."
+    add_next_step "Inspect git worktree lock state for $(shell_quote "${cleanup_path}") and retry cleanup after unlocking it"
+    return 1
+  fi
+
+  if [[ ! -d "${cleanup_path}" ]]; then
+    if [[ -n "${prunable_reason}" ]]; then
+      set +e
+      output="$(git -C "${resolved_repo_root}" worktree prune 2>&1)"
+      rc=$?
+      set -e
+
+      if [[ "${rc}" -eq 0 ]] && ! git_worktree_record_for_path "${cleanup_path}" >/dev/null 2>&1; then
+        report_worktree_action="pruned"
+        return 0
+      fi
+
+      report_worktree_action="blocked"
+      add_warning "git worktree prune did not clear the stale worktree entry for ${cleanup_path}."
+      if [[ -n "${output}" ]]; then
+        add_warning "$(printf '%s' "${output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      fi
+      add_next_step "git -C $(shell_quote "${resolved_repo_root}") worktree prune"
+      return 1
+    fi
+
+    report_worktree_action="already_missing"
+    return 0
+  fi
+
+  bd_command="$(resolve_bd_command_for_path "${resolved_repo_root}")" || {
+    report_worktree_action="blocked"
+    add_warning "Plain bd is unavailable from the canonical root session."
+    add_next_step "export PATH=$(shell_quote "${resolved_repo_root}/bin"):\$PATH"
+    add_next_step "bd worktree remove $(shell_quote "${cleanup_path}")"
+    return 1
+  }
+
+  set +e
+  output="$(
+    cd "${resolved_repo_root}" &&
+    "${bd_command}" worktree remove "${cleanup_path}" 2>&1
+  )"
+  rc=$?
+  set -e
+
+  if [[ "${rc}" -ne 0 ]]; then
+    report_worktree_action="blocked"
+    add_warning "bd worktree remove failed for ${cleanup_path}."
+    if [[ -n "${output}" ]]; then
+      add_warning "$(printf '%s' "${output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+    fi
+    add_next_step "cd $(shell_quote "${resolved_repo_root}")"
+    add_next_step "bd worktree remove $(shell_quote "${cleanup_path}")"
+    if worktree_path_is_prunable "${cleanup_path}"; then
+      add_next_step "git worktree prune"
+    fi
+    return 1
+  fi
+
+  if wait_for_worktree_removal "${cleanup_path}"; then
+    report_worktree_action="removed"
+    return 0
+  fi
+
+  if worktree_path_is_prunable "${cleanup_path}"; then
+    set +e
+    output="$(git -C "${resolved_repo_root}" worktree prune 2>&1)"
+    rc=$?
+    set -e
+    if [[ "${rc}" -eq 0 ]] && ! git_worktree_record_for_path "${cleanup_path}" >/dev/null 2>&1; then
+      report_worktree_action="pruned"
+      return 0
+    fi
+  fi
+
+  report_worktree_action="blocked"
+  add_warning "Cleanup did not observe the worktree entry disappear after bd worktree remove."
+  add_next_step "git -C $(shell_quote "${resolved_repo_root}") worktree list --porcelain"
+  add_next_step "git -C $(shell_quote "${resolved_repo_root}") worktree prune"
+  return 1
+}
+
+execute_cleanup_branch_actions() {
+  local cleanup_branch="${report_branch_name:-${branch:-}}"
+  local default_branch_name=""
+  local output=""
+  local local_delete_flag="-d"
+  local rc=0
+
+  report_local_branch_action="not_requested"
+  report_remote_branch_action="not_requested"
+  report_merge_check="not_requested"
+  report_default_branch_name=""
+
+  if [[ "${delete_branch_requested}" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${cleanup_branch}" || "${cleanup_branch}" == "n/a" ]]; then
+    report_local_branch_action="skipped"
+    report_remote_branch_action="skipped"
+    report_merge_check="missing_branch_name"
+    add_warning "Cleanup cannot delete branches because no target branch name was resolved."
+    add_next_step "Retry cleanup with --branch <name> if branch deletion is required"
+    return 1
+  fi
+
+  if ! local_branch_exists "${cleanup_branch}" && ! remote_branch_exists "${cleanup_branch}"; then
+    report_local_branch_action="already_missing"
+    report_remote_branch_action="already_missing"
+    report_merge_check="already_missing"
+    return 0
+  fi
+
+  default_branch_name="$(resolve_default_branch_name)"
+  report_default_branch_name="${default_branch_name}"
+
+  if ! resolve_cleanup_merge_proof "${cleanup_branch}" "${default_branch_name}"; then
+    report_local_branch_action="skipped"
+    if remote_branch_exists "${cleanup_branch}"; then
+      report_remote_branch_action="blocked"
+    else
+      report_remote_branch_action="already_missing"
+    fi
+
+    add_warning "Cleanup could not establish merged proof for branch '${cleanup_branch}'."
+    case "${report_merge_check}" in
+      github_unavailable)
+        add_next_step "gh auth status -h github.com"
+        ;;
+      github_pr_ambiguous)
+        add_warning "Multiple merged PR candidates matched the branch name; remote delete remains blocked until a single PR/head SHA is confirmed."
+        ;;
+      missing_branch_tip)
+        add_warning "No local or remote branch tip is available to compare against merged PR metadata."
+        ;;
+    esac
+    if remote_branch_exists "${cleanup_branch}" || local_branch_exists "${cleanup_branch}"; then
+      add_next_step "git merge-base --is-ancestor $(shell_quote "refs/remotes/origin/${cleanup_branch}") $(shell_quote "refs/remotes/origin/${default_branch_name}")"
+    fi
+    if origin_uses_github; then
+      add_next_step "gh pr list --state merged --head $(shell_quote "${cleanup_branch}") --json number,state,mergedAt,headRefName,headRefOid,baseRefName,url"
+    fi
+    return 1
+  fi
+
+  if local_branch_exists "${cleanup_branch}"; then
+    if [[ "${report_merge_check}" == "github_pr_merged" ]]; then
+      local_delete_flag="-D"
+    fi
+    set +e
+    output="$(git -C "${resolved_repo_root}" branch "${local_delete_flag}" "${cleanup_branch}" 2>&1)"
+    rc=$?
+    set -e
+
+    if [[ "${rc}" -eq 0 ]]; then
+      report_local_branch_action="deleted"
+    else
+      report_local_branch_action="blocked"
+      add_warning "git branch ${local_delete_flag} failed for ${cleanup_branch}."
+      if [[ -n "${output}" ]]; then
+        add_warning "$(printf '%s' "${output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      fi
+      add_next_step "git -C $(shell_quote "${resolved_repo_root}") branch ${local_delete_flag} $(shell_quote "${cleanup_branch}")"
+      return 1
+    fi
+  else
+    report_local_branch_action="already_missing"
+  fi
+
+  if remote_branch_exists "${cleanup_branch}"; then
+    set +e
+    output="$(git -C "${resolved_repo_root}" push origin --delete "${cleanup_branch}" 2>&1)"
+    rc=$?
+    set -e
+
+    if [[ "${rc}" -eq 0 ]]; then
+      report_remote_branch_action="deleted"
+    else
+      report_remote_branch_action="blocked"
+      add_warning "git push origin --delete failed for ${cleanup_branch}."
+      if [[ -n "${output}" ]]; then
+        add_warning "$(printf '%s' "${output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      fi
+      add_next_step "git -C $(shell_quote "${resolved_repo_root}") push origin --delete $(shell_quote "${cleanup_branch}")"
+      return 1
+    fi
+  else
+    report_remote_branch_action="already_missing"
+  fi
+
+  return 0
+}
+
+set_cleanup_contract() {
+  report_phase="cleanup"
+  report_boundary="none"
+  report_repair_command=""
+
+  if [[ "${report_worktree_action}" == "blocked" || "${report_local_branch_action}" == "blocked" || "${report_remote_branch_action}" == "blocked" || "${report_local_branch_action}" == "skipped" || "${report_remote_branch_action}" == "skipped" ]]; then
+    report_status="cleanup_blocked"
+    report_final_state="cleanup_blocked"
+    return 0
+  fi
+
+  report_status="cleanup_complete"
+  report_final_state="cleanup_complete"
 }
 
 add_warning() {
@@ -3094,7 +3596,65 @@ render_finish_report() {
   render_fenced_bash_block "${report_next_steps[@]}"
 }
 
+render_cleanup_report() {
+  if [[ "${output_format}" == "env" ]]; then
+    render_env_kv "schema" "worktree-cleanup/v1"
+    render_env_kv "phase" "${report_phase}"
+    render_env_kv "boundary" "${report_boundary}"
+    render_env_kv "final_state" "${report_final_state}"
+    render_env_kv "worktree" "${report_worktree_path:-n/a}"
+    render_env_kv "preview" "${report_path_preview:-n/a}"
+    render_env_kv "branch" "${report_branch_name:-n/a}"
+    render_env_kv "status" "${report_status}"
+    render_env_kv "topology_state" "${report_topology_state}"
+    render_env_kv "worktree_action" "${report_worktree_action}"
+    render_env_kv "local_branch_action" "${report_local_branch_action}"
+    render_env_kv "remote_branch_action" "${report_remote_branch_action}"
+    render_env_kv "merge_check" "${report_merge_check}"
+    if [[ -n "${report_default_branch_name}" ]]; then
+      render_env_kv "default_branch" "${report_default_branch_name}"
+    fi
+    if [[ -n "${report_repair_command}" ]]; then
+      render_env_kv "repair_command" "${report_repair_command}"
+    fi
+    render_env_array "next" "${report_next_steps[@]}"
+    render_env_array "warning" "${report_warnings[@]}"
+    return 0
+  fi
+
+  printf 'Worktree: %s\n' "${report_worktree_path:-n/a}"
+  printf 'Preview: %s\n' "${report_path_preview:-n/a}"
+  printf 'Branch: %s\n' "${report_branch_name:-n/a}"
+  printf 'Status: %s\n' "${report_status}"
+  printf 'Phase: %s\n' "${report_phase}"
+  printf 'Boundary: %s\n' "${report_boundary}"
+  printf 'Final State: %s\n' "${report_final_state}"
+  printf 'Topology: %s\n' "${report_topology_state}"
+  printf 'Worktree Action: %s\n' "${report_worktree_action}"
+  printf 'Local Branch Action: %s\n' "${report_local_branch_action}"
+  printf 'Remote Branch Action: %s\n' "${report_remote_branch_action}"
+  printf 'Merge Check: %s\n' "${report_merge_check}"
+  if [[ -n "${report_default_branch_name}" ]]; then
+    printf 'Default Branch: %s\n' "${report_default_branch_name}"
+  fi
+  if [[ -n "${report_repair_command}" ]]; then
+    printf 'Repair Command: %s\n' "${report_repair_command}"
+  fi
+  if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
+    printf 'Next:\n'
+    render_numbered_list "${report_next_steps[@]}"
+  fi
+  render_warning_list "${report_warnings[@]}"
+  if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
+    render_fenced_bash_block "${report_next_steps[@]}"
+  fi
+}
+
 normalize_mode_inputs() {
+  if [[ "${mode}" == "remove" ]]; then
+    mode="cleanup"
+  fi
+
   case "${output_format}" in
     human|env)
       ;;
@@ -3421,6 +3981,48 @@ render_finish_contract_report() {
   set_command_exit_code_from_readiness
 }
 
+render_cleanup_contract_report() {
+  prepare_report_target
+  if [[ "${resolved_repo_root}" != "${resolved_canonical_root}" ]]; then
+    local delete_flag=""
+    local cleanup_args="--branch <branch>"
+
+    if [[ "${delete_branch_requested}" == "true" ]]; then
+      delete_flag=" --delete-branch"
+    fi
+    if [[ -n "${branch}" ]]; then
+      cleanup_args="--branch $(shell_quote "${branch}")"
+    elif [[ -n "${target_path}" ]]; then
+      cleanup_args="--path $(shell_quote "${target_path}")"
+    fi
+
+    report_phase="cleanup"
+    report_boundary="none"
+    report_status="cleanup_blocked"
+    report_final_state="cleanup_blocked"
+    report_worktree_action="blocked"
+    report_repair_command="cd $(shell_quote "${resolved_canonical_root}") && scripts/worktree-ready.sh cleanup ${cleanup_args}${delete_flag}"
+    add_warning "Cleanup must run from the canonical root worktree."
+    add_next_step "cd $(shell_quote "${resolved_canonical_root}")"
+    if [[ -n "${branch}" ]]; then
+      add_next_step "scripts/worktree-ready.sh cleanup --branch $(shell_quote "${branch}")${delete_flag}"
+    elif [[ -n "${target_path}" ]]; then
+      add_next_step "scripts/worktree-ready.sh cleanup --path $(shell_quote "${target_path}")${delete_flag}"
+    fi
+    render_cleanup_report
+    set_command_exit_code_from_cleanup
+    return 0
+  fi
+
+  execute_cleanup_worktree_action || true
+  if [[ "${report_worktree_action}" != "blocked" ]]; then
+    execute_cleanup_branch_actions || true
+  fi
+  set_cleanup_contract
+  render_cleanup_report
+  set_command_exit_code_from_cleanup
+}
+
 prepare_create_context() {
   require_git_repo
   branch_resolution_state="not_required"
@@ -3529,6 +4131,28 @@ prepare_finish_context() {
   discover_environment_state
 }
 
+prepare_cleanup_context() {
+  require_git_repo
+  branch_resolution_state="not_required"
+
+  if [[ -z "${branch}" && -z "${target_path}" ]]; then
+    die "cleanup mode requires --branch or --path"
+  fi
+
+  if [[ -n "${branch}" ]]; then
+    resolve_existing_branch_state || true
+  fi
+
+  if [[ -n "${target_path}" ]]; then
+    resolve_explicit_path "${target_path}"
+  elif [[ -n "${branch}" ]]; then
+    derive_sibling_worktree_path "${branch}"
+  fi
+
+  discover_topology_registry_state
+  discover_target_state
+}
+
 prepare_handoff_context() {
   require_git_repo
   branch_resolution_state="not_required"
@@ -3617,6 +4241,11 @@ handle_finish() {
   render_finish_contract_report
 }
 
+handle_cleanup() {
+  prepare_cleanup_context
+  render_cleanup_contract_report
+}
+
 handle_handoff() {
   prepare_handoff_context
   render_mode_placeholder "handoff"
@@ -3648,6 +4277,9 @@ main() {
       ;;
     finish)
       handle_finish
+      ;;
+    cleanup)
+      handle_cleanup
       ;;
     handoff)
       handle_handoff
