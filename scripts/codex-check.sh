@@ -144,7 +144,9 @@ check_instruction_references() {
   if grep -Fq -- "bd sync" "${REPO_ROOT}/CLAUDE.md" || \
      grep -Fq -- "bd sync" "${REPO_ROOT}/.beads/AGENTS.md" || \
      grep -Fq -- "bd sync" "${REPO_ROOT}/.beads/config.yaml" || \
-     grep -Fq -- 'add_next_step "bd sync"' "${REPO_ROOT}/scripts/worktree-ready.sh"; then
+     grep -Fq -- 'add_next_step "bd sync"' "${REPO_ROOT}/scripts/worktree-ready.sh" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/commands/worktree.md" || \
+     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/skills/beads/SKILL.md"; then
     log_error "High-traffic instruction surfaces must not reintroduce retired bd sync guidance"
     failures=1
   else

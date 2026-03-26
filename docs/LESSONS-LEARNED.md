@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-26
-**Total Lessons**: 50
+**Total Lessons**: 51
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (20 lessons)
+#### P1 (21 lessons)
+- [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Beads worktree localization used stale bootstrap contracts and recreated the failure during Phase A](../docs/rca/2026-03-26-beads-worktree-localize-used-stale-bootstrap-contract.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
@@ -106,7 +107,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (16 lessons)
+#### process (17 lessons)
+- [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Beads worktree localization used stale bootstrap contracts and recreated the failure during Phase A](../docs/rca/2026-03-26-beads-worktree-localize-used-stale-bootstrap-contract.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
@@ -142,12 +144,12 @@
 - `github-actions` (13 lessons)
 - `deploy` (13 lessons)
 - `cicd` (11 lessons)
-- `rca` (9 lessons)
+- `rca` (10 lessons)
 - `process` (9 lessons)
 - `moltis` (9 lessons)
 - `lessons` (9 lessons)
+- `git-worktree` (8 lessons)
 - `clawdiy` (8 lessons)
-- `git-worktree` (7 lessons)
 
 
 ---
@@ -156,10 +158,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 50 |
-| Critical (P0/P1) | 21 |
+| Total Lessons | 51 |
+| Critical (P0/P1) | 22 |
 | Categories | 5 |
-| Unique Tags | 114 |
+| Unique Tags | 115 |
 
 ---
 

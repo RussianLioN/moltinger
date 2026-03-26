@@ -15,9 +15,15 @@ Usage:
 Description:
   Localize Beads ownership for an existing git worktree by removing legacy
   redirect residue and materializing a worktree-local Beads runtime from the
-  local JSONL/config foundation when that is safe to do. For older worktrees
-  that still lack the plain-bd foundation, `--bootstrap-source` can import the
-  tracked recovery files before localization.
+  local foundation when that is safe to do. For older worktrees that still
+  lack the plain-bd foundation, `--bootstrap-source` can import the tracked
+  recovery files before localization. If a Dolt runtime shell already exists
+  but the named `beads` DB is missing, this helper must stop and route the
+  operator to `bd bootstrap` instead of rebuilding from JSONL.
+  For compatibility worktrees, that foundation may still come from tracked
+  JSONL/config files. If a Dolt runtime shell already exists but the named
+  `beads` DB is missing, this helper must stop and route the operator to
+  `bd bootstrap` instead of rebuilding from JSONL.
 EOF
 }
 
@@ -117,6 +123,7 @@ classify_state() {
   local redirect_path="${beads_dir}/redirect"
   local active_migration_mode=""
   local has_local_runtime="false"
+  local has_runtime_shell="false"
 
   report_db_path="${db_path}"
   report_notice=""
@@ -125,6 +132,12 @@ classify_state() {
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
     if [[ ! -e "${db_path}" && -d "${dolt_path}" ]]; then
+      report_db_path="${dolt_path}"
+    fi
+  fi
+  if beads_resolve_has_runtime_shell "${beads_dir}"; then
+    has_runtime_shell="true"
+    if [[ "${has_local_runtime}" != "true" && -d "${dolt_path}" ]]; then
       report_db_path="${dolt_path}"
     fi
   fi
@@ -192,9 +205,17 @@ classify_state() {
   fi
 
   if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
+    if [[ "${has_runtime_shell}" == "true" ]]; then
+      report_state="runtime_bootstrap_required"
+      report_action="stop_and_report"
+      report_message="A local Dolt-backed Beads runtime shell exists, but the named 'beads' database is not materialized yet."
+      report_notice="Run /usr/local/bin/bd doctor --json first, then bd bootstrap. Do not rebuild from JSONL or restore retired tracker files."
+      return 0
+    fi
+
     report_state="partial_foundation"
     report_action="rebuild_local_foundation"
-    report_message="Local Beads foundation exists, but the named local Beads runtime must be materialized in place."
+    report_message="Local Beads foundation exists, but the local Beads runtime must be materialized in place."
     return 0
   fi
 
