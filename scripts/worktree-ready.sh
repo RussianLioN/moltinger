@@ -1008,6 +1008,48 @@ gh_available_and_authenticated() {
   gh auth status -h github.com >/dev/null 2>&1
 }
 
+github_repo_name_with_owner() {
+  local repo_json=""
+  local repo_name_with_owner=""
+
+  if ! origin_uses_github || ! gh_available_and_authenticated || ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+
+  repo_json="$(gh repo view --json nameWithOwner 2>/dev/null || true)"
+  repo_name_with_owner="$(printf '%s\n' "${repo_json}" | jq -r '.nameWithOwner // empty' 2>/dev/null || true)"
+  if [[ -z "${repo_name_with_owner}" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${repo_name_with_owner}"
+}
+
+github_delete_ref_command() {
+  local cleanup_branch="$1"
+  local repo_name_with_owner=""
+
+  repo_name_with_owner="$(github_repo_name_with_owner || true)"
+  if [[ -z "${repo_name_with_owner}" ]]; then
+    return 1
+  fi
+
+  printf 'gh api -X DELETE %s\n' "$(shell_quote "repos/${repo_name_with_owner}/git/refs/heads/${cleanup_branch}")"
+}
+
+delete_remote_branch_via_github_api() {
+  local cleanup_branch="$1"
+  local repo_name_with_owner=""
+
+  repo_name_with_owner="$(github_repo_name_with_owner || true)"
+  if [[ -z "${repo_name_with_owner}" ]]; then
+    return 1
+  fi
+
+  gh api -X DELETE "repos/${repo_name_with_owner}/git/refs/heads/${cleanup_branch}"
+  git -C "${resolved_repo_root}" update-ref -d "refs/remotes/origin/${cleanup_branch}" >/dev/null 2>&1 || true
+}
+
 resolve_ref_sha() {
   local ref_name="$1"
 
@@ -3216,6 +3258,9 @@ execute_cleanup_branch_actions() {
   fi
 
   if remote_branch_exists "${cleanup_branch}"; then
+    local remote_delete_fallback_output=""
+    local remote_delete_fallback_rc=0
+    local remote_delete_fallback_command=""
     set +e
     output="$(git -C "${resolved_repo_root}" push origin --delete "${cleanup_branch}" 2>&1)"
     rc=$?
@@ -3223,14 +3268,38 @@ execute_cleanup_branch_actions() {
 
     if [[ "${rc}" -eq 0 ]]; then
       report_remote_branch_action="deleted"
+    elif ! remote_branch_exists "${cleanup_branch}"; then
+      report_remote_branch_action="deleted"
+      add_warning "git push origin --delete returned non-zero for ${cleanup_branch}, but the remote-tracking ref disappeared anyway."
     else
-      report_remote_branch_action="blocked"
-      add_warning "git push origin --delete failed for ${cleanup_branch}."
-      if [[ -n "${output}" ]]; then
-        add_warning "$(printf '%s' "${output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      remote_delete_fallback_command="$(github_delete_ref_command "${cleanup_branch}" || true)"
+      if [[ -n "${remote_delete_fallback_command}" ]]; then
+        set +e
+        remote_delete_fallback_output="$(delete_remote_branch_via_github_api "${cleanup_branch}" 2>&1)"
+        remote_delete_fallback_rc=$?
+        set -e
+      else
+        remote_delete_fallback_rc=1
       fi
-      add_next_step "git -C $(shell_quote "${resolved_repo_root}") push origin --delete $(shell_quote "${cleanup_branch}")"
-      return 1
+
+      if [[ "${remote_delete_fallback_rc}" -eq 0 ]]; then
+        report_remote_branch_action="deleted"
+        add_warning "GitHub API fallback deleted remote branch '${cleanup_branch}' after git push origin --delete failed."
+      else
+        report_remote_branch_action="blocked"
+        add_warning "git push origin --delete failed for ${cleanup_branch}."
+        if [[ -n "${output}" ]]; then
+          add_warning "$(printf '%s' "${output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+        fi
+        if [[ -n "${remote_delete_fallback_output}" ]]; then
+          add_warning "$(printf '%s' "${remote_delete_fallback_output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+        fi
+        if [[ -n "${remote_delete_fallback_command}" ]]; then
+          add_next_step "${remote_delete_fallback_command}"
+        fi
+        add_next_step "git -C $(shell_quote "${resolved_repo_root}") push origin --delete $(shell_quote "${cleanup_branch}")"
+        return 1
+      fi
     fi
   else
     report_remote_branch_action="already_missing"

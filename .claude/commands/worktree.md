@@ -379,6 +379,7 @@ Process:
    - prove merge safety with `git merge-base --is-ancestor` against the default remote branch first
    - if git ancestry is inconclusive and `origin` is GitHub, allow an authenticated `gh` fallback that confirms a merged PR for the same branch, base branch, and head SHA
    - if the GitHub fallback proves a squash/rebase-merged branch, local branch deletion may require `git branch -D` because `git branch -d` will still reject the non-ancestor tip
+   - if `git push origin --delete` fails after merged proof is established and the repo is GitHub-backed, the helper may fall back to `gh api -X DELETE` for the exact head ref before reporting `cleanup_blocked`
    - if neither proof succeeds, block remote deletion and print the exact manual verification steps
 6. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
    - if stale, report the dedicated topology publish next step instead of auto-running `refresh --write-doc`
