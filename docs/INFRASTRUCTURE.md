@@ -265,8 +265,10 @@ make logs
 # Check container status
 docker inspect moltis
 
-# Force recreate
-docker compose -p moltinger -f docker-compose.prod.yml up -d --force-recreate moltis
+# Safer recreate path for fixed-name Moltis container
+docker stop --time 45 moltis || true
+docker rm -f moltis || true
+docker compose -p moltinger -f docker-compose.prod.yml up -d moltis
 ```
 
 ### Health check failing

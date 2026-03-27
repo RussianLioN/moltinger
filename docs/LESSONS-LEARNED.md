@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-27
-**Total Lessons**: 52
+**Total Lessons**: 53
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (22 lessons)
+#### P1 (23 lessons)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
+- [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Beads worktree localization used stale bootstrap contracts and recreated the failure during Phase A](../docs/rca/2026-03-26-beads-worktree-localize-used-stale-bootstrap-contract.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
@@ -77,7 +78,8 @@
 ### By Category
 
 
-#### cicd (22 lessons)
+#### cicd (23 lessons)
+- [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
 - [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
 - [Tracked Moltis deploy failed on legacy prometheus container-name conflict and opaque non-JSON failure envelope](../docs/rca/2026-03-20-tracked-deploy-failed-on-legacy-prometheus-container-name-conflict.md)
@@ -143,11 +145,11 @@
 ### Popular Tags
 
 - `gitops` (16 lessons)
+- `deploy` (14 lessons)
 - `github-actions` (13 lessons)
-- `deploy` (13 lessons)
-- `cicd` (11 lessons)
+- `cicd` (12 lessons)
+- `moltis` (11 lessons)
 - `rca` (10 lessons)
-- `moltis` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `git-worktree` (8 lessons)
@@ -160,8 +162,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 52 |
-| Critical (P0/P1) | 23 |
+| Total Lessons | 53 |
+| Critical (P0/P1) | 24 |
 | Categories | 5 |
 | Unique Tags | 120 |
 

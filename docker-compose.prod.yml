@@ -30,6 +30,7 @@ services:
     image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-0.10.18}
     container_name: moltis
     restart: unless-stopped
+    stop_grace_period: 45s
     working_dir: /server
 
     # Security: Drop all capabilities, add only what's needed
