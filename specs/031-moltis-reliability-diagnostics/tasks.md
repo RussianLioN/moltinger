@@ -89,11 +89,23 @@
 - [x] T064 Record RCA/rules/lessons for the Telegram activity-log leak plus authoritative-UAT blind spot
 - [x] T065 Re-run authoritative Telegram validation against the shared remote runtime and reconcile `tasks.md` with the verified outcome
 
+---
+
+## Phase 8: Browser Sandbox Contract Audit And New-Instance Prevention
+
+- [x] T070 Record the second browser root cause in tracked RCA/rules/runbook artifacts, including the answer to whether the failure came from ignoring official docs versus stopping after a partial contract fix
+- [ ] T071 Audit the full browser/sandbox contract against official Moltis docs plus secondary browserless/Chromium bind-mount caveats: sandbox mode, Docker socket access, `container_host`, `sandbox_image`, `profile_dir`, `persist_profile`, writable host-visible profile storage, and end-to-end browser canary proof
+- [ ] T072 Extend deploy/runtime/browser proof so Docker/socket recovery is not treated as complete until writable browser-profile storage and a real `browser` navigation canary both pass
+- [ ] T073 Verify additional adjacent timeout/activity-leak failure modes triggered by browser/search incidents and reconcile the authoritative Telegram/browser UAT contract accordingly
+- [ ] T074 Preserve the browser/sandbox deploy checklist and new-instance lessons so future agent instances start from the complete contract rather than rediscovering the same drift
+
 ## Dependencies & Execution Order
 
 - Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7
+- Phase 8 is a new follow-up backlog driven by the March 27 browser timeout evidence; it is intentionally left open until the full browser/sandbox contract is re-proven against the authoritative remote path.
 - Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and now lands through `PR1 -> main deploy -> PR2` rather than direct feature-branch rollout.
 - Phase 7 depends on the completed Telegram/session reliability work from Phases 4 and 5 and adds a narrower user-facing channel-output/UAT closure pass.
+- Phase 8 depends on both the earlier browser access repair and the Telegram/UAT work, because the observed failure combined browser timeout, activity leakage, and incomplete post-fix verification.
 - Phase 2 and Phase 3 are the only repository-safe implementation phases in this slice.
 - Phase 4 depends on operator action against the shared remote runtime after repository guardrails are merged.
 - Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
@@ -108,3 +120,4 @@
 - Use Phase 5 backlog items to drive the next durability-focused slice once the current operational backlog is under control.
 - Close the embedding/Ollama incident by first preparing a minimal `PR1` for `main`, then proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery, and only after that landing the deferred `PR2` documentation layer.
 - Close the Telegram activity-log incident by layering a fail-closed prompt/channel contract under a fail-closed authoritative UAT gate, then validating the shared remote behavior with a real Telegram run.
+- Treat browser sandbox recovery as incomplete until the whole Docker-backed browser contract is re-proven: socket access, `container_host`, host-visible writable profile storage, and an exercised browser canary on the same user-facing path that previously timed out.

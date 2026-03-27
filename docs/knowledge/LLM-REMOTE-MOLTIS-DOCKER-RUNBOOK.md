@@ -24,6 +24,21 @@ This runbook assumes:
 - static git-synced config source: `/opt/moltinger-jb6-gpt54-primary` or another dedicated server worktree
 - writable runtime config dir: `${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}`
 
+## Official-First References
+
+Before diagnosing or repairing Moltis, re-check the official docs first and treat them as the baseline:
+
+- Browser automation: `https://docs.moltis.org/browser-automation.html`
+- Sandbox: `https://docs.moltis.org/sandbox.html`
+- Cloud / Docker deployment constraints: `https://docs.moltis.org/cloud-deploy.html`
+- Local validation: `https://docs.moltis.org/local-validation.html`
+- Changelog for browser/sandbox fixes and contract changes: `https://docs.moltis.org/changelog.html`
+
+Rule:
+
+- do not start from community guesses if the official docs already describe the baseline
+- use community/browserless/Chromium evidence only after the official Moltis path has been checked and the remaining gap is clearly repo-specific or runtime-specific
+
 ## Non-Negotiable Rules
 
 1. Never trust a cached `latest` image during manual rollout.
@@ -51,6 +66,12 @@ All installed automation must execute via `/opt/moltinger-active`, which is a sy
 
 8. Never let sibling browser sandboxes use a container-only profile path.
 When Moltis talks to the host Docker socket from inside a container, browser profile bind sources like `/home/moltis/.moltis/...` are interpreted on the host, not inside the Moltis container. In this deployment, keep `[tools.browser] profile_dir = "/tmp/moltis-browser-profile/shared"`, mount `/tmp/moltis-browser-profile` into the Moltis container at the same absolute path, and prepare it writable before deploy.
+
+9. Never call browser recovery complete after fixing only Docker/socket access.
+Browser recovery is complete only after:
+- the tracked browser image is ready
+- the shared browser profile path is writable for the sibling browser container
+- a real browser canary succeeds on the same class of user-facing path that was failing before
 
 ## Canonical Deploy Sequence
 
@@ -225,6 +246,39 @@ The strongest user-facing proof is:
 - model selector set to `GPT 5.4 (Codex/OAuth)`
 - prompt returns successfully
 - logs confirm the same model
+
+For browser-related incidents, add one more proof layer before calling the rollout healthy:
+
+- a real `browser` tool canary succeeds
+- if the user-facing failure happened on Telegram / `t.me/...`, re-run a browser path of that same class after the deploy
+- if browser launch fails, inspect the sibling browser container logs before blaming Traefik or Telegram
+
+## Browser Sandbox Contract Checklist
+
+Use this checklist for new instances, browser incidents, and post-deploy browser validation:
+
+1. Official baseline re-read:
+   - browser automation
+   - sandbox
+   - cloud/self-hosted Docker limits
+2. Docker-backed Moltis contract:
+   - host Docker socket mounted
+   - live Docker socket GID propagated if needed
+   - `container_host` present when Moltis runs in Docker
+3. Tracked browser runtime contract:
+   - expected `sandbox_image`
+   - expected `profile_dir`
+   - expected `persist_profile`
+4. Host-visible profile storage:
+   - shared profile mount exists
+   - host path ownership/permissions allow writes for the browser container user
+   - no stale root-owned auto-created browser profile dir remains
+5. Exercised proof:
+   - run a real `browser` navigation canary
+   - inspect Moltis logs for successful `tool=browser`
+   - inspect sibling browser container logs if launch fails
+
+If step 2 passes but step 4 fails, treat it as an incomplete contract repair, not as proof that official docs were wrong or ignored.
 
 ## Runtime Attestation
 

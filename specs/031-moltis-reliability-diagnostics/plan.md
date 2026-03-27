@@ -5,7 +5,7 @@
 
 ## Summary
 
-Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. A new live-authoritative Telegram pass on 2026-03-26 then exposed another user-facing regression: the bot can emit internal telemetry replies like `📋 Activity log`, `💻 Running`, and `🧠 Searching memory...`, while the current authoritative UAT still passes because its reply-quality gate only recognizes plain ASCII `Activity log ...` forms and ignores recent invalid pre-send incoming activity. Production policy adds one more hard constraint: shared production deploys are allowed only from `main`. This slice therefore extends the safe repository-managed fixes with a fail-closed Telegram channel-output guardrail plus authoritative UAT hardening, while keeping any live repair or rollout on the canonical `main` path.
+Production Moltis currently exhibits several symptoms that look unrelated from the outside but collapse into one core pattern: the live runtime is not honoring the tracked repository contract. The running container is healthy on `/health`, yet it does not see the repository as `/server`, does not load repo-managed skills, does not use the prepared writable runtime config directory, and therefore fails across model selection, browser execution, vector memory usefulness, and some tool availability. After the OAuth/runtime contract repair, the highest unresolved live blockers were Tavily SSE instability and `memory_search` embedding-provider failures. The next incident pass showed the deeper root cause: tracked `config/moltis.toml` already pins memory to `ollama/nomic-embed-text`, but the writable runtime `moltis.toml` had drifted back to an older auto-detect memory contract, while `OLLAMA_API_KEY` existed in server `.env` but was not forwarded into the running `moltis` container. A new live-authoritative Telegram pass on 2026-03-26 then exposed another user-facing regression: the bot can emit internal telemetry replies like `📋 Activity log`, `💻 Running`, and `🧠 Searching memory...`, while the current authoritative UAT still passes because its reply-quality gate only recognizes plain ASCII `Activity log ...` forms and ignores recent invalid pre-send incoming activity. The follow-up evidence on 2026-03-27 proved that browser recovery also has a second layer: restoring Docker socket access and `container_host` is not enough when the sibling browser container still receives a non-writable host-visible `profile_dir` bind mount and the real Telegram `t.me/...` path was not re-exercised after the partial fix. Production policy adds one more hard constraint: shared production deploys are allowed only from `main`. This slice therefore extends the safe repository-managed fixes with a fail-closed Telegram channel-output guardrail, browser/sandbox contract lessons, and authoritative UAT hardening, while keeping any live repair or rollout on the canonical `main` path.
 
 ## Technical Context
 
@@ -197,6 +197,21 @@ This does not claim to patch an upstream Telegram adapter implementation that is
 - fail-closed authoritative UAT
 - explicit RCA for any remaining upstream/runtime behavior
 
+### Phase 5b - Browser Sandbox Contract Audit And New-Instance Lessons
+
+The next hardening pass must not stop at the first restored browser invariant. It must audit the full browser sandbox contract against official Moltis docs plus tracked repo-specific runtime constraints:
+
+1. Re-check official Moltis browser/sandbox/cloud guidance for Docker-backed sibling browser containers, including sandbox mode, `container_host`, and host Docker socket requirements.
+2. Re-check repo-specific browser contract elements that official docs do not fail-close automatically:
+   - tracked `sandbox_image`
+   - `profile_dir`
+   - `persist_profile`
+   - host-visible browser profile mount source
+   - writable shared profile directory
+   - end-to-end `browser` canary against the same Telegram/`t.me/...` user path that previously timed out
+3. Record explicitly that the initial deployment failure was not “sandbox mode was disabled” but “the first fix stopped after socket connectivity and did not yet prove writable browser profile storage plus exercised browser launch.”
+4. Preserve that lesson in tracked RCA/rules/runbook artifacts so new agent instances and future deploys start from a complete browser contract checklist instead of rediscovering the same gap.
+
 ## Structure Decision
 
 Keep this slice intentionally narrow:
@@ -258,6 +273,11 @@ This keeps the work safe, auditable, and aligned with GitOps.
 ### Phase 6: Architectural Hardening Backlog
 
 - Record the consilium-backed backlog for fail-closed auth/config durability so follow-up work is driven by tracked artifacts rather than chat history.
+
+### Phase 7: Browser Contract Follow-Up Backlog
+
+- Add a dedicated backlog track for browser/sandbox contract audit, including official-doc cross-check, community caveats, deploy/UAT invariants, and new-instance lessons.
+- Keep the resulting tasks explicit until the live Telegram/browser timeout path is re-proven without leaked activity logs.
 - Prioritize secret/env hardening, runtime-dir pinning, semantic proof of health, session reconciliation, durable-state audit, and immutable release-root design.
 
 ### Phase 7: Telegram Activity-Log And UAT Hardening
