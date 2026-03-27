@@ -40,6 +40,8 @@ services:
     # Required for Docker socket access (sandbox execution)
     privileged: true
     read_only: false
+    group_add:
+      - "${DOCKER_SOCKET_GID:-999}"
 
     ports:
       - "${MOLTIS_PORT:-13131}:13131"
@@ -51,6 +53,8 @@ services:
       - ${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}:/home/moltis/.config/moltis
       - moltis-data:/home/moltis/.moltis
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     environment:
       <<: *common-env

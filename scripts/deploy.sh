@@ -507,6 +507,7 @@ compose_cmd() {
 
     local args=("$@")
     local -a compose_args=()
+    local -a env_prefix=(env)
     local redirect_stdout=false
 
     if [[ -n "$ENV_FILE" && -f "$ENV_FILE" ]]; then
@@ -520,17 +521,32 @@ compose_cmd() {
     fi
 
     if [[ "$TARGET" == "moltis" ]]; then
+        local docker_socket_gid="${DOCKER_SOCKET_GID:-}"
+        if [[ -z "$docker_socket_gid" && -S /var/run/docker.sock ]]; then
+            docker_socket_gid="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
+        fi
+        if [[ -z "$docker_socket_gid" ]]; then
+            log_error "Moltis browser sandbox contract requires a detectable DOCKER_SOCKET_GID for /var/run/docker.sock"
+            exit 2
+        fi
+        if [[ ! "$docker_socket_gid" =~ ^[0-9]+$ ]]; then
+            log_error "DOCKER_SOCKET_GID must be numeric; got '$docker_socket_gid'"
+            exit 2
+        fi
+
         if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" == "true" && -n "${MOLTIS_VERSION:-}" ]]; then
+            env_prefix=(env "DOCKER_SOCKET_GID=$docker_socket_gid" "MOLTIS_VERSION=$MOLTIS_VERSION")
             if [[ "$redirect_stdout" == "true" ]]; then
-                MOLTIS_VERSION="$MOLTIS_VERSION" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
             else
-                MOLTIS_VERSION="$MOLTIS_VERSION" docker compose "${compose_args[@]}" "${args[@]}"
+                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}"
             fi
         else
+            env_prefix=(env -u MOLTIS_VERSION "DOCKER_SOCKET_GID=$docker_socket_gid")
             if [[ "$redirect_stdout" == "true" ]]; then
-                env -u MOLTIS_VERSION docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
             else
-                env -u MOLTIS_VERSION docker compose "${compose_args[@]}" "${args[@]}"
+                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}"
             fi
         fi
         return
@@ -1323,6 +1339,21 @@ verify_deployment() {
             rm -f "$tmp_path"
         ' >/dev/null 2>&1; then
             log_error "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
+            return 1
+        fi
+
+        if ! docker exec "$TARGET_CONTAINER" sh -lc '
+            sock_gid="$(stat -c %g /var/run/docker.sock)" &&
+            id -G | tr " " "\n" | grep -qx "$sock_gid"
+        ' >/dev/null 2>&1; then
+            log_error "Moltis runtime contract mismatch: mounted docker.sock gid is not present in the live Moltis process groups"
+            return 1
+        fi
+
+        if ! docker exec "$TARGET_CONTAINER" sh -lc '
+            grep -Eq "(^|[[:space:]])host\.docker\.internal([[:space:]]|$)" /etc/hosts
+        ' >/dev/null 2>&1; then
+            log_error "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
             return 1
         fi
     fi
