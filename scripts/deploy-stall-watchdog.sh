@@ -5,6 +5,7 @@ set -euo pipefail
 
 REPO="${REPO:-${GITHUB_REPOSITORY:-}}"
 WORKFLOW_NAME="${WORKFLOW_NAME:-Deploy Moltis}"
+WORKFLOW_FILE="${WORKFLOW_FILE:-deploy.yml}"
 THRESHOLD_MINUTES="${THRESHOLD_MINUTES:-45}"
 MAX_RUNS="${MAX_RUNS:-100}"
 RUNS_JSON_FILE=""
@@ -17,6 +18,7 @@ Usage: deploy-stall-watchdog.sh [OPTIONS]
 Options:
   --repo <owner/name>          GitHub repository (defaults to GITHUB_REPOSITORY)
   --workflow-name <name>       Workflow name to inspect (default: Deploy Moltis)
+  --workflow-file <path>       Workflow file/id to inspect via GitHub API (default: deploy.yml)
   --threshold-minutes <n>      Alert threshold in minutes (default: 45)
   --max-runs <n>               Number of recent workflow runs to inspect (default: 100)
   --runs-json-file <path>      Read workflow-runs JSON from a local fixture instead of GitHub API
@@ -34,6 +36,8 @@ require_command() {
 }
 
 fetch_runs_json() {
+    local per_page pages_needed page page_payload payload
+
     if [[ -n "$RUNS_JSON_FILE" ]]; then
         cat "$RUNS_JSON_FILE"
         return 0
@@ -45,9 +49,34 @@ fetch_runs_json() {
     fi
 
     require_command gh
-    gh api \
-        -H "Accept: application/vnd.github+json" \
-        "repos/${REPO}/actions/runs?per_page=${MAX_RUNS}"
+    per_page=$(( MAX_RUNS < 100 ? MAX_RUNS : 100 ))
+    pages_needed=$(( (MAX_RUNS + per_page - 1) / per_page ))
+    payload='{"total_count":0,"workflow_runs":[]}'
+
+    for ((page = 1; page <= pages_needed; page++)); do
+        page_payload="$(
+            gh api \
+                -H "Accept: application/vnd.github+json" \
+                "repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=${per_page}&page=${page}"
+        )"
+
+        payload="$(
+            jq -cn \
+                --argjson current "$payload" \
+                --argjson page_payload "$page_payload" \
+                --argjson max_runs "$MAX_RUNS" '
+                {
+                  total_count: ($page_payload.total_count // $current.total_count // 0),
+                  workflow_runs: (($current.workflow_runs + ($page_payload.workflow_runs // []))[:$max_runs])
+                }'
+        )"
+
+        if [[ "$(jq '.workflow_runs | length' <<<"$page_payload")" -lt "$per_page" ]]; then
+            break
+        fi
+    done
+
+    printf '%s\n' "$payload"
 }
 
 render_human_output() {
@@ -59,6 +88,7 @@ render_human_output() {
 
     echo "status=$status"
     echo "workflow_name=$(jq -r '.workflow_name' <<<"$result_json")"
+    echo "workflow_file=$(jq -r '.workflow_file' <<<"$result_json")"
     echo "threshold_minutes=$(jq -r '.threshold_minutes' <<<"$result_json")"
     echo "stalled_count=$stalled_count"
 
@@ -69,7 +99,7 @@ render_human_output() {
 
     jq -r '
         .stalled_runs[]
-        | "run_id=\(.id) run_number=\(.run_number) age_minutes=\(.age_minutes) status=\(.status) branch=\(.head_branch // "detached") url=\(.html_url)"
+        | "run_id=\(.id) run_number=\(.run_number) age_minutes=\(.age_minutes) idle_minutes=\(.idle_minutes // "n/a") status=\(.status) reason=\(.stall_reason) branch=\(.head_branch // "detached") url=\(.html_url)"
     ' <<<"$result_json"
 }
 
@@ -81,6 +111,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --workflow-name)
             WORKFLOW_NAME="${2:-}"
+            shift 2
+            ;;
+        --workflow-file)
+            WORKFLOW_FILE="${2:-}"
             shift 2
             ;;
         --threshold-minutes)
@@ -130,39 +164,71 @@ RESULT_JSON="$(
     jq -cn \
         --argjson now_epoch "$NOW_EPOCH" \
         --arg workflow_name "$WORKFLOW_NAME" \
+        --arg workflow_file "$WORKFLOW_FILE" \
         --argjson threshold_minutes "$THRESHOLD_MINUTES" \
         --argjson max_runs "$MAX_RUNS" \
         --argjson payload "$RUNS_JSON" '
         def age_minutes($created_at):
             ((($now_epoch - ($created_at | fromdateiso8601)) / 60) | floor);
 
-        def stalled_runs:
+        def idle_minutes($updated_at):
+            ((($now_epoch - ($updated_at | fromdateiso8601)) / 60) | floor);
+
+        def active_runs:
             [
               $payload.workflow_runs[]?
-              | select(.name == $workflow_name)
               | select(.status == "queued" or .status == "in_progress" or .status == "waiting")
-              | . + {age_minutes: age_minutes(.created_at)}
-              | select(.age_minutes >= $threshold_minutes)
-              | {
-                  id,
-                  name,
-                  run_number,
-                  run_attempt,
-                  status,
-                  event,
-                  head_branch,
-                  head_sha,
-                  created_at,
-                  updated_at,
-                  html_url,
-                  age_minutes
+              | . + {
+                  age_minutes: age_minutes(.created_at),
+                  idle_minutes: idle_minutes(.updated_at)
                 }
             ];
+
+        def has_older_in_progress($active; $run):
+            any(
+              $active[]?;
+              .status == "in_progress"
+              and .id != $run.id
+              and (.created_at | fromdateiso8601) <= ($run.created_at | fromdateiso8601)
+            );
+
+        def stalled_runs:
+            (active_runs | map(select(.name == $workflow_name))) as $active
+            | [
+                $active[]?
+                | if .status == "in_progress" then
+                    select(.idle_minutes >= $threshold_minutes)
+                    | . + {stall_reason: "idle_in_progress"}
+                  elif (.status == "queued" or .status == "waiting") then
+                    select(.age_minutes >= $threshold_minutes)
+                    | select((has_older_in_progress($active; .)) | not)
+                    | . + {stall_reason: "queue_timeout_without_active_predecessor"}
+                  else
+                    empty
+                  end
+                | {
+                    id,
+                    name,
+                    run_number,
+                    run_attempt,
+                    status,
+                    event,
+                    head_branch,
+                    head_sha,
+                    created_at,
+                    updated_at,
+                    html_url,
+                    age_minutes,
+                    idle_minutes,
+                    stall_reason
+                  }
+              ];
 
         (stalled_runs) as $stalled
         | {
             status: (if ($stalled | length) > 0 then "stalled" else "ok" end),
             workflow_name: $workflow_name,
+            workflow_file: $workflow_file,
             threshold_minutes: $threshold_minutes,
             inspected_runs: ($payload.workflow_runs | length),
             max_runs: $max_runs,

@@ -120,7 +120,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Send deploy status email (optional)
-        if: ${{ steps.email.outputs.should_send == 'true' }}
+        id: send_email
+        if: ${{ always() && steps.email.outputs.should_send == 'true' }}
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
@@ -134,7 +136,9 @@ jobs:
           body: ${{ steps.payload.outputs.email_body }}
 
       - name: Send deploy status Telegram notification (optional)
-        if: ${{ steps.telegram.outputs.should_send == 'true' }}
+        id: send_telegram
+        if: ${{ always() && steps.telegram.outputs.should_send == 'true' }}
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
@@ -159,6 +163,34 @@ jobs:
             exit 1
           fi
 
+      - name: Validate notification delivery
+        if: always()
+        env:
+          EMAIL_ENABLED: ${{ steps.email.outputs.should_send || 'false' }}
+          TELEGRAM_ENABLED: ${{ steps.telegram.outputs.should_send || 'false' }}
+          EMAIL_OUTCOME: ${{ steps.send_email.outcome || 'skipped' }}
+          TELEGRAM_OUTCOME: ${{ steps.send_telegram.outcome || 'skipped' }}
+        run: |
+          set -euo pipefail
+
+          configured_channels=0
+          successful_channels=0
+
+          if [[ "$EMAIL_ENABLED" == "true" ]]; then
+            configured_channels=$((configured_channels + 1))
+            [[ "$EMAIL_OUTCOME" == "success" ]] && successful_channels=$((successful_channels + 1))
+          fi
+
+          if [[ "$TELEGRAM_ENABLED" == "true" ]]; then
+            configured_channels=$((configured_channels + 1))
+            [[ "$TELEGRAM_OUTCOME" == "success" ]] && successful_channels=$((successful_channels + 1))
+          fi
+
+          if (( configured_channels > 0 && successful_channels == 0 )); then
+            echo "::error::All configured deploy notification channels failed"
+            exit 1
+          fi
+
       - name: Notification summary
         if: always()
         run: |
@@ -173,6 +205,8 @@ jobs:
             echo "| Run URL | ${{ github.event.workflow_run.html_url }} |"
             echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
             echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
+            echo "| Email outcome | \`${{ steps.send_email.outcome || 'skipped' }}\` |"
             echo "| Telegram send | \`${{ steps.telegram.outputs.should_send || 'false' }}\` |"
             echo "| Telegram skip reason | \`${{ steps.telegram.outputs.reason || 'n/a' }}\` |"
+            echo "| Telegram outcome | \`${{ steps.send_telegram.outcome || 'skipped' }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

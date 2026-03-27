@@ -62,6 +62,7 @@ jobs:
           RESULT="$(bash ./scripts/deploy-stall-watchdog.sh \
             --repo "${{ github.repository }}" \
             --workflow-name "Deploy Moltis" \
+            --workflow-file "deploy.yml" \
             --threshold-minutes 45 \
             --max-runs 100 \
             --json)"
@@ -130,7 +131,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Send watchdog email (optional)
-        if: ${{ steps.watchdog.outputs.stalled_count != '0' && steps.email.outputs.should_send == 'true' }}
+        id: send_email
+        if: ${{ always() && steps.watchdog.outputs.stalled_count != '0' && steps.email.outputs.should_send == 'true' }}
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
@@ -144,7 +147,9 @@ jobs:
           body: ${{ steps.payload.outputs.email_body }}
 
       - name: Send watchdog Telegram notification (optional)
-        if: ${{ steps.watchdog.outputs.stalled_count != '0' && steps.telegram.outputs.should_send == 'true' }}
+        id: send_telegram
+        if: ${{ always() && steps.watchdog.outputs.stalled_count != '0' && steps.telegram.outputs.should_send == 'true' }}
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
@@ -169,6 +174,34 @@ jobs:
             exit 1
           fi
 
+      - name: Validate watchdog notification delivery
+        if: ${{ always() && steps.watchdog.outputs.stalled_count != '0' }}
+        env:
+          EMAIL_ENABLED: ${{ steps.email.outputs.should_send || 'false' }}
+          TELEGRAM_ENABLED: ${{ steps.telegram.outputs.should_send || 'false' }}
+          EMAIL_OUTCOME: ${{ steps.send_email.outcome || 'skipped' }}
+          TELEGRAM_OUTCOME: ${{ steps.send_telegram.outcome || 'skipped' }}
+        run: |
+          set -euo pipefail
+
+          configured_channels=0
+          successful_channels=0
+
+          if [[ "$EMAIL_ENABLED" == "true" ]]; then
+            configured_channels=$((configured_channels + 1))
+            [[ "$EMAIL_OUTCOME" == "success" ]] && successful_channels=$((successful_channels + 1))
+          fi
+
+          if [[ "$TELEGRAM_ENABLED" == "true" ]]; then
+            configured_channels=$((configured_channels + 1))
+            [[ "$TELEGRAM_OUTCOME" == "success" ]] && successful_channels=$((successful_channels + 1))
+          fi
+
+          if (( configured_channels > 0 && successful_channels == 0 )); then
+            echo "::error::All configured watchdog notification channels failed"
+            exit 1
+          fi
+
       - name: Watchdog summary
         if: always()
         env:
@@ -188,7 +221,9 @@ jobs:
             echo "| Stalled count | \`$(jq -r '.stalled_count // 0' <<<"$RESULT")\` |"
             echo "| Threshold (minutes) | \`$(jq -r '.threshold_minutes // 0' <<<"$RESULT")\` |"
             echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
+            echo "| Email outcome | \`${{ steps.send_email.outcome || 'skipped' }}\` |"
             echo "| Telegram send | \`${{ steps.telegram.outputs.should_send || 'false' }}\` |"
+            echo "| Telegram outcome | \`${{ steps.send_telegram.outcome || 'skipped' }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail watchdog when stalled runs were detected
