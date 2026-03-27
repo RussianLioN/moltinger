@@ -276,9 +276,15 @@ get_timestamp() {
 record_verification_failure() {
     local message="$1"
 
-    VERIFY_FAILURE_REASON="$message"
+    if [[ -z "$VERIFY_FAILURE_REASON" ]]; then
+        VERIFY_FAILURE_REASON="$message"
+    fi
     log_error "$message"
-    return 1
+    return 0
+}
+
+verification_failure_recorded() {
+    [[ -n "$VERIFY_FAILURE_REASON" ]]
 }
 
 output_json_result() {
@@ -454,6 +460,7 @@ sync_moltis_repo_skills_into_runtime() {
           --manifest '$MOLTIS_RUNTIME_SKILLS_MANIFEST'
     " >/dev/null 2>&1; then
         record_verification_failure "Moltis runtime contract mismatch: failed to sync repo-managed skills into runtime discovery path"
+        return 1
     fi
 
     return 0
@@ -481,6 +488,7 @@ moltis_login_session() {
     password="$(read_moltis_auth_password 2>/dev/null || true)"
     if [[ -z "$password" ]]; then
         record_verification_failure "Moltis runtime contract mismatch: cannot authenticate live /api/skills verification because MOLTIS_PASSWORD is unavailable"
+        return 1
     fi
 
     login_payload="$(jq -nc --arg password "$password" '{password:$password}')"
@@ -495,6 +503,7 @@ moltis_login_session() {
 
     if [[ "$login_code" != "200" ]]; then
         record_verification_failure "Moltis runtime contract mismatch: live /api/auth/login failed before /api/skills verification (HTTP $login_code)"
+        return 1
     fi
 
     return 0
@@ -513,9 +522,7 @@ verify_moltis_repo_skills_discovery() {
         return 0
     fi
 
-    if ! sync_moltis_repo_skills_into_runtime; then
-        return 1
-    fi
+    sync_moltis_repo_skills_into_runtime || return 1
 
     for repo_skill_name in "${repo_skill_names[@]}"; do
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
@@ -563,6 +570,10 @@ verify_moltis_repo_skills_discovery() {
                 record_verification_failure "Moltis runtime contract mismatch: authenticated live /api/skills does not expose repo-managed skill '$repo_skill_name'"
             fi
         done
+    fi
+
+    if verification_failure_recorded; then
+        return 1
     fi
 
     return 0
@@ -1550,9 +1561,7 @@ verify_deployment() {
             record_verification_failure "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
         fi
 
-        if ! verify_moltis_repo_skills_discovery; then
-            return 1
-        fi
+        verify_moltis_repo_skills_discovery || true
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             sock_gid="$(stat -c %g /var/run/docker.sock)" &&
@@ -1566,6 +1575,10 @@ verify_deployment() {
         ' >/dev/null 2>&1; then
             record_verification_failure "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
         fi
+    fi
+
+    if verification_failure_recorded; then
+        return 1
     fi
 
     log_success "Deployment verification passed for target $TARGET"

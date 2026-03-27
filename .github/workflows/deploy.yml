@@ -523,6 +523,7 @@ jobs:
   test:
     name: Pre-deployment Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [preflight]
     if: needs.preflight.outputs.should_deploy == 'true'
 

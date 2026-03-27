@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-28
-**Total Lessons**: 54
+**Total Lessons**: 55
 
 ---
 
@@ -40,7 +40,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (19 lessons)
+#### P2 (20 lessons)
+- [Deploy hardening follow-up introduced a latent verify failure-path regression and queue-blind watchdog alerts](../docs/rca/2026-03-28-deploy-hardening-follow-up-verify-failure-and-watchdog-queue-semantics.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
 - [Telegram monitor generated unsolicited user-facing traffic by default](../docs/rca/2026-03-20-telegram-monitor-default-noise-via-cron-and-probe-fallback.md)
@@ -79,8 +80,9 @@
 ### By Category
 
 
-#### cicd (24 lessons)
+#### cicd (25 lessons)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
+- [Deploy hardening follow-up introduced a latent verify failure-path regression and queue-blind watchdog alerts](../docs/rca/2026-03-28-deploy-hardening-follow-up-verify-failure-and-watchdog-queue-semantics.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
 - [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
@@ -147,10 +149,10 @@
 ### Popular Tags
 
 - `gitops` (16 lessons)
-- `deploy` (15 lessons)
-- `github-actions` (13 lessons)
-- `cicd` (13 lessons)
-- `moltis` (12 lessons)
+- `deploy` (16 lessons)
+- `github-actions` (14 lessons)
+- `cicd` (14 lessons)
+- `moltis` (13 lessons)
 - `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
@@ -164,10 +166,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 54 |
+| Total Lessons | 55 |
 | Critical (P0/P1) | 25 |
 | Categories | 5 |
-| Unique Tags | 123 |
+| Unique Tags | 125 |
 
 ---
 

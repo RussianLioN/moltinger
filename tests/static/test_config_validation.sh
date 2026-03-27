@@ -533,6 +533,7 @@ notify = pathlib.Path(sys.argv[2]).read_text()
 required_job_timeouts = {
     'gitops-compliance': 'timeout-minutes: 15',
     'preflight': 'timeout-minutes: 15',
+    'test': 'timeout-minutes: 15',
     'backup': 'timeout-minutes: 15',
     'deploy': 'timeout-minutes: 20',
     'rollback': 'timeout-minutes: 15',
@@ -551,6 +552,10 @@ required_notify_fragments = [
     'workflow_run.conclusion',
     'https://api.telegram.org/bot',
     'action-send-mail@v16',
+    "always() && steps.email.outputs.should_send == 'true'",
+    "always() && steps.telegram.outputs.should_send == 'true'",
+    'continue-on-error: true',
+    'All configured deploy notification channels failed',
 ]
 for fragment in required_notify_fragments:
     if fragment not in notify:
@@ -585,8 +590,12 @@ required_workflow_fragments = [
     "actions: read",
     "contents: read",
     "scripts/deploy-stall-watchdog.sh",
+    '--workflow-file "deploy.yml"',
     "--threshold-minutes 45",
     "api.telegram.org/bot",
+    "always() && steps.watchdog.outputs.stalled_count != '0' && steps.email.outputs.should_send == 'true'",
+    "always() && steps.watchdog.outputs.stalled_count != '0' && steps.telegram.outputs.should_send == 'true'",
+    "continue-on-error: true",
 ]
 for fragment in required_workflow_fragments:
     if fragment not in workflow:
@@ -602,10 +611,13 @@ for forbidden_fragment in [
 
 required_script_fragments = [
     "gh api",
-    "actions/runs?per_page=",
+    "actions/workflows/${WORKFLOW_FILE}/runs",
     "status == \"queued\"",
     "status == \"in_progress\"",
     "status == \"waiting\"",
+    "idle_in_progress",
+    "queue_timeout_without_active_predecessor",
+    "has_older_in_progress",
     "fromdateiso8601",
     "stalled_count",
 ]
@@ -616,7 +628,7 @@ PY
     then
         test_pass
     else
-        test_fail "Deploy stall watchdog must stay read-only, use a trusted default-branch checkout, and detect stale queued/in_progress runs via GitHub Actions API"
+        test_fail "Deploy stall watchdog must stay read-only, query the workflow-specific GitHub Actions API, ignore serialized/progressing runs, and keep email/Telegram channels isolated"
     fi
 
     test_start "static_health_monitor_respects_deploy_mutex_and_avoids_global_prune"

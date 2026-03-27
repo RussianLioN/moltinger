@@ -21,11 +21,13 @@ PY
 
 write_fixture() {
     local fixture_path="$1"
-    local stale_in_progress stale_queued fresh_run
+    local stale_in_progress stale_queued_blocked stale_queued_unblocked fresh_in_progress old_but_progressing
 
     stale_in_progress="$(iso_minutes_ago 70)"
-    stale_queued="$(iso_minutes_ago 50)"
-    fresh_run="$(iso_minutes_ago 5)"
+    stale_queued_blocked="$(iso_minutes_ago 50)"
+    stale_queued_unblocked="$(iso_minutes_ago 80)"
+    fresh_in_progress="$(iso_minutes_ago 5)"
+    old_but_progressing="$(iso_minutes_ago 60)"
 
     cat > "$fixture_path" <<EOF
 {
@@ -52,8 +54,8 @@ write_fixture() {
       "event": "workflow_dispatch",
       "head_branch": "main",
       "head_sha": "bbb222",
-      "created_at": "$stale_queued",
-      "updated_at": "$stale_queued",
+      "created_at": "$stale_queued_blocked",
+      "updated_at": "$stale_queued_blocked",
       "html_url": "https://example.invalid/102"
     },
     {
@@ -61,26 +63,39 @@ write_fixture() {
       "name": "Deploy Moltis",
       "run_number": 93,
       "run_attempt": 1,
-      "status": "in_progress",
-      "event": "push",
-      "head_branch": "main",
+      "status": "queued",
+      "event": "workflow_dispatch",
+      "head_branch": "release",
       "head_sha": "ccc333",
-      "created_at": "$fresh_run",
-      "updated_at": "$fresh_run",
+      "created_at": "$stale_queued_unblocked",
+      "updated_at": "$stale_queued_unblocked",
       "html_url": "https://example.invalid/103"
     },
     {
       "id": 104,
+      "name": "Deploy Moltis",
+      "run_number": 94,
+      "run_attempt": 1,
+      "status": "in_progress",
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "ddd444",
+      "created_at": "$old_but_progressing",
+      "updated_at": "$fresh_in_progress",
+      "html_url": "https://example.invalid/104"
+    },
+    {
+      "id": 105,
       "name": "Other Workflow",
       "run_number": 12,
       "run_attempt": 1,
       "status": "in_progress",
       "event": "push",
       "head_branch": "main",
-      "head_sha": "ddd444",
+      "head_sha": "eee555",
       "created_at": "$stale_in_progress",
       "updated_at": "$stale_in_progress",
-      "html_url": "https://example.invalid/104"
+      "html_url": "https://example.invalid/105"
     }
   ]
 }
@@ -99,8 +114,8 @@ test_watchdog_requires_repo_or_fixture() {
     fi
 }
 
-test_watchdog_detects_stalled_runs_from_fixture() {
-    test_start "deploy stall watchdog should detect stale queued and in-progress runs"
+test_watchdog_detects_only_true_stalls_from_fixture() {
+    test_start "deploy stall watchdog should distinguish real stalls from serialized or progressing runs"
 
     local tmp_dir fixture_path result_json
     tmp_dir="$(mktemp -d)"
@@ -116,7 +131,15 @@ test_watchdog_detects_stalled_runs_from_fixture() {
     assert_eq "stalled" "$(jq -r '.status' <<<"$result_json")" "Watchdog should report stalled status"
     assert_eq "2" "$(jq -r '.stalled_count' <<<"$result_json")" "Expected two stalled runs over threshold"
     assert_eq "101" "$(jq -r '.stalled_runs[0].id' <<<"$result_json")" "First stalled run id mismatch"
-    assert_eq "102" "$(jq -r '.stalled_runs[1].id' <<<"$result_json")" "Second stalled run id mismatch"
+    assert_eq "idle_in_progress" "$(jq -r '.stalled_runs[0].stall_reason' <<<"$result_json")" "First stall reason mismatch"
+    assert_eq "103" "$(jq -r '.stalled_runs[1].id' <<<"$result_json")" "Second stalled run id mismatch"
+    assert_eq "queue_timeout_without_active_predecessor" "$(jq -r '.stalled_runs[1].stall_reason' <<<"$result_json")" "Second stall reason mismatch"
+
+    if jq -e '.stalled_runs[] | select(.id == 102 or .id == 104)' <<<"$result_json" >/dev/null 2>&1; then
+        test_fail "Serialized queued runs or actively progressing in-progress runs must not be reported as stalled"
+        rm -rf "$tmp_dir"
+        return
+    fi
 
     rm -rf "$tmp_dir"
     test_pass
@@ -159,7 +182,7 @@ run_all_tests() {
     fi
 
     test_watchdog_requires_repo_or_fixture
-    test_watchdog_detects_stalled_runs_from_fixture
+    test_watchdog_detects_only_true_stalls_from_fixture
     test_watchdog_ignores_recent_runs_when_threshold_is_high
 
     generate_report
