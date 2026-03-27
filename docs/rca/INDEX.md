@@ -1,32 +1,32 @@
 # RCA Index
 
 **Last Updated**: 2026-03-28
-**Version**: 1.14.0
+**Version**: 1.15.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 22 |
+| Total RCA | 23 |
 | Avg Resolution Time | N/A |
-| This Month | 22 |
+| This Month | 23 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 18% |
-| process | 9 | 41% |
-| cicd | 7 | 32% |
-| security | 1 | 5% |
-| shell | 1 | 5% |
+| generic | 4 | 17% |
+| process | 9 | 39% |
+| cicd | 8 | 35% |
+| security | 1 | 4% |
+| shell | 1 | 4% |
 
 ## By Severity
 
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 8 | High - production impact |
+| P1 | 9 | High - production impact |
 | P2 | 8 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-023 | 2026-03-28 | cicd | P1 | resolved | repo skill sync verification relied on `moltis-repo-skills-sync.sh`, whose EXIT trap referenced a local `staging_root` under `set -u`, so the helper crashed on cleanup and deploy verification treated repo-managed skill sync as failed | moved staging cleanup to a scope-safe global variable + cleanup function and added the sync component test to pre-deployment workflow gates |
 | RCA-022 | 2026-03-28 | cicd | P2 | resolved | the first deploy hardening pass validated happy-path structure but did not simulate bash `set -e` verify failures or GitHub Actions queue semantics, so `record_verification_failure()` became prematurely fatal and the watchdog treated healthy serialized runs as stalls | made verify-failure recording non-fatal, switched stall detection to workflow-specific idle/queue semantics, isolated notification channels, and added targeted tests |
 | RCA-021 | 2026-03-28 | cicd | P1 | resolved | deploy.sh auto-triggered rollback through the old unsafe Moltis recreate path after post-start verification failed, while health-monitor crash-looped on disk warnings and mutated Docker state in the same incident window | made rollback reuse the serialized Moltis rollout contract, added verify failure detail + health-monitor deploy mutex guards, and hardened timeout/notification/watchdog workflows |
 | RCA-020 | 2026-03-27 | cicd | P1 | resolved | Tracked deploy relied on docker compose `force-recreate` for a fixed-name Moltis container without an explicit stop grace or pre-stop/remove step, so Docker hit the default 10s stop timeout and compose failed against the disappearing old container | added deterministic pre-stop/remove rollout + `stop_grace_period: 45s` + static/unit guards |

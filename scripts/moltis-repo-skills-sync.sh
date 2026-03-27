@@ -6,6 +6,7 @@ SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills}"
 TARGET_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
 MANIFEST_PATH="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-}"
 MANIFEST_EXPLICIT=0
+STAGING_ROOT=""
 
 usage() {
     cat <<EOF
@@ -87,6 +88,12 @@ parse_args() {
     done
 }
 
+cleanup_staging_root() {
+    if [[ -n "${STAGING_ROOT:-}" ]]; then
+        rm -rf "$STAGING_ROOT"
+    fi
+}
+
 read_manifest() {
     local manifest="$1"
     if [[ ! -f "$manifest" ]]; then
@@ -128,9 +135,8 @@ main() {
     mkdir -p "$TARGET_ROOT"
     mkdir -p "$(dirname "$MANIFEST_PATH")"
 
-    local staging_root
-    staging_root="$(mktemp -d "$TARGET_ROOT/.repo-sync.XXXXXX")"
-    trap 'rm -rf "$staging_root"' EXIT
+    STAGING_ROOT="$(mktemp -d "$TARGET_ROOT/.repo-sync.XXXXXX")"
+    trap cleanup_staging_root EXIT
 
     local -a previous_managed=()
     local manifest_entry
@@ -158,7 +164,7 @@ main() {
     for skill_dir in "${skill_dirs[@]}"; do
         skill_name="$(basename "$skill_dir")"
         current_managed+=("$skill_name")
-        sync_skill "$skill_dir" "$TARGET_ROOT" "$skill_name" "$staging_root"
+        sync_skill "$skill_dir" "$TARGET_ROOT" "$skill_name" "$STAGING_ROOT"
     done
 
     for skill_name in "${previous_managed[@]}"; do
