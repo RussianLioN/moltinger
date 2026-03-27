@@ -66,6 +66,7 @@ All installed automation must execute via `/opt/moltinger-active`, which is a sy
 
 8. Never let sibling browser sandboxes use a container-only profile path.
 When Moltis talks to the host Docker socket from inside a container, browser profile bind sources like `/home/moltis/.moltis/...` are interpreted on the host, not inside the Moltis container. In this deployment, keep `[tools.browser] profile_dir = "/tmp/moltis-browser-profile/shared"`, mount `/tmp/moltis-browser-profile` into the Moltis container at the same absolute path, and prepare it writable before deploy.
+If live runtime still shows stock `sandbox_image = "browserless/chrome"` with no explicit `profile_dir` / `persist_profile`, treat that as an incomplete baseline for this deployment, not as a finished browser fix.
 
 9. Never call browser recovery complete after fixing only Docker/socket access.
 Browser recovery is complete only after:
@@ -269,6 +270,8 @@ Use this checklist for new instances, browser incidents, and post-deploy browser
    - expected `sandbox_image`
    - expected `profile_dir`
    - expected `persist_profile`
+   - prefer stock `browserless/chrome` as the tracked default unless a separate live or isolated canary proves stock remains insufficient after storage fixes
+   - if production still matches stock `browserless/chrome` without the tracked browser contract from git, classify it as runtime drift and land the fix through `main`
 4. Host-visible profile storage:
    - shared profile mount exists
    - host path ownership/permissions allow writes for the browser container user
