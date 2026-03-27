@@ -10,7 +10,7 @@ root_cause: "The first repair restored only Docker/socket connectivity, but the 
 # RCA: Moltis browser timeout persisted after Docker socket recovery because the sibling browser profile bind mount was not writable and the repair stopped before full end-to-end contract proof
 
 **Дата:** 2026-03-27  
-**Статус:** In Progress  
+**Статус:** In Progress, root cause confirmed with authoritative live browser repro  
 **Влияние:** Пользовательский Telegram-запрос мог завершаться `Timed out after 30s`, а бот при этом показывал внутренний `Activity log`, хотя первая часть browser sandbox repair уже казалась успешной.
 
 ## Ошибка
@@ -33,6 +33,38 @@ Live evidence разделилось на два слоя:
 2. **Второй слой остался сломан**
    - sibling browser container не мог создать `SingletonLock` в browser profile dir
    - реальный Telegram `t.me/...` canary после первой правки не был доведён до полного exercised browser proof
+
+Позднее authoritative evidence от 2026-03-27 добавило ещё одну важную коррекцию:
+
+- текущий production runtime на `main` больше вообще не живёт по tracked browser contract из `031`
+- live runtime config внутри контейнера сейчас содержит только:
+  - `sandbox_image = "browserless/chrome"`
+  - `container_host = "host.docker.internal"`
+  - без `profile_dir`
+  - без `persist_profile`
+- ручной `docker pull browserless/chrome` изнутри контейнера `moltis` теперь проходит
+- изолированный stock `browserless/chrome` на том же хосте успешно стартует, но `/json/version` возвращает websocket URL вида `ws://127.0.0.1:<port>` вместо явного `/devtools/browser/*` пути
+
+Это означает, что текущий live browser outage уже не лучше всего объясняется активной проблемой image-pull permissions. Более сильное объяснение: production остался на stock browserless baseline из `main`, а repo-specific sibling-browser compatibility shim из `031` туда так и не попал.
+
+### Authoritative live repro from the browser path itself
+
+К 2026-03-27 20:23 UTC инцидент был подтверждён уже не только через Telegram, но и через чистый RPC path после `chat.clear`:
+
+- live `chat.send` с явным требованием использовать `browser`, а не `web_fetch`, стартовал run `f07bf3a7-0c29-49c0-9e61-8fce95331c58`
+- runtime ушёл в `tool_call_start` для `browser`
+- затем дал `Timed out` через 30 секунд, не дойдя до `final`
+- одновременно `docker logs moltis` показал запуск sibling browser container `moltis-browser-77ee33c642484bb59bb5ff866d4310a4`
+- его собственные логи подтвердили точную причину:
+  - `Failed to create /data/browser-profile/SingletonLock: Permission denied (13)`
+  - `Failed to create a ProcessSingleton for your profile directory`
+- `docker inspect` этого контейнера показал bind mount:
+  - source: `/home/moltis/.moltis/browser/profile/sandbox/browser-49e1166b10909a09`
+  - destination: `/data/browser-profile`
+  - user: `blessuser`
+- host path при этом был `root:root 755`, то есть не writable для браузерного процесса внутри stock image
+
+Это замыкает RCA: текущий live browser failure воспроизводится и без Telegram, а значит Telegram здесь только surface, а не первичный источник дефекта.
 
 ## Анализ 5 Почему
 
@@ -66,6 +98,7 @@ Live evidence разделилось на два слоя:
 - Browser sandbox следует session sandbox mode и в Docker-backed сценарии требует рабочий sibling-container path.
 - Если Moltis сам запущен в Docker, для browser sandbox нужен host Docker access и `container_host`.
 - Cloud/self-hosted docs прямо предупреждают, что sandboxed execution зависит от Docker availability и не везде поддерживается.
+- Official changelog уже упоминает browser `profile_dir` и `persist_profile`, но browser automation guide не доводит этот слой до fail-closed host-visible ownership checklist для sibling browser containers.
 
 Это подтверждает baseline для:
 
@@ -85,6 +118,42 @@ Secondary evidence corroborated the failure mode:
 
 - Chromium stores `SingletonLock` and related singleton state in the profile directory
 - browserless/Chromium on non-root users breaks predictably when bind-mounted profile storage is not writable
+- stock `browserless/chrome` может быть operationally несовместим с Moltis sibling-CDP contract даже когда image pull и basic container start уже работают, потому что websocket endpoint из `/json/version` не даёт тот concrete `/devtools/browser/*` путь, на который опирается tracked local proxy shim
+
+## Текущий взвешенный вывод
+
+Смешанную evidence надо трактовать так:
+
+1. Более ранняя пользовательская строка `failed to pull browser image: permission d...` реальна как historical evidence, но уже не является лучшим объяснением текущего live состояния.
+2. Больше веса у текущих фактов:
+   - stock image pull сейчас успешен
+   - stock `browserless/chrome` на том же хосте поднимается
+   - live `moltis` всё ещё настроен на stock image вместо tracked shim из `031`
+3. Поэтому наиболее вероятная текущая корневая причина такая:
+   - **production runtime drift назад к stock browserless baseline из `main`**
+   - плюс **websocket/readiness несовместимость stock browserless для Moltis sibling-container browser sessions на этом deployment**
+4. Writability `profile_dir` остаётся частью полного browser contract и по-прежнему должна быть доказана end-to-end, но уже недостаточна как единственное описание всего текущего инцидента.
+
+## Authoritative follow-up proof (2026-03-27)
+
+Дополнительная authoritative проверка после расширения Telegram/browser UAT закрыла оставшиеся сомнения:
+
+1. **Current production still matches the stock `origin/main` browser contract.**
+   Live runtime config on the server still shows:
+   - `sandbox_image = "browserless/chrome"`
+   - `container_host = "host.docker.internal"`
+   - no tracked `profile_dir`
+   - no tracked `persist_profile`
+2. **The stock image is not generically broken on this host.**
+   A plain isolated `browserless/chrome` container starts and answers `/json/version`.
+3. **The stock image fails once the real browser/profile path is exercised with the host bind class used by this deployment.**
+   In an isolated remote reproduction with:
+   - `DEFAULT_USER_DATA_DIR=/data/browser-profile`
+   - bind mount `/home/moltis/.moltis/browser/profile:/data/browser-profile`
+   the first actual browser job fails with:
+   - `Failed to create /data/browser-profile/SingletonLock: Permission denied (13)`
+
+Это переводит диагноз из “вероятный profile-dir drift” в “напрямую воспроизведённый stock-image failure mode под тем же классом host path, который production использует сейчас”.
 
 ## Принятые меры
 
@@ -96,6 +165,8 @@ Secondary evidence corroborated the failure mode:
    - Remote Moltis Docker runbook теперь явно требует browser profile storage contract и exercised browser proof.
 4. **Lessons path**
    - Этот инцидент сохраняется отдельно от Telegram leak и отдельно от первого browser repair, чтобы новые инстансы агента не считали “docker.sock заработал” достаточным критерием закрытия browser outage.
+5. **Mainline landing requirement**
+   - Без минимального browser hotfix carrier в `main` production останется на stock browser contract, потому что текущий live runtime всё ещё совпадает с `origin/main`, а не с tracked browser stack из `031`.
 
 ## Уроки
 

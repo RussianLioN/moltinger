@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-27
-**Total Lessons**: 61
+**Total Lessons**: 62
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (24 lessons)
+#### P1 (25 lessons)
+- [Stock browserless/chrome remained viable on the live host; the immediate browser hotfix was profile-dir writability, not a custom browser image](../docs/rca/2026-03-27-moltis-browser-stock-image-remains-viable-with-writable-profile-dir.md)
 - [Moltis browser timeout persisted after Docker socket recovery because the sibling browser profile bind mount was not writable and the repair stopped before full end-to-end contract proof](../docs/rca/2026-03-27-moltis-browser-sandbox-profile-bind-permission-contract-drift.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Telegram leaked internal activity log to the user while authoritative UAT still passed because reply-quality checks were blind to telemetry variants and pre-send contamination](../docs/rca/2026-03-26-telegram-activity-log-leak-and-uat-blind-spot.md)
@@ -124,7 +125,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (21 lessons)
+#### process (22 lessons)
+- [Stock browserless/chrome remained viable on the live host; the immediate browser hotfix was profile-dir writability, not a custom browser image](../docs/rca/2026-03-27-moltis-browser-stock-image-remains-viable-with-writable-profile-dir.md)
 - [Moltis browser timeout persisted after Docker socket recovery because the sibling browser profile bind mount was not writable and the repair stopped before full end-to-end contract proof](../docs/rca/2026-03-27-moltis-browser-sandbox-profile-bind-permission-contract-drift.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Telegram leaked internal activity log to the user while authoritative UAT still passed because reply-quality checks were blind to telemetry variants and pre-send contamination](../docs/rca/2026-03-26-telegram-activity-log-leak-and-uat-blind-spot.md)
@@ -162,16 +164,16 @@
 
 ### Popular Tags
 
-- `rca` (18 lessons)
+- `rca` (19 lessons)
 - `gitops` (18 lessons)
-- `moltis` (16 lessons)
+- `moltis` (17 lessons)
 - `deploy` (14 lessons)
 - `github-actions` (13 lessons)
 - `lessons` (12 lessons)
 - `cicd` (11 lessons)
 - `process` (10 lessons)
 - `telegram` (9 lessons)
-- `clawdiy` (8 lessons)
+- `docker` (8 lessons)
 
 
 ---
@@ -180,10 +182,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 61 |
-| Critical (P0/P1) | 25 |
+| Total Lessons | 62 |
+| Critical (P0/P1) | 26 |
 | Categories | 6 |
-| Unique Tags | 136 |
+| Unique Tags | 137 |
 
 ---
 
