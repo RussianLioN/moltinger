@@ -72,7 +72,8 @@ MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS = "24"
 MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND = "/codex-advisory-followup"
 # Canonical Moltis-native Codex update skill runtime.
-# Live Moltis must see the repo through /server; writable skill state lives under ~/.moltis.
+# The repo remains the Git source of truth under /server; deploy syncs repo-managed skills
+# into the official runtime-discovered skills directory under ~/.moltis/skills.
 MOLTIS_CODEX_UPDATE_STATE_FILE = "/home/moltis/.moltis/codex-update/state.json"
 MOLTIS_CODEX_UPDATE_STATE_SCRIPT = "/server/scripts/moltis-codex-update-state.sh"
 MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT = "/server/scripts/moltis-codex-update-profile.sh"
@@ -504,11 +505,9 @@ container_host = "host.docker.internal"  # Moltis runs in Docker; sibling browse
 # Reusable prompt templates and workflows.
 
 [skills]
-enabled = true                    # Enable skills system
-search_paths = ["/server/skills"] # Additional directories to search for skills
-                                  # Default locations: ~/.config/moltis/skills/, ./skills/
-auto_load = ["telegram-learner", "codex-update"]  # Skills to always load without explicit activation
-                                  # Example: ["code-review", "commit"]
+enabled = true  # Enable skills system
+search_paths = []  # Production must not rely on repo-mounted /server/skills for discovery
+auto_load = ["telegram-learner", "codex-update"]  # Applied after the skill is discoverable
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MCP SERVERS

@@ -369,6 +369,28 @@
       ],
       "ci": true
     },
+    "moltis-repo-skills-sync.sh": {
+      "version": "1.0.0",
+      "description": "Sync Git-tracked repo-managed Moltis skills into the official runtime-discovered skills directory before live verification",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cp",
+        "mktemp",
+        "mv",
+        "rm",
+        "sort"
+      ],
+      "provides": [
+        "moltis-repo-skills-sync"
+      ],
+      "env_vars": [
+        "MOLTIS_REPO_SKILLS_SOURCE_ROOT",
+        "MOLTIS_RUNTIME_SKILLS_ROOT",
+        "MOLTIS_RUNTIME_SKILLS_MANIFEST"
+      ],
+      "ci": true
+    },
     "moltis-codex-advisory-router.sh": {
       "version": "1.0.0",
       "description": "Route Moltis-native Codex advisory callbacks and recovery actions into immediate Telegram follow-up delivery",
