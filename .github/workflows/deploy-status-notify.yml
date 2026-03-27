@@ -1,0 +1,178 @@
+name: Deploy Moltis Status Notify
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Moltis
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  notify:
+    name: Notify deploy completion
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Evaluate email prerequisites
+        id: email
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_TO: ${{ secrets.MOLTIS_UPDATE_NOTIFY_EMAIL }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$SMTP_SERVER" && -n "$SMTP_USERNAME" && -n "$SMTP_PASSWORD" && -n "$SMTP_TO" ]]; then
+            echo "should_send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=required SMTP secrets are missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate Telegram prerequisites
+        id: telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]]; then
+            echo "should_send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=required Telegram secrets are missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build notification payload
+        id: payload
+        env:
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+        run: |
+          set -euo pipefail
+
+          conclusion="${RUN_CONCLUSION:-unknown}"
+          branch="${RUN_BRANCH:-detached}"
+          status_emoji="ℹ️"
+          status_word="completed"
+
+          case "$conclusion" in
+            success)
+              status_emoji="✅"
+              status_word="succeeded"
+              ;;
+            failure)
+              status_emoji="❌"
+              status_word="failed"
+              ;;
+            cancelled)
+              status_emoji="⚠️"
+              status_word="was cancelled"
+              ;;
+          esac
+
+          subject="[Moltis] Deploy Moltis ${status_word} (${conclusion})"
+
+          telegram_message=$(cat <<EOF
+          ${status_emoji} Deploy Moltis ${status_word}.
+
+          Conclusion: ${conclusion}
+          Branch: ${branch}
+          SHA: ${RUN_SHA}
+          Event: ${RUN_EVENT}
+          Run: ${RUN_URL}
+          EOF
+          )
+
+          email_body=$(cat <<EOF
+          Deploy Moltis has ${status_word}.
+
+          Conclusion: ${conclusion}
+          Branch: ${branch}
+          SHA: ${RUN_SHA}
+          Event: ${RUN_EVENT}
+          Run number: ${RUN_NUMBER}
+          Run URL: ${RUN_URL}
+          EOF
+          )
+
+          {
+            echo "subject<<EOF"
+            echo "$subject"
+            echo "EOF"
+            echo "telegram_message<<EOF"
+            echo "$telegram_message"
+            echo "EOF"
+            echo "email_body<<EOF"
+            echo "$email_body"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send deploy status email (optional)
+        if: ${{ steps.email.outputs.should_send == 'true' }}
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT != '' && secrets.SMTP_PORT || '465' }}
+          secure: true
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          to: ${{ secrets.MOLTIS_UPDATE_NOTIFY_EMAIL }}
+          from: ${{ secrets.MOLTIS_UPDATE_NOTIFY_FROM != '' && secrets.MOLTIS_UPDATE_NOTIFY_FROM || secrets.SMTP_USERNAME }}
+          subject: ${{ steps.payload.outputs.subject }}
+          body: ${{ steps.payload.outputs.email_body }}
+
+      - name: Send deploy status Telegram notification (optional)
+        if: ${{ steps.telegram.outputs.should_send == 'true' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
+          TELEGRAM_MESSAGE: ${{ steps.payload.outputs.telegram_message }}
+        run: |
+          set -euo pipefail
+
+          PAYLOAD="$(jq -nc \
+            --arg chat_id "$TELEGRAM_CHAT_ID" \
+            --arg text "$TELEGRAM_MESSAGE" \
+            '{chat_id: $chat_id, text: $text}')"
+
+          RESULT="$(
+            curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -H 'Content-Type: application/json' \
+              -d "$PAYLOAD"
+          )"
+          echo "$RESULT"
+
+          if ! jq -e '.ok == true' >/dev/null 2>&1 <<<"$RESULT"; then
+            echo "::error::Telegram send failed"
+            exit 1
+          fi
+
+      - name: Notification summary
+        if: always()
+        run: |
+          {
+            echo "## Deploy Moltis Status Notify"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Conclusion | \`${{ github.event.workflow_run.conclusion || 'unknown' }}\` |"
+            echo "| Branch | \`${{ github.event.workflow_run.head_branch || 'detached' }}\` |"
+            echo "| SHA | \`${{ github.event.workflow_run.head_sha }}\` |"
+            echo "| Run URL | ${{ github.event.workflow_run.html_url }} |"
+            echo "| Email send | \`${{ steps.email.outputs.should_send || 'false' }}\` |"
+            echo "| Email skip reason | \`${{ steps.email.outputs.reason || 'n/a' }}\` |"
+            echo "| Telegram send | \`${{ steps.telegram.outputs.should_send || 'false' }}\` |"
+            echo "| Telegram skip reason | \`${{ steps.telegram.outputs.reason || 'n/a' }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

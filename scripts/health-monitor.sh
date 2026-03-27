@@ -17,6 +17,10 @@ ALERT_WEBHOOK="${ALERT_WEBHOOK:-}"
 MAX_RESTARTS=3
 RESTART_WINDOW=300  # 5 minutes
 HEALTH_CHECK_INTERVAL=60
+DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"
+DISK_AUTO_CLEANUP_ENABLED="${DISK_AUTO_CLEANUP_ENABLED:-true}"
+DISK_CLEANUP_COOLDOWN_SECONDS="${DISK_CLEANUP_COOLDOWN_SECONDS:-3600}"
+DISK_CLEANUP_STATE_FILE="${DISK_CLEANUP_STATE_FILE:-/tmp/moltis-disk-cleanup-state}"
 
 # Output format flags
 OUTPUT_JSON=false
@@ -83,6 +87,71 @@ send_alert() {
     if command -v mail &> /dev/null; then
         echo "$message" | mail -s "[Moltis] $subject" "${ALERT_EMAIL:-admin@localhost}" 2>/dev/null || true
     fi
+}
+
+lock_meta_value() {
+    local file="$1"
+    local key="$2"
+
+    [[ -r "$file" ]] || return 1
+
+    awk -F= -v key="$key" '$1 == key { sub($1 FS, ""); print; exit }' "$file"
+}
+
+deploy_mutex_metadata_path() {
+    local flock_meta="${DEPLOY_MUTEX_PATH}.meta"
+    local mkdir_meta="${DEPLOY_MUTEX_PATH}.d/meta"
+
+    if [[ -f "$flock_meta" ]]; then
+        printf '%s\n' "$flock_meta"
+        return 0
+    fi
+
+    if [[ -f "$mkdir_meta" ]]; then
+        printf '%s\n' "$mkdir_meta"
+        return 0
+    fi
+
+    return 1
+}
+
+deploy_mutex_active() {
+    local metadata_path now_epoch expires_at
+
+    metadata_path="$(deploy_mutex_metadata_path || true)"
+    [[ -n "$metadata_path" ]] || return 1
+
+    expires_at="$(lock_meta_value "$metadata_path" "expires_at" || true)"
+    if [[ ! "$expires_at" =~ ^[0-9]+$ ]]; then
+        return 0
+    fi
+
+    now_epoch="$(date +%s)"
+    (( now_epoch < expires_at ))
+}
+
+disk_cleanup_due() {
+    local now_epoch last_epoch
+
+    if [[ "$DISK_AUTO_CLEANUP_ENABLED" != "true" ]]; then
+        return 1
+    fi
+
+    if [[ ! -f "$DISK_CLEANUP_STATE_FILE" ]]; then
+        return 0
+    fi
+
+    last_epoch="$(cat "$DISK_CLEANUP_STATE_FILE" 2>/dev/null || true)"
+    if [[ ! "$last_epoch" =~ ^[0-9]+$ ]]; then
+        return 0
+    fi
+
+    now_epoch="$(date +%s)"
+    (( now_epoch - last_epoch >= DISK_CLEANUP_COOLDOWN_SECONDS ))
+}
+
+record_disk_cleanup_epoch() {
+    date +%s > "$DISK_CLEANUP_STATE_FILE"
 }
 
 # Check container health
@@ -630,6 +699,11 @@ restart_container() {
     local container="$1"
     local restart_count
 
+    if deploy_mutex_active; then
+        log_warn "Skipping container restart for $container while deploy mutex is active"
+        return 1
+    fi
+
     restart_count=$(get_restart_count "$container" "$RESTART_WINDOW")
 
     if [[ "$restart_count" -ge "$MAX_RESTARTS" ]]; then
@@ -663,16 +737,17 @@ restart_container() {
 full_recovery() {
     local container="$1"
 
+    if deploy_mutex_active; then
+        log_warn "Skipping full recovery for $container while deploy mutex is active"
+        return 1
+    fi
+
     log_error "Initiating full recovery for $container"
     send_alert "Full Recovery" "Starting full recovery for $container"
 
     # Stop container
     log_info "Stopping container $container"
     docker stop "$container" 2>/dev/null || true
-
-    # Clean up resources
-    log_info "Cleaning up Docker resources"
-    docker system prune -f 2>/dev/null || true
 
     if [[ ! -f "$COMPOSE_FILE" ]]; then
         log_error "Compose file not found for recovery: $COMPOSE_FILE"
@@ -682,7 +757,7 @@ full_recovery() {
 
     # Recreate container from the active deploy root, not from whichever worktree installed the service.
     log_info "Recreating container from compose file $COMPOSE_FILE (project: $COMPOSE_PROJECT_NAME)"
-    docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d --force-recreate "$container"
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d --no-deps --force-recreate "$container"
 
     # Wait for startup
     sleep 60
@@ -709,11 +784,19 @@ check_disk_space() {
         log_warn "Disk usage at ${usage}% (threshold: ${threshold}%)"
         send_alert "Disk Space Warning" "Disk usage at ${usage}%"
 
-        # Auto cleanup (SAFE: without --volumes to preserve data)
-        log_info "Running Docker cleanup (images only, volumes preserved)"
-        docker system prune -af 2>/dev/null || true
-        # NOTE: Intentionally NOT using --volumes to prevent data loss
-        # If volume cleanup needed, run manually: docker volume prune
+        if [[ "$DISK_AUTO_CLEANUP_ENABLED" == "true" ]]; then
+            if deploy_mutex_active; then
+                log_warn "Skipping Docker image cleanup while deploy mutex is active"
+            elif disk_cleanup_due; then
+                # Keep cleanup scoped to unused images/build cache. Do not prune
+                # containers or networks from a background monitor.
+                log_info "Running Docker image cleanup (cooldown ${DISK_CLEANUP_COOLDOWN_SECONDS}s)"
+                docker image prune -af 2>/dev/null || true
+                record_disk_cleanup_epoch
+            else
+                log_info "Skipping Docker image cleanup; cooldown window is still active"
+            fi
+        fi
 
         return 1
     fi
@@ -860,8 +943,24 @@ main() {
     log_info "Max restarts: ${MAX_RESTARTS} per ${RESTART_WINDOW}s window"
 
     local consecutive_failures=0
+    local deploy_suppressed=false
 
     while true; do
+        if deploy_mutex_active; then
+            if [[ "$deploy_suppressed" != "true" ]]; then
+                log_info "Deploy mutex active; suspending mutating health-monitor actions"
+                deploy_suppressed=true
+            fi
+            consecutive_failures=0
+            sleep "$HEALTH_CHECK_INTERVAL"
+            continue
+        fi
+
+        if [[ "$deploy_suppressed" == "true" ]]; then
+            log_info "Deploy mutex cleared; resuming active health monitoring"
+            deploy_suppressed=false
+        fi
+
         # Check container health
         if ! check_container_health "moltis"; then
             consecutive_failures=$((consecutive_failures + 1))
@@ -888,8 +987,8 @@ main() {
         fi
 
         # Check system resources
-        check_disk_space 90
-        check_memory 90
+        check_disk_space 90 || true
+        check_memory 90 || true
 
         sleep "$HEALTH_CHECK_INTERVAL"
     done

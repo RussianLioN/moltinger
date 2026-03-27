@@ -270,12 +270,12 @@ test_deploy_script_force_recreates_moltis_runtime_on_rollout() {
     fi
 
     if ! grep -Fq 'prepare_moltis_container_for_rollout' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'docker stop --time "$stop_timeout" "$TARGET_CONTAINER"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'docker rm -f "$TARGET_CONTAINER"' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'deploy_args+=(--force-recreate)' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'bind-mounted config' "$PROJECT_ROOT/scripts/deploy.sh"; then
-        test_fail "deploy.sh must pre-stop/remove Moltis deterministically and then force-recreate it so updated runtime config is not left pending until a manual restart"
+        test_fail "deploy.sh must converge Moltis sidecars separately, pre-stop/remove Moltis deterministically, and then recreate only the Moltis service with --no-deps so runtime config changes apply without a second compose recreate race"
         return
     fi
 

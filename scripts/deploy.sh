@@ -78,6 +78,7 @@ MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
+VERIFY_FAILURE_REASON=""
 CLAWDIY_HEALTH_CHECK_TIMEOUT="${CLAWDIY_HEALTH_CHECK_TIMEOUT:-420}"
 DEPLOY_MUTEX_ENABLED="${DEPLOY_MUTEX_ENABLED:-true}"
 DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"
@@ -272,6 +273,14 @@ get_timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+record_verification_failure() {
+    local message="$1"
+
+    VERIFY_FAILURE_REASON="$message"
+    log_error "$message"
+    return 1
+}
+
 output_json_result() {
     local status="$1"
     local action="$2"
@@ -280,7 +289,6 @@ output_json_result() {
     local services_json="[]"
     local errors_json="[]"
     local details="{}"
-    local evidence_file_json="null"
 
     if [[ $DEPLOY_START_TIME -gt 0 ]]; then
         duration_ms=$(( ($(date +%s) - DEPLOY_START_TIME) * 1000 ))
@@ -294,16 +302,23 @@ output_json_result() {
         errors_json=$(printf '%s\n' "${JSON_ERRORS[@]}" | jq -R '{code: "DEPLOY_ERROR", message: .}' | jq -s '.')
     fi
 
-    if [[ -n "$DEPLOY_IMAGE" ]]; then
-        details=$(jq -n \
-            --arg image "$DEPLOY_IMAGE" \
-            --argjson duration "$duration_ms" \
-            --arg health "$health" \
-            --arg evidence_file "$DEPLOY_EVIDENCE_FILE" \
-            --arg restore_check_file "$DEPLOY_RESTORE_CHECK_FILE" \
-            --argjson services "$services_json" \
-            '{image: $image, duration_ms: $duration, health: $health, services: $services, rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end), restore_check_file: (if $restore_check_file == "" then null else $restore_check_file end)}')
-    fi
+    details=$(jq -n \
+        --arg image "$DEPLOY_IMAGE" \
+        --argjson duration "$duration_ms" \
+        --arg health "$health" \
+        --arg evidence_file "$DEPLOY_EVIDENCE_FILE" \
+        --arg restore_check_file "$DEPLOY_RESTORE_CHECK_FILE" \
+        --arg verify_failure_reason "$VERIFY_FAILURE_REASON" \
+        --argjson services "$services_json" \
+        '{
+            image: (if $image == "" then null else $image end),
+            duration_ms: $duration,
+            health: $health,
+            services: $services,
+            rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end),
+            restore_check_file: (if $restore_check_file == "" then null else $restore_check_file end),
+            verify_failure_reason: (if $verify_failure_reason == "" then null else $verify_failure_reason end)
+        }')
 
     jq -n \
         --arg status "$status" \
@@ -438,8 +453,7 @@ sync_moltis_repo_skills_into_runtime() {
           --target-root '$MOLTIS_RUNTIME_SKILLS_ROOT' \
           --manifest '$MOLTIS_RUNTIME_SKILLS_MANIFEST'
     " >/dev/null 2>&1; then
-        log_error "Moltis runtime contract mismatch: failed to sync repo-managed skills into runtime discovery path"
-        return 1
+        record_verification_failure "Moltis runtime contract mismatch: failed to sync repo-managed skills into runtime discovery path"
     fi
 
     return 0
@@ -466,8 +480,7 @@ moltis_login_session() {
 
     password="$(read_moltis_auth_password 2>/dev/null || true)"
     if [[ -z "$password" ]]; then
-        log_error "Moltis runtime contract mismatch: cannot authenticate live /api/skills verification because MOLTIS_PASSWORD is unavailable"
-        return 1
+        record_verification_failure "Moltis runtime contract mismatch: cannot authenticate live /api/skills verification because MOLTIS_PASSWORD is unavailable"
     fi
 
     login_payload="$(jq -nc --arg password "$password" '{password:$password}')"
@@ -481,8 +494,7 @@ moltis_login_session() {
     )"
 
     if [[ "$login_code" != "200" ]]; then
-        log_error "Moltis runtime contract mismatch: live /api/auth/login failed before /api/skills verification (HTTP $login_code)"
-        return 1
+        record_verification_failure "Moltis runtime contract mismatch: live /api/auth/login failed before /api/skills verification (HTTP $login_code)"
     fi
 
     return 0
@@ -509,8 +521,7 @@ verify_moltis_repo_skills_discovery() {
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
             test -f '$MOLTIS_RUNTIME_SKILLS_ROOT/$repo_skill_name/SKILL.md'
         " >/dev/null 2>&1; then
-            log_error "Moltis runtime contract mismatch: synced runtime skill is missing SKILL.md for $repo_skill_name"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: synced runtime skill is missing SKILL.md for $repo_skill_name"
         fi
     done
 
@@ -543,14 +554,13 @@ verify_moltis_repo_skills_discovery() {
     rm -f "$cookie_file"
 
     if [[ -z "$skills_json" ]]; then
-        log_error "Moltis runtime contract mismatch: failed to query authenticated live /api/skills after repo skill sync"
+        record_verification_failure "Moltis runtime contract mismatch: failed to query authenticated live /api/skills after repo skill sync"
     else
         for repo_skill_name in "${repo_skill_names[@]}"; do
             if ! jq -e --arg skill_name "$repo_skill_name" '
                 .skills[]? | select(.name == $skill_name)
             ' <<<"$skills_json" >/dev/null; then
-                log_error "Moltis runtime contract mismatch: authenticated live /api/skills does not expose repo-managed skill '$repo_skill_name'"
-                return 1
+                record_verification_failure "Moltis runtime contract mismatch: authenticated live /api/skills does not expose repo-managed skill '$repo_skill_name'"
             fi
         done
     fi
@@ -879,12 +889,12 @@ prepare_moltis_container_for_rollout() {
     if docker ps -q --filter "id=$container_id" | grep -q .; then
         log_json_stderr INFO "Stopping existing Moltis container '$TARGET_CONTAINER' with ${stop_timeout}s grace before rollout"
         if [[ "$OUTPUT_JSON" == "true" ]]; then
-            if ! docker stop --time "$stop_timeout" "$TARGET_CONTAINER" 1>&2; then
+            if ! docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER" 1>&2; then
                 log_error "Failed to stop existing Moltis container: $TARGET_CONTAINER"
                 exit 1
             fi
         else
-            if ! docker stop --time "$stop_timeout" "$TARGET_CONTAINER"; then
+            if ! docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"; then
                 log_error "Failed to stop existing Moltis container: $TARGET_CONTAINER"
                 exit 1
             fi
@@ -1066,7 +1076,7 @@ capture_moltis_rollback_evidence() {
   "schema_version": "v1",
   "target": "moltis",
   "captured_at": "$(get_timestamp)",
-  "rollback_reason": "$reason",
+  "rollback_reason": $(printf '%s' "$reason" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "backup_reference": $(printf '%s' "$backup_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "restore_check_reference": $(printf '%s' "$restore_check_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "pre_rollback_image": "$current_image",
@@ -1130,7 +1140,7 @@ capture_clawdiy_rollback_evidence() {
   "schema_version": "v1",
   "target": "clawdiy",
   "captured_at": "$(get_timestamp)",
-  "rollback_reason": "$reason",
+  "rollback_reason": $(printf '%s' "$reason" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "pre_rollback_image": "$current_image",
   "pre_rollback_health": "$current_health",
   "audit_root": "$PROJECT_ROOT/data/clawdiy/audit",
@@ -1372,21 +1382,29 @@ pull_images() {
 deploy_containers() {
     log_info "Deploying containers for target $TARGET..."
     local -a deploy_services=("$TARGET_SERVICE")
+    local -a auxiliary_services=()
     local -a deploy_args=(up -d --remove-orphans)
     local service
 
     for service in "${TARGET_AUXILIARY_SERVICES[@]}"; do
         [[ -n "$service" ]] || continue
         deploy_services+=("$service")
+        auxiliary_services+=("$service")
     done
 
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
         # changes must force a recreate to avoid stale live state.
-        # Pre-stop/remove the fixed-name container to avoid compose recreate
-        # races when Moltis takes longer than Docker's default 10s stop grace.
+        # Keep sidecars converged without forcing a second Moltis recreate in the
+        # same compose transaction. Then pre-stop/remove the fixed-name Moltis
+        # container and recreate only the Moltis service with --no-deps.
+        if [[ ${#auxiliary_services[@]} -gt 0 ]]; then
+            compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"
+        fi
         prepare_moltis_container_for_rollout
-        deploy_args+=(--force-recreate)
+        compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
+        log_success "Containers deployed for target $TARGET"
+        return 0
     fi
 
     compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"
@@ -1413,9 +1431,12 @@ rollback() {
         log_info "Rolling back target $TARGET to $last_image"
 
         if [[ "$TARGET" == "moltis" ]]; then
+            local rollback_version
+            rollback_version="$(extract_moltis_version_tag "$last_image")"
+            prepare_moltis_container_for_rollout
             ALLOW_MOLTIS_VERSION_OVERRIDE=true \
-                MOLTIS_VERSION="$(extract_moltis_version_tag "$last_image")" \
-                compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
+                MOLTIS_VERSION="$rollback_version" \
+                compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
         else
             CLAWDIY_IMAGE="$last_image" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         fi
@@ -1448,16 +1469,16 @@ rollback() {
 
 verify_deployment() {
     log_info "Verifying deployment for target $TARGET..."
+    VERIFY_FAILURE_REASON=""
 
     if ! wait_for_healthy "$TARGET_CONTAINER" "$TARGET_HEALTH_TIMEOUT"; then
-        return 1
+        record_verification_failure "Health wait timed out for target $TARGET"
     fi
 
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_HEALTH_URL" 2>/dev/null || echo "000")
     if [[ "$http_code" != "200" ]]; then
-        log_error "Health endpoint returned HTTP $http_code for target $TARGET"
-        return 1
+        record_verification_failure "Health endpoint returned HTTP $http_code for target $TARGET"
     fi
 
     if [[ -n "$TARGET_METRICS_URL" ]]; then
@@ -1475,56 +1496,47 @@ verify_deployment() {
 
         working_dir="$(docker inspect --format '{{.Config.WorkingDir}}' "$TARGET_CONTAINER" 2>/dev/null || echo "")"
         if [[ "$working_dir" != "/server" ]]; then
-            log_error "Moltis runtime contract mismatch: working_dir is '$working_dir', expected '/server'"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: working_dir is '$working_dir', expected '/server'"
         fi
 
         expected_workspace="$(canonicalize_existing_path "$PROJECT_ROOT" || printf '%s\n' "$PROJECT_ROOT")"
         actual_workspace_source="$(container_mount_source "$TARGET_CONTAINER" "/server")"
         if [[ -z "$actual_workspace_source" ]]; then
-            log_error "Moltis runtime contract mismatch: /server mount is missing in container $TARGET_CONTAINER"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: /server mount is missing in container $TARGET_CONTAINER"
         fi
         actual_workspace_source="$(canonicalize_existing_path "$actual_workspace_source" || printf '%s\n' "$actual_workspace_source")"
         if [[ "$actual_workspace_source" != "$expected_workspace" ]]; then
-            log_error "Moltis runtime contract mismatch: /server source is '$actual_workspace_source', expected '$expected_workspace'"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: /server source is '$actual_workspace_source', expected '$expected_workspace'"
         fi
 
         expected_runtime_config="$(read_env_file_value "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
         expected_runtime_config="${expected_runtime_config:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
         expected_runtime_config="$(normalize_runtime_config_path "$expected_runtime_config")"
         if ! runtime_config_dir_allowed "$expected_runtime_config"; then
-            log_error "Moltis runtime contract mismatch: runtime config dir '$expected_runtime_config' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: runtime config dir '$expected_runtime_config' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
         fi
         expected_runtime_config="$(canonicalize_existing_path "$expected_runtime_config" || printf '%s\n' "$expected_runtime_config")"
         actual_runtime_config_source="$(container_mount_source "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
         if [[ -z "$actual_runtime_config_source" ]]; then
-            log_error "Moltis runtime contract mismatch: runtime config mount is missing for /home/moltis/.config/moltis"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: runtime config mount is missing for /home/moltis/.config/moltis"
         fi
         actual_runtime_config_source="$(canonicalize_existing_path "$actual_runtime_config_source" || printf '%s\n' "$actual_runtime_config_source")"
         if [[ "$actual_runtime_config_source" != "$expected_runtime_config" ]]; then
-            log_error "Moltis runtime contract mismatch: runtime config source is '$actual_runtime_config_source', expected '$expected_runtime_config'"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: runtime config source is '$actual_runtime_config_source', expected '$expected_runtime_config'"
         fi
 
         actual_runtime_config_rw="$(container_mount_rw "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
         if [[ "$actual_runtime_config_rw" != "true" ]]; then
-            log_error "Moltis runtime contract mismatch: runtime config mount must be writable for runtime-managed auth/key files"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: runtime config mount must be writable for runtime-managed auth/key files"
         fi
 
         tracked_runtime_toml="$PROJECT_ROOT/config/moltis.toml"
         runtime_runtime_toml="$expected_runtime_config/moltis.toml"
         if [[ ! -f "$tracked_runtime_toml" || ! -f "$runtime_runtime_toml" ]]; then
-            log_error "Moltis runtime contract mismatch: tracked or runtime moltis.toml is missing"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: tracked or runtime moltis.toml is missing"
         fi
         if ! cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"; then
-            log_error "Moltis runtime contract mismatch: runtime moltis.toml diverges from tracked config/moltis.toml"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: runtime moltis.toml diverges from tracked config/moltis.toml"
         fi
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
@@ -1535,8 +1547,7 @@ verify_deployment() {
             : > "$tmp_path" &&
             rm -f "$tmp_path"
         ' >/dev/null 2>&1; then
-            log_error "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
         fi
 
         if ! verify_moltis_repo_skills_discovery; then
@@ -1547,15 +1558,13 @@ verify_deployment() {
             sock_gid="$(stat -c %g /var/run/docker.sock)" &&
             id -G | tr " " "\n" | grep -qx "$sock_gid"
         ' >/dev/null 2>&1; then
-            log_error "Moltis runtime contract mismatch: mounted docker.sock gid is not present in the live Moltis process groups"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: mounted docker.sock gid is not present in the live Moltis process groups"
         fi
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             grep -Eq "(^|[[:space:]])host\.docker\.internal([[:space:]]|$)" /etc/hosts
         ' >/dev/null 2>&1; then
-            log_error "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
-            return 1
+            record_verification_failure "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
         fi
     fi
 
@@ -1634,7 +1643,12 @@ cmd_deploy() {
         local health_status="unhealthy"
 
         if [[ "$ROLLBACK_ENABLED" == "true" ]]; then
-            ROLLBACK_REASON="deployment-verification-failed"
+            if [[ -n "$VERIFY_FAILURE_REASON" ]]; then
+                log_error "Auto rollback trigger reason: $VERIFY_FAILURE_REASON"
+                ROLLBACK_REASON="deployment-verification-failed: $VERIFY_FAILURE_REASON"
+            else
+                ROLLBACK_REASON="deployment-verification-failed"
+            fi
             rollback
             if [[ "$TARGET" == "clawdiy" ]] && ! docker ps --format '{{.Names}}' | grep -qx "$TARGET_CONTAINER"; then
                 health_status="disabled"

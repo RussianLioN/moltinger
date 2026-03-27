@@ -61,6 +61,7 @@ jobs:
   gitops-compliance:
     name: GitOps Compliance Check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       compliant: ${{ steps.check.outputs.compliant }}
       drift_detected: ${{ steps.check.outputs.drift_detected }}
@@ -331,6 +332,7 @@ jobs:
   preflight:
     name: Pre-flight Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
       should_deploy: ${{ steps.validate.outputs.should_deploy }}
@@ -608,6 +610,7 @@ jobs:
   backup:
     name: Backup Current State
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [preflight, gitops-compliance]
     if: needs.preflight.outputs.should_deploy == 'true' && github.event.inputs.rollback != 'true'
     outputs:
@@ -858,6 +861,7 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [preflight, backup, test, gitops-compliance]
     if: needs.preflight.outputs.should_deploy == 'true' && needs.test.result == 'success' && needs.backup.result == 'success' && needs.gitops-compliance.result == 'success'
     environment:
@@ -1125,6 +1129,7 @@ jobs:
   rollback:
     name: Rollback Deployment
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: preflight
     if: github.event.inputs.rollback == 'true'
     environment:
@@ -1254,6 +1259,7 @@ jobs:
   verify:
     name: Post-deployment Verification
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [deploy, rollback]
     if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success' || needs.deploy.outputs.auto_rollback_performed == 'true')
 
@@ -1514,6 +1520,7 @@ jobs:
   notify-failure:
     name: Notify on Failure
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [deploy, rollback]
     if: failure()
 
