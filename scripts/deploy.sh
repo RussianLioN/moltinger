@@ -32,6 +32,8 @@ MOLTIS_REPO_SKILLS_SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills
 MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
 MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-/home/moltis/.moltis/.repo-managed-skills.txt}"
 MOLTIS_STOP_TIMEOUT_SECONDS="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
+CANONICAL_MOLTIS_BROWSER_PROFILE_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_DIR:-/tmp/moltis-browser-profile}"
+CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR:-$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR/shared}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -435,6 +437,22 @@ container_mount_rw() {
     docker inspect "$container" 2>/dev/null | \
         jq -r --arg destination "$destination" '.[0].Mounts[]? | select(.Destination == $destination) | .RW' | \
         head -n 1
+}
+
+dir_mode_allows_other_write_exec() {
+    local path="$1"
+    local mode last_digit
+
+    mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
+    if [[ -z "$mode" ]]; then
+        mode="$(stat -f '%Mp%Lp' "$path" 2>/dev/null || true)"
+    fi
+    [[ -n "$mode" ]] || return 1
+
+    last_digit="${mode: -1}"
+    [[ -n "$last_digit" ]] || return 1
+
+    (( (10#$last_digit & 2) == 2 && (10#$last_digit & 1) == 1 ))
 }
 
 list_repo_skill_names() {
@@ -1503,6 +1521,7 @@ verify_deployment() {
         local expected_workspace expected_runtime_config
         local actual_workspace_source actual_runtime_config_source
         local actual_runtime_config_rw working_dir
+        local browser_profile_dir browser_profile_root actual_browser_profile_source actual_browser_profile_rw
         local tracked_runtime_toml runtime_runtime_toml
 
         working_dir="$(docker inspect --format '{{.Config.WorkingDir}}' "$TARGET_CONTAINER" 2>/dev/null || echo "")"
@@ -1575,6 +1594,49 @@ verify_deployment() {
         ' >/dev/null 2>&1; then
             record_verification_failure "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
         fi
+
+        browser_profile_dir="$(awk '
+            /^\[tools\.browser\][[:space:]]*$/ { in_section = 1; next }
+            /^\[/ { if (in_section) exit }
+            in_section && /^[[:space:]]*profile_dir[[:space:]]*=/ {
+                gsub(/#.*/, "", $0)
+                sub(/^[[:space:]]*profile_dir[[:space:]]*=[[:space:]]*"/, "", $0)
+                sub(/".*$/, "", $0)
+                print $0
+                exit
+            }
+        ' "$tracked_runtime_toml")"
+        if [[ -n "$browser_profile_dir" ]]; then
+            browser_profile_root="$(dirname "$browser_profile_dir")"
+            actual_browser_profile_source="$(container_mount_source "$TARGET_CONTAINER" "$browser_profile_root")"
+            if [[ -z "$actual_browser_profile_source" ]]; then
+                log_error "Moltis browser contract mismatch: browser profile root mount '$browser_profile_root' is missing"
+                return 1
+            fi
+            actual_browser_profile_source="$(canonicalize_existing_path "$actual_browser_profile_source" || printf '%s\n' "$actual_browser_profile_source")"
+            browser_profile_root="$(canonicalize_existing_path "$browser_profile_root" || printf '%s\n' "$browser_profile_root")"
+            browser_profile_dir="$(canonicalize_existing_path "$browser_profile_dir" || printf '%s\n' "$browser_profile_dir")"
+            if [[ "$actual_browser_profile_source" != "$browser_profile_root" ]]; then
+                log_error "Moltis browser contract mismatch: browser profile source is '$actual_browser_profile_source', expected '$browser_profile_root'"
+                return 1
+            fi
+
+            actual_browser_profile_rw="$(container_mount_rw "$TARGET_CONTAINER" "$browser_profile_root")"
+            if [[ "$actual_browser_profile_rw" != "true" ]]; then
+                log_error "Moltis browser contract mismatch: browser profile mount '$browser_profile_root' must be writable"
+                return 1
+            fi
+
+            if [[ ! -d "$browser_profile_root" || ! -d "$browser_profile_dir" ]]; then
+                log_error "Moltis browser contract mismatch: browser profile root or shared dir is missing on host"
+                return 1
+            fi
+
+            if ! dir_mode_allows_other_write_exec "$browser_profile_root" || ! dir_mode_allows_other_write_exec "$browser_profile_dir"; then
+                log_error "Moltis browser contract mismatch: browser profile root/shared dir must be writable for arbitrary non-root browser users"
+                return 1
+            fi
+        fi
     fi
 
     if verification_failure_recorded; then
@@ -1582,6 +1644,74 @@ verify_deployment() {
     fi
 
     log_success "Deployment verification passed for target $TARGET"
+    return 0
+}
+
+prepare_moltis_browser_profile_dir() {
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    chmod 0777 "$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    log_success "Prepared shared Moltis browser profile dir: $CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    return 0
+}
+
+prepull_moltis_browser_sandbox_image() {
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    local browser_contract browser_enabled sandbox_image
+    browser_contract="$(awk '
+        BEGIN {
+            in_section = 0
+            enabled = "true"
+            image = "browserless/chrome"
+        }
+        /^\[tools\.browser\][[:space:]]*$/ {
+            in_section = 1
+            next
+        }
+        /^\[/ {
+            if (in_section) {
+                exit
+            }
+        }
+        in_section {
+            if ($0 ~ /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*(true|false)/) {
+                gsub(/#.*/, "", $0)
+                sub(/^[[:space:]]*enabled[[:space:]]*=[[:space:]]*/, "", $0)
+                gsub(/[[:space:]]+$/, "", $0)
+                enabled = $0
+            }
+            if ($0 ~ /^[[:space:]]*sandbox_image[[:space:]]*=[[:space:]]*"/) {
+                gsub(/#.*/, "", $0)
+                sub(/^[[:space:]]*sandbox_image[[:space:]]*=[[:space:]]*"/, "", $0)
+                sub(/".*$/, "", $0)
+                image = $0
+            }
+        }
+        END {
+            print enabled "|" image
+        }
+    ' "$PROJECT_ROOT/config/moltis.toml")"
+    browser_enabled="${browser_contract%%|*}"
+    sandbox_image="${browser_contract#*|}"
+
+    if [[ "$browser_enabled" != "true" ]]; then
+        log_info "Tracked Moltis browser tool is disabled; skipping sandbox image pre-pull"
+        return 0
+    fi
+
+    if [[ -z "$sandbox_image" || "$sandbox_image" == "null" ]]; then
+        sandbox_image="browserless/chrome"
+    fi
+
+    log_info "Pre-pulling Moltis browser sandbox image: $sandbox_image"
+    docker pull "$sandbox_image" >/dev/null
+    log_success "Moltis browser sandbox image ready: $sandbox_image"
     return 0
 }
 
@@ -1637,6 +1767,8 @@ cmd_deploy() {
     check_prerequisites "deploy"
     backup_current_state
     pull_images
+    prepare_moltis_browser_profile_dir
+    prepull_moltis_browser_sandbox_image
     deploy_containers
 
     if verify_deployment; then

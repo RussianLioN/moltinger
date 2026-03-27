@@ -22,6 +22,13 @@ AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS="${AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS:-25
 BROWSER_ENABLED=""
 BROWSER_SANDBOX_IMAGE=""
 BROWSER_CONTAINER_HOST=""
+BROWSER_PROFILE_DIR=""
+BROWSER_PERSIST_PROFILE=""
+BROWSER_PROFILE_ROOT=""
+BROWSER_PROFILE_SOURCE=""
+BROWSER_PROFILE_RW=""
+BROWSER_PROFILE_ROOT_WRITABLE=""
+BROWSER_PROFILE_SHARED_WRITABLE=""
 DOCKER_SOCKET_SOURCE=""
 DOCKER_SOCKET_GID=""
 DOCKER_SOCKET_MODE=""
@@ -123,6 +130,22 @@ read_toml_key() {
             exit
         }
     ' "$toml_file"
+}
+
+dir_mode_allows_other_write_exec() {
+    local path="$1"
+    local mode last_digit
+
+    mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
+    if [[ -z "$mode" ]]; then
+        mode="$(stat -f '%Mp%Lp' "$path" 2>/dev/null || true)"
+    fi
+    [[ -n "$mode" ]] || return 1
+
+    last_digit="${mode: -1}"
+    [[ -n "$last_digit" ]] || return 1
+
+    (( (10#$last_digit & 2) == 2 && (10#$last_digit & 1) == 1 ))
 }
 
 read_env_file_value() {
@@ -587,6 +610,8 @@ fi
 BROWSER_ENABLED="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "enabled" || true)"
 BROWSER_SANDBOX_IMAGE="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "sandbox_image" || true)"
 BROWSER_CONTAINER_HOST="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "container_host" || true)"
+BROWSER_PROFILE_DIR="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "profile_dir" || true)"
+BROWSER_PERSIST_PROFILE="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "persist_profile" || true)"
 
 if browser_contract_required; then
     DOCKER_SOCKET_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "/var/run/docker.sock")"
@@ -615,6 +640,44 @@ if browser_contract_required; then
             fail_with "BROWSER_CONTAINER_HOST_MAPPING_MISSING" "tools.browser.container_host points to host.docker.internal but the hostname is not mapped inside the live Moltis container"
         fi
         HOST_DOCKER_INTERNAL_MAPPED="true"
+    fi
+
+    if [[ -n "$BROWSER_PROFILE_DIR" ]]; then
+        local_browser_profile_root="$(dirname "$BROWSER_PROFILE_DIR")"
+        expected_browser_profile_root="$(canonicalize_existing_path "$local_browser_profile_root" || printf '%s\n' "$local_browser_profile_root")"
+        expected_browser_profile_shared_dir="$(canonicalize_existing_path "$BROWSER_PROFILE_DIR" || printf '%s\n' "$BROWSER_PROFILE_DIR")"
+
+        BROWSER_PROFILE_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "$local_browser_profile_root")"
+        if [[ -z "$BROWSER_PROFILE_SOURCE" ]]; then
+            fail_with "BROWSER_PROFILE_MOUNT_MISSING" "Moltis browser profile root '$local_browser_profile_root' is not mounted into the live container"
+        fi
+        BROWSER_PROFILE_SOURCE="$(canonicalize_existing_path "$BROWSER_PROFILE_SOURCE" || printf '%s\n' "$BROWSER_PROFILE_SOURCE")"
+        if [[ "$BROWSER_PROFILE_SOURCE" != "$expected_browser_profile_root" ]]; then
+            fail_with "BROWSER_PROFILE_SOURCE_MISMATCH" "Live browser profile source '$BROWSER_PROFILE_SOURCE' does not match tracked root '$expected_browser_profile_root'"
+        fi
+
+        BROWSER_PROFILE_RW="$(container_mount_rw "$MOLTIS_CONTAINER" "$local_browser_profile_root")"
+        if [[ "$BROWSER_PROFILE_RW" != "true" ]]; then
+            fail_with "BROWSER_PROFILE_MOUNT_NOT_WRITABLE" "Browser profile mount '$local_browser_profile_root' must be writable"
+        fi
+
+        if [[ ! -d "$expected_browser_profile_root" ]]; then
+            fail_with "BROWSER_PROFILE_ROOT_MISSING" "Tracked browser profile root is missing on the host: $expected_browser_profile_root"
+        fi
+        if [[ ! -d "$expected_browser_profile_shared_dir" ]]; then
+            fail_with "BROWSER_PROFILE_SHARED_DIR_MISSING" "Tracked browser shared profile dir is missing on the host: $expected_browser_profile_shared_dir"
+        fi
+        if ! dir_mode_allows_other_write_exec "$expected_browser_profile_root"; then
+            fail_with "BROWSER_PROFILE_ROOT_PERMISSION_MISMATCH" "Browser profile root '$expected_browser_profile_root' is not writable/traversable for arbitrary non-root users"
+        fi
+        if ! dir_mode_allows_other_write_exec "$expected_browser_profile_shared_dir"; then
+            fail_with "BROWSER_PROFILE_SHARED_PERMISSION_MISMATCH" "Browser shared profile dir '$expected_browser_profile_shared_dir' is not writable/traversable for arbitrary non-root users"
+        fi
+
+        BROWSER_PROFILE_ROOT="$expected_browser_profile_root"
+        BROWSER_PROFILE_DIR="$expected_browser_profile_shared_dir"
+        BROWSER_PROFILE_ROOT_WRITABLE="true"
+        BROWSER_PROFILE_SHARED_WRITABLE="true"
     fi
 fi
 
@@ -699,6 +762,13 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg browser_enabled "$BROWSER_ENABLED" \
         --arg browser_sandbox_image "$BROWSER_SANDBOX_IMAGE" \
         --arg browser_container_host "$BROWSER_CONTAINER_HOST" \
+        --arg browser_profile_dir "$BROWSER_PROFILE_DIR" \
+        --arg browser_profile_root "$BROWSER_PROFILE_ROOT" \
+        --arg browser_profile_source "$BROWSER_PROFILE_SOURCE" \
+        --arg browser_profile_rw "$BROWSER_PROFILE_RW" \
+        --arg browser_persist_profile "$BROWSER_PERSIST_PROFILE" \
+        --arg browser_profile_root_writable "$BROWSER_PROFILE_ROOT_WRITABLE" \
+        --arg browser_profile_shared_writable "$BROWSER_PROFILE_SHARED_WRITABLE" \
         --arg docker_socket_source "$DOCKER_SOCKET_SOURCE" \
         --arg docker_socket_gid "$DOCKER_SOCKET_GID" \
         --arg docker_socket_mode "$DOCKER_SOCKET_MODE" \
@@ -742,6 +812,13 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             browser_enabled: (if $browser_enabled == "" then null else ($browser_enabled == "true") end),
             browser_sandbox_image: (if $browser_sandbox_image == "" then null else $browser_sandbox_image end),
             browser_container_host: (if $browser_container_host == "" then null else $browser_container_host end),
+            browser_profile_dir: (if $browser_profile_dir == "" then null else $browser_profile_dir end),
+            browser_profile_root: (if $browser_profile_root == "" then null else $browser_profile_root end),
+            browser_profile_source: (if $browser_profile_source == "" then null else $browser_profile_source end),
+            browser_profile_rw: (if $browser_profile_rw == "" then null else $browser_profile_rw end),
+            browser_persist_profile: (if $browser_persist_profile == "" then null else $browser_persist_profile end),
+            browser_profile_root_writable: (if $browser_profile_root_writable == "" then null else ($browser_profile_root_writable == "true") end),
+            browser_profile_shared_writable: (if $browser_profile_shared_writable == "" then null else ($browser_profile_shared_writable == "true") end),
             docker_socket_source: (if $docker_socket_source == "" then null else $docker_socket_source end),
             docker_socket_gid: (if $docker_socket_gid == "" then null else $docker_socket_gid end),
             docker_socket_mode: (if $docker_socket_mode == "" then null else $docker_socket_mode end),
@@ -777,6 +854,13 @@ runtime_runtime_toml=${RUNTIME_RUNTIME_TOML:-unknown}
 browser_enabled=${BROWSER_ENABLED:-unknown}
 browser_sandbox_image=${BROWSER_SANDBOX_IMAGE:-none}
 browser_container_host=${BROWSER_CONTAINER_HOST:-none}
+browser_profile_dir=${BROWSER_PROFILE_DIR:-none}
+browser_profile_root=${BROWSER_PROFILE_ROOT:-none}
+browser_profile_source=${BROWSER_PROFILE_SOURCE:-none}
+browser_profile_rw=${BROWSER_PROFILE_RW:-unknown}
+browser_persist_profile=${BROWSER_PERSIST_PROFILE:-unknown}
+browser_profile_root_writable=${BROWSER_PROFILE_ROOT_WRITABLE:-skipped}
+browser_profile_shared_writable=${BROWSER_PROFILE_SHARED_WRITABLE:-skipped}
 docker_socket_source=${DOCKER_SOCKET_SOURCE:-none}
 docker_socket_gid=${DOCKER_SOCKET_GID:-none}
 docker_socket_mode=${DOCKER_SOCKET_MODE:-none}

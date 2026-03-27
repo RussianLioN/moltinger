@@ -963,6 +963,22 @@
       "gitops": true,
       "ci": true
     },
+    "moltis-browser-canary.sh": {
+      "version": "1.0.0",
+      "description": "Run a tracked browser navigation canary and require live browser-tool proof in Moltis logs",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "docker",
+        "grep",
+        "mktemp"
+      ],
+      "provides": [
+        "moltis-browser-canary"
+      ],
+      "gitops": true,
+      "ci": true
+    },
     "moltis-search-memory-diagnostics.sh": {
       "version": "1.0.0",
       "description": "Emit tracked Tavily search and memory diagnostics from config and optional runtime logs",

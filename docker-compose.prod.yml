@@ -53,6 +53,7 @@ services:
       # Writable live config/state directory. Prepared from ./config by deploy workflow.
       - ${MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}:/home/moltis/.config/moltis
       - moltis-data:/home/moltis/.moltis
+      - /tmp/moltis-browser-profile:/tmp/moltis-browser-profile
       - /var/run/docker.sock:/var/run/docker.sock:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"

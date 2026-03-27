@@ -261,6 +261,53 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
     test_pass
 }
 
+test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
+    test_start "Deploy should export the live Docker socket GID for browser sandbox access"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/docker-compose.prod.yml" || ! -f "$PROJECT_ROOT/config/moltis.toml" ]]; then
+        test_skip "Missing deploy, compose, or config files"
+        return
+    fi
+
+    if ! grep -Fq 'DOCKER_SOCKET_GID=$docker_socket_gid' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'profile_dir = "/tmp/moltis-browser-profile/shared"' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'persist_profile = false' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.prod.yml" || \
+       ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
+       ! grep -Fq 'prepare_moltis_browser_profile_dir' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
+        test_fail "Browser sandbox access requires the tracked shared profile_dir, explicit non-persistent profile intent, deploy-time permission prep, live socket GID injection, and host.docker.internal exposure for sibling browser containers"
+        return
+    fi
+
+    test_pass
+}
+
+test_deploy_script_prepulls_tracked_browser_sandbox_image() {
+    test_start "Deploy should pre-pull the tracked browser sandbox image before Moltis comes up"
+
+    if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/config/moltis.toml" ]]; then
+        test_skip "Missing deploy or config files"
+        return
+    fi
+
+    if ! grep -Fq 'prepull_moltis_browser_sandbox_image()' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "awk '" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'docker pull "$sandbox_image"' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'sandbox_image = "browserless/chrome"' "$PROJECT_ROOT/config/moltis.toml"; then
+        test_fail "Deploy must parse the tracked browser contract with shell-only tooling and pre-pull browserless/chrome so the first browser run is not spent on a cold pull"
+        return
+    fi
+
+    if grep -Fq 'import tomllib' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       grep -Fq 'import tomli' "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "Deploy must not depend on Python TOML modules in the remote rollout path"
+        return
+    fi
+
+    test_pass
+}
+
 test_deploy_script_force_recreates_moltis_runtime_on_rollout() {
     test_start "Deploy rollout should force-recreate Moltis so runtime config changes are applied"
 
@@ -1273,6 +1320,8 @@ run_all_tests() {
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
     test_deploy_script_verifies_live_moltis_runtime_contract
+    test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox
+    test_deploy_script_prepulls_tracked_browser_sandbox_image
     test_deploy_script_force_recreates_moltis_runtime_on_rollout
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
