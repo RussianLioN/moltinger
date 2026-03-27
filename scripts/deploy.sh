@@ -28,6 +28,9 @@ CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
 CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+MOLTIS_REPO_SKILLS_SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills}"
+MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
+MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-/home/moltis/.moltis/.repo-managed-skills.txt}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -410,6 +413,97 @@ container_mount_rw() {
     docker inspect "$container" 2>/dev/null | \
         jq -r --arg destination "$destination" '.[0].Mounts[]? | select(.Destination == $destination) | .RW' | \
         head -n 1
+}
+
+list_repo_skill_names() {
+    local skills_dir="$PROJECT_ROOT/skills"
+    local skill_dir
+    shopt -s nullglob
+    for skill_dir in "$skills_dir"/*; do
+        [[ -d "$skill_dir" ]] || continue
+        [[ -f "$skill_dir/SKILL.md" ]] || continue
+        basename "$skill_dir"
+    done | LC_ALL=C sort
+    shopt -u nullglob
+}
+
+sync_moltis_repo_skills_into_runtime() {
+    local sync_script="/server/scripts/moltis-repo-skills-sync.sh"
+
+    if ! docker exec "$TARGET_CONTAINER" sh -lc "
+        test -x '$sync_script' &&
+        '$sync_script' \
+          --source-root '$MOLTIS_REPO_SKILLS_SOURCE_ROOT' \
+          --target-root '$MOLTIS_RUNTIME_SKILLS_ROOT' \
+          --manifest '$MOLTIS_RUNTIME_SKILLS_MANIFEST'
+    " >/dev/null 2>&1; then
+        log_error "Moltis runtime contract mismatch: failed to sync repo-managed skills into runtime discovery path"
+        return 1
+    fi
+
+    return 0
+}
+
+verify_moltis_repo_skills_discovery() {
+    local skills_api_url repo_skill_name skills_json attempt
+    local -a repo_skill_names=()
+
+    while IFS= read -r repo_skill_name; do
+        [[ -n "$repo_skill_name" ]] || continue
+        repo_skill_names+=("$repo_skill_name")
+    done < <(list_repo_skill_names)
+
+    if [[ ${#repo_skill_names[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    if ! sync_moltis_repo_skills_into_runtime; then
+        return 1
+    fi
+
+    for repo_skill_name in "${repo_skill_names[@]}"; do
+        if ! docker exec "$TARGET_CONTAINER" sh -lc "
+            test -f '$MOLTIS_RUNTIME_SKILLS_ROOT/$repo_skill_name/SKILL.md'
+        " >/dev/null 2>&1; then
+            log_error "Moltis runtime contract mismatch: synced runtime skill is missing SKILL.md for $repo_skill_name"
+            return 1
+        fi
+    done
+
+    skills_api_url="${TARGET_HEALTH_URL%/health}/api/skills"
+    for attempt in {1..10}; do
+        skills_json="$(curl -fsS "$skills_api_url" 2>/dev/null || true)"
+        if [[ -n "$skills_json" ]]; then
+            local missing_skill=0
+            for repo_skill_name in "${repo_skill_names[@]}"; do
+                if ! jq -e --arg skill_name "$repo_skill_name" '
+                    .skills[]? | select(.name == $skill_name)
+                ' <<<"$skills_json" >/dev/null; then
+                    missing_skill=1
+                    break
+                fi
+            done
+            if [[ $missing_skill -eq 0 ]]; then
+                return 0
+            fi
+        fi
+        sleep 2
+    done
+
+    if [[ -z "$skills_json" ]]; then
+        log_error "Moltis runtime contract mismatch: failed to query live /api/skills after repo skill sync"
+    else
+        for repo_skill_name in "${repo_skill_names[@]}"; do
+            if ! jq -e --arg skill_name "$repo_skill_name" '
+                .skills[]? | select(.name == $skill_name)
+            ' <<<"$skills_json" >/dev/null; then
+                log_error "Moltis runtime contract mismatch: live /api/skills does not expose repo-managed skill '$repo_skill_name'"
+                return 1
+            fi
+        done
+    fi
+
+    return 0
 }
 
 tracked_moltis_version() {
@@ -1339,6 +1433,10 @@ verify_deployment() {
             rm -f "$tmp_path"
         ' >/dev/null 2>&1; then
             log_error "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
+            return 1
+        fi
+
+        if ! verify_moltis_repo_skills_discovery; then
             return 1
         fi
 

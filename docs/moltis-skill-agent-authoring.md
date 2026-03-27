@@ -1,6 +1,6 @@
 # Moltis Skill/Agent Authoring Guide
 
-Last reviewed: 2026-03-14
+Last reviewed: 2026-03-27
 
 ## Зачем этот документ
 
@@ -32,7 +32,9 @@ Last reviewed: 2026-03-14
 5. Делать `MCP`/hooks/tools для внешних действий и enforcement, а не кодировать API-интеграцию только текстом в prompt.
 6. Делать `session_state` для краткоживущего рабочего состояния, а `memory/knowledge` — для долговременных знаний.
 7. Для периодики использовать нативный Moltis scheduler/heartbeat path, а не внешний shell-cron, если можно остаться внутри Moltis runtime.
-8. Считать skill внедрённым только после проверки runtime visibility: skill/agent должен реально быть видим контейнеру и его `search_paths`, а не только лежать в git.
+8. Считать skill внедрённым только после проверки runtime visibility: skill/agent должен реально discover-иться live runtime через официальный skill path и `/api/skills`, а не только лежать в git.
+
+Официальный runtime-контракт и production interpretation для Moltinger зафиксированы в [docs/research/moltis-official-skill-runtime-contract-2026-03-27.md](./research/moltis-official-skill-runtime-contract-2026-03-27.md).
 
 ## Что использовать и когда
 
@@ -110,16 +112,16 @@ Last reviewed: 2026-03-14
 Если новый skill:
 
 - лежит в `skills/` репозитория,
-- но контейнер его не видит,
-- или `search_paths` не совпадают с mount points,
+- но live `/api/skills` его не показывает,
+- или deploy не материализовал его в официальный runtime-discovered path,
 
 то capability ещё не внедрён.
 
 Минимальная проверка:
 
-1. skill/agent лежит в правильном runtime-visible path;
-2. этот path есть в `search_paths` или в documented import path;
-3. live runtime может реально прочитать skill и вызвать canonical entrypoint;
+1. skill/agent лежит в правильном runtime-discovered path;
+2. live `/api/skills` реально показывает этот skill;
+3. live runtime может вызвать canonical entrypoint;
 4. это подтверждено не только hermetic test, но и runtime smoke/UAT.
 
 ## Рекомендуемый workflow добавления нового skill/agent
@@ -172,9 +174,9 @@ Last reviewed: 2026-03-14
 Отдельно проверь:
 
 - repo path;
-- runtime-visible path;
+- runtime-discovered path;
 - container mounts;
-- `search_paths`;
+- live `/api/skills`;
 - права на execution;
 - наличие нужных инструментов внутри live runtime.
 

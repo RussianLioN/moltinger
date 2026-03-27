@@ -98,7 +98,7 @@ run_static_config_validation_tests() {
        rg -q '^\s+- \./:/server:ro$' "$PROJECT_ROOT/docker-compose.yml"; then
         test_pass
     else
-        test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for live skill visibility"
+        test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for Git-tracked scripts, docs, and repo-managed skill sources"
     fi
 
     test_start "static_moltis_browser_docker_contract_declares_host_gateway_and_socket_gid_alignment"
@@ -255,7 +255,16 @@ PY
        rg -Fq 'MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT = "/server/scripts/telegram-bot-send.sh"' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis config must use container-visible /server paths for codex-update skill code and ~/.moltis paths for writable state"
+        test_fail "Primary Moltis config must keep repo-side codex-update scripts container-visible under /server and keep writable runtime state under ~/.moltis"
+    fi
+
+    test_start "static_config_does_not_claim_repo_search_paths_are_live_skill_contract"
+    if rg -Fq 'search_paths = []' "$TOML_CONFIG" && \
+       ! rg -Fq 'search_paths = ["/server/skills"]' "$TOML_CONFIG" && \
+       rg -Fq 'auto_load = ["telegram-learner", "codex-update"]' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must not rely on repo-mounted /server/skills for live discovery and should keep auto_load only for already-discoverable skills"
     fi
 
     test_start "static_config_pins_memory_provider_and_repo_watch_dirs"
@@ -281,6 +290,13 @@ PY
         test_pass
     else
         test_fail "scripts/codex-cli-update-delivery.sh must be executable to stay GitOps-clean after managed surface sync applies executable bits"
+    fi
+
+    test_start "static_moltis_repo_skills_sync_script_is_executable"
+    if [[ -x "$PROJECT_ROOT/scripts/moltis-repo-skills-sync.sh" ]]; then
+        test_pass
+    else
+        test_fail "scripts/moltis-repo-skills-sync.sh must be executable so deploy can materialize repo-managed skills into the runtime discovery path"
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"

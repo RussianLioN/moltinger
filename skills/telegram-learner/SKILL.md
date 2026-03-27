@@ -162,11 +162,11 @@ original_url: "https://t.me/tsingular/[msg_id]"
    - Часто используемый процесс
 
 2. Создай skill:
-   mkdir -p /server/skills/[skill-name]
-   # Создать SKILL.md по шаблону
+   mkdir -p skills/[skill-name]
+   # Создать SKILL.md по шаблону в git-tracked repo source
 
 3. Зарегистрируй skill:
-   # Добавить в search_paths если нужно
+   # Для production deploy skill должен быть затем синхронизирован в /home/moltis/.moltis/skills
 ```
 
 ## Output Format

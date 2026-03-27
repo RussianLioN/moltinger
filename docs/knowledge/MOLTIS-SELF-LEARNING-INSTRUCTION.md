@@ -5,7 +5,7 @@
 **Назначение**: Исчерпывающее руководство для обучения LLM-агента работе с Moltis и его самообучению
 
 > Для проектного skill/agent authoring и миграции capability из Claude Code, Codex или OpenCode сначала смотри канонический гайд:
-> [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md)
+> [docs/moltis-skill-agent-authoring.md](../moltis-skill-agent-authoring.md)
 
 ---
 
@@ -38,7 +38,7 @@
 | Механизм | Файл | Назначение | Когда использовать |
 |----------|------|------------|-------------------|
 | **Soul Prompt** | `moltis.toml → [identity]` | Идентичность, поведение, роль | Изменение личности агента |
-| **Skills** | `~/.config/moltis/skills/*/SKILL.md` | Переиспользуемые шаблоны промптов | Новые возможности, паттерны |
+| **Skills** | `<data_dir>/skills/*/SKILL.md` | Переиспользуемые шаблоны промптов | Новые возможности, паттерны |
 | **Memory/RAG** | `~/.moltis/memory/` + watch_dirs | База знаний с семантическим поиском | Факты, документация, ссылки |
 | **MCP Servers** | `moltis.toml → [mcp.servers]` | Внешние инструменты и интеграции | API, базы данных, Telegram |
 
@@ -90,9 +90,9 @@
 │  │ Шаблоны     │  │ База знаний │  │ Инструменты │         │
 │  │ промптов    │  │ с RAG       │  │ извне       │         │
 │  │             │  │             │  │             │         │
-│  │ ~/.config/  │  │ ~/.moltis/  │  │ External    │         │
-│  │ moltis/     │  │ memory/     │  │ Servers     │         │
-│  │ skills/     │  │             │  │             │         │
+│  │ <data_dir>/ │  │ ~/.moltis/  │  │ External    │         │
+│  │ skills/     │  │ memory/     │  │ Servers     │         │
+│  │             │  │             │  │             │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -112,14 +112,13 @@
 /server                    # Рабочая директория контейнера
 ├── config/
 │   └── moltis.toml        # ГЛАВНЫЙ конфиг
-├── skills/                # Skills (если используется локальный путь)
+├── skills/                # Git-tracked source of truth for repo-managed skills
 └── knowledge/             # База знаний (кастомная)
 
 /home/moltis/
-├── .config/moltis/
-│   ├── moltis.toml        # Конфиг по умолчанию
-│   └── skills/            # Skills по умолчанию
+├── skills/                # Official personal skill path from Moltis docs
 └── .moltis/
+    ├── skills/            # Runtime-discovered project skills in our production contract
     └── memory/            # Memory по умолчанию
 ```
 
@@ -167,11 +166,8 @@ soul = """
 ```toml
 [skills]
 enabled = true
-search_paths = [
-  "/server/skills",           # Кастомный путь
-  "~/.config/moltis/skills"   # По умолчанию
-]
-auto_load = ["skill-name-1", "skill-name-2"]  # Всегда активные skills
+search_paths = []              # Не полагаться на repo-mounted /server/skills как на live contract
+auto_load = ["skill-name-1", "skill-name-2"]  # Всегда активные skills после discovery
 ```
 
 #### Memory Configuration
@@ -322,7 +318,7 @@ STEP 2: Создать директорию skills/skill-name/
 STEP 3: Написать SKILL.md по шаблону
         │
         ▼
-STEP 4: Добавить в search_paths или auto_load
+STEP 4: Для always-on навыка добавить в auto_load; для production deploy обеспечить sync в runtime-discovered path
         │
         ▼
 STEP 5: Перезапустить Moltis (или ждать auto-reload)
@@ -344,14 +340,13 @@ STEP 6: Протестировать активацию
 
 #### Step 2: Создать директорию
 ```bash
-mkdir -p /server/skills/my-skill/
-# или
-mkdir -p ~/.config/moltis/skills/my-skill/
+mkdir -p skills/my-skill/
+# Git source of truth lives in repo; deploy then syncs to ~/.moltis/skills in production.
 ```
 
 #### Step 3: Написать SKILL.md
 ```bash
-cat > /server/skills/my-skill/SKILL.md << 'EOF'
+cat > skills/my-skill/SKILL.md << 'EOF'
 ---
 name: my-skill
 description: [Описание]. Использовать когда [сценарий].
@@ -373,9 +368,6 @@ EOF
 #### Step 4: Настроить конфигурацию
 ```toml
 [skills]
-search_paths = ["/server/skills"]
-
-# Для always-on skills:
 auto_load = ["my-skill"]
 ```
 
@@ -998,7 +990,8 @@ soul = """
 
 ## Твои источники знаний
 - Knowledge base: /server/knowledge/
-- Skills: /server/skills/
+- Git-tracked skills source: /server/skills/
+- Live runtime-discovered skills: /home/moltis/.moltis/skills/
 - Telegram: @tsingular (OpenClaw новости)
 
 ## Твоё поведение
@@ -1058,18 +1051,19 @@ transport = "stdio"
 # Проверить пути
 grep "search_paths" ~/.config/moltis/moltis.toml
 
-# Проверить существование директории
-ls -la /server/skills/
+# Проверить существование live runtime skill directory
+ls -la /home/moltis/.moltis/skills/
 
 # Проверить формат SKILL.md
-head -20 /server/skills/my-skill/SKILL.md
+head -20 /home/moltis/.moltis/skills/my-skill/SKILL.md
 ```
 
 **Решения**:
-1. Проверь что путь в `search_paths` существует
-2. Проверь frontmatter в SKILL.md (должен быть валидный YAML)
-3. Проверь права доступа к файлам
-4. Перезапусти Moltis
+1. Проверь что deploy/sync действительно материализовал skill в runtime-discovered path
+2. Проверь `GET /api/skills`, а не только наличие repo path
+3. Проверь frontmatter в SKILL.md (должен быть валидный YAML)
+4. Проверь права доступа к файлам
+5. Перезапусти Moltis
 
 ### 6.2 Memory не индексируется
 
@@ -1160,8 +1154,8 @@ docker logs moltis --tail 100 -f
 curl http://localhost:13131/health
 
 # Создать новый skill
-mkdir -p /server/skills/my-skill
-cat > /server/skills/my-skill/SKILL.md << 'EOF'
+mkdir -p skills/my-skill
+cat > skills/my-skill/SKILL.md << 'EOF'
 ---
 name: my-skill
 description: Description here
@@ -1189,11 +1183,7 @@ EOF
 ├── config/
 │   └── moltis.toml          # Главный конфиг
 ├── skills/
-│   ├── agent-spec-generator/
-│   │   └── SKILL.md
-│   ├── telegram-learner/
-│   │   └── SKILL.md
-│   └── ...
+│   └── ...                  # Git-tracked source skills
 ├── knowledge/
 │   ├── concepts/
 │   ├── tutorials/
@@ -1207,8 +1197,9 @@ EOF
 
 **Для Skills**:
 - [ ] `skills.enabled = true`
-- [ ] `skills.search_paths` содержит нужный путь
-- [ ] Директория skills существует
+- [ ] Repo `skills/` содержит source skill
+- [ ] Deploy sync materializes skill into `/home/moltis/.moltis/skills`
+- [ ] `GET /api/skills` показывает skill
 - [ ] SKILL.md имеет валидный frontmatter
 
 **Для Memory**:

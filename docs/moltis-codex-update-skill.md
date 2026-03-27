@@ -4,7 +4,7 @@
 
 Это новый канонический Moltis-native навык для отслеживания обновлений `Codex CLI`.
 
-Общий проектный паттерн для добавления Moltis skills/agents и миграции capability из Claude Code, Codex и OpenCode описан в [docs/moltis-skill-agent-authoring.md](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docs/moltis-skill-agent-authoring.md).
+Общий проектный паттерн для добавления Moltis skills/agents и миграции capability из Claude Code, Codex и OpenCode описан в [docs/moltis-skill-agent-authoring.md](./moltis-skill-agent-authoring.md).
 
 Простыми словами:
 - Moltis сам проверяет официальный changelog;
@@ -17,19 +17,20 @@
 
 ## Live runtime contract
 
-Для live Moltis skill считается внедрённым только если контейнер реально видит репозиторий как `/server`.
+Для live Moltis skill считается внедрённым только если Git-tracked skill после deploy реально discover-ится live runtime.
 
 Канонический контракт такой:
-- `docker-compose*.yml` монтирует checkout в контейнер как `/server:ro`;
-- `working_dir` контейнера равен `/server`;
-- `skills.search_paths` указывает на `/server/skills`;
-- runtime scripts и schema paths в `config/moltis.toml` используют container-visible пути;
-- writable state и audit живут не в `/server`, а в `/home/moltis/.moltis/codex-update/`.
+- repo остаётся source of truth и монтируется в контейнер как `/server:ro`;
+- runtime scripts и schema paths в `config/moltis.toml` используют container-visible repo paths под `/server`;
+- deploy sync-ит repo-managed skills в `/home/moltis/.moltis/skills`;
+- live proof идёт через `/api/skills`, а не через одно только `search_paths`;
+- writable state и audit живут в `/home/moltis/.moltis/codex-update/`.
 
 Простыми словами:
-- skill и scripts читаются из git-управляемого checkout;
+- skill source и scripts читаются из git-управляемого checkout;
+- live skill discovery идёт из runtime-managed каталога под `~/.moltis/skills`;
 - state и audit пишутся в runtime home Moltis;
-- live Telegram UAT должен проверять именно этот путь, а не ad-hoc shell fallback.
+- live acceptance должен подтверждать `/api/skills` и реальный вызов skill, а не ad-hoc shell fallback.
 
 ## Как это работает сейчас
 
@@ -257,10 +258,11 @@ scripts/moltis-codex-update-run.sh --mode scheduler
 ```
 
 GitOps wiring:
-- runtime defaults живут в [config/moltis.toml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/config/moltis.toml)
-- cron job живёт в [moltis-codex-upstream-watcher](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/scripts/cron.d/moltis-codex-upstream-watcher)
-- inventory зафиксирован в [manifest.json](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/scripts/manifest.json)
-- live container visibility обеспечивается через `/server` mount в [docker-compose.yml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docker-compose.yml) и [docker-compose.prod.yml](/Users/rl/coding/moltinger-molt-2-codex-update-monitor-new/docker-compose.prod.yml)
+- runtime defaults живут в [config/moltis.toml](../config/moltis.toml)
+- cron job живёт в [moltis-codex-upstream-watcher](../scripts/cron.d/moltis-codex-upstream-watcher)
+- inventory зафиксирован в [manifest.json](../scripts/manifest.json)
+- repo source остаётся доступен через `/server` mount в [docker-compose.yml](../docker-compose.yml) и [docker-compose.prod.yml](../docker-compose.prod.yml)
+- live skill discovery доказывается через runtime sync в `~/.moltis/skills` и `/api/skills`
 
 Минимальные env для live scheduler delivery:
 
