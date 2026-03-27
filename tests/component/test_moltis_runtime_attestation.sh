@@ -93,13 +93,20 @@ EOF
 
 create_workspace_fixture() {
     local workspace_root="$1"
+    local browser_profile_dir="$2"
 
     mkdir -p "$workspace_root/data" "$workspace_root/skills" "$workspace_root/config"
     git -C "$workspace_root" init -q
     git -C "$workspace_root" config user.name "Codex Test"
     git -C "$workspace_root" config user.email "codex@example.com"
     printf 'runtime\n' >"$workspace_root/runtime.txt"
-    cat >"$workspace_root/config/moltis.toml" <<'EOF'
+    cat >"$workspace_root/config/moltis.toml" <<EOF
+[tools.browser]
+sandbox_image = "browserless/chrome"
+profile_dir = "$browser_profile_dir"
+persist_profile = false
+container_host = "host.docker.internal"
+
 [memory]
 provider = "ollama"
 base_url = "http://ollama:11434"
@@ -113,20 +120,25 @@ EOF
 run_component_moltis_runtime_attestation_tests() {
     start_timer
 
-    local fixture_root fake_bin workspace_root workspace_root_canonical active_root runtime_config_dir runtime_config_dir_canonical runtime_home_dir mounts_file output_json live_sha
+    local fixture_root fake_bin workspace_root workspace_root_canonical active_root runtime_config_dir runtime_config_dir_canonical runtime_home_dir mounts_file output_json live_sha browser_profile_root browser_profile_dir browser_profile_root_canonical browser_profile_dir_canonical
     fixture_root="$(secure_temp_dir moltis-runtime-attestation)"
     fake_bin="$(create_fake_runtime_bin "$fixture_root")"
     workspace_root="$fixture_root/deploy-root"
     active_root="$fixture_root/moltis-active"
     runtime_config_dir="$fixture_root/runtime-config"
     runtime_home_dir="$fixture_root/runtime-home"
+    browser_profile_root="$fixture_root/browser-profile"
+    browser_profile_dir="$browser_profile_root/shared"
     mounts_file="$fixture_root/mounts.json"
     output_json="$fixture_root/output.json"
 
-    mkdir -p "$runtime_config_dir" "$runtime_home_dir"
-    create_workspace_fixture "$workspace_root"
+    mkdir -p "$runtime_config_dir" "$runtime_home_dir" "$browser_profile_dir"
+    chmod 0777 "$browser_profile_root" "$browser_profile_dir"
+    create_workspace_fixture "$workspace_root" "$browser_profile_dir"
     workspace_root_canonical="$(cd "$workspace_root" && pwd -P)"
     runtime_config_dir_canonical="$(cd "$runtime_config_dir" && pwd -P)"
+    browser_profile_root_canonical="$(cd "$browser_profile_root" && pwd -P)"
+    browser_profile_dir_canonical="$(cd "$browser_profile_dir" && pwd -P)"
     live_sha="$(git -C "$workspace_root" rev-parse HEAD)"
     cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
 
@@ -152,7 +164,8 @@ EOF
     "Mounts": [
       {"Destination": "/server", "Source": "$workspace_root", "RW": false},
       {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
-      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true},
+      {"Destination": "$browser_profile_root", "Source": "$browser_profile_root", "RW": true}
     ]
   }
 ]
@@ -171,7 +184,10 @@ EOF
             --json \
             --deploy-path "$workspace_root" \
             --active-path "$active_root" \
+            --expected-runtime-config-dir "$runtime_config_dir" \
             --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr.log"; then
+        cat "$fixture_root/stderr.log" >&2 || true
+        cat "$output_json" >&2 || true
         test_fail "Runtime attestation should pass for matching live provenance"
         rm -rf "$fixture_root"
         return
@@ -186,6 +202,15 @@ EOF
        [[ "$(jq -r '.details.runtime_config_rw' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.tracked_runtime_toml' "$output_json")" != "$workspace_root_canonical/config/moltis.toml" ]] || \
        [[ "$(jq -r '.details.runtime_runtime_toml' "$output_json")" != "$runtime_config_dir_canonical/moltis.toml" ]] || \
+       [[ "$(jq -r '.details.browser_sandbox_image' "$output_json")" != "browserless/chrome" ]] || \
+       [[ "$(jq -r '.details.browser_profile_dir' "$output_json")" != "$browser_profile_dir_canonical" ]] || \
+       [[ "$(jq -r '.details.browser_profile_root' "$output_json")" != "$browser_profile_root_canonical" ]] || \
+       [[ "$(jq -r '.details.browser_profile_source' "$output_json")" != "$browser_profile_root_canonical" ]] || \
+       [[ "$(jq -r '.details.browser_profile_rw' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.browser_persist_profile' "$output_json")" != "false" ]] || \
+       [[ "$(jq -r '.details.browser_container_host' "$output_json")" != "host.docker.internal" ]] || \
+       [[ "$(jq -r '.details.browser_profile_root_writable' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.browser_profile_shared_writable' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
@@ -209,7 +234,8 @@ EOF
         bash "$ATTESTATION_SCRIPT" \
             --json \
             --deploy-path "$workspace_root" \
-            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-runtime-config.log"
+            --active-path "$active_root" \
+            --expected-runtime-config-dir "$runtime_config_dir" >"$output_json" 2>"$fixture_root/stderr-runtime-config.log"
     exit_code=$?
     set -e
 
@@ -223,6 +249,38 @@ EOF
     test_pass
 
     cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
+    chmod 0755 "$browser_profile_root"
+
+    test_start "component_runtime_attestation_fails_when_browser_profile_root_is_not_world_writable"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" \
+            --expected-runtime-config-dir "$runtime_config_dir" >"$output_json" 2>"$fixture_root/stderr-browser-perms.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "BROWSER_PROFILE_ROOT_PERMISSION_MISMATCH")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when the browser profile root is not writable for arbitrary non-root browser users"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    chmod 0777 "$browser_profile_root"
+
+    cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
 
     cat >"$mounts_file" <<EOF
 [
@@ -230,7 +288,8 @@ EOF
     "Mounts": [
       {"Destination": "/server", "Source": "$fixture_root/untracked-root", "RW": false},
       {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
-      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true},
+      {"Destination": "$browser_profile_root", "Source": "$browser_profile_root", "RW": true}
     ]
   }
 ]
@@ -250,7 +309,8 @@ EOF
         bash "$ATTESTATION_SCRIPT" \
             --json \
             --deploy-path "$workspace_root" \
-            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-fail.log"
+            --active-path "$active_root" \
+            --expected-runtime-config-dir "$runtime_config_dir" >"$output_json" 2>"$fixture_root/stderr-fail.log"
     local exit_code=$?
     set -e
 
@@ -269,7 +329,8 @@ EOF
     "Mounts": [
       {"Destination": "/server", "Source": "$workspace_root", "RW": false},
       {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
-      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true},
+      {"Destination": "$browser_profile_root", "Source": "$browser_profile_root", "RW": true}
     ]
   }
 ]
@@ -290,6 +351,7 @@ EOF
             --json \
             --deploy-path "$workspace_root" \
             --active-path "$active_root" \
+            --expected-runtime-config-dir "$runtime_config_dir" \
             --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr-auth.log"
     exit_code=$?
     set -e

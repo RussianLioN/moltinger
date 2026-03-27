@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-27
-**Total Lessons**: 62
+**Total Lessons**: 63
 
 ---
 
@@ -14,9 +14,10 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (25 lessons)
+#### P1 (26 lessons)
 - [Stock browserless/chrome remained viable on the live host; the immediate browser hotfix was profile-dir writability, not a custom browser image](../docs/rca/2026-03-27-moltis-browser-stock-image-remains-viable-with-writable-profile-dir.md)
 - [Moltis browser timeout persisted after Docker socket recovery because the sibling browser profile bind mount was not writable and the repair stopped before full end-to-end contract proof](../docs/rca/2026-03-27-moltis-browser-sandbox-profile-bind-permission-contract-drift.md)
+- [Moltis browser timeout recurred because canonical production still ran the stock browser sandbox contract from main](../docs/rca/2026-03-27-moltis-browser-recurrence-main-still-runs-stock-sandbox-contract.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Telegram leaked internal activity log to the user while authoritative UAT still passed because reply-quality checks were blind to telemetry variants and pre-send contamination](../docs/rca/2026-03-26-telegram-activity-log-leak-and-uat-blind-spot.md)
 - [Moltis memory embeddings and Ollama cloud models drifted because runtime config parity and runtime env delivery were not enforced together](../docs/rca/2026-03-24-moltis-embedding-runtime-config-and-ollama-env-drift.md)
@@ -125,6 +126,9 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
+#### operational-drift (1 lessons)
+- [Moltis browser timeout recurred because canonical production still ran the stock browser sandbox contract from main](../docs/rca/2026-03-27-moltis-browser-recurrence-main-still-runs-stock-sandbox-contract.md)
+
 #### process (22 lessons)
 - [Stock browserless/chrome remained viable on the live host; the immediate browser hotfix was profile-dir writability, not a custom browser image](../docs/rca/2026-03-27-moltis-browser-stock-image-remains-viable-with-writable-profile-dir.md)
 - [Moltis browser timeout persisted after Docker socket recovery because the sibling browser profile bind mount was not writable and the repair stopped before full end-to-end contract proof](../docs/rca/2026-03-27-moltis-browser-sandbox-profile-bind-permission-contract-drift.md)
@@ -164,16 +168,16 @@
 
 ### Popular Tags
 
-- `rca` (19 lessons)
+- `rca` (20 lessons)
+- `moltis` (18 lessons)
 - `gitops` (18 lessons)
-- `moltis` (17 lessons)
 - `deploy` (14 lessons)
 - `github-actions` (13 lessons)
 - `lessons` (12 lessons)
 - `cicd` (11 lessons)
+- `telegram` (10 lessons)
 - `process` (10 lessons)
-- `telegram` (9 lessons)
-- `docker` (8 lessons)
+- `docker` (9 lessons)
 
 
 ---
@@ -182,10 +186,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 62 |
-| Critical (P0/P1) | 26 |
-| Categories | 6 |
-| Unique Tags | 137 |
+| Total Lessons | 63 |
+| Critical (P0/P1) | 27 |
+| Categories | 7 |
+| Unique Tags | 138 |
 
 ---
 

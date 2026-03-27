@@ -271,6 +271,7 @@ Use this checklist for new instances, browser incidents, and post-deploy browser
    - expected `profile_dir`
    - expected `persist_profile`
    - prefer stock `browserless/chrome` as the tracked default unless a separate live or isolated canary proves stock remains insufficient after storage fixes
+   - if stock `browserless/chrome` still reports a root websocket URL from `/json/version` while the tracked shim reports `/devtools/browser/*`, treat the shim as the live-required contract for this deployment
    - if production still matches stock `browserless/chrome` without the tracked browser contract from git, classify it as runtime drift and land the fix through `main`
 4. Host-visible profile storage:
    - shared profile mount exists

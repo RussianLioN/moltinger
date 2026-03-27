@@ -216,14 +216,12 @@ The next hardening pass must not stop at the first restored browser invariant. I
 Latest live evidence on 2026-03-27 tightened the scope further:
 
 - production still runs the `origin/main` browser baseline (`sandbox_image = "browserless/chrome"`, no tracked `profile_dir`, no tracked `persist_profile`, and no host-visible browser-profile bind mount in compose), not the audited browser contract already present in `031`
-- the stock `browserless/chrome` image is healthy in isolation on the same host, but its `/json/version` still returns a root websocket URL (`ws://127.0.0.1:<port>`) rather than a real `/devtools/browser/*` endpoint, so the earlier repo-specific shim rationale remains relevant
-- a live Moltis-created sibling container currently starts with:
-  - `Image = browserless/chrome`
-  - `PREBOOT_CHROME=true`
-  - `DEFAULT_LAUNCH_ARGS=["--window-size=2560,1440","--user-data-dir=/data/browser-profile"]`
-  - bind mount `/home/moltis/.moltis/browser/profile/sandbox/browser-...:/data/browser-profile:rw`
-- on the host, `/home/moltis/.moltis/browser/profile/sandbox/...` is being auto-created as `root:root 755`, while the stock `browserless/chrome` image runs as `blessuser`; live Moltis readiness probes then loop on `Connection reset by peer (os error 104)` until the 60s browser timeout and the 30s agent timeout overlap
-- incident closure therefore requires a narrow browser-runtime carrier to `main`, not a direct feature-branch rollout and not a docs-only follow-up
+- the stock `browserless/chrome` image is healthy in isolation on the same host and successfully handles a root websocket request once it is given a writable browser profile bind
+- a same-host isolated repro with `DEFAULT_USER_DATA_DIR=/data/browser-profile` and a root-owned host bind reproduces the live blocker exactly:
+  - `Failed to create /data/browser-profile/SingletonLock: Permission denied (13)`
+  - websocket job closes early and matches the live `Connection reset by peer` readiness loop
+- the current production root cause is therefore the missing explicit `profile_dir` / shared host mount / permission prep, not the stock image itself
+- incident closure therefore requires a narrow browser-runtime carrier to `main` that prefers the official stock `browserless/chrome` image and lands the writable profile-dir contract through a canonical deploy from `main`
 
 The safe landing path for this Phase 5b work is:
 

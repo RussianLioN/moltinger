@@ -87,6 +87,64 @@ canonicalize_existing_path() {
     fi
 }
 
+toml_section_value() {
+    local toml_file="$1"
+    local section="$2"
+    local key="$3"
+
+    awk -v section="$section" -v key="$key" '
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
+
+        {
+            line = trim($0)
+        }
+
+        line == "[" section "]" {
+            in_section = 1
+            next
+        }
+
+        in_section && line ~ /^\[/ {
+            exit
+        }
+
+        in_section && line ~ ("^" key "[[:space:]]*=") {
+            value = line
+            sub("^[^=]+=[[:space:]]*", "", value)
+            sub(/[[:space:]]+#.*$/, "", value)
+            value = trim(value)
+
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+
+            print value
+            exit
+        }
+    ' "$toml_file"
+}
+
+dir_mode_allows_other_write_exec() {
+    local path="$1"
+    local mode last_digit
+
+    mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
+    if [[ -z "$mode" ]]; then
+        mode="$(stat -f '%Mp%Lp' "$path" 2>/dev/null || true)"
+    fi
+    [[ -n "$mode" ]] || return 1
+
+    last_digit="${mode: -1}"
+    [[ -n "$last_digit" ]] || return 1
+
+    (( (10#$last_digit & 2) == 2 && (10#$last_digit & 1) == 1 ))
+}
+
 read_env_file_value() {
     local env_file="$1"
     local key="$2"
@@ -417,6 +475,55 @@ if ! cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"; then
     fail_with "RUNTIME_CONFIG_FILE_MISMATCH" "Runtime moltis.toml diverges from tracked config/moltis.toml"
 fi
 
+BROWSER_SANDBOX_IMAGE="$(toml_section_value "$TRACKED_RUNTIME_TOML" "tools.browser" "sandbox_image" || true)"
+BROWSER_PROFILE_DIR="$(toml_section_value "$TRACKED_RUNTIME_TOML" "tools.browser" "profile_dir" || true)"
+BROWSER_PERSIST_PROFILE="$(toml_section_value "$TRACKED_RUNTIME_TOML" "tools.browser" "persist_profile" || true)"
+BROWSER_CONTAINER_HOST="$(toml_section_value "$TRACKED_RUNTIME_TOML" "tools.browser" "container_host" || true)"
+BROWSER_PROFILE_ROOT=""
+BROWSER_PROFILE_SOURCE=""
+BROWSER_PROFILE_RW=""
+BROWSER_PROFILE_ROOT_WRITABLE=""
+BROWSER_PROFILE_SHARED_WRITABLE=""
+
+if [[ -n "$BROWSER_PROFILE_DIR" ]]; then
+    BROWSER_PROFILE_ROOT="$(dirname "$BROWSER_PROFILE_DIR")"
+    BROWSER_PROFILE_MOUNT_DESTINATION="$BROWSER_PROFILE_ROOT"
+    EXPECTED_BROWSER_PROFILE_ROOT="$(canonicalize_existing_path "$BROWSER_PROFILE_ROOT" || printf '%s\n' "$BROWSER_PROFILE_ROOT")"
+    EXPECTED_BROWSER_PROFILE_SHARED_DIR="$(canonicalize_existing_path "$BROWSER_PROFILE_DIR" || printf '%s\n' "$BROWSER_PROFILE_DIR")"
+
+    BROWSER_PROFILE_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "$BROWSER_PROFILE_MOUNT_DESTINATION")"
+    if [[ -z "$BROWSER_PROFILE_SOURCE" ]]; then
+        fail_with "BROWSER_PROFILE_MOUNT_MISSING" "Moltis browser profile root '$BROWSER_PROFILE_MOUNT_DESTINATION' is not mounted into the live container"
+    fi
+    BROWSER_PROFILE_SOURCE="$(canonicalize_existing_path "$BROWSER_PROFILE_SOURCE" || printf '%s\n' "$BROWSER_PROFILE_SOURCE")"
+    if [[ "$BROWSER_PROFILE_SOURCE" != "$EXPECTED_BROWSER_PROFILE_ROOT" ]]; then
+        fail_with "BROWSER_PROFILE_SOURCE_MISMATCH" "Live browser profile source '$BROWSER_PROFILE_SOURCE' does not match tracked root '$EXPECTED_BROWSER_PROFILE_ROOT'"
+    fi
+
+    BROWSER_PROFILE_RW="$(container_mount_rw "$MOLTIS_CONTAINER" "$BROWSER_PROFILE_MOUNT_DESTINATION")"
+    if [[ "$BROWSER_PROFILE_RW" != "true" ]]; then
+        fail_with "BROWSER_PROFILE_MOUNT_NOT_WRITABLE" "Browser profile mount '$BROWSER_PROFILE_MOUNT_DESTINATION' must be writable"
+    fi
+
+    if [[ ! -d "$EXPECTED_BROWSER_PROFILE_ROOT" ]]; then
+        fail_with "BROWSER_PROFILE_ROOT_MISSING" "Tracked browser profile root is missing on the host: $EXPECTED_BROWSER_PROFILE_ROOT"
+    fi
+    if [[ ! -d "$EXPECTED_BROWSER_PROFILE_SHARED_DIR" ]]; then
+        fail_with "BROWSER_PROFILE_SHARED_DIR_MISSING" "Tracked browser shared profile dir is missing on the host: $EXPECTED_BROWSER_PROFILE_SHARED_DIR"
+    fi
+    if ! dir_mode_allows_other_write_exec "$EXPECTED_BROWSER_PROFILE_ROOT"; then
+        fail_with "BROWSER_PROFILE_ROOT_PERMISSION_MISMATCH" "Browser profile root '$EXPECTED_BROWSER_PROFILE_ROOT' is not writable/traversable for arbitrary non-root users"
+    fi
+    if ! dir_mode_allows_other_write_exec "$EXPECTED_BROWSER_PROFILE_SHARED_DIR"; then
+        fail_with "BROWSER_PROFILE_SHARED_PERMISSION_MISMATCH" "Browser shared profile dir '$EXPECTED_BROWSER_PROFILE_SHARED_DIR' is not writable/traversable for arbitrary non-root users"
+    fi
+
+    BROWSER_PROFILE_ROOT="$EXPECTED_BROWSER_PROFILE_ROOT"
+    BROWSER_PROFILE_DIR="$EXPECTED_BROWSER_PROFILE_SHARED_DIR"
+    BROWSER_PROFILE_ROOT_WRITABLE="true"
+    BROWSER_PROFILE_SHARED_WRITABLE="true"
+fi
+
 RUNTIME_HOME_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "/home/moltis/.moltis")"
 if [[ -z "$RUNTIME_HOME_SOURCE" ]]; then
     fail_with "RUNTIME_HOME_MOUNT_MISSING" "Moltis runtime home mount /home/moltis/.moltis is missing"
@@ -474,6 +581,15 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg runtime_config_rw "$RUNTIME_CONFIG_RW" \
         --arg tracked_runtime_toml "$TRACKED_RUNTIME_TOML" \
         --arg runtime_runtime_toml "$RUNTIME_RUNTIME_TOML" \
+        --arg browser_sandbox_image "$BROWSER_SANDBOX_IMAGE" \
+        --arg browser_profile_dir "$BROWSER_PROFILE_DIR" \
+        --arg browser_profile_root "$BROWSER_PROFILE_ROOT" \
+        --arg browser_profile_source "$BROWSER_PROFILE_SOURCE" \
+        --arg browser_profile_rw "$BROWSER_PROFILE_RW" \
+        --arg browser_persist_profile "$BROWSER_PERSIST_PROFILE" \
+        --arg browser_container_host "$BROWSER_CONTAINER_HOST" \
+        --arg browser_profile_root_writable "$BROWSER_PROFILE_ROOT_WRITABLE" \
+        --arg browser_profile_shared_writable "$BROWSER_PROFILE_SHARED_WRITABLE" \
         --arg expected_auth_provider "$EXPECTED_AUTH_PROVIDER" \
         --arg auth_status_valid "$AUTH_STATUS_VALID" \
         '{
@@ -504,6 +620,15 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             runtime_config_rw: (if $runtime_config_rw == "" then null else $runtime_config_rw end),
             tracked_runtime_toml: (if $tracked_runtime_toml == "" then null else $tracked_runtime_toml end),
             runtime_runtime_toml: (if $runtime_runtime_toml == "" then null else $runtime_runtime_toml end),
+            browser_sandbox_image: (if $browser_sandbox_image == "" then null else $browser_sandbox_image end),
+            browser_profile_dir: (if $browser_profile_dir == "" then null else $browser_profile_dir end),
+            browser_profile_root: (if $browser_profile_root == "" then null else $browser_profile_root end),
+            browser_profile_source: (if $browser_profile_source == "" then null else $browser_profile_source end),
+            browser_profile_rw: (if $browser_profile_rw == "" then null else $browser_profile_rw end),
+            browser_persist_profile: (if $browser_persist_profile == "" then null else $browser_persist_profile end),
+            browser_container_host: (if $browser_container_host == "" then null else $browser_container_host end),
+            browser_profile_root_writable: (if $browser_profile_root_writable == "" then null else ($browser_profile_root_writable == "true") end),
+            browser_profile_shared_writable: (if $browser_profile_shared_writable == "" then null else ($browser_profile_shared_writable == "true") end),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
             auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end)
           },
@@ -526,6 +651,15 @@ live_version=${LIVE_VERSION:-unknown}
 runtime_config_rw=${RUNTIME_CONFIG_RW:-unknown}
 tracked_runtime_toml=${TRACKED_RUNTIME_TOML:-unknown}
 runtime_runtime_toml=${RUNTIME_RUNTIME_TOML:-unknown}
+browser_sandbox_image=${BROWSER_SANDBOX_IMAGE:-none}
+browser_profile_dir=${BROWSER_PROFILE_DIR:-none}
+browser_profile_root=${BROWSER_PROFILE_ROOT:-none}
+browser_profile_source=${BROWSER_PROFILE_SOURCE:-none}
+browser_profile_rw=${BROWSER_PROFILE_RW:-unknown}
+browser_persist_profile=${BROWSER_PERSIST_PROFILE:-unknown}
+browser_container_host=${BROWSER_CONTAINER_HOST:-none}
+browser_profile_root_writable=${BROWSER_PROFILE_ROOT_WRITABLE:-skipped}
+browser_profile_shared_writable=${BROWSER_PROFILE_SHARED_WRITABLE:-skipped}
 expected_auth_provider=${EXPECTED_AUTH_PROVIDER:-none}
 auth_status_valid=${AUTH_STATUS_VALID:-skipped}
 EOF

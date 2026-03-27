@@ -95,7 +95,7 @@
 
 - [x] T070 Record the second browser root cause in tracked RCA/rules/runbook artifacts, including the answer to whether the failure came from ignoring official docs versus stopping after a partial contract fix
 - [x] T071 Audit the full browser/sandbox contract against official Moltis docs plus secondary browserless/Chromium bind-mount caveats: sandbox mode, Docker socket access, `container_host`, `sandbox_image`, `profile_dir`, `persist_profile`, writable host-visible profile storage, and end-to-end browser canary proof
-- [ ] T072 Extend deploy/runtime/browser proof so Docker/socket recovery is not treated as complete until writable browser-profile storage and a real `browser` navigation canary both pass
+- [x] T072 Extend deploy/runtime/browser proof so Docker/socket recovery is not treated as complete until writable browser-profile storage and a real `browser` navigation canary both pass
 - [x] T073 Verify additional adjacent timeout/activity-leak failure modes triggered by browser/search incidents and reconcile the authoritative Telegram/browser UAT contract accordingly
 - [x] T074 Preserve the browser/sandbox deploy checklist and new-instance lessons so future agent instances start from the complete contract rather than rediscovering the same drift
 - [x] T075 Prepare a minimal browser-runtime carrier for `main` from the audited 031 browser contract so production can be repaired through the canonical deploy path without dragging docs/process-only deltas

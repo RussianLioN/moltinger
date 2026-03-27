@@ -32,8 +32,6 @@ CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
 CANONICAL_MOLTIS_BROWSER_PROFILE_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_DIR:-/tmp/moltis-browser-profile}"
 CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR:-$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR/shared}"
-LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE="${LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE:-moltinger/browserless-chrome-no-preboot:local}"
-LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE="${LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE:-$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -1409,7 +1407,7 @@ prepull_moltis_browser_sandbox_image() {
         BEGIN {
             in_section = 0
             enabled = "true"
-            image = "moltinger/browserless-chrome-no-preboot:local"
+            image = "browserless/chrome"
         }
         /^\[tools\.browser\][[:space:]]*$/ {
             in_section = 1
@@ -1447,19 +1445,7 @@ prepull_moltis_browser_sandbox_image() {
     fi
 
     if [[ -z "$sandbox_image" || "$sandbox_image" == "null" ]]; then
-        sandbox_image="$LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE"
-    fi
-
-    if [[ "$sandbox_image" == "$LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE" ]]; then
-        if [[ ! -f "$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" ]]; then
-            log_error "Tracked Moltis browser sandbox Dockerfile is missing: $LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE"
-            return 1
-        fi
-
-        log_info "Building tracked Moltis browser sandbox image: $sandbox_image"
-        docker build -f "$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" -t "$sandbox_image" "$PROJECT_ROOT" >/dev/null
-        log_success "Tracked Moltis browser sandbox image ready: $sandbox_image"
-        return 0
+        sandbox_image="browserless/chrome"
     fi
 
     log_info "Pre-pulling Moltis browser sandbox image: $sandbox_image"

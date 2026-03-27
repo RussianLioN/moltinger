@@ -113,21 +113,11 @@ run_static_config_validation_tests() {
        rg -q 'prepare_moltis_browser_profile_dir' "$DEPLOY_SCRIPT" && \
        rg -q 'chmod 0777 "\$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "\$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"' "$DEPLOY_SCRIPT" && \
        rg -q 'prepull_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
-       rg -q 'LOCAL_MOLTIS_BROWSER_SANDBOX_IMAGE' "$DEPLOY_SCRIPT" && \
-       rg -q 'docker build -f "\$LOCAL_MOLTIS_BROWSER_SANDBOX_DOCKERFILE" -t "\$sandbox_image" "\$PROJECT_ROOT"' "$DEPLOY_SCRIPT" && \
-       rg -q '^sandbox_image = "moltinger/browserless-chrome-no-preboot:local"' "$TOML_CONFIG" && \
-       rg -q '^FROM browserless/chrome$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
-       rg -q '^ENV PREBOOT_CHROME=false$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
-       rg -q '^COPY docker/moltis-browser-sandbox/cdp-proxy\.mjs /usr/local/bin/cdp-proxy\.mjs$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
-       rg -q '^ENTRYPOINT \["/usr/local/bin/start-browserless-no-preboot.sh"\]$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/Dockerfile" && \
-       rg -q '^exec node /usr/local/bin/cdp-proxy\.mjs$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/start-browserless-no-preboot.sh" && \
-       rg -q '^function rewriteVersionPayload' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs" && \
-       rg -q '^function fetchActiveBrowserWsPath' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs" && \
-       rg -q '^function resolveUpstreamWebSocketPath' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs" && \
-       rg -q '^let cachedBrowserWsPath = null;$' "$PROJECT_ROOT/docker/moltis-browser-sandbox/cdp-proxy.mjs"; then
+       rg -q 'docker pull "\$sandbox_image"' "$DEPLOY_SCRIPT" && \
+       rg -q '^sandbox_image = "browserless/chrome"' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must pin the tracked browser CDP shim image, keep the shared profile_dir contract, keep persist_profile disabled, build the local shim image during deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must keep the shared profile_dir contract, keep persist_profile disabled, pre-pull the tracked browserless/chrome image, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
