@@ -44,6 +44,7 @@ report_db_path=""
 report_message=""
 report_notice=""
 report_bootstrap_source=""
+report_runtime_repair_mode=""
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -124,10 +125,12 @@ classify_state() {
   local active_migration_mode=""
   local has_local_runtime="false"
   local has_runtime_shell="false"
+  local runtime_probe_state="not_run"
 
   report_db_path="${db_path}"
   report_notice=""
   report_bootstrap_source=""
+  report_runtime_repair_mode=""
 
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
@@ -140,6 +143,10 @@ classify_state() {
     if [[ "${has_local_runtime}" != "true" && -d "${dolt_path}" ]]; then
       report_db_path="${dolt_path}"
     fi
+  fi
+  if [[ "${has_local_runtime}" == "true" ]]; then
+    beads_resolve_probe_local_runtime_health "${target_path}" || true
+    runtime_probe_state="${BEADS_RESOLVE_RUNTIME_PROBE_STATE:-not_run}"
   fi
 
   active_migration_mode="$(detect_active_migration_mode 2>/dev/null || true)"
@@ -181,14 +188,14 @@ classify_state() {
     return 0
   fi
 
-  if [[ -f "${config_path}" && -f "${issues_path}" && "${has_local_runtime}" == "true" ]]; then
+  if [[ -f "${config_path}" && -f "${issues_path}" && "${has_local_runtime}" == "true" && "${runtime_probe_state}" != "unhealthy" ]]; then
     report_state="current"
     report_action="none"
     report_message="This worktree already has localized Beads ownership."
     return 0
   fi
 
-  if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && ! -f "${issues_path}" ]]; then
+  if [[ -f "${config_path}" && "${has_local_runtime}" == "true" && "${runtime_probe_state}" != "unhealthy" && ! -f "${issues_path}" ]]; then
     report_state="post_migration_runtime_only"
     report_action="none"
     report_message="Tracked .beads/issues.jsonl is already retired for this worktree; use the local Beads runtime as the backlog source of truth."
@@ -199,17 +206,23 @@ classify_state() {
   if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
     report_state="runtime_bootstrap_required"
     report_action="stop_and_report"
+    report_runtime_repair_mode="bootstrap_only"
     report_message="Tracked .beads/issues.jsonl is already retired for this worktree, but the local Dolt-backed Beads runtime is incomplete."
     report_notice="Run /usr/local/bin/bd doctor --json first, then bd bootstrap. Do not restore JSONL."
     return 0
   fi
 
   if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
-    if [[ "${has_runtime_shell}" == "true" ]]; then
+    if [[ "${runtime_probe_state}" == "unhealthy" || "${has_runtime_shell}" == "true" ]]; then
       report_state="runtime_bootstrap_required"
       report_action="stop_and_report"
-      report_message="A local Dolt-backed Beads runtime shell exists, but the named 'beads' database is not materialized yet."
-      report_notice="Run /usr/local/bin/bd doctor --json first, then bd bootstrap. Do not rebuild from JSONL or restore retired tracker files."
+      report_runtime_repair_mode="rebuild_local_foundation"
+      if [[ "${runtime_probe_state}" == "unhealthy" ]]; then
+        report_message="A local named 'beads' database exists on disk, but plain bd cannot read it safely yet."
+      else
+        report_message="A local Dolt-backed Beads runtime shell exists, but the named 'beads' database is not materialized yet."
+      fi
+      report_notice="Run ./scripts/beads-worktree-localize.sh --path . to quarantine the partial runtime, bootstrap a fresh named DB, and reimport the tracked local backlog."
       return 0
     fi
 
@@ -259,6 +272,7 @@ materialize_local_db() {
   local recovery_path=""
   local timestamp=""
   local artifact=""
+  local runtime_probe_state="not_run"
   local -a stale_runtime_artifacts=(
     "metadata.json"
     "interactions.jsonl"
@@ -272,8 +286,14 @@ materialize_local_db() {
     system_bd="$(beads_resolve_find_system_bd "${REPO_ROOT}/bin/bd")" || die "Could not locate the system bd binary"
   fi
 
-  if [[ ! -d "${dolt_path}/beads" && ! -d "${dolt_path}/beads/.dolt" ]] && \
-     [[ -d "${dolt_path}" || -e "${beads_dir}/metadata.json" || -e "${beads_dir}/interactions.jsonl" ]]; then
+  if beads_resolve_has_local_runtime "${beads_dir}"; then
+    beads_resolve_probe_local_runtime_health "${target_path}" || true
+    runtime_probe_state="${BEADS_RESOLVE_RUNTIME_PROBE_STATE:-not_run}"
+  fi
+
+  if [[ "${runtime_probe_state}" == "unhealthy" ]] || \
+     ([[ ! -d "${dolt_path}/beads" && ! -d "${dolt_path}/beads/.dolt" ]] && \
+      [[ -d "${dolt_path}" || -e "${beads_dir}/metadata.json" || -e "${beads_dir}/interactions.jsonl" ]]); then
     timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
     recovery_path="${recovery_dir}/runtime-pre-init-${timestamp}"
     mkdir -p "${recovery_path}"
@@ -306,7 +326,11 @@ localize_state() {
       return 0
       ;;
     runtime_bootstrap_required)
-      return 1
+      if [[ "${report_runtime_repair_mode}" == "rebuild_local_foundation" ]]; then
+        materialize_local_db
+      else
+        return 1
+      fi
       ;;
     migratable_legacy)
       rm -f "${redirect_path}"
@@ -344,6 +368,7 @@ render_env() {
   printf 'message=%q\n' "${report_message}"
   printf 'notice=%q\n' "${report_notice}"
   printf 'bootstrap_source=%q\n' "${report_bootstrap_source}"
+  printf 'runtime_repair_mode=%q\n' "${report_runtime_repair_mode}"
 }
 
 render_human() {
@@ -354,6 +379,9 @@ render_human() {
   printf 'Message: %s\n' "${report_message}"
   if [[ -n "${report_bootstrap_source}" ]]; then
     printf 'Bootstrap Source: %s\n' "${report_bootstrap_source}"
+  fi
+  if [[ -n "${report_runtime_repair_mode}" ]]; then
+    printf 'Runtime Repair Mode: %s\n' "${report_runtime_repair_mode}"
   fi
   if [[ -n "${report_notice}" ]]; then
     printf 'Notice: %s\n' "${report_notice}"
@@ -366,7 +394,7 @@ main() {
   classify_state
 
   if [[ "${check_only}" != "true" ]]; then
-    if [[ "${report_action}" == "stop_and_report" ]]; then
+    if [[ "${report_action}" == "stop_and_report" && "${report_runtime_repair_mode}" != "rebuild_local_foundation" ]]; then
       render_human >&2
       exit 23
     fi

@@ -45,8 +45,18 @@ fi
 
 if [[ "${args[0]:-}" == "import" ]]; then
   mkdir -p ".beads/dolt/beads/.dolt"
+  rm -f ".beads/dolt/beads/.fake-broken"
   : > ".beads/last-touched"
   printf 'IMPORTED=%s\n' "${args[1]:-}"
+  exit 0
+fi
+
+if [[ "${args[0]:-}" == "status" ]]; then
+  if [[ -e ".beads/dolt/beads/.fake-broken" ]]; then
+    printf 'Error: failed to open database: failed to initialize schema: failed to run dolt migrations: dolt migration "uuid_primary_keys" failed: migrate events to UUID PK: check column type: Error 1105 (HY000): no root value found in session\n' >&2
+    exit 1
+  fi
+  printf 'STATUS_OK\n'
   exit 0
 fi
 
@@ -146,6 +156,21 @@ EOF
 EOF
 }
 
+seed_unhealthy_named_runtime_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/dolt/beads/.dolt"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+    cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+    : > "${worktree_dir}/.beads/metadata.json"
+    : > "${worktree_dir}/.beads/dolt/beads/.fake-broken"
+}
+
 run_plain_bd() {
     local worktree_dir="$1"
     local fake_bin="$2"
@@ -197,6 +222,15 @@ assert_named_beads_runtime_present() {
     fi
     if [[ ! -f "${worktree_path}/.beads/last-touched" ]]; then
         test_fail "${message} (missing import marker)"
+    fi
+}
+
+assert_runtime_quarantine_present() {
+    local worktree_path="$1"
+    local message="$2"
+
+    if ! find "${worktree_path}/.beads/recovery" -maxdepth 2 -type d -name 'runtime-pre-init-*' | grep -q .; then
+        test_fail "${message} (missing runtime recovery backup)"
     fi
 }
 
@@ -575,8 +609,8 @@ test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state()
     test_pass
 }
 
-test_plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance() {
-    test_start "plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance"
+test_plain_bd_blocks_broken_runtime_shell_with_localize_guidance() {
+    test_start "plain_bd_blocks_broken_runtime_shell_with_localize_guidance"
 
     local fixture_root repo_dir worktree_path fake_bin output rc
     fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
@@ -597,7 +631,7 @@ test_plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance() {
 
     assert_eq "25" "${rc}" "Runtime shell without a named beads DB must fail closed even when tracked JSONL still exists"
     assert_contains "${output}" "named 'beads' database is not materialized yet" "Dispatch must describe the missing named DB explicitly"
-    assert_contains "${output}" "bd bootstrap" "Dispatch must point operators to bootstrap repair for broken runtime shells"
+    assert_contains "${output}" "beads-worktree-localize.sh --path" "Dispatch must point operators to localized runtime rebuild when tracked foundation exists"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -626,7 +660,8 @@ test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell() {
     assert_eq "23" "${rc}" "Localization helper must stop and report when a named DB is missing behind a Dolt runtime shell"
     assert_contains "${output}" "State: runtime_bootstrap_required" "Localization helper must expose runtime_bootstrap_required for broken runtime shells"
     assert_contains "${output}" "named 'beads' database is not materialized yet" "Localization helper must explain the named DB problem directly"
-    assert_contains "${output}" "bd bootstrap" "Localization helper must route broken runtime shells to bootstrap recovery"
+    assert_contains "${output}" "Runtime Repair Mode: rebuild_local_foundation" "Localization helper must expose the repairable rebuild mode for tracked foundation states"
+    assert_contains "${output}" "beads-worktree-localize.sh --path ." "Localization helper must route broken runtime shells to the in-place rebuild helper"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -708,10 +743,10 @@ test_localize_bootstraps_missing_foundation_from_source_ref() {
     test_pass
 }
 
-test_localize_blocks_stale_dolt_shell_and_routes_to_bootstrap() {
-    test_start "localize_blocks_stale_dolt_shell_and_routes_to_bootstrap"
+test_localize_repairs_stale_dolt_shell_by_rebuilding_local_runtime() {
+    test_start "localize_repairs_stale_dolt_shell_by_rebuilding_local_runtime"
 
-    local fixture_root repo_dir worktree_path fake_bin output rc
+    local fixture_root repo_dir worktree_path fake_bin output
     fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     seed_repo_local_bd_tools "${repo_dir}"
@@ -723,17 +758,65 @@ test_localize_blocks_stale_dolt_shell_and_routes_to_bootstrap() {
     : > "${worktree_path}/.beads/metadata.json"
     fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
 
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: current" "Localization should converge stale Dolt shells to a healthy localized state"
+    assert_named_beads_runtime_present "${worktree_path}" "Localization should rebuild stale runtime shells in place"
+    assert_runtime_quarantine_present "${worktree_path}" "Localization should preserve the stale runtime shell in recovery before rebuilding"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_blocks_unhealthy_named_runtime_with_localize_guidance() {
+    test_start "plain_bd_blocks_unhealthy_named_runtime_with_localize_guidance"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-unhealthy-named-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/unhealthy-named-runtime" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_unhealthy_named_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
     output="$(
         set +e
-        run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}" 2>&1
+        run_plain_bd "${worktree_path}" "${fake_bin}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
 
-    assert_eq "23" "${rc}" "Localization must fail closed when a stale Dolt shell hides a missing named beads DB"
-    assert_contains "${output}" "State: runtime_bootstrap_required" "Localization must classify stale shells as runtime_bootstrap_required"
-    assert_contains "${output}" "named 'beads' database is not materialized yet" "Localization must explain the missing named DB directly"
-    assert_contains "${output}" "bd bootstrap" "Localization must route stale-shell repair through bootstrap"
+    assert_eq "25" "${rc}" "Partially materialized named DBs must fail closed instead of passing through to plain bd"
+    assert_contains "${output}" "plain bd cannot read it safely yet" "Dispatch must explain that the local runtime exists but is unhealthy"
+    assert_contains "${output}" "beads-worktree-localize.sh --path" "Dispatch must route unhealthy named DBs through localized rebuild"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_rebuilds_unhealthy_named_runtime_in_place() {
+    test_start "localize_rebuilds_unhealthy_named_runtime_in_place"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-unhealthy-runtime-localize"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/unhealthy-runtime-localize" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_unhealthy_named_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: current" "Localization should converge unhealthy named DBs to a healthy localized state"
+    assert_named_beads_runtime_present "${worktree_path}" "Localization should reimport the tracked backlog after unhealthy runtime repair"
+    assert_runtime_quarantine_present "${worktree_path}" "Localization should quarantine the unhealthy runtime before rebuilding"
+    if [[ -e "${worktree_path}/.beads/dolt/beads/.fake-broken" ]]; then
+        test_fail "Localization should remove the unhealthy named DB marker during rebuild"
+    fi
 
     rm -rf "${fixture_root}"
     test_pass
@@ -765,11 +848,13 @@ run_all_tests() {
     test_localize_recognizes_post_migration_runtime_only_state
     test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state
-    test_plain_bd_blocks_broken_runtime_shell_with_bootstrap_guidance
+    test_plain_bd_blocks_broken_runtime_shell_with_localize_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell
     test_localize_materializes_local_db_and_removes_redirect
     test_localize_bootstraps_missing_foundation_from_source_ref
-    test_localize_blocks_stale_dolt_shell_and_routes_to_bootstrap
+    test_localize_repairs_stale_dolt_shell_by_rebuilding_local_runtime
+    test_plain_bd_blocks_unhealthy_named_runtime_with_localize_guidance
+    test_localize_rebuilds_unhealthy_named_runtime_in_place
     generate_report
 }
 
