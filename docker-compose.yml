@@ -56,6 +56,8 @@ services:
     # SECURITY: privileged mode required for Docker-in-Docker sandbox execution
     # See SECURITY NOTICE above for details
     privileged: true
+    group_add:
+      - "${DOCKER_SOCKET_GID:-999}"
     networks:
       - ainetic_net
 
@@ -71,6 +73,8 @@ services:
       - ./data:/home/moltis/.moltis
       # Docker socket for sandbox execution (WARNING: root access)
       - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     environment:
       <<: *common-env

@@ -247,8 +247,11 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
        ! grep -Fq "/server mount is missing" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "/server/skills" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "MOLTIS_RUNTIME_CONFIG_DIR" "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq "provider_keys.json.tmp.contract-check" "$PROJECT_ROOT/scripts/deploy.sh"; then
-        test_fail "deploy.sh must verify /server visibility, runtime config mount source, and writable runtime config behavior for Moltis"
+       ! grep -Fq "provider_keys.json.tmp.contract-check" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "DOCKER_SOCKET_GID" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "mounted docker.sock gid is not present" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "host.docker.internal is not mapped" "$PROJECT_ROOT/scripts/deploy.sh"; then
+        test_fail "deploy.sh must verify /server visibility, runtime config mount source, writable runtime config behavior, and the browser sandbox Docker contract for Moltis"
         return
     fi
 

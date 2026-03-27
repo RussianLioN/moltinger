@@ -101,6 +101,19 @@ run_static_config_validation_tests() {
         test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for live skill visibility"
     fi
 
+    test_start "static_moltis_browser_docker_contract_declares_host_gateway_and_socket_gid_alignment"
+    if rg -q 'group_add:' "$COMPOSE_PROD" && \
+       rg -q 'DOCKER_SOCKET_GID' "$COMPOSE_PROD" && \
+       rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
+       rg -q 'group_add:' "$PROJECT_ROOT/docker-compose.yml" && \
+       rg -q 'DOCKER_SOCKET_GID' "$PROJECT_ROOT/docker-compose.yml" && \
+       rg -q 'host\.docker\.internal:host-gateway' "$PROJECT_ROOT/docker-compose.yml" && \
+       rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Moltis browser Docker contract must align docker.sock gid access, provide host-gateway routing, and pin container_host away from 127.0.0.1"
+    fi
+
     test_start "static_compose_clawdiy_valid"
     if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass
@@ -137,6 +150,13 @@ PY
         test_pass
     else
         test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
+    fi
+
+    test_start "static_browser_config_declares_container_host_for_docker_runtime"
+    if rg -Fq 'container_host = "host.docker.internal"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis browser config must declare host-gateway container_host when Moltis itself runs in Docker"
     fi
 
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
@@ -184,6 +204,16 @@ PY
         test_pass
     else
         test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches"
+    fi
+
+    test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"
+    if rg -Fq 'BROWSER_DOCKER_SOCKET_GID_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_CONTAINER_HOST_INVALID' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'read_toml_key' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'DOCKER_SOCKET_GID' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Runtime attestation and deploy control plane must guard the Docker browser sandbox contract before production traffic hits Telegram"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"

@@ -19,6 +19,14 @@ MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CAN
 AUTH_PROVIDER_CANARY_PROMPT="${AUTH_PROVIDER_CANARY_PROMPT:-Reply with exactly OK and nothing else.}"
 AUTH_PROVIDER_CANARY_WAIT_MS="${AUTH_PROVIDER_CANARY_WAIT_MS:-3000}"
 AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS="${AUTH_PROVIDER_CANARY_TIMEOUT_SECONDS:-25}"
+BROWSER_ENABLED=""
+BROWSER_SANDBOX_IMAGE=""
+BROWSER_CONTAINER_HOST=""
+DOCKER_SOCKET_SOURCE=""
+DOCKER_SOCKET_GID=""
+DOCKER_SOCKET_MODE=""
+CONTAINER_GROUP_IDS=""
+HOST_DOCKER_INTERNAL_MAPPED=""
 
 timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -89,6 +97,32 @@ canonicalize_existing_path() {
             printf '%s/%s\n' "$(pwd -P)" "$(basename "$path")"
         )
     fi
+}
+
+read_toml_key() {
+    local toml_file="$1"
+    local section="$2"
+    local key="$3"
+
+    [[ -f "$toml_file" ]] || return 1
+
+    awk -v section="$section" -v key="$key" '
+        BEGIN { in_section = 0 }
+        /^[[:space:]]*\[/ {
+            in_section = ($0 == section)
+            next
+        }
+        in_section && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub("^[^=]+=[[:space:]]*", "", line)
+            gsub(/^"/, "", line)
+            gsub(/"$/, "", line)
+            print line
+            exit
+        }
+    ' "$toml_file"
 }
 
 read_env_file_value() {
@@ -209,6 +243,34 @@ container_mount_rw() {
     docker inspect "$container" 2>/dev/null | \
         jq -r --arg destination "$destination" '.[0].Mounts[]? | select(.Destination == $destination) | .RW' | \
         head -n 1
+}
+
+container_exec_shell() {
+    local command="$1"
+    docker exec "$MOLTIS_CONTAINER" sh -lc "$command" 2>/dev/null || true
+}
+
+container_exec_ok() {
+    local command="$1"
+    docker exec "$MOLTIS_CONTAINER" sh -lc "$command" >/dev/null 2>&1
+}
+
+browser_contract_required() {
+    [[ "$BROWSER_ENABLED" == "true" && -n "$BROWSER_SANDBOX_IMAGE" ]]
+}
+
+container_group_has_gid() {
+    local groups="$1"
+    local gid="$2"
+    local group_id
+
+    for group_id in $groups; do
+        if [[ "$group_id" == "$gid" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 container_state() {
@@ -522,6 +584,40 @@ if ! cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"; then
     fail_with "RUNTIME_CONFIG_FILE_MISMATCH" "Runtime moltis.toml diverges from tracked config/moltis.toml"
 fi
 
+BROWSER_ENABLED="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "enabled" || true)"
+BROWSER_SANDBOX_IMAGE="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "sandbox_image" || true)"
+BROWSER_CONTAINER_HOST="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "container_host" || true)"
+
+if browser_contract_required; then
+    DOCKER_SOCKET_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "/var/run/docker.sock")"
+    if [[ -z "$DOCKER_SOCKET_SOURCE" ]]; then
+        fail_with "BROWSER_DOCKER_SOCKET_MOUNT_MISSING" "Browser sandbox requires /var/run/docker.sock to be mounted into the Moltis container"
+    fi
+
+    if [[ -z "$BROWSER_CONTAINER_HOST" || "$BROWSER_CONTAINER_HOST" == "127.0.0.1" || "$BROWSER_CONTAINER_HOST" == "localhost" ]]; then
+        fail_with "BROWSER_CONTAINER_HOST_INVALID" "Browser sandbox requires tools.browser.container_host to point to the host gateway when Moltis itself runs in Docker"
+    fi
+
+    CONTAINER_GROUP_IDS="$(container_exec_shell 'id -G')"
+    DOCKER_SOCKET_GID="$(container_exec_shell 'stat -c "%g" /var/run/docker.sock')"
+    DOCKER_SOCKET_MODE="$(container_exec_shell 'stat -c "%a" /var/run/docker.sock')"
+
+    if [[ -z "$CONTAINER_GROUP_IDS" || -z "$DOCKER_SOCKET_GID" ]]; then
+        fail_with "BROWSER_DOCKER_SOCKET_METADATA_MISSING" "Browser sandbox contract could not read docker socket ownership metadata from the live container"
+    fi
+
+    if ! container_group_has_gid "$CONTAINER_GROUP_IDS" "$DOCKER_SOCKET_GID"; then
+        fail_with "BROWSER_DOCKER_SOCKET_GID_MISMATCH" "Browser sandbox docker.sock gid '$DOCKER_SOCKET_GID' is not present in the live Moltis process groups '$CONTAINER_GROUP_IDS'"
+    fi
+
+    if [[ "$BROWSER_CONTAINER_HOST" == "host.docker.internal" ]]; then
+        if ! container_exec_ok 'grep -Eq "(^|[[:space:]])host\.docker\.internal([[:space:]]|$)" /etc/hosts'; then
+            fail_with "BROWSER_CONTAINER_HOST_MAPPING_MISSING" "tools.browser.container_host points to host.docker.internal but the hostname is not mapped inside the live Moltis container"
+        fi
+        HOST_DOCKER_INTERNAL_MAPPED="true"
+    fi
+fi
+
 RUNTIME_HOME_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "/home/moltis/.moltis")"
 if [[ -z "$RUNTIME_HOME_SOURCE" ]]; then
     fail_with "RUNTIME_HOME_MOUNT_MISSING" "Moltis runtime home mount /home/moltis/.moltis is missing"
@@ -600,6 +696,14 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg runtime_config_rw "$RUNTIME_CONFIG_RW" \
         --arg tracked_runtime_toml "$TRACKED_RUNTIME_TOML" \
         --arg runtime_runtime_toml "$RUNTIME_RUNTIME_TOML" \
+        --arg browser_enabled "$BROWSER_ENABLED" \
+        --arg browser_sandbox_image "$BROWSER_SANDBOX_IMAGE" \
+        --arg browser_container_host "$BROWSER_CONTAINER_HOST" \
+        --arg docker_socket_source "$DOCKER_SOCKET_SOURCE" \
+        --arg docker_socket_gid "$DOCKER_SOCKET_GID" \
+        --arg docker_socket_mode "$DOCKER_SOCKET_MODE" \
+        --arg container_group_ids "$CONTAINER_GROUP_IDS" \
+        --arg host_docker_internal_mapped "$HOST_DOCKER_INTERNAL_MAPPED" \
         --arg expected_auth_provider "$EXPECTED_AUTH_PROVIDER" \
         --arg auth_status_raw "$AUTH_STATUS_RAW" \
         --arg auth_status_post_canary "$AUTH_STATUS_POST_CANARY" \
@@ -635,6 +739,14 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             runtime_config_rw: (if $runtime_config_rw == "" then null else $runtime_config_rw end),
             tracked_runtime_toml: (if $tracked_runtime_toml == "" then null else $tracked_runtime_toml end),
             runtime_runtime_toml: (if $runtime_runtime_toml == "" then null else $runtime_runtime_toml end),
+            browser_enabled: (if $browser_enabled == "" then null else ($browser_enabled == "true") end),
+            browser_sandbox_image: (if $browser_sandbox_image == "" then null else $browser_sandbox_image end),
+            browser_container_host: (if $browser_container_host == "" then null else $browser_container_host end),
+            docker_socket_source: (if $docker_socket_source == "" then null else $docker_socket_source end),
+            docker_socket_gid: (if $docker_socket_gid == "" then null else $docker_socket_gid end),
+            docker_socket_mode: (if $docker_socket_mode == "" then null else $docker_socket_mode end),
+            container_group_ids: (if $container_group_ids == "" then null else ($container_group_ids | split(" ")) end),
+            host_docker_internal_mapped: (if $host_docker_internal_mapped == "" then null else ($host_docker_internal_mapped == "true") end),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
             auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
             auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
@@ -662,6 +774,14 @@ live_version=${LIVE_VERSION:-unknown}
 runtime_config_rw=${RUNTIME_CONFIG_RW:-unknown}
 tracked_runtime_toml=${TRACKED_RUNTIME_TOML:-unknown}
 runtime_runtime_toml=${RUNTIME_RUNTIME_TOML:-unknown}
+browser_enabled=${BROWSER_ENABLED:-unknown}
+browser_sandbox_image=${BROWSER_SANDBOX_IMAGE:-none}
+browser_container_host=${BROWSER_CONTAINER_HOST:-none}
+docker_socket_source=${DOCKER_SOCKET_SOURCE:-none}
+docker_socket_gid=${DOCKER_SOCKET_GID:-none}
+docker_socket_mode=${DOCKER_SOCKET_MODE:-none}
+container_group_ids=${CONTAINER_GROUP_IDS:-none}
+host_docker_internal_mapped=${HOST_DOCKER_INTERNAL_MAPPED:-false}
 expected_auth_provider=${EXPECTED_AUTH_PROVIDER:-none}
 auth_status_raw=${AUTH_STATUS_RAW:-none}
 auth_status_post_canary=${AUTH_STATUS_POST_CANARY:-none}

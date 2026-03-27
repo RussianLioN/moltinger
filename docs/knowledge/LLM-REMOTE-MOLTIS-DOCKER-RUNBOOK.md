@@ -304,6 +304,39 @@ Fix:
 - inspect `docker logs moltis` before changing Traefik
 - do not guess at websocket headers first
 
+### Symptom: Browser tool fails with `failed to pull browser image` or Docker `permission denied`
+
+Likely cause:
+
+- `/var/run/docker.sock` is mounted, but the live Moltis process does not have the
+  socket's numeric GID in its supplementary groups
+- or containerized Moltis is still trying to reach sibling browser containers via
+  loopback instead of the host gateway
+
+Inspect:
+
+```bash
+docker inspect moltis --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+docker exec moltis sh -lc 'id -G && stat -c "%g %a" /var/run/docker.sock'
+docker exec moltis sh -lc 'grep host.docker.internal /etc/hosts || true'
+docker exec moltis sh -lc 'sed -n "470,505p" /home/moltis/.config/moltis/moltis.toml'
+```
+
+Fix:
+
+- ensure compose passes `group_add` with the real host `docker.sock` GID
+- ensure deploy-time `DOCKER_SOCKET_GID` comes from `stat -c %g /var/run/docker.sock`
+- ensure `tools.browser.container_host` is not left at loopback for a Dockerized
+  Moltis runtime
+- ensure the container maps `host.docker.internal:host-gateway`
+
+Why this matters:
+
+- the official Moltis browser docs require sibling-container routing when Moltis
+  runs inside Docker
+- Docker socket access is controlled by numeric UID/GID, not the textual group name
+  shown inside the container
+
 ## Anti-Patterns
 
 Do not do any of the following:

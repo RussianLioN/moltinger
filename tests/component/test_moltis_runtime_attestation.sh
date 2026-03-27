@@ -76,6 +76,28 @@ case "${1:-}" in
       read_auth_status
       exit 0
     fi
+    if [[ "${1:-}" == "moltis" && "${2:-}" == "sh" && "${3:-}" == "-lc" ]]; then
+      case "${4:-}" in
+        'id -G')
+          printf '%s\n' "${FAKE_CONTAINER_GROUP_IDS:-1001 999}"
+          exit 0
+          ;;
+        'stat -c "%g" /var/run/docker.sock')
+          printf '%s\n' "${FAKE_DOCKER_SOCKET_GID:-999}"
+          exit 0
+          ;;
+        'stat -c "%a" /var/run/docker.sock')
+          printf '%s\n' "${FAKE_DOCKER_SOCKET_MODE:-660}"
+          exit 0
+          ;;
+        'grep -Eq "(^|[[:space:]])host\.docker\.internal([[:space:]]|$)" /etc/hosts')
+          if [[ "${FAKE_HOST_DOCKER_INTERNAL_MAPPED:-true}" == "true" ]]; then
+            exit 0
+          fi
+          exit 1
+          ;;
+      esac
+    fi
     printf 'unsupported docker exec invocation: %s\n' "$*" >&2
     exit 1
     ;;
@@ -157,6 +179,11 @@ create_workspace_fixture() {
 provider = "ollama"
 base_url = "http://ollama:11434"
 model = "nomic-embed-text"
+
+[tools.browser]
+enabled = true
+sandbox_image = "browserless/chrome"
+container_host = "host.docker.internal"
 EOF
     git -C "$workspace_root" add runtime.txt
     git -C "$workspace_root" add config/moltis.toml
@@ -206,11 +233,13 @@ EOF
     "Mounts": [
       {"Destination": "/server", "Source": "$workspace_root", "RW": false},
       {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
-      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true},
+      {"Destination": "/var/run/docker.sock", "Source": "$fixture_root/docker.sock", "RW": false}
     ]
   }
 ]
 EOF
+    : >"$fixture_root/docker.sock"
 
     test_start "component_runtime_attestation_succeeds_for_live_provenance_contract"
     if ! PATH="$fake_bin:$PATH" \
@@ -240,10 +269,43 @@ EOF
        [[ "$(jq -r '.details.runtime_config_rw' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.tracked_runtime_toml' "$output_json")" != "$workspace_root_canonical/config/moltis.toml" ]] || \
        [[ "$(jq -r '.details.runtime_runtime_toml' "$output_json")" != "$runtime_config_dir_canonical/moltis.toml" ]] || \
+       [[ "$(jq -r '.details.browser_enabled' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.browser_sandbox_image' "$output_json")" != "browserless/chrome" ]] || \
+       [[ "$(jq -r '.details.browser_container_host' "$output_json")" != "host.docker.internal" ]] || \
+       [[ "$(jq -r '.details.docker_socket_gid' "$output_json")" != "999" ]] || \
+       [[ "$(jq -r '.details.host_docker_internal_mapped' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "status" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_runtime_attestation_fails_when_browser_socket_gid_mismatches_live_groups"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        FAKE_CONTAINER_GROUP_IDS="1001 1000" \
+        FAKE_DOCKER_SOCKET_GID="999" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-browser-gid.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "BROWSER_DOCKER_SOCKET_GID_MISMATCH")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when the docker.sock gid is not present in the live Moltis process groups"
         rm -rf "$fixture_root"
         return
     fi
@@ -285,7 +347,8 @@ EOF
     "Mounts": [
       {"Destination": "/server", "Source": "$fixture_root/untracked-root", "RW": false},
       {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
-      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true},
+      {"Destination": "/var/run/docker.sock", "Source": "$fixture_root/docker.sock", "RW": false}
     ]
   }
 ]
@@ -324,7 +387,8 @@ EOF
     "Mounts": [
       {"Destination": "/server", "Source": "$workspace_root", "RW": false},
       {"Destination": "/home/moltis/.config/moltis", "Source": "$runtime_config_dir", "RW": true},
-      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true}
+      {"Destination": "/home/moltis/.moltis", "Source": "$runtime_home_dir", "RW": true},
+      {"Destination": "/var/run/docker.sock", "Source": "$fixture_root/docker.sock", "RW": false}
     ]
   }
 ]
