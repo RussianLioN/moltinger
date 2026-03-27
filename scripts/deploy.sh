@@ -31,6 +31,7 @@ MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CAN
 MOLTIS_REPO_SKILLS_SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills}"
 MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
 MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-/home/moltis/.moltis/.repo-managed-skills.txt}"
+MOLTIS_STOP_TIMEOUT_SECONDS="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -859,6 +860,54 @@ resolve_container_name_conflicts() {
     done < <(managed_container_names_for_target)
 }
 
+prepare_moltis_container_for_rollout() {
+    local stop_timeout="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
+    local container_id=""
+
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    if [[ ! "$stop_timeout" =~ ^[0-9]+$ ]] || (( stop_timeout < 1 )); then
+        log_error "MOLTIS_STOP_TIMEOUT_SECONDS must be a positive integer; got '$stop_timeout'"
+        exit 2
+    fi
+
+    container_id="$(docker ps -aq --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
+    [[ -n "$container_id" ]] || return 0
+
+    if docker ps -q --filter "id=$container_id" | grep -q .; then
+        log_json_stderr INFO "Stopping existing Moltis container '$TARGET_CONTAINER' with ${stop_timeout}s grace before rollout"
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            if ! docker stop --time "$stop_timeout" "$TARGET_CONTAINER" 1>&2; then
+                log_error "Failed to stop existing Moltis container: $TARGET_CONTAINER"
+                exit 1
+            fi
+        else
+            if ! docker stop --time "$stop_timeout" "$TARGET_CONTAINER"; then
+                log_error "Failed to stop existing Moltis container: $TARGET_CONTAINER"
+                exit 1
+            fi
+        fi
+    fi
+
+    container_id="$(docker ps -aq --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
+    [[ -n "$container_id" ]] || return 0
+
+    log_json_stderr INFO "Removing existing Moltis container '$TARGET_CONTAINER' before rollout"
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        if ! docker rm -f "$TARGET_CONTAINER" 1>&2; then
+            log_error "Failed to remove existing Moltis container: $TARGET_CONTAINER"
+            exit 1
+        fi
+    else
+        if ! docker rm -f "$TARGET_CONTAINER"; then
+            log_error "Failed to remove existing Moltis container: $TARGET_CONTAINER"
+            exit 1
+        fi
+    fi
+}
+
 ensure_clawdiy_runtime_paths() {
     local required_paths=(
         "$PROJECT_ROOT/data/clawdiy"
@@ -1334,6 +1383,9 @@ deploy_containers() {
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
         # changes must force a recreate to avoid stale live state.
+        # Pre-stop/remove the fixed-name container to avoid compose recreate
+        # races when Moltis takes longer than Docker's default 10s stop grace.
+        prepare_moltis_container_for_rollout
         deploy_args+=(--force-recreate)
     fi
 

@@ -123,9 +123,14 @@ If the feature targets another version, replace the tag, but still pull it expli
 
 ## 6. Recreate the live container with the explicit version
 
+Do not rely on raw `up --force-recreate` against the existing fixed-name container.  
+First stop it with an extended grace window, then remove it, then create the new one:
+
 ```bash
 cd /opt/moltinger-active
-MOLTIS_VERSION=0.10.18 docker compose -p moltinger -f docker-compose.prod.yml up -d --force-recreate --no-deps moltis
+docker stop --time 45 moltis || true
+docker rm -f moltis || true
+MOLTIS_VERSION=0.10.18 docker compose -p moltinger -f docker-compose.prod.yml up -d --no-deps moltis
 ```
 
 Then verify immediately:

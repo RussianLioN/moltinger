@@ -496,11 +496,24 @@ PY
     test_start "static_deploy_script_scopes_moltis_rollout_to_core_and_sidecars"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        rg -Fq 'TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'prepare_moltis_container_for_rollout' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'docker stop --time "$stop_timeout" "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'docker rm -f "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'deploy_args+=(--force-recreate)' "$DEPLOY_SCRIPT" && \
        rg -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Moltis deploy path must target only moltis + required sidecars and force-recreate the runtime so config changes take effect immediately"
+        test_fail "Moltis deploy path must target only moltis + required sidecars, pre-stop/remove the fixed-name Moltis container, and then force-recreate the runtime so config changes take effect immediately"
+    fi
+
+    test_start "static_moltis_compose_uses_extended_stop_grace_period"
+    if [[ -f "$PROJECT_ROOT/docker-compose.prod.yml" ]] && \
+       [[ -f "$PROJECT_ROOT/docker-compose.yml" ]] && \
+       rg -Fq 'stop_grace_period: 45s' "$PROJECT_ROOT/docker-compose.prod.yml" && \
+       rg -Fq 'stop_grace_period: 45s' "$PROJECT_ROOT/docker-compose.yml"; then
+        test_pass
+    else
+        test_fail "Moltis compose files must grant Moltis a longer stop_grace_period so deploys do not depend on Docker's 10s default stop timeout"
     fi
 
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
