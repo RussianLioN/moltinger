@@ -74,26 +74,32 @@ ssh root@ainetic.tech '
 Observed:
 
 - stock `browserless/chrome` was healthy in isolation
-- `/json/version` returned a root websocket URL:
-  - `ws://127.0.0.1:<port>`
 
-### 5. Hermetic local check for the tracked shim image
+### 5. Same-host check for the writable-profile boundary
+
+Run the stock image twice:
+
+1. with a root-owned host bind mounted into `/data/browser-profile`
+2. with a writable host bind mounted into `/data/browser-profile`
+
+Observed:
+
+- the root-owned bind reproduced the browser-profile failure boundary (`SingletonLock: Permission denied`)
+- the writable bind succeeded on the same host with the same stock image
+
+### 6. Confirm the current carrier surface in this branch
 
 ```bash
-docker build -f docker/moltis-browser-sandbox/Dockerfile \
-  -t moltinger/browserless-chrome-no-preboot:test .
-
-cid=$(docker run -d --rm -p 127.0.0.1::3000 moltinger/browserless-chrome-no-preboot:test)
-port=$(docker inspect "$cid" --format '{{(index (index .NetworkSettings.Ports "3000/tcp") 0).HostPort}}')
-sleep 3
-curl -sS "http://127.0.0.1:$port/json/version" | jq -r .webSocketDebuggerUrl
-docker rm -f "$cid" >/dev/null
+rg -n 'sandbox_image = "browserless/chrome"|profile_dir = "/tmp/moltis-browser-profile/shared"|persist_profile = false|container_host = "host.docker.internal"' config/moltis.toml
+rg -n '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' docker-compose.prod.yml
+rg -n 'prepare_moltis_browser_profile_dir|prepull_moltis_browser_sandbox_image' scripts/deploy.sh
+rg -n 'browser_profile_root_writable|browser_profile_shared_writable|browser_profile_dir' scripts/moltis-runtime-attestation.sh
+rg -n 'tool execution succeeded tool=browser|browser failure signature' scripts/moltis-browser-canary.sh
 ```
 
 Observed:
 
-- tracked shim returned a concrete DevTools websocket path:
-  - `ws://127.0.0.1:<port>/devtools/browser/<id>`
+- branch `031` carries the stock-image browser contract plus shared profile-dir preparation, fail-closed runtime attestation, and a dedicated browser canary
 
 ## Result
 
@@ -101,7 +107,7 @@ The validation supports all three carrier assumptions:
 
 1. **Current production is still on the stock browser contract from `main`.**
 2. **The live browser runtime is genuinely failing now, even outside Telegram.**
-3. **The tracked shim changes the websocket contract in the exact way the audited repair path expected.**
+3. **The missing production fix is the host-visible writable profile-dir contract, not a mandatory custom browser image.**
 
 ## Conclusion
 
