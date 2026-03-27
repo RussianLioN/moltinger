@@ -444,8 +444,51 @@ sync_moltis_repo_skills_into_runtime() {
     return 0
 }
 
+read_moltis_auth_password() {
+    local password_file="$PROJECT_ROOT/secrets/moltis_password.txt"
+    local password=""
+
+    if [[ -f "$password_file" ]]; then
+        password="$(tr -d '\r\n' < "$password_file")"
+    elif read_env_file_value "MOLTIS_PASSWORD" >/dev/null 2>&1; then
+        password="$(read_env_file_value "MOLTIS_PASSWORD")"
+    fi
+
+    [[ -n "$password" ]] || return 1
+    printf '%s\n' "$password"
+}
+
+moltis_login_session() {
+    local cookie_file="$1"
+    local login_url="${TARGET_HEALTH_URL%/health}/api/auth/login"
+    local password login_payload login_code
+
+    password="$(read_moltis_auth_password 2>/dev/null || true)"
+    if [[ -z "$password" ]]; then
+        log_error "Moltis runtime contract mismatch: cannot authenticate live /api/skills verification because MOLTIS_PASSWORD is unavailable"
+        return 1
+    fi
+
+    login_payload="$(jq -nc --arg password "$password" '{password:$password}')"
+    login_code="$(
+        curl -sS -o /dev/null -w '%{http_code}' \
+            -c "$cookie_file" -b "$cookie_file" \
+            -X POST "$login_url" \
+            -H 'Content-Type: application/json' \
+            -d "$login_payload" \
+            --max-time 10 2>/dev/null || echo "000"
+    )"
+
+    if [[ "$login_code" != "200" ]]; then
+        log_error "Moltis runtime contract mismatch: live /api/auth/login failed before /api/skills verification (HTTP $login_code)"
+        return 1
+    fi
+
+    return 0
+}
+
 verify_moltis_repo_skills_discovery() {
-    local skills_api_url repo_skill_name skills_json attempt
+    local skills_api_url repo_skill_name skills_json attempt cookie_file
     local -a repo_skill_names=()
 
     while IFS= read -r repo_skill_name; do
@@ -471,8 +514,14 @@ verify_moltis_repo_skills_discovery() {
     done
 
     skills_api_url="${TARGET_HEALTH_URL%/health}/api/skills"
+    cookie_file="$(mktemp)"
+    if ! moltis_login_session "$cookie_file"; then
+        rm -f "$cookie_file"
+        return 1
+    fi
+
     for attempt in {1..10}; do
-        skills_json="$(curl -fsS "$skills_api_url" 2>/dev/null || true)"
+        skills_json="$(curl -fsS -b "$cookie_file" -c "$cookie_file" "$skills_api_url" --max-time 10 2>/dev/null || true)"
         if [[ -n "$skills_json" ]]; then
             local missing_skill=0
             for repo_skill_name in "${repo_skill_names[@]}"; do
@@ -484,20 +533,22 @@ verify_moltis_repo_skills_discovery() {
                 fi
             done
             if [[ $missing_skill -eq 0 ]]; then
+                rm -f "$cookie_file"
                 return 0
             fi
         fi
         sleep 2
     done
+    rm -f "$cookie_file"
 
     if [[ -z "$skills_json" ]]; then
-        log_error "Moltis runtime contract mismatch: failed to query live /api/skills after repo skill sync"
+        log_error "Moltis runtime contract mismatch: failed to query authenticated live /api/skills after repo skill sync"
     else
         for repo_skill_name in "${repo_skill_names[@]}"; do
             if ! jq -e --arg skill_name "$repo_skill_name" '
                 .skills[]? | select(.name == $skill_name)
             ' <<<"$skills_json" >/dev/null; then
-                log_error "Moltis runtime contract mismatch: live /api/skills does not expose repo-managed skill '$repo_skill_name'"
+                log_error "Moltis runtime contract mismatch: authenticated live /api/skills does not expose repo-managed skill '$repo_skill_name'"
                 return 1
             fi
         done

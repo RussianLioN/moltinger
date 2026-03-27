@@ -23,14 +23,14 @@
 - repo остаётся source of truth и монтируется в контейнер как `/server:ro`;
 - runtime scripts и schema paths в `config/moltis.toml` используют container-visible repo paths под `/server`;
 - deploy sync-ит repo-managed skills в `/home/moltis/.moltis/skills`;
-- live proof идёт через `/api/skills`, а не через одно только `search_paths`;
+- live proof идёт через аутентифицированный `/api/skills`, а не через одно только `search_paths`;
 - writable state и audit живут в `/home/moltis/.moltis/codex-update/`.
 
 Простыми словами:
 - skill source и scripts читаются из git-управляемого checkout;
 - live skill discovery идёт из runtime-managed каталога под `~/.moltis/skills`;
 - state и audit пишутся в runtime home Moltis;
-- live acceptance должен подтверждать `/api/skills` и реальный вызов skill, а не ad-hoc shell fallback.
+- live acceptance должен подтверждать аутентифицированный `/api/skills` и реальный вызов skill, а не ad-hoc shell fallback.
 
 ## Как это работает сейчас
 
@@ -262,7 +262,7 @@ GitOps wiring:
 - cron job живёт в [moltis-codex-upstream-watcher](../scripts/cron.d/moltis-codex-upstream-watcher)
 - inventory зафиксирован в [manifest.json](../scripts/manifest.json)
 - repo source остаётся доступен через `/server` mount в [docker-compose.yml](../docker-compose.yml) и [docker-compose.prod.yml](../docker-compose.prod.yml)
-- live skill discovery доказывается через runtime sync в `~/.moltis/skills` и `/api/skills`
+- live skill discovery доказывается через runtime sync в `~/.moltis/skills` и аутентифицированный `/api/skills`
 
 Минимальные env для live scheduler delivery:
 

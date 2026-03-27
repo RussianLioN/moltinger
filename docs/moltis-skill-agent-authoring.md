@@ -32,7 +32,7 @@ Last reviewed: 2026-03-27
 5. Делать `MCP`/hooks/tools для внешних действий и enforcement, а не кодировать API-интеграцию только текстом в prompt.
 6. Делать `session_state` для краткоживущего рабочего состояния, а `memory/knowledge` — для долговременных знаний.
 7. Для периодики использовать нативный Moltis scheduler/heartbeat path, а не внешний shell-cron, если можно остаться внутри Moltis runtime.
-8. Считать skill внедрённым только после проверки runtime visibility: skill/agent должен реально discover-иться live runtime через официальный skill path и `/api/skills`, а не только лежать в git.
+8. Считать skill внедрённым только после проверки runtime visibility: skill/agent должен реально discover-иться live runtime через официальный skill path и аутентифицированный `/api/skills`, а не только лежать в git.
 
 Официальный runtime-контракт и production interpretation для Moltinger зафиксированы в [docs/research/moltis-official-skill-runtime-contract-2026-03-27.md](./research/moltis-official-skill-runtime-contract-2026-03-27.md).
 
@@ -112,7 +112,7 @@ Last reviewed: 2026-03-27
 Если новый skill:
 
 - лежит в `skills/` репозитория,
-- но live `/api/skills` его не показывает,
+- но аутентифицированный live `/api/skills` его не показывает,
 - или deploy не материализовал его в официальный runtime-discovered path,
 
 то capability ещё не внедрён.
@@ -120,7 +120,7 @@ Last reviewed: 2026-03-27
 Минимальная проверка:
 
 1. skill/agent лежит в правильном runtime-discovered path;
-2. live `/api/skills` реально показывает этот skill;
+2. аутентифицированный live `/api/skills` реально показывает этот skill;
 3. live runtime может вызвать canonical entrypoint;
 4. это подтверждено не только hermetic test, но и runtime smoke/UAT.
 
@@ -176,7 +176,7 @@ Last reviewed: 2026-03-27
 - repo path;
 - runtime-discovered path;
 - container mounts;
-- live `/api/skills`;
+- аутентифицированный live `/api/skills`;
 - права на execution;
 - наличие нужных инструментов внутри live runtime.
 

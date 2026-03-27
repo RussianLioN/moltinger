@@ -97,7 +97,7 @@ root_cause: "Project docs, deploy verification, and config relied on /server/ski
 
 ## Принятые меры
 
-1. **Немедленное исправление:** добавлен `scripts/moltis-repo-skills-sync.sh`, а deploy verification теперь sync-ит repo-managed skills в `/home/moltis/.moltis/skills` и проверяет их через live `/api/skills`.
+1. **Немедленное исправление:** добавлен `scripts/moltis-repo-skills-sync.sh`, а deploy verification теперь sync-ит repo-managed skills в `/home/moltis/.moltis/skills`, логинится через `/api/auth/login` и проверяет их через аутентифицированный live `/api/skills`.
 2. **Предотвращение:** `config/moltis.toml` больше не утверждает `/server/skills` как live contract; static/unit/component tests переписаны на runtime-first proof.
 3. **Документация:** добавлен официальный research artifact `docs/research/moltis-official-skill-runtime-contract-2026-03-27.md`, обновлены canonical skill docs и self-learning handbook.
 
@@ -113,5 +113,5 @@ root_cause: "Project docs, deploy verification, and config relied on /server/ski
 
 1. Для Moltis skill delivery нельзя считать repo path и live discovery одним и тем же контрактом.
 2. `search_paths` в конфиге не является достаточным production-proof, пока live runtime и official callsites не подтверждают это явно.
-3. Для GitOps-managed skills acceptance должен идти от live `/api/skills` и реального использования skill, а не от mount/path existence.
+3. Для GitOps-managed skills acceptance должен идти от аутентифицированного live `/api/skills` и реального использования skill, а не от mount/path existence.
 4. Если official docs и live behavior расходятся, нужно поднимать authoritative research artifact и фиксировать принятый production contract отдельно, а не размазывать частичные выводы по handbook-ам.

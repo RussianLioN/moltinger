@@ -1060,7 +1060,7 @@ head -20 /home/moltis/.moltis/skills/my-skill/SKILL.md
 
 **Решения**:
 1. Проверь что deploy/sync действительно материализовал skill в runtime-discovered path
-2. Проверь `GET /api/skills`, а не только наличие repo path
+2. Проверь аутентифицированный `GET /api/skills`, а не только наличие repo path
 3. Проверь frontmatter в SKILL.md (должен быть валидный YAML)
 4. Проверь права доступа к файлам
 5. Перезапусти Moltis
@@ -1199,7 +1199,7 @@ EOF
 - [ ] `skills.enabled = true`
 - [ ] Repo `skills/` содержит source skill
 - [ ] Deploy sync materializes skill into `/home/moltis/.moltis/skills`
-- [ ] `GET /api/skills` показывает skill
+- [ ] Аутентифицированный `GET /api/skills` показывает skill
 - [ ] SKILL.md имеет валидный frontmatter
 
 **Для Memory**:

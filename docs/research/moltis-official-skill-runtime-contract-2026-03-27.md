@@ -40,7 +40,7 @@ Snapshot checked on `2026-03-27`: `moltis-org/moltis`.
   - built-in `template-skill` и `tmux` seed-ятся через `seed_skill_if_missing()` в `<data_dir>/skills/<name>/`
 
 - `crates/web/src/api.rs`
-  - `/api/skills` lists discovered skills from runtime-default paths, so this endpoint is valid live proof for discovery.
+  - `/api/skills` lists discovered skills from runtime-default paths; in production this remains valid live proof only after authenticating through the official auth flow.
 
 ## What This Means For Moltinger
 
@@ -63,7 +63,7 @@ For GitOps-managed skills in Moltinger:
 1. edit the skill under repo `skills/<name>/`
 2. deploy the tracked repo through GitOps
 3. during deploy, sync repo-managed skills into `/home/moltis/.moltis/skills`
-4. verify discovery through live `/api/skills`
+4. verify discovery through an authenticated live `/api/skills` request
 5. keep `auto_load` only as an activation hint after discovery, not as an import mechanism
 
 ## Verification Contract
@@ -71,7 +71,7 @@ For GitOps-managed skills in Moltinger:
 The minimum acceptable proof is runtime-first:
 
 1. synced file exists in `/home/moltis/.moltis/skills/<name>/SKILL.md`
-2. `GET /api/skills` exposes the skill name
+2. authenticated `GET /api/skills` exposes the skill name
 3. one technical canary request can use the skill without falling back to generic reasoning
 
 Not sufficient on its own:
@@ -86,4 +86,4 @@ For this repository, the canonical rule is:
 
 - do not treat `/server/skills` as live discovery contract;
 - do treat repo `skills/` as Git-managed source content;
-- do treat `/home/moltis/.moltis/skills` plus live `/api/skills` as the production discovery proof.
+- do treat `/home/moltis/.moltis/skills` plus authenticated live `/api/skills` as the production discovery proof.

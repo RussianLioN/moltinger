@@ -246,14 +246,15 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
     if ! grep -Fq "working_dir is" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "/server mount is missing" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "moltis-repo-skills-sync.sh" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "/api/auth/login" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "/api/skills" "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq "live /api/skills does not expose repo-managed skill" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "authenticated live /api/skills does not expose repo-managed skill" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "MOLTIS_RUNTIME_CONFIG_DIR" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "provider_keys.json.tmp.contract-check" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "DOCKER_SOCKET_GID" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "mounted docker.sock gid is not present" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "host.docker.internal is not mapped" "$PROJECT_ROOT/scripts/deploy.sh"; then
-        test_fail "deploy.sh must verify /server visibility, sync repo-managed skills into the official runtime-discovered directory, prove them through live /api/skills, and preserve the browser sandbox Docker contract for Moltis"
+        test_fail "deploy.sh must verify /server visibility, sync repo-managed skills into the official runtime-discovered directory, authenticate through /api/auth/login, prove them through live /api/skills, and preserve the browser sandbox Docker contract for Moltis"
         return
     fi
 

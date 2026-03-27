@@ -35,7 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
-| RCA-019 | 2026-03-27 | process | P1 | resolved | Project docs, config, and deploy checks treated repo-mounted `/server/skills` plus `search_paths` as a live Moltis skill contract, while official runtime discovery used data-dir-backed default paths | added repo-skill runtime sync + live `/api/skills` deploy proof + official contract research/doc updates |
+| RCA-019 | 2026-03-27 | process | P1 | resolved | Project docs, config, and deploy checks treated repo-mounted `/server/skills` plus `search_paths` as a live Moltis skill contract, while official runtime discovery used data-dir-backed default paths | added repo-skill runtime sync + authenticated `/api/skills` deploy proof + official contract research/doc updates |
 | RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
 | RCA-017 | 2026-03-14 | process | P1 | resolved | Clawdiy model selection was completed in live runtime state but not mirrored into tracked `config/clawdiy/openclaw.json` | pinned the Codex OAuth / `gpt-5.4` baseline in tracked config + static guard + runbook update |
 | RCA-016 | 2026-03-14 | cicd | P1 | resolved | Clawdiy repo defaults switched to floating OpenClaw Docker `latest` before that image had been verified against the live runtime contract | rolled back to `2026.3.11` and restored pinned default pending explicit upgrade canary |
