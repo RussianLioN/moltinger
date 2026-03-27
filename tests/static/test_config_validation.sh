@@ -544,6 +544,10 @@ for job_name, timeout_fragment in required_job_timeouts.items():
     if not job_match or timeout_fragment not in job_match.group(1):
         raise SystemExit(1)
 
+test_job_match = re.search(r'(?ms)^  test:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
+if not test_job_match or 'test_moltis_repo_skills_sync.sh' not in test_job_match.group(1):
+    raise SystemExit(1)
+
 required_notify_fragments = [
     'workflow_run:',
     'Deploy Moltis',

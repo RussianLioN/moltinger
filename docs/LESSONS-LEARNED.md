@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-28
-**Total Lessons**: 55
+**Total Lessons**: 56
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (24 lessons)
+#### P1 (25 lessons)
+- [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
@@ -80,7 +81,8 @@
 ### By Category
 
 
-#### cicd (25 lessons)
+#### cicd (26 lessons)
+- [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
 - [Deploy hardening follow-up introduced a latent verify failure-path regression and queue-blind watchdog alerts](../docs/rca/2026-03-28-deploy-hardening-follow-up-verify-failure-and-watchdog-queue-semantics.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
@@ -148,11 +150,11 @@
 
 ### Popular Tags
 
+- `deploy` (17 lessons)
 - `gitops` (16 lessons)
-- `deploy` (16 lessons)
-- `github-actions` (14 lessons)
-- `cicd` (14 lessons)
-- `moltis` (13 lessons)
+- `github-actions` (15 lessons)
+- `cicd` (15 lessons)
+- `moltis` (14 lessons)
 - `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
@@ -166,10 +168,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 55 |
-| Critical (P0/P1) | 25 |
+| Total Lessons | 56 |
+| Critical (P0/P1) | 26 |
 | Categories | 5 |
-| Unique Tags | 125 |
+| Unique Tags | 128 |
 
 ---
 

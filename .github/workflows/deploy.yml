@@ -594,6 +594,10 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Component test - Moltis repo skill sync
+        run: |
+          bash tests/component/test_moltis_repo_skills_sync.sh
+
       - name: Test summary
         if: always()
         run: |
