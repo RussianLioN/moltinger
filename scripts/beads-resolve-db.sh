@@ -11,6 +11,10 @@ BEADS_RESOLVE_MESSAGE=""
 BEADS_RESOLVE_RECOVERY_HINT=""
 BEADS_RESOLVE_ROOT_CLEANUP_NOTICE=""
 BEADS_RESOLVE_EXIT_CODE=0
+BEADS_RESOLVE_LAST_BD_OUTPUT=""
+BEADS_RESOLVE_LAST_BD_RC=0
+BEADS_RESOLVE_LAST_BD_TIMED_OUT="false"
+BEADS_RESOLVE_RUNTIME_PROBE_STATE="not_run"
 
 beads_resolve_usage() {
   cat <<'EOF'
@@ -517,6 +521,9 @@ beads_resolve_dispatch() {
   local has_local_runtime="false"
   local has_runtime_shell="false"
   local recovery_hint=""
+  local runtime_probe_state="not_run"
+  local runtime_recovery_hint=""
+  local runtime_repair_detail=""
   local root_cleanup_notice=""
   local migration_mode=""
   local migration_review_command=""
@@ -610,6 +617,17 @@ beads_resolve_dispatch() {
   if beads_resolve_has_runtime_shell "${beads_dir}"; then
     has_runtime_shell="true"
   fi
+  if [[ "${has_local_runtime}" == "true" ]]; then
+    beads_resolve_probe_local_runtime_health "${repo_root}" || true
+    runtime_probe_state="${BEADS_RESOLVE_RUNTIME_PROBE_STATE:-not_run}"
+  fi
+  if [[ -f "${issues_path}" ]]; then
+    runtime_recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
+    runtime_repair_detail="Repair the local runtime in place from the tracked local foundation."
+  else
+    runtime_recovery_hint="/usr/local/bin/bd doctor --json && bd bootstrap"
+    runtime_repair_detail="Tracked .beads/issues.jsonl is retired here; repair the local runtime instead of restoring JSONL."
+  fi
 
   if [[ -f "${redirect_path}" ]]; then
     redirect_target="$(cat "${redirect_path}")"
@@ -647,6 +665,21 @@ beads_resolve_dispatch() {
     return 0
   fi
 
+  if [[ "${runtime_probe_state}" == "unhealthy" ]]; then
+    if beads_resolve_is_runtime_repair_command "$@"; then
+      beads_resolve_set_decision "allow_explicit_troubleshooting" "runtime_repair" 0
+      return 0
+    fi
+
+    beads_resolve_set_decision \
+      "block_missing_foundation" \
+      "$( [[ ! -f "${issues_path}" ]] && printf '%s' "runtime_only_worktree" || printf '%s' "dedicated_worktree" )" \
+      25 \
+      "bd: local Beads runtime exists in ${repo_root}, but plain bd cannot read it safely yet. ${runtime_repair_detail}" \
+      "${runtime_recovery_hint}"
+    return 0
+  fi
+
   if [[ "${has_local_runtime}" != "true" && "${has_runtime_shell}" == "true" ]]; then
     if beads_resolve_is_runtime_repair_command "$@"; then
       beads_resolve_set_decision "allow_explicit_troubleshooting" "runtime_repair" 0
@@ -657,8 +690,8 @@ beads_resolve_dispatch() {
       "block_missing_foundation" \
       "$( [[ ! -f "${issues_path}" ]] && printf '%s' "runtime_only_worktree" || printf '%s' "dedicated_worktree" )" \
       25 \
-      "bd: local Dolt-backed Beads runtime is incomplete in ${repo_root}. A runtime shell exists, but the named 'beads' database is not materialized yet. $( [[ ! -f "${issues_path}" ]] && printf '%s' "Tracked .beads/issues.jsonl is retired here; repair the local runtime instead of restoring JSONL." || printf '%s' "Repair the local runtime in place instead of rebuilding it from legacy artifacts." )" \
-      "/usr/local/bin/bd doctor --json && bd bootstrap"
+      "bd: local Dolt-backed Beads runtime is incomplete in ${repo_root}. A runtime shell exists, but the named 'beads' database is not materialized yet. ${runtime_repair_detail}" \
+      "${runtime_recovery_hint}"
     return 0
   fi
 
@@ -753,6 +786,105 @@ beads_resolve_find_system_bd() {
   return 1
 }
 
+beads_resolve_run_system_bd_probe() {
+  local repo_root="$1"
+  local capture_stderr="$2"
+  shift 2
+
+  local timeout_seconds="${BEADS_RESOLVE_BD_TIMEOUT_SECONDS:-8}"
+  local command_path=""
+  local stdout_file=""
+  local stderr_file=""
+  local timed_out_file=""
+  local command_pid=""
+  local watchdog_pid=""
+  local rc=0
+  local output=""
+
+  if [[ -z "${repo_root}" || ! -d "${repo_root}" ]]; then
+    return 1
+  fi
+
+  command_path="$(beads_resolve_find_system_bd "${repo_root}/bin/bd")" || return 1
+
+  stdout_file="$(mktemp)"
+  stderr_file="$(mktemp)"
+  timed_out_file="$(mktemp)"
+
+  (
+    cd "${repo_root}"
+    "${command_path}" "$@" >"${stdout_file}" 2>"${stderr_file}"
+  ) &
+  command_pid=$!
+
+  (
+    sleep "${timeout_seconds}"
+    if kill -0 "${command_pid}" 2>/dev/null; then
+      printf 'true\n' >"${timed_out_file}"
+      kill -TERM "${command_pid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL "${command_pid}" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  set +e
+  wait "${command_pid}"
+  rc=$?
+  set -e
+
+  kill "${watchdog_pid}" 2>/dev/null || true
+  wait "${watchdog_pid}" 2>/dev/null || true
+
+  BEADS_RESOLVE_LAST_BD_OUTPUT="$(cat "${stdout_file}")"
+  if [[ "${capture_stderr}" == "true" ]]; then
+    output="$(cat "${stderr_file}")"
+    if [[ -n "${output}" ]]; then
+      if [[ -n "${BEADS_RESOLVE_LAST_BD_OUTPUT}" ]]; then
+        BEADS_RESOLVE_LAST_BD_OUTPUT+=$'\n'
+      fi
+      BEADS_RESOLVE_LAST_BD_OUTPUT+="${output}"
+    fi
+  fi
+
+  BEADS_RESOLVE_LAST_BD_TIMED_OUT="false"
+  BEADS_RESOLVE_LAST_BD_RC="${rc}"
+  if [[ -s "${timed_out_file}" ]]; then
+    BEADS_RESOLVE_LAST_BD_TIMED_OUT="true"
+    BEADS_RESOLVE_LAST_BD_RC=124
+  fi
+
+  rm -f "${stdout_file}" "${stderr_file}" "${timed_out_file}"
+  return 0
+}
+
+beads_resolve_probe_local_runtime_health() {
+  local repo_root="$1"
+
+  BEADS_RESOLVE_RUNTIME_PROBE_STATE="not_run"
+  BEADS_RESOLVE_LAST_BD_OUTPUT=""
+  BEADS_RESOLVE_LAST_BD_RC=0
+  BEADS_RESOLVE_LAST_BD_TIMED_OUT="false"
+
+  if ! beads_resolve_run_system_bd_probe "${repo_root}" true status; then
+    BEADS_RESOLVE_RUNTIME_PROBE_STATE="unavailable"
+    return 1
+  fi
+
+  if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" == "true" ]]; then
+    BEADS_RESOLVE_RUNTIME_PROBE_STATE="unavailable"
+    return 0
+  fi
+
+  if [[ "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
+    BEADS_RESOLVE_RUNTIME_PROBE_STATE="healthy"
+  else
+    BEADS_RESOLVE_RUNTIME_PROBE_STATE="unhealthy"
+  fi
+
+  return 0
+}
+
 beads_resolve_render_env() {
   printf 'schema=%q\n' "${BEADS_RESOLVE_SCHEMA}"
   printf 'decision=%q\n' "${BEADS_RESOLVE_DECISION}"
@@ -803,6 +935,7 @@ beads_localize_worktree() {
   local recovery_path=""
   local artifact=""
   local has_local_runtime="false"
+  local runtime_probe_state="not_run"
   local -a stale_runtime_artifacts=(
     "metadata.json"
     "interactions.jsonl"
@@ -823,9 +956,11 @@ beads_localize_worktree() {
 
   if beads_resolve_has_local_runtime "${repo_root}/.beads"; then
     has_local_runtime="true"
+    beads_resolve_probe_local_runtime_health "${repo_root}" || true
+    runtime_probe_state="${BEADS_RESOLVE_RUNTIME_PROBE_STATE:-not_run}"
   fi
 
-  if [[ -f "${current_config}" && "${has_local_runtime}" == "true" && ! -f "${current_issues}" && ! -f "${current_redirect}" ]]; then
+  if [[ -f "${current_config}" && "${has_local_runtime}" == "true" && "${runtime_probe_state}" != "unhealthy" && ! -f "${current_issues}" && ! -f "${current_redirect}" ]]; then
     if [[ "${output_format}" == "env" ]]; then
       printf 'result=%q\n' "post_migration_runtime_only"
       printf 'repo_root=%q\n' "${repo_root}"
@@ -844,7 +979,7 @@ beads_localize_worktree() {
     beads_resolve_die "Cannot localize ${repo_root}: tracked .beads/config.yaml and .beads/issues.jsonl must exist locally first."
   fi
 
-  if [[ "${has_local_runtime}" == "true" && ! -f "${current_redirect}" ]]; then
+  if [[ "${has_local_runtime}" == "true" && "${runtime_probe_state}" != "unhealthy" && ! -f "${current_redirect}" ]]; then
     if [[ "${output_format}" == "env" ]]; then
       printf 'result=%q\n' "already_local"
       printf 'repo_root=%q\n' "${repo_root}"
@@ -865,7 +1000,7 @@ beads_localize_worktree() {
 
   system_bd="${BEADS_SYSTEM_BD:-}"
   if [[ -z "${system_bd}" ]]; then
-    system_bd="$(beads_resolve_find_system_bd "${DEFAULT_REPO_ROOT}/bin/bd")" || {
+    system_bd="$(beads_resolve_find_system_bd "${repo_root}/bin/bd")" || {
       beads_resolve_die "Could not find the system bd binary needed for localization."
     }
   fi
@@ -873,8 +1008,9 @@ beads_localize_worktree() {
   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
   recovery_dir="${repo_root}/.beads/recovery"
 
-  if [[ ! -d "${current_dolt}/beads" && ! -d "${current_dolt}/beads/.dolt" ]] && \
-     [[ -d "${current_dolt}" || -e "${repo_root}/.beads/metadata.json" || -e "${repo_root}/.beads/interactions.jsonl" ]]; then
+  if [[ "${runtime_probe_state}" == "unhealthy" ]] || \
+     ([[ ! -d "${current_dolt}/beads" && ! -d "${current_dolt}/beads/.dolt" ]] && \
+      [[ -d "${current_dolt}" || -e "${repo_root}/.beads/metadata.json" || -e "${repo_root}/.beads/interactions.jsonl" ]]); then
     recovery_path="${recovery_dir}/runtime-pre-init-${timestamp}"
     mkdir -p "${recovery_path}"
     if [[ -d "${current_dolt}" ]]; then

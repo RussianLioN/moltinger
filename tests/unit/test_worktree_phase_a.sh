@@ -23,19 +23,28 @@ if [[ "${1:-}" == "--no-daemon" ]]; then
   shift
 fi
 
-if [[ "${1:-}" == "--db" ]]; then
-  db_path="${2:-}"
-  shift 2
-  if [[ "${1:-}" == "info" ]]; then
-    mkdir -p "$(dirname "${db_path}")"
-    : > "${db_path}"
-    exit 0
+  if [[ "${1:-}" == "--db" ]]; then
+    db_path="${2:-}"
+    shift 2
+    if [[ "${1:-}" == "info" ]]; then
+      mkdir -p "$(dirname "${db_path}")"
+      : > "${db_path}"
+      exit 0
+    fi
+    if [[ "${1:-}" == "import" ]]; then
+      mkdir -p .beads/dolt/beads/.dolt
+      rm -f .beads/dolt/beads/.fake-broken
+      : > .beads/last-touched
+      exit 0
+    fi
   fi
-  if [[ "${1:-}" == "import" ]]; then
-    mkdir -p .beads/dolt/beads/.dolt
-    : > .beads/last-touched
-    exit 0
+
+if [[ "${1:-}" == "status" ]]; then
+  if [[ -e ".beads/dolt/beads/.fake-broken" ]]; then
+    printf 'simulated broken named db\n' >&2
+    exit 1
   fi
+  exit 0
 fi
 
 if [[ "${1:-}" == "list" ]]; then
@@ -77,6 +86,16 @@ assert_file_missing() {
     if [[ -e "$path" ]]; then
         test_fail "$message (unexpected path: $path)"
     fi
+}
+
+seed_unhealthy_named_runtime_fixture() {
+    local repo_dir="$1"
+
+    mkdir -p "${repo_dir}/.beads/dolt/beads/.dolt"
+    printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
+    printf '{"id":"molt-1","title":"fixture"}\n' > "${repo_dir}/.beads/issues.jsonl"
+    printf '{"role":"maintainer"}\n' > "${repo_dir}/.beads/metadata.json"
+    : > "${repo_dir}/.beads/dolt/beads/.fake-broken"
 }
 
 test_phase_a_create_from_base_anchors_new_branch_to_main() {
@@ -207,6 +226,45 @@ test_phase_a_create_bootstraps_runtime_shell_when_named_db_missing() {
     test_pass
 }
 
+test_phase_a_create_rebuilds_unhealthy_named_runtime() {
+    test_start "worktree_phase_a_create_rebuilds_unhealthy_named_runtime"
+
+    local fixture_root repo_dir fake_bin target_path output
+    fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    target_path="${fixture_root}/moltinger-unhealthy-runtime"
+
+    mkdir -p "${repo_dir}/.beads"
+    seed_unhealthy_named_runtime_fixture "${repo_dir}"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl .beads/metadata.json .beads/dolt/beads/.fake-broken
+        git commit -m "fixture: track unhealthy named runtime" >/dev/null
+    )
+
+    output="$(run_phase_a_create "$fake_bin" \
+        --canonical-root "$repo_dir" \
+        --base-ref main \
+        --branch feat/unhealthy-runtime \
+        --path "$target_path" \
+        --format env)"
+
+    assert_contains "$output" 'result=created_from_base' "Phase A should still succeed after rebuilding an unhealthy named runtime"
+    if [[ ! -f "${target_path}/.beads/last-touched" ]]; then
+        test_fail "Phase A should reimport tracked issues after unhealthy runtime repair"
+    fi
+    if [[ -e "${target_path}/.beads/dolt/beads/.fake-broken" ]]; then
+        test_fail "Phase A should not leave the unhealthy named runtime marker behind"
+    fi
+    if ! find "${target_path}/.beads/recovery" -maxdepth 2 -type d -name 'runtime-pre-init-*' | grep -q .; then
+        test_fail "Phase A should quarantine the unhealthy runtime before rebuilding it"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair() {
     test_start "worktree_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair"
 
@@ -264,6 +322,7 @@ run_all_tests() {
     test_phase_a_create_from_base_anchors_new_branch_to_main
     test_phase_a_create_blocks_existing_branch_on_wrong_base
     test_phase_a_create_bootstraps_runtime_shell_when_named_db_missing
+    test_phase_a_create_rebuilds_unhealthy_named_runtime
     test_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair
     generate_report
 }

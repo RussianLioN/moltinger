@@ -136,19 +136,21 @@ phase_a_probe_localize_state() {
   phase_a_localize_action=""
   phase_a_localize_message=""
   phase_a_localize_notice=""
+  phase_a_localize_runtime_repair_mode=""
 
   set +e
   output="$("${SCRIPT_DIR}/beads-worktree-localize.sh" --check --format env --path "${worktree_path}" 2>/dev/null)"
   rc=$?
   set -e
 
-  unset schema worktree state action db_path message notice bootstrap_source
+  unset schema worktree state action db_path message notice bootstrap_source runtime_repair_mode
   eval "${output}"
 
   phase_a_localize_state="${state:-}"
   phase_a_localize_action="${action:-}"
   phase_a_localize_message="${message:-}"
   phase_a_localize_notice="${notice:-}"
+  phase_a_localize_runtime_repair_mode="${runtime_repair_mode:-}"
   return "${rc}"
 }
 
@@ -202,11 +204,16 @@ phase_a_prepare_beads_runtime() {
         if [[ "${bootstrap_attempted}" == "true" ]]; then
           phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
         fi
-        system_bd="$(phase_a_runtime_bootstrap_command)"
-        (
-          cd "${target_path}"
-          "${system_bd}" bootstrap >/dev/null
-        ) || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        if [[ "${phase_a_localize_runtime_repair_mode}" == "rebuild_local_foundation" ]]; then
+          "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null \
+            || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        else
+          system_bd="$(phase_a_runtime_bootstrap_command)"
+          (
+            cd "${target_path}"
+            "${system_bd}" bootstrap >/dev/null
+          ) || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        fi
         bootstrap_attempted="true"
         ;;
       *)
