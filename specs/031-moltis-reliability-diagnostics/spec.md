@@ -66,6 +66,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - What happens when memory initializes successfully but indexes zero useful chunks because project docs are not visible in watched paths?
 - What happens when browser automation is enabled in config but fails at runtime because Docker access and sibling-container connectivity are both incomplete?
 - What happens when Docker access is restored, but the browser sandbox still fails because the host-visible `profile_dir` bind mount is not writable for the sibling browser container and the real `t.me/...` canary was never re-run?
+- What happens when stock `browserless/chrome` is already healthy on the target host once the profile bind is writable, so the safest hotfix is an official-first profile-dir repair instead of a custom browser image?
 - What happens when the container is healthy and authenticated, but the prompt/runtime context is degraded by stale `~/.moltis` memory files?
 - What happens when the live UI itself proves the server is running a non-`main` branch and operators need that branch/runtime provenance to be deliberate rather than accidental drift?
 
@@ -100,6 +101,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **FR-025**: The authoritative Telegram reply-quality gate MUST fail when the quiet window immediately before a probe already contains a recent invalid incoming Telegram reply with internal activity/tool-progress leakage.
 - **FR-026**: The package MUST record a new RCA and lessons entry for the Telegram activity-log leak plus the UAT emoji blind spot, including live evidence and the chosen repo-controlled mitigation path.
 - **FR-027**: The package MUST treat browser sandbox reliability as a multi-part runtime contract, not a single “browser enabled” toggle; the documented contract includes sandbox mode, Docker/socket access, `container_host`, browser image, `profile_dir` / `persist_profile`, writable host-visible profile storage, and at least one exercised browser canary.
+- **FR-028**: When live production still runs the pre-fix browser baseline from `main`, the package MUST prepare a minimal browser-runtime carrier to `main` rather than assuming the `031` branch alone closes the incident; the carrier scope must stay limited to production-critical browser contract files plus blocking validation.
 - **FR-028**: The package MUST explicitly distinguish “official docs were ignored” from “official baseline was followed only partially and the repo stopped before full end-to-end contract proof”, and preserve that answer in tracked RCA/rules/lessons artifacts for future agent instances.
 - **FR-029**: The backlog MUST include a full browser/sandbox contract audit against official Moltis docs plus secondary community caveats for browserless/Chromium bind-mount ownership so future deploys validate all relevant invariants before trusting transport-green status.
 
@@ -138,6 +140,7 @@ An operator can run a repo-managed Moltis smoke script and test authentication p
 - **SC-013**: The Speckit artifacts explicitly separate `PR1` production-critical runtime changes from `PR2` deferred documentation/process artifacts so the canonical deploy path can proceed from `main` without dragging along mutable post-incident docs.
 - **SC-014**: Authoritative Telegram probing fails on emoji-prefixed internal activity/tool-progress replies instead of treating them as clean replies.
 - **SC-015**: Authoritative Telegram probing fails when a recent pre-send incoming Telegram message already contains an invalid internal activity/tool-progress leak.
+- **SC-016**: The package leaves behind a browser-runtime carrier artifact for `main` that matches the audited live root cause and does not mix mutable docs/process layers into the production-critical browser rollout.
 - **SC-016**: The tracked Moltis identity prompt contains an explicit fail-closed rule that user-facing messaging channels must never emit internal activity/tool-progress dumps.
 - **SC-017**: The Speckit artifacts and durable docs explicitly capture the second browser root cause: Docker/socket access alone is insufficient unless the host-visible browser `profile_dir` contract is also writable and exercised end-to-end.
 - **SC-018**: The tracked artifacts leave a concrete backlog for full browser/sandbox contract audit and new-instance deployment lessons so future sessions start from a repeatable checklist rather than rediscovering the same drift.
