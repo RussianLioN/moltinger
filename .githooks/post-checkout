@@ -13,21 +13,22 @@ auto_localize_beads_state() {
   local localize_output=""
   local state=""
   local action=""
-  local bootstrap_source="origin/main"
+  local requested_bootstrap_source="origin/main"
 
   [[ -x "${BEADS_LOCALIZE_SCRIPT}" ]] || return 0
 
   set +e
-  check_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --check --format env --bootstrap-source "${bootstrap_source}" 2>/dev/null)"
+  check_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --check --format env --bootstrap-source "${requested_bootstrap_source}" 2>/dev/null)"
   check_rc=$?
   set -e
 
   if [[ "${check_rc}" -eq 0 ]]; then
+    unset state action bootstrap_source
     eval "${check_output}"
     state="${state:-}"
     action="${action:-}"
     if [[ "${state}" == "migratable_legacy" || "${state}" == "partial_foundation" || "${state}" == "bootstrap_required" || "${action}" == "localize_in_place" || "${action}" == "rebuild_local_foundation" || "${action}" == "bootstrap_and_localize" ]]; then
-      if localize_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --bootstrap-source "${bootstrap_source}" 2>&1)"; then
+      if localize_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --bootstrap-source "${requested_bootstrap_source}" 2>&1)"; then
         printf '%s\n' "${localize_output}" >&2
       else
         printf '%s\n' "${localize_output}" >&2
@@ -38,7 +39,7 @@ auto_localize_beads_state() {
 
   if [[ "${check_rc}" -eq 23 ]]; then
     set +e
-    localize_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --check --bootstrap-source "${bootstrap_source}" 2>&1)"
+    localize_output="$("${BEADS_LOCALIZE_SCRIPT}" --path "${PROJECT_ROOT}" --check --bootstrap-source "${requested_bootstrap_source}" 2>&1)"
     set -e
     printf '%s\n' "${localize_output}" >&2
     echo "[beads] automatic localization skipped: this worktree still needs manual Beads repair." >&2
