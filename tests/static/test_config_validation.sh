@@ -11,6 +11,8 @@ COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
+DEPLOY_STATUS_NOTIFY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-status-notify.yml"
+DEPLOY_STALL_WATCHDOG_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-stall-watchdog.yml"
 MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
@@ -29,6 +31,10 @@ TELEGRAM_WEBHOOK_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/telegram-webhook-monitor.
 TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webhook-monitor"
 TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
+DEPLOY_STALL_WATCHDOG_SCRIPT="$PROJECT_ROOT/scripts/deploy-stall-watchdog.sh"
+HEALTH_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/health-monitor.sh"
+HEALTH_MONITOR_UNIT="$PROJECT_ROOT/systemd/moltis-health-monitor.service"
+HEALTH_MONITOR_CONFIG_UNIT="$PROJECT_ROOT/config/systemd/moltis-health-monitor.service"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
 TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
@@ -497,13 +503,139 @@ PY
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        rg -Fq 'TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")' "$DEPLOY_SCRIPT" && \
        rg -Fq 'prepare_moltis_container_for_rollout' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'docker stop --time "$stop_timeout" "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'docker rm -f "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'deploy_args+=(--force-recreate)' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
+       rg -Fq 'compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Moltis deploy path must target only moltis + required sidecars, pre-stop/remove the fixed-name Moltis container, and then force-recreate the runtime so config changes take effect immediately"
+        test_fail "Moltis deploy path must converge sidecars separately, pre-stop/remove the fixed-name Moltis container, and recreate only Moltis with --no-deps so config changes apply without a second compose recreate race"
+    fi
+
+    test_start "static_deploy_script_rollback_reuses_serialized_moltis_contract"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       [[ "$(rg -F -c 'prepare_moltis_container_for_rollout' "$DEPLOY_SCRIPT")" -ge 2 ]] && \
+       [[ "$(rg -F -c 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$DEPLOY_SCRIPT")" -ge 2 ]] && \
+       rg -Fq 'Auto rollback trigger reason:' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'verify_failure_reason' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Moltis rollback path must reuse the same serialized no-deps recreate contract as rollout and preserve the failing verify reason in deploy JSON/logging"
+    fi
+
+    test_start "static_deploy_workflow_bounds_critical_jobs_and_emits_hardened_completion_notifications"
+    if [[ -f "$DEPLOY_WORKFLOW" ]] && [[ -f "$DEPLOY_STATUS_NOTIFY_WORKFLOW" ]] && \
+       python3 - "$DEPLOY_WORKFLOW" "$DEPLOY_STATUS_NOTIFY_WORKFLOW" <<'PY'
+import pathlib, re, sys
+deploy = pathlib.Path(sys.argv[1]).read_text()
+notify = pathlib.Path(sys.argv[2]).read_text()
+
+required_job_timeouts = {
+    'gitops-compliance': 'timeout-minutes: 15',
+    'preflight': 'timeout-minutes: 15',
+    'backup': 'timeout-minutes: 15',
+    'deploy': 'timeout-minutes: 20',
+    'rollback': 'timeout-minutes: 15',
+    'verify': 'timeout-minutes: 15',
+}
+for job_name, timeout_fragment in required_job_timeouts.items():
+    job_match = re.search(rf'(?ms)^  {re.escape(job_name)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
+    if not job_match or timeout_fragment not in job_match.group(1):
+        raise SystemExit(1)
+
+required_notify_fragments = [
+    'workflow_run:',
+    'Deploy Moltis',
+    'completed',
+    'timeout-minutes: 10',
+    'workflow_run.conclusion',
+    'https://api.telegram.org/bot',
+    'action-send-mail@v16',
+]
+for fragment in required_notify_fragments:
+    if fragment not in notify:
+        raise SystemExit(1)
+
+for forbidden_fragment in [
+    'ref: ${{ github.event.workflow_run.head_sha }}',
+    'actions/checkout@v6',
+]:
+    if forbidden_fragment in notify:
+        raise SystemExit(1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Deploy workflow must bound all critical jobs and use a hardened workflow_run completion notifier that does not execute head_sha code under secrets"
+    fi
+
+    test_start "static_deploy_stall_watchdog_is_read_only_and_timeout_aware"
+    if [[ -f "$DEPLOY_STALL_WATCHDOG_WORKFLOW" ]] && [[ -f "$DEPLOY_STALL_WATCHDOG_SCRIPT" ]] && \
+       python3 - "$DEPLOY_STALL_WATCHDOG_WORKFLOW" "$DEPLOY_STALL_WATCHDOG_SCRIPT" <<'PY'
+import pathlib, sys
+workflow = pathlib.Path(sys.argv[1]).read_text()
+script = pathlib.Path(sys.argv[2]).read_text()
+
+required_workflow_fragments = [
+    "name: Deploy Moltis Stall Watchdog",
+    "schedule:",
+    "7,22,37,52 * * * *",
+    "timeout-minutes: 10",
+    "ref: main",
+    "actions: read",
+    "contents: read",
+    "scripts/deploy-stall-watchdog.sh",
+    "--threshold-minutes 45",
+    "api.telegram.org/bot",
+]
+for fragment in required_workflow_fragments:
+    if fragment not in workflow:
+        raise SystemExit(1)
+
+for forbidden_fragment in [
+    "cancel-in-progress: true",
+    "contents: write",
+    "actions: write",
+]:
+    if forbidden_fragment in workflow:
+        raise SystemExit(1)
+
+required_script_fragments = [
+    "gh api",
+    "actions/runs?per_page=",
+    "status == \"queued\"",
+    "status == \"in_progress\"",
+    "status == \"waiting\"",
+    "fromdateiso8601",
+    "stalled_count",
+]
+for fragment in required_script_fragments:
+    if fragment not in script:
+        raise SystemExit(1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Deploy stall watchdog must stay read-only, use a trusted default-branch checkout, and detect stale queued/in_progress runs via GitHub Actions API"
+    fi
+
+    test_start "static_health_monitor_respects_deploy_mutex_and_avoids_global_prune"
+    if [[ -f "$HEALTH_MONITOR_SCRIPT" ]] && [[ -f "$HEALTH_MONITOR_UNIT" ]] && [[ -f "$HEALTH_MONITOR_CONFIG_UNIT" ]] && \
+       rg -Fq 'DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'deploy_mutex_active()' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'Deploy mutex active; suspending mutating health-monitor actions' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'docker image prune -af' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'up -d --no-deps --force-recreate "$container"' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'check_disk_space 90 || true' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'check_memory 90 || true' "$HEALTH_MONITOR_SCRIPT" && \
+       ! rg -Fq 'docker system prune' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'Environment=DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock' "$HEALTH_MONITOR_UNIT" && \
+       rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_UNIT" && \
+       rg -Fq 'Environment=DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock' "$HEALTH_MONITOR_CONFIG_UNIT" && \
+       rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_CONFIG_UNIT"; then
+        test_pass
+    else
+        test_fail "Health monitor must suppress mutating actions during deploy mutex, avoid global docker system prune, and ship the same mutex/cooldown unit contract through both tracked service definitions"
     fi
 
     test_start "static_moltis_compose_uses_extended_stop_grace_period"

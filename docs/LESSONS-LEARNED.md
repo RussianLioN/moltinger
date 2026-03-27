@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-27
-**Total Lessons**: 53
+**Generated**: 2026-03-28
+**Total Lessons**: 54
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (23 lessons)
+#### P1 (24 lessons)
+- [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
@@ -78,7 +79,8 @@
 ### By Category
 
 
-#### cicd (23 lessons)
+#### cicd (24 lessons)
+- [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
 - [Tracked Moltis deploy failed because backup restore-check logs polluted deploy.sh JSON stdout contract](../docs/rca/2026-03-20-tracked-deploy-json-contract-broken-by-restore-check-stdout.md)
@@ -145,10 +147,10 @@
 ### Popular Tags
 
 - `gitops` (16 lessons)
-- `deploy` (14 lessons)
+- `deploy` (15 lessons)
 - `github-actions` (13 lessons)
-- `cicd` (12 lessons)
-- `moltis` (11 lessons)
+- `cicd` (13 lessons)
+- `moltis` (12 lessons)
 - `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
@@ -162,10 +164,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 53 |
-| Critical (P0/P1) | 24 |
+| Total Lessons | 54 |
+| Critical (P0/P1) | 25 |
 | Categories | 5 |
-| Unique Tags | 120 |
+| Unique Tags | 123 |
 
 ---
 

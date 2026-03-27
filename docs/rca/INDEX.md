@@ -1,23 +1,23 @@
 # RCA Index
 
-**Last Updated**: 2026-03-27
-**Version**: 1.12.0
+**Last Updated**: 2026-03-28
+**Version**: 1.13.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 20 |
+| Total RCA | 21 |
 | Avg Resolution Time | N/A |
-| This Month | 20 |
+| This Month | 21 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 20% |
-| process | 9 | 45% |
-| cicd | 5 | 25% |
+| generic | 4 | 19% |
+| process | 9 | 43% |
+| cicd | 6 | 29% |
 | security | 1 | 5% |
 | shell | 1 | 5% |
 
@@ -26,7 +26,7 @@
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 7 | High - production impact |
+| P1 | 8 | High - production impact |
 | P2 | 7 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-021 | 2026-03-28 | cicd | P1 | resolved | deploy.sh auto-triggered rollback through the old unsafe Moltis recreate path after post-start verification failed, while health-monitor crash-looped on disk warnings and mutated Docker state in the same incident window | made rollback reuse the serialized Moltis rollout contract, added verify failure detail + health-monitor deploy mutex guards, and hardened timeout/notification/watchdog workflows |
 | RCA-020 | 2026-03-27 | cicd | P1 | resolved | Tracked deploy relied on docker compose `force-recreate` for a fixed-name Moltis container without an explicit stop grace or pre-stop/remove step, so Docker hit the default 10s stop timeout and compose failed against the disappearing old container | added deterministic pre-stop/remove rollout + `stop_grace_period: 45s` + static/unit guards |
 | RCA-019 | 2026-03-27 | process | P1 | resolved | Project docs, config, and deploy checks treated repo-mounted `/server/skills` plus `search_paths` as a live Moltis skill contract, while official runtime discovery used data-dir-backed default paths | added repo-skill runtime sync + authenticated `/api/skills` deploy proof + official contract research/doc updates |
 | RCA-018 | 2026-03-14 | cicd | P1 | resolved | Clawdiy deploy treated transient OpenClaw startup `unhealthy` as terminal failure even though the container later recovered and served `/health` | extended Clawdiy startup health grace, increased deploy wait timeout, and taught deploy verification to tolerate transient startup unhealthy states |
