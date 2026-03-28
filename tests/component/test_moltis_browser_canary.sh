@@ -150,6 +150,25 @@ EOF
     fi
     test_pass
 
+    test_start "component_moltis_browser_canary_fails_when_live_logs_report_pool_exhaustion"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        DOCKER_BIN="docker" \
+        MOLTIS_BROWSER_CANARY_SMOKE_SCRIPT="$fake_smoke" \
+        FAKE_SMOKE_EXIT_CODE="0" \
+        FAKE_DOCKER_LOGS=$'INFO tool execution succeeded tool=browser\nWARN browser connection dead, closing session and retrying\nERROR tool execution failed tool=browser error=pool exhausted: no browser instances available' \
+        bash "$CANARY_SCRIPT" >"$stdout_log" 2>"$stderr_log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       ! grep -Fq 'browser canary matched a browser failure signature' "$stderr_log"; then
+        test_fail "Browser canary must fail closed when live logs show browser connection death or pool exhaustion"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
     rm -rf "$fixture_root"
     generate_report
 }

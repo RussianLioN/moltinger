@@ -66,6 +66,60 @@ print_json_summary() {
     fi
 }
 
+detect_browser_failure_taxonomy() {
+    local file_path="$1"
+
+    jq -cr '
+        def event_text: tostring | ascii_downcase;
+        def browser_failure_re:
+            "operation timed out after 60000ms|browser connection dead|pool exhausted: no browser instances available|pool exhausted|no browser instances available|browser launch failed|failed to become ready within 60s|browser container failed readiness check";
+        def browser_events:
+            [
+                .events[]?
+                | select(((.event // "") | tostring | ascii_downcase | test("tool_call|chat")) and ((. | tostring | ascii_downcase) | test("browser")))
+                | {
+                    event: (.event // ""),
+                    session_id: (
+                        .payload.session_id
+                        // .payload.args.session_id
+                        // .payload.params.session_id
+                        // .payload.result.session_id
+                        // .payload.response.session_id
+                        // ""
+                    ),
+                    text: (. | tostring)
+                }
+            ];
+        browser_events as $browser_events
+        | ($browser_events | map(select((.text | ascii_downcase) | test(browser_failure_re)))) as $browser_failures
+        | ($browser_events | map(select((.session_id | type) == "string" and (.session_id | test("^browser-"))))) as $browser_sessions
+        | if ($browser_failures | length) == 0 then
+              empty
+          elif ($browser_sessions | length) > 0 then
+              {
+                  code: "browser_session_contamination",
+                  session_id: $browser_sessions[0].session_id,
+                  detail: $browser_failures[0].text
+              }
+          elif (($browser_failures | map(.text | ascii_downcase) | join("\n")) | test("pool exhausted|no browser instances available")) then
+              {
+                  code: "browser_pool_exhausted",
+                  detail: $browser_failures[0].text
+              }
+          elif (($browser_failures | map(.text | ascii_downcase) | join("\n")) | test("operation timed out after 60000ms")) then
+              {
+                  code: "browser_navigation_timeout",
+                  detail: $browser_failures[0].text
+              }
+          else
+              {
+                  code: "browser_failure_detected",
+                  detail: $browser_failures[0].text
+              }
+          end
+    ' "$file_path" 2>/dev/null || true
+}
+
 delete_test_session_best_effort() {
     [[ -n "$TEST_SESSION_KEY" ]] || return 0
 
@@ -106,7 +160,7 @@ main() {
     local command="${1:-/status}"
     local health_code auth_code logout_code
     local final_event_count final_provider final_model final_reply_text
-    local chat_run_started
+    local chat_run_started browser_failure_json browser_failure_code browser_failure_detail browser_failure_session_id
 
     require_command curl
     require_command jq
@@ -200,6 +254,29 @@ main() {
     final_event_count="$(jq -r '[.events[]? | select(.event == "chat" and .payload.state == "final")] | length' "$RPC_OUTPUT_FILE")"
     chat_run_started="$(jq -r '([.result.payload[]? | select(.step.method == "chat.send")][0].response.ok == true and [.result.payload[]? | select(.step.method == "chat.send")][0].response.payload.ok == true)' "$RPC_OUTPUT_FILE" 2>/dev/null || echo "false")"
     if [[ "$final_event_count" == "0" ]]; then
+        browser_failure_json="$(detect_browser_failure_taxonomy "$RPC_OUTPUT_FILE")"
+        if [[ -n "$browser_failure_json" ]]; then
+            browser_failure_code="$(jq -r '.code // empty' <<<"$browser_failure_json")"
+            browser_failure_detail="$(jq -r '.detail // empty' <<<"$browser_failure_json")"
+            browser_failure_session_id="$(jq -r '.session_id // empty' <<<"$browser_failure_json")"
+            case "$browser_failure_code" in
+                browser_session_contamination)
+                    echo "ERROR: Browser session contamination detected: the run hit a browser failure and reused browser session_id '$browser_failure_session_id' in the same chat workflow" >&2
+                    ;;
+                browser_pool_exhausted)
+                    echo "ERROR: Browser pool exhaustion detected before the run reached a final event" >&2
+                    ;;
+                browser_navigation_timeout)
+                    echo "ERROR: Browser navigation timeout detected before the run reached a final event" >&2
+                    ;;
+                browser_failure_detected)
+                    echo "ERROR: Browser failure detected before the run reached a final event" >&2
+                    ;;
+            esac
+            if [[ -n "$browser_failure_detail" ]]; then
+                echo "DETAIL: $browser_failure_detail" >&2
+            fi
+        fi
         if [[ "$chat_run_started" == "true" ]]; then
             echo "ERROR: Chat RPC started successfully but did not reach a final event within CHAT_WAIT_MS=$CHAT_WAIT_MS" >&2
         else
