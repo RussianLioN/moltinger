@@ -230,7 +230,7 @@ enabled = true
 api_key = "${GLM_API_KEY}"
 model = "glm-5"
 base_url = "https://api.z.ai/api/coding/paas/v4"
-alias = "custom-zai-telegram-safe"
+alias = "zai-telegram-safe"
 models = ["glm-5"]
 tool_mode = "off"
 
