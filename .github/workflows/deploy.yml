@@ -110,30 +110,6 @@ jobs:
             fi
           fi
 
-          # Function to compare files
-          compare_files() {
-            local LOCAL_FILE="$1"
-            local REMOTE_FILE="$2"
-            local DESCRIPTION="$3"
-
-            if [ -f "$LOCAL_FILE" ]; then
-              LOCAL_HASH=$(sha256sum "$LOCAL_FILE" | cut -d' ' -f1)
-              REMOTE_HASH=$(ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "sha256sum $REMOTE_FILE 2>/dev/null | cut -d' ' -f1" || echo "NOT_FOUND")
-
-              if [ "$REMOTE_HASH" = "NOT_FOUND" ]; then
-                echo "::notice::$DESCRIPTION not found on server (will be created during deploy)"
-              elif [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
-                echo "::notice::$DESCRIPTION pending sync (git desired state differs from deployed server file)"
-                echo "  Local:  $LOCAL_HASH"
-                echo "  Server: $REMOTE_HASH"
-                return 1
-              else
-                echo "::notice::$DESCRIPTION compliant ✅"
-              fi
-            fi
-            return 0
-          }
-
           is_managed_path() {
             local candidate="$1"
             case "$candidate" in
@@ -160,57 +136,23 @@ jobs:
             is_managed_path "$entry"
           }
 
-          # Check 1: docker-compose.yml
-          echo "=== Check 1: docker-compose.yml ==="
-          if ! compare_files "docker-compose.yml" "${{ env.DEPLOY_PATH }}/docker-compose.yml" "docker-compose.yml"; then
-            PENDING_SYNC=true
-          fi
-
-          # Check 2: docker-compose.prod.yml
-          echo "=== Check 2: docker-compose.prod.yml ==="
-          if ! compare_files "docker-compose.prod.yml" "${{ env.DEPLOY_PATH }}/docker-compose.prod.yml" "docker-compose.prod.yml"; then
-            PENDING_SYNC=true
-          fi
-
-          # Check 3: config/moltis.toml
-          echo "=== Check 3: config/moltis.toml ==="
-          if ! compare_files "config/moltis.toml" "${{ env.DEPLOY_PATH }}/config/moltis.toml" "moltis.toml"; then
-            PENDING_SYNC=true
-          fi
-
-          # Check 4: config/mcp-servers.json (if exists)
-          echo "=== Check 4: config/mcp-servers.json ==="
-          if [ -f "config/mcp-servers.json" ]; then
-            if ! compare_files "config/mcp-servers.json" "${{ env.DEPLOY_PATH }}/config/mcp-servers.json" "mcp-servers.json"; then
-              PENDING_SYNC=true
-            fi
-          fi
-
-          # Check 5: scripts/ directory
-          echo "=== Check 5: scripts/ directory ==="
-          if [ -d "scripts" ] && [ "$(ls -A scripts 2>/dev/null)" ]; then
-            for SCRIPT in scripts/*; do
-              if [ -f "$SCRIPT" ]; then
-                SCRIPT_NAME=$(basename "$SCRIPT")
-                if ! compare_files "$SCRIPT" "${{ env.DEPLOY_PATH }}/scripts/$SCRIPT_NAME" "scripts/$SCRIPT_NAME"; then
-                  PENDING_SYNC=true
-                fi
-              fi
-            done
-          fi
-
-          # Check 6: systemd/ directory
-          echo "=== Check 6: systemd/ directory ==="
-          if [ -d "systemd" ] && [ "$(ls -A systemd 2>/dev/null)" ]; then
-            for UNIT in systemd/*; do
-              if [ -f "$UNIT" ]; then
-                UNIT_NAME=$(basename "$UNIT")
-                if ! compare_files "$UNIT" "${{ env.DEPLOY_PATH }}/systemd/$UNIT_NAME" "systemd/$UNIT_NAME"; then
-                  PENDING_SYNC=true
-                fi
-              fi
-            done
-          fi
+          # Check 1-6: batch compare managed surface hashes
+          echo "=== Check 1-6: deploy-managed file hashes ==="
+          MANAGED_SURFACE_STATE="$(mktemp)"
+          bash scripts/gitops-check-managed-surface.sh \
+            --ssh-user "${{ env.SSH_USER }}" \
+            --ssh-host "${{ env.SSH_HOST }}" \
+            --deploy-path "${{ env.DEPLOY_PATH }}" \
+            --project-root "$PWD" \
+            --state-file "$MANAGED_SURFACE_STATE"
+          # shellcheck disable=SC1090
+          source "$MANAGED_SURFACE_STATE"
+          rm -f "$MANAGED_SURFACE_STATE"
+          PENDING_SYNC="${PENDING_SYNC:-false}"
+          echo "managed_files_compared=${COMPARED_FILES:-0}" >> "$GITHUB_OUTPUT"
+          echo "managed_files_compliant=${COMPLIANT_COUNT:-0}" >> "$GITHUB_OUTPUT"
+          echo "managed_files_pending=${PENDING_COUNT:-0}" >> "$GITHUB_OUTPUT"
+          echo "managed_files_missing=${MISSING_COUNT:-0}" >> "$GITHUB_OUTPUT"
 
           # Check 7: migrate legacy runtime pointers out of git-managed root
           echo "=== Check 7: migrate legacy Moltis runtime pointers ==="
@@ -318,6 +260,10 @@ jobs:
           echo "| Drift Detected | \`${{ steps.check.outputs.drift_detected }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Server Dirty | \`${{ steps.check.outputs.server_dirty }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Pending Sync | \`${{ steps.check.outputs.pending_sync }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Managed Files Compared | \`${{ steps.check.outputs.managed_files_compared }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Managed Files Compliant | \`${{ steps.check.outputs.managed_files_compliant }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Managed Files Pending | \`${{ steps.check.outputs.managed_files_pending }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Managed Files Missing | \`${{ steps.check.outputs.managed_files_missing }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Repair Performed | \`${{ steps.check.outputs.repair_performed }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliant | \`${{ steps.check.outputs.compliant }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
