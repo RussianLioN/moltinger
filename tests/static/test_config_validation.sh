@@ -113,6 +113,7 @@ run_static_config_validation_tests() {
        rg -q '^profile_dir = "/tmp/moltis-browser-profile/browserless"' "$TOML_CONFIG" && \
        rg -q '^persist_profile = false' "$TOML_CONFIG" && \
        rg -q '^max_instances = 1' "$TOML_CONFIG" && \
+       rg -q '^sandbox_image = "moltis-browserless-chrome:tracked"' "$TOML_CONFIG" && \
        rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
        rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$COMPOSE_PROD" && \
        rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.yml" && \
@@ -122,12 +123,14 @@ run_static_config_validation_tests() {
        rg -q 'prepare_moltis_browser_profile_dir' "$DEPLOY_SCRIPT" && \
        rg -q 'rm -rf "\$browser_profile_dir"' "$DEPLOY_SCRIPT" && \
        rg -q 'Tracked browser contract must pin max_instances=1 when persist_profile=false' "$DEPLOY_SCRIPT" && \
-       rg -q 'prepull_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
-       rg -q 'docker pull "\$sandbox_image"' "$DEPLOY_SCRIPT" && \
-       rg -q '^sandbox_image = "browserless/chrome"' "$TOML_CONFIG"; then
+       rg -q 'prepare_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
+       [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" ]] && \
+       [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" ]] && \
+       rg -q 'scripts/moltis-browser-sandbox/Dockerfile' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker build \\' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must keep a dedicated non-persistent browser profile dir, pin max_instances=1, purge stale profile state on deploy, pre-pull the tracked browserless/chrome image, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must keep a dedicated non-persistent browser profile dir, pin max_instances=1, build the tracked browser sandbox wrapper image during deploy, purge stale profile state on deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
@@ -262,15 +265,34 @@ PY
     fi
 
     test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"
-    if rg -Fq 'BROWSER_DOCKER_SOCKET_GID_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+    if rg -Fq 'BROWSER_SANDBOX_IMAGE_UNAVAILABLE' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'docker image inspect "$BROWSER_SANDBOX_IMAGE"' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_DOCKER_SOCKET_GID_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_CONTAINER_HOST_INVALID' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_PROFILE_ROOT_PERMISSION_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_PROFILE_DIR_PERMISSION_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_PROFILE_CONCURRENCY_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'prepare_moltis_browser_sandbox_image()' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker build \\' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'scripts/moltis-browser-sandbox/Dockerfile' "$DEPLOY_SCRIPT" && \
        rg -Fq 'DOCKER_SOCKET_GID' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Runtime attestation and deploy control plane must guard docker.sock access, host-gateway routing, writable browser profile storage, and single-instance non-persistent browser concurrency before production traffic hits Telegram"
+        test_fail "Runtime attestation and deploy control plane must guard browser sandbox image availability, docker.sock access, host-gateway routing, writable browser profile storage, and single-instance non-persistent browser concurrency before production traffic hits Telegram"
+    fi
+
+    test_start "static_tracked_browser_sandbox_wrapper_normalizes_profile_ownership_and_drops_privileges"
+    if [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" ]] && \
+       [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" ]] && \
+       rg -q '^ARG BASE_IMAGE=browserless/chrome$' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^FROM \$\{BASE_IMAGE\}$' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^USER root$' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -Fq 'chown -R 999:999 "$profile_dir"' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" && \
+       rg -Fq 'export HOME="$runtime_home"' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" && \
+       rg -Fq "exec setpriv --reuid=999 --regid=999 --init-groups /bin/sh -lc 'cd /usr/src/app && exec ./start.sh'" "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh"; then
+        test_pass
+    else
+        test_fail "Tracked browser sandbox wrapper must normalize the bind-mounted profile ownership as root, provide a writable non-root HOME, and then drop privileges back to the upstream browserless runtime user before Chrome starts"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"

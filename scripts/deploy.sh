@@ -1715,17 +1715,17 @@ prepare_moltis_browser_profile_dir() {
     return 0
 }
 
-prepull_moltis_browser_sandbox_image() {
+prepare_moltis_browser_sandbox_image() {
     if [[ "$TARGET" != "moltis" ]]; then
         return 0
     fi
 
-    local browser_contract browser_enabled sandbox_image
+    local browser_contract browser_enabled sandbox_image sandbox_build_context sandbox_dockerfile
     browser_contract="$(awk '
         BEGIN {
             in_section = 0
             enabled = "true"
-            image = "browserless/chrome"
+            image = "moltis-browserless-chrome:tracked"
         }
         /^\[tools\.browser\][[:space:]]*$/ {
             in_section = 1
@@ -1758,15 +1758,33 @@ prepull_moltis_browser_sandbox_image() {
     sandbox_image="${browser_contract#*|}"
 
     if [[ "$browser_enabled" != "true" ]]; then
-        log_info "Tracked Moltis browser tool is disabled; skipping sandbox image pre-pull"
+        log_info "Tracked Moltis browser tool is disabled; skipping sandbox image preparation"
         return 0
     fi
 
     if [[ -z "$sandbox_image" || "$sandbox_image" == "null" ]]; then
-        sandbox_image="browserless/chrome"
+        sandbox_image="moltis-browserless-chrome:tracked"
     fi
 
-    log_info "Pre-pulling Moltis browser sandbox image: $sandbox_image"
+    if [[ "$sandbox_image" == "moltis-browserless-chrome:tracked" ]]; then
+        sandbox_build_context="$PROJECT_ROOT/scripts/moltis-browser-sandbox"
+        sandbox_dockerfile="$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile"
+        if [[ ! -f "$sandbox_dockerfile" ]]; then
+            log_error "Tracked Moltis browser sandbox Dockerfile is missing: $sandbox_dockerfile"
+            return 1
+        fi
+
+        log_info "Building tracked Moltis browser sandbox image: $sandbox_image"
+        docker build \
+            --build-arg BASE_IMAGE=browserless/chrome \
+            -t "$sandbox_image" \
+            -f "$sandbox_dockerfile" \
+            "$sandbox_build_context" >/dev/null
+        log_success "Tracked Moltis browser sandbox image built: $sandbox_image"
+        return 0
+    fi
+
+    log_info "Pulling Moltis browser sandbox image: $sandbox_image"
     docker pull "$sandbox_image" >/dev/null
     log_success "Moltis browser sandbox image ready: $sandbox_image"
     return 0
@@ -1825,7 +1843,7 @@ cmd_deploy() {
     backup_current_state
     pull_images
     prepare_moltis_browser_profile_dir
-    prepull_moltis_browser_sandbox_image
+    prepare_moltis_browser_sandbox_image
     deploy_containers
 
     if verify_deployment; then

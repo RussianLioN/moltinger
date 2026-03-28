@@ -285,19 +285,20 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
     test_pass
 }
 
-test_deploy_script_prepulls_tracked_browser_sandbox_image() {
-    test_start "Deploy should pre-pull the tracked browser sandbox image before Moltis comes up"
+test_deploy_script_prepares_tracked_browser_sandbox_image() {
+    test_start "Deploy should prepare the tracked browser sandbox image before Moltis comes up"
 
     if [[ ! -f "$PROJECT_ROOT/scripts/deploy.sh" || ! -f "$PROJECT_ROOT/config/moltis.toml" ]]; then
         test_skip "Missing deploy or config files"
         return
     fi
 
-    if ! grep -Fq 'prepull_moltis_browser_sandbox_image()' "$PROJECT_ROOT/scripts/deploy.sh" || \
+    if ! grep -Fq 'prepare_moltis_browser_sandbox_image()' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "awk '" "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'docker pull "$sandbox_image"' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'sandbox_image = "browserless/chrome"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Deploy must parse the tracked browser contract with shell-only tooling and pre-pull browserless/chrome so the first browser run is not spent on a cold pull"
+       ! rg -q 'docker build \\' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'scripts/moltis-browser-sandbox/Dockerfile' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'sandbox_image = "moltis-browserless-chrome:tracked"' "$PROJECT_ROOT/config/moltis.toml"; then
+        test_fail "Deploy must parse the tracked browser contract with shell-only tooling and build the tracked browser sandbox wrapper image before the first browser run"
         return
     fi
 
@@ -1323,7 +1324,7 @@ run_all_tests() {
     test_tracked_deploy_workflows_use_shared_script_entrypoint
     test_deploy_script_verifies_live_moltis_runtime_contract
     test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox
-    test_deploy_script_prepulls_tracked_browser_sandbox_image
+    test_deploy_script_prepares_tracked_browser_sandbox_image
     test_deploy_script_force_recreates_moltis_runtime_on_rollout
     test_tracked_deploy_workflows_pass_remote_args_without_inline_shell_string
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
