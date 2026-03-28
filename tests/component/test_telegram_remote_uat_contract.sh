@@ -155,6 +155,70 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "host_path_leak_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Для этого навыка использую /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_false_negative_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "По-честному: подтверждённых новых версий Codex у меня сейчас нет. Что проверилось: путь к skill codex-update сейчас не существует физически; каталога /home/moltis/.moltis/skills в текущем файловом окружении тоже нет.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 base_payload="$(cat <<'JSON'
 {
   "ok": false,
@@ -336,6 +400,42 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must fail on recent invalid pre-send activity leakage even when the helper payload is otherwise green"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_host_path_leak_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=host_path_leak_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Что умеет codex-update?" \
+        --output "$TEST_TMPDIR/result-host-path-leak.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the reply exposes host filesystem or repo runtime paths"
+    else
+        if jq -e '.failure.code == "semantic_host_path_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-host-path-leak.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must surface host-path leakage as a failed authoritative outcome"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_false_negative_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_false_negative_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Что с новыми версиями codex?" \
+        --output "$TEST_TMPDIR/result-codex-update-false-negative.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update is falsely treated as missing from a sandboxed Telegram surface"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-false-negative.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must surface codex-update false negatives caused by sandbox-invisible host paths"
         fi
     fi
 
