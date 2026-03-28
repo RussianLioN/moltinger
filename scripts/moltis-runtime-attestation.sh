@@ -35,6 +35,7 @@ DOCKER_SOCKET_GID=""
 DOCKER_SOCKET_MODE=""
 CONTAINER_GROUP_IDS=""
 HOST_DOCKER_INTERNAL_MAPPED=""
+TELEGRAM_ROOT_TABLE_PRESENT=""
 
 timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -131,6 +132,15 @@ read_toml_key() {
             exit
         }
     ' "$toml_file"
+}
+
+toml_has_exact_section() {
+    local toml_file="$1"
+    local section="$2"
+
+    [[ -f "$toml_file" ]] || return 1
+
+    grep -Eq "^[[:space:]]*\\[${section//./\\.}\\][[:space:]]*$" "$toml_file"
 }
 
 dir_mode_allows_other_write_exec() {
@@ -608,6 +618,11 @@ if ! cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"; then
     fail_with "RUNTIME_CONFIG_FILE_MISMATCH" "Runtime moltis.toml diverges from tracked config/moltis.toml"
 fi
 
+if toml_has_exact_section "$RUNTIME_RUNTIME_TOML" "channels.telegram"; then
+    TELEGRAM_ROOT_TABLE_PRESENT="true"
+    fail_with "TELEGRAM_LEGACY_ROOT_TABLE_PRESENT" "Tracked/runtime Moltis config must use the current account-only Telegram schema and must not contain a legacy [channels.telegram] root table"
+fi
+
 BROWSER_ENABLED="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "enabled" || true)"
 BROWSER_SANDBOX_IMAGE="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "sandbox_image" || true)"
 BROWSER_CONTAINER_HOST="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "container_host" || true)"
@@ -790,6 +805,7 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg docker_socket_mode "$DOCKER_SOCKET_MODE" \
         --arg container_group_ids "$CONTAINER_GROUP_IDS" \
         --arg host_docker_internal_mapped "$HOST_DOCKER_INTERNAL_MAPPED" \
+        --arg telegram_root_table_present "$TELEGRAM_ROOT_TABLE_PRESENT" \
         --arg expected_auth_provider "$EXPECTED_AUTH_PROVIDER" \
         --arg auth_status_raw "$AUTH_STATUS_RAW" \
         --arg auth_status_post_canary "$AUTH_STATUS_POST_CANARY" \
@@ -841,6 +857,7 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             docker_socket_mode: (if $docker_socket_mode == "" then null else $docker_socket_mode end),
             container_group_ids: (if $container_group_ids == "" then null else ($container_group_ids | split(" ")) end),
             host_docker_internal_mapped: (if $host_docker_internal_mapped == "" then null else ($host_docker_internal_mapped == "true") end),
+            telegram_root_table_present: ($telegram_root_table_present == "true"),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
             auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
             auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),

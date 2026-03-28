@@ -193,11 +193,14 @@ create_workspace_fixture() {
     git -C "$workspace_root" config user.name "Codex Test"
     git -C "$workspace_root" config user.email "codex@example.com"
     printf 'runtime\n' >"$workspace_root/runtime.txt"
-    cat >"$workspace_root/config/moltis.toml" <<EOF
+cat >"$workspace_root/config/moltis.toml" <<EOF
 [memory]
 provider = "ollama"
 base_url = "http://ollama:11434"
 model = "nomic-embed-text"
+
+[channels.telegram.moltis-bot]
+stream_mode = "off"
 
 [tools.browser]
 enabled = true
@@ -435,6 +438,50 @@ PY
        [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
        ! jq -e '.errors[] | select(.code == "BROWSER_DOCKER_SOCKET_GID_MISMATCH")' "$output_json" >/dev/null 2>&1; then
         test_fail "Runtime attestation should fail when the docker.sock gid is not present in the live Moltis process groups"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    python3 - "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml" <<'PY'
+from pathlib import Path
+import sys
+
+legacy_block = "[channels.telegram]\nenabled = true\n\n"
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
+    text = path.read_text()
+    if legacy_block not in text:
+        marker = "[channels.telegram.moltis-bot]\n"
+        if marker in text:
+            path.write_text(text.replace(marker, legacy_block + marker, 1))
+        else:
+            path.write_text(legacy_block + text)
+PY
+
+    test_start "component_runtime_attestation_fails_when_legacy_root_telegram_table_exists"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-legacy-telegram-root.log"
+    exit_code=$?
+    set -e
+    cp "$original_tracked_toml" "$workspace_root/config/moltis.toml"
+    cp "$original_tracked_toml" "$runtime_config_dir/moltis.toml"
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "TELEGRAM_LEGACY_ROOT_TABLE_PRESENT")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when tracked/runtime config keeps the legacy root [channels.telegram] table"
         rm -rf "$fixture_root"
         return
     fi

@@ -179,6 +179,14 @@ PY
         test_fail "User-facing Telegram account must explicitly pin stream_mode = \"off\" so runtime defaults or per-account streaming features cannot leak internal activity/tool-progress into chat"
     fi
 
+    test_start "static_telegram_config_uses_current_account_only_schema"
+    if rg -Fq '[channels.telegram.moltis-bot]' "$TOML_CONFIG" && \
+       ! rg -q '^\[channels\.telegram\]$' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Tracked Moltis config must use the current account-only Telegram schema and must not keep the legacy [channels.telegram] enabled-table that runtime misreads as a fake account"
+    fi
+
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
     if rg -Fq 'container_host = "host.docker.internal"' "$TOML_CONFIG"; then
         test_pass
@@ -279,6 +287,7 @@ PY
 
     test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"
     if rg -Fq 'BROWSER_SANDBOX_IMAGE_UNAVAILABLE' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'TELEGRAM_LEGACY_ROOT_TABLE_PRESENT' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'docker image inspect "$BROWSER_SANDBOX_IMAGE"' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_DOCKER_SOCKET_GID_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_CONTAINER_HOST_INVALID' "$RUNTIME_ATTESTATION_SCRIPT" && \

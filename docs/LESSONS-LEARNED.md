@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-28
-**Total Lessons**: 60
+**Total Lessons**: 61
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (28 lessons)
+#### P1 (29 lessons)
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
+- [Moltis Telegram logbook suffix remained user-visible after stream_mode off, and tracked config still carried a legacy schema table](../docs/rca/2026-03-28-moltis-telegram-logbook-suffix-and-legacy-schema-drift.md)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Moltis operator browser session isolation and Telegram send attribution drift](../docs/rca/2026-03-28-moltis-operator-browser-session-isolation-and-telegram-send-attribution-drift.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
@@ -114,8 +115,9 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
-#### configuration (1 lessons)
+#### configuration (2 lessons)
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
+- [Moltis Telegram logbook suffix remained user-visible after stream_mode off, and tracked config still carried a legacy schema table](../docs/rca/2026-03-28-moltis-telegram-logbook-suffix-and-legacy-schema-drift.md)
 
 #### generic (5 lessons)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
@@ -160,15 +162,15 @@
 
 ### Popular Tags
 
-- `moltis` (18 lessons)
+- `moltis` (19 lessons)
 - `deploy` (17 lessons)
 - `gitops` (16 lessons)
 - `github-actions` (16 lessons)
 - `cicd` (16 lessons)
-- `rca` (10 lessons)
+- `rca` (11 lessons)
+- `telegram` (9 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
-- `telegram` (8 lessons)
 - `git-worktree` (8 lessons)
 
 
@@ -178,10 +180,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 60 |
-| Critical (P0/P1) | 29 |
+| Total Lessons | 61 |
+| Critical (P0/P1) | 30 |
 | Categories | 6 |
-| Unique Tags | 137 |
+| Unique Tags | 138 |
 
 ---
 

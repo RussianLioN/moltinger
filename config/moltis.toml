@@ -452,12 +452,10 @@ cache_ttl_minutes = 15            # Cache fetched pages for this many minutes (0
 max_redirects = 3                 # Maximum HTTP redirects to follow
 readability = true                # Use readability extraction for HTML (cleaner output)
 
-[channels.telegram]
-enabled = true                    # Keep Telegram integration explicitly enabled
-
 # ── Telegram Bot Configuration ────────────────────────────────────────────────
 # Create bot via @BotFather, get token
 # Get user ID via @userinfobot
+# Current Moltis schema uses account-only tables under [channels.telegram.<account>].
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
