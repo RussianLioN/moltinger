@@ -33,7 +33,6 @@ MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/s
 MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-/home/moltis/.moltis/.repo-managed-skills.txt}"
 MOLTIS_STOP_TIMEOUT_SECONDS="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
 CANONICAL_MOLTIS_BROWSER_PROFILE_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_DIR:-/tmp/moltis-browser-profile}"
-CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR:-$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR/shared}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -453,6 +452,32 @@ dir_mode_allows_other_write_exec() {
     [[ -n "$last_digit" ]] || return 1
 
     (( (10#$last_digit & 2) == 2 && (10#$last_digit & 1) == 1 ))
+}
+
+read_toml_key() {
+    local file_path="$1"
+    local section="$2"
+    local key="$3"
+
+    awk -v section="$section" -v key="$key" '
+        BEGIN { in_section = 0 }
+        $0 ~ "^[[:space:]]*\\[.*\\][[:space:]]*$" {
+            in_section = ($0 == section)
+            next
+        }
+        in_section {
+            line = $0
+            sub(/[[:space:]]*#.*/, "", line)
+            if (line ~ "^[[:space:]]*" key "[[:space:]]*=") {
+                sub("^[[:space:]]*" key "[[:space:]]*=[[:space:]]*", "", line)
+                gsub(/^[[:space:]]*"/, "", line)
+                gsub(/"[[:space:]]*$/, "", line)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+                print line
+                exit
+            }
+        }
+    ' "$file_path"
 }
 
 list_repo_skill_names() {
@@ -1521,7 +1546,7 @@ verify_deployment() {
         local expected_workspace expected_runtime_config
         local actual_workspace_source actual_runtime_config_source
         local actual_runtime_config_rw working_dir
-        local browser_profile_dir browser_profile_root actual_browser_profile_source actual_browser_profile_rw
+        local browser_profile_dir browser_profile_root browser_persist_profile browser_max_instances actual_browser_profile_source actual_browser_profile_rw
         local tracked_runtime_toml runtime_runtime_toml
 
         working_dir="$(docker inspect --format '{{.Config.WorkingDir}}' "$TARGET_CONTAINER" 2>/dev/null || echo "")"
@@ -1595,17 +1620,9 @@ verify_deployment() {
             record_verification_failure "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
         fi
 
-        browser_profile_dir="$(awk '
-            /^\[tools\.browser\][[:space:]]*$/ { in_section = 1; next }
-            /^\[/ { if (in_section) exit }
-            in_section && /^[[:space:]]*profile_dir[[:space:]]*=/ {
-                gsub(/#.*/, "", $0)
-                sub(/^[[:space:]]*profile_dir[[:space:]]*=[[:space:]]*"/, "", $0)
-                sub(/".*$/, "", $0)
-                print $0
-                exit
-            }
-        ' "$tracked_runtime_toml")"
+        browser_profile_dir="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "profile_dir" || true)"
+        browser_persist_profile="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "persist_profile" || true)"
+        browser_max_instances="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "max_instances" || true)"
         if [[ -n "$browser_profile_dir" ]]; then
             browser_profile_root="$(dirname "$browser_profile_dir")"
             actual_browser_profile_source="$(container_mount_source "$TARGET_CONTAINER" "$browser_profile_root")"
@@ -1628,12 +1645,22 @@ verify_deployment() {
             fi
 
             if [[ ! -d "$browser_profile_root" || ! -d "$browser_profile_dir" ]]; then
-                log_error "Moltis browser contract mismatch: browser profile root or shared dir is missing on host"
+                log_error "Moltis browser contract mismatch: browser profile root or configured dir is missing on host"
                 return 1
             fi
 
             if ! dir_mode_allows_other_write_exec "$browser_profile_root" || ! dir_mode_allows_other_write_exec "$browser_profile_dir"; then
-                log_error "Moltis browser contract mismatch: browser profile root/shared dir must be writable for arbitrary non-root browser users"
+                log_error "Moltis browser contract mismatch: browser profile root/configured dir must be writable for arbitrary non-root browser users"
+                return 1
+            fi
+
+            if [[ "$browser_profile_dir" == "$browser_profile_root" ]]; then
+                log_error "Moltis browser contract mismatch: browser profile_dir must be a dedicated child path, not the mounted root itself"
+                return 1
+            fi
+
+            if [[ "$browser_persist_profile" == "false" && "${browser_max_instances:-}" != "1" ]]; then
+                log_error "Moltis browser contract mismatch: persist_profile=false requires max_instances=1 to avoid shared Chrome profile lock contention"
                 return 1
             fi
         fi
@@ -1648,13 +1675,43 @@ verify_deployment() {
 }
 
 prepare_moltis_browser_profile_dir() {
+    local tracked_runtime_toml browser_profile_dir browser_profile_root browser_persist_profile browser_max_instances
+
     if [[ "$TARGET" != "moltis" ]]; then
         return 0
     fi
 
-    mkdir -p "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
-    chmod 0777 "$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
-    log_success "Prepared shared Moltis browser profile dir: $CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    tracked_runtime_toml="$PROJECT_ROOT/config/moltis.toml"
+    browser_profile_dir="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "profile_dir" || true)"
+    browser_persist_profile="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "persist_profile" || true)"
+    browser_max_instances="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "max_instances" || true)"
+    if [[ -z "$browser_profile_dir" ]]; then
+        log_error "Missing tools.browser.profile_dir in tracked config: $tracked_runtime_toml"
+        return 1
+    fi
+
+    browser_profile_root="$(dirname "$browser_profile_dir")"
+    if [[ "$browser_profile_root" != "$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" ]]; then
+        log_error "Tracked browser profile root '$browser_profile_root' must stay under canonical mount root '$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR'"
+        return 1
+    fi
+
+    if [[ "$browser_profile_dir" == "$browser_profile_root" ]]; then
+        log_error "Tracked browser profile_dir must be a dedicated child path under '$browser_profile_root'"
+        return 1
+    fi
+
+    if [[ "$browser_persist_profile" == "false" && "${browser_max_instances:-}" != "1" ]]; then
+        log_error "Tracked browser contract must pin max_instances=1 when persist_profile=false"
+        return 1
+    fi
+
+    mkdir -p "$browser_profile_root"
+    chmod 0777 "$browser_profile_root"
+    rm -rf "$browser_profile_dir"
+    mkdir -p "$browser_profile_dir"
+    chmod 0777 "$browser_profile_dir"
+    log_success "Prepared dedicated Moltis browser profile dir: $browser_profile_dir"
     return 0
 }
 

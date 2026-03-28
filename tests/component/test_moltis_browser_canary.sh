@@ -90,6 +90,28 @@ EOF
     fi
     test_pass
 
+    test_start "component_moltis_browser_canary_uses_extended_default_wait_budget"
+    : >"$smoke_calls"
+    if ! PATH="$fake_bin:$PATH" \
+        DOCKER_BIN="docker" \
+        MOLTIS_BROWSER_CANARY_SMOKE_SCRIPT="$fake_smoke" \
+        FAKE_SMOKE_CALLS="$smoke_calls" \
+        FAKE_SMOKE_EXIT_CODE="0" \
+        FAKE_DOCKER_LOGS=$'INFO tool execution succeeded tool=browser\nINFO navigated to URL' \
+        bash "$CANARY_SCRIPT" >"$stdout_log" 2>"$stderr_log"; then
+        test_fail "Browser canary should use the tracked extended wait budget when env overrides are absent"
+        rm -rf "$fixture_root"
+        return
+    fi
+
+    if ! grep -Fq 'CHAT_WAIT_MS=120000' "$smoke_calls" || \
+       ! grep -Fq 'TEST_TIMEOUT=90' "$smoke_calls"; then
+        test_fail "Browser canary defaults must keep the extended wait and timeout budget for real browser runs"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
     test_start "component_moltis_browser_canary_fails_when_live_logs_still_contain_browser_errors"
     set +e
     PATH="$fake_bin:$PATH" \

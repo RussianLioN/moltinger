@@ -342,6 +342,44 @@ Why this matters:
 - Docker socket access is controlled by numeric UID/GID, not the textual group name
   shown inside the container
 
+### Symptom: Browser tool no longer shows Docker `permission denied`, but browser container never becomes ready
+
+Likely cause:
+
+- the sibling browser container can now start, but Chrome cannot initialize the
+  configured `profile_dir`
+- the tracked profile contract is reusing a shared/stale Chrome user-data-dir
+  instead of a dedicated non-persistent child directory
+
+Inspect:
+
+```bash
+docker logs moltis --since 20m | rg 'browser container failed readiness check|tool execution failed tool=browser|SingletonLock|ProcessSingleton' -n
+docker ps --format '{{.Names}}' | rg '^moltis-browser-' | tail -n 1
+docker logs "$(docker ps --format '{{.Names}}' | rg '^moltis-browser-' | tail -n 1)" 2>&1 | tail -n 50
+docker exec moltis sh -lc 'sed -n "478,498p" /home/moltis/.config/moltis/moltis.toml'
+ls -la /tmp/moltis-browser-profile
+find /tmp/moltis-browser-profile -maxdepth 2 -mindepth 1 -printf '%M %u:%g %p\n' | head -n 50
+docker run --rm browserless/chrome sh -lc 'id'
+```
+
+Fix:
+
+- keep `tools.browser.container_host = "host.docker.internal"` and the Docker socket
+  contract from the official docs
+- use a dedicated child `profile_dir` such as
+  `/tmp/moltis-browser-profile/browserless`, not a shared multi-instance path
+- keep `persist_profile = false`
+- pin `max_instances = 1`
+- purge and recreate the configured browser `profile_dir` during deploy
+
+Why this matters:
+
+- official Moltis docs cover sibling-container routing, not a shared Chrome
+  profile strategy
+- Chrome user-data-dirs are lock-sensitive; concurrent or stale reuse shows up as
+  `SingletonLock` / `ProcessSingleton` failures even when Docker connectivity is fine
+
 ### Symptom: Browser tool now starts, but the run still ends with `Timed out: Agent run timed out after 30s`
 
 Likely cause:
