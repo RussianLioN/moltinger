@@ -1,23 +1,23 @@
 # RCA Index
 
-**Last Updated**: 2026-03-28
-**Version**: 1.16.0
+**Last Updated**: 2026-03-29
+**Version**: 1.17.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 24 |
+| Total RCA | 25 |
 | Avg Resolution Time | N/A |
-| This Month | 24 |
+| This Month | 25 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
 | generic | 4 | 17% |
-| process | 9 | 38% |
-| cicd | 9 | 38% |
+| process | 10 | 40% |
+| cicd | 9 | 36% |
 | security | 1 | 4% |
 | shell | 1 | 4% |
 
@@ -26,7 +26,7 @@
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 9 | High - production impact |
+| P1 | 10 | High - production impact |
 | P2 | 9 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-025 | 2026-03-29 | process | P1 | resolved | repo-local runtime repair guidance still routed `runtime_bootstrap_required` to raw `bd bootstrap`, but current installed Beads CLI can no-op when a stale `.beads/dolt` shell already exists without the named `beads` DB | routed runtime-only repair through managed stale-shell quarantine + bootstrap/import helper, updated active rules/docs, and added live-contract regressions |
 | RCA-024 | 2026-03-28 | cicd | P2 | resolved | deploy stall watchdog passed full GitHub Actions workflow-run payloads into `jq` through `--argjson` shell arguments twice, so scheduled monitoring failed with `Argument list too long` before classification | switched watchdog payload transport to temp files + `jq --slurpfile` and added an oversized API-payload unit test |
 | RCA-023 | 2026-03-28 | cicd | P1 | resolved | repo skill sync verification relied on `moltis-repo-skills-sync.sh`, whose EXIT trap referenced a local `staging_root` under `set -u`, so the helper crashed on cleanup and deploy verification treated repo-managed skill sync as failed | moved staging cleanup to a scope-safe global variable + cleanup function and added the sync component test to pre-deployment workflow gates |
 | RCA-022 | 2026-03-28 | cicd | P2 | resolved | the first deploy hardening pass validated happy-path structure but did not simulate bash `set -e` verify failures or GitHub Actions queue semantics, so `record_verification_failure()` became prematurely fatal and the watchdog treated healthy serialized runs as stalls | made verify-failure recording non-fatal, switched stall detection to workflow-specific idle/queue semantics, isolated notification channels, and added targeted tests |

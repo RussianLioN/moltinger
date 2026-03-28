@@ -39,6 +39,8 @@ CLAUDE_DOC="$PROJECT_ROOT/CLAUDE.md"
 BEADS_STATE_AGENTS="$PROJECT_ROOT/.beads/AGENTS.md"
 BEADS_STATE_CONFIG="$PROJECT_ROOT/.beads/config.yaml"
 WORKTREE_HOTFIX_PLAYBOOK="$PROJECT_ROOT/docs/WORKTREE-HOTFIX-PLAYBOOK.md"
+RUNTIME_FIRST_RULE="$PROJECT_ROOT/docs/rules/beads-runtime-first-jsonl-compatibility-only.md"
+LOCALIZE_RULE="$PROJECT_ROOT/docs/rules/beads-worktree-localize-must-bootstrap-and-import-without-moving-head.md"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -88,8 +90,10 @@ run_static_beads_worktree_ownership_tests() {
        rg -q 'partial_foundation' "$LOCALIZE_SCRIPT" && \
        rg -q 'post_migration_runtime_only' "$LOCALIZE_SCRIPT" && \
        rg -q 'bootstrap_required' "$LOCALIZE_SCRIPT" && \
+       rg -q 'repair_runtime_only' "$LOCALIZE_SCRIPT" && \
+       rg -q 'find_runtime_import_source' "$LOCALIZE_SCRIPT" && \
        rg -q '"\$\{system_bd\}" bootstrap' "$LOCALIZE_SCRIPT" && \
-       rg -q '"\$\{system_bd\}" --db "\$\{report_db_path\}" import "\$\{beads_dir\}/issues\.jsonl"' "$LOCALIZE_SCRIPT" && \
+       rg -q '"\$\{system_bd\}" --db "\$\{import_db_path\}" import "\$\{import_source\}"' "$LOCALIZE_SCRIPT" && \
        rg -q -- '--bootstrap-source' "$LOCALIZE_SCRIPT"; then
         test_pass
     else
@@ -112,10 +116,20 @@ run_static_beads_worktree_ownership_tests() {
     if rg -q -F 'Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F 'Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F 'local Beads repair problem' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
+       rg -q -F './scripts/beads-worktree-localize.sh --path .' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F 'bd status' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS"; then
         test_pass
     else
         test_fail "Root instructions must define the post-migration local-runtime state and repair protocol explicitly"
+    fi
+
+    test_start "static_runtime_rules_route_runtime_only_repair_through_managed_helper"
+    if rg -q -F './scripts/beads-worktree-localize.sh --path .' "$RUNTIME_FIRST_RULE" && \
+       rg -q -F 'quarantine the stale `.beads/dolt/` shell' "$LOCALIZE_RULE" && \
+       rg -q -F 'raw `bd bootstrap` can no-op on a stale `.beads/dolt/` shell' "$LOCALIZE_RULE"; then
+        test_pass
+    else
+        test_fail "Active runtime rules must route runtime-only repair through the managed helper and document stale-shell quarantine"
     fi
 
     test_start "static_root_instructions_do_not_reference_absent_migration_scripts"

@@ -13,8 +13,9 @@ If `.beads/config.yaml` exists, tracked `.beads/issues.jsonl` is already retired
 
 1. Treat the state as **local runtime repair drift**.
 2. Run `/usr/local/bin/bd doctor --json` first.
-3. Recover with `bd bootstrap`.
-4. Do **not** restore `.beads/issues.jsonl`.
+3. Recover with `./scripts/beads-worktree-localize.sh --path .` so stale runtime artifacts are quarantined before bootstrap is retried.
+4. Import the newest compatibility backup (`.beads/backup/*.jsonl` first, then `.beads/legacy-jsonl-backup/*.jsonl`) when one exists.
+5. Do **not** restore `.beads/issues.jsonl`.
 
 ## Why
 
@@ -23,5 +24,5 @@ A bare Dolt data directory can exist after a failed or partial bootstrap while t
 ## Required Guardrails
 
 1. Repo-local Beads helpers must not report `post_migration_runtime_only` from a bare `.beads/dolt/` shell alone.
-2. Recovery hints for runtime-only failures must point to `bd bootstrap`, not to JSONL restoration.
-3. Regression tests must cover `config + .beads/dolt shell + missing named beads DB`.
+2. Recovery hints for runtime-only failures must point to the managed runtime-repair helper, not to raw `bd bootstrap` or JSONL restoration.
+3. Regression tests must cover `config + .beads/dolt shell + missing named beads DB`, including the current Beads CLI behavior where raw `bd bootstrap` can no-op on that stale shell.

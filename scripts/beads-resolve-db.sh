@@ -690,7 +690,7 @@ beads_resolve_dispatch() {
   root_db_path="${canonical_root}/.beads/beads.db"
   recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
   if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
-    recovery_hint="/usr/local/bin/bd doctor --json && bd bootstrap"
+    recovery_hint="/usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ."
   fi
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
@@ -706,8 +706,8 @@ beads_resolve_dispatch() {
     runtime_recovery_hint="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${repo_root}")"
     runtime_repair_detail="Repair the local runtime in place from the tracked local foundation."
   else
-    runtime_recovery_hint="/usr/local/bin/bd doctor --json && bd bootstrap"
-    runtime_repair_detail="Tracked .beads/issues.jsonl is retired here; repair the local runtime instead of restoring JSONL."
+    runtime_recovery_hint="/usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ."
+    runtime_repair_detail="Tracked .beads/issues.jsonl is retired here; quarantine the stale runtime shell, rerun bootstrap, and import the newest compatibility backup instead of restoring tracked JSONL."
   fi
 
   if [[ -f "${redirect_path}" ]]; then

@@ -154,24 +154,10 @@ phase_a_probe_localize_state() {
   return "${rc}"
 }
 
-phase_a_runtime_bootstrap_command() {
-  local bd_self_path="${target_path}/bin/bd"
-  local system_bd="${BEADS_SYSTEM_BD:-}"
-
-  if [[ -z "${system_bd}" ]]; then
-    if [[ ! -x "${bd_self_path}" ]]; then
-      bd_self_path="${canonical_root}/bin/bd"
-    fi
-    system_bd="$(beads_resolve_find_system_bd "${bd_self_path}")" || die "Could not locate the system bd binary for runtime bootstrap"
-  fi
-
-  printf '%s\n' "${system_bd}"
-}
-
 phase_a_fail_runtime() {
   local state="${1:-unknown}"
   local message="${2:-Beads runtime could not be prepared in the new worktree.}"
-  local notice="${3:-Run /usr/local/bin/bd doctor --json and bd bootstrap inside the target worktree before continuing.}"
+  local notice="${3:-Run /usr/local/bin/bd doctor --json and ./scripts/beads-worktree-localize.sh --path . inside the target worktree before continuing.}"
 
   echo "[worktree-phase-a] ${message}" >&2
   if [[ -n "${notice}" ]]; then
@@ -184,7 +170,6 @@ phase_a_fail_runtime() {
 phase_a_prepare_beads_runtime() {
   local loop_count=0
   local bootstrap_attempted="false"
-  local system_bd=""
 
   [[ -x "${SCRIPT_DIR}/beads-worktree-localize.sh" ]] || die "Missing beads-worktree-localize.sh; cannot verify worktree-local Beads ownership"
 
@@ -204,16 +189,8 @@ phase_a_prepare_beads_runtime() {
         if [[ "${bootstrap_attempted}" == "true" ]]; then
           phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
         fi
-        if [[ "${phase_a_localize_runtime_repair_mode}" == "rebuild_local_foundation" ]]; then
-          "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null \
-            || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
-        else
-          system_bd="$(phase_a_runtime_bootstrap_command)"
-          (
-            cd "${target_path}"
-            "${system_bd}" bootstrap >/dev/null
-          ) || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
-        fi
+        "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null \
+          || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
         bootstrap_attempted="true"
         ;;
       *)

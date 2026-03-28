@@ -17,13 +17,10 @@ Description:
   redirect residue and materializing a worktree-local Beads runtime from the
   local foundation when that is safe to do. For older worktrees that still
   lack the plain-bd foundation, `--bootstrap-source` can import the tracked
-  recovery files before localization. If a Dolt runtime shell already exists
-  but the named `beads` DB is missing, this helper must stop and route the
-  operator to `bd bootstrap` instead of rebuilding from JSONL.
-  For compatibility worktrees, that foundation may still come from tracked
-  JSONL/config files. If a Dolt runtime shell already exists but the named
-  `beads` DB is missing, this helper must stop and route the operator to
-  `bd bootstrap` instead of rebuilding from JSONL.
+  recovery files before localization. For runtime-only drift after JSONL
+  retirement, the same helper can quarantine a stale Dolt shell, rerun
+  `bd bootstrap`, and import the newest compatibility JSONL backup when one
+  is available. It must never restore tracked `.beads/issues.jsonl`.
 EOF
 }
 
@@ -206,9 +203,9 @@ classify_state() {
   if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
     report_state="runtime_bootstrap_required"
     report_action="stop_and_report"
-    report_runtime_repair_mode="bootstrap_only"
+    report_runtime_repair_mode="repair_runtime_only"
     report_message="Tracked .beads/issues.jsonl is already retired for this worktree, but the local Dolt-backed Beads runtime is incomplete."
-    report_notice="Run /usr/local/bin/bd doctor --json first, then bd bootstrap. Do not restore JSONL."
+    report_notice="Run /usr/local/bin/bd doctor --json first, then ./scripts/beads-worktree-localize.sh --path . to quarantine any stale runtime shell, rerun bootstrap, and import the newest compatibility backup when available. Do not restore tracked JSONL."
     return 0
   fi
 
@@ -264,14 +261,39 @@ bootstrap_foundation() {
   )
 }
 
+find_runtime_import_source() {
+  local beads_dir="$1"
+  local latest=""
+  local candidate=""
+  local search_dir=""
+
+  for search_dir in "${beads_dir}/backup" "${beads_dir}/legacy-jsonl-backup"; do
+    [[ -d "${search_dir}" ]] || continue
+    while IFS= read -r candidate; do
+      if [[ -z "${latest}" || "${candidate}" -nt "${latest}" ]]; then
+        latest="${candidate}"
+      fi
+    done < <(find "${search_dir}" -maxdepth 1 -type f -name '*.jsonl' -print 2>/dev/null)
+    if [[ -n "${latest}" ]]; then
+      printf '%s\n' "${latest}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 materialize_local_db() {
+  local import_source="${1:-}"
   local system_bd="${BEADS_SYSTEM_BD:-}"
   local beads_dir="${target_path}/.beads"
+  local db_path="${beads_dir}/beads.db"
   local dolt_path="${beads_dir}/dolt"
   local recovery_dir="${beads_dir}/recovery"
   local recovery_path=""
   local timestamp=""
   local artifact=""
+  local import_db_path=""
   local runtime_probe_state="not_run"
   local -a stale_runtime_artifacts=(
     "metadata.json"
@@ -310,8 +332,19 @@ materialize_local_db() {
   (
     cd "${target_path}"
     "${system_bd}" bootstrap >/dev/null 2>&1
-    "${system_bd}" --db "${report_db_path}" import "${beads_dir}/issues.jsonl" >/dev/null 2>&1
   )
+
+  if [[ -n "${import_source}" ]]; then
+    if [[ -d "${dolt_path}" ]]; then
+      import_db_path="${dolt_path}"
+    else
+      import_db_path="${db_path}"
+    fi
+    (
+      cd "${target_path}"
+      "${system_bd}" --db "${import_db_path}" import "${import_source}" >/dev/null 2>&1
+    )
+  fi
 }
 
 localize_state() {
@@ -326,24 +359,30 @@ localize_state() {
       return 0
       ;;
     runtime_bootstrap_required)
-      if [[ "${report_runtime_repair_mode}" == "rebuild_local_foundation" ]]; then
-        materialize_local_db
-      else
-        return 1
-      fi
+      case "${report_runtime_repair_mode}" in
+        rebuild_local_foundation)
+          materialize_local_db "${target_path}/.beads/issues.jsonl"
+          ;;
+        repair_runtime_only)
+          materialize_local_db "$(find_runtime_import_source "${target_path}/.beads" 2>/dev/null || true)"
+          ;;
+        *)
+          return 1
+          ;;
+      esac
       ;;
     migratable_legacy)
       rm -f "${redirect_path}"
-      materialize_local_db
+      materialize_local_db "${target_path}/.beads/issues.jsonl"
       ;;
     bootstrap_required)
       bootstrap_source_used="${report_bootstrap_source}"
       bootstrap_foundation
       rm -f "${redirect_path}"
-      materialize_local_db
+      materialize_local_db "${target_path}/.beads/issues.jsonl"
       ;;
     partial_foundation)
-      materialize_local_db
+      materialize_local_db "${target_path}/.beads/issues.jsonl"
       ;;
     damaged_blocked)
       return 1
@@ -394,7 +433,9 @@ main() {
   classify_state
 
   if [[ "${check_only}" != "true" ]]; then
-    if [[ "${report_action}" == "stop_and_report" && "${report_runtime_repair_mode}" != "rebuild_local_foundation" ]]; then
+    if [[ "${report_action}" == "stop_and_report" && \
+          "${report_runtime_repair_mode}" != "rebuild_local_foundation" && \
+          "${report_runtime_repair_mode}" != "repair_runtime_only" ]]; then
       render_human >&2
       exit 23
     fi

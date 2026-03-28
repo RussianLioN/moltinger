@@ -300,7 +300,7 @@ test_audit_warns_for_runtime_bootstrap_required_runtime_only_sibling() {
     assert_contains "${output}" "Warnings: 1" "Audit should surface the runtime repair issue as a warning"
     assert_contains "${output}" "state=runtime_bootstrap_required" "Audit must classify broken runtime-only siblings explicitly"
     assert_contains "${output}" "action=runtime_repair" "Audit must distinguish runtime repair from ownership localization"
-    assert_contains "${output}" "/usr/local/bin/bd doctor --json && bd bootstrap" "Audit must point runtime-only siblings to the sanctioned repair path"
+    assert_contains "${output}" "/usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ." "Audit must point runtime-only siblings to the sanctioned runtime repair helper"
 
     rm -rf "${fixture_root}"
     test_pass

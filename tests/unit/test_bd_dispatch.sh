@@ -38,6 +38,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${args[0]:-}" == "bootstrap" ]]; then
+  if [[ -d ".beads/dolt" && ! -d ".beads/dolt/beads/.dolt" ]]; then
+    printf 'BOOTSTRAP_SKIPPED=stale_shell\n'
+    exit 0
+  fi
   mkdir -p ".beads/dolt/beads/.dolt"
   printf 'BOOTSTRAP_DB=beads\n'
   exit 0
@@ -140,6 +144,15 @@ seed_broken_runtime_only_foundation() {
     cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
 issue-prefix: "demo"
 auto-start-daemon: false
+EOF
+}
+
+seed_runtime_only_compatibility_backup() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/legacy-jsonl-backup"
+    cat > "${worktree_dir}/.beads/legacy-jsonl-backup/issues.legacy.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
 EOF
 }
 
@@ -619,7 +632,7 @@ test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance() {
     assert_eq "25" "${rc}" "Runtime-only worktrees with a missing beads named DB must fail closed"
     assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "Dispatch must classify the failure as runtime repair, not backlog loss"
     assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "Dispatch must keep retired JSONL retired during runtime repair"
-    assert_contains "${output}" "bd bootstrap" "Dispatch must point operators to the official bootstrap recovery path"
+    assert_contains "${output}" "./scripts/beads-worktree-localize.sh --path ." "Dispatch must point operators to the managed runtime repair helper"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -647,8 +660,32 @@ test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state()
 
     assert_eq "23" "${rc}" "Localization helper must stop and report when a runtime-only worktree needs bootstrap repair"
     assert_contains "${output}" "State: runtime_bootstrap_required" "Localization helper must expose a dedicated runtime-bootstrap-required state"
-    assert_contains "${output}" "bd bootstrap" "Localization helper must point operators to bootstrap recovery"
-    assert_contains "${output}" "Do not restore JSONL" "Localization helper must preserve retired JSONL semantics during repair"
+    assert_contains "${output}" "./scripts/beads-worktree-localize.sh --path ." "Localization helper must point operators to the managed runtime repair helper"
+    assert_contains "${output}" "Do not restore tracked JSONL" "Localization helper must preserve retired JSONL semantics during repair"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_repairs_runtime_only_state_by_quarantining_stale_shell() {
+    test_start "localize_repairs_runtime_only_state_by_quarantining_stale_shell"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-runtime-only-repair"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-repair" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_only_foundation "${worktree_path}"
+    seed_runtime_only_compatibility_backup "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: post_migration_runtime_only" "Runtime-only repair should converge to the healthy post-migration state"
+    assert_named_beads_runtime_present "${worktree_path}" "Runtime-only repair should materialize the named local Beads runtime"
+    assert_runtime_quarantine_present "${worktree_path}" "Runtime-only repair should quarantine the stale runtime shell before rerunning bootstrap"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -895,6 +932,7 @@ run_all_tests() {
     test_localize_recognizes_post_migration_runtime_only_state
     test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state
+    test_localize_repairs_runtime_only_state_by_quarantining_stale_shell
     test_plain_bd_blocks_broken_runtime_shell_with_localize_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell
     test_localize_materializes_local_db_and_removes_redirect

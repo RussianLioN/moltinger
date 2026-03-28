@@ -11,7 +11,7 @@ WRAPPER_SCRIPT="$PROJECT_ROOT/scripts/bd-local.sh"
 install_fake_bd() {
     local repo_dir="$1"
 
-    mkdir -p "${repo_dir}/bin" "${repo_dir}/scripts"
+    mkdir -p "${repo_dir}/bin" "${repo_dir}/scripts" "${repo_dir}/.fake-system-bd"
     cat > "${repo_dir}/bin/bd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -19,8 +19,26 @@ printf 'BEADS_DB=%s\n' "${BEADS_DB:-}"
 printf 'ARGS=%s\n' "$*"
 EOF
     chmod +x "${repo_dir}/bin/bd"
+    cat > "${repo_dir}/.fake-system-bd/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+    chmod +x "${repo_dir}/.fake-system-bd/bd"
     cp "${PROJECT_ROOT}/scripts/beads-resolve-db.sh" "${repo_dir}/scripts/beads-resolve-db.sh"
     chmod +x "${repo_dir}/scripts/beads-resolve-db.sh"
+}
+
+run_wrapper() {
+    local worktree_dir="$1"
+    shift
+
+    (
+        cd "${worktree_dir}"
+        PATH="${worktree_dir}/.fake-system-bd:${PATH}" \
+        BEADS_SYSTEM_BD="${worktree_dir}/.fake-system-bd/bd" \
+        "${WRAPPER_SCRIPT}" "$@"
+    )
 }
 
 seed_local_beads_state() {
@@ -59,8 +77,7 @@ test_bd_local_exports_worktree_local_beads_db() {
     physical_repo_dir="$(cd "${worktree_path}" && pwd -P)"
 
     output="$(
-        cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" status
+        run_wrapper "${worktree_path}" status
     )"
 
     assert_contains "${output}" "BEADS_DB=${physical_repo_dir}/.beads/beads.db" "Wrapper must pin BEADS_DB to the current worktree"
@@ -85,8 +102,7 @@ test_bd_local_blocks_redirected_worktrees() {
 
     output="$(
         set +e
-        cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" status 2>&1
+        run_wrapper "${worktree_path}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -113,8 +129,7 @@ test_bd_local_blocks_missing_foundation_files() {
 
     output="$(
         set +e
-        cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" status 2>&1
+        run_wrapper "${worktree_path}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -141,8 +156,7 @@ test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl() {
     physical_repo_dir="$(cd "${worktree_path}" && pwd -P)"
 
     output="$(
-        cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" status
+        run_wrapper "${worktree_path}" status
     )"
 
     assert_contains "${output}" "BEADS_DB=${physical_repo_dir}/.beads/beads.db" "Wrapper must keep using the local runtime after tracked JSONL retirement"
@@ -166,8 +180,7 @@ test_bd_local_blocks_deprecated_sync_with_modern_guidance() {
 
     output="$(
         set +e
-        cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" sync 2>&1
+        run_wrapper "${worktree_path}" sync 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -194,8 +207,7 @@ test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
 
     output="$(
         set +e
-        cd "${worktree_path}"
-        "${WRAPPER_SCRIPT}" status 2>&1
+        run_wrapper "${worktree_path}" status 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -203,7 +215,7 @@ test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
     assert_eq "25" "${rc}" "bd-local must fail closed when the Dolt runtime exists only as an incomplete shell"
     assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "bd-local must describe the failure as a runtime repair problem"
     assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "bd-local must not ask operators to restore retired JSONL"
-    assert_contains "${output}" "bd bootstrap" "bd-local must point operators to bootstrap recovery for runtime-only failures"
+    assert_contains "${output}" "./scripts/beads-worktree-localize.sh --path ." "bd-local must point operators to the managed runtime repair helper for runtime-only failures"
 
     rm -rf "${fixture_root}"
     test_pass
