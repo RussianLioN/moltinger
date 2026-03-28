@@ -36,7 +36,7 @@ require_command() {
 }
 
 fetch_runs_json() {
-    local per_page pages_needed page page_payload payload
+    local per_page pages_needed page payload_file page_file merged_file tmp_dir
 
     if [[ -n "$RUNS_JSON_FILE" ]]; then
         cat "$RUNS_JSON_FILE"
@@ -51,32 +51,38 @@ fetch_runs_json() {
     require_command gh
     per_page=$(( MAX_RUNS < 100 ? MAX_RUNS : 100 ))
     pages_needed=$(( (MAX_RUNS + per_page - 1) / per_page ))
-    payload='{"total_count":0,"workflow_runs":[]}'
+    tmp_dir="$(mktemp -d)"
+    payload_file="$tmp_dir/payload.json"
+    page_file="$tmp_dir/page.json"
+    merged_file="$tmp_dir/merged.json"
+    printf '%s\n' '{"total_count":0,"workflow_runs":[]}' > "$payload_file"
 
     for ((page = 1; page <= pages_needed; page++)); do
-        page_payload="$(
-            gh api \
-                -H "Accept: application/vnd.github+json" \
-                "repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=${per_page}&page=${page}"
-        )"
+        gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=${per_page}&page=${page}" \
+            > "$page_file"
 
-        payload="$(
-            jq -cn \
-                --argjson current "$payload" \
-                --argjson page_payload "$page_payload" \
-                --argjson max_runs "$MAX_RUNS" '
+        jq -cn \
+            --slurpfile current "$payload_file" \
+            --slurpfile page_payload "$page_file" \
+            --argjson max_runs "$MAX_RUNS" '
+                ($current[0] // {}) as $current
+                | ($page_payload[0] // {}) as $page_payload
+                |
                 {
                   total_count: ($page_payload.total_count // $current.total_count // 0),
                   workflow_runs: (($current.workflow_runs + ($page_payload.workflow_runs // []))[:$max_runs])
-                }'
-        )"
+                }' > "$merged_file"
+        mv "$merged_file" "$payload_file"
 
-        if [[ "$(jq '.workflow_runs | length' <<<"$page_payload")" -lt "$per_page" ]]; then
+        if [[ "$(jq '.workflow_runs | length' < "$page_file")" -lt "$per_page" ]]; then
             break
         fi
     done
 
-    printf '%s\n' "$payload"
+    cat "$payload_file"
+    rm -rf "$tmp_dir"
 }
 
 render_human_output() {
@@ -158,7 +164,9 @@ if [[ -n "$RUNS_JSON_FILE" && ! -f "$RUNS_JSON_FILE" ]]; then
 fi
 
 NOW_EPOCH="$(date -u +%s)"
-RUNS_JSON="$(fetch_runs_json)"
+TMP_JSON_DIR="$(mktemp -d)"
+RUNS_JSON_PATH="$TMP_JSON_DIR/runs.json"
+fetch_runs_json > "$RUNS_JSON_PATH"
 
 RESULT_JSON="$(
     jq -cn \
@@ -167,7 +175,9 @@ RESULT_JSON="$(
         --arg workflow_file "$WORKFLOW_FILE" \
         --argjson threshold_minutes "$THRESHOLD_MINUTES" \
         --argjson max_runs "$MAX_RUNS" \
-        --argjson payload "$RUNS_JSON" '
+        --slurpfile payload "$RUNS_JSON_PATH" '
+        ($payload[0] // {}) as $payload
+        |
         def age_minutes($created_at):
             ((($now_epoch - ($created_at | fromdateiso8601)) / 60) | floor);
 
@@ -237,6 +247,7 @@ RESULT_JSON="$(
             stalled_runs: $stalled
           }'
 )"
+rm -rf "$TMP_JSON_DIR"
 
 if [[ "$OUTPUT_JSON" == "true" ]]; then
     printf '%s\n' "$RESULT_JSON"

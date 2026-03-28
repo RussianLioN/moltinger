@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-28
-**Total Lessons**: 56
+**Total Lessons**: 57
 
 ---
 
@@ -41,7 +41,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (20 lessons)
+#### P2 (21 lessons)
+- [Deploy stall watchdog self-failed on oversized GitHub Actions payloads](../docs/rca/2026-03-28-deploy-stall-watchdog-argjson-overflow.md)
 - [Deploy hardening follow-up introduced a latent verify failure-path regression and queue-blind watchdog alerts](../docs/rca/2026-03-28-deploy-hardening-follow-up-verify-failure-and-watchdog-queue-semantics.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
@@ -81,9 +82,10 @@
 ### By Category
 
 
-#### cicd (26 lessons)
+#### cicd (27 lessons)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
+- [Deploy stall watchdog self-failed on oversized GitHub Actions payloads](../docs/rca/2026-03-28-deploy-stall-watchdog-argjson-overflow.md)
 - [Deploy hardening follow-up introduced a latent verify failure-path regression and queue-blind watchdog alerts](../docs/rca/2026-03-28-deploy-hardening-follow-up-verify-failure-and-watchdog-queue-semantics.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Tracked Moltis deploy cancelled by manual GitOps confirmation guard during CI workflow](../docs/rca/2026-03-20-tracked-moltis-deploy-cancelled-by-manual-gitops-guard.md)
@@ -152,9 +154,9 @@
 
 - `deploy` (17 lessons)
 - `gitops` (16 lessons)
-- `github-actions` (15 lessons)
-- `cicd` (15 lessons)
-- `moltis` (14 lessons)
+- `github-actions` (16 lessons)
+- `cicd` (16 lessons)
+- `moltis` (15 lessons)
 - `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
@@ -168,10 +170,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 56 |
+| Total Lessons | 57 |
 | Critical (P0/P1) | 26 |
 | Categories | 5 |
-| Unique Tags | 128 |
+| Unique Tags | 129 |
 
 ---
 

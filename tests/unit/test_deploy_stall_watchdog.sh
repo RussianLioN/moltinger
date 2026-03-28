@@ -102,6 +102,41 @@ write_fixture() {
 EOF
 }
 
+write_large_api_fixture() {
+    local fixture_path="$1"
+
+    python3 - "$fixture_path" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json
+import sys
+
+path = sys.argv[1]
+now = datetime.now(timezone.utc)
+padding = "x" * 40000
+runs = []
+
+for idx in range(1, 101):
+    created_at = (now - timedelta(minutes=idx + 5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    runs.append({
+        "id": 2000 + idx,
+        "name": "Deploy Moltis",
+        "run_number": 3000 + idx,
+        "run_attempt": 1,
+        "status": "completed",
+        "event": "push",
+        "head_branch": "main",
+        "head_sha": f"{idx:040d}",
+        "created_at": created_at,
+        "updated_at": created_at,
+        "html_url": f"https://example.invalid/{2000 + idx}",
+        "padding": padding,
+    })
+
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump({"total_count": len(runs), "workflow_runs": runs}, handle)
+PY
+}
+
 test_watchdog_requires_repo_or_fixture() {
     test_start "deploy stall watchdog should require repo or fixture input"
 
@@ -145,6 +180,41 @@ test_watchdog_detects_only_true_stalls_from_fixture() {
     test_pass
 }
 
+test_watchdog_handles_large_github_api_payload_without_arg_overflow() {
+    test_start "deploy stall watchdog should handle oversized GitHub API payloads without jq argv overflow"
+
+    local tmp_dir fixture_path mock_bin result_json
+    tmp_dir="$(mktemp -d)"
+    fixture_path="$tmp_dir/runs-page.json"
+    mock_bin="$tmp_dir/bin"
+    mkdir -p "$mock_bin"
+    write_large_api_fixture "$fixture_path"
+
+    cat > "$mock_bin/gh" <<EOF
+#!/bin/bash
+cat "$fixture_path"
+EOF
+    chmod +x "$mock_bin/gh"
+
+    result_json="$(
+        PATH="$mock_bin:$PATH" \
+        "$WATCHDOG_SCRIPT" \
+            --repo "RussianLioN/moltinger" \
+            --workflow-name "Deploy Moltis" \
+            --workflow-file "deploy.yml" \
+            --threshold-minutes 45 \
+            --max-runs 100 \
+            --json
+    )"
+
+    assert_eq "ok" "$(jq -r '.status' <<<"$result_json")" "Large payload should still produce valid JSON output"
+    assert_eq "100" "$(jq -r '.inspected_runs' <<<"$result_json")" "Expected watchdog to inspect the oversized fixture page"
+    assert_eq "0" "$(jq -r '.stalled_count' <<<"$result_json")" "Completed runs must not be treated as stalled"
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_watchdog_ignores_recent_runs_when_threshold_is_high() {
     test_start "deploy stall watchdog should ignore runs below the configured threshold"
 
@@ -183,6 +253,7 @@ run_all_tests() {
 
     test_watchdog_requires_repo_or_fixture
     test_watchdog_detects_only_true_stalls_from_fixture
+    test_watchdog_handles_large_github_api_payload_without_arg_overflow
     test_watchdog_ignores_recent_runs_when_threshold_is_high
 
     generate_report
