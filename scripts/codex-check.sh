@@ -69,6 +69,17 @@ assert_contains() {
   log_success "Verified ${description} in ${path}"
 }
 
+contains_fixed_string() {
+  local pattern="$1"
+  shift
+
+  if command -v rg >/dev/null 2>&1; then
+    rg -Fq -- "${pattern}" "$@"
+  else
+    grep -Fq -- "${pattern}" "$@"
+  fi
+}
+
 check_required_files() {
   log_info "Checking required Codex governance files..."
 
@@ -110,6 +121,34 @@ check_instruction_references() {
   log_info "Checking source instruction references..."
 
   local failures=0
+  local retired_bd_sync_surfaces=(
+    "${REPO_ROOT}/CLAUDE.md"
+    "${REPO_ROOT}/.beads/AGENTS.md"
+    "${REPO_ROOT}/.beads/config.yaml"
+    "${REPO_ROOT}/.claude/commands/worktree.md"
+    "${REPO_ROOT}/.claude/commands/beads-init.md"
+    "${REPO_ROOT}/.claude/commands/speckit.tobeads.md"
+    "${REPO_ROOT}/.claude/docs/beads-quickstart.md"
+    "${REPO_ROOT}/.claude/docs/beads-quickstart.en.md"
+    "${REPO_ROOT}/.claude/agents/meta/workers/session-summarizer.md"
+    "${REPO_ROOT}/.claude/skills/beads/SKILL.md"
+    "${REPO_ROOT}/.claude/skills/beads/resources/COMMANDS_QUICKREF.md"
+    "${REPO_ROOT}/.claude/skills/beads/resources/WORKFLOWS.md"
+    "${REPO_ROOT}/.claude/skills/deps-health-inline/SKILL.md"
+    "${REPO_ROOT}/.claude/skills/cleanup-health-inline/SKILL.md"
+    "${REPO_ROOT}/.claude/skills/reuse-health-inline/SKILL.md"
+    "${REPO_ROOT}/.claude/skills/security-health-inline/SKILL.md"
+    "${REPO_ROOT}/.claude/skills/health-bugs/SKILL.md"
+    "${REPO_ROOT}/docs/WORKTREE-HOTFIX-PLAYBOOK.md"
+  )
+  local bd_status_surfaces=(
+    "${REPO_ROOT}/CLAUDE.md"
+    "${REPO_ROOT}/.beads/AGENTS.md"
+    "${REPO_ROOT}/.claude/docs/beads-quickstart.md"
+    "${REPO_ROOT}/.claude/docs/beads-quickstart.en.md"
+    "${REPO_ROOT}/.claude/skills/beads/resources/COMMANDS_QUICKREF.md"
+    "${REPO_ROOT}/.claude/skills/beads/resources/WORKFLOWS.md"
+  )
   assert_contains ".ai/instructions/shared-core.md" "Speckit Artifact Guard" "root Speckit guard" || failures=1
   assert_contains ".ai/instructions/shared-core.md" "docs/GIT-TOPOLOGY-REGISTRY.md" "topology registry reference" || failures=1
   if grep -Fq -- "bd status" "${REPO_ROOT}/.ai/instructions/shared-core.md" || \
@@ -141,16 +180,15 @@ check_instruction_references() {
     fi
   fi
 
-  if grep -Fq -- "bd sync" "${REPO_ROOT}/CLAUDE.md" || \
-     grep -Fq -- "bd sync" "${REPO_ROOT}/.beads/AGENTS.md" || \
-     grep -Fq -- "bd sync" "${REPO_ROOT}/.beads/config.yaml" || \
-     grep -Fq -- 'add_next_step "bd sync"' "${REPO_ROOT}/scripts/worktree-ready.sh" || \
-     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/commands/worktree.md" || \
-     grep -Fq -- "bd sync" "${REPO_ROOT}/.claude/skills/beads/SKILL.md"; then
+  if contains_fixed_string "bd sync" "${retired_bd_sync_surfaces[@]}" || \
+     grep -Fq -- 'add_next_step "bd sync"' "${REPO_ROOT}/scripts/worktree-ready.sh"; then
     log_error "High-traffic instruction surfaces must not reintroduce retired bd sync guidance"
     failures=1
-  else
+  elif contains_fixed_string "bd status" "${bd_status_surfaces[@]}"; then
     log_success "Verified high-traffic instruction surfaces retire bd sync guidance"
+  else
+    log_error "High-traffic instruction surfaces must advertise the current bd status workflow"
+    failures=1
   fi
 
   return "${failures}"

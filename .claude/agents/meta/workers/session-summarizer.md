@@ -74,4 +74,4 @@ Updated sections:
 - Triggered by `/session-summary` command
 - Automatically reads PRIME.md context
 - Updates .beads/PRIME.md if needed
-- Syncs with Beads via `bd sync`
+- Inspects the local Beads state via `bd status`

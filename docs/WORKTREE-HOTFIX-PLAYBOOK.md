@@ -129,12 +129,13 @@ If the hotfix also requires publishing a tracked topology snapshot, do that as a
 git add ...
 git commit -m "fix(worktree): <short description>"
 git pull --rebase
-bd sync
+bd status
 git push
 git status
 ```
 
 `git status` must show that the branch is up to date with origin.
+If the worktree is configured with a Dolt remote, run `bd dolt push` before `git push`.
 
 ## What Not To Do
 

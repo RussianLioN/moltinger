@@ -72,9 +72,9 @@ Within this repository, assume plain `bd` is the normal command path once the se
    bd dep add <child-id> <parent-id>
    ```
 
-9. Sync to git:
+9. Inspect the local Beads state:
    ```bash
-   bd sync
+   bd status
    ```
 
 ## Output

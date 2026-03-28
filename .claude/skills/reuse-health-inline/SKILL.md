@@ -256,11 +256,12 @@ After all priorities consolidated:
    ```bash
    git status
    git add .
-   bd sync
+   bd status
    git commit -m "refactor: consolidate {consolidated} duplications ({wisp_id})"
-   bd sync
+   bd status
    git push
    ```
+   If this repo has a Dolt remote configured, run `bd dolt push` before `git push`.
 
 ---
 

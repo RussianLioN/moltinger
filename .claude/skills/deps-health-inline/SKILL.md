@@ -263,11 +263,12 @@ After all priorities updated:
    ```bash
    git status
    git add .
-   bd sync
+   bd status
    git commit -m "chore(deps): {fixed} dependencies updated ({wisp_id})"
-   bd sync
+   bd status
    git push
    ```
+   If this repo has a Dolt remote configured, run `bd dolt push` before `git push`.
 
 ---
 

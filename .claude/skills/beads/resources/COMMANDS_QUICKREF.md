@@ -64,13 +64,14 @@ bd label add ID label-name
 bd label remove ID label-name
 ```
 
-## Sync & Diagnostics
+## Status, Dolt & Diagnostics
 
 ```bash
-bd sync                     # Sync DB ↔ JSONL ↔ Git
-bd sync --force             # Force from JSONL
+bd status                   # Local backlog status
 bd info                     # Project status
 bd doctor                   # Health check
+bd dolt pull                # Pull when a Dolt remote is configured
+bd dolt push                # Push when a Dolt remote is configured
 bd prime                    # Context injection
 bd prime --full             # Full context
 ```

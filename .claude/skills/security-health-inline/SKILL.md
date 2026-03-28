@@ -267,11 +267,12 @@ After all priorities fixed:
    ```bash
    git status
    git add .
-   bd sync
+   bd status
    git commit -m "security: {fixed} vulnerabilities fixed ({wisp_id})"
-   bd sync
+   bd status
    git push
    ```
+   If this repo has a Dolt remote configured, run `bd dolt push` before `git push`.
 
 ---
 

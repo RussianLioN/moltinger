@@ -24,12 +24,21 @@ QUICKSTART_EN="$PROJECT_ROOT/.claude/docs/beads-quickstart.en.md"
 BEADS_SKILL="$PROJECT_ROOT/.claude/skills/beads/SKILL.md"
 BEADS_COMMAND_QUICKREF="$PROJECT_ROOT/.claude/skills/beads/resources/COMMANDS_QUICKREF.md"
 BEADS_WORKFLOWS="$PROJECT_ROOT/.claude/skills/beads/resources/WORKFLOWS.md"
+SESSION_SUMMARIZER_DOC="$PROJECT_ROOT/.claude/agents/meta/workers/session-summarizer.md"
+BEADS_INIT_COMMAND="$PROJECT_ROOT/.claude/commands/beads-init.md"
+SPECKIT_TOBEADS_COMMAND="$PROJECT_ROOT/.claude/commands/speckit.tobeads.md"
+DEPS_HEALTH_SKILL="$PROJECT_ROOT/.claude/skills/deps-health-inline/SKILL.md"
+CLEANUP_HEALTH_SKILL="$PROJECT_ROOT/.claude/skills/cleanup-health-inline/SKILL.md"
+REUSE_HEALTH_SKILL="$PROJECT_ROOT/.claude/skills/reuse-health-inline/SKILL.md"
+SECURITY_HEALTH_SKILL="$PROJECT_ROOT/.claude/skills/security-health-inline/SKILL.md"
+HEALTH_BUGS_SKILL="$PROJECT_ROOT/.claude/skills/health-bugs/SKILL.md"
 WORKTREE_COMMAND="$PROJECT_ROOT/.claude/commands/worktree.md"
 SHARED_CORE_INSTRUCTIONS="$PROJECT_ROOT/.ai/instructions/shared-core.md"
 ROOT_AGENTS="$PROJECT_ROOT/AGENTS.md"
 CLAUDE_DOC="$PROJECT_ROOT/CLAUDE.md"
 BEADS_STATE_AGENTS="$PROJECT_ROOT/.beads/AGENTS.md"
 BEADS_STATE_CONFIG="$PROJECT_ROOT/.beads/config.yaml"
+WORKTREE_HOTFIX_PLAYBOOK="$PROJECT_ROOT/docs/WORKTREE-HOTFIX-PLAYBOOK.md"
 
 run_static_beads_worktree_ownership_tests() {
     start_timer
@@ -112,8 +121,11 @@ run_static_beads_worktree_ownership_tests() {
 
     test_start "static_active_instruction_surfaces_retire_bd_sync_guidance"
     if ! rg -q 'bd sync' "$CLAUDE_DOC" "$BEADS_STATE_AGENTS" "$BEADS_STATE_CONFIG" && \
+       ! rg -q 'bd sync' "$QUICKSTART_RU" "$QUICKSTART_EN" "$BEADS_COMMAND_QUICKREF" "$BEADS_WORKFLOWS" && \
+       ! rg -q 'bd sync' "$SESSION_SUMMARIZER_DOC" "$BEADS_INIT_COMMAND" "$SPECKIT_TOBEADS_COMMAND" "$WORKTREE_HOTFIX_PLAYBOOK" && \
+       ! rg -q 'bd sync' "$DEPS_HEALTH_SKILL" "$CLEANUP_HEALTH_SKILL" "$REUSE_HEALTH_SKILL" "$SECURITY_HEALTH_SKILL" "$HEALTH_BUGS_SKILL" && \
        ! rg -q 'add_next_step "bd sync"' "$WORKTREE_READY_SCRIPT" && \
-       rg -q 'bd status' "$CLAUDE_DOC" "$BEADS_STATE_AGENTS"; then
+       rg -q 'bd status' "$CLAUDE_DOC" "$BEADS_STATE_AGENTS" "$QUICKSTART_RU" "$QUICKSTART_EN" "$BEADS_COMMAND_QUICKREF" "$BEADS_WORKFLOWS"; then
         test_pass
     else
         test_fail "Active instruction surfaces must not reintroduce retired bd sync guidance"
