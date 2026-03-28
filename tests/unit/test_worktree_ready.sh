@@ -24,6 +24,20 @@ if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; t
   exit 0
 fi
 
+if [[ "${1:-}" == "worktree" && "${2:-}" == "remove" ]]; then
+  target_path="${3:-}"
+  if [[ -n "${BD_WORKTREE_REMOVE_STDOUT:-}" ]]; then
+    printf '%s\n' "${BD_WORKTREE_REMOVE_STDOUT}"
+  fi
+  if [[ -n "${BD_WORKTREE_REMOVE_STDERR:-}" ]]; then
+    printf '%s\n' "${BD_WORKTREE_REMOVE_STDERR}" >&2
+  fi
+  if [[ "${BD_WORKTREE_REMOVE_NOOP:-0}" != "1" && -n "${target_path}" ]]; then
+    git worktree remove "${target_path}" >/dev/null 2>&1 || true
+  fi
+  exit "${BD_WORKTREE_REMOVE_RC:-0}"
+fi
+
 if [[ "${1:-}" == "list" && "${2:-}" == "--all" && "${3:-}" == "--json" ]]; then
   printf '%s\n' "${BD_LIST_ALL_JSON:-[]}"
   exit 0
@@ -67,6 +81,66 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+create_fake_gh_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/gh-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then
+  exit "${GH_AUTH_RC:-0}"
+fi
+
+if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
+  if [[ -n "${GH_EXPECT_CWD:-}" && "${PWD}" != "${GH_EXPECT_CWD}" ]]; then
+    printf 'unexpected gh cwd: %s\n' "${PWD}" >&2
+    exit 97
+  fi
+  printf '%s\n' "${GH_REPO_VIEW_JSON:-{\"defaultBranchRef\":{\"name\":\"main\"},\"deleteBranchOnMerge\":false,\"nameWithOwner\":\"example/repo\"}}"
+  exit "${GH_REPO_VIEW_RC:-0}"
+fi
+
+if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
+  if [[ -n "${GH_EXPECT_CWD:-}" && "${PWD}" != "${GH_EXPECT_CWD}" ]]; then
+    printf 'unexpected gh cwd: %s\n' "${PWD}" >&2
+    exit 97
+  fi
+  printf '%s\n' "${GH_PR_LIST_JSON:-[]}"
+  exit "${GH_PR_LIST_RC:-0}"
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "-X" && "${3:-}" == "DELETE" ]]; then
+  if [[ -n "${GH_EXPECT_CWD:-}" && "${PWD}" != "${GH_EXPECT_CWD}" ]]; then
+    printf 'unexpected gh cwd: %s\n' "${PWD}" >&2
+    exit 97
+  fi
+  if [[ -n "${GH_EXPECT_API_DELETE_ROUTE:-}" && "${4:-}" != "${GH_EXPECT_API_DELETE_ROUTE}" ]]; then
+    printf 'unexpected gh api route: %s\n' "${4:-}" >&2
+    exit 98
+  fi
+  if [[ -n "${GH_API_STDOUT:-}" ]]; then
+    printf '%s\n' "${GH_API_STDOUT}"
+  fi
+  if [[ -n "${GH_API_STDERR:-}" ]]; then
+    printf '%s\n' "${GH_API_STDERR}" >&2
+  fi
+  if [[ -n "${GH_API_DELETE_GIT_DIR:-}" && -n "${GH_API_DELETE_REF:-}" ]]; then
+    git --git-dir "${GH_API_DELETE_GIT_DIR}" update-ref -d "${GH_API_DELETE_REF}" >/dev/null 2>&1 || true
+  fi
+  exit "${GH_API_RC:-0}"
+fi
+
+printf 'unsupported fake gh invocation\n' >&2
+exit 1
+EOF
+    chmod +x "${fake_bin}/gh"
+
+    printf '%s\n' "${fake_bin}"
+}
+
 run_worktree_plan() {
     local repo_dir="$1"
     local fake_bin="$2"
@@ -105,6 +179,14 @@ run_worktree_finish() {
     shift 2
 
     PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" finish --repo "$repo_dir" "$@"
+}
+
+run_worktree_cleanup() {
+    local repo_dir="$1"
+    local path_prefix="$2"
+    shift 2
+
+    PATH="${path_prefix}:$PATH" "$WORKTREE_READY_SCRIPT" cleanup --repo "$repo_dir" "$@"
 }
 
 create_fake_direnv_permission_denied_bin() {
@@ -1310,6 +1392,311 @@ test_attach_codex_handoff_falls_back_to_manual_boundary() {
     test_pass
 }
 
+test_cleanup_removes_linked_worktree_without_branch_delete() {
+    test_start "worktree_ready_cleanup_removes_linked_worktree_without_branch_delete"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening --format env 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup without branch deletion should succeed for a managed linked worktree"
+    assert_contains "$output" 'schema=worktree-cleanup/v1' "Cleanup env output should expose the cleanup schema"
+    assert_contains "$output" 'status=cleanup_complete' "Cleanup env output should report cleanup_complete on success"
+    assert_contains "$output" 'worktree_action=removed' "Cleanup should mark the linked worktree as removed"
+    assert_contains "$output" 'local_branch_action=not_requested' "Cleanup without --delete-branch should not touch local branches"
+    assert_contains "$output" 'remote_branch_action=not_requested' "Cleanup without --delete-branch should not touch remote branches"
+    if [[ -d "${existing_path}" ]]; then
+        test_fail "Cleanup should remove the linked worktree directory"
+    fi
+    if git -C "$repo_dir" worktree list --porcelain | rg -q 'feat/remote-uat-hardening'; then
+        test_fail "Cleanup should remove the linked worktree entry from git worktree list"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_prunes_stale_missing_worktree_entry() {
+    test_start "worktree_ready_cleanup_prunes_stale_missing_worktree_entry"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    rm -rf "$existing_path"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should prune stale missing worktree entries"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should stay complete after pruning a stale entry"
+    assert_contains "$output" 'Worktree Action: pruned' "Cleanup should report pruned when stale admin state was removed"
+    if git -C "$repo_dir" worktree list --porcelain | rg -q 'feat/remote-uat-hardening'; then
+        test_fail "Cleanup should prune the stale git worktree entry"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_delete_branch_uses_git_ancestor_proof() {
+    test_start "worktree_ready_cleanup_delete_branch_uses_git_ancestor_proof"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+    )
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should delete local and remote branch when git ancestry proves the branch is merged"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should complete once branch deletion succeeds"
+    assert_contains "$output" 'Merge Check: git_ancestor_local' "Cleanup should record git ancestry as the merge proof"
+    assert_contains "$output" 'Local Branch Action: deleted' "Cleanup should delete the local branch after worktree removal"
+    assert_contains "$output" 'Remote Branch Action: deleted' "Cleanup should delete the remote branch after merge proof"
+    if git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup should remove the local branch after delete-branch success"
+    fi
+    if git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
+        test_fail "Cleanup should remove the remote branch after delete-branch success"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous() {
+    test_start "worktree_ready_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous"
+
+    local fixture_root repo_dir fake_bd_bin fake_gh_bin existing_path output rc bd_json head_sha
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_gh_bin="$(create_fake_gh_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+    )
+    head_sha="$(git -C "$repo_dir" rev-parse refs/remotes/origin/feat/remote-uat-hardening)"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        cd "$fixture_root"
+        set +e
+        WORKTREE_READY_ASSUME_GITHUB_ORIGIN=1 \
+        GH_EXPECT_CWD="${repo_dir}" \
+        GH_REPO_VIEW_JSON='{"defaultBranchRef":{"name":"main"},"deleteBranchOnMerge":false}' \
+        GH_PR_LIST_JSON="$(printf '[{"number":103,"state":"MERGED","mergedAt":"2026-03-26T19:35:17Z","headRefName":"feat/remote-uat-hardening","headRefOid":"%s","baseRefName":"main","isCrossRepository":false,"url":"https://github.com/example/repo/pull/103","title":"Fixture merged PR"}]\n' "${head_sha}")" \
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        run_worktree_cleanup "$repo_dir" "${fake_gh_bin}:${fake_bd_bin}" --branch feat/remote-uat-hardening --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should allow branch deletion when GitHub merged-PR metadata proves merge safety"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should complete when GitHub fallback proves merge safety"
+    assert_contains "$output" 'Merge Check: github_pr_merged' "Cleanup should record GitHub PR metadata as the merge proof"
+    assert_contains "$output" 'Local Branch Action: deleted' "Cleanup should still delete the local branch after GitHub merge proof"
+    assert_contains "$output" 'Remote Branch Action: deleted' "Cleanup should delete the remote branch after GitHub merge proof"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_delete_branch_uses_github_api_remote_delete_fallback() {
+    test_start "worktree_ready_cleanup_delete_branch_uses_github_api_remote_delete_fallback"
+
+    local fixture_root repo_dir fake_bd_bin fake_gh_bin existing_path output rc bd_json head_sha origin_dir
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    origin_dir="${fixture_root}/moltinger.git"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_gh_bin="$(create_fake_gh_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+        git remote set-url origin "${fixture_root}/missing-origin.git"
+    )
+    head_sha="$(git -C "$repo_dir" rev-parse refs/remotes/origin/feat/remote-uat-hardening)"
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        cd "$fixture_root"
+        set +e
+        WORKTREE_READY_ASSUME_GITHUB_ORIGIN=1 \
+        GH_EXPECT_CWD="${repo_dir}" \
+        GH_EXPECT_API_DELETE_ROUTE="repos/example/repo/git/refs/heads/feat/remote-uat-hardening" \
+        GH_REPO_VIEW_JSON='{"defaultBranchRef":{"name":"main"},"deleteBranchOnMerge":false,"nameWithOwner":"example/repo"}' \
+        GH_PR_LIST_JSON="$(printf '[{"number":111,"state":"MERGED","mergedAt":"2026-03-27T20:30:28Z","headRefName":"feat/remote-uat-hardening","headRefOid":"%s","baseRefName":"main","isCrossRepository":false,"url":"https://github.com/example/repo/pull/111","title":"Fixture merged PR"}]\n' "${head_sha}")" \
+        GH_API_DELETE_GIT_DIR="${origin_dir}" \
+        GH_API_DELETE_REF="refs/heads/feat/remote-uat-hardening" \
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        run_worktree_cleanup "$repo_dir" "${fake_gh_bin}:${fake_bd_bin}" --branch feat/remote-uat-hardening --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should recover remote deletion through GitHub API fallback when git push --delete fails"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should stay complete after GitHub API remote-delete fallback"
+    assert_contains "$output" 'Merge Check: github_pr_merged' "Cleanup should still rely on the merged PR proof before deleting remotely"
+    assert_contains "$output" 'Remote Branch Action: deleted' "Cleanup should report the remote branch as deleted after API fallback"
+    assert_contains "$output" "GitHub API fallback deleted remote branch 'feat/remote-uat-hardening'" "Cleanup should report that the API fallback path was used"
+    if git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup should still delete the local branch when remote delete falls back to GitHub API"
+    fi
+    if git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
+        test_fail "Cleanup should remove the local remote-tracking ref after GitHub API fallback"
+    fi
+    if git --git-dir "$origin_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup should remove the actual remote branch after GitHub API fallback"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_blocks_branch_delete_without_merge_proof() {
+    test_start "worktree_ready_cleanup_blocks_branch_delete_without_merge_proof"
+
+    local fixture_root repo_dir fake_bd_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+    )
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" run_worktree_cleanup "$repo_dir" "$fake_bd_bin" --branch feat/remote-uat-hardening --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Cleanup should block branch deletion when no safe merge proof exists"
+    assert_contains "$output" 'Status: cleanup_blocked' "Cleanup should report cleanup_blocked when branch deletion remains unsafe"
+    assert_contains "$output" 'Remote Branch Action: blocked' "Cleanup should keep the remote branch intact when merged proof is missing"
+    assert_contains "$output" 'Merge Check: not_merged' "Cleanup should record the failed merge proof state"
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the local branch when safe delete proof is missing"
+    fi
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the remote branch when safe delete proof is missing"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_blocks_remote_delete_when_github_fallback_is_unavailable() {
+    test_start "worktree_ready_cleanup_blocks_remote_delete_when_github_fallback_is_unavailable"
+
+    local fixture_root repo_dir fake_bd_bin fake_gh_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_gh_bin="$(create_fake_gh_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+    )
+    bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        WORKTREE_READY_ASSUME_GITHUB_ORIGIN=1 \
+        GH_AUTH_RC=1 \
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        run_worktree_cleanup "$repo_dir" "${fake_gh_bin}:${fake_bd_bin}" --branch feat/remote-uat-hardening --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Cleanup should block deletion when GitHub fallback cannot be authenticated"
+    assert_contains "$output" 'Status: cleanup_blocked' "Cleanup should report cleanup_blocked when GitHub fallback is unavailable"
+    assert_contains "$output" 'Merge Check: github_unavailable' "Cleanup should record the degraded GitHub proof state"
+    assert_contains "$output" 'Remote Branch Action: blocked' "Cleanup should preserve the remote branch when GitHub fallback is unavailable"
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the remote branch when GitHub fallback is unavailable"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -1355,6 +1742,13 @@ run_all_tests() {
     test_finish_returns_issue_na_when_branch_mapping_is_ambiguous
     test_finish_blocks_runtime_bootstrap_required_when_external_state_says_local
     test_finish_stale_topology_remains_warning_not_blocker
+    test_cleanup_removes_linked_worktree_without_branch_delete
+    test_cleanup_prunes_stale_missing_worktree_entry
+    test_cleanup_delete_branch_uses_git_ancestor_proof
+    test_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous
+    test_cleanup_delete_branch_uses_github_api_remote_delete_fallback
+    test_cleanup_blocks_branch_delete_without_merge_proof
+    test_cleanup_blocks_remote_delete_when_github_fallback_is_unavailable
     test_plan_needs_clarification_returns_exit_code_10
     test_attach_missing_branch_returns_blocked_missing_branch
     test_attach_preserves_separate_phase_b_seed_payload

@@ -40,6 +40,17 @@
 - Evaluates an existing worktree or branch target.
 - Must report readiness status plus exact next action for any failed probe.
 
+### `cleanup`
+
+- Removes an existing linked worktree through a helper-backed lifecycle flow.
+- Must run from the canonical root worktree; linked worktrees may diagnose the target but must block the mutation and print the exact canonical-root retry command.
+- Must treat `scripts/worktree-ready.sh cleanup ...` as the source of truth for lifecycle status, next steps, and exit code.
+- Must remove worktrees through plain `bd worktree remove <absolute-path>` and verify disappearance through `git worktree list --porcelain`.
+- Must treat already-missing worktrees or already-missing branches as idempotent outcomes, not opaque failures.
+- When `--delete-branch` is requested, must prove merge safety with git ancestry first and may use a GitHub merged-PR fallback only when git ancestry is inconclusive and the authenticated repo metadata matches the same branch, base branch, and head SHA.
+- When the GitHub fallback proves a squash/rebase merged branch, local branch deletion may require force-delete semantics because `git branch -d` still evaluates plain ancestry.
+- Must block remote branch deletion when neither git nor GitHub can prove the branch was safely merged.
+
 ## Handoff Flags
 
 - `--handoff manual` (default)
@@ -91,6 +102,7 @@ Phase A is complete. Do not repeat worktree setup in the originating session.
 
 - `scripts/worktree-ready.sh` must support `--format env`.
 - For `create`, `attach`, and `handoff`, the helper emits shell-safe `key=value` lines with schema `worktree-handoff/v1`.
+- For `cleanup`, the helper emits shell-safe `key=value` lines with schema `worktree-cleanup/v1`; see `contracts/worktree-cleanup-schema.md`.
 - The command workflow may use this contract for automation, but even without machine parsing the human-facing behavior must respect the same boundary.
 - `pending` remains the concise summary carrier.
 - `phase_b_seed_payload` is a distinct richer deferred-intent carrier when the originating request includes structured Phase B details.
@@ -110,3 +122,5 @@ Phase A is complete. Do not repeat worktree setup in the originating session.
 - Richer downstream constraints, exact feature descriptions, defaults, and stop conditions must be preserved separately via `phase_b_seed_payload` or equivalent helper-rendered deferred payload block instead of being collapsed into `Pending`.
 - A manual handoff MAY append a `Phase B Seed Payload (deferred, not executed)` block after the fenced `bash` block, but it must remain advisory and must not imply that Phase B already started.
 - Clean-create flows must be single-pass: one ancestry verification, one topology refresh, and at most one invoking-branch landing cycle.
+- Cleanup flows must remain lifecycle-only: no handoff boundary, no downstream task execution, and no auto-publication of the topology registry markdown snapshot.
+- Cleanup flows must fail closed for remote branch deletion when merged proof is unavailable, contradictory, or repository metadata cannot be authenticated.

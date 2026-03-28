@@ -21,6 +21,7 @@
 | Manual next steps are copy-paste friendly | `quickstart.md` Scenario 11 | pass | Covered by manual create handoff fixture that asserts fenced `bash` commands in `tests/unit/test_worktree_ready.sh` |
 | Mixed request preserves downstream intent without breaking the boundary | `quickstart.md` Scenario 12 | pass | Verified by create rich-payload fixture, concise `pending`, and absence of duplicate short seed block in `tests/unit/test_worktree_ready.sh` |
 | Attach flow preserves rich deferred payload | `quickstart.md` Scenario 13 | pass | Verified by attach rich-payload fixture plus attach boundary contract assertions in `tests/unit/test_worktree_ready.sh` |
+| Canonical-root cleanup with GitHub-aware branch deletion | `quickstart.md` Scenario 14 | pass | Covered by cleanup lifecycle, idempotency, GitHub fallback, and degraded-auth fixtures in `tests/unit/test_worktree_ready.sh` plus resolver guard coverage in `tests/unit/test_bd_dispatch.sh` |
 | Clean-create always starts from canonical main | latest mixed-request UAT | pending | Needs deterministic Phase A executor coverage |
 | Mixed request does not create downstream artifacts | latest mixed-request UAT | pending | Must prove no Beads/spec side effects during Phase A |
 
@@ -143,3 +144,20 @@
   - unavailable Beads probes do not force `bd worktree list` or a blocked doctor result by themselves
   - missing guard script does not produce `./scripts/git-session-guard.sh --refresh`
   - missing-worktree recovery routes back to managed attach flow instead of raw `bd worktree create`
+
+### 2026-03-26 - Cleanup contract hardening
+
+- Goal:
+  - align the documented cleanup workflow with the real helper-backed lifecycle path and close the merge-proof gap for squash/rebase merged branches
+- Checks:
+  - `bash tests/unit/test_bd_dispatch.sh`
+  - `bash tests/unit/test_worktree_ready.sh`
+  - `bash tests/static/test_beads_worktree_ownership.sh`
+  - `bash -n scripts/worktree-ready.sh`
+  - `bash -n scripts/beads-resolve-db.sh`
+- Observed:
+  - canonical root now allows only the narrow `bd worktree remove <absolute-path>` admin path for linked worktrees
+  - cleanup helper emits `worktree-cleanup/v1` and blocks mutation when invoked outside the canonical root worktree
+  - linked worktree removal is verified against `git worktree list --porcelain`, including stale `prunable` cleanup
+  - GitHub merged-PR metadata can prove safe delete for the same branch, base branch, and head SHA when git ancestry is inconclusive
+  - local branch deletion switches to `git branch -D` only for the GitHub-verified merged-PR fallback, which avoids false negatives on squash/rebase merges

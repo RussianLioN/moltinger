@@ -123,3 +123,13 @@
    - the workflow still stops after Phase A
    - `Pending` stays short
    - the richer deferred Phase B intent is preserved separately and not collapsed into the short summary
+
+## Scenario 14: Canonical-root cleanup with GitHub-aware branch deletion
+
+1. Run `/worktree cleanup feat/remote-uat-hardening --delete-branch` from the canonical root worktree.
+2. Expect:
+   - helper output includes `Status: cleanup_complete` or `Status: cleanup_blocked`
+   - linked worktree removal is verified against `git worktree list --porcelain`, not only the `bd` exit code
+   - already-missing worktrees or branches stay idempotent instead of reporting opaque failure
+   - remote branch deletion stays blocked unless merge safety is proven
+   - when git ancestry is inconclusive for a GitHub-backed repo, the helper may use merged PR metadata for the same head SHA and base branch
