@@ -106,10 +106,12 @@ run_static_beads_worktree_ownership_tests() {
        rg -q 'export PATH="\$\{PROJECT_ROOT\}/bin:\$\{PATH\}"' "$HOOK_BOOTSTRAP" && \
        rg -q '_repo-local-path\.sh' "$HOOK_PRE_COMMIT" "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" "$HOOK_PRE_PUSH" && \
        rg -q 'beads-worktree-localize\.sh' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" && \
-       rg -q -- '--bootstrap-source' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE"; then
+       rg -q -- '--bootstrap-source' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" && \
+       rg -q 'requested_bootstrap_source="origin/main"' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE" && \
+       rg -q 'unset state action bootstrap_source' "$HOOK_POST_CHECKOUT" "$HOOK_POST_MERGE"; then
         test_pass
     else
-        test_fail "Tracked git hooks must source the repo-local PATH bootstrap and auto-heal safe Beads ownership residue"
+        test_fail "Tracked git hooks must preserve the requested bootstrap source across env-eval and auto-heal safe Beads ownership residue"
     fi
 
     test_start "static_hooks_enforce_sibling_beads_ownership_audit"
@@ -183,6 +185,16 @@ run_static_beads_worktree_ownership_tests() {
         test_pass
     else
         test_fail "Worktree helper integration must advertise the finish helper contract explicitly"
+    fi
+
+    test_start "static_worktree_command_separates_phase_a_executor_from_create_helper"
+    if [[ -f "$WORKTREE_COMMAND" ]] && \
+       rg -q 'post-Phase-A readiness/handoff helper' "$WORKTREE_COMMAND" && \
+       rg -q 'does not create git branches or worktrees by itself' "$WORKTREE_COMMAND" && \
+       rg -q 'scripts/worktree-phase-a\.sh create-from-base' "$WORKTREE_COMMAND"; then
+        test_pass
+    else
+        test_fail "Worktree command docs must separate the Phase A executor from the create helper explicitly"
     fi
 
     generate_report

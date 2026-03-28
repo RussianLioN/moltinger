@@ -96,6 +96,11 @@ scripts/worktree-ready.sh doctor --branch <branch-or-path>
 scripts/worktree-ready.sh finish --branch <branch-or-path>
 ```
 
+Important:
+- `scripts/worktree-ready.sh create` is a post-Phase-A readiness/handoff helper.
+- It does not create git branches or worktrees by itself.
+- The mutating create executor is `scripts/worktree-phase-a.sh create-from-base ...`.
+
 Helper responsibilities:
 - deterministic branch/path derivation
 - Speckit-aware numeric branch allocation when requested or implied by issue context

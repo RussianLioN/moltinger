@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-26
-**Total Lessons**: 43
+**Generated**: 2026-03-28
+**Total Lessons**: 44
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (15 lessons)
+#### P1 (16 lessons)
+- [Managed worktree creation mixed up the create executor and hook bootstrap-source contract](../docs/rca/2026-03-28-worktree-create-helper-and-hook-bootstrap-source-drift.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
 - [Telegram authoritative UAT could pass on provider/model resolution errors](../docs/rca/2026-03-20-telegram-uat-false-pass-on-model-not-found.md)
@@ -94,7 +95,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (15 lessons)
+#### process (16 lessons)
+- [Managed worktree creation mixed up the create executor and hook bootstrap-source contract](../docs/rca/2026-03-28-worktree-create-helper-and-hook-bootstrap-source-drift.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Half-initialized Beads Dolt runtime was misclassified as a healthy local worktree state](../docs/rca/2026-03-24-beads-half-initialized-dolt-runtime-misclassified-as-healthy.md)
 - [Telegram webhook monitor default expected webhook while production stayed in polling mode](../docs/rca/2026-03-20-telegram-webhook-monitor-webhook-requirement-drift.md)
@@ -126,13 +128,13 @@
 
 - `gitops` (11 lessons)
 - `github-actions` (11 lessons)
+- `rca` (9 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
-- `rca` (8 lessons)
 - `deploy` (8 lessons)
 - `clawdiy` (8 lessons)
+- `git-worktree` (7 lessons)
 - `openclaw` (6 lessons)
-- `git-worktree` (6 lessons)
 - `telegram` (5 lessons)
 
 
@@ -142,10 +144,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 43 |
-| Critical (P0/P1) | 16 |
+| Total Lessons | 44 |
+| Critical (P0/P1) | 17 |
 | Categories | 5 |
-| Unique Tags | 102 |
+| Unique Tags | 104 |
 
 ---
 

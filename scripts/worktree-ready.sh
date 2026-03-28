@@ -882,6 +882,23 @@ build_plain_bd_bootstrap_command_for_path() {
   printf 'export PATH=%s:$PATH\n' "$(shell_quote "${worktree_path}/bin")"
 }
 
+build_phase_a_create_command_for_target() {
+  local target_branch="${1:-${branch:-}}"
+  local worktree_path="${2:-${target_path:-}}"
+  local canonical_root=""
+
+  if [[ -z "${target_branch}" || -z "${worktree_path}" || "${worktree_path}" == "n/a" ]]; then
+    return 1
+  fi
+
+  canonical_root="$(beads_resolve_canonical_root "${resolved_repo_root}" 2>/dev/null || printf '%s\n' "${resolved_repo_root}")"
+  printf 'scripts/worktree-phase-a.sh create-from-base --canonical-root %s --base-ref %s --branch %s --path %s\n' \
+    "$(shell_quote "${canonical_root}")" \
+    "$(shell_quote "main")" \
+    "$(shell_quote "${target_branch}")" \
+    "$(shell_quote "${worktree_path}")"
+}
+
 build_finish_commit_message() {
   local finish_branch="${report_branch_name:-${branch:-worktree}}"
 
@@ -2414,6 +2431,7 @@ set_readiness_next_steps() {
   local mode_name="$1"
   local bootstrap_command=""
   local plain_bd_bootstrap=""
+  local phase_a_create_command=""
 
   if [[ "${branch_resolution_state}" == "missing" ]]; then
     add_next_step "Create or fetch the branch '${branch}' before using attach or start --existing"
@@ -2480,7 +2498,13 @@ set_readiness_next_steps() {
               add_next_step "Inspect the existing worktree and fix the reported prerequisites"
             fi
           else
-            add_next_step "Retry the managed worktree flow from the invoking worktree after fixing the reported prerequisites"
+            if [[ "${mode_name}" == "create" ]] && phase_a_create_command="$(build_phase_a_create_command_for_target "${branch}" "${target_path}")"; then
+              add_warning "worktree-ready create is a post-Phase-A handoff helper; it does not allocate the branch or git worktree by itself."
+              report_repair_command="${phase_a_create_command}"
+              add_next_step "${phase_a_create_command}"
+            else
+              add_next_step "Retry the managed worktree flow from the invoking worktree after fixing the reported prerequisites"
+            fi
           fi
           ;;
         doctor|handoff)

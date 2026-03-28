@@ -774,6 +774,36 @@ test_create_prefers_live_bd_issue_context_without_jsonl_bootstrap() {
     test_pass
 }
 
+test_create_without_existing_worktree_points_to_phase_a_executor() {
+    test_start "worktree_ready_create_without_existing_worktree_points_to_phase_a_executor"
+
+    local fixture_root repo_dir canonical_repo_dir fake_bd_bin probe_dir output rc expected_create_command
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    canonical_repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
+    probe_dir="${fixture_root}/moltinger-main-034-moltis-skill-discovery-and-telegram-leak-regressions"
+    expected_create_command="scripts/worktree-phase-a.sh create-from-base --canonical-root ${canonical_repo_dir} --base-ref main --branch 034-moltis-skill-discovery-and-telegram-leak-regressions --path ${probe_dir}"
+
+    output="$(
+        set +e
+        run_worktree_create "$repo_dir" "$fake_bd_bin" --branch 034-moltis-skill-discovery-and-telegram-leak-regressions --path "$probe_dir" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Create helper should return the blocked action-required exit code when no worktree exists yet"
+    assert_contains "$output" 'Status: action_required' "Create helper should block when the target worktree has not been allocated yet"
+    assert_contains "$output" 'worktree-ready create is a post-Phase-A handoff helper; it does not allocate the branch or git worktree by itself.' "Create helper should explain the Phase A boundary explicitly"
+    assert_contains "$output" "$expected_create_command" "Create helper should route missing-worktree cases to the exact Phase A executor command"
+    if [[ "$output" == *'Retry the managed worktree flow from the invoking worktree after fixing the reported prerequisites'* ]]; then
+        test_fail "Create helper should not fall back to the old generic retry guidance when no worktree exists yet"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_doctor_branch_only_suppresses_already_attached_warning() {
     test_start "worktree_ready_doctor_branch_only_suppresses_already_attached_warning"
 
@@ -1360,6 +1390,7 @@ run_all_tests() {
     test_create_returns_issue_na_when_branch_mapping_is_ambiguous
     test_create_surfaces_source_only_issue_artifacts_when_target_lacks_them
     test_create_prefers_live_bd_issue_context_without_jsonl_bootstrap
+    test_create_without_existing_worktree_points_to_phase_a_executor
     test_doctor_branch_only_suppresses_already_attached_warning
     test_doctor_accepts_local_beads_state
     test_doctor_blocks_runtime_bootstrap_required_when_external_state_says_local
