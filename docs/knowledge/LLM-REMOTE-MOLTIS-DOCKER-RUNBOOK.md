@@ -573,6 +573,58 @@ Why this matters:
 - if the outer run budget equals the browser page budget, the agent can still time
   out even though the browser container itself is healthy
 
+## Skill Discovery vs Sandbox Filesystem
+
+### Symptom: Telegram says a skill path does not exist even though the skill is listed as available
+
+Likely cause:
+
+- live runtime discovery and sandbox-visible filesystem are not the same surface
+- the active Telegram session may advertise available skills from runtime state while sandboxed
+  `exec` cannot read the corresponding host-style paths
+
+Inspect authoritative truth in this order:
+
+```bash
+curl -sS -c /tmp/moltis.cookies -H 'Content-Type: application/json' \
+  -d "{\"password\":\"$MOLTIS_PASSWORD\"}" \
+  https://moltis.ainetic.tech/api/auth/login >/dev/null
+curl -sS -b /tmp/moltis.cookies https://moltis.ainetic.tech/api/skills | jq .
+node /server/tests/lib/ws_rpc_cli.mjs request --method channels.list --params '{}' | jq .
+node /server/tests/lib/ws_rpc_cli.mjs request --method chat.raw_prompt --params '{}' | jq .
+```
+
+Then compare that to what the session sandbox can actually see before trusting any `exec` probe.
+
+Rule:
+
+- `/api/skills` and runtime-advertised Available Skills are the authoritative proof that a skill
+  is discoverable
+- `exec cat /home/moltis/.moltis/skills/...` inside a sandboxed Telegram session is not global
+  truth for skill existence
+
+### Special note for `codex-update`
+
+For remote Moltis surfaces, `codex-update` must be treated as advisory/notification capability.
+Do not promise that the server/container can update the user's local Codex CLI installation.
+If the current surface cannot safely reach the canonical local runtime path, use official external
+release sources or provide an honest advisory-only answer.
+
+## Telegram Activity Log Leakage Triage
+
+If the user still sees `📋 Activity log` in Telegram, do not stop at `stream_mode = "off"`.
+
+Check:
+
+1. tracked `config/moltis.toml`
+2. authoritative `channels.list`
+3. `chat.history`
+4. whether the leak appears in final assistant content or only in delivered chat artifacts
+
+If `chat.history` final reply is clean but the user still sees `Activity log`, treat it as
+transport/channel delivery leakage and prepare upstream handoff instead of only rewriting prompt
+text.
+
 ## Anti-Patterns
 
 Do not do any of the following:

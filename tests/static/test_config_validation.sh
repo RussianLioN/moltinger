@@ -361,6 +361,16 @@ PY
         test_fail "Primary Moltis config must keep repo-side codex-update scripts container-visible under /server and keep writable runtime state under ~/.moltis"
     fi
 
+    test_start "static_config_codex_update_remote_surface_contract_is_advisory_safe"
+    if rg -Fq 'Если `codex-update` уже объявлен в списке доступных навыков, считай этот навык существующим.' "$TOML_CONFIG" && \
+       rg -Fq 'Не пытайся опровергнуть это через `exec`, `cat`, `find`' "$TOML_CONFIG" && \
+       rg -Fq 'Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме' "$TOML_CONFIG" && \
+       rg -Fq 'Если trusted operator/local surface реально видит `/server`' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must treat codex-update as an advisory-safe capability on remote Telegram surfaces while reserving direct /server runtime usage for trusted operator/local contexts"
+    fi
+
     test_start "static_config_does_not_claim_repo_search_paths_are_live_skill_contract"
     if rg -Fq 'search_paths = []' "$TOML_CONFIG" && \
        ! rg -Fq 'search_paths = ["/server/skills"]' "$TOML_CONFIG" && \
