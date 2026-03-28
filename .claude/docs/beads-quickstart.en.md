@@ -13,13 +13,14 @@
 ```bash
 git status              # 1. What changed?
 git add <files>         # 2. Stage code
-bd sync                 # 3. Sync beads
+bd status               # 3. Inspect the local Beads state
 git commit -m "... (PREFIX-xxx)"  # 4. Commit with issue ID
-bd sync                 # 5. Sync new changes
+bd status               # 5. Confirm the backlog still reads locally
 git push                # 6. Push to remote
 ```
 
 **Work is NOT done until pushed!**
+If this repository is configured with a Dolt remote, run `bd dolt push` before `git push`.
 
 ---
 
@@ -52,7 +53,7 @@ bd close ID --reason "Description"  # Complete task
 /push patch                         # Commit
 
 # === END (MANDATORY) ===
-bd sync                     # Sync before exit
+bd status                   # Inspect the local Beads state before exit
 ```
 
 ---
@@ -248,9 +249,9 @@ bd prime      # Workflow context
 │ SESSION END (ALL 6 STEPS!)                       │
 │   1. git status                                  │
 │   2. git add <files>                             │
-│   3. bd sync                                     │
+│   3. bd status                                   │
 │   4. git commit -m "... (PREFIX-xxx)"            │
-│   5. bd sync                                     │
+│   5. bd status                                   │
 │   6. git push                                    │
 ├──────────────────────────────────────────────────┤
 │ WORKFLOWS bd formula list                        │

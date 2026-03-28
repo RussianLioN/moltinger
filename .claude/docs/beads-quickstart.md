@@ -13,13 +13,14 @@
 ```bash
 git status              # 1. Что изменилось?
 git add <files>         # 2. Добавить код
-bd sync                 # 3. Sync beads
+bd status               # 3. Проверить локальное состояние Beads
 git commit -m "... (PREFIX-xxx)"  # 4. Коммит с ID issue
-bd sync                 # 5. Sync новые изменения
+bd status               # 5. Убедиться, что backlog читается локально
 git push                # 6. Push в remote
 ```
 
 **Работа НЕ завершена пока не сделан push!**
+Если для этого репозитория настроен Dolt remote, выполните `bd dolt push` перед `git push`.
 
 ---
 
@@ -52,7 +53,7 @@ bd close ID --reason "Описание"     # Закрыть задачу
 /push patch                         # Коммит
 
 # === КОНЕЦ (ОБЯЗАТЕЛЬНО) ===
-bd sync                     # Синхронизация перед выходом
+bd status                   # Проверить локальное состояние Beads перед выходом
 ```
 
 ---
@@ -248,9 +249,9 @@ bd prime      # Контекст workflow
 │ КОНЕЦ СЕССИИ (ВСЕ 6 ШАГОВ!)                      │
 │   1. git status                                  │
 │   2. git add <files>                             │
-│   3. bd sync                                     │
+│   3. bd status                                   │
 │   4. git commit -m "... (PREFIX-xxx)"            │
-│   5. bd sync                                     │
+│   5. bd status                                   │
 │   6. git push                                    │
 ├──────────────────────────────────────────────────┤
 │ WORKFLOWS bd formula list                        │

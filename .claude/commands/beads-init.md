@@ -81,9 +81,9 @@ cp .beads-templates/PRIME.template.md .beads/PRIME.md
 
 6. **Update PRIME.md** - replace `{{PREFIX}}` and `{{PROJECT_NAME}}`
 
-7. **Initial sync**:
+7. **Initial status check**:
 ```bash
-bd sync
+bd status
 ```
 
 ## Post-Setup Instructions
@@ -114,7 +114,9 @@ After initialization, display:
 
 START:  bd prime → bd ready
 WORK:   bd update → work → bd close → /push patch
-END:    bd sync → git push
+END:    git status → git add → bd status → git commit → bd status → git push
+
+If a Dolt remote is configured for this repo, run `bd dolt push` before `git push`.
 
 ### Documentation
 

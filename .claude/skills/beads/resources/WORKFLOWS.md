@@ -18,11 +18,13 @@ bd close PREFIX-xxx --reason "Implemented feature"
 # === END (MANDATORY!) ===
 git status
 git add <files>
-bd sync
+bd status
 git commit -m "feat: description (PREFIX-xxx)"
-bd sync
+bd status
 git push
 ```
+
+If this repo has a Dolt remote configured, run `bd dolt push` before `git push`.
 
 ## Emergent Work
 
