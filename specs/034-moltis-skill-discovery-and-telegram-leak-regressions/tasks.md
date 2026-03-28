@@ -31,7 +31,7 @@
 ## Phase 4: Verification And Handoff
 
 - [x] T040 Run targeted checks and reconcile `tasks.md`
-- [ ] T041 Commit, rebase, push, and produce concise handoff
+- [x] T041 Commit, rebase, push, and produce concise handoff
 
 ## Deferred Follow-Up Backlog
 
