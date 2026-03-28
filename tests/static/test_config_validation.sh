@@ -44,6 +44,7 @@ CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
 PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
+GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -702,8 +703,20 @@ PY
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
     fi
 
+    test_start "static_deploy_batches_managed_surface_hash_checks"
+    if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
+       rg -Fq 'gitops-check-managed-surface.sh' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'managed_files_compared=' "$DEPLOY_WORKFLOW" && \
+       rg -Fq "emit_remote_script \"\$manifest_file\" | ssh \"\$SSH_TARGET\" 'bash -seu'" "$GITOPS_CHECK_SCRIPT" && \
+       rg -Fq 'Fetching remote hashes in one SSH roundtrip' "$GITOPS_CHECK_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must batch managed-surface hash checks through the dedicated helper and expose summary counts"
+    fi
+
     test_start "static_deploy_compliance_checks_prod_compose_hash"
-    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
+       rg -Fq 'append_manifest_entry "docker-compose.prod.yml"' "$GITOPS_CHECK_SCRIPT"; then
         test_pass
     else
         test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
@@ -854,7 +867,8 @@ PY
     fi
 
     test_start "static_deploy_compliance_checks_prod_compose_hash"
-    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
+       rg -Fq 'append_manifest_entry "docker-compose.prod.yml"' "$GITOPS_CHECK_SCRIPT"; then
         test_pass
     else
         test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
