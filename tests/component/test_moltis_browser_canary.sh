@@ -37,16 +37,25 @@ EOF
 run_component_moltis_browser_canary_tests() {
     start_timer
 
-    local fixture_root fake_bin fake_smoke stdout_log stderr_log
+    local fixture_root fake_bin fake_smoke stdout_log stderr_log smoke_calls
     fixture_root="$(secure_temp_dir moltis-browser-canary)"
     fake_bin="$(create_fake_browser_canary_bin "$fixture_root")"
     fake_smoke="$fixture_root/fake-smoke.sh"
     stdout_log="$fixture_root/stdout.log"
     stderr_log="$fixture_root/stderr.log"
+    smoke_calls="$fixture_root/smoke-calls.log"
 
     cat >"$fake_smoke" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${FAKE_SMOKE_CALLS:-}" ]]; then
+    {
+        printf 'CHAT_WAIT_MS=%s\n' "${CHAT_WAIT_MS:-}"
+        printf 'TEST_TIMEOUT=%s\n' "${TEST_TIMEOUT:-}"
+        printf 'EXPECTED_REPLY_TEXT=%s\n' "${EXPECTED_REPLY_TEXT:-}"
+        printf -- '---\n'
+    } >>"${FAKE_SMOKE_CALLS:?}"
+fi
 printf '%s\n' "${FAKE_SMOKE_STDOUT:-smoke ok}"
 if [[ "${FAKE_SMOKE_EXIT_CODE:-0}" -ne 0 ]]; then
     exit "${FAKE_SMOKE_EXIT_CODE}"
@@ -55,9 +64,14 @@ EOF
     chmod +x "$fake_smoke"
 
     test_start "component_moltis_browser_canary_passes_when_smoke_and_live_browser_log_match"
+    : >"$smoke_calls"
     if ! PATH="$fake_bin:$PATH" \
         DOCKER_BIN="docker" \
         MOLTIS_BROWSER_CANARY_SMOKE_SCRIPT="$fake_smoke" \
+        FAKE_SMOKE_CALLS="$smoke_calls" \
+        MOLTIS_BROWSER_CANARY_CHAT_WAIT_MS="654" \
+        MOLTIS_BROWSER_CANARY_TEST_TIMEOUT="45" \
+        MOLTIS_BROWSER_CANARY_EXPECTED_REPLY="Introduction - Moltis Documentation" \
         FAKE_SMOKE_EXIT_CODE="0" \
         FAKE_DOCKER_LOGS=$'INFO tool execution succeeded tool=browser\nINFO navigated to URL' \
         bash "$CANARY_SCRIPT" >"$stdout_log" 2>"$stderr_log"; then
@@ -66,8 +80,11 @@ EOF
         return
     fi
 
-    if ! grep -Fq '[OK] Moltis browser canary passed' "$stdout_log"; then
-        test_fail "Browser canary success output must include the OK marker"
+    if ! grep -Fq '[OK] Moltis browser canary passed' "$stdout_log" || \
+       ! grep -Fq 'CHAT_WAIT_MS=654' "$smoke_calls" || \
+       ! grep -Fq 'TEST_TIMEOUT=45' "$smoke_calls" || \
+       ! grep -Fq 'EXPECTED_REPLY_TEXT=Introduction - Moltis Documentation' "$smoke_calls"; then
+        test_fail "Browser canary success path must include the OK marker and forward wait/timeout/reply expectations into the smoke helper"
         rm -rf "$fixture_root"
         return
     fi

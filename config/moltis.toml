@@ -286,7 +286,7 @@ priority_models = [
 # ══════════════════════════════════════════════════════════════════════════════
 
 [tools]
-agent_timeout_secs = 30           # Max seconds for an agent run (30s for fast failover on rate limits)
+agent_timeout_secs = 90           # Max seconds for an agent run; keep headroom above 30s browser navigation so multi-step browser runs can finish cleanly
 max_tool_result_bytes = 50000     # Max bytes per tool result before truncation (50KB)
 
 # ── Command Execution ─────────────────────────────────────────────────────────

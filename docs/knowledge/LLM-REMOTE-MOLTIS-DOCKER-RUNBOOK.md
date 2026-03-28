@@ -342,6 +342,46 @@ Why this matters:
 - Docker socket access is controlled by numeric UID/GID, not the textual group name
   shown inside the container
 
+### Symptom: Browser tool now starts, but the run still ends with `Timed out: Agent run timed out after 30s`
+
+Likely cause:
+
+- browser launch/storage contract is already repaired, but the overall agent run
+  timeout still equals the browser navigation timeout, so the run dies before
+  follow-up browser actions and the final assistant reply can complete
+- or the operator canary is stale and still testing retired `/login` +
+  `/api/v1/chat` instead of the current auth + WS RPC surface
+
+Inspect:
+
+```bash
+docker exec moltis sh -lc 'sed -n "286,296p" /home/moltis/.config/moltis/moltis.toml'
+docker exec moltis sh -lc 'sed -n "478,496p" /home/moltis/.config/moltis/moltis.toml'
+TEST_BASE_URL=http://localhost:13131 TEST_TIMEOUT=30 node /server/tests/lib/ws_rpc_cli.mjs request \
+  --method chat.send \
+  --params '{"text":"Используй browser, а не web_fetch. Открой https://docs.moltis.org/ и ответь только точным заголовком страницы без пояснений."}' \
+  --wait-ms 90000 \
+  --subscribe chat
+```
+
+Fix:
+
+- keep `tools.browser.navigation_timeout_ms` as the page-load budget unless the
+  site itself is slow
+- raise `[tools].agent_timeout_secs` above that browser budget; tracked baseline
+  is `90` so the run has headroom for `navigate`, a follow-up browser action, and
+  the final reply
+- use the repo `scripts/test-moltis-api.sh` helper only after it is on the current
+  `/api/auth/login` + WS RPC contract
+- rerun the browser canary after the config change and only then re-check Telegram
+
+Why this matters:
+
+- official Moltis docs describe browser navigation as a separate browser-side
+  timeout budget and browser automation as slower than `web_fetch`
+- if the outer run budget equals the browser page budget, the agent can still time
+  out even though the browser container itself is healthy
+
 ## Anti-Patterns
 
 Do not do any of the following:

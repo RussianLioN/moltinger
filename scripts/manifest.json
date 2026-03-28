@@ -1071,18 +1071,25 @@
     },
     "test-moltis-api.sh": {
       "version": "1.0.0",
-      "description": "Moltis HTTP API testing script",
+      "description": "Moltis auth plus WebSocket RPC smoke-check script",
       "entrypoint": true,
       "requires": [
         "curl",
-        "jq"
+        "jq",
+        "node"
       ],
       "provides": [
         "test-api"
       ],
       "env_vars": [
         "MOLTIS_URL",
-        "MOLTIS_PASSWORD"
+        "MOLTIS_PASSWORD",
+        "TEST_TIMEOUT",
+        "CHAT_WAIT_MS",
+        "EXPECTED_PROVIDER",
+        "EXPECTED_MODEL",
+        "EXPECTED_REPLY_TEXT",
+        "RESET_CHAT_CONTEXT_BEFORE_SEND"
       ]
     },
     "zai-rate-monitor.sh": {
