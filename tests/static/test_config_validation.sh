@@ -171,6 +171,14 @@ PY
         test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
     fi
 
+    test_start "static_telegram_account_pins_classic_final_message_delivery"
+    if rg -Fq '[channels.telegram.moltis-bot]' "$TOML_CONFIG" && \
+       rg -Fq 'stream_mode = "off"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "User-facing Telegram account must explicitly pin stream_mode = \"off\" so runtime defaults or per-account streaming features cannot leak internal activity/tool-progress into chat"
+    fi
+
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
     if rg -Fq 'container_host = "host.docker.internal"' "$TOML_CONFIG"; then
         test_pass
@@ -243,13 +251,18 @@ PY
     if rg -Fq 'Authenticating via /api/auth/login' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        rg -Fq 'tests/lib/ws_rpc_cli.mjs' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        rg -Fq 'RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq -- '--method chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq -- '--method chat.send' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'TEST_SESSION_KEY="${TEST_SESSION_KEY:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'DELETE_TEST_SESSION_ON_EXIT="${DELETE_TEST_SESSION_ON_EXIT:-false}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'sequence --steps' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'sessions.switch' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'sessions.delete' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'chat.send' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        ! rg -Fq '/api/v1/chat' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        ! rg -Fq '"/login"' "$PROJECT_ROOT/scripts/test-moltis-api.sh"; then
         test_pass
     else
-        test_fail "scripts/test-moltis-api.sh must use /api/auth/login plus WS RPC status/chat calls, clear stale chat context before send, and avoid the retired /login + /api/v1/chat contract"
+        test_fail "scripts/test-moltis-api.sh must use /api/auth/login plus WS RPC status/chat calls, run the chat workflow in one RPC sequence for session fidelity, support dedicated session switch/delete for operator canaries, clear stale chat context before send, and avoid the retired /login + /api/v1/chat contract"
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"

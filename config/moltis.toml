@@ -462,6 +462,7 @@ enabled = true                    # Keep Telegram integration explicitly enabled
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
+stream_mode = "off"        # Official changelog adds Telegram reply streaming; pin classic final-message delivery so user chats never receive partial/tool-progress output
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
 # webhook_url = "${TELEGRAM_WEBHOOK_URL}"
 # webhook_secret = "${TELEGRAM_WEBHOOK_SECRET}"

@@ -21,6 +21,8 @@ const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS 
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 const INTERNAL_TELEMETRY_RE =
   /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b)/iu;
+const INTERIM_PROGRESS_RE =
+  /^(?:сейчас\s+)?(?:проверяю|смотрю|ищу|открываю|открою|попробую|запускаю|зайду|перехожу|достаю|подожди|секунду|one moment|working on it|checking|looking|opening|navigating|fetching|let me|i(?:'ll| will)\b)/iu;
 
 function getArg(name, fallback = "") {
   const idx = process.argv.indexOf(name);
@@ -62,6 +64,13 @@ function normalizeMessageText(value) {
     .trim();
 }
 
+export function isLikelyInterimReplyText(value) {
+  const normalized = normalizeMessageText(value);
+  if (!normalized) return false;
+  if (INTERNAL_TELEMETRY_RE.test(normalized)) return false;
+  return INTERIM_PROGRESS_RE.test(normalized);
+}
+
 export function isReplyErrorSignature(value) {
   const normalized = normalizeMessageText(value);
   return ERROR_RE.test(normalized) || INTERNAL_TELEMETRY_RE.test(normalized);
@@ -100,19 +109,31 @@ function maxObservedMid(messages) {
 
 export function findOutgoingProbeMessage(messages, probeText, minMidExclusive = 0) {
   const normalizedProbeText = normalizeMessageText(probeText);
-  let latest = null;
+  let latestExact = null;
+  let latestPrefix = null;
 
   for (const rawMessage of messages) {
     const message = normalizeProbeMessage(rawMessage);
     if (message.direction !== "out") continue;
     if (message.mid <= minMidExclusive) continue;
-    if (message.text !== normalizedProbeText) continue;
-    if (!latest || message.mid > latest.mid) {
-      latest = message;
+    if (message.text === normalizedProbeText) {
+      if (!latestExact || message.mid > latestExact.mid) {
+        latestExact = message;
+      }
+      continue;
+    }
+    if (
+      normalizedProbeText.length > 0 &&
+      message.text.length > normalizedProbeText.length &&
+      message.text.startsWith(normalizedProbeText)
+    ) {
+      if (!latestPrefix || message.mid > latestPrefix.mid) {
+        latestPrefix = message;
+      }
     }
   }
 
-  return latest;
+  return latestExact || latestPrefix;
 }
 
 export function findAttributedReply(messages, sentMid) {
@@ -334,6 +355,17 @@ export function buildSendDebugSnapshot(rawSnapshot, probeText, minMidExclusive =
     )
     .slice(-5)
     .map(summarizeMessage);
+  const prefixOutgoingMatches = messages
+    .filter(
+      (message) =>
+        message.direction === "out" &&
+        message.mid > minMidExclusive &&
+        normalizedProbeText.length > 0 &&
+        message.text.length > normalizedProbeText.length &&
+        message.text.startsWith(normalizedProbeText)
+    )
+    .slice(-5)
+    .map(summarizeMessage);
 
   return {
     url: String(rawSnapshot?.url || ""),
@@ -362,6 +394,7 @@ export function buildSendDebugSnapshot(rawSnapshot, probeText, minMidExclusive =
     verification_prompt_present: Boolean(rawSnapshot?.verificationPromptPresent),
     bubble_count: messages.length,
     exact_outgoing_probe_candidates: exactOutgoingMatches,
+    prefixed_outgoing_probe_candidates: prefixOutgoingMatches,
     last_bubbles: messages.slice(-8).map(summarizeMessage),
   };
 }
@@ -576,6 +609,7 @@ export async function waitForReplySettleWithCollector({
   let lastFingerprint = null;
   let latestIncoming = null;
   let stableReply = null;
+  let stableReplyIsInterim = false;
 
   while (Date.now() - startedAt < maxWaitMs) {
     const messages = await collectMessagesFn();
@@ -591,8 +625,9 @@ export async function waitForReplySettleWithCollector({
         lastFingerprint = currentFingerprint;
         lastChangeAt = Date.now();
         stableReply = latestIncoming;
+        stableReplyIsInterim = isLikelyInterimReplyText(latestIncoming.text);
       }
-      if (lastChangeAt !== null && Date.now() - lastChangeAt >= settleMs) {
+      if (!stableReplyIsInterim && lastChangeAt !== null && Date.now() - lastChangeAt >= settleMs) {
         return {
           ok: true,
           settled: true,
@@ -608,7 +643,7 @@ export async function waitForReplySettleWithCollector({
   }
 
   return {
-    ok: stableReply !== null,
+    ok: stableReply !== null && !stableReplyIsInterim,
     settled: false,
     settleWaitMs: Date.now() - startedAt,
     replyObservedAtMs: firstReplyObservedAtMs,
@@ -1101,9 +1136,7 @@ async function main() {
 
     if (!replyMessage) {
       const nowMessages = await collectMessages(page);
-      const outgoingSent = nowMessages.some(
-        (message) => message.direction === "out" && normalizeMessageText(message.text) === normalizeMessageText(text)
-      );
+      const outgoingSent = Boolean(findOutgoingProbeMessage(nowMessages, text, beforeMaxMid));
       const currentLatestIncoming = nowMessages
         .map(normalizeProbeMessage)
         .filter((message) => message.direction === "in" && message.text.length > 0)

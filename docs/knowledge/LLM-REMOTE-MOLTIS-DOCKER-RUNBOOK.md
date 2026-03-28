@@ -238,6 +238,73 @@ docker logs --since 2m moltis 2>&1 | grep -E 'chat.send|streaming agent loop|ope
 Expected proof lines:
 
 - `chat.send ... model="openai-codex::gpt-5.4"`
+
+## Browser Canary Discipline On Shared Production
+
+When you run an operator browser canary against shared production:
+
+1. Do not run it in the default `main` chat session.
+2. Do not treat a standalone `sessions.switch` as proof that later `chat.send` calls are isolated.
+3. Use one WS RPC connection for the whole browser smoke lifecycle:
+   - `sessions.switch`
+   - `chat.clear`
+   - `chat.send`
+   - `sessions.delete`
+4. After the run, confirm the dedicated operator session no longer appears in `sessions.list`.
+
+Reason:
+
+- Moltis browser reuse is session-scoped.
+- Shared production with tight browser capacity is vulnerable to false isolation.
+- The operator path must not contaminate or starve user traffic.
+
+## Telegram Pairing Triage
+
+Do not jump to “pair again” by default.
+
+Re-pair Telegram Web only when one of these is true:
+
+- authoritative state file is missing
+- helper shows login inputs / QR / verification prompt instead of an active chat
+- helper returns `missing_session_state`
+
+Do not blame pairing first when:
+
+- the outgoing probe was observed successfully
+- the bot already produced a reply
+- the incident evidence points to browser/session/tooling drift instead
+
+In other words: pairing is an operational checkpoint, not the default root cause for browser/session incidents.
+
+## Telegram Delivery Contract
+
+Treat user-facing Telegram delivery as an explicit runtime contract, not an implicit default.
+
+Official Moltis sources are currently split:
+
+- the public channels page still describes Telegram as a polling channel with no streaming;
+- changelog `0.8.38` added Telegram reply streaming plus per-account
+  `stream_mode` gating, where `off` keeps the classic final-message delivery path.
+
+Safe repo policy for user-facing Telegram bots:
+
+- explicitly pin `stream_mode = "off"` under `[channels.telegram.<account>]`;
+- do not rely on the runtime default if the bot is allowed to talk to real users;
+- if you intentionally test streaming, do it only in a controlled debug lane, not in the
+  main user chat.
+
+Inspect:
+
+```bash
+docker exec moltis sh -lc 'sed -n "455,470p" /home/moltis/.config/moltis/moltis.toml'
+sqlite3 /opt/moltinger/data/moltis.db 'select slug, config from channels where kind = "telegram";'
+```
+
+If users see `Activity log`, raw tool names, or partial progress in Telegram:
+
+1. confirm the live Telegram account config actually contains `stream_mode = "off"`;
+2. confirm the runtime channel state or DB override did not drift from tracked config;
+3. only after that continue with browser/runtime investigation.
 - `starting streaming agent loop provider="openai-codex"`
 - `openai-codex stream_with_tools request model=gpt-5.4`
 - `agent run complete ... response=OK`

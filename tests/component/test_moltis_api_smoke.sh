@@ -70,41 +70,66 @@ write_fake_ws_rpc_cli() {
 import fs from 'node:fs';
 
 const args = process.argv.slice(2);
+const command = args[0] || 'request';
 const method = args[args.indexOf('--method') + 1] || '';
 const waitMs = args.includes('--wait-ms') ? args[args.indexOf('--wait-ms') + 1] : '';
 const subscribe = args.includes('--subscribe') ? args[args.indexOf('--subscribe') + 1] : '';
 const params = args.includes('--params') ? args[args.indexOf('--params') + 1] : '';
+const steps = args.includes('--steps') ? JSON.parse(args[args.indexOf('--steps') + 1] || '[]') : [];
 
-if (process.env.FAKE_WS_CALLS) {
+function recordCall(entry) {
+  if (!process.env.FAKE_WS_CALLS) return;
   fs.appendFileSync(process.env.FAKE_WS_CALLS, JSON.stringify({
-    method,
-    waitMs,
-    subscribe,
-    params,
+    command,
+    ...entry,
     testBaseUrl: process.env.TEST_BASE_URL || '',
     testTimeout: process.env.TEST_TIMEOUT || '',
     testCookieHeader: process.env.TEST_COOKIE_HEADER || '',
   }) + '\n');
 }
 
-let payload;
-switch (method) {
+if (command === 'sequence') {
+  for (const step of steps) {
+    recordCall({
+      method: step.method || '',
+      waitMs: step.waitMs == null ? '' : String(step.waitMs),
+      subscribe,
+      params: JSON.stringify(step.params || {}),
+    });
+  }
+} else {
+  recordCall({
+    method,
+    waitMs,
+    subscribe,
+    params,
+  });
+}
+
+function payloadForMethod(methodName, paramsJson) {
+switch (methodName) {
   case 'status':
-    payload = {
+    return {
       ok: true,
       result: { ok: true, payload: { version: '0.10.18', connections: 1 } },
       events: [],
     };
-    break;
   case 'chat.clear':
-    payload = {
+    return {
       ok: true,
       result: { ok: true, payload: { ok: true } },
       events: [],
     };
-    break;
+  case 'sessions.switch': {
+    const parsed = JSON.parse(paramsJson || '{}');
+    return {
+      ok: true,
+      result: { ok: true, payload: { entry: { key: parsed.key || '' } } },
+      events: [],
+    };
+  }
   case 'chat.send':
-    payload = {
+    return {
       ok: true,
       result: { ok: true, payload: { ok: true } },
       events: [
@@ -119,12 +144,38 @@ switch (method) {
         },
       ],
     };
-    break;
-  default:
-    payload = {
-      ok: false,
-      message: `unexpected method ${method}`,
+  case 'sessions.delete':
+    return {
+      ok: true,
+      result: { ok: true, payload: { ok: true } },
+      events: [],
     };
+  default:
+    return {
+      ok: false,
+      message: `unexpected method ${methodName}`,
+    };
+}
+}
+
+let payload;
+if (command === 'sequence') {
+  const results = [];
+  const events = [];
+  for (const step of steps) {
+    const response = payloadForMethod(step.method || '', JSON.stringify(step.params || {}));
+    results.push({ step, response: response.result ?? response });
+    if (Array.isArray(response.events)) {
+      events.push(...response.events);
+    }
+  }
+  payload = {
+    ok: true,
+    result: { ok: true, payload: results },
+    events,
+  };
+} else {
+  payload = payloadForMethod(method, params);
 }
 
 process.stdout.write(JSON.stringify(payload));
@@ -166,7 +217,7 @@ run_component_moltis_api_smoke_tests() {
 
     if ! grep -Fq 'Authenticating via /api/auth/login' "$stdout_log" || \
        ! grep -Fq 'Fetching runtime status via RPC' "$stdout_log" || \
-       ! grep -Fq 'Clearing chat context via RPC' "$stdout_log" || \
+       ! grep -Fq 'Running chat workflow via a single RPC connection' "$stdout_log" || \
        ! grep -Fq '=== Done ===' "$stdout_log" || \
        [[ "$(grep -c '"method":"status"' "$ws_calls")" != "1" ]] || \
        [[ "$(grep -c '"method":"chat.clear"' "$ws_calls")" != "1" ]] || \
@@ -175,6 +226,28 @@ run_component_moltis_api_smoke_tests() {
        ! grep -Fq '"subscribe":"chat"' "$ws_calls" || \
        ! grep -Fq '"testCookieHeader":"session=smoke"' "$ws_calls"; then
         test_fail "Smoke script must authenticate through /api/auth/login semantics, use WS RPC for status/chat, clear chat context before send, and forward wait/cookie context into chat.send"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_moltis_api_smoke_supports_dedicated_session_switch_and_delete"
+    : >"$ws_calls"
+    if ! MOLTIS_ACTIVE_ROOT="$fake_root" \
+        MOLTIS_URL="http://example.invalid:13131" \
+        TEST_SESSION_KEY="operator:browser-canary:test" \
+        DELETE_TEST_SESSION_ON_EXIT="true" \
+        FAKE_WS_CALLS="$ws_calls" \
+        bash "$SMOKE_SCRIPT" "Reply with exactly OK and nothing else." >"$stdout_log" 2>"$stderr_log"; then
+        test_fail "Smoke script should support switching into and deleting a dedicated operator session"
+        rm -rf "$fixture_root"
+        return
+    fi
+
+    if [[ "$(grep -c '"method":"sessions.switch"' "$ws_calls")" != "1" ]] || \
+       [[ "$(grep -c '"method":"sessions.delete"' "$ws_calls")" != "1" ]] || \
+       ! grep -Fq '"params":"{\"key\":\"operator:browser-canary:test\"}"' "$ws_calls"; then
+        test_fail "Smoke script must call sessions.switch and sessions.delete when TEST_SESSION_KEY lifecycle cleanup is requested"
         rm -rf "$fixture_root"
         return
     fi

@@ -48,6 +48,26 @@ NODE
         test_fail "Outgoing probe correlation must ignore Telegram Web time/status suffixes appended to bubble text"
     fi
 
+    test_start "component_telegram_web_probe_accepts_prefixed_outgoing_probe_with_appended_preview"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { findOutgoingProbeMessage } = await import(process.env.NODE_SCRIPT);
+const probeText = "Используй browser, а не web_fetch. Открой https://t.me/tsingular и ответь кратко.";
+const probe = findOutgoingProbeMessage([
+  { mid: 59, direction: "out", text: probeText.slice(0, 40) },
+  { mid: 60, direction: "out", text: `${probeText}\nTelegram Технозаметки Малышева` },
+  { mid: 61, direction: "in", text: "Открою канал в браузере и кратко отвечу." }
+], probeText, 50);
+if (!probe || probe.mid !== 60) {
+  throw new Error(`expected prefixed outgoing probe match, got ${JSON.stringify(probe)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Outgoing probe correlation must recognize Telegram bubbles that append page preview text after the probe"
+    fi
+
     test_start "component_telegram_web_probe_ignores_stale_incoming_messages"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
@@ -135,6 +155,49 @@ NODE
         test_pass
     else
         test_fail "Probe must settle on the final stable incoming reply instead of passing on an early intermediate response"
+    fi
+
+    test_start "component_telegram_web_probe_does_not_settle_on_short_interim_preface"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { waitForReplySettleWithCollector } = await import(process.env.NODE_SCRIPT);
+const snapshots = [
+  [{ mid: 71, direction: "out", text: "Открой t.me/tsingular и опиши канал" }],
+  [
+    { mid: 71, direction: "out", text: "Открой t.me/tsingular и опиши канал" },
+    { mid: 72, direction: "in", text: "Открою канал через browser и посмотрю, что видно сейчас." }
+  ],
+  [
+    { mid: 71, direction: "out", text: "Открой t.me/tsingular и опиши канал" },
+    { mid: 72, direction: "in", text: "Открою канал через browser и посмотрю, что видно сейчас." }
+  ],
+  [
+    { mid: 71, direction: "out", text: "Открой t.me/tsingular и опиши канал" },
+    { mid: 72, direction: "in", text: "Открою канал через browser и посмотрю, что видно сейчас." },
+    { mid: 73, direction: "in", text: "Activity log • Navigating to t.me/tsingular • operation timed out after 60000ms" }
+  ],
+  [
+    { mid: 71, direction: "out", text: "Открой t.me/tsingular и опиши канал" },
+    { mid: 72, direction: "in", text: "Открою канал через browser и посмотрю, что видно сейчас." },
+    { mid: 73, direction: "in", text: "Activity log • Navigating to t.me/tsingular • operation timed out after 60000ms" }
+  ]
+];
+let index = 0;
+const result = await waitForReplySettleWithCollector({
+  collectMessagesFn: async () => snapshots[Math.min(index++, snapshots.length - 1)],
+  sleepFn: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  settleMs: 150,
+  maxWaitMs: 1200,
+  sentMid: 71,
+});
+if (!result.ok || !result.replyMessage || result.replyMessage.mid !== 73) {
+  throw new Error(`expected late non-interim reply to win, got ${JSON.stringify(result)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must keep waiting after a short interim preface and settle on the later attributable final/error reply"
     fi
 
     test_start "component_telegram_web_probe_waits_for_quiet_window_before_send"
