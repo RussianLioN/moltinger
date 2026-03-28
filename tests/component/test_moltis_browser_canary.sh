@@ -53,6 +53,8 @@ if [[ -n "${FAKE_SMOKE_CALLS:-}" ]]; then
         printf 'CHAT_WAIT_MS=%s\n' "${CHAT_WAIT_MS:-}"
         printf 'TEST_TIMEOUT=%s\n' "${TEST_TIMEOUT:-}"
         printf 'EXPECTED_REPLY_TEXT=%s\n' "${EXPECTED_REPLY_TEXT:-}"
+        printf 'TEST_SESSION_KEY=%s\n' "${TEST_SESSION_KEY:-}"
+        printf 'DELETE_TEST_SESSION_ON_EXIT=%s\n' "${DELETE_TEST_SESSION_ON_EXIT:-}"
         printf -- '---\n'
     } >>"${FAKE_SMOKE_CALLS:?}"
 fi
@@ -83,8 +85,10 @@ EOF
     if ! grep -Fq '[OK] Moltis browser canary passed' "$stdout_log" || \
        ! grep -Fq 'CHAT_WAIT_MS=654' "$smoke_calls" || \
        ! grep -Fq 'TEST_TIMEOUT=45' "$smoke_calls" || \
-       ! grep -Fq 'EXPECTED_REPLY_TEXT=Introduction - Moltis Documentation' "$smoke_calls"; then
-        test_fail "Browser canary success path must include the OK marker and forward wait/timeout/reply expectations into the smoke helper"
+       ! grep -Fq 'EXPECTED_REPLY_TEXT=Introduction - Moltis Documentation' "$smoke_calls" || \
+       ! grep -Fq 'DELETE_TEST_SESSION_ON_EXIT=true' "$smoke_calls" || \
+       ! grep -Fq 'TEST_SESSION_KEY=operator:browser-canary:' "$smoke_calls"; then
+        test_fail "Browser canary success path must include the OK marker and forward wait/timeout/reply expectations plus dedicated cleanup session lifecycle into the smoke helper"
         rm -rf "$fixture_root"
         return
     fi
@@ -107,6 +111,21 @@ EOF
     if ! grep -Fq 'CHAT_WAIT_MS=120000' "$smoke_calls" || \
        ! grep -Fq 'TEST_TIMEOUT=90' "$smoke_calls"; then
         test_fail "Browser canary defaults must keep the extended wait and timeout budget for real browser runs"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_moltis_browser_canary_strips_ansi_before_log_contract_checks"
+    : >"$smoke_calls"
+    if ! PATH="$fake_bin:$PATH" \
+        DOCKER_BIN="docker" \
+        MOLTIS_BROWSER_CANARY_SMOKE_SCRIPT="$fake_smoke" \
+        FAKE_SMOKE_CALLS="$smoke_calls" \
+        FAKE_SMOKE_EXIT_CODE="0" \
+        FAKE_DOCKER_LOGS=$'\033[32mINFO tool execution succeeded tool=browser\033[0m\n\033[36mINFO navigated to URL\033[0m' \
+        bash "$CANARY_SCRIPT" >"$stdout_log" 2>"$stderr_log"; then
+        test_fail "Browser canary should ignore ANSI color sequences when proving browser execution from live logs"
         rm -rf "$fixture_root"
         return
     fi

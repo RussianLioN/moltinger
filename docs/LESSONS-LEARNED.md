@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-28
-**Total Lessons**: 58
+**Total Lessons**: 60
 
 ---
 
@@ -14,8 +14,10 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (26 lessons)
+#### P1 (28 lessons)
+- [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
+- [Moltis operator browser session isolation and Telegram send attribution drift](../docs/rca/2026-03-28-moltis-operator-browser-session-isolation-and-telegram-send-attribution-drift.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
 - [Moltis browser runs still timed out because the overall agent timeout matched the browser navigation timeout and the repo smoke helper still used retired chat endpoints](../docs/rca/2026-03-28-moltis-browser-timeout-budget-equalled-navigation-timeout.md)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
@@ -112,6 +114,9 @@
 - [Ложные error-сигналы в успешных GitHub workflow](../docs/rca/2026-03-07-workflow-alert-severity-mismatch.md)
 - [Повторяющиеся падения GitHub Actions workflow (Drift + Deploy)](../docs/rca/2026-03-07-github-workflows-recurring-failures.md)
 
+#### configuration (1 lessons)
+- [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
+
 #### generic (5 lessons)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -119,7 +124,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (19 lessons)
+#### process (20 lessons)
+- [Moltis operator browser session isolation and Telegram send attribution drift](../docs/rca/2026-03-28-moltis-operator-browser-session-isolation-and-telegram-send-attribution-drift.md)
 - [Moltis browser runs still timed out because the overall agent timeout matched the browser navigation timeout and the repo smoke helper still used retired chat endpoints](../docs/rca/2026-03-28-moltis-browser-timeout-budget-equalled-navigation-timeout.md)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
@@ -154,16 +160,16 @@
 
 ### Popular Tags
 
+- `moltis` (18 lessons)
 - `deploy` (17 lessons)
-- `moltis` (16 lessons)
 - `gitops` (16 lessons)
 - `github-actions` (16 lessons)
 - `cicd` (16 lessons)
 - `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
+- `telegram` (8 lessons)
 - `git-worktree` (8 lessons)
-- `clawdiy` (8 lessons)
 
 
 ---
@@ -172,10 +178,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 58 |
-| Critical (P0/P1) | 27 |
-| Categories | 5 |
-| Unique Tags | 132 |
+| Total Lessons | 60 |
+| Critical (P0/P1) | 29 |
+| Categories | 6 |
+| Unique Tags | 137 |
 
 ---
 

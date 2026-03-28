@@ -18,6 +18,7 @@ CHAT_WAIT_MS="${MOLTIS_BROWSER_CANARY_CHAT_WAIT_MS:-120000}"
 TEST_TIMEOUT="${MOLTIS_BROWSER_CANARY_TEST_TIMEOUT:-90}"
 REQUIRED_LOG="${MOLTIS_BROWSER_CANARY_REQUIRED_LOG:-tool execution succeeded tool=browser}"
 REJECT_LOG_RE="${MOLTIS_BROWSER_CANARY_REJECT_LOG_RE:-browser container failed readiness check|tool execution failed tool=browser|browser launch failed}"
+CANARY_SESSION_KEY="${MOLTIS_BROWSER_CANARY_SESSION_KEY:-operator:browser-canary:$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 
 timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -31,8 +32,12 @@ require_file() {
     fi
 }
 
+strip_ansi() {
+    perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g'
+}
+
 main() {
-    local started_at smoke_log recent_logs
+    local started_at smoke_log recent_logs normalized_logs
 
     require_file "$SMOKE_SCRIPT"
     started_at="$(timestamp)"
@@ -41,6 +46,8 @@ main() {
 
     if ! CHAT_WAIT_MS="$CHAT_WAIT_MS" \
         TEST_TIMEOUT="$TEST_TIMEOUT" \
+        TEST_SESSION_KEY="$CANARY_SESSION_KEY" \
+        DELETE_TEST_SESSION_ON_EXIT="true" \
         EXPECTED_REPLY_TEXT="$EXPECTED_REPLY" \
         bash "$SMOKE_SCRIPT" "$CANARY_PROMPT" >"$smoke_log" 2>&1; then
         cat "$smoke_log" >&2 || true
@@ -49,22 +56,23 @@ main() {
     fi
 
     recent_logs="$("$DOCKER_BIN" logs --since "$started_at" "$MOLTIS_CONTAINER" 2>&1 || true)"
+    normalized_logs="$(printf '%s' "$recent_logs" | strip_ansi)"
     if [[ -z "$recent_logs" ]]; then
         cat "$smoke_log" >&2 || true
         echo "moltis-browser-canary.sh: no recent Moltis logs were captured after the canary start time" >&2
         exit 1
     fi
 
-    if ! grep -Fq "$REQUIRED_LOG" <<<"$recent_logs"; then
+    if ! grep -Fq "$REQUIRED_LOG" <<<"$normalized_logs"; then
         cat "$smoke_log" >&2 || true
-        printf '%s\n' "$recent_logs" >&2
+        printf '%s\n' "$normalized_logs" >&2
         echo "moltis-browser-canary.sh: browser canary did not produce '$REQUIRED_LOG' in live logs" >&2
         exit 1
     fi
 
-    if grep -Eq "$REJECT_LOG_RE" <<<"$recent_logs"; then
+    if grep -Eq "$REJECT_LOG_RE" <<<"$normalized_logs"; then
         cat "$smoke_log" >&2 || true
-        printf '%s\n' "$recent_logs" >&2
+        printf '%s\n' "$normalized_logs" >&2
         echo "moltis-browser-canary.sh: browser canary matched a browser failure signature in live logs" >&2
         exit 1
     fi
@@ -76,6 +84,7 @@ base_url=$MOLTIS_URL
 started_at=$started_at
 expected_reply=$EXPECTED_REPLY
 required_log=$REQUIRED_LOG
+session_key=$CANARY_SESSION_KEY
 EOF
 }
 

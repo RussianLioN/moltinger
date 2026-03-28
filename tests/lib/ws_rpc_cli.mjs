@@ -1,7 +1,7 @@
 import { WsRpcClient, createAuthenticatedClient, loginAndGetCookie } from './ws_rpc_client.mjs';
 
 function parseArgs(argv) {
-  const args = { command: '', method: '', params: '{}', waitMs: 0, subscribe: [], noAuth: false, raw: '' };
+  const args = { command: '', method: '', params: '{}', steps: '[]', waitMs: 0, subscribe: [], noAuth: false, raw: '' };
   const items = [...argv];
   args.command = items.shift() || 'request';
   while (items.length > 0) {
@@ -12,6 +12,9 @@ function parseArgs(argv) {
         break;
       case '--params':
         args.params = items.shift() || '{}';
+        break;
+      case '--steps':
+        args.steps = items.shift() || '[]';
         break;
       case '--wait-ms':
         args.waitMs = Number(items.shift() || '0');
@@ -86,6 +89,28 @@ try {
       throw new Error('--method is required for request');
     }
     result = await rpc.request(args.method, JSON.parse(args.params || '{}'));
+  } else if (args.command === 'sequence') {
+    const steps = JSON.parse(args.steps || '[]');
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new Error('--steps must be a non-empty JSON array for sequence');
+    }
+    const payload = [];
+    for (const rawStep of steps) {
+      const step = {
+        method: typeof rawStep?.method === 'string' ? rawStep.method : '',
+        params: rawStep?.params && typeof rawStep.params === 'object' ? rawStep.params : {},
+        waitMs: Number(rawStep?.waitMs || 0),
+      };
+      if (!step.method) {
+        throw new Error(`sequence step is missing method: ${JSON.stringify(rawStep)}`);
+      }
+      const response = await rpc.request(step.method, step.params);
+      payload.push({ step, response });
+      if (step.waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, step.waitMs));
+      }
+    }
+    result = { ok: true, payload };
   } else if (args.command === 'invalid-frame') {
     if (!args.raw) {
       throw new Error('--raw is required for invalid-frame');

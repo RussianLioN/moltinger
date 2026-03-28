@@ -15,6 +15,8 @@ ENV_FILE="${MOLTIS_ENV_FILE:-$PROJECT_ROOT/.env}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-20}"
 CHAT_WAIT_MS="${CHAT_WAIT_MS:-15000}"
 RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"
+TEST_SESSION_KEY="${TEST_SESSION_KEY:-}"
+DELETE_TEST_SESSION_ON_EXIT="${DELETE_TEST_SESSION_ON_EXIT:-false}"
 EXPECTED_PROVIDER="${EXPECTED_PROVIDER:-}"
 EXPECTED_MODEL="${EXPECTED_MODEL:-}"
 EXPECTED_REPLY_TEXT="${EXPECTED_REPLY_TEXT:-}"
@@ -23,6 +25,8 @@ STATUS_FILE="/tmp/moltis-status-$$.json"
 RPC_OUTPUT_FILE="/tmp/moltis-chat-$$.json"
 AUTH_STATUS_FILE="/tmp/moltis-auth-$$.json"
 CHAT_CLEAR_FILE="/tmp/moltis-chat-clear-$$.json"
+SESSION_DELETE_FILE="/tmp/moltis-session-delete-$$.json"
+SESSION_DELETE_ATTEMPTED="false"
 
 # shellcheck source=../tests/lib/http.sh
 source "$PROJECT_ROOT/tests/lib/http.sh"
@@ -30,7 +34,11 @@ source "$PROJECT_ROOT/tests/lib/http.sh"
 source "$PROJECT_ROOT/tests/lib/rpc.sh"
 
 cleanup() {
+    if [[ "$DELETE_TEST_SESSION_ON_EXIT" == "true" && -n "$TEST_SESSION_KEY" && "$SESSION_DELETE_ATTEMPTED" != "true" && -n "${TEST_COOKIE_HEADER:-}" ]]; then
+        delete_test_session_best_effort || true
+    fi
     rm -f "$COOKIE_FILE" "$STATUS_FILE" "$RPC_OUTPUT_FILE" "$AUTH_STATUS_FILE" "$CHAT_CLEAR_FILE"
+    rm -f "$SESSION_DELETE_FILE"
     unset TEST_COOKIE_HEADER || true
 }
 
@@ -58,9 +66,45 @@ print_json_summary() {
     fi
 }
 
+delete_test_session_best_effort() {
+    [[ -n "$TEST_SESSION_KEY" ]] || return 0
+
+    TEST_BASE_URL="$MOLTIS_URL" TEST_TIMEOUT="$TEST_TIMEOUT" MOLTIS_PASSWORD="$MOLTIS_PASSWORD" TEST_COOKIE_HEADER="$TEST_COOKIE_HEADER" \
+        node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" request \
+            --method sessions.delete \
+            --params "$(jq -nc --arg key "$TEST_SESSION_KEY" '{key: $key}')" >"$SESSION_DELETE_FILE" 2>/dev/null || return 1
+
+    jq -e '.ok == true and .result.ok == true and .result.payload.ok == true' "$SESSION_DELETE_FILE" >/dev/null 2>&1
+}
+
+run_chat_workflow_sequence() {
+    local command_text="$1"
+    local steps_json
+
+    steps_json="$(
+        jq -nc \
+            --arg session_key "$TEST_SESSION_KEY" \
+            --argjson reset_chat "$([[ "$RESET_CHAT_CONTEXT_BEFORE_SEND" == "true" ]] && echo true || echo false)" \
+            --argjson delete_session "$([[ "$DELETE_TEST_SESSION_ON_EXIT" == "true" && -n "$TEST_SESSION_KEY" ]] && echo true || echo false)" \
+            --arg text "$command_text" \
+            --argjson wait_ms "$CHAT_WAIT_MS" \
+            '
+            [
+              (if $session_key != "" then {method: "sessions.switch", params: {key: $session_key}} else empty end),
+              (if $reset_chat then {method: "chat.clear", params: {}} else empty end),
+              {method: "chat.send", params: {text: $text}, waitMs: $wait_ms},
+              (if $delete_session then {method: "sessions.delete", params: {key: $session_key}} else empty end)
+            ]
+            '
+    )"
+
+    TEST_BASE_URL="$MOLTIS_URL" TEST_TIMEOUT="$TEST_TIMEOUT" MOLTIS_PASSWORD="$MOLTIS_PASSWORD" TEST_COOKIE_HEADER="$TEST_COOKIE_HEADER" \
+        node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" sequence --steps "$steps_json" --subscribe chat >"$RPC_OUTPUT_FILE"
+}
+
 main() {
     local command="${1:-/status}"
-    local health_code auth_code logout_code rpc_payload
+    local health_code auth_code logout_code
     local final_event_count final_provider final_model final_reply_text
     local chat_run_started
 
@@ -119,33 +163,42 @@ main() {
     fi
     print_json_summary "$STATUS_FILE" '{version: .result.payload.version, connections: .result.payload.connections}'
 
-    if [[ "$RESET_CHAT_CONTEXT_BEFORE_SEND" == "true" ]]; then
-        echo
-        echo "5. Clearing chat context via RPC..."
-        TEST_BASE_URL="$MOLTIS_URL" TEST_TIMEOUT="$TEST_TIMEOUT" MOLTIS_PASSWORD="$MOLTIS_PASSWORD" TEST_COOKIE_HEADER="$TEST_COOKIE_HEADER" \
-            node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" request \
-                --method chat.clear \
-                --params '{}' >"$CHAT_CLEAR_FILE"
-        if ! jq -e '.ok == true and .result.ok == true and .result.payload.ok == true' "$CHAT_CLEAR_FILE" >/dev/null 2>&1; then
-            echo "ERROR: chat.clear RPC failed" >&2
-            jq . "$CHAT_CLEAR_FILE" >&2 || true
-            exit 1
-        fi
-        echo "   OK"
+    echo
+    echo "5. Running chat workflow via a single RPC connection..."
+    if ! run_chat_workflow_sequence "$command"; then
+        echo "ERROR: chat workflow RPC sequence failed" >&2
+        jq . "$RPC_OUTPUT_FILE" >&2 || true
+        exit 1
     fi
 
-    echo
-    echo "6. Sending chat via RPC..."
-    rpc_payload="$(jq -nc --arg text "$command" '{text: $text}')"
-    TEST_BASE_URL="$MOLTIS_URL" TEST_TIMEOUT="$TEST_TIMEOUT" \
-        node "$PROJECT_ROOT/tests/lib/ws_rpc_cli.mjs" request \
-            --method chat.send \
-            --params "$rpc_payload" \
-            --wait-ms "$CHAT_WAIT_MS" \
-            --subscribe chat >"$RPC_OUTPUT_FILE"
+    if [[ -n "$TEST_SESSION_KEY" ]]; then
+        if ! jq -e --arg key "$TEST_SESSION_KEY" '
+            .ok == true and
+            ([.result.payload[]? | select(.step.method == "sessions.switch")][0].response.ok == true) and
+            (([.result.payload[]? | select(.step.method == "sessions.switch")][0].response.payload.entry.key // "") == $key)
+        ' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
+            echo "ERROR: sessions.switch step failed for TEST_SESSION_KEY='$TEST_SESSION_KEY'" >&2
+            jq . "$RPC_OUTPUT_FILE" >&2 || true
+            exit 1
+        fi
+        echo "   Switched to dedicated session: $TEST_SESSION_KEY"
+    fi
+
+    if [[ "$RESET_CHAT_CONTEXT_BEFORE_SEND" == "true" ]]; then
+        if ! jq -e '
+            .ok == true and
+            ([.result.payload[]? | select(.step.method == "chat.clear")][0].response.ok == true) and
+            ([.result.payload[]? | select(.step.method == "chat.clear")][0].response.payload.ok == true)
+        ' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
+            echo "ERROR: chat.clear step failed" >&2
+            jq . "$RPC_OUTPUT_FILE" >&2 || true
+            exit 1
+        fi
+        echo "   Cleared chat context"
+    fi
 
     final_event_count="$(jq -r '[.events[]? | select(.event == "chat" and .payload.state == "final")] | length' "$RPC_OUTPUT_FILE")"
-    chat_run_started="$(jq -r '.result.ok == true and .result.payload.ok == true' "$RPC_OUTPUT_FILE" 2>/dev/null || echo "false")"
+    chat_run_started="$(jq -r '([.result.payload[]? | select(.step.method == "chat.send")][0].response.ok == true and [.result.payload[]? | select(.step.method == "chat.send")][0].response.payload.ok == true)' "$RPC_OUTPUT_FILE" 2>/dev/null || echo "false")"
     if [[ "$final_event_count" == "0" ]]; then
         if [[ "$chat_run_started" == "true" ]]; then
             echo "ERROR: Chat RPC started successfully but did not reach a final event within CHAT_WAIT_MS=$CHAT_WAIT_MS" >&2
@@ -180,8 +233,22 @@ main() {
 
     print_json_summary "$RPC_OUTPUT_FILE" '[.events[]? | select(.event == "chat" and .payload.state == "final")][-1]'
 
+    if [[ "$DELETE_TEST_SESSION_ON_EXIT" == "true" && -n "$TEST_SESSION_KEY" ]]; then
+        if ! jq -e '
+            .ok == true and
+            ([.result.payload[]? | select(.step.method == "sessions.delete")][0].response.ok == true) and
+            ([.result.payload[]? | select(.step.method == "sessions.delete")][0].response.payload.ok == true)
+        ' "$RPC_OUTPUT_FILE" >/dev/null 2>&1; then
+            echo "ERROR: sessions.delete RPC failed for TEST_SESSION_KEY='$TEST_SESSION_KEY'" >&2
+            jq . "$RPC_OUTPUT_FILE" >&2 || true
+            exit 1
+        fi
+        SESSION_DELETE_ATTEMPTED="true"
+        echo "   Deleted dedicated session"
+    fi
+
     echo
-    echo "7. Logging out..."
+    echo "6. Logging out..."
     logout_code="$(moltis_logout_code "$MOLTIS_URL" "$COOKIE_FILE" "$TEST_TIMEOUT")"
     if [[ ! "$logout_code" =~ ^(200|204|302|303)$ ]]; then
         echo "ERROR: Logout failed (HTTP $logout_code)" >&2
