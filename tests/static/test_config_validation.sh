@@ -173,6 +173,32 @@ PY
         test_fail "Primary Moltis browser config must declare host-gateway container_host when Moltis itself runs in Docker"
     fi
 
+    test_start "static_browser_agent_timeout_keeps_headroom_above_navigation_budget"
+    if python3 - "$TOML_CONFIG" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+with path.open('rb') as fh:
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
+    config = tomllib.load(fh)
+
+tools = config.get('tools', {})
+browser = tools.get('browser', {})
+agent_timeout_secs = int(tools.get('agent_timeout_secs', 0))
+navigation_timeout_ms = int(browser.get('navigation_timeout_ms', 0))
+required_minimum = max(90, (navigation_timeout_ms // 1000) + 60)
+raise SystemExit(0 if agent_timeout_secs >= required_minimum else 1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Overall agent timeout must stay materially above the browser navigation timeout so multi-step browser runs do not abort at the same 30s ceiling as page navigation"
+    fi
+
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
     if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
        bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
@@ -206,6 +232,19 @@ PY
         test_pass
     else
         test_fail "MTProto user-monitor cron should be opt-in and disabled by default to avoid unsolicited chat noise"
+    fi
+
+    test_start "static_moltis_smoke_uses_current_auth_and_ws_rpc_contract"
+    if rg -Fq 'Authenticating via /api/auth/login' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'tests/lib/ws_rpc_cli.mjs' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq -- '--method chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq -- '--method chat.send' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       ! rg -Fq '/api/v1/chat' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       ! rg -Fq '"/login"' "$PROJECT_ROOT/scripts/test-moltis-api.sh"; then
+        test_pass
+    else
+        test_fail "scripts/test-moltis-api.sh must use /api/auth/login plus WS RPC status/chat calls, clear stale chat context before send, and avoid the retired /login + /api/v1/chat contract"
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-03-28
-**Total Lessons**: 57
+**Total Lessons**: 58
 
 ---
 
@@ -14,9 +14,10 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (25 lessons)
+#### P1 (26 lessons)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
+- [Moltis browser runs still timed out because the overall agent timeout matched the browser navigation timeout and the repo smoke helper still used retired chat endpoints](../docs/rca/2026-03-28-moltis-browser-timeout-budget-equalled-navigation-timeout.md)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
 - [Tracked Moltis deploy failed when docker compose force-recreate hit a slow-stop container race](../docs/rca/2026-03-27-moltis-deploy-force-recreate-race-on-slow-stop.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
@@ -118,7 +119,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (18 lessons)
+#### process (19 lessons)
+- [Moltis browser runs still timed out because the overall agent timeout matched the browser navigation timeout and the repo smoke helper still used retired chat endpoints](../docs/rca/2026-03-28-moltis-browser-timeout-budget-equalled-navigation-timeout.md)
 - [Moltis repo-managed codex-update skill existed in git but never became a live runtime skill](../docs/rca/2026-03-27-moltis-repo-skill-discovery-contract-drift.md)
 - [Managed worktree creation misread local Beads ownership as runtime readiness](../docs/rca/2026-03-26-worktree-create-misread-local-ownership-as-runtime-ready.md)
 - [Beads worktree localization used stale bootstrap contracts and recreated the failure during Phase A](../docs/rca/2026-03-26-beads-worktree-localize-used-stale-bootstrap-contract.md)
@@ -153,10 +155,10 @@
 ### Popular Tags
 
 - `deploy` (17 lessons)
+- `moltis` (16 lessons)
 - `gitops` (16 lessons)
 - `github-actions` (16 lessons)
 - `cicd` (16 lessons)
-- `moltis` (15 lessons)
 - `rca` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
@@ -170,10 +172,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 57 |
-| Critical (P0/P1) | 26 |
+| Total Lessons | 58 |
+| Critical (P0/P1) | 27 |
 | Categories | 5 |
-| Unique Tags | 129 |
+| Unique Tags | 132 |
 
 ---
 
