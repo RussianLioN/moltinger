@@ -27,4 +27,4 @@
 ## Phase 3: Verification And Handoff
 
 - [x] T030 Run targeted checks and reconcile `tasks.md`
-- [ ] T031 Commit, rebase, push, and produce a concise handoff with checklist, solved problems, and remaining upstream gaps
+- [x] T031 Commit, rebase, push, and produce a concise handoff with checklist, solved problems, and remaining upstream gaps
