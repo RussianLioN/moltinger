@@ -232,6 +232,34 @@ reply_has_codex_update_false_negative() {
   return 1
 }
 
+reply_has_codex_update_remote_contract_violation() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  case "$normalized" in
+    *"make codex-update"*|*"запущу канонический runtime"*|*"запускаю канонический runtime"*|*"обновлю вашу локальную установку codex"*|*"обновлю локальную установку codex"*|*"обновлю ваш codex"*|*"смогу обновить ваш codex"*|*"удаленно обновлю ваш codex"*|*"удалённо обновлю ваш codex"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+reply_has_codex_update_state_memory_false_negative() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}")"
+  [[ -n "$normalized" ]] || return 1
+
+  case "$normalized" in
+    *"в памяти не найдено"*|*"В памяти не найдено"*|*"не найдено в памяти"*|*"Не найдено в памяти"*|*"в памяти записи о последней известной версии не найдено"*|*"В памяти записи о последней известной версии не найдено"*|*"в памяти записи не найдено"*|*"В памяти записи не найдено"*|*"в памяти у меня не зафиксирована"*|*"В памяти у меня не зафиксирована"*|*"в базе у меня не зафиксирована"*|*"В базе у меня не зафиксирована"*|*"в базе не зафиксирована"*|*"В базе не зафиксирована"*|*"не вижу физически доступного содержимого skill"*|*"Не вижу физически доступного содержимого skill"*|*"не вижу физически доступного содержимого скил"*|*"Не вижу физически доступного содержимого скил"*|*"механизм отслеживания обновлений codex cli сейчас не в рабочем состоянии"*|*"Механизм отслеживания обновлений Codex CLI сейчас не в рабочем состоянии"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 write_report() {
   local debug_available="false"
   if [[ -n "$DEBUG_OUTPUT_PATH" ]]; then
@@ -352,6 +380,32 @@ evaluate_authoritative_semantics() {
     return 0
   fi
 
+  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_remote_contract_violation "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_remote_contract_violation" "$RUN_STAGE" "Authoritative Codex update reply promised operator-only runtime execution or local-machine update behavior on a remote user-facing surface" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_remote_contract_violation"}}')"
+    RECOMMENDED_ACTION="Reconcile the remote codex-update contract so Telegram stays advisory-only and does not promise operator-only runtime execution, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_state_memory_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_state_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update reply treated chat memory or generic unavailable text as proof that codex-update runtime state was absent" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_state_memory_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update state queries so they read runtime state helper truth instead of memory-search fallbacks, then rerun authoritative UAT."
+    return 0
+  fi
+
   if reply_has_host_path_leak "$reply_text"; then
     VERDICT="failed"
     RUN_STAGE="semantic_review"
@@ -362,7 +416,7 @@ evaluate_authoritative_semantics() {
       '$base + {semantic_review:{observed_reply:$reply_text, failure:"semantic_host_path_leak"}}')"
     RECOMMENDED_ACTION="Remove host-path and repo-runtime details from user-facing Telegram replies and rerun authoritative UAT."
     return 0
-  fi
+fi
 
   if [[ "$normalized_message" != "/status" ]]; then
     return 0
