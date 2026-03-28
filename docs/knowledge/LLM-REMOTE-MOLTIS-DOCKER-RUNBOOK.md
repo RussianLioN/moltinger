@@ -618,8 +618,10 @@ Check:
 
 1. tracked `config/moltis.toml`
 2. authoritative `channels.list`
-3. `chat.history`
-4. whether the leak appears in final assistant content or only in delivered chat artifacts
+3. whether the Telegram account is pinned to a dedicated text-only provider lane
+   (`model_provider` + provider `tool_mode = "off"`)
+4. `chat.history`
+5. whether the leak appears in final assistant content or only in delivered chat artifacts
 
 If `chat.history` final reply is clean but the user still sees `Activity log`, treat it as
 transport/channel delivery leakage and prepare upstream handoff instead of only rewriting prompt

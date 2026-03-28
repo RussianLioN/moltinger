@@ -279,8 +279,8 @@ NODE
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
 const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
-const badReply = "model 'openai-codex::gpt-5.4' not found. available: [\"zai::glm-5\"]";
-const goodReply = "Статус: Online | Модель: zai::glm-5";
+const badReply = "model 'custom-zai-telegram-safe::glm-5' not found. available: [\"zai::glm-5\"]";
+const goodReply = "Статус: Online | Модель: custom-zai-telegram-safe::glm-5";
 if (!isReplyErrorSignature(badReply)) {
   throw new Error("expected model-not-found reply to be treated as error signature");
 }
@@ -302,7 +302,7 @@ const badReplies = [
   "Activity log • nodes_list • sessions_list • cron • missing 'action' parameter",
   "Timed out: Agent run timed out after 90s"
 ];
-const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: openai-codex::gpt-5.4";
+const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: custom-zai-telegram-safe::glm-5";
 for (const badReply of badReplies) {
   if (!isReplyErrorSignature(badReply)) {
     throw new Error(`expected error signature to be rejected: ${badReply}`);
@@ -325,7 +325,8 @@ const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
 const badReplies = [
   "📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -type...` • 🧠 Searching memory...",
   "💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -print`",
-  "🧠 Searching memory..."
+  "🧠 Searching memory...",
+  "🗺️ mcp__tavily__tavily_map"
 ];
 for (const badReply of badReplies) {
   if (!isReplyErrorSignature(badReply)) {

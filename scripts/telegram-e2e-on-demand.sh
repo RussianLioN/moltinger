@@ -30,7 +30,7 @@ SHARED_TARGET_LOCK="${SHARED_TARGET_LOCK:-/tmp/moltinger-telegram-remote-uat.loc
 SERIALIZE_SHARED_TARGET="${SERIALIZE_SHARED_TARGET:-true}"
 MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
-STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"
+STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-zai-telegram-safe::glm-5}"
 
 RUN_ID=""
 STARTED_AT=""
@@ -174,7 +174,7 @@ reply_has_internal_activity() {
   [[ -n "$normalized" ]] || return 1
 
   case "$normalized" in
-    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*)
+    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*)
       return 0
       ;;
   esac

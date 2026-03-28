@@ -179,6 +179,44 @@ PY
         test_fail "User-facing Telegram account must explicitly pin stream_mode = \"off\" so runtime defaults or per-account streaming features cannot leak internal activity/tool-progress into chat"
     fi
 
+    test_start "static_telegram_account_pins_text_only_safe_provider_lane"
+    if python3 - "$TOML_CONFIG" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+with path.open('rb') as fh:
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
+    config = tomllib.load(fh)
+
+providers = config.get('providers', {})
+telegram = config.get('channels', {}).get('telegram', {}).get('moltis-bot', {})
+default_zai = providers.get('openai', {})
+safe_lane = providers.get('custom-zai-telegram-safe', {})
+
+conditions = [
+    safe_lane.get('enabled') is True,
+    safe_lane.get('tool_mode') == 'off',
+    safe_lane.get('model') == 'glm-5',
+    safe_lane.get('models') == ['glm-5'],
+    safe_lane.get('alias') == 'custom-zai-telegram-safe',
+    safe_lane.get('api_key') == default_zai.get('api_key'),
+    safe_lane.get('base_url') == default_zai.get('base_url'),
+    telegram.get('model') == 'glm-5',
+    telegram.get('model_provider') == 'custom-zai-telegram-safe',
+]
+
+raise SystemExit(0 if all(conditions) else 1)
+PY
+    then
+        test_pass
+    else
+        test_fail "User-facing Telegram must pin a dedicated text-only provider lane so DM traffic cannot inherit the shared tool-capable runtime surface"
+    fi
+
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
     if rg -Fq 'container_host = "host.docker.internal"' "$TOML_CONFIG"; then
         test_pass
@@ -278,11 +316,12 @@ PY
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
-    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq '*"mcp__"*)' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
         test_pass
     else
