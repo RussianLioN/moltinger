@@ -132,6 +132,13 @@ Authoritative Telegram Web path различает минимум:
 - `stale_chat_noise`
 - `send_failure`
 - `bot_no_response`
+- `semantic_activity_leak`
+- `semantic_pre_send_activity_leak`
+- `semantic_host_path_leak`
+- `semantic_codex_update_false_negative`
+- `semantic_codex_update_remote_contract_violation`
+
+Для `codex-update`-запросов это значит ещё одно правило: если remote user-facing reply обещает operator-only runtime path вроде `make codex-update` или server-side обновление локальной машины пользователя, authoritative verdict должен быть `failed`, даже если helper payload выглядит зелёным.
 
 ## Restricted Debug Bundle
 

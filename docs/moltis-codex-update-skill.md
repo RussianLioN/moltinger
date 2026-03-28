@@ -15,6 +15,21 @@
 Этот путь заменяет старую гибридную модель, где canonical runtime жил в repo-side watcher scripts.
 Старый watcher теперь нужен только как migration-only исторический материал и не должен восприниматься как основной пользовательский путь.
 
+## Surface Split
+
+Для этой capability теперь действуют два разных контракта, и их нельзя смешивать:
+
+- **Remote user-facing surfaces** (`Telegram`, DM, sandboxed chat):
+  `codex-update` здесь advisory/notification-only capability.
+  Такой surface не должен:
+  - доказывать отсутствие навыка через sandbox file probes;
+  - обещать server-side execution локального Codex update path;
+  - обещать обновить локальную установку Codex пользователя.
+- **Trusted operator/local surfaces**:
+  operator может использовать canonical runtime (`make codex-update` / `moltis-codex-update-run.sh`) только если `/server` и writable runtime state реально доступны на этой surface.
+
+Если surface неоднозначна, безопасный дефолт один: remote-safe advisory-only ответ.
+
 ## Live runtime contract
 
 Для live Moltis skill считается внедрённым только если Git-tracked skill после deploy реально discover-ится live runtime.
@@ -51,13 +66,26 @@
 На текущем implementation уровне уже закрыто всё внутри feature `023`.
 Отдельно от этой ветки остаётся только production rollout/UAT, если оператор захочет включать live scheduler delivery на сервере.
 
-## On-demand usage
+## Remote User-Facing Usage
+
+В Telegram и других user-facing remote surfaces skill должен отвечать как advisory layer:
+
+- кратко суммировать известный upstream/advisory status;
+- объяснить важность изменения;
+- предложить следующие шаги;
+- честно деградировать в `нужно проверить`, если authoritative source недоступен.
+
+На этих surfaces нельзя считать operator runtime универсальным дефолтом и нельзя превращать ответ в обещание локального update execution.
+
+## On-demand operator/local usage
 
 Канонический операторский entrypoint:
 
 ```bash
 make codex-update
 ```
+
+Команды ниже относятся только к trusted operator/local surface.
 
 Он запускает Moltis-native runtime в manual-режиме, включает issue signals и пишет артефакты в `.tmp/current/`.
 

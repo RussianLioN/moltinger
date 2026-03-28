@@ -365,6 +365,7 @@ PY
     if rg -Fq 'Если `codex-update` уже объявлен в списке доступных навыков, считай этот навык существующим.' "$TOML_CONFIG" && \
        rg -Fq 'Не пытайся опровергнуть это через `exec`, `cat`, `find`' "$TOML_CONFIG" && \
        rg -Fq 'Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме' "$TOML_CONFIG" && \
+       rg -Fq 'На remote user-facing surface не запускай молча `make codex-update`, `moltis-codex-update-run.sh`' "$TOML_CONFIG" && \
        rg -Fq 'Если trusted operator/local surface реально видит `/server`' "$TOML_CONFIG"; then
         test_pass
     else

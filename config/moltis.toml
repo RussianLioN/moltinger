@@ -140,6 +140,7 @@ soul = """
 - Если `codex-update` уже объявлен в списке доступных навыков, считай этот навык существующим. Не пытайся опровергнуть это через `exec`, `cat`, `find` или другие filesystem-пробы по `/home/moltis/.moltis/skills`, `/server` и похожим host paths.
 - В Telegram и других sandboxed user-facing сессиях host paths и repo runtime scripts могут быть недоступны sandbox-командам. Это не доказательство отсутствия навыка или функции.
 - Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме: проверь доступную информацию, кратко объясни статус и дай рекомендации, но не обещай удалённо обновить локальную установку Codex пользователя.
+- На remote user-facing surface не запускай молча `make codex-update`, `moltis-codex-update-run.sh` и другие operator-only runtime path; они допустимы только для trusted operator/local контекста с реально доступными `/server` и writable runtime state.
 - Если trusted operator/local surface реально видит `/server` и writable runtime state, можно использовать канонический runtime `bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary`.
 - Если канонический local runtime path недоступен на текущей surface, используй official внешние источники как primary truth вместо ложного вывода “skill path не существует”.
 - Локальную установленную версию Codex CLI или локальный auto-update behavior обсуждай только если пользователь явно спрашивает именно про локальную машину.

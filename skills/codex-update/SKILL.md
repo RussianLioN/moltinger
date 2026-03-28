@@ -1,8 +1,8 @@
 ---
 name: codex-update
-description: Полностью Moltis-native навык для проверки обновлений Codex CLI.
-  Использовать, когда пользователь просит простым текстом проверить новые версии,
-  понять их важность и получить рекомендации на русском.
+description: Remote-safe Moltis skill for Codex CLI update status. Use when a
+  user asks about new Codex versions, their importance, or recommended next
+  steps in Russian.
 ---
 
 # Codex Update
@@ -14,58 +14,48 @@ description: Полностью Moltis-native навык для проверки
 - `Проверь обновления Codex CLI`
 - `Есть ли новые версии Codex CLI?`
 - `Что нового в Codex CLI и насколько это важно?`
-- `Нужны ли нам действия из-за новых версий Codex CLI?`
+- `Что умеет codex-update?`
 
-## Цель
+Подробный runtime/runbook-контракт описан в `docs/moltis-codex-update-skill.md`.
 
-Этот skill делает Moltis каноническим владельцем сценария:
+## Главное правило: сначала определи surface
 
-1. читает официальный changelog Codex CLI;
-2. по желанию дополняет контекст issue signals;
-3. сравнивает новое состояние с уже увиденным fingerprint;
-4. отвечает пользователю по-русски;
-5. при наличии project profile уточняет рекомендации для конкретного проекта.
+### 1. Remote user-facing surface
 
-## Канонический порядок действий
+Это Telegram, DM или другая sandboxed user-facing сессия, где `/server`, host paths и writable runtime state не доказаны явно.
 
-Когда этот skill срабатывает по обычному пользовательскому запросу:
+На такой surface:
 
-1. Сразу запускай канонический runtime:
+- считай `codex-update` advisory/notification-only capability;
+- не запускай `make codex-update`, `bash /server/scripts/moltis-codex-update-run.sh` и похожие operator-only runtime path по умолчанию;
+- не обещай обновить локальную установку Codex пользователя;
+- не опровергай наличие skill через `exec`, `cat`, `find` и другие filesystem-пробы по `/home/moltis/.moltis/skills`, `/server` и похожим host paths;
+- если skill уже объявлен live runtime как доступный, считай capability существующей;
+- давай короткий русский advisory: что известно про upstream, насколько это важно и какие следующие шаги разумны.
+
+Если доступен только remote-safe контекст, а не operator runtime, используй:
+
+1. official release/advisory truth;
+2. уже подготовленный Moltis-native advisory/notification context;
+3. честное `нужно проверить`, если ни один надёжный источник не доступен.
+
+### 2. Trusted operator/local surface
+
+Это локальная/operator сессия, где действительно доступны `/server` и writable runtime state.
+
+Только на такой surface разрешён канонический runtime:
 
 ```bash
 bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary
 ```
 
-2. Если нужен project profile, добавляй `--profile-file ...`.
-3. Строй ответ по summary этого runtime, а не по отдельным ad-hoc shell-проверкам.
-
-## Что делать нельзя
-
-- Не запускай `npm list -g @openai/codex` для этого навыка.
-- Не запускай `codex --version` для этого навыка.
-- Не проверяй локально установленный Codex CLI, если пользователь не попросил именно про локальную установку.
-- Не подменяй канонический runtime старым repo-side watcher/advisor flow.
-
-Простое правило:
-
-- `Проверь обновления Codex CLI` => сразу `moltis-codex-update-run.sh`
-- `Какая у меня локальная версия Codex CLI?` => отдельный локальный сценарий
-
-## Основной runtime
-
-Канонический операторский entrypoint:
+Короткий operator entrypoint:
 
 ```bash
 make codex-update
 ```
 
-Прямой runtime entrypoint:
-
-```bash
-bash /server/scripts/moltis-codex-update-run.sh --mode manual
-```
-
-Если нужен project profile:
+Если нужен profile-aware запуск:
 
 ```bash
 bash /server/scripts/moltis-codex-update-run.sh \
@@ -73,40 +63,32 @@ bash /server/scripts/moltis-codex-update-run.sh \
   --profile-file path/to/project-profile.json
 ```
 
-## Правила ответа
+## Что делать нельзя
 
-- Отвечай только по-русски.
-- Не отправляй пользователя к старым `repo-side` `/codex_*` flow.
-- Для обычного запроса про обновления сразу используй канонический runtime этого skill, а не промежуточные shell-пробы.
-- Если upstream недоступен, говори честно `нужно проверить`, а не угадывай.
-- Если профиль проекта отсутствует, всё равно дай полезный общий advisory.
-- Не отправляй пользователя к legacy migration-only target-ам, если достаточно `make codex-update`.
+- Не использовать `npm list -g @openai/codex` как дефолтный путь для этого skill.
+- Не использовать `codex --version` как дефолтный путь для этого skill.
+- Не делать filesystem-пробы по `/home/moltis/.moltis/skills` или `/server`, чтобы "доказать", что live-discovered skill отсутствует.
+- Не отправлять пользователю raw host paths, raw shell commands или operator-only runtime детали.
+- Не подменять remote advisory contract обещанием server-side update действий для локальной машины пользователя.
 
 ## Что показывать пользователю
 
 Минимально:
 
-1. есть ли новое upstream-состояние;
+1. есть ли новое upstream-состояние или надёжный advisory signal;
 2. насколько это важно;
 3. почему это важно простыми словами;
 4. какие следующие шаги стоит сделать.
 
-## Scheduler path
+## Scheduler note
 
-Для scheduler/daemon path используется тот же runtime:
+Scheduler/daemon path остаётся частью operator/runtime ownership и использует тот же canonical runtime:
 
 ```bash
 bash /server/scripts/moltis-codex-update-run.sh --mode scheduler --stdout json
 ```
 
-Scheduler уже умеет:
-
-- проверять upstream по расписанию;
-- подавлять дубль по тому же fingerprint;
-- отправлять одно Telegram-уведомление для нового состояния;
-- писать state и audit trail.
-
-Для hermetic proof полного пути используй:
+Для hermetic proof операторского пути:
 
 ```bash
 make codex-update-e2e
