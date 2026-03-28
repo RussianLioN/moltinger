@@ -95,16 +95,32 @@ if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then
 fi
 
 if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
+  if [[ -n "${GH_EXPECT_CWD:-}" && "${PWD}" != "${GH_EXPECT_CWD}" ]]; then
+    printf 'unexpected gh cwd: %s\n' "${PWD}" >&2
+    exit 97
+  fi
   printf '%s\n' "${GH_REPO_VIEW_JSON:-{\"defaultBranchRef\":{\"name\":\"main\"},\"deleteBranchOnMerge\":false,\"nameWithOwner\":\"example/repo\"}}"
   exit "${GH_REPO_VIEW_RC:-0}"
 fi
 
 if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
+  if [[ -n "${GH_EXPECT_CWD:-}" && "${PWD}" != "${GH_EXPECT_CWD}" ]]; then
+    printf 'unexpected gh cwd: %s\n' "${PWD}" >&2
+    exit 97
+  fi
   printf '%s\n' "${GH_PR_LIST_JSON:-[]}"
   exit "${GH_PR_LIST_RC:-0}"
 fi
 
 if [[ "${1:-}" == "api" && "${2:-}" == "-X" && "${3:-}" == "DELETE" ]]; then
+  if [[ -n "${GH_EXPECT_CWD:-}" && "${PWD}" != "${GH_EXPECT_CWD}" ]]; then
+    printf 'unexpected gh cwd: %s\n' "${PWD}" >&2
+    exit 97
+  fi
+  if [[ -n "${GH_EXPECT_API_DELETE_ROUTE:-}" && "${4:-}" != "${GH_EXPECT_API_DELETE_ROUTE}" ]]; then
+    printf 'unexpected gh api route: %s\n' "${4:-}" >&2
+    exit 98
+  fi
   if [[ -n "${GH_API_STDOUT:-}" ]]; then
     printf '%s\n' "${GH_API_STDOUT}"
   fi
@@ -1488,6 +1504,7 @@ test_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous() {
     local fixture_root repo_dir fake_bd_bin fake_gh_bin existing_path output rc bd_json head_sha
     fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
     fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
     fake_gh_bin="$(create_fake_gh_bin "$fixture_root")"
     existing_path="${fixture_root}/moltinger-remote-uat-hardening"
@@ -1507,8 +1524,10 @@ test_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous() {
     bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
 
     output="$(
+        cd "$fixture_root"
         set +e
         WORKTREE_READY_ASSUME_GITHUB_ORIGIN=1 \
+        GH_EXPECT_CWD="${repo_dir}" \
         GH_REPO_VIEW_JSON='{"defaultBranchRef":{"name":"main"},"deleteBranchOnMerge":false}' \
         GH_PR_LIST_JSON="$(printf '[{"number":103,"state":"MERGED","mergedAt":"2026-03-26T19:35:17Z","headRefName":"feat/remote-uat-hardening","headRefOid":"%s","baseRefName":"main","isCrossRepository":false,"url":"https://github.com/example/repo/pull/103","title":"Fixture merged PR"}]\n' "${head_sha}")" \
         BD_WORKTREE_LIST_JSON="${bd_json}" \
@@ -1533,6 +1552,7 @@ test_cleanup_delete_branch_uses_github_api_remote_delete_fallback() {
     local fixture_root repo_dir fake_bd_bin fake_gh_bin existing_path output rc bd_json head_sha origin_dir
     fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
     origin_dir="${fixture_root}/moltinger.git"
     fake_bd_bin="$(create_fake_bd_bin "$fixture_root")"
     fake_gh_bin="$(create_fake_gh_bin "$fixture_root")"
@@ -1554,8 +1574,11 @@ test_cleanup_delete_branch_uses_github_api_remote_delete_fallback() {
     bd_json="$(printf '[{"name":"remote-uat-hardening","path":"%s","branch":"feat/remote-uat-hardening","beads_state":"local"}]\n' "${existing_path}")"
 
     output="$(
+        cd "$fixture_root"
         set +e
         WORKTREE_READY_ASSUME_GITHUB_ORIGIN=1 \
+        GH_EXPECT_CWD="${repo_dir}" \
+        GH_EXPECT_API_DELETE_ROUTE="repos/example/repo/git/refs/heads/feat/remote-uat-hardening" \
         GH_REPO_VIEW_JSON='{"defaultBranchRef":{"name":"main"},"deleteBranchOnMerge":false,"nameWithOwner":"example/repo"}' \
         GH_PR_LIST_JSON="$(printf '[{"number":111,"state":"MERGED","mergedAt":"2026-03-27T20:30:28Z","headRefName":"feat/remote-uat-hardening","headRefOid":"%s","baseRefName":"main","isCrossRepository":false,"url":"https://github.com/example/repo/pull/111","title":"Fixture merged PR"}]\n' "${head_sha}")" \
         GH_API_DELETE_GIT_DIR="${origin_dir}" \

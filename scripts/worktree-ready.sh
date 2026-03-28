@@ -981,7 +981,7 @@ resolve_default_branch_name() {
   fi
 
   if origin_uses_github && gh_available_and_authenticated && command -v jq >/dev/null 2>&1; then
-    repo_json="$(gh repo view --json defaultBranchRef 2>/dev/null || true)"
+    repo_json="$(gh_run_in_repo repo view --json defaultBranchRef 2>/dev/null || true)"
     default_branch="$(printf '%s\n' "${repo_json}" | jq -r '.defaultBranchRef.name // empty' 2>/dev/null || true)"
     if [[ -n "${default_branch}" ]]; then
       printf '%s\n' "${default_branch}"
@@ -1008,6 +1008,17 @@ gh_available_and_authenticated() {
   gh auth status -h github.com >/dev/null 2>&1
 }
 
+gh_run_in_repo() {
+  if [[ -z "${resolved_repo_root:-}" ]]; then
+    return 1
+  fi
+
+  (
+    cd "${resolved_repo_root}" &&
+      gh "$@"
+  )
+}
+
 github_repo_name_with_owner() {
   local repo_json=""
   local repo_name_with_owner=""
@@ -1016,7 +1027,7 @@ github_repo_name_with_owner() {
     return 1
   fi
 
-  repo_json="$(gh repo view --json nameWithOwner 2>/dev/null || true)"
+  repo_json="$(gh_run_in_repo repo view --json nameWithOwner 2>/dev/null || true)"
   repo_name_with_owner="$(printf '%s\n' "${repo_json}" | jq -r '.nameWithOwner // empty' 2>/dev/null || true)"
   if [[ -z "${repo_name_with_owner}" ]]; then
     return 1
@@ -1046,7 +1057,7 @@ delete_remote_branch_via_github_api() {
     return 1
   fi
 
-  gh api -X DELETE "repos/${repo_name_with_owner}/git/refs/heads/${cleanup_branch}"
+  gh_run_in_repo api -X DELETE "repos/${repo_name_with_owner}/git/refs/heads/${cleanup_branch}"
   git -C "${resolved_repo_root}" update-ref -d "refs/remotes/origin/${cleanup_branch}" >/dev/null 2>&1 || true
 }
 
@@ -1190,7 +1201,7 @@ resolve_cleanup_merge_proof() {
     return 1
   fi
 
-  repo_json="$(gh repo view --json deleteBranchOnMerge,defaultBranchRef 2>/dev/null || true)"
+  repo_json="$(gh_run_in_repo repo view --json deleteBranchOnMerge,defaultBranchRef 2>/dev/null || true)"
   repo_delete_branch_on_merge="$(printf '%s\n' "${repo_json}" | jq -r '.deleteBranchOnMerge // empty' 2>/dev/null || true)"
   if [[ -z "${report_default_branch_name}" ]]; then
     report_default_branch_name="$(printf '%s\n' "${repo_json}" | jq -r '.defaultBranchRef.name // empty' 2>/dev/null || true)"
@@ -1199,7 +1210,7 @@ resolve_cleanup_merge_proof() {
     add_warning "GitHub auto-delete for merged head branches is disabled for this repository; cleanup must explicitly remove remote branches when merge proof exists."
   fi
 
-  pr_json="$(gh pr list --state merged --head "${cleanup_branch}" --json number,state,mergedAt,headRefName,headRefOid,baseRefName,isCrossRepository,url,title 2>/dev/null || true)"
+  pr_json="$(gh_run_in_repo pr list --state merged --head "${cleanup_branch}" --json number,state,mergedAt,headRefName,headRefOid,baseRefName,isCrossRepository,url,title 2>/dev/null || true)"
   match_count="$(
     printf '%s\n' "${pr_json}" | jq -r \
       --arg branch "${cleanup_branch}" \
@@ -3228,7 +3239,7 @@ execute_cleanup_branch_actions() {
       add_next_step "git merge-base --is-ancestor $(shell_quote "refs/remotes/origin/${cleanup_branch}") $(shell_quote "refs/remotes/origin/${default_branch_name}")"
     fi
     if origin_uses_github; then
-      add_next_step "gh pr list --state merged --head $(shell_quote "${cleanup_branch}") --json number,state,mergedAt,headRefName,headRefOid,baseRefName,url"
+      add_next_step "cd $(shell_quote "${resolved_repo_root}") && gh pr list --state merged --head $(shell_quote "${cleanup_branch}") --json number,state,mergedAt,headRefName,headRefOid,baseRefName,url"
     fi
     return 1
   fi
