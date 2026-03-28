@@ -616,6 +616,13 @@ BROWSER_PROFILE_DIR="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "
 BROWSER_PERSIST_PROFILE="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "persist_profile" || true)"
 
 if browser_contract_required; then
+    if [[ -z "$BROWSER_SANDBOX_IMAGE" ]]; then
+        fail_with "BROWSER_SANDBOX_IMAGE_MISSING" "Browser sandbox requires a tracked tools.browser.sandbox_image value"
+    fi
+    if ! docker image inspect "$BROWSER_SANDBOX_IMAGE" >/dev/null 2>&1; then
+        fail_with "BROWSER_SANDBOX_IMAGE_UNAVAILABLE" "Tracked browser sandbox image is not available on the host: $BROWSER_SANDBOX_IMAGE"
+    fi
+
     DOCKER_SOCKET_SOURCE="$(container_mount_source "$MOLTIS_CONTAINER" "/var/run/docker.sock")"
     if [[ -z "$DOCKER_SOCKET_SOURCE" ]]; then
         fail_with "BROWSER_DOCKER_SOCKET_MOUNT_MISSING" "Browser sandbox requires /var/run/docker.sock to be mounted into the Moltis container"

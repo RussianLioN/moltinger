@@ -372,6 +372,10 @@ Fix:
 - keep `persist_profile = false`
 - pin `max_instances = 1`
 - purge and recreate the configured browser `profile_dir` during deploy
+- if the live runtime still uses stock `browserless/chrome` and transient container
+  logs show `SingletonLock` / `ProcessSingleton`, switch to the tracked wrapper image
+  that normalizes bind-mounted profile ownership before dropping back to the upstream
+  non-root runtime user
 
 Why this matters:
 
@@ -379,6 +383,44 @@ Why this matters:
   profile strategy
 - Chrome user-data-dirs are lock-sensitive; concurrent or stale reuse shows up as
   `SingletonLock` / `ProcessSingleton` failures even when Docker connectivity is fine
+
+### Symptom: Dedicated `profile_dir` + `max_instances = 1` are already in place, but transient browser containers still fail with `SingletonLock: Permission denied`
+
+Likely cause:
+
+- the transient browser container is still the stock `browserless/chrome` image;
+- the per-session bind-mounted profile directory is owned by a different host UID/GID
+  than the image's runtime user (`blessuser`, `999:999`);
+- Chrome cannot create `SingletonLock` inside `/data/browser-profile`.
+
+Inspect:
+
+```bash
+docker ps --format '{{.Names}} {{.Image}}' | grep '^moltis-browser-'
+name="$(docker ps --format '{{.Names}}' | grep '^moltis-browser-' | tail -n 1)"
+docker inspect "$name" --format 'image={{.Config.Image}} user={{.Config.User}} mounts={{range .Mounts}}{{.Source}}=>{{.Destination}} rw={{.RW}};{{end}}'
+docker logs "$name" 2>&1 | tail -n 80
+ls -ld /tmp/moltis-browser-profile/browserless /tmp/moltis-browser-profile/browserless/sandbox /tmp/moltis-browser-profile/browserless/sandbox/*
+```
+
+Fix:
+
+- pin `sandbox_image = "moltis-browserless-chrome:tracked"`
+- build that tracked wrapper image during deploy
+- let the wrapper:
+  - start as root briefly
+  - `chown -R 999:999` the bind-mounted profile dir
+  - create a writable runtime `HOME`
+  - drop privileges back to `999:999`
+  - exec the upstream browserless start path
+
+Why this matters:
+
+- official Moltis sandbox docs explicitly allow custom sandbox images;
+- official browserless/OpenClaw guidance still leaves user-data-dir ownership as an
+  operator/runtime concern;
+- this is safer than leaving the browser container running as root or relying on
+  host-only `chmod 0777`.
 
 ### Symptom: Browser tool now starts, but the run still ends with `Timed out: Agent run timed out after 30s`
 

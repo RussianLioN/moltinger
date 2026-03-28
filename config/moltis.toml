@@ -490,7 +490,7 @@ navigation_timeout_ms = 30000     # Page load timeout in milliseconds (30 sec)
 allowed_domains = []              # Empty = all domains allowed
 memory_limit_percent = 90
 chrome_args = []
-sandbox_image = "browserless/chrome"
+sandbox_image = "moltis-browserless-chrome:tracked"
 profile_dir = "/tmp/moltis-browser-profile/browserless"  # Dedicated host-visible profile dir for sibling browser sandboxes; do not reuse a shared multi-instance Chrome profile
 persist_profile = false           # Keep browser profiles ephemeral in Docker mode; deploy will recreate this dir so stale host-owned state cannot poison browser startup
 container_host = "host.docker.internal"  # Moltis runs in Docker; sibling browser container must be reached via host gateway, not 127.0.0.1

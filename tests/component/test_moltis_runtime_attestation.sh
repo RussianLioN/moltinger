@@ -41,6 +41,16 @@ read_auth_status() {
 }
 
 case "${1:-}" in
+  image)
+    if [[ "${2:-}" == "inspect" ]]; then
+      if [[ "${FAKE_DOCKER_IMAGE_PRESENT:-true}" == "true" ]]; then
+        exit 0
+      fi
+      exit 1
+    fi
+    printf 'unsupported docker image invocation\n' >&2
+    exit 1
+    ;;
   inspect)
     if [[ "${2:-}" == "--format" ]]; then
       case "${3:-}" in
@@ -191,7 +201,7 @@ model = "nomic-embed-text"
 
 [tools.browser]
 enabled = true
-sandbox_image = "browserless/chrome"
+sandbox_image = "moltis-browserless-chrome:tracked"
 max_instances = 1
 profile_dir = "$browser_profile_dir"
 persist_profile = false
@@ -290,7 +300,7 @@ EOF
        [[ "$(jq -r '.details.tracked_runtime_toml' "$output_json")" != "$workspace_root_canonical/config/moltis.toml" ]] || \
        [[ "$(jq -r '.details.runtime_runtime_toml' "$output_json")" != "$runtime_config_dir_canonical/moltis.toml" ]] || \
        [[ "$(jq -r '.details.browser_enabled' "$output_json")" != "true" ]] || \
-       [[ "$(jq -r '.details.browser_sandbox_image' "$output_json")" != "browserless/chrome" ]] || \
+       [[ "$(jq -r '.details.browser_sandbox_image' "$output_json")" != "moltis-browserless-chrome:tracked" ]] || \
        [[ "$(jq -r '.details.browser_container_host' "$output_json")" != "host.docker.internal" ]] || \
        [[ "$(jq -r '.details.browser_max_instances' "$output_json")" != "1" ]] || \
        [[ "$(jq -r '.details.browser_profile_dir' "$output_json")" != "$browser_profile_dir_canonical" ]] || \
@@ -306,6 +316,33 @@ EOF
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "status" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_runtime_attestation_fails_when_browser_sandbox_image_is_missing_on_host"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_DOCKER_IMAGE_PRESENT="false" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-browser-image.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "BROWSER_SANDBOX_IMAGE_UNAVAILABLE")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when the tracked browser sandbox image is missing on the host"
         rm -rf "$fixture_root"
         return
     fi
