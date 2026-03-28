@@ -246,6 +246,20 @@ reply_has_codex_update_remote_contract_violation() {
   return 1
 }
 
+reply_has_codex_update_state_memory_false_negative() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  case "$normalized" in
+    *"в памяти не найдено"*|*"не найдено в памяти"*|*"в памяти записи о последней известной версии не найдено"*|*"в памяти записи не найдено"*|*"в памяти у меня не зафиксирована"*|*"в базе у меня не зафиксирована"*|*"в базе не зафиксирована"*|*"не вижу физически доступного содержимого skill"*|*"не вижу физически доступного содержимого скил"*|*"механизм отслеживания обновлений codex cli сейчас не в рабочем состоянии"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 write_report() {
   local debug_available="false"
   if [[ -n "$DEBUG_OUTPUT_PATH" ]]; then
@@ -376,6 +390,19 @@ evaluate_authoritative_semantics() {
       --argjson base "$DIAGNOSTIC_JSON" \
       '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_remote_contract_violation"}}')"
     RECOMMENDED_ACTION="Reconcile the remote codex-update contract so Telegram stays advisory-only and does not promise operator-only runtime execution, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_state_memory_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_state_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update reply treated chat memory or generic unavailable text as proof that codex-update runtime state was absent" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_state_memory_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update state queries so they read runtime state helper truth instead of memory-search fallbacks, then rerun authoritative UAT."
     return 0
   fi
 

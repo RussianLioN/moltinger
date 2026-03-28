@@ -366,6 +366,8 @@ PY
        rg -Fq 'Не пытайся опровергнуть это через `exec`, `cat`, `find`' "$TOML_CONFIG" && \
        rg -Fq 'Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме' "$TOML_CONFIG" && \
        rg -Fq 'На remote user-facing surface не запускай молча `make codex-update`, `moltis-codex-update-run.sh`' "$TOML_CONFIG" && \
+       rg -Fq 'primary truth — runtime state helper `bash /server/scripts/moltis-codex-update-state.sh get --json`' "$TOML_CONFIG" && \
+       rg -Fq 'не используй `memory_search`, общую память чата' "$TOML_CONFIG" && \
        rg -Fq 'Если trusted operator/local surface реально видит `/server`' "$TOML_CONFIG"; then
         test_pass
     else

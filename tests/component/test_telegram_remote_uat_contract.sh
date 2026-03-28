@@ -251,6 +251,70 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_memory_state_false_negative_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "В базе у меня не зафиксирована отдельная текущая версия Codex CLI. В памяти записи о последней известной версии не найдено, значит механизм сейчас не в рабочем состоянии.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_state_helper_safe_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Последнее зафиксированное состояние я читаю не из памяти чата, а из runtime state codex-update. Последняя сохранённая версия: 1.2.3, fingerprint: abc123, время последнего чтения: 2026-03-28T10:00:00Z.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 base_payload="$(cat <<'JSON'
 {
   "ok": false,
@@ -487,6 +551,37 @@ run_component_telegram_remote_uat_contract_tests() {
         else
             test_fail "Wrapper must surface remote codex-update execution-contract violations on user-facing surfaces"
         fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_memory_state_false_negative_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_memory_state_false_negative_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Какая текущая версия Codex CLI у тебя зафиксирована в базе?" \
+        --output "$TEST_TMPDIR/result-codex-update-memory-state.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update state queries are answered from memory-search style false negatives"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_state_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-memory-state.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must surface codex-update state replies that substitute chat memory for runtime state truth"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_codex_update_state_helper_reply_that_mentions_chat_memory_only_as_contrast"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_state_helper_safe_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Какая текущая версия Codex CLI у тебя зафиксирована в базе?" \
+        --output "$TEST_TMPDIR/result-codex-update-state-helper-safe.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must not fail a correct codex-update runtime-state reply only because it contrasts with chat memory"
     fi
 
     test_start "component_telegram_remote_uat_marks_mtproto_fallback_unavailable_when_prerequisites_missing"

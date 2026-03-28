@@ -15,6 +15,8 @@ description: Remote-safe Moltis skill for Codex CLI update status. Use when a
 - `Есть ли новые версии Codex CLI?`
 - `Что нового в Codex CLI и насколько это важно?`
 - `Что умеет codex-update?`
+- `Какая последняя версия Codex CLI у тебя зафиксирована?`
+- `Что сейчас лежит в state/fingerprint codex-update?`
 
 Подробный runtime/runbook-контракт описан в `docs/moltis-codex-update-skill.md`.
 
@@ -32,6 +34,27 @@ description: Remote-safe Moltis skill for Codex CLI update status. Use when a
 - не опровергай наличие skill через `exec`, `cat`, `find` и другие filesystem-пробы по `/home/moltis/.moltis/skills`, `/server` и похожим host paths;
 - если skill уже объявлен live runtime как доступный, считай capability существующей;
 - давай короткий русский advisory: что известно про upstream, насколько это важно и какие следующие шаги разумны.
+
+Для любых семантически эквивалентных вопросов про уже сохранённое состояние skill
+(например, “какая последняя/latest версия у тебя зафиксирована”, “что у тебя сейчас в базе/state”, “какой последний fingerprint/version запомнен”):
+
+primary truth — это runtime state helper, а не память чата и не общая память агента.
+
+Если read-only runtime state helper доступен на этой surface, сначала используй:
+
+```bash
+bash /server/scripts/moltis-codex-update-state.sh get --json
+```
+
+Из него смотри прежде всего:
+
+- `last_seen_version`
+- `last_seen_fingerprint`
+- `last_run_at`
+- `last_result`
+
+Если state helper недоступен, отвечай честно, что не удалось прочитать runtime state `codex-update` на текущей surface.
+Не говори `в памяти не найдено`, `в базе не зафиксировано` или `skill не в рабочем состоянии`, пока не проверен именно runtime state.
 
 Если доступен только remote-safe контекст, а не operator runtime, используй:
 
@@ -68,6 +91,7 @@ bash /server/scripts/moltis-codex-update-run.sh \
 - Не использовать `npm list -g @openai/codex` как дефолтный путь для этого skill.
 - Не использовать `codex --version` как дефолтный путь для этого skill.
 - Не делать filesystem-пробы по `/home/moltis/.moltis/skills` или `/server`, чтобы "доказать", что live-discovered skill отсутствует.
+- Не использовать `memory_search`, `Searching memory` или общую память чата как primary truth для вопросов о runtime state `codex-update`.
 - Не отправлять пользователю raw host paths, raw shell commands или operator-only runtime детали.
 - Не подменять remote advisory contract обещанием server-side update действий для локальной машины пользователя.
 

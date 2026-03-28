@@ -77,6 +77,30 @@
 
 На этих surfaces нельзя считать operator runtime универсальным дефолтом и нельзя превращать ответ в обещание локального update execution.
 
+### Runtime state queries
+
+Если пользователь спрашивает не про свежую upstream-проверку, а про уже сохранённое состояние навыка, то такой intent нужно распознавать семантически, а не только по конкретной формулировке. Примеры:
+
+- `Какая последняя версия Codex CLI у тебя зафиксирована?`
+- `Что сейчас лежит в state codex-update?`
+- `Какой последний fingerprint/version запомнен?`
+
+то первичный источник истины — не память чата и не общая RAG/memory surface, а runtime state helper:
+
+```bash
+bash /server/scripts/moltis-codex-update-state.sh get --json
+```
+
+Полезные поля:
+
+- `last_seen_version`
+- `last_seen_fingerprint`
+- `last_run_at`
+- `last_result`
+- `last_delivery_status`
+
+Если этот helper на текущей surface недоступен, корректная деградация такая: честно сказать, что runtime state навыка не удалось прочитать. Некорректная деградация: заявлять `в памяти не найдено` или делать вывод, что skill нерабочий, не проверив state helper.
+
 ## On-demand operator/local usage
 
 Канонический операторский entrypoint:
