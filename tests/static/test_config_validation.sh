@@ -108,17 +108,24 @@ run_static_config_validation_tests() {
         test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for Git-tracked scripts, docs, and repo-managed skill sources"
     fi
 
-    test_start "static_moltis_browser_docker_contract_declares_host_gateway_and_socket_gid_alignment"
-    if rg -q 'group_add:' "$COMPOSE_PROD" && \
-       rg -q 'DOCKER_SOCKET_GID' "$COMPOSE_PROD" && \
+    test_start "static_moltis_browser_docker_contract_matches_official_sibling_container_requirements"
+    if rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG" && \
+       rg -q '^profile_dir = "/tmp/moltis-browser-profile/shared"' "$TOML_CONFIG" && \
+       rg -q '^persist_profile = false' "$TOML_CONFIG" && \
+       rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
+       rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$COMPOSE_PROD" && \
+       rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.yml" && \
        rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
-       rg -q 'group_add:' "$PROJECT_ROOT/docker-compose.yml" && \
-       rg -q 'DOCKER_SOCKET_GID' "$PROJECT_ROOT/docker-compose.yml" && \
        rg -q 'host\.docker\.internal:host-gateway' "$PROJECT_ROOT/docker-compose.yml" && \
-       rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG"; then
+       rg -q 'DOCKER_SOCKET_GID=\$docker_socket_gid' "$DEPLOY_SCRIPT" && \
+       rg -q 'prepare_moltis_browser_profile_dir' "$DEPLOY_SCRIPT" && \
+       rg -q 'chmod 0777 "\$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "\$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"' "$DEPLOY_SCRIPT" && \
+       rg -q 'prepull_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker pull "\$sandbox_image"' "$DEPLOY_SCRIPT" && \
+       rg -q '^sandbox_image = "browserless/chrome"' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Moltis browser Docker contract must align docker.sock gid access, provide host-gateway routing, and pin container_host away from 127.0.0.1"
+        test_fail "Browser-in-Docker contract must keep the shared profile_dir contract, keep persist_profile disabled, pre-pull the tracked browserless/chrome image, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
@@ -216,11 +223,12 @@ PY
     test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"
     if rg -Fq 'BROWSER_DOCKER_SOCKET_GID_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'BROWSER_CONTAINER_HOST_INVALID' "$RUNTIME_ATTESTATION_SCRIPT" && \
-       rg -Fq 'read_toml_key' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_PROFILE_ROOT_PERMISSION_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_PROFILE_SHARED_PERMISSION_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'DOCKER_SOCKET_GID' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Runtime attestation and deploy control plane must guard the Docker browser sandbox contract before production traffic hits Telegram"
+        test_fail "Runtime attestation and deploy control plane must guard docker.sock access, host-gateway routing, and writable browser profile storage before production traffic hits Telegram"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"
