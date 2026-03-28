@@ -130,7 +130,7 @@ Authoritative `Telegram Web` probe больше не принимает перв
 Практический смысл:
 
 - ранняя промежуточная реплика вроде `Проверяю снова...` больше не считается достаточным pass;
-- если следом приходит `Timed out: Agent run timed out after 30s`, authoritative verdict должен стать `failed`, а не `passed`.
+- если следом приходит `Timed out: Agent run timed out after <N>s`, authoritative verdict должен стать `failed`, а не `passed`.
 
 ## Failure Codes
 

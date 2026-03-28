@@ -235,10 +235,15 @@ NODE
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
 const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
-const badReply = "Activity log • nodes_list • sessions_list • cron • missing 'action' parameter";
+const badReplies = [
+  "Activity log • nodes_list • sessions_list • cron • missing 'action' parameter",
+  "Timed out: Agent run timed out after 90s"
+];
 const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: openai-codex::gpt-5.4";
-if (!isReplyErrorSignature(badReply)) {
-  throw new Error("expected activity-log/tool-error reply to be treated as error signature");
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected error signature to be rejected: ${badReply}`);
+  }
 }
 if (isReplyErrorSignature(goodReply)) {
   throw new Error("expected healthy presence/status reply to remain clean");
@@ -324,6 +329,27 @@ NODE
         test_pass
     else
         test_fail "Probe must recognize short human-facing progress prefaces so it does not pass too early"
+    fi
+
+    test_start "component_telegram_web_probe_rejects_timeout_variants_with_different_durations"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const replies = [
+  "Timed out: Agent run timed out after 30s",
+  "Timed out: Agent run timed out after 90s",
+  "⚠️ Timed out: Agent run timed out after 120s"
+];
+for (const reply of replies) {
+  if (!isReplyErrorSignature(reply)) {
+    throw new Error(`expected timeout variant to be rejected: ${reply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must reject timeout replies regardless of the reported timeout duration"
     fi
 
     test_start "component_telegram_web_probe_waits_past_progress_preface_for_final_reply"
