@@ -69,6 +69,17 @@ assert_contains() {
   log_success "Verified ${description} in ${path}"
 }
 
+contains_fixed_string() {
+  local pattern="$1"
+  shift
+
+  if command -v rg >/dev/null 2>&1; then
+    rg -Fq -- "${pattern}" "$@"
+  else
+    grep -Fq -- "${pattern}" "$@"
+  fi
+}
+
 check_required_files() {
   log_info "Checking required Codex governance files..."
 
@@ -169,11 +180,11 @@ check_instruction_references() {
     fi
   fi
 
-  if rg -Fq -- "bd sync" "${retired_bd_sync_surfaces[@]}" || \
+  if contains_fixed_string "bd sync" "${retired_bd_sync_surfaces[@]}" || \
      grep -Fq -- 'add_next_step "bd sync"' "${REPO_ROOT}/scripts/worktree-ready.sh"; then
     log_error "High-traffic instruction surfaces must not reintroduce retired bd sync guidance"
     failures=1
-  elif rg -Fq -- "bd status" "${bd_status_surfaces[@]}"; then
+  elif contains_fixed_string "bd status" "${bd_status_surfaces[@]}"; then
     log_success "Verified high-traffic instruction surfaces retire bd sync guidance"
   else
     log_error "High-traffic instruction surfaces must advertise the current bd status workflow"
