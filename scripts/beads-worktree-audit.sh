@@ -100,9 +100,14 @@ classify_worktree_state() {
   local issues_path="${beads_dir}/issues.jsonl"
   local redirect_path="${beads_dir}/redirect"
   local has_local_runtime="false"
+  local has_runtime_shell="false"
 
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
+  fi
+
+  if beads_resolve_has_runtime_shell "${beads_dir}"; then
+    has_runtime_shell="true"
   fi
 
   if [[ -f "${redirect_path}" ]]; then
@@ -124,7 +129,17 @@ classify_worktree_state() {
     return 0
   fi
 
+  if [[ -f "${config_path}" && ! -f "${issues_path}" ]]; then
+    printf '%s\n' "runtime_bootstrap_required"
+    return 0
+  fi
+
   if [[ -f "${config_path}" && -f "${issues_path}" ]]; then
+    if [[ "${has_runtime_shell}" == "true" ]]; then
+      printf '%s\n' "runtime_bootstrap_required"
+      return 0
+    fi
+
     printf '%s\n' "partial_foundation"
     return 0
   fi
@@ -158,6 +173,7 @@ collect_worktrees() {
 
 audit_worktree() {
   local worktree_path="$1"
+  local issues_path="${worktree_path}/.beads/issues.jsonl"
   local state=""
   local action="none"
   local severity="ok"
@@ -167,6 +183,10 @@ audit_worktree() {
   helper_command="./scripts/beads-worktree-localize.sh --path $(printf '%q' "${worktree_path}")"
   if [[ -n "${bootstrap_source}" ]]; then
     helper_command+=" --bootstrap-source $(printf '%q' "${bootstrap_source}")"
+  fi
+
+  if [[ "${state}" == "runtime_bootstrap_required" && ! -f "${issues_path}" ]]; then
+    helper_command="cd $(printf '%q' "${worktree_path}") && /usr/local/bin/bd doctor --json && bd bootstrap"
   fi
 
   if [[ "${apply_safe}" == "true" ]]; then
@@ -184,10 +204,14 @@ audit_worktree() {
     current|no_beads|post_migration_runtime_only)
       severity="ok"
       ;;
-    partial_foundation)
+    partial_foundation|runtime_bootstrap_required)
       severity="warn"
       if [[ "${action}" == "none" ]]; then
-        action="localize_safe"
+        if [[ "${state}" == "runtime_bootstrap_required" ]]; then
+          action="runtime_repair"
+        else
+          action="localize_safe"
+        fi
       fi
       add_next_step "${helper_command}"
       ;;

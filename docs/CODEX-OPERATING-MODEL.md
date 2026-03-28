@@ -164,6 +164,8 @@ For Beads in dedicated worktrees, ordinary work should use plain `bd`.
 
 The dedicated Beads Dolt migration helper scripts lived only in the migration branches that introduced the cutover. Ordinary branches created from `main` should use the ordinary plain-`bd` contract unless a branch explicitly ships its own branch-local migration helpers and instructions.
 
+Treat `029-beads-dolt-native-migration` as the historical migration/reference lane for the Beads Dolt cutover. New generic worktree/Beads helper fixes must land in `main` first and only be backported into `029` when the migration/reference branch still needs the same contract update.
+
 ## Local Instruction Split
 
 Use the nearest local `AGENTS.md` for directory-specific rules.

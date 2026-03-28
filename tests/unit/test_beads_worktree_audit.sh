@@ -98,6 +98,16 @@ auto-start-daemon: false
 EOF
 }
 
+seed_broken_post_migration_runtime_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/dolt/.dolt"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+}
+
 run_audit() {
     local worktree_dir="$1"
     local fake_bin="$2"
@@ -266,6 +276,36 @@ test_audit_treats_post_migration_runtime_only_sibling_as_ok() {
     test_pass
 }
 
+test_audit_warns_for_runtime_bootstrap_required_runtime_only_sibling() {
+    test_start "audit_warns_for_runtime_bootstrap_required_runtime_only_sibling"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/beads-worktree-audit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_beads_audit_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-broken-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime" "main"
+    seed_broken_post_migration_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_audit "${repo_dir}" "${fake_bin}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Ownership audit must not fail closed when the sibling already has local ownership but needs runtime bootstrap"
+    assert_contains "${output}" "Warnings: 1" "Audit should surface the runtime repair issue as a warning"
+    assert_contains "${output}" "state=runtime_bootstrap_required" "Audit must classify broken runtime-only siblings explicitly"
+    assert_contains "${output}" "action=runtime_repair" "Audit must distinguish runtime repair from ownership localization"
+    assert_contains "${output}" "/usr/local/bin/bd doctor --json && bd bootstrap" "Audit must point runtime-only siblings to the sanctioned repair path"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_test_beads_worktree_audit() {
     start_timer
     test_audit_blocks_canonical_root_when_legacy_redirect_exists
@@ -273,6 +313,7 @@ run_test_beads_worktree_audit() {
     test_audit_apply_safe_bootstraps_damaged_sibling
     test_audit_skips_enforcement_in_non_canonical_worktree
     test_audit_treats_post_migration_runtime_only_sibling_as_ok
+    test_audit_warns_for_runtime_bootstrap_required_runtime_only_sibling
     generate_report
 }
 
