@@ -169,6 +169,10 @@ When one dedicated worktree enters the Beads Dolt-native pilot:
 4. Use `./scripts/beads-dolt-pilot.sh review` as the documented pilot review surface.
 5. Keep pilot mode isolated to one worktree until the pilot verdict is explicit.
 
+### Historical Migration Note
+
+This branch, `029-beads-dolt-native-migration`, is the migration/reference lane for the Beads Dolt cutover. New generic worktree/Beads helper fixes should land in `main` first; backport them into `029` only when the migration/reference branch still needs the same contract update.
+
 ## Local Instruction Split
 
 Use the nearest local `AGENTS.md` for directory-specific rules.
