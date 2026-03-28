@@ -280,34 +280,48 @@ In other words: pairing is an operational checkpoint, not the default root cause
 
 Treat user-facing Telegram delivery as an explicit runtime contract, not an implicit default.
 
-Official Moltis sources are currently split:
+Official Moltis sources agree on the high-level delivery model:
 
-- the public channels page still describes Telegram as a polling channel with no streaming;
+- the Telegram docs expose per-account `stream_mode`, `stream_notify_on_complete`,
+  and `stream_min_initial_chars`;
 - changelog `0.8.38` added Telegram reply streaming plus per-account
   `stream_mode` gating, where `off` keeps the classic final-message delivery path.
 
 Safe repo policy for user-facing Telegram bots:
 
 - explicitly pin `stream_mode = "off"` under `[channels.telegram.<account>]`;
+- use the current account-only schema and do not keep a legacy root
+  `[channels.telegram]` table with `enabled = true`, because current runtime can
+  misread it as a fake Telegram account named `enabled`;
 - do not rely on the runtime default if the bot is allowed to talk to real users;
 - if you intentionally test streaming, do it only in a controlled debug lane, not in the
   main user chat.
+
+Important boundary:
+
+- `stream_mode = "off"` disables edit-in-place streaming, but it does **not**
+  disable Telegram channel status/logbook delivery in current upstream runtime.
+- If tool execution buffered a `status_log`, current upstream `deliver_channel_replies`
+  can still choose `send_text_with_suffix(...)` and append `Activity log`-style
+  HTML to the final Telegram reply.
+- The public Telegram docs do not currently document a per-account switch that
+  disables those status/logbook suffixes for user-facing bots.
 
 Inspect:
 
 ```bash
 docker exec moltis sh -lc 'sed -n "455,470p" /home/moltis/.config/moltis/moltis.toml'
 sqlite3 /opt/moltinger/data/moltis.db 'select slug, config from channels where kind = "telegram";'
+docker logs --since 15m moltis 2>&1 | grep -E 'telegram outbound text\+suffix|invalid type: boolean true, expected struct TelegramAccountConfig'
 ```
 
 If users see `Activity log`, raw tool names, or partial progress in Telegram:
 
 1. confirm the live Telegram account config actually contains `stream_mode = "off"`;
-2. confirm the runtime channel state or DB override did not drift from tracked config;
-3. only after that continue with browser/runtime investigation.
-- `starting streaming agent loop provider="openai-codex"`
-- `openai-codex stream_with_tools request model=gpt-5.4`
-- `agent run complete ... response=OK`
+2. confirm tracked/runtime config does not keep the legacy root `[channels.telegram]` table;
+3. inspect live logs for `telegram outbound text+suffix send` before assuming the leak is
+   still a streaming-mode problem;
+4. only after that continue with browser/runtime investigation.
 
 ## Known Failure Patterns And Fixes
 
