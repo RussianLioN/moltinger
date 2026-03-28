@@ -21,6 +21,8 @@ const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS 
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 const INTERNAL_TELEMETRY_RE =
   /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b)/iu;
+const PROGRESS_PREFACE_RE =
+  /^(?:сначала(?:\s|$)|сперва(?:\s|$)|сейчас(?:\s|$)|для начала(?:\s|$)|первым делом(?:\s|$)|я\s+(?:сначала\s+)?(?:проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)(?:\s|$)|(?:проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)(?:\s|$)|let me(?:\s|$)|i(?:'|’)ll(?:\s|$)|first[, ]+i(?:'|’)ll(?:\s|$)|checking(?:\s|$)|opening(?:\s|$)|looking up(?:\s|$))/iu;
 const INTERIM_PROGRESS_RE =
   /^(?:сейчас\s+)?(?:проверяю|смотрю|ищу|открываю|открою|попробую|запускаю|зайду|перехожу|достаю|подожди|секунду|one moment|working on it|checking|looking|opening|navigating|fetching|let me|i(?:'ll| will)\b)/iu;
 
@@ -74,6 +76,12 @@ export function isLikelyInterimReplyText(value) {
 export function isReplyErrorSignature(value) {
   const normalized = normalizeMessageText(value);
   return ERROR_RE.test(normalized) || INTERNAL_TELEMETRY_RE.test(normalized);
+}
+
+export function isLikelyProgressPreface(value) {
+  const normalized = normalizeMessageText(value);
+  if (!normalized) return false;
+  return PROGRESS_PREFACE_RE.test(normalized);
 }
 
 function safeMid(value) {
@@ -209,9 +217,52 @@ function buildCorrelationWindow(details) {
     sent_observed_at_ms: details.sentObservedAtMs || null,
     reply_observed_at_ms: details.replyObservedAtMs || null,
     sent_message: summarizeMessage(details.sentMessage),
+    preface_reply: summarizeMessage(details.prefaceReplyMessage),
+    preface_followup_wait_ms: details.prefaceFollowupWaitMs || null,
     matched_reply: summarizeMessage(details.replyMessage),
     latest_seen_incoming: summarizeMessage(details.latestIncoming),
     last_pre_send_activity: details.lastPreSendActivity || null,
+  };
+}
+
+export async function extendReplySettlePastProgressPreface({
+  initialResult,
+  deadlineMs,
+  waitForReplySettleFn,
+  nowMs = () => Date.now(),
+}) {
+  const prefaceReply = initialResult?.replyMessage;
+  if (!prefaceReply || !isLikelyProgressPreface(prefaceReply.text)) {
+    return {
+      ...initialResult,
+      prefaceReplyMessage: null,
+      prefaceFollowupWaitMs: null,
+    };
+  }
+
+  const remainingMs = Math.max(0, deadlineMs - nowMs());
+  if (remainingMs === 0) {
+    return {
+      ...initialResult,
+      prefaceReplyMessage: prefaceReply,
+      prefaceFollowupWaitMs: 0,
+    };
+  }
+
+  const followupResult = await waitForReplySettleFn(prefaceReply.mid, remainingMs);
+  if (followupResult?.replyMessage) {
+    return {
+      ...followupResult,
+      prefaceReplyMessage: prefaceReply,
+      prefaceFollowupWaitMs: followupResult.settleWaitMs ?? null,
+    };
+  }
+
+  return {
+    ...initialResult,
+    latestIncoming: followupResult?.latestIncoming ?? initialResult.latestIncoming,
+    prefaceReplyMessage: prefaceReply,
+    prefaceFollowupWaitMs: followupResult?.settleWaitMs ?? null,
   };
 }
 
@@ -1129,7 +1180,12 @@ async function main() {
 
     stage = "wait_reply";
     const deadline = Date.now() + timeoutSec * 1000;
-    const settledReply = await waitForReplySettle(page, replySettleMs, timeoutSec * 1000, sentMessage.mid);
+    let settledReply = await waitForReplySettle(page, replySettleMs, timeoutSec * 1000, sentMessage.mid);
+    settledReply = await extendReplySettlePastProgressPreface({
+      initialResult: settledReply,
+      deadlineMs: deadline,
+      waitForReplySettleFn: (afterMid, maxWaitMs) => waitForReplySettle(page, replySettleMs, maxWaitMs, afterMid),
+    });
     let replyMessage = settledReply.replyMessage;
     let latestIncoming = settledReply.latestIncoming;
     let replyObservedAtMs = settledReply.replyObservedAtMs;

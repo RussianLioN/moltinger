@@ -212,6 +212,15 @@ PY
         test_fail "Overall agent timeout must stay materially above the browser navigation timeout so multi-step browser runs do not abort at the same 30s ceiling as page navigation"
     fi
 
+    test_start "static_identity_prompt_scopes_broad_moltis_skill_authoring_requests"
+    if rg -Fq 'Для запросов про создание или обновление Moltis skills сначала используй локальные проектные гайды' "$TOML_CONFIG" && \
+       rg -Fq 'Official docs Moltis для skill-authoring открывай точечно по релевантным разделам' "$TOML_CONFIG" && \
+       rg -Fq 'не зависай в долгом browse-цикле' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must scope broad Moltis skill-authoring/doc-review requests to relevant sections and local project guides"
+    fi
+
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
     if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
        bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \

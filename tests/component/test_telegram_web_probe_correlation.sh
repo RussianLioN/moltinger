@@ -298,10 +298,15 @@ NODE
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
 const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
-const badReply = "Activity log • nodes_list • sessions_list • cron • missing 'action' parameter";
+const badReplies = [
+  "Activity log • nodes_list • sessions_list • cron • missing 'action' parameter",
+  "Timed out: Agent run timed out after 90s"
+];
 const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: openai-codex::gpt-5.4";
-if (!isReplyErrorSignature(badReply)) {
-  throw new Error("expected activity-log/tool-error reply to be treated as error signature");
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected error signature to be rejected: ${badReply}`);
+  }
 }
 if (isReplyErrorSignature(goodReply)) {
   throw new Error("expected healthy presence/status reply to remain clean");
@@ -357,6 +362,106 @@ NODE
         test_fail "Probe must classify recent incoming activity/tool-progress leakage before send attribution begins"
     fi
 
+    test_start "component_telegram_web_probe_detects_human_progress_preface_replies"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isLikelyProgressPreface } = await import(process.env.NODE_SCRIPT);
+const prefaced = [
+  "Сначала открою канал и быстро посмотрю.",
+  "Проверю источник и вернусь с ответом.",
+  "Let me open the page first.",
+  "Checking the channel now."
+];
+const finalAnswers = [
+  "Канал про новости и комментарии об ИИ и автоматизации.",
+  "docs.moltis.org",
+  "Timed out: Agent run timed out after 30s"
+];
+for (const reply of prefaced) {
+  if (!isLikelyProgressPreface(reply)) {
+    throw new Error(`expected progress preface to be detected: ${reply}`);
+  }
+}
+for (const reply of finalAnswers) {
+  if (isLikelyProgressPreface(reply)) {
+    throw new Error(`expected final/error reply to remain non-preface: ${reply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must recognize short human-facing progress prefaces so it does not pass too early"
+    fi
+
+    test_start "component_telegram_web_probe_rejects_timeout_variants_with_different_durations"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const replies = [
+  "Timed out: Agent run timed out after 30s",
+  "Timed out: Agent run timed out after 90s",
+  "⚠️ Timed out: Agent run timed out after 120s"
+];
+for (const reply of replies) {
+  if (!isReplyErrorSignature(reply)) {
+    throw new Error(`expected timeout variant to be rejected: ${reply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must reject timeout replies regardless of the reported timeout duration"
+    fi
+
+    test_start "component_telegram_web_probe_waits_past_progress_preface_for_final_reply"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { extendReplySettlePastProgressPreface } = await import(process.env.NODE_SCRIPT);
+const initialResult = {
+  ok: true,
+  settled: true,
+  settleWaitMs: 5000,
+  replyObservedAtMs: 1000,
+  replyMessage: { mid: 218926, direction: "in", text: "Сначала открою канал и быстро посмотрю." },
+  latestIncoming: { mid: 218926, direction: "in", text: "Сначала открою канал и быстро посмотрю." }
+};
+let called = false;
+const refined = await extendReplySettlePastProgressPreface({
+  initialResult,
+  deadlineMs: 60_000,
+  nowMs: () => 10_000,
+  waitForReplySettleFn: async (afterMid, remainingMs) => {
+    called = true;
+    if (afterMid !== 218926 || remainingMs <= 0) {
+      throw new Error(`unexpected follow-up wait args: afterMid=${afterMid}, remainingMs=${remainingMs}`);
+    }
+    return {
+      ok: true,
+      settled: true,
+      settleWaitMs: 18000,
+      replyObservedAtMs: 28000,
+      replyMessage: { mid: 218930, direction: "in", text: "Timed out: Agent run timed out after 30s" },
+      latestIncoming: { mid: 218930, direction: "in", text: "Timed out: Agent run timed out after 30s" }
+    };
+  }
+});
+if (!called) {
+  throw new Error("expected follow-up settle wait after progress preface");
+}
+if (!refined.replyMessage || refined.replyMessage.mid !== 218930) {
+  throw new Error(`expected final follow-up reply, got ${JSON.stringify(refined)}`);
+}
+if (!refined.prefaceReplyMessage || refined.prefaceReplyMessage.mid !== 218926) {
+  throw new Error(`expected original preface reply to be preserved, got ${JSON.stringify(refined)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must keep waiting after a progress preface and settle on the later final reply"
+    fi
     generate_report
 }
 
