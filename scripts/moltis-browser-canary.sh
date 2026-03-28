@@ -17,7 +17,7 @@ EXPECTED_REPLY="${MOLTIS_BROWSER_CANARY_EXPECTED_REPLY:-Introduction - Moltis Do
 CHAT_WAIT_MS="${MOLTIS_BROWSER_CANARY_CHAT_WAIT_MS:-120000}"
 TEST_TIMEOUT="${MOLTIS_BROWSER_CANARY_TEST_TIMEOUT:-90}"
 REQUIRED_LOG="${MOLTIS_BROWSER_CANARY_REQUIRED_LOG:-tool execution succeeded tool=browser}"
-REJECT_LOG_RE="${MOLTIS_BROWSER_CANARY_REJECT_LOG_RE:-browser container failed readiness check|tool execution failed tool=browser|browser launch failed}"
+REJECT_LOG_RE="${MOLTIS_BROWSER_CANARY_REJECT_LOG_RE:-browser container failed readiness check|failed to become ready within 60s|tool execution failed tool=browser|browser launch failed|browser connection dead|pool exhausted: no browser instances available}"
 CANARY_SESSION_KEY="${MOLTIS_BROWSER_CANARY_SESSION_KEY:-operator:browser-canary:$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 
 timestamp() {

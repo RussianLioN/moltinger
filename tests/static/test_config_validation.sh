@@ -258,11 +258,14 @@ PY
        rg -Fq 'sessions.delete' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        rg -Fq 'chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        rg -Fq 'chat.send' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'Browser session contamination detected' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'Browser pool exhaustion detected' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'detect_browser_failure_taxonomy()' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        ! rg -Fq '/api/v1/chat' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
        ! rg -Fq '"/login"' "$PROJECT_ROOT/scripts/test-moltis-api.sh"; then
         test_pass
     else
-        test_fail "scripts/test-moltis-api.sh must use /api/auth/login plus WS RPC status/chat calls, run the chat workflow in one RPC sequence for session fidelity, support dedicated session switch/delete for operator canaries, clear stale chat context before send, and avoid the retired /login + /api/v1/chat contract"
+        test_fail "scripts/test-moltis-api.sh must use /api/auth/login plus WS RPC status/chat calls, run the chat workflow in one RPC sequence for session fidelity, support dedicated session switch/delete for operator canaries, classify stale browser session/pool-exhaustion failures before the generic timeout, clear stale chat context before send, and avoid the retired /login + /api/v1/chat contract"
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
@@ -292,6 +295,14 @@ PY
         test_pass
     else
         test_fail "Runtime attestation and deploy control plane must guard browser sandbox image availability, docker.sock access, host-gateway routing, writable browser profile storage, and single-instance non-persistent browser concurrency before production traffic hits Telegram"
+    fi
+
+    test_start "static_moltis_identity_degrades_tool_heavy_telegram_paths"
+    if rg -Fq 'В пользовательских Telegram/DM чатах по умолчанию избегай browser, Tavily/web-search, memory_search и других многошаговых tool-heavy workflow' "$TOML_CONFIG" && \
+       rg -Fq 'Если задача требует интерактивного браузера, цепочки tool calls или длительной диагностики' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity must explicitly degrade browser/search/memory-heavy Telegram/DM paths instead of silently triggering tool-heavy workflows on user-facing chat"
     fi
 
     test_start "static_tracked_browser_sandbox_wrapper_normalizes_profile_ownership_and_drops_privileges"

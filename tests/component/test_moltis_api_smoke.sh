@@ -89,6 +89,10 @@ function recordCall(entry) {
 }
 
 if (command === 'sequence') {
+  if (process.env.FAKE_SEQUENCE_JSON) {
+    process.stdout.write(process.env.FAKE_SEQUENCE_JSON);
+    process.exit(0);
+  }
   for (const step of steps) {
     recordCall({
       method: step.method || '',
@@ -265,6 +269,50 @@ run_component_moltis_api_smoke_tests() {
 
     if [[ "$exit_code" -eq 0 ]] || ! grep -Fq "Final reply text mismatch" "$stderr_log"; then
         test_fail "Smoke script must fail closed when the final assistant reply breaks the expected reply contract"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_moltis_api_smoke_classifies_browser_session_contamination_on_timeout"
+    local fake_sequence_json
+    fake_sequence_json="$(cat <<'EOF'
+{"ok":true,"result":{"ok":true,"payload":[{"step":{"method":"sessions.switch","params":{"key":"operator:browser-canary:test"}},"response":{"ok":true,"payload":{"entry":{"key":"operator:browser-canary:test"}}}},{"step":{"method":"chat.clear","params":{}},"response":{"ok":true,"payload":{"ok":true}}},{"step":{"method":"chat.send","params":{"text":"Use browser"}},"response":{"ok":true,"payload":{"ok":true}}}]},"events":[{"event":"tool_call_start","payload":{"tool":"browser","args":{"action":"navigate","session_id":null}}},{"event":"tool_call_end","payload":{"tool":"browser","error":"operation timed out after 60000ms"}},{"event":"tool_call_start","payload":{"tool":"browser","session_id":"browser-027f2350dc1ebb16","args":{"action":"get_title","session_id":"browser-027f2350dc1ebb16"}}}]}
+EOF
+)"
+    set +e
+    MOLTIS_ACTIVE_ROOT="$fake_root" \
+        MOLTIS_URL="http://example.invalid:13131" \
+        TEST_SESSION_KEY="operator:browser-canary:test" \
+        FAKE_SEQUENCE_JSON="$fake_sequence_json" \
+        bash "$SMOKE_SCRIPT" "Use browser." >"$stdout_log" 2>"$stderr_log"
+    local contamination_exit_code=$?
+    set -e
+
+    if [[ "$contamination_exit_code" -eq 0 ]] || \
+       ! grep -Fq "Browser session contamination detected" "$stderr_log" || \
+       ! grep -Fq "browser-027f2350dc1ebb16" "$stderr_log"; then
+        test_fail "Smoke script must classify stale browser session reuse after a timed-out browser step before reporting the generic chat timeout"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_moltis_api_smoke_classifies_browser_pool_exhaustion"
+    fake_sequence_json="$(cat <<'EOF'
+{"ok":true,"result":{"ok":true,"payload":[{"step":{"method":"chat.clear","params":{}},"response":{"ok":true,"payload":{"ok":true}}},{"step":{"method":"chat.send","params":{"text":"Use browser"}},"response":{"ok":true,"payload":{"ok":true}}}]},"events":[{"event":"tool_call_start","payload":{"tool":"browser","args":{"action":"navigate","session_id":null}}},{"event":"tool_call_end","payload":{"tool":"browser","error":"pool exhausted: no browser instances available"}}]}
+EOF
+)"
+    set +e
+    MOLTIS_ACTIVE_ROOT="$fake_root" \
+        MOLTIS_URL="http://example.invalid:13131" \
+        FAKE_SEQUENCE_JSON="$fake_sequence_json" \
+        bash "$SMOKE_SCRIPT" "Use browser." >"$stdout_log" 2>"$stderr_log"
+    local pool_exit_code=$?
+    set -e
+
+    if [[ "$pool_exit_code" -eq 0 ]] || ! grep -Fq "Browser pool exhaustion detected" "$stderr_log"; then
+        test_fail "Smoke script must classify pool exhaustion separately from the generic chat timeout path"
         rm -rf "$fixture_root"
         return
     fi

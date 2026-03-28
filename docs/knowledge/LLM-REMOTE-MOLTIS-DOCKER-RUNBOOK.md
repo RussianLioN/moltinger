@@ -258,6 +258,38 @@ Reason:
 - Shared production with tight browser capacity is vulnerable to false isolation.
 - The operator path must not contaminate or starve user traffic.
 
+If the browser canary still fails after the repo-owned Docker/profile fixes:
+
+1. do not assume the remaining defect is still repo-owned;
+2. inspect whether the failure shape changed to:
+   - `browser connection dead`
+   - stale `browser-*` session reuse
+   - `pool exhausted: no browser instances available`
+3. if yes, treat it as a likely upstream runtime/browser lifecycle gap and open an explicit
+   upstream issue artifact instead of continuing blind local tweaking.
+
+## Official Sandbox Mode Reminder
+
+Official Moltis docs:
+
+- browser sandbox follows the current session sandbox mode;
+- sandboxed browser runs in a Docker container with readiness detection;
+- Dockerized Moltis must use sibling-container routing with `container_host`;
+- Docker-backed sandbox/workspace mounts must use host-visible paths.
+
+Official OpenClaw docs:
+
+- Pairing covers DM approval and device/node approval;
+- sandbox/runtime config changes point toward recreate/reset, not UI Pair as the default fix.
+
+Operationally this means:
+
+1. browser/session incidents should be triaged first as sandbox/runtime lifecycle issues;
+2. `Pair` should be used only when the evidence actually shows missing paired state, login/QR,
+   or explicit session-state drift;
+3. after sandbox/runtime changes, prefer recreate/revalidation and a real browser canary before
+   returning to Telegram user-path testing.
+
 ## Telegram Pairing Triage
 
 Do not jump to “pair again” by default.
@@ -305,9 +337,21 @@ If users see `Activity log`, raw tool names, or partial progress in Telegram:
 1. confirm the live Telegram account config actually contains `stream_mode = "off"`;
 2. confirm the runtime channel state or DB override did not drift from tracked config;
 3. only after that continue with browser/runtime investigation.
+- if the task would require browser/search/memory-heavy multi-step work while the browser path
+  is still unstable, temporarily move the user to the web UI/operator lane instead of silently
+  triggering the same Telegram failure mode again.
 - `starting streaming agent loop provider="openai-codex"`
 - `openai-codex stream_with_tools request model=gpt-5.4`
 - `agent run complete ... response=OK`
+
+## Closure Criteria For The Current Browser/Telegram Incident
+
+Do not close the incident until all of the following are proven on the authoritative target:
+
+1. `t.me/...` browser canary succeeds, not only `docs.moltis.org/...`.
+2. repeated browser runs do not reuse a stale `browser-*` session after failure.
+3. Telegram authoritative UAT shows no `Activity log` / internal progress leakage.
+4. browser death no longer degrades into `PoolExhausted`.
 
 ## Known Failure Patterns And Fixes
 
