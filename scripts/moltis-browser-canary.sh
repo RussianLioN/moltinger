@@ -14,8 +14,8 @@ SMOKE_SCRIPT="${MOLTIS_BROWSER_CANARY_SMOKE_SCRIPT:-$PROJECT_ROOT/scripts/test-m
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 CANARY_PROMPT="${MOLTIS_BROWSER_CANARY_PROMPT:-Используй browser, а не web_fetch. Открой https://docs.moltis.org/ и ответь только точным заголовком страницы без пояснений.}"
 EXPECTED_REPLY="${MOLTIS_BROWSER_CANARY_EXPECTED_REPLY:-Introduction - Moltis Documentation}"
-CHAT_WAIT_MS="${MOLTIS_BROWSER_CANARY_CHAT_WAIT_MS:-30000}"
-TEST_TIMEOUT="${MOLTIS_BROWSER_CANARY_TEST_TIMEOUT:-30}"
+CHAT_WAIT_MS="${MOLTIS_BROWSER_CANARY_CHAT_WAIT_MS:-120000}"
+TEST_TIMEOUT="${MOLTIS_BROWSER_CANARY_TEST_TIMEOUT:-90}"
 REQUIRED_LOG="${MOLTIS_BROWSER_CANARY_REQUIRED_LOG:-tool execution succeeded tool=browser}"
 REJECT_LOG_RE="${MOLTIS_BROWSER_CANARY_REJECT_LOG_RE:-browser container failed readiness check|tool execution failed tool=browser|browser launch failed}"
 

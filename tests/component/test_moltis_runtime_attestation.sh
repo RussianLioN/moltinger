@@ -192,6 +192,7 @@ model = "nomic-embed-text"
 [tools.browser]
 enabled = true
 sandbox_image = "browserless/chrome"
+max_instances = 1
 profile_dir = "$browser_profile_dir"
 persist_profile = false
 container_host = "host.docker.internal"
@@ -204,7 +205,7 @@ EOF
 run_component_moltis_runtime_attestation_tests() {
     start_timer
 
-    local fixture_root fake_bin workspace_root workspace_root_canonical active_root runtime_config_dir runtime_config_dir_canonical runtime_home_dir mounts_file output_json live_sha browser_profile_root browser_profile_dir browser_profile_root_canonical browser_profile_dir_canonical
+    local fixture_root fake_bin workspace_root workspace_root_canonical active_root runtime_config_dir runtime_config_dir_canonical runtime_home_dir mounts_file output_json live_sha browser_profile_root browser_profile_dir browser_profile_root_canonical browser_profile_dir_canonical original_tracked_toml
     fixture_root="$(secure_temp_dir moltis-runtime-attestation)"
     fake_bin="$(create_fake_runtime_bin "$fixture_root")"
     workspace_root="$fixture_root/deploy-root"
@@ -212,9 +213,10 @@ run_component_moltis_runtime_attestation_tests() {
     runtime_config_dir="$fixture_root/runtime-config"
     runtime_home_dir="$fixture_root/runtime-home"
     browser_profile_root="$fixture_root/browser-profile"
-    browser_profile_dir="$browser_profile_root/shared"
+    browser_profile_dir="$browser_profile_root/browserless"
     mounts_file="$fixture_root/mounts.json"
     output_json="$fixture_root/output.json"
+    original_tracked_toml="$fixture_root/original-moltis.toml"
 
     mkdir -p "$runtime_config_dir" "$runtime_home_dir" "$browser_profile_dir"
     chmod 0777 "$browser_profile_root" "$browser_profile_dir"
@@ -224,6 +226,7 @@ run_component_moltis_runtime_attestation_tests() {
     browser_profile_root_canonical="$(cd "$browser_profile_root" && pwd -P)"
     browser_profile_dir_canonical="$(cd "$browser_profile_dir" && pwd -P)"
     live_sha="$(git -C "$workspace_root" rev-parse HEAD)"
+    cp "$workspace_root/config/moltis.toml" "$original_tracked_toml"
     cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
 
     cat >"$workspace_root/.env" <<EOF
@@ -289,19 +292,56 @@ EOF
        [[ "$(jq -r '.details.browser_enabled' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.browser_sandbox_image' "$output_json")" != "browserless/chrome" ]] || \
        [[ "$(jq -r '.details.browser_container_host' "$output_json")" != "host.docker.internal" ]] || \
+       [[ "$(jq -r '.details.browser_max_instances' "$output_json")" != "1" ]] || \
        [[ "$(jq -r '.details.browser_profile_dir' "$output_json")" != "$browser_profile_dir_canonical" ]] || \
        [[ "$(jq -r '.details.browser_profile_root' "$output_json")" != "$browser_profile_root_canonical" ]] || \
        [[ "$(jq -r '.details.browser_profile_source' "$output_json")" != "$browser_profile_root_canonical" ]] || \
        [[ "$(jq -r '.details.browser_profile_rw' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.browser_persist_profile' "$output_json")" != "false" ]] || \
        [[ "$(jq -r '.details.browser_profile_root_writable' "$output_json")" != "true" ]] || \
-       [[ "$(jq -r '.details.browser_profile_shared_writable' "$output_json")" != "true" ]] || \
+       [[ "$(jq -r '.details.browser_profile_dir_writable' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.docker_socket_gid' "$output_json")" != "999" ]] || \
        [[ "$(jq -r '.details.host_docker_internal_mapped' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "status" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    test_start "component_runtime_attestation_fails_when_non_persistent_browser_profile_allows_concurrency"
+    python3 - "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml" <<'PY'
+from pathlib import Path
+import sys
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
+    text = path.read_text()
+    path.write_text(text.replace("max_instances = 1", "max_instances = 3", 1))
+PY
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" >"$output_json" 2>"$fixture_root/stderr-browser-concurrency.log"
+    exit_code=$?
+    set -e
+    cp "$original_tracked_toml" "$workspace_root/config/moltis.toml"
+    cp "$original_tracked_toml" "$runtime_config_dir/moltis.toml"
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "BROWSER_PROFILE_CONCURRENCY_MISMATCH")' "$output_json" >/dev/null 2>&1; then
+        test_fail "Runtime attestation should fail when a non-persistent browser profile allows concurrent instances"
         rm -rf "$fixture_root"
         return
     fi

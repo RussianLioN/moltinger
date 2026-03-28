@@ -476,7 +476,7 @@ headless = true                   # Run without visible window (true = backgroun
 viewport_width = 2560             # Default viewport width in pixels (QHD for tech users)
 viewport_height = 1440            # Default viewport height in pixels
 device_scale_factor = 2.0         # HiDPI/Retina scaling (2.0 = Retina, 1.0 = standard)
-max_instances = 3                 # Maximum concurrent browser instances
+max_instances = 1                 # Non-persistent browserless profiles must stay single-instance to avoid Chrome SingletonLock contention
 idle_timeout_secs = 300           # Close idle browsers after this many seconds (5 min)
 navigation_timeout_ms = 30000     # Page load timeout in milliseconds (30 sec)
 # chrome_path = "/path/to/chrome" # Custom Chrome/Chromium binary path (auto-detected)
@@ -491,8 +491,8 @@ allowed_domains = []              # Empty = all domains allowed
 memory_limit_percent = 90
 chrome_args = []
 sandbox_image = "browserless/chrome"
-profile_dir = "/tmp/moltis-browser-profile/shared"  # Host-visible path shared with sibling browser sandboxes so Chrome profile state is writable
-persist_profile = false           # Keep browser profiles ephemeral in Docker mode; only the shared writable path contract persists
+profile_dir = "/tmp/moltis-browser-profile/browserless"  # Dedicated host-visible profile dir for sibling browser sandboxes; do not reuse a shared multi-instance Chrome profile
+persist_profile = false           # Keep browser profiles ephemeral in Docker mode; deploy will recreate this dir so stale host-owned state cannot poison browser startup
 container_host = "host.docker.internal"  # Moltis runs in Docker; sibling browser container must be reached via host gateway, not 127.0.0.1
 # allowed_domains = [
 #     "docs.example.com",         # Exact match

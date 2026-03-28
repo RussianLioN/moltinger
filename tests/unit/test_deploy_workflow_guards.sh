@@ -270,13 +270,15 @@ test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox() {
     fi
 
     if ! grep -Fq 'DOCKER_SOCKET_GID=$docker_socket_gid' "$PROJECT_ROOT/scripts/deploy.sh" || \
-       ! grep -Fq 'profile_dir = "/tmp/moltis-browser-profile/shared"' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'profile_dir = "/tmp/moltis-browser-profile/browserless"' "$PROJECT_ROOT/config/moltis.toml" || \
        ! grep -Fq 'persist_profile = false' "$PROJECT_ROOT/config/moltis.toml" || \
+       ! grep -Fq 'max_instances = 1' "$PROJECT_ROOT/config/moltis.toml" || \
        ! grep -Fq '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'host.docker.internal:host-gateway' "$PROJECT_ROOT/docker-compose.prod.yml" || \
        ! grep -Fq 'prepare_moltis_browser_profile_dir' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'rm -rf "$browser_profile_dir"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'container_host = "host.docker.internal"' "$PROJECT_ROOT/config/moltis.toml"; then
-        test_fail "Browser sandbox access requires the tracked shared profile_dir, explicit non-persistent profile intent, deploy-time permission prep, live socket GID injection, and host.docker.internal exposure for sibling browser containers"
+        test_fail "Browser sandbox access requires the tracked dedicated profile_dir, explicit non-persistent profile intent, single-instance browser concurrency, deploy-time profile cleanup, live socket GID injection, and host.docker.internal exposure for sibling browser containers"
         return
     fi
 
