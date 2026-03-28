@@ -20,7 +20,7 @@ const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIE
 const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 const INTERNAL_TELEMETRY_RE =
-  /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b)/iu;
+  /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b|mcp__[\p{L}\p{N}_:.-]+)/iu;
 const PROGRESS_PREFACE_RE =
   /^(?:сначала(?:\s|$)|сперва(?:\s|$)|сейчас(?:\s|$)|для начала(?:\s|$)|первым делом(?:\s|$)|я\s+(?:сначала\s+)?(?:проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)(?:\s|$)|(?:проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)(?:\s|$)|let me(?:\s|$)|i(?:'|’)ll(?:\s|$)|first[, ]+i(?:'|’)ll(?:\s|$)|checking(?:\s|$)|opening(?:\s|$)|looking up(?:\s|$))/iu;
 const INTERIM_PROGRESS_RE =

@@ -87,7 +87,7 @@ if [[ "$mode" == "activity_log_emoji_pass" ]]; then
   "ok": true,
   "status": "pass",
   "stage": "wait_reply",
-  "reply_text": "📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills -maxdepth 2 -type...` • 🧠 Searching memory...",
+  "reply_text": "📋 Activity log • 🗺️ mcp__tavily__tavily_map • 🧠 Searching memory...",
   "reply_mid": 42,
   "sent_mid": 41,
   "checks": {
@@ -437,7 +437,7 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must fail when /status reply omits the canonical model contract"
     else
         if jq -e '.failure.code == "semantic_status_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1 \
-            && jq -e '.diagnostic_context.semantic_review.expected_model == "openai-codex::gpt-5.4"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
+            && jq -e '.diagnostic_context.semantic_review.expected_model == "custom-zai-telegram-safe::glm-5"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
         then
             test_pass
         else

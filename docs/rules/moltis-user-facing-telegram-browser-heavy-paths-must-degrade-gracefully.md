@@ -15,7 +15,10 @@ Until browser/session closure is proven on the authoritative target:
    web UI/operator lane when the task would require browser automation or long tool chains.
 3. Treat `Activity log`, raw tool names, raw shell commands, or progress traces in Telegram as
    failures, not as acceptable degraded UX.
-4. Do not recommend `Pair` as the default fix unless the evidence actually shows missing session
+4. Pin real user-facing Telegram accounts to a dedicated text-only provider lane
+   (`model_provider` + provider `tool_mode = "off"`) instead of letting them inherit the shared
+   tool-capable operator/runtime surface.
+5. Do not recommend `Pair` as the default fix unless the evidence actually shows missing session
    state, QR/login prompt, or other pairing/auth drift.
 
 ## Why

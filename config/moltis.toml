@@ -222,6 +222,18 @@ base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
 alias = "zai"
 models = ["glm-5"]                                  # Keep GLM-5 as third step in chain
 
+# ── Telegram-safe Z.ai lane ───────────────────────────────────────────────────
+# Keep the user-facing Telegram bot on a text-only provider surface so long
+# tool-heavy runs cannot spill browser/search activity into DM replies.
+[providers.custom-zai-telegram-safe]
+enabled = true
+api_key = "${GLM_API_KEY}"
+model = "glm-5"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+alias = "custom-zai-telegram-safe"
+models = ["glm-5"]
+tool_mode = "off"
+
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
 [providers.glm-coding]
@@ -476,6 +488,8 @@ enabled = true                    # Keep Telegram integration explicitly enabled
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
+model = "glm-5"            # User-facing Telegram must stay on the dedicated text-only lane.
+model_provider = "custom-zai-telegram-safe"
 stream_mode = "off"        # Official changelog adds Telegram reply streaming; pin classic final-message delivery so user chats never receive partial/tool-progress output
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
 # webhook_url = "${TELEGRAM_WEBHOOK_URL}"
