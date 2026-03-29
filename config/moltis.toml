@@ -817,6 +817,10 @@ rate_limit_window_secs = 60
 # MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 # MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX = "codex-advisory"
 
+# Keep the matching project-local hook package under
+# `/.moltis/hooks/telegram-safe-llm-guard/HOOK.md` as the primary discovery path.
+# Moltis 0.10.18 does not reliably register this tracked config-defined hook in
+# live Telegram runtime, so the workspace hook remains authoritative today.
 [[hooks.hooks]]
 name = "telegram-safe-llm-guard"
 command = "./scripts/telegram-safe-llm-guard.sh"

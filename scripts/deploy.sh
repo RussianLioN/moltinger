@@ -492,6 +492,18 @@ list_repo_skill_names() {
     shopt -u nullglob
 }
 
+list_repo_hook_names() {
+    local hooks_dir="$PROJECT_ROOT/.moltis/hooks"
+    local hook_dir
+    shopt -s nullglob
+    for hook_dir in "$hooks_dir"/*; do
+        [[ -d "$hook_dir" ]] || continue
+        [[ -f "$hook_dir/HOOK.md" ]] || continue
+        basename "$hook_dir"
+    done | LC_ALL=C sort
+    shopt -u nullglob
+}
+
 sync_moltis_repo_skills_into_runtime() {
     local sync_script="/server/scripts/moltis-repo-skills-sync.sh"
 
@@ -619,6 +631,44 @@ verify_moltis_repo_skills_discovery() {
     if verification_failure_recorded; then
         return 1
     fi
+
+    return 0
+}
+
+verify_moltis_project_hook_discovery() {
+    local hook_name hooks_json
+    local -a repo_hook_names=()
+
+    while IFS= read -r hook_name; do
+        [[ -n "$hook_name" ]] || continue
+        repo_hook_names+=("$hook_name")
+    done < <(list_repo_hook_names)
+
+    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    for hook_name in "${repo_hook_names[@]}"; do
+        if ! docker exec "$TARGET_CONTAINER" sh -lc "
+            test -f '/server/.moltis/hooks/$hook_name/HOOK.md'
+        " >/dev/null 2>&1; then
+            record_verification_failure "Moltis runtime contract mismatch: project-local hook package is not visible in /server/.moltis/hooks for $hook_name"
+        fi
+    done
+
+    hooks_json="$(docker exec "$TARGET_CONTAINER" moltis hooks list --json 2>/dev/null || true)"
+    if [[ -z "$hooks_json" ]]; then
+        record_verification_failure "Moltis runtime contract mismatch: failed to query live hook registration via 'moltis hooks list --json'"
+        return 1
+    fi
+
+    for hook_name in "${repo_hook_names[@]}"; do
+        if ! jq -e --arg hook_name "$hook_name" '
+            .. | objects | .name? | select(type == "string" and . == $hook_name)
+        ' <<<"$hooks_json" >/dev/null 2>&1; then
+            record_verification_failure "Moltis runtime contract mismatch: project-local hook '$hook_name' is not registered in the live runtime hook registry"
+        fi
+    done
 
     return 0
 }
@@ -1607,6 +1657,7 @@ verify_deployment() {
         fi
 
         verify_moltis_repo_skills_discovery || true
+        verify_moltis_project_hook_discovery || true
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             sock_gid="$(stat -c %g /var/run/docker.sock)" &&

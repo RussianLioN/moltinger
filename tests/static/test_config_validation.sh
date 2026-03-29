@@ -45,6 +45,9 @@ SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
 PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
+TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
+TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
+TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -236,6 +239,28 @@ PY
         test_pass
     else
         test_fail "Tracked Moltis config must register a Telegram-safe LLM guard hook so user-facing Telegram replies cannot drift into tool fallback or activity-log leakage"
+    fi
+
+    test_start "static_telegram_safe_lane_ships_project_local_hook_package"
+    if [[ -f "$TELEGRAM_SAFE_HOOK_MANIFEST" ]] && \
+       rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'events = ["AfterLLMCall"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'command = "/server/scripts/telegram-safe-llm-guard.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       ! rg -Fq 'bins = ["jq"]' "$TELEGRAM_SAFE_HOOK_MANIFEST"; then
+        test_pass
+    else
+        test_fail "Tracked repo must ship a project-local Telegram-safe hook package under /.moltis/hooks without a jq runtime dependency"
+    fi
+
+    test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_live_registration"
+    if [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
+       ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
+       rg -Fq 'verify_moltis_project_hook_discovery' "$DEPLOY_SCRIPT" && \
+       rg -Fq ".moltis/hooks/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
+       rg -Fq "moltis hooks list --json" "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Telegram-safe hook runtime must stay shell-only and deploy verification must attest project-local hook registration"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"

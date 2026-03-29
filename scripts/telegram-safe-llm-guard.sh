@@ -6,117 +6,158 @@ if [[ -z "${payload:-}" ]]; then
     exit 0
 fi
 
-if ! jq -e '.' >/dev/null 2>&1 <<<"$payload"; then
-    exit 0
-fi
+payload_flat="$(
+    printf '%s' "$payload" \
+        | tr '\r\n' '  ' \
+        | sed 's/[[:space:]][[:space:]]*/ /g'
+)"
 
-event="$(jq -r '.event // empty' <<<"$payload")"
-model="$(jq -r '.data.model // .model // empty' <<<"$payload")"
-provider="$(jq -r '.data.provider // .provider // empty' <<<"$payload")"
-session_key="$(jq -r '.data.session_key // .session_key // .session_id // "current-session"' <<<"$payload")"
+extract_first_string() {
+    local key="$1"
+    local match
+
+    match="$(printf '%s' "$payload_flat" | grep -oE "\"${key}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -n1 || true)"
+    if [[ -z "$match" ]]; then
+        return 1
+    fi
+
+    printf '%s' "$match" \
+        | sed -E 's/^"[^"]*"[[:space:]]*:[[:space:]]*"//; s/"$//'
+}
+
+extract_first_number() {
+    local key="$1"
+    local match
+
+    match="$(printf '%s' "$payload_flat" | grep -oE "\"${key}\"[[:space:]]*:[[:space:]]*[0-9]+" | head -n1 || true)"
+    if [[ -z "$match" ]]; then
+        return 1
+    fi
+
+    printf '%s' "$match" \
+        | sed -E 's/^"[^"]*"[[:space:]]*:[[:space:]]*//'
+}
+
+json_escape() {
+    printf '%s' "$1" | awk '
+        BEGIN {
+            ORS = ""
+        }
+        {
+            gsub(/\\/, "\\\\")
+            gsub(/"/, "\\\"")
+            gsub(/\t/, "\\t")
+            gsub(/\r/, "\\r")
+            if (NR > 1) {
+                printf "\\n"
+            }
+            printf "%s", $0
+        }
+    '
+}
+
+json_string_field() {
+    local key="$1"
+    local value="$2"
+    printf '"%s":"%s"' "$key" "$(json_escape "$value")"
+}
+
+json_number_field() {
+    local key="$1"
+    local value="$2"
+    printf '"%s":%s' "$key" "$value"
+}
+
+append_optional_string_field() {
+    local key="$1"
+    local value="${2:-}"
+    if [[ -n "$value" ]]; then
+        printf ',%s' "$(json_string_field "$key" "$value")"
+    fi
+}
+
+append_optional_number_field() {
+    local key="$1"
+    local value="${2:-}"
+    if [[ -n "$value" ]]; then
+        printf ',%s' "$(json_number_field "$key" "$value")"
+    fi
+}
+
+emit_modified_after_llm() {
+    local text="$1"
+    local session_key provider model finish_reason input_tokens output_tokens reasoning_tokens
+
+    session_key="$(extract_first_string session_key || true)"
+    if [[ -z "$session_key" ]]; then
+        session_key="$(extract_first_string session_id || true)"
+    fi
+    provider="$(extract_first_string provider || true)"
+    model="$(extract_first_string model || true)"
+    finish_reason="$(extract_first_string finish_reason || true)"
+    input_tokens="$(extract_first_number input_tokens || true)"
+    output_tokens="$(extract_first_number output_tokens || true)"
+    reasoning_tokens="$(extract_first_number reasoning_tokens || true)"
+
+    printf '{"action":"modify","data":{%s%s%s%s%s%s%s,"text":"%s","tool_calls":[]}}\n' \
+        "$(json_string_field session_key "${session_key:-current-session}")" \
+        "$(append_optional_string_field provider "$provider")" \
+        "$(append_optional_string_field model "$model")" \
+        "$(append_optional_string_field finish_reason "$finish_reason")" \
+        "$(append_optional_number_field input_tokens "$input_tokens")" \
+        "$(append_optional_number_field output_tokens "$output_tokens")" \
+        "$(append_optional_number_field reasoning_tokens "$reasoning_tokens")" \
+        "$(json_escape "$text")"
+}
+
+event="$(extract_first_string event || true)"
+model="$(extract_first_string model || true)"
+provider="$(extract_first_string provider || true)"
 
 is_telegram_safe_lane=false
-case "$model" in
+case "${model:-}" in
     custom-zai-telegram-safe::*)
         is_telegram_safe_lane=true
         ;;
 esac
-
-if [[ "$provider" == "custom-zai-telegram-safe" || "$provider" == "zai-telegram-safe" ]]; then
+if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-telegram-safe" ]]; then
     is_telegram_safe_lane=true
 fi
 
-if [[ "$is_telegram_safe_lane" != true ]]; then
+if [[ "$event" != "AfterLLMCall" || "$is_telegram_safe_lane" != true ]]; then
     exit 0
 fi
 
-extract_last_user_text() {
-    jq -r '
-        def content_to_text:
-            if . == null then ""
-            elif type == "string" then .
-            elif type == "array" then
-                [ .[]?
-                  | if type == "string" then .
-                    elif type == "object" then (.text // .input_text // .content // "")
-                    else ""
-                    end
-                ] | join("\n")
-            elif type == "object" then (.text // .input_text // .content // "")
-            else ""
-            end;
-        (.data.messages // .messages // []) as $messages
-        | [ $messages[]? | select(.role == "user") | (.content | content_to_text) ]
-        | last // ""
-    ' <<<"$payload"
-}
+tool_calls_present=false
+if printf '%s' "$payload_flat" | grep -Eq '"tool_calls"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
+    tool_calls_present=true
+fi
 
-emit_before_llm_guard() {
-    local last_user_text normalized guard
-    last_user_text="$(extract_last_user_text)"
-    normalized="$(printf '%s' "$last_user_text" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+has_internal_telemetry=false
+if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call"; then
+    has_internal_telemetry=true
+fi
 
-    if [[ "$normalized" == "/status" ]]; then
-        guard=$'Telegram-safe status contract:\n- Never call or simulate tools.\n- Never output Activity log, tool names, raw commands, or internal steps.\n- For the literal command /status reply with exactly these plain-text lines and nothing else:\nСтатус: online\nСессия: `'"$session_key"$'`\nМодель: '"$model"$'\nРежим: telegram-safe\n- Do not inspect processes, cron, tmux, skills, nodes, filesystem, or environment.'
-    else
-        guard=$'Telegram-safe response contract:\n- Never call or simulate tools, even if tool schemas are visible.\n- Never output Activity log, tool names, raw commands, or internal steps.\n- Answer directly from current conversation context only.\n- If the request would require browser/search/exec/cron/process or other multi-step tools, say that Telegram-safe mode cannot run that workflow and suggest continuing in the web UI or operator session.'
-    fi
+looks_like_status=false
+if printf '%s' "$payload_flat" | grep -Eiq 'статус|status|режим:|модель:|model:|провайдер:|provider:|online'; then
+    looks_like_status=true
+fi
 
-    jq -c --arg guard "$guard" '
-        (.data // {}) as $data
-        | ($data.messages // []) as $messages
-        | {action:"modify", data:($data + {messages:($messages + [{role:"system", content:$guard}])})}
-    ' <<<"$payload"
-}
+mentions_wrong_model=false
+if printf '%s' "$payload_flat" | grep -Fq 'zai::glm-5'; then
+    mentions_wrong_model=true
+fi
 
-emit_after_llm_guard() {
-    local text tool_calls_count
-    text="$(jq -r '.data.text // .text // ""' <<<"$payload")"
-    tool_calls_count="$(jq -r '((.data.tool_calls // .tool_calls // []) | length)' <<<"$payload")"
+if [[ "$looks_like_status" == true && ( "$tool_calls_present" == true || "$has_internal_telemetry" == true || "$mentions_wrong_model" == true ) ]]; then
+    canonical_status=$'Статус: online\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
+    emit_modified_after_llm "$canonical_status"
+    exit 0
+fi
 
-    local has_activity_log=false
-    if grep -Eiq 'activity log|using glm-5|tool call|process|cron|tmux|list failed:' <<<"$text"; then
-        has_activity_log=true
-    fi
-
-    local looks_like_status=false
-    if grep -Eiq 'статус|сессия|параметр|всё работает|режим: telegram|песочниц|активност' <<<"$text"; then
-        looks_like_status=true
-    fi
-
-    local mentions_wrong_model=false
-    if grep -Fq 'zai::glm-5' <<<"$text"; then
-        mentions_wrong_model=true
-    fi
-
-    if [[ "$looks_like_status" == true && ( "$tool_calls_count" != "0" || "$has_activity_log" == true || "$mentions_wrong_model" == true ) ]]; then
-        local status_text
-        status_text=$'Статус: online\nСессия: `'"$session_key"$'`\nМодель: '"$model"$'\nРежим: telegram-safe'
-        jq -c --arg text "$status_text" '
-            (.data // {}) as $data
-            | {action:"modify", data:($data + {text:$text, tool_calls:[]})}
-        ' <<<"$payload"
-        exit 0
-    fi
-
-    if [[ "$tool_calls_count" != "0" || "$has_activity_log" == true ]]; then
-        local fallback_text
-        fallback_text='В Telegram-safe режиме я не выполняю многошаговые инструменты и не показываю внутренние логи. Если нужен browser/search/cron/process workflow, продолжим в web UI или операторской сессии.'
-        jq -c --arg text "$fallback_text" '
-            (.data // {}) as $data
-            | {action:"modify", data:($data + {text:$text, tool_calls:[]})}
-        ' <<<"$payload"
-        exit 0
-    fi
-}
-
-case "$event" in
-    BeforeLLMCall)
-        emit_before_llm_guard
-        ;;
-    AfterLLMCall)
-        emit_after_llm_guard
-        ;;
-esac
+if [[ "$tool_calls_present" == true || "$has_internal_telemetry" == true ]]; then
+    fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
+    emit_modified_after_llm "$fallback_text"
+    exit 0
+fi
 
 exit 0

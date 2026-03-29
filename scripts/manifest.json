@@ -1344,11 +1344,10 @@
     },
     "telegram-safe-llm-guard.sh": {
       "version": "1.0.0",
-      "description": "Hook guard that forces deterministic, no-tool Telegram-safe replies and suppresses activity-log leakage",
+      "description": "Shell-only hook guard that forces deterministic, no-tool Telegram-safe replies and suppresses activity-log leakage",
       "entrypoint": true,
       "requires": [
         "bash",
-        "jq",
         "grep",
         "sed",
         "tr"
