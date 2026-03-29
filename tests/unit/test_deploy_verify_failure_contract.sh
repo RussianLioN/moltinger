@@ -225,11 +225,119 @@ EOF
     test_pass
 }
 
+test_moltis_hook_verification_strips_cli_log_preamble_before_jq() {
+    test_start "Moltis hook verify path should ignore CLI log preamble before parsing JSON"
+
+    local tmp_dir deploy_lib scenario result_file trace_file
+    tmp_dir="$(mktemp -d)"
+    deploy_lib="$(prepare_deploy_library "$tmp_dir")"
+    scenario="$tmp_dir/scenario.sh"
+    result_file="$tmp_dir/result.txt"
+    trace_file="$tmp_dir/trace.log"
+
+    cat >"$scenario" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$deploy_lib"
+
+RESULT_FILE="$result_file"
+TRACE_FILE="$trace_file"
+
+log_info() { :; }
+log_warn() { :; }
+log_error() { :; }
+log_success() { :; }
+
+sync_moltis_repo_hooks_into_runtime() {
+    printf 'sync-hooks\n' >>"\$TRACE_FILE"
+    return 0
+}
+
+list_repo_hook_names() {
+    printf 'telegram-safe-llm-guard\n'
+}
+
+docker() {
+    if [[ "\$1" != "exec" ]]; then
+        echo "unexpected docker invocation: \$*" >&2
+        return 99
+    fi
+
+    if [[ "\$*" == *"test -f"* ]]; then
+        printf 'hook-file-check\n' >>"\$TRACE_FILE"
+        return 0
+    fi
+
+    if [[ "\$*" == *"moltis hooks list --json"* ]]; then
+        printf 'hook-list\n' >>"\$TRACE_FILE"
+        cat <<'JSON'
+\u001b[2m2026-03-29T04:09:37.984155Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mmoltis\u001b[0m: moltis starting version="0.10.18"
+[
+  {
+    "name": "telegram-safe-llm-guard",
+    "source": "project"
+  }
+]
+JSON
+        return 0
+    fi
+
+    echo "unexpected docker exec invocation: \$*" >&2
+    return 98
+}
+
+TARGET_CONTAINER="moltis"
+VERIFY_FAILURE_REASON=""
+
+if verify_moltis_repo_hook_discovery; then
+    status=0
+else
+    status=\$?
+fi
+
+cat >"\$RESULT_FILE" <<RESULT
+status=\$status
+reason=\${VERIFY_FAILURE_REASON:-}
+trace=\$(tr '\n' ',' <"\$TRACE_FILE" | sed 's/,\$//')
+RESULT
+EOF
+    chmod +x "$scenario"
+
+    if ! bash "$scenario"; then
+        test_fail "Hook verify path aborted instead of handling the CLI log preamble"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fqx 'status=0' "$result_file"; then
+        test_fail "Hook verify path must accept hook registry JSON even when the CLI prefixes it with an INFO log line"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fqx 'reason=' "$result_file"; then
+        test_fail "Hook verify path must leave VERIFY_FAILURE_REASON empty on successful JSON extraction"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fqx 'trace=sync-hooks,hook-file-check,hook-list' "$result_file"; then
+        test_fail "Hook verify path must still perform sync and runtime file checks before parsing the sanitized hook registry JSON"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
     test_verify_deployment_records_failure_without_aborting_shell
     test_moltis_skill_verification_failure_does_not_skip_later_contract_checks
+    test_moltis_hook_verification_strips_cli_log_preamble_before_jq
 
     generate_report
 }

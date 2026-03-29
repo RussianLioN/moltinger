@@ -484,6 +484,16 @@ read_toml_key() {
     ' "$file_path"
 }
 
+extract_json_payload() {
+    local raw_output="$1"
+
+    awk '
+        BEGIN { capture = 0 }
+        /^[[:space:]]*[\[{]/ { capture = 1 }
+        capture { print }
+    ' <<<"$raw_output"
+}
+
 list_repo_skill_names() {
     local skills_dir="$PROJECT_ROOT/skills"
     local skill_dir
@@ -677,7 +687,7 @@ verify_moltis_repo_skills_discovery() {
 }
 
 verify_moltis_repo_hook_discovery() {
-    local hook_name hooks_json
+    local hook_name hooks_json hooks_output
     local -a repo_hook_names=()
 
     while IFS= read -r hook_name; do
@@ -699,7 +709,8 @@ verify_moltis_repo_hook_discovery() {
         fi
     done
 
-    hooks_json="$(docker exec "$TARGET_CONTAINER" moltis hooks list --json 2>/dev/null || true)"
+    hooks_output="$(docker exec "$TARGET_CONTAINER" moltis hooks list --json 2>/dev/null || true)"
+    hooks_json="$(extract_json_payload "$hooks_output")"
     if [[ -z "$hooks_json" ]]; then
         record_verification_failure "Moltis runtime contract mismatch: failed to query live hook registration via 'moltis hooks list --json'"
         return 1
