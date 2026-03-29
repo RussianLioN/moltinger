@@ -815,6 +815,12 @@ rate_limit_window_secs = 60
 # MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 # MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX = "codex-advisory"
 
+[[hooks.hooks]]
+name = "telegram-safe-llm-guard"
+command = "./scripts/telegram-safe-llm-guard.sh"
+events = ["BeforeLLMCall", "AfterLLMCall"]
+timeout = 5
+
 # [hooks]
 # [[hooks.hooks]]
 # name = "my-hook"                # Hook name (for logging)

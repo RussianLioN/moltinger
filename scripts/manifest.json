@@ -1342,6 +1342,22 @@
         "TELEGRAM_API_HASH"
       ]
     },
+    "telegram-safe-llm-guard.sh": {
+      "version": "1.0.0",
+      "description": "Hook guard that forces deterministic, no-tool Telegram-safe replies and suppresses activity-log leakage",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "grep",
+        "sed",
+        "tr"
+      ],
+      "provides": [
+        "telegram-safe-llm-guard",
+        "moltis-hook"
+      ]
+    },
     "telegram-web-user-login.mjs": {
       "version": "1.0.0",
       "description": "One-time Telegram Web user login and storage-state save",

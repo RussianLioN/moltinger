@@ -227,6 +227,15 @@ PY
         test_fail "User-facing Telegram must pin a dedicated text-only provider lane so DM traffic cannot inherit the shared tool-capable runtime surface"
     fi
 
+    test_start "static_telegram_safe_lane_registers_llm_guard_hook"
+    if rg -Fq 'name = "telegram-safe-llm-guard"' "$TOML_CONFIG" && \
+       rg -Fq 'command = "./scripts/telegram-safe-llm-guard.sh"' "$TOML_CONFIG" && \
+       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall"]' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Tracked Moltis config must register a Telegram-safe LLM guard hook so user-facing Telegram replies cannot drift into tool fallback or activity-log leakage"
+    fi
+
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
     if rg -Fq 'container_host = "host.docker.internal"' "$TOML_CONFIG"; then
         test_pass
