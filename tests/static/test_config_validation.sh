@@ -346,11 +346,24 @@ PY
     fi
 
     test_start "static_moltis_identity_degrades_tool_heavy_telegram_paths"
-    if rg -Fq 'В пользовательских Telegram/DM чатах по умолчанию избегай browser, Tavily/web-search, memory_search и других многошаговых tool-heavy workflow' "$TOML_CONFIG" && \
+    if rg -Fq 'В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты' "$TOML_CONFIG" && \
        rg -Fq 'Если задача требует интерактивного браузера, цепочки tool calls или длительной диагностики' "$TOML_CONFIG"; then
         test_pass
     else
         test_fail "Primary Moltis identity must explicitly degrade browser/search/memory-heavy Telegram/DM paths instead of silently triggering tool-heavy workflows on user-facing chat"
+    fi
+
+    test_start "static_moltis_identity_hard_disables_tools_for_telegram_dm_status"
+    if rg -Fq 'В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты' "$TOML_CONFIG" && \
+       rg -Fq 'Если Telegram/DM запрос требует внешнего исследования, чтения курса или документации целиком' "$TOML_CONFIG" && \
+       rg -Fq 'Для команды `/status` в Telegram/DM никогда не используй инструменты' "$TOML_CONFIG" && \
+       rg -Fq 'Модель: custom-zai-telegram-safe::glm-5' "$TOML_CONFIG" && \
+       rg -Fq 'Провайдер: custom-zai-telegram-safe' "$TOML_CONFIG" && \
+       rg -Fq 'Режим: safe-text' "$TOML_CONFIG" && \
+       rg -Fq 'не подставляй устаревшее `zai::glm-5`' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity must hard-disable tool use for Telegram DM status/long-research paths and require the canonical Telegram-safe model contract instead of stale provider/model guesses"
     fi
 
     test_start "static_tracked_browser_sandbox_wrapper_normalizes_profile_ownership_and_drops_privileges"

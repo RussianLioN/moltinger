@@ -18,7 +18,11 @@ Until browser/session closure is proven on the authoritative target:
 4. Pin real user-facing Telegram accounts to a dedicated text-only provider lane
    (`model_provider` + provider `tool_mode = "off"`) instead of letting them inherit the shared
    tool-capable operator/runtime surface.
-5. Do not recommend `Pair` as the default fix unless the evidence actually shows missing session
+5. Treat provider `tool_mode = "off"` as necessary but not sufficient. Verify with authoritative
+   UAT and session artifacts that the live Telegram turn did not execute tools anyway.
+6. For Telegram `/status`, require a deterministic short text reply with the canonical
+   Telegram-safe model contract and no tool calls.
+7. Do not recommend `Pair` as the default fix unless the evidence actually shows missing session
    state, QR/login prompt, or other pairing/auth drift.
 
 ## Why
