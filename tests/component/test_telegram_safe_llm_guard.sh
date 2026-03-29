@@ -227,6 +227,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must suppress the exact live friendly doc-search wording that still leaks internal planning without raw tool names"
     fi
 
+    test_start "component_after_llm_guard_blocks_exact_live_named_doc_study_phrase_from_probe"
+    local live_named_doc_study_output
+    live_named_doc_study_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsy2","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_named_doc_study_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_named_doc_study_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$live_named_doc_study_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must suppress the exact live named doc-study wording captured by the authoritative Telegram probe"
+    fi
+
     test_start "component_after_llm_guard_blocks_exact_live_codex_update_reading_phrase_from_audit"
     local live_codex_update_reading_output
     live_codex_update_reading_output="$(
@@ -316,6 +330,23 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "MessageSending guard must strip the exact live friendly doc-search wording and preserve routing fields required for Telegram delivery"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_exact_live_named_doc_study_phrase_from_probe"
+    local message_sending_named_doc_study_output
+    message_sending_named_doc_study_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","session_id":"session:vwx4","data":{"account_id":"moltis-bot","to":"987655","reply_to_message_id":779,"text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_named_doc_study_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_named_doc_study_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_named_doc_study_output" && \
+       jq -e '.data.to == "987655"' >/dev/null 2>&1 <<<"$message_sending_named_doc_study_output" && \
+       jq -e '.data.reply_to_message_id == 779' >/dev/null 2>&1 <<<"$message_sending_named_doc_study_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_named_doc_study_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must strip the exact live named doc-study wording captured by the authoritative Telegram probe"
     fi
 
     test_start "component_message_sending_guard_is_noop_for_plain_text_without_strict_delivery_log_markers"

@@ -283,6 +283,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_reading_plan_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Давай наконец сделаю это! Читаю существующий навык codex-update как пример и найду документацию:",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "pre_send_internal_planning_pass" ]]; then
   cat <<'JSON'
 {
@@ -738,6 +770,24 @@ run_component_telegram_remote_uat_contract_tests() {
 	            test_pass
 	        else
 	            test_fail "Wrapper must surface the exact live friendly doc-search wording as a failed authoritative outcome"
+	        fi
+	    fi
+
+	    test_start "component_telegram_remote_uat_fails_exact_live_codex_update_reading_phrase_even_if_helper_passes"
+	    if TELEGRAM_WEB_STUB_MODE=codex_update_reading_plan_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "Изучи документацию Moltis" \
+	        --output "$TEST_TMPDIR/result-codex-update-reading-plan.json" \
+	        >/dev/null 2>&1
+	    then
+	        test_fail "Authoritative wrapper must fail when the final reply uses the exact live codex-update reading phrase instead of a user-facing answer"
+	    else
+	        if jq -e '.failure.code == "semantic_internal_planning_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-reading-plan.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Wrapper must surface the exact live codex-update reading phrase as a failed authoritative outcome"
 	        fi
 	    fi
 
