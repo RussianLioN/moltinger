@@ -205,7 +205,7 @@ conditions = [
     safe_lane.get('alias') == 'zai-telegram-safe',
     safe_lane.get('api_key') == default_zai.get('api_key'),
     safe_lane.get('base_url') == default_zai.get('base_url'),
-    telegram.get('model') == 'glm-5',
+    telegram.get('model') == 'custom-zai-telegram-safe::glm-5',
     telegram.get('model_provider') == 'custom-zai-telegram-safe',
 ]
 
@@ -316,7 +316,7 @@ PY
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
-    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \

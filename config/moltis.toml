@@ -488,7 +488,7 @@ enabled = true                    # Keep Telegram integration explicitly enabled
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
-model = "glm-5"            # User-facing Telegram must stay on the dedicated text-only lane.
+model = "custom-zai-telegram-safe::glm-5"  # Telegram channel sessions resolve the explicit runtime model ID more reliably than a bare model name.
 model_provider = "custom-zai-telegram-safe"
 stream_mode = "off"        # Official changelog adds Telegram reply streaming; pin classic final-message delivery so user chats never receive partial/tool-progress output
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).

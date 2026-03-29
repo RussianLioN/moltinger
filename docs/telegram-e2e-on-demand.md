@@ -122,7 +122,7 @@ Authoritative `Telegram Web` probe больше не принимает перв
 - ранняя промежуточная реплика вроде `Проверяю снова...` больше не считается достаточным pass;
 - если следом приходит `Timed out: Agent run timed out after <N>s`, authoritative verdict должен стать `failed`, а не `passed`.
 - если сообщение `/status` не показывает текущую pinned Telegram-safe модель
-  `zai-telegram-safe::glm-5`, verdict тоже должен стать `failed`.
+  `custom-zai-telegram-safe::glm-5`, verdict тоже должен стать `failed`.
 
 ## Failure Codes
 
