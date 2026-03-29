@@ -21,6 +21,10 @@ const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS 
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 const INTERNAL_TELEMETRY_RE =
   /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b|mcp__[\p{L}\p{N}_:.-]+)/iu;
+const INTERNAL_PLANNING_RE =
+  /(?:пользователь просит|the user (?:is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|давайте (?:получу|найду|изучу|посмотрю|открою|проверю)|наш[её]л.{0,120}(?:репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(?:у|им|ить).{0,120}(?:документац|docs|documentation|manual|guide|инструкц)|mounted workspace|skill files|existing skills|mcp__[\p{L}\p{N}_:.-]+)/iu;
+const INTERNAL_CAPABILITY_DISCLOSURE_RE =
+  /(?:у меня есть доступ к|i have access to|мне доступны).{0,200}(?:create_skill\b|skills?\b|tavily\b|mcp__[\p{L}\p{N}_:.-]+)/iu;
 const PROGRESS_PREFACE_RE =
   /^(?:сначала(?:\s|$)|сперва(?:\s|$)|сейчас(?:\s|$)|для начала(?:\s|$)|первым делом(?:\s|$)|я\s+(?:сначала\s+)?(?:проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)(?:\s|$)|(?:проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)(?:\s|$)|let me(?:\s|$)|i(?:'|’)ll(?:\s|$)|first[, ]+i(?:'|’)ll(?:\s|$)|checking(?:\s|$)|opening(?:\s|$)|looking up(?:\s|$))/iu;
 const INTERIM_PROGRESS_RE =
@@ -69,13 +73,28 @@ function normalizeMessageText(value) {
 export function isLikelyInterimReplyText(value) {
   const normalized = normalizeMessageText(value);
   if (!normalized) return false;
-  if (INTERNAL_TELEMETRY_RE.test(normalized)) return false;
+  if (INTERNAL_TELEMETRY_RE.test(normalized) || INTERNAL_PLANNING_RE.test(normalized) || INTERNAL_CAPABILITY_DISCLOSURE_RE.test(normalized)) return false;
   return INTERIM_PROGRESS_RE.test(normalized);
 }
 
 export function isReplyErrorSignature(value) {
   const normalized = normalizeMessageText(value);
-  return ERROR_RE.test(normalized) || INTERNAL_TELEMETRY_RE.test(normalized);
+  return (
+    ERROR_RE.test(normalized) ||
+    INTERNAL_TELEMETRY_RE.test(normalized) ||
+    INTERNAL_PLANNING_RE.test(normalized) ||
+    INTERNAL_CAPABILITY_DISCLOSURE_RE.test(normalized)
+  );
+}
+
+export function isUserVisibleInternalPlanning(value) {
+  const normalized = normalizeMessageText(value);
+  if (!normalized) return false;
+  return (
+    isLikelyProgressPreface(normalized) ||
+    INTERNAL_PLANNING_RE.test(normalized) ||
+    INTERNAL_CAPABILITY_DISCLOSURE_RE.test(normalized)
+  );
 }
 
 export function isLikelyProgressPreface(value) {
@@ -1240,6 +1259,7 @@ async function main() {
       min_length: replyText.length >= minReplyLen,
       reply_settled: settledReply.settled === true,
       error_signature_clean: !isReplyErrorSignature(replyText),
+      internal_planning_clean: !isUserVisibleInternalPlanning(replyText),
       sensitive_signature_clean: !SENSITIVE_RE.test(replyText),
     };
     const failures = Object.entries(checks)

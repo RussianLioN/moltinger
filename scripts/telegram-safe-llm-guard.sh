@@ -243,6 +243,12 @@ emit_before_llm_modified_payload() {
 event="$(extract_first_string event || true)"
 model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
+response_text="$(extract_first_string text || true)"
+response_text_flat="$(
+    printf '%s' "${response_text:-}" \
+        | tr '\r\n' '  ' \
+        | sed 's/[[:space:]][[:space:]]*/ /g'
+)"
 
 is_telegram_safe_lane=false
 case "${model:-}" in
@@ -267,14 +273,24 @@ fi
 # Keep delivery-time stripping strict, but allow broader AfterLLM fail-closed
 # interception before text-fallback parsing can promote intent text into tools.
 has_delivery_internal_telemetry=false
-if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call"; then
+if printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call"; then
     has_delivery_internal_telemetry=true
 fi
 
 has_after_llm_tool_intent=false
 if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "$payload_flat" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try)|i( ?|')ll (check|search|inspect|look|study|read|try)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|давай (изучу|разберу|посмотрю|проверю|почитаю)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool"; then
     has_after_llm_tool_intent=true
+fi
+
+has_user_visible_internal_planning=false
+if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|давайте (получу|найду|изучу|посмотрю|открою|проверю)|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|mcp__|mounted workspace|skill files|existing skills"; then
+    has_user_visible_internal_planning=true
+fi
+if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(у меня есть доступ к|i have access to|мне доступны).{0,160}((^|[^[:alnum:]_])create_skill([^[:alnum:]_]|$)|skills?|tavily|mcp__)"; then
+    has_user_visible_internal_planning=true
 fi
 
 looks_like_status=false
@@ -309,7 +325,7 @@ if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == tru
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_user_visible_internal_planning" != true ]]; then
     exit 0
 fi
 
@@ -324,7 +340,7 @@ if [[ "$looks_like_status" == true ]]; then
     exit 0
 fi
 
-if [[ "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true ]]; then
+if [[ "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true ]]; then
     fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
     if [[ "$event" == "AfterLLMCall" ]]; then
         emit_modified_payload "$fallback_text" true

@@ -340,6 +340,30 @@ NODE
         test_fail "Emoji-prefixed activity/tool-progress replies must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_rejects_user_visible_internal_tool_planning_without_activity_log_markers"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "Пользователь просит изучить официальную документацию Moltis. У меня есть доступ к mcp__tavily__tavily_search, mcp__tavily__tavily_skill и create_skill. Сначала найду официальную документацию Moltis.",
+  "Нашёл официальный репозиторий Moltis на GitHub. Давайте получу полную документацию."
+];
+const goodReply = "Сейчас не могу проводить полный web-поиск в Telegram-safe режиме, но могу дать краткий план по шагам без инструментов.";
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected internal planning leak to be rejected: ${badReply}`);
+  }
+}
+if (isReplyErrorSignature(goodReply)) {
+  throw new Error("expected clean human-facing fallback reply to remain non-error");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must reject user-visible internal planning/tool-inventory replies even when Activity log markers are absent"
+    fi
+
     test_start "component_telegram_web_probe_detects_recent_invalid_pre_send_incoming_activity"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
@@ -361,6 +385,28 @@ NODE
         test_pass
     else
         test_fail "Probe must classify recent incoming activity/tool-progress leakage before send attribution begins"
+    fi
+
+    test_start "component_telegram_web_probe_detects_recent_invalid_pre_send_internal_planning_leaks"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { findInvalidIncomingActivityMessages } = await import(process.env.NODE_SCRIPT);
+const invalid = findInvalidIncomingActivityMessages([
+  { mid: 90, direction: "out", text: "изучи документацию Moltis" },
+  { mid: 91, direction: "in", text: "Пользователь просит изучить официальную документацию Moltis. У меня есть доступ к mcp__tavily__tavily_search и create_skill. Сначала найду документацию." },
+  { mid: 92, direction: "in", text: "Нормальный человеческий ответ" }
+]);
+if (!Array.isArray(invalid) || invalid.length !== 1) {
+  throw new Error(`expected one invalid incoming planning leak, got ${JSON.stringify(invalid)}`);
+}
+if (invalid[0].mid !== 91) {
+  throw new Error(`unexpected invalid incoming mid: ${JSON.stringify(invalid)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must classify recent incoming internal planning/tool-inventory leakage before send attribution begins"
     fi
 
     test_start "component_telegram_web_probe_detects_human_progress_preface_replies"
@@ -393,6 +439,31 @@ NODE
         test_pass
     else
         test_fail "Probe must recognize short human-facing progress prefaces so it does not pass too early"
+    fi
+
+    test_start "component_telegram_web_probe_treats_final_progress_preface_or_internal_planning_as_non_green"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isUserVisibleInternalPlanning } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "Сейчас проверю формулировку ответа и вернусь с кратким планом.",
+  "Проверю источник и вернусь с ответом.",
+  "Нашёл официальную документацию Moltis. Давай изучу её полностью:"
+];
+const goodReply = "В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Могу дать краткий план по шагам без web-поиска.";
+for (const badReply of badReplies) {
+  if (!isUserVisibleInternalPlanning(badReply)) {
+    throw new Error(`expected final internal planning reply to be treated as non-green: ${badReply}`);
+  }
+}
+if (isUserVisibleInternalPlanning(goodReply)) {
+  throw new Error("expected clean human-facing fallback reply to remain green");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must treat final progress-preface/internal-planning replies as non-green even without explicit Activity log markers"
     fi
 
     test_start "component_telegram_web_probe_rejects_timeout_variants_with_different_durations"

@@ -182,6 +182,18 @@ reply_has_internal_activity() {
   return 1
 }
 
+reply_has_internal_planning_leak() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}")"
+  [[ -n "$normalized" ]] || return 1
+
+  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|давайте получу|давайте найду|давайте изучу|давай изучу|наш[её]л официальный (репозиторий|документац)|github|полную документацию|mcp__|mounted workspace|skill files|existing skills'; then
+    return 0
+  fi
+
+  return 1
+}
+
 reply_has_host_path_leak() {
   local normalized
   normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -344,6 +356,18 @@ evaluate_authoritative_semantics() {
     return 0
   fi
 
+  if reply_has_internal_planning_leak "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_internal_planning_leak" "$RUN_STAGE" "Authoritative Telegram reply exposed internal tool inventory, capability disclosure, or planning instead of a user-facing answer" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{observed_reply:$reply_text, failure:"semantic_internal_planning_leak"}}')"
+    RECOMMENDED_ACTION="Tighten the Telegram-safe lane so internal planning/tool inventory never reaches the user-facing chat, then rerun authoritative UAT."
+    return 0
+  fi
+
   local pre_send_activity_leak
   pre_send_activity_leak="$(
     jq -r '.attribution_evidence.last_pre_send_activity.messages[]?.text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null \
@@ -364,6 +388,29 @@ evaluate_authoritative_semantics() {
       --argjson base "$DIAGNOSTIC_JSON" \
       '$base + {semantic_review:{recent_invalid_incoming:$activity_text, failure:"semantic_pre_send_activity_leak"}}')"
     RECOMMENDED_ACTION="Clear or reconcile the contaminated Telegram chat/session and rerun authoritative UAT only after the last invalid incoming activity message is gone."
+    return 0
+  fi
+
+  local pre_send_internal_planning_leak
+  pre_send_internal_planning_leak="$(
+    jq -r '.attribution_evidence.last_pre_send_activity.messages[]?.text // empty' <<< "$AUTHORITATIVE_RAW_JSON" 2>/dev/null \
+      | while IFS= read -r line; do
+          if reply_has_internal_planning_leak "$line"; then
+            printf '%s\n' "$line"
+            break
+          fi
+        done
+  )"
+
+  if [[ -n "$pre_send_internal_planning_leak" ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_pre_send_internal_planning_leak" "$RUN_STAGE" "Authoritative Telegram chat already contained a recent internal planning/tool-inventory leak before the probe send" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg planning_text "$pre_send_internal_planning_leak" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{recent_invalid_incoming:$planning_text, failure:"semantic_pre_send_internal_planning_leak"}}')"
+    RECOMMENDED_ACTION="Clear or reconcile the contaminated Telegram chat/session and rerun authoritative UAT only after the last invalid incoming planning leak is gone."
     return 0
   fi
 
