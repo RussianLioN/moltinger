@@ -6,6 +6,7 @@ SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills}"
 TARGET_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
 MANIFEST_PATH="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-}"
 MANIFEST_EXPLICIT=0
+PRUNE_UNMANAGED="${MOLTIS_RUNTIME_SKILLS_PRUNE_UNMANAGED:-0}"
 STAGING_ROOT=""
 
 usage() {
@@ -19,6 +20,8 @@ Options:
   --target-root PATH   Runtime-discovered target directory (default: $TARGET_ROOT)
   --manifest PATH      File that tracks repo-managed installed skills
                        (default: <dirname(target-root)>/.repo-managed-skills.txt)
+  --prune-unmanaged    Remove runtime skills that are not present in source root
+                       (default: disabled unless MOLTIS_RUNTIME_SKILLS_PRUNE_UNMANAGED=1)
   -h, --help           Show this help
 EOF
 }
@@ -74,6 +77,10 @@ parse_args() {
                 MANIFEST_PATH="$2"
                 MANIFEST_EXPLICIT=1
                 shift 2
+                ;;
+            --prune-unmanaged)
+                PRUNE_UNMANAGED=1
+                shift
                 ;;
             -h|--help)
                 usage
@@ -172,6 +179,25 @@ main() {
             rm -rf "$TARGET_ROOT/$skill_name"
         fi
     done
+
+    if [[ "$PRUNE_UNMANAGED" == "1" ]]; then
+        local -a runtime_skill_dirs=()
+        local runtime_skill_dir runtime_skill_name
+        shopt -s nullglob
+        for runtime_skill_dir in "$TARGET_ROOT"/*; do
+            [[ -d "$runtime_skill_dir" ]] || continue
+            [[ -f "$runtime_skill_dir/SKILL.md" ]] || continue
+            runtime_skill_dirs+=("$runtime_skill_dir")
+        done
+        shopt -u nullglob
+
+        for runtime_skill_dir in "${runtime_skill_dirs[@]}"; do
+            runtime_skill_name="$(basename "$runtime_skill_dir")"
+            if ! path_is_listed "$runtime_skill_name" "${current_managed[@]}"; then
+                rm -rf "$runtime_skill_dir"
+            fi
+        done
+    fi
 
     : >"$MANIFEST_PATH"
     if [[ ${#current_managed[@]} -gt 0 ]]; then

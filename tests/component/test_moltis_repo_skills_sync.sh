@@ -77,6 +77,19 @@ EOF
     assert_file_exists "$target_root/manual-skill/SKILL.md" "Sync must preserve runtime skills that are not listed in the repo-managed manifest"
     test_pass
 
+    test_start "component_moltis_repo_skills_sync_can_prune_unmanaged_runtime_skills_when_requested"
+    mkdir -p "$target_root/manual-skill"
+    printf 'keep-me\n' >"$target_root/manual-skill/SKILL.md"
+    MOLTIS_RUNTIME_SKILLS_PRUNE_UNMANAGED=1 bash "$SYNC_SCRIPT" \
+        --source-root "$source_root" \
+        --target-root "$target_root" \
+        --manifest "$manifest_path"
+    if [[ -e "$target_root/manual-skill" ]]; then
+        test_fail "Strict managed mode should remove runtime skills that are not present in the repo source root"
+    fi
+    assert_file_exists "$target_root/codex-update/SKILL.md" "Strict managed mode must keep repo-managed skills installed"
+    test_pass
+
     local auto_fixture_root auto_source_root auto_target_root auto_manifest_path
     auto_fixture_root="$(secure_temp_dir moltis-repo-skills-sync-auto-manifest)"
     auto_source_root="$auto_fixture_root/source"

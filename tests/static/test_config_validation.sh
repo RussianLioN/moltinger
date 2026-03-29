@@ -173,9 +173,11 @@ PY
 
     test_start "static_identity_prompt_makes_telegram_status_deterministic_and_tool_free"
     if rg -Fq 'Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.' "$TOML_CONFIG" && \
-       rg -Fq 'Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search и другие tool calls' "$TOML_CONFIG" && \
+       rg -Fq 'Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search, MCP и другие tool calls' "$TOML_CONFIG" && \
        rg -Fq 'всегда указывай канонический model id `custom-zai-telegram-safe::glm-5` именно целиком' "$TOML_CONFIG" && \
-       rg -Fq 'Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай' "$TOML_CONFIG"; then
+       rg -Fq 'Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай' "$TOML_CONFIG" && \
+       rg -Fq 'Для `/status` в Telegram не перечисляй skills, не проверяй tmux/cron/runtime вручную и не импровизируй свободный обзор состояния.' "$TOML_CONFIG" && \
+       rg -Fq 'Для `/status` в Telegram отвечай только коротким финальным статусом в стабильном формате: Время, Сессия, Канал, Модель, Sandbox, затем одна короткая итоговая строка.' "$TOML_CONFIG"; then
         test_pass
     else
         test_fail "Primary Moltis identity prompt must make Telegram /status deterministic, tool-free, and pinned to the canonical Telegram-safe model id"

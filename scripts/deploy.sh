@@ -497,6 +497,7 @@ sync_moltis_repo_skills_into_runtime() {
 
     if ! docker exec "$TARGET_CONTAINER" sh -lc "
         test -x '$sync_script' &&
+        export MOLTIS_RUNTIME_SKILLS_PRUNE_UNMANAGED=1 &&
         '$sync_script' \
           --source-root '$MOLTIS_REPO_SKILLS_SOURCE_ROOT' \
           --target-root '$MOLTIS_RUNTIME_SKILLS_ROOT' \
