@@ -249,6 +249,11 @@ log_warn() { :; }
 log_error() { :; }
 log_success() { :; }
 
+sync_moltis_repo_hooks_into_runtime() {
+    printf 'sync-hooks\n' >>"\$TRACE_FILE"
+    return 0
+}
+
 list_repo_hook_names() {
     printf 'telegram-safe-llm-guard\n'
 }
@@ -319,8 +324,8 @@ EOF
         return
     fi
 
-    if ! grep -Fqx 'trace=hook-file-check,hook-file-check,hook-list' "$result_file"; then
-        test_fail "Hook verify path must still perform tracked-source and runtime hook file checks before parsing the sanitized hook registry JSON"
+    if ! grep -Fqx 'trace=sync-hooks,hook-file-check,hook-file-check,hook-list' "$result_file"; then
+        test_fail "Hook verify path must sync repo hooks into the runtime path before performing tracked-source and runtime hook file checks"
         rm -rf "$tmp_dir"
         return
     fi

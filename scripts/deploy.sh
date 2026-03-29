@@ -699,6 +699,8 @@ verify_moltis_repo_hook_discovery() {
         return 0
     fi
 
+    sync_moltis_repo_hooks_into_runtime || return 1
+
     for hook_name in "${repo_hook_names[@]}"; do
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
             test -f '$MOLTIS_REPO_HOOKS_SOURCE_ROOT/$hook_name/HOOK.md'
@@ -728,7 +730,7 @@ verify_moltis_repo_hook_discovery() {
                 .path == ($runtime_root + "/" + $hook_name)
             )
         ' --arg runtime_root "$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT" <<<"$hooks_json" >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not discovered from the live runtime hook path $MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT"
+            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not registered from the active runtime project hook discovery path"
         fi
     done
 
