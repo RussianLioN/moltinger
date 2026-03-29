@@ -219,6 +219,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "doc_search_plan_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Хорошо, изучу документацию Moltis и существующие навыки как примеры. Начну с поиска официальной документации и анализа имеющегося навыка codex-update, который как раз занимается проверкой версий.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "pre_send_internal_planning_pass" ]]; then
   cat <<'JSON'
 {
@@ -638,6 +670,24 @@ run_component_telegram_remote_uat_contract_tests() {
 	            test_pass
 	        else
 	            test_fail "Wrapper must surface final progress-preface replies as failed authoritative outcomes"
+	        fi
+	    fi
+
+	    test_start "component_telegram_remote_uat_fails_doc_search_plan_without_tool_names_even_if_helper_passes"
+	    if TELEGRAM_WEB_STUB_MODE=doc_search_plan_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "Изучи документацию Moltis" \
+	        --output "$TEST_TMPDIR/result-doc-search-plan.json" \
+	        >/dev/null 2>&1
+	    then
+	        test_fail "Authoritative wrapper must fail when the final reply promises a doc-search plan instead of a user-facing answer"
+	    else
+	        if jq -e '.failure.code == "semantic_internal_planning_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-doc-search-plan.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Wrapper must surface doc-search planning replies as failed authoritative outcomes"
 	        fi
 	    fi
 

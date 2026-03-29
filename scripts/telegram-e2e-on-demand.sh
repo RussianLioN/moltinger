@@ -187,7 +187,7 @@ reply_has_internal_planning_leak() {
   normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
-  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|давайте получу|давайте найду|давайте изучу|давай изучу|наш[её]л официальный (репозиторий|документац)|github|полную документацию|mcp__|mounted workspace|skill files|existing skills'; then
+  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|давайте получу|давайте найду|давайте изучу|давай изучу|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|mcp__|mounted workspace|skill files|existing skills|существующ(ие|его) навык|имеющ(егося|ийся) навы'; then
     return 0
   fi
 

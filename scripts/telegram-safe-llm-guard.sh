@@ -279,13 +279,13 @@ fi
 
 has_after_llm_tool_intent=false
 if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
     has_after_llm_tool_intent=true
 fi
 
 has_user_visible_internal_planning=false
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|давайте (получу|найду|изучу|посмотрю|открою|проверю)|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|mcp__|mounted workspace|skill files|existing skills"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|давайте (получу|найду|изучу|посмотрю|открою|проверю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|mcp__|mounted workspace|skill files|existing skills|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
     has_user_visible_internal_planning=true
 fi
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
@@ -309,7 +309,7 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
 fi
 
 if [[ "$event" == "MessageSending" ]]; then
-    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_user_visible_internal_planning" != true ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then

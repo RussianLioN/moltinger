@@ -180,6 +180,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must suppress user-visible internal tool inventory and planning even when Activity log markers are absent"
     fi
 
+    test_start "component_after_llm_guard_blocks_live_post_deploy_doc_search_plan_without_tool_names"
+    local live_doc_search_plan_output
+    live_doc_search_plan_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsx","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, изучу документацию Moltis и существующие навыки как примеры. Начну с поиска официальной документации и анализа имеющегося навыка codex-update, который как раз занимается проверкой версий.","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_doc_search_plan_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_doc_search_plan_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$live_doc_search_plan_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must suppress live post-deploy doc-search planning text even when no raw tool names are present"
+    fi
+
     test_start "component_message_sending_guard_rewrites_final_status_delivery_even_when_after_llm_missed"
     local message_sending_status_output
     message_sending_status_output="$(
@@ -220,6 +234,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "MessageSending guard must strip final internal tool inventory/planning leakage even when Activity log markers are absent"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_final_doc_search_plan_without_tool_names"
+    local message_sending_doc_search_plan_output
+    message_sending_doc_search_plan_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","session_id":"session:vwx2","data":{"text":"Хорошо, изучу документацию Moltis и существующие навыки как примеры. Начну с поиска официальной документации и анализа имеющегося навыка codex-update, который как раз занимается проверкой версий."}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_doc_search_plan_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_doc_search_plan_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_doc_search_plan_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must strip final doc-search planning leakage even when no raw tool names are present"
     fi
 
     test_start "component_message_sending_guard_is_noop_for_plain_text_without_strict_delivery_log_markers"

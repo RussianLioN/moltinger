@@ -22,7 +22,7 @@ const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS 
 const INTERNAL_TELEMETRY_RE =
   /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b|mcp__[\p{L}\p{N}_:.-]+)/iu;
 const INTERNAL_PLANNING_RE =
-  /(?:пользователь просит|the user (?:is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|давайте (?:получу|найду|изучу|посмотрю|открою|проверю)|наш[её]л.{0,120}(?:репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(?:у|им|ить).{0,120}(?:документац|docs|documentation|manual|guide|инструкц)|mounted workspace|skill files|existing skills|mcp__[\p{L}\p{N}_:.-]+)/iu;
+  /(?:пользователь просит|the user (?:is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|давайте (?:получу|найду|изучу|посмотрю|открою|проверю)|хорошо,?\s*(?:изучу|проверю|посмотрю|почитаю).{0,120}(?:документац|docs|documentation|manual|guide|инструкц)|начну с (?:поиска|анализа|изучения|просмотра)|наш[её]л.{0,120}(?:репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(?:у|им|ить).{0,120}(?:документац|docs|documentation|manual|guide|инструкц)|mounted workspace|skill files|existing skills|существующ(?:ие|его) навык|имеющ(?:егося|ийся) навы|mcp__[\p{L}\p{N}_:.-]+)/iu;
 const INTERNAL_CAPABILITY_DISCLOSURE_RE =
   /(?:у меня есть доступ к|i have access to|мне доступны).{0,200}(?:create_skill\b|skills?\b|tavily\b|mcp__[\p{L}\p{N}_:.-]+)/iu;
 const PROGRESS_PREFACE_RE =
