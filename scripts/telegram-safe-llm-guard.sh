@@ -264,9 +264,17 @@ if printf '%s' "$payload_flat" | grep -Eq '"tool_calls"[[:space:]]*:[[:space:]]*
     tool_calls_present=true
 fi
 
-has_internal_telemetry=false
-if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call|no remote nodes available|let me (check|search|inspect|look)|i( ?|')ll (check|search|inspect|look)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на "; then
-    has_internal_telemetry=true
+# Keep delivery-time stripping strict, but allow broader AfterLLM fail-closed
+# interception before text-fallback parsing can promote intent text into tools.
+has_delivery_internal_telemetry=false
+if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call"; then
+    has_delivery_internal_telemetry=true
+fi
+
+has_after_llm_tool_intent=false
+if [[ "$event" == "AfterLLMCall" ]] && \
+   printf '%s' "$payload_flat" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read)|i( ?|')ll (check|search|inspect|look|study|read)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|давай (изучу|разберу|посмотрю|проверю|почитаю)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)"; then
+    has_after_llm_tool_intent=true
 fi
 
 looks_like_status=false
@@ -284,11 +292,15 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
     already_guarded_long_research=true
 fi
 
-if [[ "$event" != "MessageSending" && "$is_telegram_safe_lane" != true ]]; then
+if [[ "$event" == "MessageSending" ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true ]]; then
+        exit 0
+    fi
+elif [[ "$is_telegram_safe_lane" != true ]]; then
     exit 0
 fi
 
-if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == true && "$already_guarded_long_research" != true && "${tool_count:-0}" -gt 0 ]]; then
+if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == true && "$already_guarded_long_research" != true ]]; then
     messages_json="$(extract_json_array messages || true)"
     if [[ -n "${messages_json:-}" ]]; then
         long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, or inspect the environment right now.\n- If the request requires deep research or full doc/course study, answer honestly in Russian without tools: briefly state the limit, then offer either a compact step-by-step plan or ask to continue in the web UI/operator session for the full research.'
@@ -297,7 +309,7 @@ if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == tru
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_internal_telemetry" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true ]]; then
     exit 0
 fi
 
@@ -312,7 +324,7 @@ if [[ "$looks_like_status" == true ]]; then
     exit 0
 fi
 
-if [[ "$tool_calls_present" == true || "$has_internal_telemetry" == true ]]; then
+if [[ "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true ]]; then
     fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
     if [[ "$event" == "AfterLLMCall" ]]; then
         emit_modified_payload "$fallback_text" true

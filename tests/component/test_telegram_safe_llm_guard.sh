@@ -51,6 +51,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "BeforeLLMCall guard must strip tool surface and append a deterministic Telegram-safe long-research policy before the provider sees a broad doc-study request"
     fi
 
+    test_start "component_before_llm_guard_does_not_depend_on_tool_count_field_to_append_long_research_policy"
+    local before_llm_no_tool_count_output
+    before_llm_no_tool_count_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abd","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Изучи полностью официальную документацию Moltis и научи меня делать новый навык"}],"iteration":1}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
+       jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must still append the long-research policy and force tool_count=0 even if the runtime payload omits tool_count"
+    fi
+
     test_start "component_after_llm_guard_rewrites_status_like_tool_fallback_to_canonical_safe_status_without_jq_runtime_dependency"
     local after_status_output
     after_status_output="$(
@@ -110,6 +124,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must treat latent tool-intent text as internal telemetry so text-fallback parsing never turns it into real Telegram-safe tool execution"
     fi
 
+    test_start "component_after_llm_guard_blocks_observed_russian_long_research_commitment_before_text_fallback_parser_can_promote_it"
+    local observed_long_research_output
+    observed_long_research_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qst","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Нашёл официальную документацию Moltis. Давай изучу её полностью:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$observed_long_research_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$observed_long_research_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$observed_long_research_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fail closed on the observed Russian long-research commitment wording before text fallback turns it into real tool execution"
+    fi
+
     test_start "component_message_sending_guard_rewrites_final_status_delivery_even_when_after_llm_missed"
     local message_sending_status_output
     message_sending_status_output="$(
@@ -136,6 +164,18 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "MessageSending guard must strip leaked internal telemetry from the final Telegram-safe reply even when it appears only at delivery time"
+    fi
+
+    test_start "component_message_sending_guard_is_noop_for_plain_text_without_strict_delivery_log_markers"
+    local message_sending_plain_output
+    message_sending_plain_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","session_id":"session:vwz","data":{"text":"Сейчас проверю формулировку ответа и вернусь с кратким планом."}}'
+    )"
+    if [[ -z "$message_sending_plain_output" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must stay inert for plain text that lacks strict delivery-log markers so it does not rewrite ordinary replies outside the real Activity log path"
     fi
 
     test_start "component_telegram_safe_llm_guard_is_noop_for_non_telegram_safe_models"

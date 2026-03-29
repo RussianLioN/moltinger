@@ -6,7 +6,7 @@ command = "/server/scripts/telegram-safe-llm-guard.sh"
 timeout = 5
 
 [requires]
-os = ["linux", "darwin"]
+os = ["linux"]
 +++
 
 # Telegram Safe LLM Guard
