@@ -35,7 +35,7 @@ run_component_telegram_safe_llm_guard_tests() {
         return
     fi
 
-    test_start "component_before_llm_guard_strips_tool_surface_for_broad_telegram_research_requests"
+    test_start "component_before_llm_guard_hard_overrides_broad_telegram_research_requests"
     local before_llm_output
     before_llm_output="$(
         run_hook_with_minimal_path \
@@ -43,19 +43,19 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.messages[0].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe hard override")' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.messages[0].content | contains("must remain text-only")' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[0].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.messages[0].content | contains("В Telegram-safe режиме я не запускаю инструменты")' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[1].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[2].role == "user"' >/dev/null 2>&1 <<<"$before_llm_output"; then
+       jq -e '.data.messages[1].role == "user"' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must strip tool surface and prepend a deterministic Telegram-safe long-research policy before the provider sees a broad doc-study request"
+        test_fail "BeforeLLMCall guard must hard-override broad doc-study turns so the provider sees only a deterministic Telegram-safe reply contract"
     fi
 
-    test_start "component_before_llm_guard_does_not_depend_on_tool_count_field_to_append_long_research_policy"
+    test_start "component_before_llm_guard_does_not_depend_on_tool_count_field_to_apply_hard_override"
     local before_llm_no_tool_count_output
     before_llm_no_tool_count_output="$(
         run_hook_with_minimal_path \
@@ -63,14 +63,15 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
-       jq -e '.data.messages[0].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe hard override")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must still prepend the long-research policy and force tool_count=0 even if the runtime payload omits tool_count"
+        test_fail "BeforeLLMCall guard must still apply the hard override and force tool_count=0 even if the runtime payload omits tool_count"
     fi
 
-    test_start "component_before_llm_guard_reapplies_long_research_policy_even_when_session_history_already_contains_guard"
+    test_start "component_before_llm_guard_replaces_history_when_session_already_contains_stale_guard"
     local before_llm_existing_guard_output
     before_llm_existing_guard_output="$(
         run_hook_with_minimal_path \
@@ -78,12 +79,12 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
-       jq -e '.data.messages[1].content == "base system"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
-       jq -e '.data.messages[2].content == "Telegram-safe long-research guard: stale copy"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output"; then
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe hard override")' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must reapply the strong long-research policy at the front even when an older copy already exists in session history"
+        test_fail "BeforeLLMCall guard must replace stale session history with the hard override when an older guard copy already exists"
     fi
 
     test_start "component_before_llm_guard_forces_safe_lane_text_only_even_for_non_research_request"
@@ -100,6 +101,16 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "BeforeLLMCall guard must force tool_count=0 for the Telegram-safe lane even when the request is not broad research"
+    fi
+
+    test_start "component_before_llm_guard_emits_modify_payload_without_duplicate_messages_or_tool_count_fields"
+    local before_tool_count_field_count before_messages_field_count
+    before_tool_count_field_count="$(printf '%s' "$before_llm_output" | grep -o '"tool_count":' | wc -l | tr -d ' ')"
+    before_messages_field_count="$(printf '%s' "$before_llm_output" | grep -o '"messages":' | wc -l | tr -d ' ')"
+    if [[ "$before_tool_count_field_count" == "1" && "$before_messages_field_count" == "1" ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must emit a clean modify payload without duplicate top-level tool_count/messages keys that the runtime can reject silently"
     fi
 
     test_start "component_after_llm_guard_rewrites_status_like_tool_fallback_to_canonical_safe_status_without_jq_runtime_dependency"
@@ -131,6 +142,16 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress general Telegram-safe tool fallbacks and replace them with a clean user-facing fallback"
+    fi
+
+    test_start "component_after_llm_guard_emits_modify_payload_without_duplicate_text_or_tool_calls_fields"
+    local after_text_field_count after_tool_calls_field_count
+    after_text_field_count="$(printf '%s' "$after_general_output" | grep -o '"text":' | wc -l | tr -d ' ')"
+    after_tool_calls_field_count="$(printf '%s' "$after_general_output" | grep -o '"tool_calls":' | wc -l | tr -d ' ')"
+    if [[ "$after_text_field_count" == "1" && "$after_tool_calls_field_count" == "1" ]]; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must emit a clean modify payload without duplicate top-level text/tool_calls keys that the runtime can reject silently"
     fi
 
     test_start "component_after_llm_guard_blocks_internal_telemetry_even_without_tool_calls"

@@ -279,6 +279,126 @@ append_field_to_object() {
     printf '%s,%s}' "${object_json%\}}" "$field_fragment"
 }
 
+filter_top_level_object_fields() {
+    local object_json="$1"
+    shift
+    local remove_csv=""
+    local field_name
+
+    for field_name in "$@"; do
+        if [[ -n "$remove_csv" ]]; then
+            remove_csv="${remove_csv},${field_name}"
+        else
+            remove_csv="$field_name"
+        fi
+    done
+
+    printf '%s' "$object_json" | awk -v remove_csv="$remove_csv" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            split(remove_csv, remove_keys, ",")
+            for (i in remove_keys) {
+                if (remove_keys[i] != "") {
+                    remove[remove_keys[i]] = 1
+                }
+            }
+            out = ""
+            member = ""
+            started = 0
+            in_string = 0
+            escape = 0
+            depth = 0
+        }
+
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
+
+        function flush_member(    item, key) {
+            item = trim(member)
+            member = ""
+            if (item == "") {
+                return
+            }
+
+            key = ""
+            if (match(item, /^"[^"]*"/)) {
+                key = substr(item, 2, RLENGTH - 2)
+                if (key in remove) {
+                    return
+                }
+            }
+
+            if (out != "") {
+                out = out "," item
+            } else {
+                out = item
+            }
+        }
+
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+
+                if (!started) {
+                    if (c == "{") {
+                        started = 1
+                    }
+                    continue
+                }
+
+                if (escape) {
+                    member = member c
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    member = member c
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    member = member c
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    member = member c
+                    continue
+                }
+
+                if (c == "}" && depth == 0) {
+                    flush_member()
+                    print "{" out "}"
+                    exit 0
+                }
+                if (c == "," && depth == 0) {
+                    flush_member()
+                    continue
+                }
+                if (c == "{" || c == "[") {
+                    depth++
+                } else if (c == "}" || c == "]") {
+                    depth--
+                }
+
+                member = member c
+            }
+        }
+
+        END {
+            if (!started) {
+                print "{}"
+            }
+        }
+    '
+}
+
 build_message_json() {
     local role="$1"
     local content="$2"
@@ -334,28 +454,7 @@ emit_modified_payload() {
     data_object_json="$(extract_json_object data || true)"
 
     if [[ -n "$data_object_json" ]]; then
-        modified_data_json="$data_object_json"
-        if [[ -n "$session_key" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field session_key "$session_key")")"
-        fi
-        if [[ -n "$provider" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field provider "$provider")")"
-        fi
-        if [[ -n "$model" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field model "$model")")"
-        fi
-        if [[ -n "$finish_reason" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field finish_reason "$finish_reason")")"
-        fi
-        if [[ -n "$input_tokens" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field input_tokens "$input_tokens")")"
-        fi
-        if [[ -n "$output_tokens" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field output_tokens "$output_tokens")")"
-        fi
-        if [[ -n "$reasoning_tokens" ]]; then
-            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field reasoning_tokens "$reasoning_tokens")")"
-        fi
+        modified_data_json="$(filter_top_level_object_fields "$data_object_json" text tool_calls)"
         if [[ "$include_tool_calls" == "true" ]]; then
             modified_data_json="$(append_field_to_object "$modified_data_json" '"tool_calls":[]')"
         fi
@@ -383,12 +482,21 @@ emit_modified_payload() {
 emit_before_llm_modified_payload() {
     local messages_json="$1"
     local tool_count="$2"
-    local session_key provider model iteration
+    local session_key provider model iteration data_object_json modified_data_json
 
     session_key="$(extract_first_string session_key || true)"
     provider="$(extract_first_string provider || true)"
     model="$(extract_first_string model || true)"
     iteration="$(extract_first_number iteration || true)"
+
+    data_object_json="$(extract_json_object data || true)"
+    if [[ -n "$data_object_json" ]]; then
+        modified_data_json="$(filter_top_level_object_fields "$data_object_json" messages tool_count)"
+        modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field tool_count "$tool_count")")"
+        modified_data_json="$(append_field_to_object "$modified_data_json" "\"messages\":$messages_json")"
+        printf '{"action":"modify","data":%s}\n' "$modified_data_json"
+        return
+    fi
 
     printf '{"action":"modify","data":{%s%s%s%s%s,"messages":%s}}\n' \
         "$(json_string_field session_key "${session_key:-current-session}")" \
@@ -541,9 +649,12 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     if [[ -n "${messages_json:-}" ]]; then
         # Safe Telegram lane must stay text-only even when upstream tool_mode is ignored.
         if [[ "$looks_like_broad_research_request" == true ]]; then
-            long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, inspect the environment, inspect the mounted workspace, read skill files, or look at existing skills right now.\n- Avoid self-action phrasing such as: "попробую", "найду", "посмотрю", "изучу", "let me", "I will".\n- If the request requires deep research or full doc/course study, do not provide a plan of action and do not promise to start searching.\n- For this turn, answer in Russian with exactly this single sentence and nothing else: "В Telegram-safe режиме я не запускаю инструменты и не провожу глубокий поиск. Могу дать краткий ответ без поиска или продолжить в web UI/операторской сессии для полного разбора."'
-            messages_json="$(prepend_message_to_array "$messages_json" system "$long_research_guard")"
-            write_audit_line "before_modify reason=long_research tool_count=0 guard_reapplied=true previously_present=$already_guarded_long_research"
+            # Hard override broad doc-study turns so the provider never sees the
+            # original research request and cannot improvise a user-visible plan.
+            long_research_guard=$'Telegram-safe hard override:\n- Ignore the prior conversation content for this turn.\n- This user-facing Telegram lane must remain text-only and must not expose internal planning.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, inspect the environment, inspect the mounted workspace, read skill files, or look at existing skills right now.\n- Return exactly this single Russian sentence and nothing else: "В Telegram-safe режиме я не запускаю инструменты и не провожу глубокий поиск. Могу дать краткий ответ без поиска или продолжить в web UI/операторской сессии для полного разбора."'
+            long_research_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+            messages_json="[$(build_message_json system "$long_research_guard"),$(build_message_json user "$long_research_user")]"
+            write_audit_line "before_modify reason=long_research_hard_override tool_count=0 guard_reapplied=true previously_present=$already_guarded_long_research"
         fi
         write_audit_line "before_modify reason=safe_lane tool_count=0"
         emit_before_llm_modified_payload "$messages_json" 0
