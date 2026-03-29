@@ -273,7 +273,7 @@ fi
 
 has_after_llm_tool_intent=false
 if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "$payload_flat" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read)|i( ?|')ll (check|search|inspect|look|study|read)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|давай (изучу|разберу|посмотрю|проверю|почитаю)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)"; then
+   printf '%s' "$payload_flat" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try)|i( ?|')ll (check|search|inspect|look|study|read|try)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|давай (изучу|разберу|посмотрю|проверю|почитаю)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool"; then
     has_after_llm_tool_intent=true
 fi
 
@@ -303,7 +303,7 @@ fi
 if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == true && "$already_guarded_long_research" != true ]]; then
     messages_json="$(extract_json_array messages || true)"
     if [[ -n "${messages_json:-}" ]]; then
-        long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, or inspect the environment right now.\n- If the request requires deep research or full doc/course study, answer honestly in Russian without tools: briefly state the limit, then offer either a compact step-by-step plan or ask to continue in the web UI/operator session for the full research.'
+        long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, inspect the environment, inspect the mounted workspace, read skill files, or look at existing skills right now.\n- Avoid self-action phrasing such as: "попробую", "найду", "посмотрю", "изучу", "let me", "I will".\n- If the request requires deep research or full doc/course study, answer honestly in Russian without tools: briefly state the limit, then offer either a compact step-by-step plan or ask to continue in the web UI/operator session for the full research.'
         emit_before_llm_modified_payload "$(append_message_to_array "$messages_json" system "$long_research_guard")" 0
         exit 0
     fi
