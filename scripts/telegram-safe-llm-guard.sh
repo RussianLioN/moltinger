@@ -274,11 +274,6 @@ if printf '%s' "$payload_flat" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:
     looks_like_status=true
 fi
 
-mentions_wrong_model=false
-if printf '%s' "$payload_flat" | grep -Fq 'zai::glm-5'; then
-    mentions_wrong_model=true
-fi
-
 looks_like_broad_research_request=false
 if printf '%s' "$payload_flat" | grep -Eiq '((изучи|изучить|исследуй|исследовать|прочитай|прочитать|study|research|analy[sz]e|read).{0,120}(документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site))|((документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site).{0,120}(полностью|целиком|всю|весь|глубоко|thoroughly|fully|end[ -]?to[ -]?end))'; then
     looks_like_broad_research_request=true
