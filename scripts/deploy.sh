@@ -573,6 +573,37 @@ prestage_moltis_repo_hooks_into_runtime() {
     return 0
 }
 
+purge_stale_moltis_runtime_repo_hook_copies() {
+    local container_id hook_name
+    local -a repo_hook_names=()
+
+    while IFS= read -r hook_name; do
+        [[ -n "$hook_name" ]] || continue
+        repo_hook_names+=("$hook_name")
+    done < <(list_repo_hook_names)
+
+    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    container_id="$(docker ps -q --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
+    [[ -n "$container_id" ]] || return 0
+
+    if ! docker exec "$TARGET_CONTAINER" sh -lc "
+        runtime_hooks_root='$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT'
+        runtime_hooks_manifest='$MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST'
+        for hook_name in ${repo_hook_names[*]@Q}; do
+            rm -rf \"\$runtime_hooks_root/\$hook_name\"
+        done
+        rm -f \"\$runtime_hooks_manifest\"
+    " >/dev/null 2>&1; then
+        record_verification_failure "Moltis runtime contract mismatch: failed to purge stale runtime hook copies before recreating the Moltis container"
+        return 1
+    fi
+
+    return 0
+}
+
 read_moltis_auth_password() {
     local password_file="$PROJECT_ROOT/secrets/moltis_password.txt"
     local password=""
@@ -699,13 +730,11 @@ verify_moltis_repo_hook_discovery() {
         return 0
     fi
 
-    sync_moltis_repo_hooks_into_runtime || return 1
-
     for hook_name in "${repo_hook_names[@]}"; do
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
-            test -f '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/HOOK.md'
+            test -f '/server/.moltis/hooks/$hook_name/HOOK.md'
         " >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: synced runtime project hook is missing HOOK.md for $hook_name"
+            record_verification_failure "Moltis runtime contract mismatch: project-local hook is missing HOOK.md for $hook_name under /server/.moltis/hooks"
         fi
     done
 
@@ -718,9 +747,14 @@ verify_moltis_repo_hook_discovery() {
 
     for hook_name in "${repo_hook_names[@]}"; do
         if ! jq -e --arg hook_name "$hook_name" '
-            .. | objects | .name? | select(type == "string" and . == $hook_name)
+            .[] | select(
+                .name == $hook_name and
+                .source == "project" and
+                .eligible == true and
+                .path == ("/server/.moltis/hooks/" + $hook_name)
+            )
         ' <<<"$hooks_json" >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not registered in the live runtime hook registry"
+            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not discovered from /server/.moltis/hooks in the live runtime hook registry"
         fi
     done
 
@@ -1553,16 +1587,16 @@ deploy_containers() {
 
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
-        # changes must force a recreate to avoid stale live state. Pre-stage
-        # repo-managed project hooks into the runtime data dir before the
-        # recreate so the next process start sees them immediately.
+        # changes must force a recreate to avoid stale live state. Purge stale
+        # runtime-data hook copies before recreate so discovery stays anchored
+        # to the tracked project-local bundle under /server/.moltis/hooks.
         # Keep sidecars converged without forcing a second Moltis recreate in the
         # same compose transaction. Then pre-stop/remove the fixed-name Moltis
         # container and recreate only the Moltis service with --no-deps.
         if [[ ${#auxiliary_services[@]} -gt 0 ]]; then
             compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"
         fi
-        prestage_moltis_repo_hooks_into_runtime
+        purge_stale_moltis_runtime_repo_hook_copies
         prepare_moltis_container_for_rollout
         compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
         log_success "Containers deployed for target $TARGET"
