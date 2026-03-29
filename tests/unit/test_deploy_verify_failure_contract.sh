@@ -319,8 +319,8 @@ EOF
         return
     fi
 
-    if ! grep -Fqx 'trace=hook-file-check,hook-list' "$result_file"; then
-        test_fail "Hook verify path must still perform project-local hook file checks before parsing the sanitized hook registry JSON"
+    if ! grep -Fqx 'trace=hook-file-check,hook-file-check,hook-list' "$result_file"; then
+        test_fail "Hook verify path must still perform tracked-source and runtime hook file checks before parsing the sanitized hook registry JSON"
         rm -rf "$tmp_dir"
         return
     fi

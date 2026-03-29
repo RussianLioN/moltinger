@@ -573,37 +573,6 @@ prestage_moltis_repo_hooks_into_runtime() {
     return 0
 }
 
-purge_stale_moltis_runtime_repo_hook_copies() {
-    local container_id hook_name
-    local -a repo_hook_names=()
-
-    while IFS= read -r hook_name; do
-        [[ -n "$hook_name" ]] || continue
-        repo_hook_names+=("$hook_name")
-    done < <(list_repo_hook_names)
-
-    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
-        return 0
-    fi
-
-    container_id="$(docker ps -q --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
-    [[ -n "$container_id" ]] || return 0
-
-    if ! docker exec "$TARGET_CONTAINER" sh -lc "
-        runtime_hooks_root='$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT'
-        runtime_hooks_manifest='$MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST'
-        for hook_name in ${repo_hook_names[*]@Q}; do
-            rm -rf \"\$runtime_hooks_root/\$hook_name\"
-        done
-        rm -f \"\$runtime_hooks_manifest\"
-    " >/dev/null 2>&1; then
-        record_verification_failure "Moltis runtime contract mismatch: failed to purge stale runtime hook copies before recreating the Moltis container"
-        return 1
-    fi
-
-    return 0
-}
-
 read_moltis_auth_password() {
     local password_file="$PROJECT_ROOT/secrets/moltis_password.txt"
     local password=""
@@ -732,9 +701,14 @@ verify_moltis_repo_hook_discovery() {
 
     for hook_name in "${repo_hook_names[@]}"; do
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
-            test -f '/server/.moltis/hooks/$hook_name/HOOK.md'
+            test -f '$MOLTIS_REPO_HOOKS_SOURCE_ROOT/$hook_name/HOOK.md'
         " >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: project-local hook is missing HOOK.md for $hook_name under /server/.moltis/hooks"
+            record_verification_failure "Moltis runtime contract mismatch: tracked repo hook bundle is missing HOOK.md for $hook_name under $MOLTIS_REPO_HOOKS_SOURCE_ROOT"
+        fi
+        if ! docker exec "$TARGET_CONTAINER" sh -lc "
+            test -f '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/HOOK.md'
+        " >/dev/null 2>&1; then
+            record_verification_failure "Moltis runtime contract mismatch: synced runtime hook is missing HOOK.md for $hook_name under $MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT"
         fi
     done
 

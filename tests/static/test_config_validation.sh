@@ -274,12 +274,12 @@ PY
        rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
        rg -Fq 'prestage_moltis_repo_hooks_into_runtime' "$DEPLOY_SCRIPT" && \
        rg -Fq 'verify_moltis_repo_hook_discovery' "$DEPLOY_SCRIPT" && \
-       rg -Fq "/server/.moltis/hooks/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
+       rg -Fq "\$MOLTIS_REPO_HOOKS_SOURCE_ROOT/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
        rg -Fq 'MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT' "$DEPLOY_SCRIPT" && \
        rg -Fq "moltis hooks list --json" "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under /server/.moltis/hooks"
+        test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under MOLTIS_REPO_HOOKS_SOURCE_ROOT"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
