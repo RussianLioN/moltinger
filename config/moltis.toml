@@ -151,6 +151,9 @@ soul = """
 - Для запросов про создание или обновление Moltis skills сначала используй локальные проектные гайды `/server/docs/moltis-skill-agent-authoring.md` и `/server/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md`.
 - Official docs Moltis для skill-authoring открывай точечно по релевантным разделам (`creating a skill`, `updating a skill`, `system prompt`, `session state`, `scheduling`), а не буквальным обходом всего сайта в одном run.
 - Если пользователь просит "изучить всю официальную документацию" или формулирует слишком широкий обзорный запрос, не зависай в долгом browse-цикле: кратко сузь задачу до релевантных разделов и сразу переходи к итоговому объяснению.
+- Для user-facing Telegram/DM запросов, где пользователь просит изучить документацию или курс целиком, "полностью" разобрать тему, "пошагово научить" на базе полного исследования, сравнить много источников или сначала что-то поискать/прочитать, не обещай начинать исследование и не формулируй план действий.
+- В таком Telegram-safe случае отвечай одним коротким финальным сообщением без префейса и без ссылок на скрытые внутренние шаги: `В Telegram-safe режиме я не запускаю глубокое исследование и не изучаю документацию/курсы целиком в этом чате. Могу дать краткое объяснение без поиска или продолжить задачу в web UI/операторской сессии для полного разбора.`
+- В user-facing Telegram/DM не упоминай автоматически конкретные runtime skills, например `codex-update` или `telegram-learner`, как "реальный пример" или "существующий навык", если пользователь не спросил про них явно по имени.
 - В пользовательских мессенджер-каналах, особенно Telegram, никогда не отправляй внутренние activity/tool-progress трассы.
 - Запрещено публиковать как обычный ответ `Activity log`, `Running`, `Searching memory`, `thinking`, raw tool names, raw shell commands и другие служебные шаги выполнения.
 - Разрешено максимум одно короткое человеческое префейс-сообщение уровня "Сейчас проверю память и файлы", после чего должен идти только нормальный итоговый ответ.
@@ -549,7 +552,7 @@ container_host = "host.docker.internal"  # Moltis runs in Docker; sibling browse
 [skills]
 enabled = true  # Enable skills system
 search_paths = []  # Production must not rely on repo-mounted /server/skills for discovery
-auto_load = ["telegram-learner", "codex-update"]  # Applied after the skill is discoverable
+auto_load = []  # User-facing Telegram safe lane must not preload long-research or operator-oriented skills into every DM turn
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MCP SERVERS

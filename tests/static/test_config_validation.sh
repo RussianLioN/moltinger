@@ -486,10 +486,21 @@ PY
     test_start "static_config_does_not_claim_repo_search_paths_are_live_skill_contract"
     if rg -Fq 'search_paths = []' "$TOML_CONFIG" && \
        ! rg -Fq 'search_paths = ["/server/skills"]' "$TOML_CONFIG" && \
-       rg -Fq 'auto_load = ["telegram-learner", "codex-update"]' "$TOML_CONFIG"; then
+       rg -Fq 'auto_load = []' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis config must not rely on repo-mounted /server/skills for live discovery and should keep auto_load only for already-discoverable skills"
+        test_fail "Primary Moltis config must not rely on repo-mounted /server/skills for live discovery and must keep the Telegram safe lane free of always-on skill preload drift"
+    fi
+
+    test_start "static_config_forces_exact_telegram_safe_broad_research_fallback"
+    if rg -Fq 'Для user-facing Telegram/DM запросов, где пользователь просит изучить документацию или курс целиком' "$TOML_CONFIG" && \
+       rg -Fq 'не обещай начинать исследование и не формулируй план действий.' "$TOML_CONFIG" && \
+       rg -Fq 'В Telegram-safe режиме я не запускаю глубокое исследование и не изучаю документацию/курсы целиком в этом чате.' "$TOML_CONFIG" && \
+       rg -Fq 'Могу дать краткое объяснение без поиска или продолжить задачу в web UI/операторской сессии для полного разбора.' "$TOML_CONFIG" && \
+       rg -Fq 'В user-facing Telegram/DM не упоминай автоматически конкретные runtime skills, например `codex-update` или `telegram-learner`' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must hard-code a deterministic Telegram-safe fallback for broad research/doc-study asks and forbid automatic runtime-skill examples in DM replies"
     fi
 
     test_start "static_config_pins_memory_provider_and_repo_watch_dirs"
