@@ -518,16 +518,6 @@ log_guard_diagnostic() {
     local planning_leak="$8"
     local status_like="$9"
 
-    printf 'telegram-safe-llm-guard diag event=%s source=%s text_len=%s safe_lane=%s delivery_telemetry=%s after_llm_intent=%s planning=%s status=%s preview=%s\n' \
-        "$event_name" \
-        "$preview_source" \
-        "$text_length" \
-        "$is_safe_lane" \
-        "$delivery_telemetry" \
-        "$after_llm_intent" \
-        "$planning_leak" \
-        "$status_like" \
-        "$preview_value" >&2
     write_audit_line "diag event=$event_name source=$preview_source text_len=$text_length safe_lane=$is_safe_lane delivery_telemetry=$delivery_telemetry after_llm_intent=$after_llm_intent planning=$planning_leak status=$status_like preview=$(printf '%s' "$preview_value" | tr '\r\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g' | cut -c1-220)"
 }
 

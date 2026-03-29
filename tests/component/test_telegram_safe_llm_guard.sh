@@ -154,6 +154,24 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must emit a clean modify payload without duplicate top-level text/tool_calls keys that the runtime can reject silently"
     fi
 
+    test_start "component_after_llm_guard_keeps_stderr_empty_on_successful_modify"
+    local after_general_stdout_file after_general_stderr_file after_general_output_clean after_general_stderr
+    after_general_stdout_file="$(mktemp)"
+    after_general_stderr_file="$(mktemp)"
+    printf '%s\n' \
+        '{"event":"AfterLLMCall","data":{"session_key":"session:jkm","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, Сергей! Начинаю прямо сейчас. Сначала найду официальную документацию Moltis и изучу существующий навык `codex-update`:","tool_calls":[]}}' \
+        | env PATH="$MINIMAL_PATH" bash "$HOOK_SCRIPT" >"$after_general_stdout_file" 2>"$after_general_stderr_file"
+    after_general_output_clean="$(cat "$after_general_stdout_file")"
+    after_general_stderr="$(cat "$after_general_stderr_file")"
+    rm -f "$after_general_stdout_file" "$after_general_stderr_file"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_general_output_clean" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_general_output_clean" && \
+       [[ -z "$after_general_stderr" ]]; then
+        test_pass
+    else
+        test_fail "AfterLLMCall modify path must keep stderr empty so the runtime sees a clean hook protocol response"
+    fi
+
     test_start "component_after_llm_guard_blocks_internal_telemetry_even_without_tool_calls"
     local telemetry_only_output
     telemetry_only_output="$(
@@ -352,6 +370,24 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "MessageSending guard must strip final internal tool inventory/planning leakage even when Activity log markers are absent"
+    fi
+
+    test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"
+    local message_sending_stdout_file message_sending_stderr_file message_sending_output_clean message_sending_stderr
+    message_sending_stdout_file="$(mktemp)"
+    message_sending_stderr_file="$(mktemp)"
+    printf '%s\n' \
+        '{"event":"MessageSending","session_id":"session:vwy2","data":{"account_id":"moltis-bot","to":"777000","reply_to_message_id":780,"text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:"}}' \
+        | env PATH="$MINIMAL_PATH" bash "$HOOK_SCRIPT" >"$message_sending_stdout_file" 2>"$message_sending_stderr_file"
+    message_sending_output_clean="$(cat "$message_sending_stdout_file")"
+    message_sending_stderr="$(cat "$message_sending_stderr_file")"
+    rm -f "$message_sending_stdout_file" "$message_sending_stderr_file"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_output_clean" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_output_clean" && \
+       [[ -z "$message_sending_stderr" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending modify path must keep stderr empty so the runtime sees a clean hook protocol response"
     fi
 
     test_start "component_message_sending_guard_rewrites_final_doc_search_plan_without_tool_names"
