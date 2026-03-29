@@ -6,6 +6,18 @@ if [[ -z "${payload:-}" ]]; then
     exit 0
 fi
 
+AUDIT_FILE="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE:-}"
+
+write_audit_line() {
+    local message="$1"
+    if [[ -z "${AUDIT_FILE:-}" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$AUDIT_FILE")" 2>/dev/null || true
+    printf '%s pid=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" "$message" >>"$AUDIT_FILE" 2>/dev/null || true
+}
+
 payload_flat="$(
     printf '%s' "$payload" \
         | tr '\r\n' '  ' \
@@ -393,6 +405,7 @@ log_guard_diagnostic() {
         "$planning_leak" \
         "$status_like" \
         "$preview_value" >&2
+    write_audit_line "diag event=$event_name source=$preview_source text_len=$text_length safe_lane=$is_safe_lane delivery_telemetry=$delivery_telemetry after_llm_intent=$after_llm_intent planning=$planning_leak status=$status_like preview=$(printf '%s' "$preview_value" | tr '\r\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g' | cut -c1-220)"
 }
 
 event="$(extract_first_string event || true)"
@@ -404,6 +417,8 @@ response_text_flat="$(
         | tr '\r\n' '  ' \
         | sed 's/[[:space:]][[:space:]]*/ /g'
 )"
+
+write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
 
 is_telegram_safe_lane=false
 case "${model:-}" in
