@@ -171,6 +171,16 @@ PY
         test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
     fi
 
+    test_start "static_identity_prompt_makes_telegram_status_deterministic_and_tool_free"
+    if rg -Fq 'Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.' "$TOML_CONFIG" && \
+       rg -Fq 'Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search и другие tool calls' "$TOML_CONFIG" && \
+       rg -Fq 'всегда указывай канонический model id `custom-zai-telegram-safe::glm-5` именно целиком' "$TOML_CONFIG" && \
+       rg -Fq 'Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must make Telegram /status deterministic, tool-free, and pinned to the canonical Telegram-safe model id"
+    fi
+
     test_start "static_telegram_account_pins_classic_final_message_delivery"
     if rg -Fq '[channels.telegram.moltis-bot]' "$TOML_CONFIG" && \
        rg -Fq 'stream_mode = "off"' "$TOML_CONFIG"; then
