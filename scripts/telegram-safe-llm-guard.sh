@@ -24,6 +24,22 @@ extract_json_string() {
         sed -E 's/^"[^"]+"[[:space:]]*:[[:space:]]*"//; s/"$//'
 }
 
+extract_last_json_string() {
+    local key="$1"
+    local match=""
+    match="$(
+        printf '%s' "$compact_payload" |
+            grep -oE "\"$key\"[[:space:]]*:[[:space:]]*\"([^\"\\\\]|\\\\.)*\"" |
+            tail -n 1 || true
+    )"
+    if [[ -z "$match" ]]; then
+        return 0
+    fi
+
+    printf '%s' "$match" |
+        sed -E 's/^"[^"]+"[[:space:]]*:[[:space:]]*"//; s/"$//'
+}
+
 extract_json_number() {
     local key="$1"
     local match=""
@@ -111,13 +127,13 @@ emit_after_llm_guard() {
     local text has_nonempty_tool_calls=false
     local has_strong_telemetry=false looks_like_status=false mentions_wrong_model=false
 
-    text="$(extract_json_string "text")"
+    text="$(extract_last_json_string "text")"
 
     if grep -Eq '"tool_calls"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{' <<<"$compact_payload"; then
         has_nonempty_tool_calls=true
     fi
 
-    if grep -Eiq 'activity log|running:|searching memory|nodes_list|sessions_list|missing '\''action'\'' parameter' <<<"$text"; then
+    if grep -Eiq 'activity log|running:|searching memory|mcp__[[:alnum:]_:.:-]+|nodes_list|sessions_list|missing '\''action'\'' parameter' <<<"$text"; then
         has_strong_telemetry=true
     fi
 

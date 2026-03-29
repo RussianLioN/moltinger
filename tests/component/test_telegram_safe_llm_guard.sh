@@ -76,6 +76,21 @@ EOF
         test_fail "AfterLLMCall guard must tolerate both top-level and nested payload shapes from the hooks runtime"
     fi
 
+    test_start "component_after_llm_guard_prefers_final_llm_text_over_earlier_message_history_text"
+    local history_text_output
+    history_text_output="$(
+        cat <<'EOF' | bash "$HOOK_SCRIPT"
+{"event":"AfterLLMCall","data":{"session_key":"session:hist","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"user","content":"Покажи /status"},{"role":"assistant","content":[{"type":"text","text":"старый промежуточный текст"}]}],"text":"📋 Activity log • 🗺️ mcp__tavily__tavily_map • 🧠 Searching memory...","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$history_text_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$history_text_output" && \
+       jq -e '.data.text | contains("внутренних логов")' >/dev/null 2>&1 <<<"$history_text_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must inspect the final LLM response text instead of an earlier messages[].text entry"
+    fi
+
     test_start "component_after_llm_guard_is_noop_for_clean_safe_reply_without_tool_calls"
     local clean_safe_output
     clean_safe_output="$(
