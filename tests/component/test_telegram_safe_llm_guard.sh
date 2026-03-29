@@ -215,10 +215,14 @@ run_component_telegram_safe_llm_guard_tests() {
     local message_sending_status_output
     message_sending_status_output="$(
         run_hook_with_minimal_path \
-            '{"event":"MessageSending","session_id":"session:stu","data":{"user_message":"/status","text":"**Статус системы**\nАктивность:\n- Tmux: нет сессий\n- Cron: нет задач\nНавыки: codex-update\nГотов к работе. Что делаем?\nActivity log • process • Running: `uptime`"}}'
+            '{"event":"MessageSending","session_id":"session:stu","data":{"account_id":"moltis-bot","to":"123456","reply_to_message_id":777,"user_message":"/status","text":"**Статус системы**\nАктивность:\n- Tmux: нет сессий\n- Cron: нет задач\nНавыки: codex-update\nГотов к работе. Что делаем?\nActivity log • process • Running: `uptime`"}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
        jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e '.data.to == "123456"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e '.data.reply_to_message_id == 777' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e '.data.user_message == "/status"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
        jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_status_output"; then
         test_pass
     else
@@ -271,14 +275,17 @@ run_component_telegram_safe_llm_guard_tests() {
     local message_sending_friendly_doc_search_plan_output
     message_sending_friendly_doc_search_plan_output="$(
         run_hook_with_minimal_path \
-            '{"event":"MessageSending","session_id":"session:vwx3","data":{"text":"Отлично! Давай изучу официальную документацию и существующие навыки как примеры. Начну с поиска документации Moltis и анализа навыка codex-update (он как раз проверяет версии):"}}'
+            '{"event":"MessageSending","session_id":"session:vwx3","data":{"account_id":"moltis-bot","to":"987654","reply_to_message_id":778,"text":"Отлично! Давай изучу официальную документацию и существующие навыки как примеры. Начну с поиска документации Moltis и анализа навыка codex-update (он как раз проверяет версии):"}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_friendly_doc_search_plan_output" && \
        jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_friendly_doc_search_plan_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_friendly_doc_search_plan_output" && \
+       jq -e '.data.to == "987654"' >/dev/null 2>&1 <<<"$message_sending_friendly_doc_search_plan_output" && \
+       jq -e '.data.reply_to_message_id == 778' >/dev/null 2>&1 <<<"$message_sending_friendly_doc_search_plan_output" && \
        jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_friendly_doc_search_plan_output"; then
         test_pass
     else
-        test_fail "MessageSending guard must strip the exact live friendly doc-search wording that still leaks internal planning without raw tool names"
+        test_fail "MessageSending guard must strip the exact live friendly doc-search wording and preserve routing fields required for Telegram delivery"
     fi
 
     test_start "component_message_sending_guard_is_noop_for_plain_text_without_strict_delivery_log_markers"

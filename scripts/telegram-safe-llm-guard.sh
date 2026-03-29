@@ -121,6 +121,89 @@ extract_json_array() {
     '
 }
 
+extract_json_object() {
+    local key="$1"
+
+    printf '%s' "$payload" | awk -v key="$key" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            needle = "\"" key "\""
+            state = "seek"
+            value = ""
+            depth = 0
+            in_string = 0
+            escape = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (state == "seek") {
+                    if (substr(text, i, length(needle)) != needle) {
+                        continue
+                    }
+                    j = i + length(needle)
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != "{") {
+                        continue
+                    }
+                    state = "capture"
+                    depth = 0
+                    in_string = 0
+                    escape = 0
+                    i = j - 1
+                    continue
+                }
+
+                value = value c
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    continue
+                }
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        print value
+                        exit 0
+                    }
+                }
+            }
+        }
+        END {
+            if (value == "") {
+                exit 1
+            }
+        }
+    '
+}
+
 json_escape() {
     printf '%s' "$1" | awk '
         BEGIN {
@@ -167,6 +250,23 @@ append_optional_number_field() {
     fi
 }
 
+append_field_to_object() {
+    local object_json="$1"
+    local field_fragment="$2"
+
+    if [[ -z "$field_fragment" ]]; then
+        printf '%s' "$object_json"
+        return
+    fi
+
+    if [[ -z "$object_json" || "$object_json" == "{}" ]]; then
+        printf '{%s}' "$field_fragment"
+        return
+    fi
+
+    printf '%s,%s}' "${object_json%\}}" "$field_fragment"
+}
+
 build_message_json() {
     local role="$1"
     local content="$2"
@@ -192,7 +292,7 @@ append_message_to_array() {
 emit_modified_payload() {
     local text="$1"
     local include_tool_calls="${2:-false}"
-    local session_key provider model finish_reason input_tokens output_tokens reasoning_tokens
+    local session_key provider model finish_reason input_tokens output_tokens reasoning_tokens data_object_json modified_data_json
 
     session_key="$(extract_first_string session_key || true)"
     if [[ -z "$session_key" ]]; then
@@ -204,6 +304,38 @@ emit_modified_payload() {
     input_tokens="$(extract_first_number input_tokens || true)"
     output_tokens="$(extract_first_number output_tokens || true)"
     reasoning_tokens="$(extract_first_number reasoning_tokens || true)"
+    data_object_json="$(extract_json_object data || true)"
+
+    if [[ -n "$data_object_json" ]]; then
+        modified_data_json="$data_object_json"
+        if [[ -n "$session_key" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field session_key "$session_key")")"
+        fi
+        if [[ -n "$provider" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field provider "$provider")")"
+        fi
+        if [[ -n "$model" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field model "$model")")"
+        fi
+        if [[ -n "$finish_reason" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field finish_reason "$finish_reason")")"
+        fi
+        if [[ -n "$input_tokens" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field input_tokens "$input_tokens")")"
+        fi
+        if [[ -n "$output_tokens" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field output_tokens "$output_tokens")")"
+        fi
+        if [[ -n "$reasoning_tokens" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field reasoning_tokens "$reasoning_tokens")")"
+        fi
+        if [[ "$include_tool_calls" == "true" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" '"tool_calls":[]')"
+        fi
+        modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field text "$text")")"
+        printf '{"action":"modify","data":%s}\n' "$modified_data_json"
+        return
+    fi
 
     printf '{"action":"modify","data":{%s%s%s%s%s%s%s,"text":"%s"%s}}\n' \
         "$(json_string_field session_key "${session_key:-current-session}")" \
