@@ -391,6 +391,28 @@
       ],
       "ci": true
     },
+    "moltis-repo-hooks-sync.sh": {
+      "version": "1.0.0",
+      "description": "Sync Git-tracked repo-managed Moltis hook bundles into the runtime-discovered project hook directory before live verification",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "cp",
+        "mktemp",
+        "mv",
+        "rm",
+        "sort"
+      ],
+      "provides": [
+        "moltis-repo-hooks-sync"
+      ],
+      "env_vars": [
+        "MOLTIS_REPO_HOOKS_SOURCE_ROOT",
+        "MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT",
+        "MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST"
+      ],
+      "ci": true
+    },
     "moltis-codex-advisory-router.sh": {
       "version": "1.0.0",
       "description": "Route Moltis-native Codex advisory callbacks and recovery actions into immediate Telegram follow-up delivery",

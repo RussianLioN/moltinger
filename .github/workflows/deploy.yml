@@ -544,6 +544,10 @@ jobs:
         run: |
           bash tests/component/test_moltis_repo_skills_sync.sh
 
+      - name: Component test - Moltis repo hook sync
+        run: |
+          bash tests/component/test_moltis_repo_hooks_sync.sh
+
       - name: Test summary
         if: always()
         run: |

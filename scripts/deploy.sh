@@ -28,9 +28,13 @@ CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
 CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+MOLTIS_RUNTIME_DATA_DIR="${MOLTIS_RUNTIME_DATA_DIR:-/home/moltis/.moltis}"
 MOLTIS_REPO_SKILLS_SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills}"
-MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
-MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-/home/moltis/.moltis/.repo-managed-skills.txt}"
+MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-$MOLTIS_RUNTIME_DATA_DIR/skills}"
+MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-$MOLTIS_RUNTIME_DATA_DIR/.repo-managed-skills.txt}"
+MOLTIS_REPO_HOOKS_SOURCE_ROOT="${MOLTIS_REPO_HOOKS_SOURCE_ROOT:-/server/.moltis/hooks}"
+MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT="${MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT:-$MOLTIS_RUNTIME_DATA_DIR/.moltis/hooks}"
+MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST="${MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST:-$MOLTIS_RUNTIME_DATA_DIR/.moltis/.repo-managed-hooks.txt}"
 MOLTIS_STOP_TIMEOUT_SECONDS="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
 CANONICAL_MOLTIS_BROWSER_PROFILE_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_DIR:-/tmp/moltis-browser-profile}"
 
@@ -522,6 +526,43 @@ sync_moltis_repo_skills_into_runtime() {
     return 0
 }
 
+sync_moltis_repo_hooks_into_runtime() {
+    local sync_script="/server/scripts/moltis-repo-hooks-sync.sh"
+
+    if ! docker exec "$TARGET_CONTAINER" sh -lc "
+        test -x '$sync_script' &&
+        '$sync_script' \
+          --source-root '$MOLTIS_REPO_HOOKS_SOURCE_ROOT' \
+          --target-root '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT' \
+          --manifest '$MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST'
+    " >/dev/null 2>&1; then
+        record_verification_failure "Moltis runtime contract mismatch: failed to sync repo-managed hooks into the runtime project hook discovery path"
+        return 1
+    fi
+
+    return 0
+}
+
+prestage_moltis_repo_hooks_into_runtime() {
+    local container_id hook_name
+    local -a repo_hook_names=()
+
+    while IFS= read -r hook_name; do
+        [[ -n "$hook_name" ]] || continue
+        repo_hook_names+=("$hook_name")
+    done < <(list_repo_hook_names)
+
+    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    container_id="$(docker ps -q --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
+    [[ -n "$container_id" ]] || return 0
+
+    sync_moltis_repo_hooks_into_runtime || return 1
+    return 0
+}
+
 read_moltis_auth_password() {
     local password_file="$PROJECT_ROOT/secrets/moltis_password.txt"
     local password=""
@@ -635,7 +676,7 @@ verify_moltis_repo_skills_discovery() {
     return 0
 }
 
-verify_moltis_project_hook_discovery() {
+verify_moltis_repo_hook_discovery() {
     local hook_name hooks_json
     local -a repo_hook_names=()
 
@@ -648,11 +689,13 @@ verify_moltis_project_hook_discovery() {
         return 0
     fi
 
+    sync_moltis_repo_hooks_into_runtime || return 1
+
     for hook_name in "${repo_hook_names[@]}"; do
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
-            test -f '/server/.moltis/hooks/$hook_name/HOOK.md'
+            test -f '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/HOOK.md'
         " >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: project-local hook package is not visible in /server/.moltis/hooks for $hook_name"
+            record_verification_failure "Moltis runtime contract mismatch: synced runtime project hook is missing HOOK.md for $hook_name"
         fi
     done
 
@@ -666,7 +709,7 @@ verify_moltis_project_hook_discovery() {
         if ! jq -e --arg hook_name "$hook_name" '
             .. | objects | .name? | select(type == "string" and . == $hook_name)
         ' <<<"$hooks_json" >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: project-local hook '$hook_name' is not registered in the live runtime hook registry"
+            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not registered in the live runtime hook registry"
         fi
     done
 
@@ -1499,13 +1542,16 @@ deploy_containers() {
 
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
-        # changes must force a recreate to avoid stale live state.
+        # changes must force a recreate to avoid stale live state. Pre-stage
+        # repo-managed project hooks into the runtime data dir before the
+        # recreate so the next process start sees them immediately.
         # Keep sidecars converged without forcing a second Moltis recreate in the
         # same compose transaction. Then pre-stop/remove the fixed-name Moltis
         # container and recreate only the Moltis service with --no-deps.
         if [[ ${#auxiliary_services[@]} -gt 0 ]]; then
             compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"
         fi
+        prestage_moltis_repo_hooks_into_runtime
         prepare_moltis_container_for_rollout
         compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
         log_success "Containers deployed for target $TARGET"
@@ -1657,7 +1703,7 @@ verify_deployment() {
         fi
 
         verify_moltis_repo_skills_discovery || true
-        verify_moltis_project_hook_discovery || true
+        verify_moltis_repo_hook_discovery || true
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             sock_gid="$(stat -c %g /var/run/docker.sock)" &&

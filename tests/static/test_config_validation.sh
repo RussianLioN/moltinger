@@ -48,6 +48,7 @@ GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
 TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
 TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
 TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
+MOLTIS_REPO_HOOKS_SYNC_SCRIPT="$PROJECT_ROOT/scripts/moltis-repo-hooks-sync.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -252,15 +253,16 @@ PY
         test_fail "Tracked repo must ship a project-local Telegram-safe hook package under /.moltis/hooks without a jq runtime dependency"
     fi
 
-    test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_live_registration"
+    test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_runtime_project_hook_registration"
     if [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
        ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
-       rg -Fq 'verify_moltis_project_hook_discovery' "$DEPLOY_SCRIPT" && \
-       rg -Fq ".moltis/hooks/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
+       rg -Fq 'sync_moltis_repo_hooks_into_runtime' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'verify_moltis_repo_hook_discovery' "$DEPLOY_SCRIPT" && \
+       rg -Fq "\$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
        rg -Fq "moltis hooks list --json" "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Telegram-safe hook runtime must stay shell-only and deploy verification must attest project-local hook registration"
+        test_fail "Telegram-safe hook runtime must stay shell-only and deploy verification must attest repo-managed hook registration from the runtime project hook discovery path"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
@@ -522,6 +524,13 @@ PY
         test_fail "scripts/moltis-repo-skills-sync.sh must be executable so deploy can materialize repo-managed skills into the runtime discovery path"
     fi
 
+    test_start "static_moltis_repo_hooks_sync_script_is_executable"
+    if [[ -x "$MOLTIS_REPO_HOOKS_SYNC_SCRIPT" ]]; then
+        test_pass
+    else
+        test_fail "scripts/moltis-repo-hooks-sync.sh must be executable so deploy can materialize repo-managed hooks into the runtime project hook discovery path"
+    fi
+
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
     if rg -q 'run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
        rg -q 'data/\.deployed-sha' "$TRACKED_DEPLOY_SCRIPT" && \
@@ -762,7 +771,11 @@ for job_name, timeout_fragment in required_job_timeouts.items():
         raise SystemExit(1)
 
 test_job_match = re.search(r'(?ms)^  test:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
-if not test_job_match or 'test_moltis_repo_skills_sync.sh' not in test_job_match.group(1):
+if not test_job_match:
+    raise SystemExit(1)
+if 'test_moltis_repo_skills_sync.sh' not in test_job_match.group(1):
+    raise SystemExit(1)
+if 'test_moltis_repo_hooks_sync.sh' not in test_job_match.group(1):
     raise SystemExit(1)
 
 required_notify_fragments = [
