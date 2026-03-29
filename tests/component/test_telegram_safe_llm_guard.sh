@@ -84,7 +84,7 @@ run_component_telegram_safe_llm_guard_tests() {
     local message_sending_status_output
     message_sending_status_output="$(
         run_hook_with_minimal_path \
-            '{"event":"MessageSending","data":{"session_key":"session:stu","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","user_message":"/status","text":"**Статус системы**\nАктивность:\n- Tmux: нет сессий\n- Cron: нет задач\nНавыки: codex-update\nГотов к работе. Что делаем?\nActivity log • process • Running: `uptime`"}}'
+            '{"event":"MessageSending","session_id":"session:stu","data":{"user_message":"/status","text":"**Статус системы**\nАктивность:\n- Tmux: нет сессий\n- Cron: нет задач\nНавыки: codex-update\nГотов к работе. Что делаем?\nActivity log • process • Running: `uptime`"}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
        jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
@@ -98,7 +98,7 @@ run_component_telegram_safe_llm_guard_tests() {
     local message_sending_general_output
     message_sending_general_output="$(
         run_hook_with_minimal_path \
-            '{"event":"MessageSending","data":{"session_key":"session:vwx","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"📋 Activity log • mcp__tavily__tavily_map • Running: `curl https://docs.moltis.org`"}}'
+            '{"event":"MessageSending","session_id":"session:vwx","data":{"text":"📋 Activity log • mcp__tavily__tavily_map • Running: `curl https://docs.moltis.org`"}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_general_output" && \
        jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_general_output" && \

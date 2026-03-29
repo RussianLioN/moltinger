@@ -134,10 +134,6 @@ if [[ "$event" != "AfterLLMCall" && "$event" != "MessageSending" ]]; then
     exit 0
 fi
 
-if [[ "$is_telegram_safe_lane" != true ]]; then
-    exit 0
-fi
-
 tool_calls_present=false
 if printf '%s' "$payload_flat" | grep -Eq '"tool_calls"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
     tool_calls_present=true
@@ -156,6 +152,14 @@ fi
 mentions_wrong_model=false
 if printf '%s' "$payload_flat" | grep -Fq 'zai::glm-5'; then
     mentions_wrong_model=true
+fi
+
+if [[ "$event" == "AfterLLMCall" && "$is_telegram_safe_lane" != true ]]; then
+    exit 0
+fi
+
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_internal_telemetry" != true ]]; then
+    exit 0
 fi
 
 canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
