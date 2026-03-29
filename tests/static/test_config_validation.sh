@@ -48,6 +48,7 @@ GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
 TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
 TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
 TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
+TELEGRAM_LEARNER_SKILL="$PROJECT_ROOT/skills/telegram-learner/SKILL.md"
 MOLTIS_REPO_HOOKS_SYNC_SCRIPT="$PROJECT_ROOT/scripts/moltis-repo-hooks-sync.sh"
 
 validate_toml() {
@@ -173,6 +174,16 @@ PY
         test_pass
     else
         test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
+    fi
+
+    test_start "static_identity_prompt_fail_closes_telegram_long_research_promises"
+    if rg -Fq 'Для такого класса Telegram-safe long-research запросов запрещены ответы-обещания вида `Отлично! Давай изучу...`' "$TOML_CONFIG" && \
+       rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TOML_CONFIG" && \
+       rg -Fq 'Исключение: для широких long-research запросов в user-facing Telegram/DM даже такое короткое префейс-сообщение запрещено' "$TOML_CONFIG" && \
+       rg -Fq 'не упоминай автоматически конкретные runtime skills' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must fail closed on broad Telegram long-research requests and force a deterministic safe fallback instead of planning language"
     fi
 
     test_start "static_identity_prompt_makes_telegram_status_deterministic_and_tool_free"
@@ -305,6 +316,16 @@ PY
         test_pass
     else
         test_fail "Primary Moltis identity prompt must scope broad Moltis skill-authoring/doc-review requests to relevant sections and local project guides"
+    fi
+
+    test_start "static_telegram_learner_skill_reinforces_safe_lane_long_research_guard"
+    if [[ -f "$TELEGRAM_LEARNER_SKILL" ]] && \
+       rg -Fq '## Критический guard для user-facing Telegram DM' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'не говори `Отлично! Давай изучу...`, `Хорошо, изучу...`, `Начну...`, `Начну с поиска...`, `Сейчас изучу...`, `Сначала найду...`' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TELEGRAM_LEARNER_SKILL"; then
+        test_pass
+    else
+        test_fail "Auto-loaded telegram-learner skill must reinforce a deterministic fail-closed reply for broad Telegram long-research requests"
     fi
 
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
@@ -495,8 +516,9 @@ PY
     test_start "static_config_forces_exact_telegram_safe_broad_research_fallback"
     if rg -Fq 'Для user-facing Telegram/DM запросов, где пользователь просит изучить документацию или курс целиком' "$TOML_CONFIG" && \
        rg -Fq 'не обещай начинать исследование и не формулируй план действий.' "$TOML_CONFIG" && \
-       rg -Fq 'В Telegram-safe режиме я не запускаю глубокое исследование и не изучаю документацию/курсы целиком в этом чате.' "$TOML_CONFIG" && \
-       rg -Fq 'Могу дать краткое объяснение без поиска или продолжить задачу в web UI/операторской сессии для полного разбора.' "$TOML_CONFIG" && \
+       rg -Fq 'Для такого класса Telegram-safe long-research запросов запрещены ответы-обещания вида `Отлично! Давай изучу...`' "$TOML_CONFIG" && \
+       rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TOML_CONFIG" && \
+       rg -Fq 'Могу дать краткое объяснение без поиска или продолжить задачу в web UI/операторской сессии для полного пошагового разбора.' "$TOML_CONFIG" && \
        rg -Fq 'В user-facing Telegram/DM не упоминай автоматически конкретные runtime skills, например `codex-update` или `telegram-learner`' "$TOML_CONFIG"; then
         test_pass
     else
