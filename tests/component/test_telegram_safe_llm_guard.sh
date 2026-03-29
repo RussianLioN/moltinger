@@ -45,7 +45,9 @@ run_component_telegram_safe_llm_guard_tests() {
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.messages[-1].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[-1].content | contains("must remain text-only")' >/dev/null 2>&1 <<<"$before_llm_output"; then
+       jq -e '.data.messages[-1].content | contains("must remain text-only")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[-1].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[-1].content | contains("В Telegram-safe режиме я не запускаю инструменты")' >/dev/null 2>&1 <<<"$before_llm_output"; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must strip tool surface and append a deterministic Telegram-safe long-research policy before the provider sees a broad doc-study request"
@@ -59,7 +61,8 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
-       jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
+       jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
+       jq -e '.data.messages[-1].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must still append the long-research policy and force tool_count=0 even if the runtime payload omits tool_count"

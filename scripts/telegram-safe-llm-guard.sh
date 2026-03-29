@@ -240,6 +240,29 @@ emit_before_llm_modified_payload() {
         "$messages_json"
 }
 
+log_guard_diagnostic() {
+    local event_name="$1"
+    local preview_source="$2"
+    local preview_value="$3"
+    local text_length="$4"
+    local is_safe_lane="$5"
+    local delivery_telemetry="$6"
+    local after_llm_intent="$7"
+    local planning_leak="$8"
+    local status_like="$9"
+
+    printf 'telegram-safe-llm-guard diag event=%s source=%s text_len=%s safe_lane=%s delivery_telemetry=%s after_llm_intent=%s planning=%s status=%s preview=%s\n' \
+        "$event_name" \
+        "$preview_source" \
+        "$text_length" \
+        "$is_safe_lane" \
+        "$delivery_telemetry" \
+        "$after_llm_intent" \
+        "$planning_leak" \
+        "$status_like" \
+        "$preview_value" >&2
+}
+
 event="$(extract_first_string event || true)"
 model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
@@ -303,6 +326,33 @@ if printf '%s' "$payload_flat" | grep -Eiq '((изучи|изучить|иссл
     looks_like_broad_research_request=true
 fi
 
+if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
+    diagnostic_preview_source="text"
+    diagnostic_preview_value="$response_text_flat"
+    if [[ -z "$diagnostic_preview_value" ]]; then
+        diagnostic_preview_source="payload"
+        diagnostic_preview_value="$payload_flat"
+    fi
+    diagnostic_preview_value="$(
+        printf '%s' "$diagnostic_preview_value" \
+            | tr '\r\n' '  ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g' \
+            | cut -c1-220
+    )"
+    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$(printf '%s' "$payload_flat" | grep -Eic 'документац|docs|codex-update|навык|skill')" -gt 0 ]]; then
+        log_guard_diagnostic \
+            "$event" \
+            "$diagnostic_preview_source" \
+            "$diagnostic_preview_value" \
+            "${#response_text_flat}" \
+            "$is_telegram_safe_lane" \
+            "$has_delivery_internal_telemetry" \
+            "$has_after_llm_tool_intent" \
+            "$has_user_visible_internal_planning" \
+            "$looks_like_status"
+    fi
+fi
+
 already_guarded_long_research=false
 if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; then
     already_guarded_long_research=true
@@ -319,7 +369,7 @@ fi
 if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == true && "$already_guarded_long_research" != true ]]; then
     messages_json="$(extract_json_array messages || true)"
     if [[ -n "${messages_json:-}" ]]; then
-        long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, inspect the environment, inspect the mounted workspace, read skill files, or look at existing skills right now.\n- Avoid self-action phrasing such as: "попробую", "найду", "посмотрю", "изучу", "let me", "I will".\n- If the request requires deep research or full doc/course study, answer honestly in Russian without tools: briefly state the limit, then offer either a compact step-by-step plan or ask to continue in the web UI/operator session for the full research.'
+        long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, inspect the environment, inspect the mounted workspace, read skill files, or look at existing skills right now.\n- Avoid self-action phrasing such as: "попробую", "найду", "посмотрю", "изучу", "let me", "I will".\n- If the request requires deep research or full doc/course study, do not provide a plan of action and do not promise to start searching.\n- For this turn, answer in Russian with exactly this single sentence and nothing else: "В Telegram-safe режиме я не запускаю инструменты и не провожу глубокий поиск. Могу дать краткий ответ без поиска или продолжить в web UI/операторской сессии для полного разбора."'
         emit_before_llm_modified_payload "$(append_message_to_array "$messages_json" system "$long_research_guard")" 0
         exit 0
     fi
