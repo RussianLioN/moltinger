@@ -43,14 +43,16 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[-1].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[-1].content | contains("must remain text-only")' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[-1].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_output" && \
-       jq -e '.data.messages[-1].content | contains("В Telegram-safe режиме я не запускаю инструменты")' >/dev/null 2>&1 <<<"$before_llm_output"; then
+       jq -e '.data.messages[0].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[0].content | contains("must remain text-only")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[0].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[0].content | contains("В Telegram-safe режиме я не запускаю инструменты")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[1].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[2].role == "user"' >/dev/null 2>&1 <<<"$before_llm_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must strip tool surface and append a deterministic Telegram-safe long-research policy before the provider sees a broad doc-study request"
+        test_fail "BeforeLLMCall guard must strip tool surface and prepend a deterministic Telegram-safe long-research policy before the provider sees a broad doc-study request"
     fi
 
     test_start "component_before_llm_guard_does_not_depend_on_tool_count_field_to_append_long_research_policy"
@@ -61,11 +63,27 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
-       jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
-       jq -e '.data.messages[-1].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
+       jq -e '.data.messages[0].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
+       jq -e '.data.messages[0].content | contains("exactly this single sentence")' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must still append the long-research policy and force tool_count=0 even if the runtime payload omits tool_count"
+        test_fail "BeforeLLMCall guard must still prepend the long-research policy and force tool_count=0 even if the runtime payload omits tool_count"
+    fi
+
+    test_start "component_before_llm_guard_reapplies_long_research_policy_even_when_session_history_already_contains_guard"
+    local before_llm_existing_guard_output
+    before_llm_existing_guard_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abf","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"system","content":"Telegram-safe long-research guard: stale copy"},{"role":"user","content":"Изучи полностью официальную документацию Moltis и научи меня делать новый навык"}],"tool_count":37,"iteration":2}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
+       jq -e '.data.messages[1].content == "base system"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
+       jq -e '.data.messages[2].content == "Telegram-safe long-research guard: stale copy"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must reapply the strong long-research policy at the front even when an older copy already exists in session history"
     fi
 
     test_start "component_before_llm_guard_forces_safe_lane_text_only_even_for_non_research_request"
@@ -255,6 +273,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must suppress the exact live codex-update reading phrase captured by the runtime audit"
     fi
 
+    test_start "component_after_llm_guard_blocks_exact_live_named_doc_search_plan_wording_from_runtime_audit"
+    local live_named_doc_search_plan_output
+    live_named_doc_search_plan_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qt0","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_named_doc_search_plan_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_named_doc_search_plan_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$live_named_doc_search_plan_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must suppress the exact live named doc-search wording captured from the runtime audit"
+    fi
+
     test_start "component_message_sending_guard_rewrites_final_status_delivery_even_when_after_llm_missed"
     local message_sending_status_output
     message_sending_status_output="$(
@@ -330,6 +362,22 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "MessageSending guard must strip the exact live friendly doc-search wording and preserve routing fields required for Telegram delivery"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_exact_live_named_doc_search_plan_wording"
+    local message_sending_named_doc_search_plan_output
+    message_sending_named_doc_search_plan_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","session_id":"session:vwx4","data":{"account_id":"moltis-bot","to":"555000","reply_to_message_id":779,"text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_named_doc_search_plan_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_named_doc_search_plan_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_named_doc_search_plan_output" && \
+       jq -e '.data.to == "555000"' >/dev/null 2>&1 <<<"$message_sending_named_doc_search_plan_output" && \
+       jq -e '.data.reply_to_message_id == 779' >/dev/null 2>&1 <<<"$message_sending_named_doc_search_plan_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite the exact live named doc-search wording and preserve Telegram routing fields"
     fi
 
     test_start "component_message_sending_guard_rewrites_exact_live_named_doc_study_phrase_from_probe"
