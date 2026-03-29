@@ -492,6 +492,20 @@ list_repo_skill_names() {
     shopt -u nullglob
 }
 
+list_project_local_hook_names() {
+    local hooks_dir="$PROJECT_ROOT/.moltis/hooks"
+    local hook_dir
+
+    shopt -s nullglob
+    for hook_dir in "$hooks_dir"/*; do
+        [[ -d "$hook_dir" ]] || continue
+        [[ -f "$hook_dir/HOOK.md" ]] || continue
+        [[ -x "$hook_dir/handler.sh" ]] || continue
+        basename "$hook_dir"
+    done | LC_ALL=C sort
+    shopt -u nullglob
+}
+
 sync_moltis_repo_skills_into_runtime() {
     local sync_script="/server/scripts/moltis-repo-skills-sync.sh"
 
@@ -504,6 +518,47 @@ sync_moltis_repo_skills_into_runtime() {
           --manifest '$MOLTIS_RUNTIME_SKILLS_MANIFEST'
     " >/dev/null 2>&1; then
         record_verification_failure "Moltis runtime contract mismatch: failed to sync repo-managed skills into runtime discovery path"
+        return 1
+    fi
+
+    return 0
+}
+
+verify_moltis_project_local_hook_discovery() {
+    local hook_name hooks_json
+    local -a repo_hook_names=()
+
+    while IFS= read -r hook_name; do
+        [[ -n "$hook_name" ]] || continue
+        repo_hook_names+=("$hook_name")
+    done < <(list_project_local_hook_names)
+
+    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    for hook_name in "${repo_hook_names[@]}"; do
+        if ! docker exec "$TARGET_CONTAINER" sh -lc "
+            test -f '/server/.moltis/hooks/$hook_name/HOOK.md' &&
+            test -x '/server/.moltis/hooks/$hook_name/handler.sh'
+        " >/dev/null 2>&1; then
+            record_verification_failure "Moltis runtime contract mismatch: project-local hook bundle '$hook_name' is not visible inside /server/.moltis/hooks"
+        fi
+    done
+
+    hooks_json="$(docker exec "$TARGET_CONTAINER" sh -lc 'moltis hooks list --eligible --json' 2>/dev/null || true)"
+    if [[ -z "$hooks_json" ]]; then
+        record_verification_failure "Moltis runtime contract mismatch: failed to query eligible hooks after project-local hook discovery"
+        return 1
+    fi
+
+    for hook_name in "${repo_hook_names[@]}"; do
+        if ! grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"$hook_name\"" <<<"$hooks_json"; then
+            record_verification_failure "Moltis runtime contract mismatch: eligible hook list does not expose project-local hook '$hook_name'"
+        fi
+    done
+
+    if verification_failure_recorded; then
         return 1
     fi
 
@@ -1607,6 +1662,7 @@ verify_deployment() {
         fi
 
         verify_moltis_repo_skills_discovery || true
+        verify_moltis_project_local_hook_discovery || true
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             sock_gid="$(stat -c %g /var/run/docker.sock)" &&

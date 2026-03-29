@@ -816,12 +816,12 @@ rate_limit_window_secs = 60
 # MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
 # MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 # MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX = "codex-advisory"
-
-[[hooks.hooks]]
-name = "telegram-safe-llm-guard"
-command = "./scripts/telegram-safe-llm-guard.sh"
-events = ["BeforeLLMCall", "AfterLLMCall"]
-timeout = 5
+#
+# Telegram-safe user-facing guard now lives in the project-local hooks path:
+# `/server/.moltis/hooks/telegram-safe-llm-guard`.
+# Official docs define project-local hooks as a first-class discovery path, and
+# this runtime actually registers them, unlike config-defined hooks in the live
+# Moltis 0.10.18 deployment path.
 
 # [hooks]
 # [[hooks.hooks]]

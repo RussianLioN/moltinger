@@ -30,6 +30,9 @@ MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 TELEGRAM_WEBHOOK_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/telegram-webhook-monitor.sh"
 TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webhook-monitor"
 TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
+TELEGRAM_SAFE_HOOK_DOC="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard/HOOK.md"
+TELEGRAM_SAFE_HOOK_HANDLER="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard/handler.sh"
+TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 DEPLOY_STALL_WATCHDOG_SCRIPT="$PROJECT_ROOT/scripts/deploy-stall-watchdog.sh"
 HEALTH_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/health-monitor.sh"
@@ -229,13 +232,24 @@ PY
         test_fail "User-facing Telegram must pin a dedicated text-only provider lane so DM traffic cannot inherit the shared tool-capable runtime surface"
     fi
 
-    test_start "static_telegram_safe_lane_registers_llm_guard_hook"
-    if rg -Fq 'name = "telegram-safe-llm-guard"' "$TOML_CONFIG" && \
-       rg -Fq 'command = "./scripts/telegram-safe-llm-guard.sh"' "$TOML_CONFIG" && \
-       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall"]' "$TOML_CONFIG"; then
+    test_start "static_telegram_safe_lane_registers_project_local_llm_guard_hook"
+    if [[ -f "$TELEGRAM_SAFE_HOOK_DOC" && -x "$TELEGRAM_SAFE_HOOK_HANDLER" && -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
+       rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_DOC" && \
+       rg -Fq 'events = ["AfterLLMCall"]' "$TELEGRAM_SAFE_HOOK_DOC" && \
+       rg -Fq 'command = "./handler.sh"' "$TELEGRAM_SAFE_HOOK_DOC" && \
+       rg -Fq 'exec /server/scripts/telegram-safe-llm-guard.sh' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
+       ! rg -Fq 'name = "telegram-safe-llm-guard"' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Tracked Moltis config must register a Telegram-safe LLM guard hook so user-facing Telegram replies cannot drift into tool fallback or activity-log leakage"
+        test_fail "Telegram-safe LLM guard must live in the project-local .moltis/hooks discovery path and should not rely on config-defined hook registration"
+    fi
+
+    test_start "static_telegram_safe_llm_guard_avoids_unavailable_json_runtimes"
+    if ! grep -Eq '\<jq\>|\<python3?\>|\<node(js)?\>' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
+       rg -Fq 'bins = ["bash", "grep", "sed", "tr"]' "$TELEGRAM_SAFE_HOOK_DOC"; then
+        test_pass
+    else
+        test_fail "Telegram-safe LLM guard must remain runnable in the production Moltis container without jq/python/node"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"

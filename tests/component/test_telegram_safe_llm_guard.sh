@@ -25,37 +25,6 @@ run_component_telegram_safe_llm_guard_tests() {
         return
     fi
 
-    test_start "component_before_llm_guard_injects_strict_status_contract_for_telegram_safe_lane"
-    local before_status_output
-    before_status_output="$(
-        cat <<'EOF' | bash "$HOOK_SCRIPT"
-{"event":"BeforeLLMCall","data":{"session_key":"session:abc","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"user","content":"/status"}]}}
-EOF
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_status_output" && \
-       jq -e '.data.messages[-1].role == "system"' >/dev/null 2>&1 <<<"$before_status_output" && \
-       jq -e '.data.messages[-1].content | contains("For the literal command /status")' >/dev/null 2>&1 <<<"$before_status_output" && \
-       jq -e '.data.messages[-1].content | contains("Модель: custom-zai-telegram-safe::glm-5")' >/dev/null 2>&1 <<<"$before_status_output"; then
-        test_pass
-    else
-        test_fail "BeforeLLMCall guard must inject an exact `/status` contract for the Telegram-safe lane"
-    fi
-
-    test_start "component_before_llm_guard_injects_no_tool_policy_for_general_telegram_safe_requests"
-    local before_general_output
-    before_general_output="$(
-        cat <<'EOF' | bash "$HOOK_SCRIPT"
-{"event":"BeforeLLMCall","data":{"session_key":"session:def","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"user","content":"Изучи документацию и настрой workflow"}]}}
-EOF
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_general_output" && \
-       jq -e '.data.messages[-1].content | contains("Never call or simulate tools")' >/dev/null 2>&1 <<<"$before_general_output" && \
-       jq -e '.data.messages[-1].content | contains("web UI or operator session")' >/dev/null 2>&1 <<<"$before_general_output"; then
-        test_pass
-    else
-        test_fail "BeforeLLMCall guard must inject a no-tool Telegram-safe policy for general requests"
-    fi
-
     test_start "component_after_llm_guard_rewrites_status_like_tool_fallback_to_canonical_safe_status"
     local after_status_output
     after_status_output="$(
@@ -66,7 +35,8 @@ EOF
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.text | contains("Модель: custom-zai-telegram-safe::glm-5")' >/dev/null 2>&1 <<<"$after_status_output" && \
-       jq -e '.data.text | contains("Режим: telegram-safe")' >/dev/null 2>&1 <<<"$after_status_output"; then
+       jq -e '.data.text | contains("Провайдер: custom-zai-telegram-safe")' >/dev/null 2>&1 <<<"$after_status_output" && \
+       jq -e '.data.text | contains("Режим: safe-text")' >/dev/null 2>&1 <<<"$after_status_output"; then
         test_pass
     else
         test_fail "AfterLLMCall guard must replace Telegram-safe status tool fallbacks with a canonical status reply"
@@ -81,11 +51,42 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_general_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_general_output" && \
-       jq -e '.data.text | contains("не выполняю многошаговые инструменты")' >/dev/null 2>&1 <<<"$after_general_output" && \
+       jq -e '.data.text | contains("отвечаю без инструментов и внутренних логов")' >/dev/null 2>&1 <<<"$after_general_output" && \
        jq -e '.data.text | contains("web UI")' >/dev/null 2>&1 <<<"$after_general_output"; then
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress general Telegram-safe tool fallbacks and replace them with a clean user-facing fallback"
+    fi
+
+    test_start "component_after_llm_guard_supports_top_level_after_llm_payload_shape"
+    local top_level_output
+    top_level_output="$(
+        cat <<'EOF' | bash "$HOOK_SCRIPT"
+{"event":"AfterLLMCall","session_key":"session:top","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Activity log • Running: process list","tool_calls":[{"name":"process","arguments":{"action":"list"}}],"iteration":2,"input_tokens":10,"output_tokens":5}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$top_level_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$top_level_output" && \
+       jq -e '.data.session_key == "session:top"' >/dev/null 2>&1 <<<"$top_level_output" && \
+       jq -e '.data.iteration == 2' >/dev/null 2>&1 <<<"$top_level_output" && \
+       jq -e '.data.input_tokens == 10' >/dev/null 2>&1 <<<"$top_level_output" && \
+       jq -e '.data.output_tokens == 5' >/dev/null 2>&1 <<<"$top_level_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must tolerate both top-level and nested payload shapes from the hooks runtime"
+    fi
+
+    test_start "component_after_llm_guard_is_noop_for_clean_safe_reply_without_tool_calls"
+    local clean_safe_output
+    clean_safe_output="$(
+        cat <<'EOF' | bash "$HOOK_SCRIPT"
+{"event":"AfterLLMCall","data":{"session_key":"session:clean","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Краткий ответ без инструментов.","tool_calls":[]}}
+EOF
+    )"
+    if [[ -z "$clean_safe_output" ]]; then
+        test_pass
+    else
+        test_fail "Guard must stay silent when Telegram-safe reply is already clean and contains no tool calls"
     fi
 
     test_start "component_telegram_safe_llm_guard_is_noop_for_non_telegram_safe_models"
