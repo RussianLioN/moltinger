@@ -38,6 +38,89 @@ extract_first_number() {
         | sed -E 's/^"[^"]*"[[:space:]]*:[[:space:]]*//'
 }
 
+extract_json_array() {
+    local key="$1"
+
+    printf '%s' "$payload" | awk -v key="$key" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            needle = "\"" key "\""
+            state = "seek"
+            value = ""
+            depth = 0
+            in_string = 0
+            escape = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (state == "seek") {
+                    if (substr(text, i, length(needle)) != needle) {
+                        continue
+                    }
+                    j = i + length(needle)
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != "[") {
+                        continue
+                    }
+                    state = "capture"
+                    depth = 0
+                    in_string = 0
+                    escape = 0
+                    i = j - 1
+                    continue
+                }
+
+                value = value c
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    continue
+                }
+                if (c == "[") {
+                    depth++
+                    continue
+                }
+                if (c == "]") {
+                    depth--
+                    if (depth == 0) {
+                        print value
+                        exit 0
+                    }
+                }
+            }
+        }
+        END {
+            if (value == "") {
+                exit 1
+            }
+        }
+    '
+}
+
 json_escape() {
     printf '%s' "$1" | awk '
         BEGIN {
@@ -84,6 +167,28 @@ append_optional_number_field() {
     fi
 }
 
+build_message_json() {
+    local role="$1"
+    local content="$2"
+
+    printf '{"role":"%s","content":"%s"}' "$(json_escape "$role")" "$(json_escape "$content")"
+}
+
+append_message_to_array() {
+    local messages_json="$1"
+    local role="$2"
+    local content="$3"
+    local message_json
+
+    message_json="$(build_message_json "$role" "$content")"
+    if [[ "$messages_json" == "[]" ]]; then
+        printf '[%s]' "$message_json"
+        return
+    fi
+
+    printf '%s,%s]' "${messages_json%]}" "$message_json"
+}
+
 emit_modified_payload() {
     local text="$1"
     local include_tool_calls="${2:-false}"
@@ -116,6 +221,25 @@ emit_modified_payload() {
         )"
 }
 
+emit_before_llm_modified_payload() {
+    local messages_json="$1"
+    local tool_count="$2"
+    local session_key provider model iteration
+
+    session_key="$(extract_first_string session_key || true)"
+    provider="$(extract_first_string provider || true)"
+    model="$(extract_first_string model || true)"
+    iteration="$(extract_first_number iteration || true)"
+
+    printf '{"action":"modify","data":{%s%s%s%s%s,"messages":%s}}\n' \
+        "$(json_string_field session_key "${session_key:-current-session}")" \
+        "$(append_optional_string_field provider "$provider")" \
+        "$(append_optional_string_field model "$model")" \
+        "$(append_optional_number_field tool_count "$tool_count")" \
+        "$(append_optional_number_field iteration "$iteration")" \
+        "$messages_json"
+}
+
 event="$(extract_first_string event || true)"
 model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
@@ -130,17 +254,18 @@ if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-t
     is_telegram_safe_lane=true
 fi
 
-if [[ "$event" != "AfterLLMCall" && "$event" != "MessageSending" ]]; then
+if [[ "$event" != "BeforeLLMCall" && "$event" != "AfterLLMCall" && "$event" != "MessageSending" ]]; then
     exit 0
 fi
 
+tool_count="$(extract_first_number tool_count || true)"
 tool_calls_present=false
 if printf '%s' "$payload_flat" | grep -Eq '"tool_calls"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
     tool_calls_present=true
 fi
 
 has_internal_telemetry=false
-if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call"; then
+if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call|no remote nodes available|let me (check|search|inspect|look)|i( ?|')ll (check|search|inspect|look)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на "; then
     has_internal_telemetry=true
 fi
 
@@ -154,8 +279,27 @@ if printf '%s' "$payload_flat" | grep -Fq 'zai::glm-5'; then
     mentions_wrong_model=true
 fi
 
-if [[ "$event" == "AfterLLMCall" && "$is_telegram_safe_lane" != true ]]; then
+looks_like_broad_research_request=false
+if printf '%s' "$payload_flat" | grep -Eiq '((изучи|изучить|исследуй|исследовать|прочитай|прочитать|study|research|analy[sz]e|read).{0,120}(документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site))|((документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site).{0,120}(полностью|целиком|всю|весь|глубоко|thoroughly|fully|end[ -]?to[ -]?end))'; then
+    looks_like_broad_research_request=true
+fi
+
+already_guarded_long_research=false
+if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; then
+    already_guarded_long_research=true
+fi
+
+if [[ "$event" != "MessageSending" && "$is_telegram_safe_lane" != true ]]; then
     exit 0
+fi
+
+if [[ "$event" == "BeforeLLMCall" && "$looks_like_broad_research_request" == true && "$already_guarded_long_research" != true && "${tool_count:-0}" -gt 0 ]]; then
+    messages_json="$(extract_json_array messages || true)"
+    if [[ -n "${messages_json:-}" ]]; then
+        long_research_guard=$'Telegram-safe long-research guard:\n- This user-facing Telegram lane must remain text-only.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, or inspect the environment right now.\n- If the request requires deep research or full doc/course study, answer honestly in Russian without tools: briefly state the limit, then offer either a compact step-by-step plan or ask to continue in the web UI/operator session for the full research.'
+        emit_before_llm_modified_payload "$(append_message_to_array "$messages_json" system "$long_research_guard")" 0
+        exit 0
+    fi
 fi
 
 if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_internal_telemetry" != true ]]; then

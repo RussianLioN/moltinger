@@ -35,6 +35,22 @@ run_component_telegram_safe_llm_guard_tests() {
         return
     fi
 
+    test_start "component_before_llm_guard_strips_tool_surface_for_broad_telegram_research_requests"
+    local before_llm_output
+    before_llm_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abc","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Ты можешь сейчас изучить полностью официальную инструкцию на Moltis и пошагово научить меня создавать новый навык на примере?"}],"tool_count":37,"iteration":1}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[-1].role == "system"' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[-1].content | contains("Telegram-safe long-research guard")' >/dev/null 2>&1 <<<"$before_llm_output" && \
+       jq -e '.data.messages[-1].content | contains("must remain text-only")' >/dev/null 2>&1 <<<"$before_llm_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must strip tool surface and append a deterministic Telegram-safe long-research policy before the provider sees a broad doc-study request"
+    fi
+
     test_start "component_after_llm_guard_rewrites_status_like_tool_fallback_to_canonical_safe_status_without_jq_runtime_dependency"
     local after_status_output
     after_status_output="$(
@@ -78,6 +94,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "AfterLLMCall guard must replace raw internal telemetry even when the tool_calls array is empty"
+    fi
+
+    test_start "component_after_llm_guard_blocks_tool_intent_text_before_text_fallback_parser_can_promote_it"
+    local tool_intent_output
+    tool_intent_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qrs","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"No remote nodes available. Let me check the available skills and search the Moltis documentation for you.","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$tool_intent_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$tool_intent_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$tool_intent_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must treat latent tool-intent text as internal telemetry so text-fallback parsing never turns it into real Telegram-safe tool execution"
     fi
 
     test_start "component_message_sending_guard_rewrites_final_status_delivery_even_when_after_llm_missed"

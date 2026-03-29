@@ -245,7 +245,7 @@ PY
     test_start "static_telegram_safe_lane_ships_project_local_hook_package"
     if [[ -f "$TELEGRAM_SAFE_HOOK_MANIFEST" ]] && \
        rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
-       rg -Fq 'events = ["AfterLLMCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        rg -Fq 'command = "/server/scripts/telegram-safe-llm-guard.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        ! rg -Fq 'bins = ["jq"]' "$TELEGRAM_SAFE_HOOK_MANIFEST"; then
         test_pass
