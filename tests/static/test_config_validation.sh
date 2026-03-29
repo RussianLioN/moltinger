@@ -39,6 +39,9 @@ SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 SELF_LEARNING_DOC="$PROJECT_ROOT/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md"
 TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
 MOLTIS_SURFACE_MATRIX_SCRIPT="$PROJECT_ROOT/scripts/moltis-exercised-surface-matrix.sh"
+TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
+TELEGRAM_SAFE_HOOK_DOC="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
+TELEGRAM_SAFE_HOOK_SCRIPT="$TELEGRAM_SAFE_HOOK_DIR/handler.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -175,6 +178,29 @@ PY
         test_fail "Primary Moltis identity prompt must scope broad Moltis skill-authoring/doc-review requests to relevant sections and local project guides"
     fi
 
+    test_start "static_telegram_lane_is_pinned_to_safe_provider_without_tools"
+    if rg -Fq '[providers.custom-zai-telegram-safe]' "$TOML_CONFIG" && \
+       rg -Fq 'alias = "zai-telegram-safe"' "$TOML_CONFIG" && \
+       rg -Fq 'tool_mode = "off"' "$TOML_CONFIG" && \
+       rg -Fq 'model = "custom-zai-telegram-safe::glm-5"' "$TOML_CONFIG" && \
+       rg -Fq 'model_provider = "custom-zai-telegram-safe"' "$TOML_CONFIG" && \
+       rg -Fq 'stream_mode = "off"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Telegram lane must be pinned to a dedicated safe provider with tool_mode disabled and classic final-message delivery"
+    fi
+
+    test_start "static_project_local_telegram_safe_hook_exists_and_covers_after_llm_before_tool_plus_message_sending"
+    if [[ -f "$TELEGRAM_SAFE_HOOK_DOC" ]] && \
+       [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
+       rg -Fq 'events = ["AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_DOC" && \
+       rg -Fq 'command = "./handler.sh"' "$TELEGRAM_SAFE_HOOK_DOC" && \
+       ! rg -q '(^|[^[:alnum:]_])(jq|python3?|node(js)?)([^[:alnum:]_]|$)' "$TELEGRAM_SAFE_HOOK_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Project-local telegram-safe hook must exist, subscribe to AfterLLMCall + BeforeToolCall + MessageSending, and remain shell-only"
+    fi
+
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
     if [[ -x "$MOLTIS_VERSION_HELPER" ]] && \
        bash "$MOLTIS_VERSION_HELPER" assert-tracked >/dev/null 2>&1 && \
@@ -208,6 +234,15 @@ PY
         test_pass
     else
         test_fail "MTProto user-monitor cron should be opt-in and disabled by default to avoid unsolicited chat noise"
+    fi
+
+    test_start "static_deploy_verifies_project_local_telegram_safe_hook_discovery"
+    if rg -Fq '/server/.moltis/hooks/telegram-safe-llm-guard/HOOK.md' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'moltis hooks list --json' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'telegram-safe-llm-guard' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy verification must assert project-local telegram-safe hook visibility and live runtime discovery"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"
@@ -334,7 +369,7 @@ PY
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_semantics"
-    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \

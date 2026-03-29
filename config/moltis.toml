@@ -212,6 +212,17 @@ base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
 alias = "zai"
 models = ["glm-5"]                                  # Keep GLM-5 as third step in chain
 
+[providers.custom-zai-telegram-safe]
+enabled = true
+api_key = "${GLM_API_KEY}"
+model = "glm-5"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+alias = "zai-telegram-safe"
+models = ["glm-5"]
+tool_mode = "off"
+models = ["glm-5"]
+tool_mode = "off"
+
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
 [providers.glm-coding]
@@ -464,6 +475,9 @@ readability = true                # Use readability extraction for HTML (cleaner
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
+model = "custom-zai-telegram-safe::glm-5"
+model_provider = "custom-zai-telegram-safe"
+stream_mode = "off"
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
 # webhook_url = "${TELEGRAM_WEBHOOK_URL}"
 # webhook_secret = "${TELEGRAM_WEBHOOK_SECRET}"
@@ -741,6 +755,9 @@ rate_limit_window_secs = 60
 # Shell commands triggered by events.
 
 [hooks]
+# User-facing Telegram protection is enforced through the project-local hook at
+# /server/.moltis/hooks/telegram-safe-llm-guard so discovery survives runtime
+# paths where config-defined hooks are not registered consistently.
 # Historical repo-side consent routing is intentionally not enabled here.
 # The old `/codex_*` and `/codex-followup ...` user-facing flow is retired.
 # Codex advisories now move through a producer contract plus a Moltis-native

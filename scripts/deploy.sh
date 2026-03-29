@@ -1330,12 +1330,22 @@ verify_deployment() {
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             test -d /server &&
             test -d /server/skills &&
+            test -f /server/.moltis/hooks/telegram-safe-llm-guard/HOOK.md &&
+            test -x /server/.moltis/hooks/telegram-safe-llm-guard/handler.sh &&
             test -f /home/moltis/.config/moltis/moltis.toml &&
             tmp_path="/home/moltis/.config/moltis/provider_keys.json.tmp.contract-check.$$" &&
             : > "$tmp_path" &&
             rm -f "$tmp_path"
         ' >/dev/null 2>&1; then
-            log_error "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
+            log_error "Moltis runtime contract mismatch: repo skills/hooks are not visible or runtime config is not writable inside the container"
+            return 1
+        fi
+
+        if ! docker exec "$TARGET_CONTAINER" sh -lc '
+            hooks_json="$(moltis hooks list --json 2>/dev/null | sed -n "/^[[:space:]]*\\[/,\$p")" &&
+            printf "%s" "$hooks_json" | jq -e ".[] | select(.name == \"telegram-safe-llm-guard\" and .path == \"/server/.moltis/hooks/telegram-safe-llm-guard\" and .source == \"project\" and .eligible == true)" >/dev/null
+        ' >/dev/null 2>&1; then
+            log_error "Moltis runtime contract mismatch: project-local telegram-safe-llm-guard hook was not discovered by the live runtime"
             return 1
         fi
     fi
