@@ -84,8 +84,9 @@ append_optional_number_field() {
     fi
 }
 
-emit_modified_after_llm() {
+emit_modified_payload() {
     local text="$1"
+    local include_tool_calls="${2:-false}"
     local session_key provider model finish_reason input_tokens output_tokens reasoning_tokens
 
     session_key="$(extract_first_string session_key || true)"
@@ -99,7 +100,7 @@ emit_modified_after_llm() {
     output_tokens="$(extract_first_number output_tokens || true)"
     reasoning_tokens="$(extract_first_number reasoning_tokens || true)"
 
-    printf '{"action":"modify","data":{%s%s%s%s%s%s%s,"text":"%s","tool_calls":[]}}\n' \
+    printf '{"action":"modify","data":{%s%s%s%s%s%s%s,"text":"%s"%s}}\n' \
         "$(json_string_field session_key "${session_key:-current-session}")" \
         "$(append_optional_string_field provider "$provider")" \
         "$(append_optional_string_field model "$model")" \
@@ -107,7 +108,12 @@ emit_modified_after_llm() {
         "$(append_optional_number_field input_tokens "$input_tokens")" \
         "$(append_optional_number_field output_tokens "$output_tokens")" \
         "$(append_optional_number_field reasoning_tokens "$reasoning_tokens")" \
-        "$(json_escape "$text")"
+        "$(json_escape "$text")" \
+        "$(
+            if [[ "$include_tool_calls" == "true" ]]; then
+                printf ',\"tool_calls\":[]'
+            fi
+        )"
 }
 
 event="$(extract_first_string event || true)"
@@ -124,7 +130,11 @@ if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-t
     is_telegram_safe_lane=true
 fi
 
-if [[ "$event" != "AfterLLMCall" || "$is_telegram_safe_lane" != true ]]; then
+if [[ "$event" != "AfterLLMCall" && "$event" != "MessageSending" ]]; then
+    exit 0
+fi
+
+if [[ "$is_telegram_safe_lane" != true ]]; then
     exit 0
 fi
 
@@ -139,7 +149,7 @@ if printf '%s' "$payload_flat" | grep -Eiq "activity log|running:|searching memo
 fi
 
 looks_like_status=false
-if printf '%s' "$payload_flat" | grep -Eiq 'статус|status|режим:|модель:|model:|провайдер:|provider:|online'; then
+if printf '%s' "$payload_flat" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|параметр[[:space:]]*\||канал: telegram|провайдер:|режим: safe-text|модель: custom-zai-telegram-safe::glm-5|доступные навыки|готов к работе'; then
     looks_like_status=true
 fi
 
@@ -148,15 +158,24 @@ if printf '%s' "$payload_flat" | grep -Fq 'zai::glm-5'; then
     mentions_wrong_model=true
 fi
 
-if [[ "$looks_like_status" == true && ( "$tool_calls_present" == true || "$has_internal_telemetry" == true || "$mentions_wrong_model" == true ) ]]; then
-    canonical_status=$'Статус: online\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
-    emit_modified_after_llm "$canonical_status"
+canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
+
+if [[ "$looks_like_status" == true ]]; then
+    if [[ "$event" == "AfterLLMCall" ]]; then
+        emit_modified_payload "$canonical_status" true
+    else
+        emit_modified_payload "$canonical_status" false
+    fi
     exit 0
 fi
 
 if [[ "$tool_calls_present" == true || "$has_internal_telemetry" == true ]]; then
     fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
-    emit_modified_after_llm "$fallback_text"
+    if [[ "$event" == "AfterLLMCall" ]]; then
+        emit_modified_payload "$fallback_text" true
+    else
+        emit_modified_payload "$fallback_text" false
+    fi
     exit 0
 fi
 

@@ -43,7 +43,7 @@ run_component_telegram_safe_llm_guard_tests() {
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_status_output" && \
-       jq -e '.data.text == "Статус: online\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$after_status_output" && \
+       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.provider == "custom-zai-telegram-safe"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.model == "custom-zai-telegram-safe::glm-5"' >/dev/null 2>&1 <<<"$after_status_output"; then
         test_pass
@@ -78,6 +78,34 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "AfterLLMCall guard must replace raw internal telemetry even when the tool_calls array is empty"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_final_status_delivery_even_when_after_llm_missed"
+    local message_sending_status_output
+    message_sending_status_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","data":{"session_key":"session:stu","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","user_message":"/status","text":"**Статус системы**\nАктивность:\n- Tmux: нет сессий\n- Cron: нет задач\nНавыки: codex-update\nГотов к работе. Что делаем?\nActivity log • process • Running: `uptime`"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_status_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must canonicalize final /status delivery so Telegram never sees status drift or appended Activity log traces"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_final_internal_telemetry_for_safe_lane"
+    local message_sending_general_output
+    message_sending_general_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","data":{"session_key":"session:vwx","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"📋 Activity log • mcp__tavily__tavily_map • Running: `curl https://docs.moltis.org`"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_general_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_general_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_general_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must strip leaked internal telemetry from the final Telegram-safe reply even when it appears only at delivery time"
     fi
 
     test_start "component_telegram_safe_llm_guard_is_noop_for_non_telegram_safe_models"

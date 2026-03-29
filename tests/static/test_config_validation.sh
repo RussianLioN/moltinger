@@ -236,7 +236,7 @@ PY
     test_start "static_telegram_safe_lane_registers_llm_guard_hook"
     if rg -Fq 'name = "telegram-safe-llm-guard"' "$TOML_CONFIG" && \
        rg -Fq 'command = "./scripts/telegram-safe-llm-guard.sh"' "$TOML_CONFIG" && \
-       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall"]' "$TOML_CONFIG"; then
+       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "MessageSending"]' "$TOML_CONFIG"; then
         test_pass
     else
         test_fail "Tracked Moltis config must register a Telegram-safe LLM guard hook so user-facing Telegram replies cannot drift into tool fallback or activity-log leakage"
@@ -245,7 +245,7 @@ PY
     test_start "static_telegram_safe_lane_ships_project_local_hook_package"
     if [[ -f "$TELEGRAM_SAFE_HOOK_MANIFEST" ]] && \
        rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
-       rg -Fq 'events = ["AfterLLMCall"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'events = ["AfterLLMCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        rg -Fq 'command = "/server/scripts/telegram-safe-llm-guard.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        ! rg -Fq 'bins = ["jq"]' "$TELEGRAM_SAFE_HOOK_MANIFEST"; then
         test_pass

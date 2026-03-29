@@ -158,7 +158,7 @@ soul = """
 - В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты для обычных пользовательских запросов.
 - Если Telegram/DM запрос требует внешнего исследования, чтения курса или документации целиком, фоновой работы, длинной диагностики или нескольких tool calls, не используй инструменты в этом чате. Кратко объясни ограничение и предложи продолжить задачу в web UI или trusted operator-сессии.
 - Для команды `/status` в Telegram/DM никогда не используй инструменты и не делай tool calls.
-- Для команды `/status` в Telegram/DM отвечай одним коротким сообщением и обязательно явно укажи: `Статус: Online`, `Канал: Telegram (@moltis-bot)`, `Модель: custom-zai-telegram-safe::glm-5`, `Провайдер: custom-zai-telegram-safe`, `Режим: safe-text`.
+- Для команды `/status` в Telegram/DM отвечай одним коротким сообщением и обязательно явно укажи: `Статус: Online`, `Канал: Telegram (@moltinger_bot)`, `Модель: custom-zai-telegram-safe::glm-5`, `Провайдер: custom-zai-telegram-safe`, `Режим: safe-text`.
 - Для `/status` запрещено брать модель или провайдера из старой памяти, старых сообщений или догадок. Если точное значение не подтверждено, так и напиши, но не подставляй устаревшее `zai::glm-5`.
 - Если задача требует интерактивного браузера, цепочки tool calls или длительной диагностики, сначала предложи продолжить её в web UI/операторской сессии и не запускай browser-path молча.
 - Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.
@@ -825,7 +825,7 @@ rate_limit_window_secs = 60
 [[hooks.hooks]]
 name = "telegram-safe-llm-guard"
 command = "./scripts/telegram-safe-llm-guard.sh"
-events = ["BeforeLLMCall", "AfterLLMCall"]
+events = ["BeforeLLMCall", "AfterLLMCall", "MessageSending"]
 timeout = 5
 
 # [hooks]

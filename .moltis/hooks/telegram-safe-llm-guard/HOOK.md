@@ -1,7 +1,7 @@
 +++
 name = "telegram-safe-llm-guard"
 description = "Fail-closed Telegram safe-lane guard that strips tool fallback and internal activity leakage after the LLM reply."
-events = ["AfterLLMCall"]
+events = ["AfterLLMCall", "MessageSending"]
 command = "/server/scripts/telegram-safe-llm-guard.sh"
 timeout = 5
 
@@ -12,9 +12,10 @@ os = ["linux", "darwin"]
 # Telegram Safe LLM Guard
 
 This repo-managed hook bundle is synced into the runtime-discovered project hook
-path for the Telegram safe lane. It rewrites `AfterLLMCall` payloads when the
-`custom-zai-telegram-safe` provider tries to fall back into tool execution or
-emits internal telemetry markers.
+path for the Telegram safe lane. It rewrites both `AfterLLMCall` and
+`MessageSending` payloads when the `custom-zai-telegram-safe` provider tries to
+fall back into tool execution or emits internal telemetry markers in the final
+Telegram reply.
 
 Repository note:
 
