@@ -47,6 +47,7 @@ PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
 TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
 TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
+TELEGRAM_SAFE_HOOK_HANDLER="$TELEGRAM_SAFE_HOOK_DIR/handler.sh"
 TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
 TELEGRAM_LEARNER_SKILL="$PROJECT_ROOT/skills/telegram-learner/SKILL.md"
 MOLTIS_REPO_HOOKS_SYNC_SCRIPT="$PROJECT_ROOT/scripts/moltis-repo-hooks-sync.sh"
@@ -255,9 +256,10 @@ PY
 
     test_start "static_telegram_safe_lane_ships_project_local_hook_package"
     if [[ -f "$TELEGRAM_SAFE_HOOK_MANIFEST" ]] && \
+       [[ -x "$TELEGRAM_SAFE_HOOK_HANDLER" ]] && \
        rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
-       rg -Fq 'command = "/server/scripts/telegram-safe-llm-guard.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'command = "./handler.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        ! rg -Fq 'bins = ["jq"]' "$TELEGRAM_SAFE_HOOK_MANIFEST"; then
         test_pass
     else
@@ -266,7 +268,10 @@ PY
 
     test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_runtime_project_hook_registration"
     if [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
+       [[ -x "$TELEGRAM_SAFE_HOOK_HANDLER" ]] && \
        ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
+       ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
+       rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
        rg -Fq 'sync_moltis_repo_hooks_into_runtime' "$DEPLOY_SCRIPT" && \
        rg -Fq 'verify_moltis_repo_hook_discovery' "$DEPLOY_SCRIPT" && \
        rg -Fq "\$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
