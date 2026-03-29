@@ -751,10 +751,10 @@ verify_moltis_repo_hook_discovery() {
                 .name == $hook_name and
                 .source == "project" and
                 .eligible == true and
-                .path == ("/server/.moltis/hooks/" + $hook_name)
+                .path == ($runtime_root + "/" + $hook_name)
             )
-        ' <<<"$hooks_json" >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not discovered from /server/.moltis/hooks in the live runtime hook registry"
+        ' --arg runtime_root "$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT" <<<"$hooks_json" >/dev/null 2>&1; then
+            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not discovered from the live runtime hook path $MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT"
         fi
     done
 
@@ -1587,16 +1587,17 @@ deploy_containers() {
 
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
-        # changes must force a recreate to avoid stale live state. Purge stale
-        # runtime-data hook copies before recreate so discovery stays anchored
-        # to the tracked project-local bundle under /server/.moltis/hooks.
+        # changes must force a recreate to avoid stale live state. Prestage the
+        # repo-managed hook bundles into the runtime data-dir hook path before
+        # recreate, because Moltis 0.10.18 discovers project hooks relative to
+        # the active data_dir instead of the bind-mounted /server workspace.
         # Keep sidecars converged without forcing a second Moltis recreate in the
         # same compose transaction. Then pre-stop/remove the fixed-name Moltis
         # container and recreate only the Moltis service with --no-deps.
         if [[ ${#auxiliary_services[@]} -gt 0 ]]; then
             compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"
         fi
-        purge_stale_moltis_runtime_repo_hook_copies
+        prestage_moltis_repo_hooks_into_runtime
         prepare_moltis_container_for_rollout
         compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
         log_success "Containers deployed for target $TARGET"

@@ -273,7 +273,7 @@ docker() {
     "name": "telegram-safe-llm-guard",
     "source": "project",
     "eligible": true,
-    "path": "/server/.moltis/hooks/telegram-safe-llm-guard"
+    "path": "/home/moltis/.moltis/.moltis/hooks/telegram-safe-llm-guard"
   }
 ]
 JSON

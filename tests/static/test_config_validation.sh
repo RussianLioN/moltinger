@@ -266,20 +266,20 @@ PY
         test_fail "Tracked repo must ship a project-local Telegram-safe hook package under /.moltis/hooks without a jq runtime dependency"
     fi
 
-    test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_project_local_hook_registration"
+    test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_runtime_data_dir_hook_registration"
     if [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
        [[ -x "$TELEGRAM_SAFE_HOOK_HANDLER" ]] && \
        ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
        ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
        rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
-       rg -Fq 'purge_stale_moltis_runtime_repo_hook_copies' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'prestage_moltis_repo_hooks_into_runtime' "$DEPLOY_SCRIPT" && \
        rg -Fq 'verify_moltis_repo_hook_discovery' "$DEPLOY_SCRIPT" && \
        rg -Fq "/server/.moltis/hooks/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
-       rg -Fq '/server/.moltis/hooks/' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT' "$DEPLOY_SCRIPT" && \
        rg -Fq "moltis hooks list --json" "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Telegram-safe hook runtime must stay shell-only, purge stale runtime hook copies before recreate, and deploy verification must attest project-local hook registration from /server/.moltis/hooks"
+        test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under /server/.moltis/hooks"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
