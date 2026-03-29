@@ -68,6 +68,22 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "BeforeLLMCall guard must still append the long-research policy and force tool_count=0 even if the runtime payload omits tool_count"
     fi
 
+    test_start "component_before_llm_guard_forces_safe_lane_text_only_even_for_non_research_request"
+    local before_llm_general_output
+    before_llm_general_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abe","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Ответь кратко, что умеет этот бот."}],"tool_count":37,"iteration":1}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
+       jq -e '.data.messages[-1].role == "user"' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
+       jq -e '.data.messages[-1].content == "Ответь кратко, что умеет этот бот."' >/dev/null 2>&1 <<<"$before_llm_general_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must force tool_count=0 for the Telegram-safe lane even when the request is not broad research"
+    fi
+
     test_start "component_after_llm_guard_rewrites_status_like_tool_fallback_to_canonical_safe_status_without_jq_runtime_dependency"
     local after_status_output
     after_status_output="$(
@@ -209,6 +225,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress the exact live friendly doc-search wording that still leaks internal planning without raw tool names"
+    fi
+
+    test_start "component_after_llm_guard_blocks_exact_live_codex_update_reading_phrase_from_audit"
+    local live_codex_update_reading_output
+    live_codex_update_reading_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Давай наконец сделаю это! Читаю существующий навык `codex-update` как пример и найду документацию:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_codex_update_reading_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_codex_update_reading_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$live_codex_update_reading_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must suppress the exact live codex-update reading phrase captured by the runtime audit"
     fi
 
     test_start "component_message_sending_guard_rewrites_final_status_delivery_even_when_after_llm_missed"
