@@ -1,7 +1,7 @@
 # Cline Kanban + Worktree: Research Index
 
-**Research Date**: 2026-04-01  
-**Status**: Complete - operator guidance ready  
+**Research Date**: 2026-04-01
+**Status**: Complete - operator guidance ready
 **Scope**: how official Cline Worktrees, Workflows, Hooks, Memory Bank, and Kanban fit the current `moltinger` durable worktree model
 
 ## Executive Verdict

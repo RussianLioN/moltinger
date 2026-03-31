@@ -1,7 +1,7 @@
 # Cline Kanban + Worktree for Moltinger
 
-**Date**: 2026-04-01  
-**Type**: Research synthesis and applicability analysis  
+**Date**: 2026-04-01
+**Type**: Research synthesis and applicability analysis
 **Decision Target**: whether official Cline Worktrees and Kanban can replace the current `command-worktree`-centric workflow
 
 ## Scope

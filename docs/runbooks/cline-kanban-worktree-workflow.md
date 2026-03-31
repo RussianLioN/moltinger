@@ -1,6 +1,6 @@
 # Cline Kanban + Worktree Workflow
 
-**Status**: Operator runbook  
+**Status**: Operator runbook
 **Scope**: how to use durable worktrees together with Cline Kanban in `moltinger`
 
 ## Purpose

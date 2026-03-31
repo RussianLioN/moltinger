@@ -1,7 +1,7 @@
 # Consilium Review: Cline Kanban + Worktree Plan
 
-**Date**: 2026-04-01  
-**Mode**: parallel expert review  
+**Date**: 2026-04-01
+**Mode**: parallel expert review
 **Verdict**: viable with changes
 
 ## Experts Included
