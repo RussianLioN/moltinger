@@ -142,6 +142,24 @@ EOF
         test_fail "BeforeToolCall guard must rewrite skill-path exec probes into a runtime note instead of letting Telegram turns inspect filesystem paths"
     fi
 
+    test_start "component_before_tool_guard_rewrites_quoted_skill_exec_probe_to_runtime_note"
+    local before_tool_quoted_exec_output
+    before_tool_quoted_exec_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","data":{"session_key":"session:toolq","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"exec","arguments":{"command":"bash -lc \"ls -la ~/.moltis/skills/\""}}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
+       jq -e '.data.arguments.command | contains("Telegram-safe runtime note for skills")' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
+       jq -e '.data.arguments.command | contains("codex-update")' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must also rewrite quoted exec skill probes whose command strings contain escaped quotes"
+    fi
+
     test_start "component_before_tool_guard_allows_create_skill_passthrough"
     local before_tool_create_output
     before_tool_create_output="$(
