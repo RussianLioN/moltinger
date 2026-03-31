@@ -1599,7 +1599,15 @@ run_post_deploy_storage_reclaim() {
     fi
 
     log_info "Running post-deploy storage reclaim for Moltis"
-    if ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        if ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
+            "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
+                --ignore-deploy-mutex \
+                --skip-journal-vacuum 1>&2; then
+            log_warn "Post-deploy storage reclaim reported warnings; continuing because rollout is already healthy"
+            return 0
+        fi
+    elif ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
         "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
             --ignore-deploy-mutex \
             --skip-journal-vacuum; then
