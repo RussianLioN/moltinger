@@ -1122,13 +1122,15 @@ PY
     test_start "static_runtime_contract_enforces_tracked_runtime_config_parity"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'prepare_moltis_runtime_config_for_rollout' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'prepare-moltis-runtime-config.sh' "$DEPLOY_SCRIPT" && \
        rg -Fq 'cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'runtime moltis.toml diverges from tracked config/moltis.toml' "$DEPLOY_SCRIPT" && \
        rg -Fq 'cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"' "$RUNTIME_ATTESTATION_SCRIPT" && \
        rg -Fq 'RUNTIME_CONFIG_FILE_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT"; then
         test_pass
     else
-        test_fail "Deploy verification and runtime attestation must fail closed when live runtime moltis.toml drifts from tracked config/moltis.toml"
+        test_fail "Deploy must prepare the writable runtime config mount and then fail closed when live runtime moltis.toml still drifts from tracked config/moltis.toml"
     fi
 
     test_start "static_production_workflows_share_remote_lock_group"

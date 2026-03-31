@@ -245,6 +245,8 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
 
     if ! grep -Fq "working_dir is" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "/server mount is missing" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "prepare_moltis_runtime_config_for_rollout" "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq "prepare-moltis-runtime-config.sh" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "moltis-repo-skills-sync.sh" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "/api/auth/login" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "/api/skills" "$PROJECT_ROOT/scripts/deploy.sh" || \
@@ -254,7 +256,7 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
        ! grep -Fq "DOCKER_SOCKET_GID" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "mounted docker.sock gid is not present" "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq "host.docker.internal is not mapped" "$PROJECT_ROOT/scripts/deploy.sh"; then
-        test_fail "deploy.sh must verify /server visibility, sync repo-managed skills into the official runtime-discovered directory, authenticate through /api/auth/login, prove them through live /api/skills, and preserve the browser sandbox Docker contract for Moltis"
+        test_fail "deploy.sh must verify /server visibility, prepare the writable runtime config mount from tracked config, sync repo-managed skills into the official runtime-discovered directory, authenticate through /api/auth/login, prove them through live /api/skills, and preserve the browser sandbox Docker contract for Moltis"
         return
     fi
 
@@ -319,13 +321,15 @@ test_deploy_script_force_recreates_moltis_runtime_on_rollout() {
         return
     fi
 
-    if ! grep -Fq 'prepare_moltis_container_for_rollout' "$PROJECT_ROOT/scripts/deploy.sh" || \
+    if ! grep -Fq 'prepare_moltis_runtime_config_for_rollout' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'Preparing writable Moltis runtime config' "$PROJECT_ROOT/scripts/deploy.sh" || \
+       ! grep -Fq 'prepare_moltis_container_for_rollout' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'docker rm -f "$TARGET_CONTAINER"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$PROJECT_ROOT/scripts/deploy.sh" || \
        ! grep -Fq 'bind-mounted config' "$PROJECT_ROOT/scripts/deploy.sh"; then
-        test_fail "deploy.sh must converge Moltis sidecars separately, pre-stop/remove Moltis deterministically, and then recreate only the Moltis service with --no-deps so runtime config changes apply without a second compose recreate race"
+        test_fail "deploy.sh must prepare the writable runtime config mount, converge Moltis sidecars separately, pre-stop/remove Moltis deterministically, and then recreate only the Moltis service with --no-deps so runtime config changes apply without a second compose recreate race"
         return
     fi
 

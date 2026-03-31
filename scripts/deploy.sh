@@ -424,6 +424,32 @@ runtime_config_dir_allowed() {
     return 1
 }
 
+prepare_moltis_runtime_config_for_rollout() {
+    local runtime_config_dir prepare_script
+
+    runtime_config_dir="$(read_env_file_value "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
+    runtime_config_dir="${runtime_config_dir:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
+    runtime_config_dir="$(normalize_runtime_config_path "$runtime_config_dir")"
+    if ! runtime_config_dir_allowed "$runtime_config_dir"; then
+        log_error "Moltis runtime config dir '$runtime_config_dir' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
+        return 1
+    fi
+
+    prepare_script="$PROJECT_ROOT/scripts/prepare-moltis-runtime-config.sh"
+    if [[ ! -f "$prepare_script" ]]; then
+        log_error "Prepare writable Moltis runtime config script is missing: $prepare_script"
+        return 1
+    fi
+
+    log_info "Preparing writable Moltis runtime config at $runtime_config_dir"
+    if ! bash "$prepare_script" "$PROJECT_ROOT/config" "$runtime_config_dir"; then
+        log_error "Failed to prepare writable Moltis runtime config at $runtime_config_dir"
+        return 1
+    fi
+
+    log_success "Prepared writable Moltis runtime config at $runtime_config_dir"
+}
+
 container_mount_source() {
     local container="$1"
     local destination="$2"
@@ -1582,16 +1608,18 @@ deploy_containers() {
 
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
-        # changes must force a recreate to avoid stale live state. Prestage the
-        # repo-managed hook bundles into the runtime data-dir hook path before
-        # recreate, because Moltis 0.10.18 discovers project hooks relative to
-        # the active data_dir instead of the bind-mounted /server workspace.
-        # Keep sidecars converged without forcing a second Moltis recreate in the
-        # same compose transaction. Then pre-stop/remove the fixed-name Moltis
-        # container and recreate only the Moltis service with --no-deps.
+        # changes must be copied into the writable runtime config mount and then
+        # force a recreate to avoid stale live state. Prestage the repo-managed
+        # hook bundles into the runtime data-dir hook path before recreate,
+        # because Moltis 0.10.18 discovers project hooks relative to the active
+        # data_dir instead of the bind-mounted /server workspace. Keep sidecars
+        # converged without forcing a second Moltis recreate in the same compose
+        # transaction. Then pre-stop/remove the fixed-name Moltis container and
+        # recreate only the Moltis service with --no-deps.
         if [[ ${#auxiliary_services[@]} -gt 0 ]]; then
             compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"
         fi
+        prepare_moltis_runtime_config_for_rollout
         prestage_moltis_repo_hooks_into_runtime
         prepare_moltis_container_for_rollout
         compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
