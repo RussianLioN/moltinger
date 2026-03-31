@@ -942,7 +942,7 @@ EOF
     assert_contains "$output" 'Beads: local' "Doctor should preserve ownership discovery separately from runtime health"
     assert_contains "$output" 'Beads Runtime: runtime_bootstrap_required' "Doctor must surface runtime bootstrap repair as the real blocker"
     assert_contains "$output" '/usr/local/bin/bd doctor --json' "Doctor must route broken local runtimes through the official runtime diagnostic path"
-    assert_contains "$output" 'bd bootstrap' "Doctor must route broken local runtimes through bootstrap instead of generic localize guidance"
+    assert_contains "$output" './scripts/beads-worktree-localize.sh --path .' "Doctor must route broken local runtimes through the managed runtime repair helper"
     if [[ "$output" == *"./scripts/git-session-guard.sh --refresh"* ]]; then
         test_fail "Doctor should not prioritize guard refresh ahead of a broken local runtime"
     fi
@@ -1187,7 +1187,7 @@ EOF
     assert_eq "23" "$rc" "Finish must fail closed when the local runtime still needs bootstrap"
     assert_contains "$output" 'Beads Runtime: runtime_bootstrap_required' "Finish must surface runtime health separately from ownership"
     assert_contains "$output" '/usr/local/bin/bd doctor --json' "Finish must point operators at the canonical runtime diagnostic path"
-    assert_contains "$output" 'bd bootstrap' "Finish must require runtime bootstrap before ordinary finish commands"
+    assert_contains "$output" './scripts/beads-worktree-localize.sh --path .' "Finish must require the managed runtime repair helper before ordinary finish commands"
     if [[ "$output" == *'bd preflight --check'* ]]; then
         test_fail "Finish should stop before preflight/commit commands when the runtime itself is broken"
     fi

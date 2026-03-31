@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-03-28
-**Total Lessons**: 61
+**Generated**: 2026-03-29
+**Total Lessons**: 62
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (29 lessons)
+#### P1 (30 lessons)
+- [Runtime-only Beads repair still pointed at raw bootstrap after the CLI contract drifted](../docs/rca/2026-03-29-runtime-only-repair-contract-still-pointed-at-raw-bootstrap.md)
 - [Managed worktree creation mixed up the create executor and hook bootstrap-source contract](../docs/rca/2026-03-28-worktree-create-helper-and-hook-bootstrap-source-drift.md)
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
@@ -125,7 +126,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (21 lessons)
+#### process (22 lessons)
+- [Runtime-only Beads repair still pointed at raw bootstrap after the CLI contract drifted](../docs/rca/2026-03-29-runtime-only-repair-contract-still-pointed-at-raw-bootstrap.md)
 - [Managed worktree creation mixed up the create executor and hook bootstrap-source contract](../docs/rca/2026-03-28-worktree-create-helper-and-hook-bootstrap-source-drift.md)
 - [Moltis operator browser session isolation and Telegram send attribution drift](../docs/rca/2026-03-28-moltis-operator-browser-session-isolation-and-telegram-send-attribution-drift.md)
 - [Moltis browser runs still timed out because the overall agent timeout matched the browser navigation timeout and the repo smoke helper still used retired chat endpoints](../docs/rca/2026-03-28-moltis-browser-timeout-budget-equalled-navigation-timeout.md)
@@ -167,7 +169,7 @@
 - `gitops` (16 lessons)
 - `github-actions` (16 lessons)
 - `cicd` (16 lessons)
-- `rca` (11 lessons)
+- `rca` (12 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `git-worktree` (9 lessons)
@@ -180,10 +182,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 61 |
-| Critical (P0/P1) | 30 |
+| Total Lessons | 62 |
+| Critical (P0/P1) | 31 |
 | Categories | 6 |
-| Unique Tags | 138 |
+| Unique Tags | 140 |
 
 ---
 

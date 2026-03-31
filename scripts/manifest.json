@@ -1203,7 +1203,7 @@
     },
     "worktree-ready.sh": {
       "version": "1.0.0",
-      "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, handoff generation, and repo-local plain-bd bootstrap",
+      "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, handoff generation, and repo-local Beads runtime repair",
       "entrypoint": true,
       "requires": [
         "git"

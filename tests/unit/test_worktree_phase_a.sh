@@ -226,6 +226,42 @@ test_phase_a_create_bootstraps_runtime_shell_when_named_db_missing() {
     test_pass
 }
 
+test_phase_a_create_repairs_runtime_only_state_without_tracked_issues() {
+    test_start "worktree_phase_a_create_repairs_runtime_only_state_without_tracked_issues"
+
+    local fixture_root repo_dir fake_bin target_path output
+    fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    target_path="${fixture_root}/moltinger-runtime-only"
+
+    mkdir -p "${repo_dir}/.beads"
+    printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml
+        git commit -m "fixture: track runtime-only local foundation" >/dev/null
+    )
+
+    output="$(run_phase_a_create "$fake_bin" \
+        --canonical-root "$repo_dir" \
+        --base-ref main \
+        --branch feat/runtime-only \
+        --path "$target_path" \
+        --format env)"
+
+    assert_contains "$output" 'result=created_from_base' "Phase A should succeed for runtime-only post-migration state"
+    if [[ ! -d "${target_path}/.beads/dolt/beads/.dolt" ]]; then
+        test_fail "Phase A should materialize a named local runtime even when tracked issues are already retired"
+    fi
+    if [[ -f "${target_path}/.beads/issues.jsonl" ]]; then
+        test_fail "Phase A should not recreate tracked issues.jsonl for runtime-only post-migration state"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_phase_a_create_rebuilds_unhealthy_named_runtime() {
     test_start "worktree_phase_a_create_rebuilds_unhealthy_named_runtime"
 
@@ -322,6 +358,7 @@ run_all_tests() {
     test_phase_a_create_from_base_anchors_new_branch_to_main
     test_phase_a_create_blocks_existing_branch_on_wrong_base
     test_phase_a_create_bootstraps_runtime_shell_when_named_db_missing
+    test_phase_a_create_repairs_runtime_only_state_without_tracked_issues
     test_phase_a_create_rebuilds_unhealthy_named_runtime
     test_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair
     generate_report

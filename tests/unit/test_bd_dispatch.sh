@@ -38,6 +38,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${args[0]:-}" == "bootstrap" ]]; then
+  if [[ -d ".beads/dolt" && ! -d ".beads/dolt/beads/.dolt" ]]; then
+    printf 'BOOTSTRAP_SKIPPED=stale_shell\n'
+    exit 0
+  fi
   mkdir -p ".beads/dolt/beads/.dolt"
   printf 'BOOTSTRAP_DB=beads\n'
   exit 0
@@ -47,6 +51,7 @@ if [[ "${args[0]:-}" == "import" ]]; then
   mkdir -p ".beads/dolt/beads/.dolt"
   rm -f ".beads/dolt/beads/.fake-broken"
   : > ".beads/last-touched"
+  printf '%s\n' "${args[1]:-}" > ".beads/last-imported"
   printf 'IMPORTED=%s\n' "${args[1]:-}"
   exit 0
 fi
@@ -143,6 +148,34 @@ auto-start-daemon: false
 EOF
 }
 
+seed_runtime_only_compatibility_backup() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/legacy-jsonl-backup"
+    cat > "${worktree_dir}/.beads/legacy-jsonl-backup/issues.legacy.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+}
+
+seed_runtime_only_backup_bundle() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/backup" "${worktree_dir}/.beads/legacy-jsonl-backup"
+    cat > "${worktree_dir}/.beads/backup/issues.jsonl" <<'EOF'
+{"id":"demo-backup","title":"backup","status":"open","type":"task","priority":3}
+EOF
+    cat > "${worktree_dir}/.beads/backup/labels.jsonl" <<'EOF'
+{"name":"noise"}
+EOF
+    cat > "${worktree_dir}/.beads/legacy-jsonl-backup/issues.legacy.jsonl" <<'EOF'
+{"id":"demo-legacy","title":"legacy","status":"open","type":"task","priority":3}
+EOF
+
+    touch -t 202603290100 "${worktree_dir}/.beads/backup/issues.jsonl"
+    touch -t 202603290102 "${worktree_dir}/.beads/backup/labels.jsonl"
+    touch -t 202603290103 "${worktree_dir}/.beads/legacy-jsonl-backup/issues.legacy.jsonl"
+}
+
 seed_broken_runtime_shell_foundation() {
     local worktree_dir="$1"
 
@@ -193,6 +226,19 @@ run_plain_bd_with_path_prefix() {
     )
 }
 
+run_plain_bd_from_subdir() {
+    local worktree_dir="$1"
+    local subdir="$2"
+    local fake_bin="$3"
+    shift 3
+
+    (
+        mkdir -p "${worktree_dir}/${subdir}"
+        cd "${worktree_dir}/${subdir}"
+        PATH="${worktree_dir}/bin:${fake_bin}:$PATH" bd "$@"
+    )
+}
+
 run_localize() {
     local worktree_dir="$1"
     local fake_bin="$2"
@@ -231,6 +277,22 @@ assert_runtime_quarantine_present() {
 
     if ! find "${worktree_path}/.beads/recovery" -maxdepth 2 -type d -name 'runtime-pre-init-*' | grep -q .; then
         test_fail "${message} (missing runtime recovery backup)"
+    fi
+}
+
+assert_imported_source_equals() {
+    local worktree_path="$1"
+    local expected_path="$2"
+    local message="$3"
+    local imported_path=""
+
+    if [[ ! -f "${worktree_path}/.beads/last-imported" ]]; then
+        test_fail "${message} (missing last-imported marker)"
+    fi
+
+    imported_path="$(<"${worktree_path}/.beads/last-imported")"
+    if [[ "${imported_path}" != "${expected_path}" ]]; then
+        test_fail "${message} (expected ${expected_path}, got ${imported_path})"
     fi
 }
 
@@ -619,7 +681,34 @@ test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance() {
     assert_eq "25" "${rc}" "Runtime-only worktrees with a missing beads named DB must fail closed"
     assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "Dispatch must classify the failure as runtime repair, not backlog loss"
     assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "Dispatch must keep retired JSONL retired during runtime repair"
-    assert_contains "${output}" "bd bootstrap" "Dispatch must point operators to the official bootstrap recovery path"
+    assert_contains "${output}" "cd ${worktree_path} && /usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ." "Dispatch must point operators to a repo-root-anchored runtime repair helper"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_plain_bd_runtime_repair_hint_is_copy_pastable_from_nested_dir() {
+    test_start "plain_bd_runtime_repair_hint_is_copy_pastable_from_nested_dir"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-broken-runtime-subdir"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime-subdir" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_only_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd_from_subdir "${worktree_path}" "nested/dir" "${fake_bin}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "Nested-dir runtime-only failures must still fail closed"
+    assert_contains "${output}" "cd ${worktree_path} && /usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ." "Runtime repair hint must stay copy-pastable from nested directories"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -647,8 +736,56 @@ test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state()
 
     assert_eq "23" "${rc}" "Localization helper must stop and report when a runtime-only worktree needs bootstrap repair"
     assert_contains "${output}" "State: runtime_bootstrap_required" "Localization helper must expose a dedicated runtime-bootstrap-required state"
-    assert_contains "${output}" "bd bootstrap" "Localization helper must point operators to bootstrap recovery"
-    assert_contains "${output}" "Do not restore JSONL" "Localization helper must preserve retired JSONL semantics during repair"
+    assert_contains "${output}" "./scripts/beads-worktree-localize.sh --path ." "Localization helper must point operators to the managed runtime repair helper"
+    assert_contains "${output}" "Do not restore tracked JSONL" "Localization helper must preserve retired JSONL semantics during repair"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_repairs_runtime_only_state_by_quarantining_stale_shell() {
+    test_start "localize_repairs_runtime_only_state_by_quarantining_stale_shell"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-runtime-only-repair"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-repair" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_only_foundation "${worktree_path}"
+    seed_runtime_only_compatibility_backup "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: post_migration_runtime_only" "Runtime-only repair should converge to the healthy post-migration state"
+    assert_named_beads_runtime_present "${worktree_path}" "Runtime-only repair should materialize the named local Beads runtime"
+    assert_runtime_quarantine_present "${worktree_path}" "Runtime-only repair should quarantine the stale runtime shell before rerunning bootstrap"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_repairs_runtime_only_state_using_newest_issues_backup() {
+    test_start "localize_repairs_runtime_only_state_using_newest_issues_backup"
+
+    local fixture_root repo_dir worktree_path fake_bin output expected_import
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-runtime-only-backup-bundle"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-backup-bundle" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_broken_runtime_only_foundation "${worktree_path}"
+    seed_runtime_only_backup_bundle "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+    expected_import="${worktree_path}/.beads/legacy-jsonl-backup/issues.legacy.jsonl"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}")"
+
+    assert_contains "${output}" "State: post_migration_runtime_only" "Runtime-only repair should still converge when multiple compatibility backups exist"
+    assert_imported_source_equals "${worktree_path}" "${expected_import}" "Runtime-only repair must import the newest issues backup, not unrelated JSONL noise"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -894,7 +1031,10 @@ run_all_tests() {
     test_plain_bd_blocks_deprecated_sync_with_modern_guidance
     test_localize_recognizes_post_migration_runtime_only_state
     test_plain_bd_blocks_broken_runtime_only_foundation_with_bootstrap_guidance
+    test_plain_bd_runtime_repair_hint_is_copy_pastable_from_nested_dir
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_only_state
+    test_localize_repairs_runtime_only_state_by_quarantining_stale_shell
+    test_localize_repairs_runtime_only_state_using_newest_issues_backup
     test_plain_bd_blocks_broken_runtime_shell_with_localize_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell
     test_localize_materializes_local_db_and_removes_redirect

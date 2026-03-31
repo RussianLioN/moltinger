@@ -2799,7 +2799,7 @@ set_readiness_next_steps() {
             add_next_step "cd $(shell_quote "${report_worktree_path}")"
             if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" ]]; then
               add_next_step "/usr/local/bin/bd doctor --json"
-              add_next_step "bd bootstrap"
+              add_next_step "./scripts/beads-worktree-localize.sh --path ."
             elif [[ "${report_beads_runtime_state}" == "partial_foundation" || "${report_beads_state}" == "redirected" ]]; then
               add_next_step "./scripts/beads-worktree-localize.sh"
             else
@@ -2861,7 +2861,7 @@ set_doctor_next_steps() {
     add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/git-session-guard.sh --refresh"
   elif [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" ]]; then
     add_next_step "cd $(shell_quote "${worktree_target}") && /usr/local/bin/bd doctor --json"
-    add_next_step "cd $(shell_quote "${worktree_target}") && bd bootstrap"
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
   elif [[ "${report_beads_runtime_state}" == "partial_foundation" ]]; then
     add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
   elif [[ "${report_guard_state}" == "missing" ]]; then
@@ -3021,7 +3021,7 @@ set_finish_next_steps() {
 
   if [[ "${report_beads_runtime_state}" == "runtime_bootstrap_required" ]]; then
     add_next_step "cd $(shell_quote "${worktree_target}") && /usr/local/bin/bd doctor --json"
-    add_next_step "cd $(shell_quote "${worktree_target}") && bd bootstrap"
+    add_next_step "cd $(shell_quote "${worktree_target}") && ./scripts/beads-worktree-localize.sh --path ."
     return 0
   fi
 

@@ -8,11 +8,12 @@ If `.beads/issues.jsonl` is still present in a branch, treat it only as a tempor
 
 ## Required Behavior
 
-1. Prefer `bd status`, `bd list`, `bd ready`, `bd show`, `bd doctor --json`, and `bd bootstrap` over any JSONL restoration flow.
-2. Do not describe tracked `.beads/issues.jsonl` as the source of truth in active instructions.
-3. Do not reintroduce `bd sync` into ordinary workflows.
-4. Do not restore `.beads/issues.jsonl` to repair `config + local runtime + missing named beads DB`.
-5. If a compatibility flow still requires `.beads/issues.jsonl`, label it explicitly as transitional and plan its removal.
+1. Prefer `bd status`, `bd list`, `bd ready`, `bd show`, and `bd doctor --json` for ordinary local-runtime inspection.
+2. If ownership is already local but the named `beads` DB is missing, route runtime-only repair through `./scripts/beads-worktree-localize.sh --path .`, not raw `bd bootstrap`.
+3. Do not describe tracked `.beads/issues.jsonl` as the source of truth in active instructions.
+4. Do not reintroduce `bd sync` into ordinary workflows.
+5. Do not restore `.beads/issues.jsonl` to repair `config + local runtime + missing named beads DB`.
+6. If a compatibility flow still requires `.beads/issues.jsonl`, label it explicitly as transitional and plan its removal.
 
 ## Why
 

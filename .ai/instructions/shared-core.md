@@ -46,7 +46,7 @@ bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
 bd status             # Inspect the current Beads state
-bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
+bd bootstrap          # Initialize a local Dolt-backed clone; use localize helper for runtime-only repair
 ```
 
 ## Beads Worktree Ownership
@@ -57,10 +57,10 @@ Inside this repository, ordinary dedicated-worktree usage should run plain `bd`.
 - Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable. After the Dolt migration and local-only cleanup, the backlog may live only in the local Dolt-backed Beads runtime.
 - If tracked `.beads/issues.jsonl` is still present in a branch, treat it as a temporary compatibility/bootstrap artifact, not as the authoritative backlog source after the Dolt migration.
 - Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state, not as an unexpected deletion. Continue with local `bd` read-only inspection first.
-- Do not treat a bare `.beads/dolt/` directory as proof that the local runtime is healthy. If the named `beads` DB is missing, classify it as local runtime repair drift and recover with `/usr/local/bin/bd doctor --json` followed by `bd bootstrap`; do not restore `.beads/issues.jsonl`.
+- Do not treat a bare `.beads/dolt/` directory as proof that the local runtime is healthy. If the named `beads` DB is missing, classify it as local runtime repair drift, run `/usr/local/bin/bd doctor --json` first, then repair with `./scripts/beads-worktree-localize.sh --path .` so the stale shell is quarantined and the newest compatibility backup can be re-imported when available; do not restore `.beads/issues.jsonl`.
 - For ordinary read-only task inspection, use the local Beads database first: `bd status`, `bd list --limit <n>`, `bd ready`, `bd show <id>`.
 - `bd sync` is retired in this repository. Use `bd status` for local inspection, and use `bd dolt push` / `bd dolt pull` only when this worktree is configured with a Dolt remote.
-- If a preserved sibling worktree still reports incomplete local foundation after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. If ownership is already local but the runtime cannot open the named `beads` DB, run `/usr/local/bin/bd doctor --json` first and then `bd bootstrap`. Use `./scripts/beads-worktree-localize.sh --path .` only for missing, redirected, or legacy ownership state.
+- If a preserved sibling worktree still reports incomplete local foundation after JSONL retirement, describe it as a local Beads repair problem, not as “bd is unavailable”. If ownership is already local but the runtime cannot open the named `beads` DB, run `/usr/local/bin/bd doctor --json` first and then `./scripts/beads-worktree-localize.sh --path .`. The helper must quarantine any stale runtime shell, rerun bootstrap, and import the newest compatibility backup when one exists.
 - If a dedicated worktree reports missing, redirected, or legacy Beads state, use `./scripts/beads-worktree-localize.sh --path .` from that worktree. If ownership is already local but runtime health is broken, stop and repair the runtime instead of re-localizing ownership.
 - Do not replace the Beads backlog with ad-hoc plan files just because `.beads/issues.jsonl` is absent; use plans only as supplemental execution context.
 - Do not mix residual canonical-root cleanup into ordinary worktree recovery. Root cleanup, if still needed, belongs in a separate follow-up.

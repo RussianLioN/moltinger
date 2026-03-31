@@ -186,7 +186,7 @@ audit_worktree() {
   fi
 
   if [[ "${state}" == "runtime_bootstrap_required" && ! -f "${issues_path}" ]]; then
-    helper_command="cd $(printf '%q' "${worktree_path}") && /usr/local/bin/bd doctor --json && bd bootstrap"
+    helper_command="cd $(printf '%q' "${worktree_path}") && /usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ."
   fi
 
   if [[ "${apply_safe}" == "true" ]]; then
