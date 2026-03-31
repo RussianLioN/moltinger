@@ -44,7 +44,8 @@ Before using this flow, confirm:
    Use the post-close rule before deciding whether to reuse the current lane.
 
 2. Start the durable lane through the repo-native path.
-   Preferred future UX is a Cline workflow that calls the existing shell backend.
+   Today this means the current repo-native `command-worktree` flow or the shell backend directly.
+   Preferred future UX is a Cline workflow that calls the same backend.
 
 3. Land in the new authoritative worktree.
    This lane owns the branch and the worktree directory.
@@ -90,7 +91,37 @@ kanban task create \
   --prompt "Child: nginx probe fixes"
 ```
 
-### Step 3. Start the child task
+If the child tasks have a prerequisite relationship, link them explicitly:
+
+```bash
+kanban task link \
+  --project-path /Users/rl/coding/moltinger/moltinger-main \
+  --task-id <waiting-task-id> \
+  --linked-task-id <prerequisite-task-id>
+```
+
+Use `kanban task link` when one backlog task must wait for another.
+If the subtasks are independent, do not link them.
+
+### Step 3. Link dependencies explicitly when order matters
+
+If one task must wait on another, create the dependency explicitly:
+
+```bash
+kanban task link \
+  --project-path /Users/rl/coding/moltinger/moltinger-main \
+  --task-id <waiting-task-id> \
+  --linked-task-id <prerequisite-task-id>
+```
+
+Meaning:
+
+- `--task-id` is the waiting dependent task
+- `--linked-task-id` is the prerequisite task it waits on
+
+For a parent card that should stay blocked until a child slice is complete, the parent is the waiting task and the child is the prerequisite task.
+
+### Step 4. Start the child task
 
 ```bash
 kanban task start \
@@ -100,7 +131,7 @@ kanban task start \
 
 Kanban will create a task worktree under `~/.cline/worktrees/<taskId>/moltinger-main`.
 
-### Step 4. Execute bounded work only
+### Step 5. Execute bounded work only
 
 Inside the Kanban task worktree:
 
@@ -109,7 +140,7 @@ Inside the Kanban task worktree:
 - do not reinterpret Beads runtime rules
 - do not widen scope into shared governance work unless the task is reclassified
 
-### Step 5. Return results to the owning lane
+### Step 6. Return results to the owning lane
 
 After the child task is finished:
 
