@@ -349,6 +349,16 @@ PY
         test_fail "Primary Moltis identity prompt must prevent skill false negatives and steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing"
     fi
 
+    test_start "static_identity_prompt_forces_sparse_skill_create_to_use_minimal_scaffold_without_template_search"
+    if rg -Fq 'Если пользователь в Telegram/DM пишет короткую команду вида `создай навык <name>` или `create <name> skill`' "$TOML_CONFIG" && \
+       rg -Fq 'Для такого sparse create запроса не ищи темплейты' "$TOML_CONFIG" && \
+       rg -Fq 'Для sparse create сам сгенерируй валидный минимальный scaffold' "$TOML_CONFIG" && \
+       rg -Fq 'Если пользователь спрашивает именно про template/шаблон навыка, покажи канонический минимальный scaffold' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must force short named skill-create requests into immediate minimal create_skill scaffolding instead of template search or preliminary questioning"
+    fi
+
     test_start "static_deploy_verifies_project_local_telegram_safe_hook_bundle_visibility"
     if rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$DEPLOY_SCRIPT" && \
        rg -Fq '/server/.moltis/hooks/telegram-safe-llm-guard/HOOK.md' "$DEPLOY_SCRIPT" && \

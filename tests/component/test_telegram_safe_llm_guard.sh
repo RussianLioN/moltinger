@@ -82,10 +82,12 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
-       jq -e '.data.messages | length == 4' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages | length == 5' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
-       jq -e '.data.messages[3].content == "Давай создадим навык codex-update-new"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output"; then
+       jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[2].content | contains("Первый содержательный ход обязан быть create_skill")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[4].content == "Давай создадим навык codex-update-new"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output"; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must preserve the tool budget for Telegram skill turns and inject skill-authoring guidance instead of forcing text-only mode"
