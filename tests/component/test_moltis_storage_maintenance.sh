@@ -7,6 +7,39 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 STORAGE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
 
+test_storage_report_json_uses_empty_arrays_when_no_actions_exist() {
+    test_start "storage maintenance report JSON should keep empty arrays empty"
+
+    local tmp_dir mock_bin output
+    tmp_dir="$(mktemp -d)"
+    mock_bin="$tmp_dir/bin"
+    mkdir -p "$mock_bin"
+
+    cat > "$mock_bin/df" <<'EOF'
+#!/usr/bin/env bash
+cat <<OUT
+Filesystem 1024-blocks Used Available Capacity Mounted on
+/dev/mock 100 70 30 70% /var/lib/docker
+OUT
+EOF
+
+    chmod +x "$mock_bin/df"
+
+    output="$(
+        PATH="$mock_bin:$PATH" \
+        "$STORAGE_SCRIPT" --json report
+    )"
+
+    assert_contains "$output" '"status": "success"' "Expected report mode without warnings to stay successful"
+    assert_contains "$output" '"actions": []' "Expected empty actions array"
+    assert_contains "$output" '"warnings": []' "Expected empty warnings array"
+    assert_contains "$output" '"removed_volumes": []' "Expected empty removed_volumes array"
+    assert_contains "$output" '"removed_backup_stems": []' "Expected empty removed_backup_stems array"
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_storage_reclaim_prunes_safe_targets_only() {
     test_start "storage maintenance should reclaim safe targets only"
 
@@ -130,6 +163,7 @@ EOF
 run_component_moltis_storage_maintenance_tests() {
     start_timer
 
+    test_storage_report_json_uses_empty_arrays_when_no_actions_exist
     test_storage_reclaim_prunes_safe_targets_only
     test_storage_reclaim_skips_while_deploy_mutex_is_active
 
