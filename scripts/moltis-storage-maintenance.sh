@@ -55,6 +55,15 @@ log() {
 log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 
+json_array() {
+    if [[ $# -eq 0 ]]; then
+        printf '[]\n'
+        return 0
+    fi
+
+    printf '%s\n' "$@" | jq -R . | jq -s '.'
+}
+
 lock_meta_value() {
     local file="$1"
     local key="$2"
@@ -144,10 +153,10 @@ print_report() {
             --arg docker_use_percent "${docker_use:-unknown}" \
             --arg docker_available_kb "${docker_avail:-unknown}" \
             --arg journal_usage "${journal_use:-unknown}" \
-            --argjson actions "$(printf '%s\n' "${ACTIONS[@]}" | jq -R . | jq -s '.')" \
-            --argjson warnings "$(printf '%s\n' "${WARNINGS[@]}" | jq -R . | jq -s '.')" \
-            --argjson removed_volumes "$(printf '%s\n' "${REMOVED_VOLUMES[@]}" | jq -R . | jq -s '.')" \
-            --argjson removed_backup_stems "$(printf '%s\n' "${REMOVED_BACKUP_STEMS[@]}" | jq -R . | jq -s '.')" \
+            --argjson actions "$(json_array "${ACTIONS[@]}")" \
+            --argjson warnings "$(json_array "${WARNINGS[@]}")" \
+            --argjson removed_volumes "$(json_array "${REMOVED_VOLUMES[@]}")" \
+            --argjson removed_backup_stems "$(json_array "${REMOVED_BACKUP_STEMS[@]}")" \
             '{
                 status: (if ($warnings | length) == 0 then "success" else "warning" end),
                 command: $command,
