@@ -228,6 +228,7 @@ jobs:
         id: telegram
         if: steps.pr.outputs.pr_url != ''
         env:
+          TELEGRAM_NOTIFY_ENABLED: ${{ vars.MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED != '' && vars.MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED || 'false' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
           SEND_TELEGRAM_INPUT: ${{ github.event.inputs.send_telegram || 'true' }}
@@ -240,7 +241,10 @@ jobs:
             exit 0
           fi
 
-          if [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]]; then
+          if [[ "$TELEGRAM_NOTIFY_ENABLED" != "true" ]]; then
+            echo "should_send=false" >> "$GITHUB_OUTPUT"
+            echo "reason=repo variable MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED is not true" >> "$GITHUB_OUTPUT"
+          elif [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]]; then
             echo "should_send=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_send=false" >> "$GITHUB_OUTPUT"

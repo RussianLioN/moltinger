@@ -1312,6 +1312,18 @@ PY
         test_fail "Moltis update proposal workflow must support optional Telegram notification via dedicated chat-id secret"
     fi
 
+    test_start "static_operator_telegram_notifications_fail_closed_without_explicit_enable_flag"
+    if rg -Fq "MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED" "$DEPLOY_STATUS_NOTIFY_WORKFLOW" && \
+       rg -Fq "MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED" "$DEPLOY_STALL_WATCHDOG_WORKFLOW" && \
+       rg -Fq "MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED" "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -Fq "repo variable MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED is not true" "$DEPLOY_STATUS_NOTIFY_WORKFLOW" && \
+       rg -Fq "repo variable MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED is not true" "$DEPLOY_STALL_WATCHDOG_WORKFLOW" && \
+       rg -Fq "repo variable MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED is not true" "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Operator Telegram notification workflows must fail closed unless repo variable MOLTIS_UPDATE_NOTIFY_TELEGRAM_ENABLED=true explicitly enables delivery"
+    fi
+
     test_start "static_version_update_docs_list_optional_telegram_delivery_secrets"
     if rg -Fq 'Optional Telegram delivery secrets for proposal workflow' "$PROJECT_ROOT/docs/version-update.md" && \
        rg -Fq 'TELEGRAM_BOT_TOKEN' "$PROJECT_ROOT/docs/version-update.md" && \
