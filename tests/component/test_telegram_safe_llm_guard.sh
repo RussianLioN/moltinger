@@ -228,6 +228,20 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must fail closed on mounted-workspace skill-probe wording before text fallback turns it into exec or tavily skill calls"
     fi
 
+    test_start "component_after_llm_guard_blocks_observed_template_probe_wording_before_text_fallback_parser_can_promote_it"
+    local template_probe_output
+    template_probe_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо! Давай найду темплейт навыка и структуру. Смотрю в директории skills:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$template_probe_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$template_probe_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$template_probe_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fail closed on observed template-and-skills-directory planning before text fallback turns it into queued Telegram-safe churn"
+    fi
+
     test_start "component_after_llm_guard_blocks_observed_github_repo_doc_fetch_wording_before_text_fallback_parser_can_promote_it"
     local github_repo_fetch_output
     github_repo_fetch_output="$(
