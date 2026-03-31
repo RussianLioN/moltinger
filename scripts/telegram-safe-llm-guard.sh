@@ -436,31 +436,25 @@ prepend_message_to_array() {
     printf '[%s,%s' "$message_json" "${messages_json#\[}"
 }
 
-discover_skill_names_csv() {
+discover_runtime_skill_names_csv() {
     local csv_override="${MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES:-}"
+    local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
     local names=""
     local path=""
-    local skill_dir=""
     local skill_name=""
 
     if [[ -n "$csv_override" ]]; then
         printf '%s' "$csv_override"
-        return
+        return 0
     fi
 
-    for path in \
-        /home/moltis/.moltis/skills/*/SKILL.md \
-        /home/moltis/skills/*/SKILL.md \
-        /server/skills/*/SKILL.md
-    do
+    [[ -d "$runtime_root" ]] || return 1
+
+    for path in "$runtime_root"/*/SKILL.md; do
         [[ -f "$path" ]] || continue
-        skill_dir="${path%/SKILL.md}"
-        skill_name="${skill_dir##*/}"
-        case "$skill_name" in
-            ""|.repo-sync.*)
-                continue
-                ;;
-        esac
+        skill_name="${path%/SKILL.md}"
+        skill_name="${skill_name##*/}"
+        [[ -n "$skill_name" ]] || continue
         case ",$names," in
             *,"$skill_name",*)
                 continue
@@ -469,6 +463,7 @@ discover_skill_names_csv() {
         names="${names:+$names,}$skill_name"
     done
 
+    [[ -n "$names" ]] || return 1
     printf '%s' "$names"
 }
 
@@ -478,7 +473,7 @@ format_skill_names_bullets() {
     local skill_name=""
 
     if [[ -z "$csv" ]]; then
-        printf '%s' '- (runtime skills не обнаружены)'
+        printf '%s' '- runtime snapshot unavailable in hook context'
         return
     fi
 
@@ -493,83 +488,52 @@ format_skill_names_bullets() {
     done
 
     if [[ -z "$bullet_text" ]]; then
-        bullet_text='- (runtime skills не обнаружены)'
+        bullet_text='- runtime snapshot unavailable in hook context'
     fi
 
     printf '%s' "$bullet_text"
 }
 
-template_skill_present() {
-    local override="${MOLTIS_TELEGRAM_SAFE_TEMPLATE_SKILL_PRESENT:-}"
-    local csv="${1:-}"
-
-    case "$override" in
-        true|TRUE|1|yes|YES)
-            return 0
-            ;;
-        false|FALSE|0|no|NO)
-            return 1
-            ;;
-    esac
-
-    if [[ ",${csv}," == *",template-skill,"* ]]; then
-        return 0
-    fi
-
-    [[ -f /home/moltis/.moltis/skills/template-skill/SKILL.md || -f /home/moltis/skills/template-skill/SKILL.md || -f /server/skills/template-skill/SKILL.md ]]
-}
-
 build_skill_runtime_snapshot_message() {
     local csv="${1:-}"
     local bullets=""
-    local template_state="нет"
 
     bullets="$(format_skill_names_bullets "$csv")"
-    if template_skill_present "$csv"; then
-        template_state="да"
-    fi
 
     cat <<EOF
-Telegram-safe skill runtime snapshot:
-- Используй этот snapshot как primary truth для текущего хода вместо filesystem-проб.
-- Не пытайся доказывать отсутствие навыка через exec/find/cat по ~/.moltis/skills, /home/moltis/.moltis/skills, /server/skills, mounted workspace или repo paths.
-- Для create/update/delete навыков используй dedicated tools create_skill, update_skill, delete_skill напрямую.
-- Для skill template/scaffold не говори, что сначала будешь искать шаблон по файлам; используй канонический формат SKILL.md из project guides.
-- Текущие runtime skills:
+Telegram-safe skill runtime note:
+- Для текущего хода не доказывай отсутствие навыков через exec/find/cat по ~/.moltis/skills, /home/moltis/.moltis/skills, /server/skills, mounted workspace или repo paths.
+- Если нужен ответ про навыки, опирайся на runtime-discovered skills и на best-effort snapshot ниже. Если snapshot недоступен, честно скажи, что hook не подтверждает список, но это не означает отсутствия навыков.
+- Для create/update/delete навыков предпочитай dedicated tools create_skill, update_skill, delete_skill.
+- Канонический scaffold: skills/<name>/SKILL.md.
+- Best-effort runtime snapshot:
 ${bullets}
-- template-skill присутствует: ${template_state}
 EOF
 }
 
 build_skill_authoring_guard_message() {
     cat <<'EOF'
 Telegram-safe skill-authoring contract:
-- Если пользователь спрашивает, какие навыки уже есть, отвечай по runtime snapshot выше.
-- Если пользователь просит создать или обновить навык, не используй exec/browser/web_fetch/Tavily для поиска директорий или шаблона.
-- Для skill create/update/delete сначала пробуй dedicated tools create_skill, update_skill, delete_skill.
-- Если template-skill отсутствует, не выдумывай его наличие: прямо скажи об отсутствии built-in template и используй канонический scaffold `skills/<name>/SKILL.md`.
-- Если create_skill возвращает validation/frontmatter error, кратко объясни её и повтори попытку с валидным SKILL.md вместо filesystem probing.
+- Для skill visibility/create/update/delete не используй browser, web-search, Tavily, exec и filesystem-пробы как primary path.
+- Допустимые tool paths для такого хода: create_skill, update_skill, delete_skill, session_state, send_message, send_image.
+- Если runtime snapshot недоступен, не делай вывод "навыков нет"; скажи, что sandbox filesystem не является доказательством отсутствия навыка.
+- Если create_skill или update_skill вернул validation/frontmatter error, кратко объясни ошибку и повтори попытку с валидным SKILL.md.
 EOF
 }
 
 build_skill_probe_result_text() {
     local csv="${1:-}"
     local bullets=""
-    local template_state="нет"
 
     bullets="$(format_skill_names_bullets "$csv")"
-    if template_skill_present "$csv"; then
-        template_state="да"
-    fi
 
     cat <<EOF
-Telegram-safe runtime snapshot для навыков:
+Telegram-safe runtime note for skills:
 ${bullets}
 
-template-skill присутствует: ${template_state}
-Канонический scaffold: skills/<name>/SKILL.md
-Не используй filesystem-пробы по ~/.moltis/skills, /home/moltis/.moltis/skills, /server/skills или mounted workspace как доказательство наличия/отсутствия навыка.
-Для skill create/update/delete используй create_skill, update_skill, delete_skill напрямую.
+Filesystem-пробы по ~/.moltis/skills, /home/moltis/.moltis/skills, /server/skills и mounted workspace не считаются доказательством наличия или отсутствия навыка.
+Для skill visibility отвечай осторожно по runtime context, а для create/update/delete используй dedicated tools create_skill, update_skill, delete_skill.
+Канонический scaffold: skills/<name>/SKILL.md.
 EOF
 }
 
@@ -580,7 +544,8 @@ build_exec_heredoc_command() {
 }
 
 emit_before_tool_modified_payload() {
-    local arguments_json="$1"
+    local tool_name_fragment="$1"
+    local arguments_json="$2"
     local data_object_json modified_data_json
 
     data_object_json="$(extract_json_object data || true)"
@@ -588,9 +553,104 @@ emit_before_tool_modified_payload() {
         return 1
     fi
 
-    modified_data_json="$(filter_top_level_object_fields "$data_object_json" arguments)"
+    modified_data_json="$(filter_top_level_object_fields "$data_object_json" tool arguments)"
+    if [[ -n "$tool_name_fragment" ]]; then
+        modified_data_json="$(append_field_to_object "$modified_data_json" "$tool_name_fragment")"
+    fi
     modified_data_json="$(append_field_to_object "$modified_data_json" "\"arguments\":$arguments_json")"
     printf '{"action":"modify","data":%s}\n' "$modified_data_json"
+}
+
+emit_modified_payload_preserve_tool_calls() {
+    local text="$1"
+    local session_key provider model finish_reason input_tokens output_tokens reasoning_tokens data_object_json modified_data_json tool_calls_json
+
+    session_key="$(extract_first_string session_key || true)"
+    if [[ -z "$session_key" ]]; then
+        session_key="$(extract_first_string session_id || true)"
+    fi
+    provider="$(extract_first_string provider || true)"
+    model="$(extract_first_string model || true)"
+    finish_reason="$(extract_first_string finish_reason || true)"
+    input_tokens="$(extract_first_number input_tokens || true)"
+    output_tokens="$(extract_first_number output_tokens || true)"
+    reasoning_tokens="$(extract_first_number reasoning_tokens || true)"
+    data_object_json="$(extract_json_object data || true)"
+    tool_calls_json="$(extract_json_array tool_calls || true)"
+
+    if [[ -n "$data_object_json" ]]; then
+        modified_data_json="$(filter_top_level_object_fields "$data_object_json" text)"
+        modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_string_field text "$text")")"
+        printf '{"action":"modify","data":%s}\n' "$modified_data_json"
+        return
+    fi
+
+    printf '{"action":"modify","data":{%s%s%s%s%s%s%s,"text":"%s"%s}}\n' \
+        "$(json_string_field session_key "${session_key:-current-session}")" \
+        "$(append_optional_string_field provider "$provider")" \
+        "$(append_optional_string_field model "$model")" \
+        "$(append_optional_string_field finish_reason "$finish_reason")" \
+        "$(append_optional_number_field input_tokens "$input_tokens")" \
+        "$(append_optional_number_field output_tokens "$output_tokens")" \
+        "$(append_optional_number_field reasoning_tokens "$reasoning_tokens")" \
+        "$(json_escape "$text")" \
+        "$(
+            if [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]]; then
+                printf ',\"tool_calls\":%s' "$tool_calls_json"
+            fi
+        )"
+}
+
+extract_tool_call_names() {
+    local tool_calls_json="${1:-}"
+
+    [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]] || return 1
+
+    printf '%s' "$tool_calls_json" \
+        | grep -oE '(^|[\[,])[[:space:]]*\{[[:space:]]*"name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+        | sed -E 's/^.*"name"[[:space:]]*:[[:space:]]*"//; s/"$//'
+}
+
+tool_name_is_allowlisted() {
+    local tool_name="${1:-}"
+    case "$tool_name" in
+        create_skill|update_skill|delete_skill|session_state|send_message|send_image)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+tool_calls_only_allowlisted() {
+    local tool_calls_json="${1:-}"
+    local saw_name=false
+    local tool_name=""
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        saw_name=true
+        if ! tool_name_is_allowlisted "$tool_name"; then
+            return 1
+        fi
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    $saw_name
+}
+
+tool_calls_include_disallowed() {
+    local tool_calls_json="${1:-}"
+    local tool_name=""
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        if ! tool_name_is_allowlisted "$tool_name"; then
+            return 0
+        fi
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    return 1
 }
 
 emit_modified_payload() {
@@ -638,7 +698,7 @@ emit_modified_payload() {
 
 emit_before_llm_modified_payload() {
     local messages_json="$1"
-    local tool_count="$2"
+    local tool_count="${2:-}"
     local session_key provider model iteration data_object_json modified_data_json
 
     session_key="$(extract_first_string session_key || true)"
@@ -649,19 +709,21 @@ emit_before_llm_modified_payload() {
     data_object_json="$(extract_json_object data || true)"
     if [[ -n "$data_object_json" ]]; then
         modified_data_json="$(filter_top_level_object_fields "$data_object_json" messages tool_count)"
-        modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field tool_count "$tool_count")")"
+        if [[ -n "$tool_count" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$(json_number_field tool_count "$tool_count")")"
+        fi
         modified_data_json="$(append_field_to_object "$modified_data_json" "\"messages\":$messages_json")"
         printf '{"action":"modify","data":%s}\n' "$modified_data_json"
         return
     fi
 
-    printf '{"action":"modify","data":{%s%s%s%s%s,"messages":%s}}\n' \
+    printf '{"action":"modify","data":{%s%s%s%s%s%s}}\n' \
         "$(json_string_field session_key "${session_key:-current-session}")" \
         "$(append_optional_string_field provider "$provider")" \
         "$(append_optional_string_field model "$model")" \
-        "$(append_optional_number_field tool_count "$tool_count")" \
         "$(append_optional_number_field iteration "$iteration")" \
-        "$messages_json"
+        "$(append_optional_number_field tool_count "$tool_count")" \
+        "$(printf ',\"messages\":%s' "$messages_json")"
 }
 
 log_guard_diagnostic() {
@@ -684,6 +746,7 @@ provider="$(extract_first_string provider || true)"
 response_text="$(extract_first_string text || true)"
 tool_name="$(extract_first_string tool || true)"
 command_arg="$(extract_first_string command || true)"
+tool_calls_json="$(extract_json_array tool_calls || true)"
 response_text_flat="$(
     printf '%s' "${response_text:-}" \
         | tr '\r\n' '  ' \
@@ -708,8 +771,18 @@ fi
 
 tool_count="$(extract_first_number tool_count || true)"
 tool_calls_present=false
-if printf '%s' "$payload_flat" | grep -Eq '"tool_calls"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
+if [[ -n "${tool_calls_json:-}" && "$tool_calls_json" != "[]" ]]; then
     tool_calls_present=true
+fi
+tool_calls_allowlisted_only=false
+tool_calls_have_disallowed=false
+if [[ "$tool_calls_present" == true ]]; then
+    if tool_calls_only_allowlisted "$tool_calls_json"; then
+        tool_calls_allowlisted_only=true
+    fi
+    if tool_calls_include_disallowed "$tool_calls_json"; then
+        tool_calls_have_disallowed=true
+    fi
 fi
 
 # Keep delivery-time stripping strict, but allow broader AfterLLM fail-closed
@@ -721,25 +794,17 @@ fi
 
 has_after_llm_tool_intent=false
 if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|((([Оо]тлично|[Сс]упер|[Оо]кей|[Лл]адно)[!,.[:space:]]{0,12})?[Дд]авай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою|проанализирую|сделаю))|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц).{0,160}(codex-update|навык|skills?|пример)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл|темплейт|template)|[Чч]ита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|([Нн]айд(у|ем)|найд(у|ем)).{0,80}(документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(у|ы)|директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|структур(у|ы).{0,40}(навык|skill)|([Дд]авай(те)?|давай(те)?).{0,40}([Нн]айду|[Пп]оищу|найду|поищу).{0,80}(темплейт|template|шаблон|структур)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон).{0,80}(навык|skill|структур)|как пример|как реальн(ый|ого) пример|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
-    has_after_llm_tool_intent=true
-fi
-if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(codex-update|существующ(ий|его) навык|реальн(ый|ого) пример).{0,160}(документац|docs|documentation|manual|guide|инструкц|начина(ю|ем)|чита(ю|ем)|найд(у|ем)|изучу)|((официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)).{0,160}(codex-update|навык|skills?|пример|начина(ю|ем)|чита(ю|ем)|найд(у|ем)|изучу)"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою|проанализирую|сделаю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(workspace|документац|файл|темплейт|template)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool"; then
     has_after_llm_tool_intent=true
 fi
 
 has_user_visible_internal_planning=false
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|((([Оо]тлично|[Сс]упер|[Оо]кей|[Лл]адно)[!,.[:space:]]{0,12})?[Дд]авай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю))|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц).{0,160}(codex-update|навык|skills?|пример)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Чч]ита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|([Нн]айд(у|ем)|найд(у|ем)).{0,80}(документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(у|ы)|директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|структур(у|ы).{0,40}(навык|skill)|([Дд]авай(те)?|давай(те)?).{0,40}([Нн]айду|[Пп]оищу|найду|поищу).{0,80}(темплейт|template|шаблон|структур)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон).{0,80}(навык|skill|структур)|как пример|как реальн(ый|ого) пример|mcp__|mounted workspace|skill files|existing skills|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|как пример|как реальн(ый|ого) пример|mcp__|mounted workspace|skill files|existing skills"; then
     has_user_visible_internal_planning=true
 fi
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(у меня есть доступ к|i have access to|мне доступны).{0,160}((^|[^[:alnum:]_])create_skill([^[:alnum:]_]|$)|skills?|tavily|mcp__)"; then
-    has_user_visible_internal_planning=true
-fi
-if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(codex-update|существующ(ий|его) навык|реальн(ый|ого) пример).{0,160}(документац|docs|documentation|manual|guide|инструкц|начина(ю|ем)|чита(ю|ем)|найд(у|ем)|изучу)|((официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)).{0,160}(codex-update|навык|skills?|пример|начина(ю|ем)|чита(ю|ем)|найд(у|ем)|изучу)"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(у меня есть доступ к|i have access to|мне доступны).{0,160}((^|[^[:alnum:]_])(create_skill|update_skill|delete_skill|browser|exec|process|cron)([^[:alnum:]_]|$)|tavily|mcp__)"; then
     has_user_visible_internal_planning=true
 fi
 
@@ -753,20 +818,15 @@ if printf '%s' "$payload_flat" | grep -Eiq '((изучи|изучить|иссл
     looks_like_broad_research_request=true
 fi
 
-looks_like_skill_template_probe=false
-if printf '%s' "$payload_flat" | grep -Eiq '((темплейт|template|шаблон).{0,120}(навык|skills?|skill|SKILL\.md|структур|путь|path))|((структур(у|а|ы)).{0,80}(навык|skills?|skill))|((директори(и|ю)[[:space:]]+skills)|(skills[[:space:]]+directory))|(у тебя должен быть темплейт)|(должен быть шаблон)|(template skill)|(template-skill)'; then
-    looks_like_skill_template_probe=true
+looks_like_skill_turn=false
+if printf '%s' "$payload_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
+    looks_like_skill_turn=true
 fi
 
-looks_like_skill_creation_request=false
-if printf '%s' "$payload_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|сдела(й|ем|ть)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
-    looks_like_skill_creation_request=true
-fi
-
-looks_like_skill_exec_probe=false
-if [[ "$event" == "BeforeToolCall" && "$tool_name" == "exec" ]] && \
-   printf '%s' "$command_arg" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills|/server/skills|skills[[:space:]]+directory|template-skill|SKILL\.md|find[^[:cntrl:]]{0,120}skills|ls[^[:cntrl:]]{0,80}skills|cat[^[:cntrl:]]{0,120}(SKILL\.md|template-skill)|head[^[:cntrl:]]{0,120}(SKILL\.md|template-skill))'; then
-    looks_like_skill_exec_probe=true
+has_skill_path_false_negative=false
+if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills).{0,120}(не существует|отсутствует|doesn.?t exist|not found)|либо были удалены, либо( ещё| еще)? не созданы'; then
+    has_skill_path_false_negative=true
 fi
 
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
@@ -782,7 +842,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             | sed 's/[[:space:]][[:space:]]*/ /g' \
             | cut -c1-220
     )"
-    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$looks_like_skill_template_probe" == true || "$looks_like_skill_creation_request" == true || "$(printf '%s' "$payload_flat" | grep -Eic 'документац|docs|codex-update|навык|skill|темплейт|template|шаблон')" -gt 0 ]]; then
+    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$has_skill_path_false_negative" == true ]]; then
         log_guard_diagnostic \
             "$event" \
             "$diagnostic_preview_source" \
@@ -801,13 +861,8 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
     already_guarded_long_research=true
 fi
 
-already_guarded_skill_snapshot=false
-if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe skill runtime snapshot:'; then
-    already_guarded_skill_snapshot=true
-fi
-
 if [[ "$event" == "MessageSending" ]]; then
-    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$looks_like_skill_template_probe" != true && "$looks_like_skill_creation_request" != true ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then
@@ -817,14 +872,6 @@ fi
 if [[ "$event" == "BeforeLLMCall" ]]; then
     messages_json="$(extract_json_array messages || true)"
     if [[ -n "${messages_json:-}" ]]; then
-        skill_snapshot_csv="$(discover_skill_names_csv)"
-        if [[ "$already_guarded_skill_snapshot" != true ]]; then
-            messages_json="$(prepend_message_to_array "$messages_json" system "$(build_skill_runtime_snapshot_message "$skill_snapshot_csv")")"
-        fi
-        if [[ "$looks_like_skill_template_probe" == true || "$looks_like_skill_creation_request" == true ]]; then
-            messages_json="$(prepend_message_to_array "$messages_json" system "$(build_skill_authoring_guard_message)")"
-        fi
-        # Safe Telegram lane must stay text-only even when upstream tool_mode is ignored.
         if [[ "$looks_like_broad_research_request" == true ]]; then
             # Hard override broad doc-study turns so the provider never sees the
             # original research request and cannot improvise a user-visible plan.
@@ -832,6 +879,16 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             long_research_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
             messages_json="[$(build_message_json system "$long_research_guard"),$(build_message_json user "$long_research_user")]"
             write_audit_line "before_modify reason=long_research_hard_override tool_count=0 guard_reapplied=true previously_present=$already_guarded_long_research"
+            emit_before_llm_modified_payload "$messages_json" 0
+            exit 0
+        fi
+        if [[ "$looks_like_skill_turn" == true ]]; then
+            skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+            messages_json="$(prepend_message_to_array "$messages_json" system "$(build_skill_authoring_guard_message)")"
+            messages_json="$(prepend_message_to_array "$messages_json" system "$(build_skill_runtime_snapshot_message "$skill_snapshot_csv")")"
+            write_audit_line "before_modify reason=skill_turn tool_count=${tool_count:-preserve}"
+            emit_before_llm_modified_payload "$messages_json" "${tool_count:-4}"
+            exit 0
         fi
         write_audit_line "before_modify reason=safe_lane tool_count=0"
         emit_before_llm_modified_payload "$messages_json" 0
@@ -840,22 +897,21 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
 fi
 
 if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
-    if [[ "$looks_like_skill_exec_probe" == true ]]; then
-        skill_snapshot_csv="$(discover_skill_names_csv)"
-        synthetic_command="$(build_exec_heredoc_command "$(build_skill_probe_result_text "$skill_snapshot_csv")")"
-        write_audit_line "emit_modify event=$event reason=skill_exec_probe tool=$tool_name"
-        emit_before_tool_modified_payload "{\"command\":\"$(json_escape "$synthetic_command")\"}"
+    if tool_name_is_allowlisted "$tool_name"; then
         exit 0
     fi
 
-    case "$tool_name" in
-        create_skill|update_skill|delete_skill|session_state|send_message|send_image)
-            exit 0
-            ;;
-    esac
+    if [[ "$tool_name" == "exec" ]] && \
+       printf '%s' "$command_arg" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills|/server/skills|skills[[:space:]]+directory|SKILL\.md|find[^[:cntrl:]]{0,120}skills|ls[^[:cntrl:]]{0,80}skills|cat[^[:cntrl:]]{0,120}SKILL\.md|head[^[:cntrl:]]{0,120}SKILL\.md)'; then
+        skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+        synthetic_command="$(build_exec_heredoc_command "$(build_skill_probe_result_text "$skill_snapshot_csv")")"
+        write_audit_line "emit_modify event=$event reason=skill_exec_probe tool=$tool_name"
+        emit_before_tool_modified_payload '"tool":"exec"' "{\"command\":\"$(json_escape "$synthetic_command")\"}"
+        exit 0
+    fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$looks_like_skill_template_probe" != true && "$looks_like_skill_creation_request" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
     exit 0
 fi
 
@@ -871,14 +927,19 @@ if [[ "$looks_like_status" == true ]]; then
     exit 0
 fi
 
-if [[ "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_skill_template_probe" == true || "$looks_like_skill_creation_request" == true ]]; then
+if [[ "$event" == "AfterLLMCall" && "$tool_calls_allowlisted_only" == true && ( "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ) ]]; then
+    fallback_text='Выполняю запрос по навыкам через встроенные инструменты без filesystem-проб. После завершения вернусь с итогом.'
+    write_audit_line "emit_modify event=$event reason=allowlisted_skill_tool_progress tool_calls_present=$tool_calls_present"
+    emit_modified_payload_preserve_tool_calls "$fallback_text"
+    exit 0
+fi
+
+if [[ "$tool_calls_have_disallowed" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ]]; then
     fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
-    fallback_reason='fallback'
-    if [[ "$looks_like_skill_template_probe" == true || "$looks_like_skill_creation_request" == true ]]; then
-        fallback_text='Шаблонный путь такой: открой docs/moltis-skill-agent-authoring.md, затем создай skills/<name>/SKILL.md. Не проверяй skills через filesystem-пробы; если нужен новый навык, используй create_skill напрямую.'
-        fallback_reason='skill_authoring_guidance'
+    if [[ "$has_skill_path_false_negative" == true ]]; then
+        fallback_text='Я не использую sandbox filesystem как доказательство отсутствия навыков. Для работы с навыками продолжу через runtime skill-tools без проверки директорий.'
     fi
-    write_audit_line "emit_modify event=$event reason=$fallback_reason tool_calls_present=$tool_calls_present delivery_telemetry=$has_delivery_internal_telemetry after_llm_intent=$has_after_llm_tool_intent planning=$has_user_visible_internal_planning template_probe=$looks_like_skill_template_probe skill_create=$looks_like_skill_creation_request"
+    write_audit_line "emit_modify event=$event reason=fallback tool_calls_present=$tool_calls_present disallowed_tools=$tool_calls_have_disallowed delivery_telemetry=$has_delivery_internal_telemetry after_llm_intent=$has_after_llm_tool_intent planning=$has_user_visible_internal_planning false_negative=$has_skill_path_false_negative"
     if [[ "$event" == "AfterLLMCall" ]]; then
         emit_modified_payload "$fallback_text" true
     else

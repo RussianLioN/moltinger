@@ -11,10 +11,12 @@ COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 COMPOSE_TEST="$PROJECT_ROOT/compose.test.yml"
 COMPOSE_CLAWDIY="$PROJECT_ROOT/docker-compose.clawdiy.yml"
 DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
+DEPLOY_STATUS_NOTIFY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-status-notify.yml"
+DEPLOY_STALL_WATCHDOG_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-stall-watchdog.yml"
 MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
-DRIFT_WORKFLOW="$PROJECT_ROOT/.github/workflows/gitops-drift-detection.yml"
+FEATURE_DIAGNOSTICS_WORKFLOW="$PROJECT_ROOT/.github/workflows/feature-diagnostics.yml"
 ROLLBACK_DRILL_WORKFLOW="$PROJECT_ROOT/.github/workflows/rollback-drill.yml"
 TEST_WORKFLOW="$PROJECT_ROOT/.github/workflows/test.yml"
 TEST_RUNNER_DOCKERFILE="$PROJECT_ROOT/tests/Dockerfile.runner"
@@ -28,21 +30,29 @@ MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 TELEGRAM_WEBHOOK_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/telegram-webhook-monitor.sh"
 TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webhook-monitor"
 TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
+STORAGE_MAINTENANCE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
+STORAGE_MAINTENANCE_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-storage-maintenance"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
+DEPLOY_STALL_WATCHDOG_SCRIPT="$PROJECT_ROOT/scripts/deploy-stall-watchdog.sh"
+HEALTH_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/health-monitor.sh"
+HEALTH_MONITOR_UNIT="$PROJECT_ROOT/systemd/moltis-health-monitor.service"
+HEALTH_MONITOR_CONFIG_UNIT="$PROJECT_ROOT/config/systemd/moltis-health-monitor.service"
 MOLTIS_ENV_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-moltis-env.sh"
+TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
-SSH_RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-moltis-runtime-attestation.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
-SELF_LEARNING_DOC="$PROJECT_ROOT/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md"
-TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
-MOLTIS_SURFACE_MATRIX_SCRIPT="$PROJECT_ROOT/scripts/moltis-exercised-surface-matrix.sh"
+FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
+PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
+GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
 TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
-TELEGRAM_SAFE_HOOK_DOC="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
-TELEGRAM_SAFE_HOOK_SCRIPT="$TELEGRAM_SAFE_HOOK_DIR/handler.sh"
-TELEGRAM_SAFE_GUARD_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
+TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
+TELEGRAM_SAFE_HOOK_HANDLER="$TELEGRAM_SAFE_HOOK_DIR/handler.sh"
+TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
+TELEGRAM_LEARNER_SKILL="$PROJECT_ROOT/skills/telegram-learner/SKILL.md"
+MOLTIS_REPO_HOOKS_SYNC_SCRIPT="$PROJECT_ROOT/scripts/moltis-repo-hooks-sync.sh"
 
 validate_toml() {
     local file_path="$1"
@@ -103,25 +113,36 @@ run_static_config_validation_tests() {
        rg -q '^\s+- \./:/server:ro$' "$PROJECT_ROOT/docker-compose.yml"; then
         test_pass
     else
-        test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for live skill visibility"
+        test_fail "Moltis compose files must mount the tracked checkout as /server and use it as the working directory for Git-tracked scripts, docs, and repo-managed skill sources"
     fi
 
     test_start "static_moltis_browser_docker_contract_matches_official_sibling_container_requirements"
     if rg -q 'container_host = "host\.docker\.internal"' "$TOML_CONFIG" && \
-       rg -q '^profile_dir = "/tmp/moltis-browser-profile/shared"' "$TOML_CONFIG" && \
+       rg -q '^profile_dir = "/tmp/moltis-browser-profile/browserless"' "$TOML_CONFIG" && \
        rg -q '^persist_profile = false' "$TOML_CONFIG" && \
+       rg -q '^max_instances = 1' "$TOML_CONFIG" && \
+       rg -q '^sandbox_image = "moltis-browserless-chrome:tracked"' "$TOML_CONFIG" && \
        rg -q 'DOCKER_SOCKET_GID:-999' "$COMPOSE_PROD" && \
        rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$COMPOSE_PROD" && \
+       rg -q '/tmp/moltis-browser-profile:/tmp/moltis-browser-profile' "$PROJECT_ROOT/docker-compose.yml" && \
        rg -q 'host\.docker\.internal:host-gateway' "$COMPOSE_PROD" && \
-       rg -q 'export DOCKER_SOCKET_GID="\$docker_socket_gid"' "$DEPLOY_SCRIPT" && \
+       rg -q 'host\.docker\.internal:host-gateway' "$PROJECT_ROOT/docker-compose.yml" && \
+       rg -q 'DOCKER_SOCKET_GID=\$docker_socket_gid' "$DEPLOY_SCRIPT" && \
        rg -q 'prepare_moltis_browser_profile_dir' "$DEPLOY_SCRIPT" && \
-       rg -q 'chmod 0777 "\$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "\$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"' "$DEPLOY_SCRIPT" && \
-       rg -q 'prepull_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
-       rg -q 'docker pull "\$sandbox_image"' "$DEPLOY_SCRIPT" && \
-       rg -q '^sandbox_image = "browserless/chrome"' "$TOML_CONFIG"; then
+       rg -q 'rm -rf "\$browser_profile_dir"' "$DEPLOY_SCRIPT" && \
+       rg -q 'Tracked browser contract must pin max_instances=1 when persist_profile=false' "$DEPLOY_SCRIPT" && \
+       rg -q 'prepare_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
+       rg -q 'browser_sandbox_spec_sha\(\)' "$DEPLOY_SCRIPT" && \
+       rg -q 'SANDBOX_SPEC_SHA="\$desired_spec_sha"' "$DEPLOY_SCRIPT" && \
+       rg -q 'BROWSER_SANDBOX_SPEC_LABEL=' "$DEPLOY_SCRIPT" && \
+       [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" ]] && \
+       [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" ]] && \
+       rg -q 'io\.moltinger\.browser-sandbox\.spec-sha' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -q 'scripts/moltis-browser-sandbox/Dockerfile' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker build \\' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must keep the shared profile_dir contract, keep persist_profile disabled, pre-pull the tracked browserless/chrome image, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must keep a dedicated non-persistent browser profile dir, pin max_instances=1, rebuild the tracked browser sandbox wrapper only when its spec changes, purge stale profile state on deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
@@ -153,14 +174,6 @@ PY
         test_fail "Expected environment variable substitution in config files"
     fi
 
-    test_start "static_identity_prompt_guards_tavily_country_usage"
-    if rg -Fq 'При использовании Tavily search не заполняй параметр `country`' "$TOML_CONFIG" && \
-       rg -Fq 'используй только lowercase plain English значения из Tavily schema' "$TOML_CONFIG"; then
-        test_pass
-    else
-        test_fail "Primary Moltis identity prompt must forbid implicit Tavily country usage and require lowercase English country values when country is explicitly needed"
-    fi
-
     test_start "static_identity_prompt_forbids_internal_activity_leaks_in_telegram"
     if rg -Fq 'В пользовательских мессенджер-каналах, особенно Telegram, никогда не отправляй внутренние activity/tool-progress трассы.' "$TOML_CONFIG" && \
        rg -Fq 'Запрещено публиковать как обычный ответ `Activity log`, `Running`, `Searching memory`, `thinking`' "$TOML_CONFIG" && \
@@ -168,6 +181,144 @@ PY
         test_pass
     else
         test_fail "Primary Moltis identity prompt must fail closed against internal activity/tool-progress leakage in Telegram and other user-facing messaging channels"
+    fi
+
+    test_start "static_identity_prompt_fail_closes_telegram_long_research_promises"
+    if rg -Fq 'Для такого класса Telegram-safe long-research запросов запрещены ответы-обещания вида `Отлично! Давай изучу...`' "$TOML_CONFIG" && \
+       rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TOML_CONFIG" && \
+       rg -Fq 'Исключение: для широких long-research запросов в user-facing Telegram/DM даже такое короткое префейс-сообщение запрещено' "$TOML_CONFIG" && \
+       rg -Fq 'не упоминай автоматически конкретные runtime skills' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must fail closed on broad Telegram long-research requests and force a deterministic safe fallback instead of planning language"
+    fi
+
+    test_start "static_identity_prompt_makes_telegram_status_deterministic_and_tool_free"
+    if rg -Fq 'Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.' "$TOML_CONFIG" && \
+       rg -Fq 'Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search, MCP и другие tool calls' "$TOML_CONFIG" && \
+       rg -Fq 'всегда указывай канонический model id `custom-zai-telegram-safe::glm-5` именно целиком' "$TOML_CONFIG" && \
+       rg -Fq 'Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай' "$TOML_CONFIG" && \
+       rg -Fq 'Для `/status` в Telegram не перечисляй skills, не проверяй tmux/cron/runtime вручную и не импровизируй свободный обзор состояния.' "$TOML_CONFIG" && \
+       rg -Fq 'Для `/status` в Telegram отвечай только коротким финальным статусом в стабильном формате: Время, Сессия, Канал, Модель, Sandbox, затем одна короткая итоговая строка.' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity prompt must make Telegram /status deterministic, tool-free, and pinned to the canonical Telegram-safe model id"
+    fi
+
+    test_start "static_telegram_account_pins_classic_final_message_delivery"
+    if rg -Fq '[channels.telegram.moltis-bot]' "$TOML_CONFIG" && \
+       rg -Fq 'stream_mode = "off"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "User-facing Telegram account must explicitly pin stream_mode = \"off\" so runtime defaults or per-account streaming features cannot leak internal activity/tool-progress into chat"
+    fi
+
+    test_start "static_telegram_account_pins_text_only_safe_provider_lane"
+    if python3 - "$TOML_CONFIG" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+with path.open('rb') as fh:
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
+    config = tomllib.load(fh)
+
+providers = config.get('providers', {})
+telegram = config.get('channels', {}).get('telegram', {}).get('moltis-bot', {})
+default_zai = providers.get('openai', {})
+safe_lane = providers.get('custom-zai-telegram-safe', {})
+
+conditions = [
+    safe_lane.get('enabled') is True,
+    safe_lane.get('tool_mode') == 'auto',
+    safe_lane.get('model') == 'glm-5',
+    safe_lane.get('models') == ['glm-5'],
+    safe_lane.get('alias') == 'zai-telegram-safe',
+    safe_lane.get('api_key') == default_zai.get('api_key'),
+    safe_lane.get('base_url') == default_zai.get('base_url'),
+    telegram.get('model') == 'custom-zai-telegram-safe::glm-5',
+    telegram.get('model_provider') == 'custom-zai-telegram-safe',
+]
+
+raise SystemExit(0 if all(conditions) else 1)
+PY
+    then
+        test_pass
+    else
+        test_fail "User-facing Telegram must pin a dedicated guarded provider lane so DM traffic keeps the safe provider identity while dedicated skill tools remain available"
+    fi
+
+    test_start "static_telegram_safe_lane_registers_llm_guard_hook"
+    if rg -Fq 'name = "telegram-safe-llm-guard"' "$TOML_CONFIG" && \
+       rg -Fq 'command = "./scripts/telegram-safe-llm-guard.sh"' "$TOML_CONFIG" && \
+       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Tracked Moltis config must register a Telegram-safe LLM guard hook so user-facing Telegram replies cannot drift into tool fallback or activity-log leakage"
+    fi
+
+    test_start "static_telegram_safe_lane_ships_project_local_hook_package"
+    if [[ -f "$TELEGRAM_SAFE_HOOK_MANIFEST" ]] && \
+       [[ -x "$TELEGRAM_SAFE_HOOK_HANDLER" ]] && \
+       rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'command = "./handler.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       ! rg -Fq 'bins = ["jq"]' "$TELEGRAM_SAFE_HOOK_MANIFEST"; then
+        test_pass
+    else
+        test_fail "Tracked repo must ship a project-local Telegram-safe hook package under /.moltis/hooks without a jq runtime dependency"
+    fi
+
+    test_start "static_telegram_safe_llm_guard_script_stays_shell_only_and_deploy_verifies_runtime_data_dir_hook_registration"
+    if [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
+       [[ -x "$TELEGRAM_SAFE_HOOK_HANDLER" ]] && \
+       ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
+       ! rg -Fq 'jq ' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
+       rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$TELEGRAM_SAFE_HOOK_HANDLER" && \
+       rg -Fq 'prestage_moltis_repo_hooks_into_runtime' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'verify_moltis_repo_hook_discovery' "$DEPLOY_SCRIPT" && \
+       rg -Fq "\$MOLTIS_REPO_HOOKS_SOURCE_ROOT/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
+       rg -Fq 'MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT' "$DEPLOY_SCRIPT" && \
+       rg -Fq "moltis hooks list --json" "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under MOLTIS_REPO_HOOKS_SOURCE_ROOT"
+    fi
+
+    test_start "static_browser_config_declares_container_host_for_docker_runtime"
+    if rg -Fq 'container_host = "host.docker.internal"' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis browser config must declare host-gateway container_host when Moltis itself runs in Docker"
+    fi
+
+    test_start "static_browser_agent_timeout_keeps_headroom_above_navigation_budget"
+    if python3 - "$TOML_CONFIG" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+with path.open('rb') as fh:
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
+    config = tomllib.load(fh)
+
+tools = config.get('tools', {})
+browser = tools.get('browser', {})
+agent_timeout_secs = int(tools.get('agent_timeout_secs', 0))
+navigation_timeout_ms = int(browser.get('navigation_timeout_ms', 0))
+required_minimum = max(90, (navigation_timeout_ms // 1000) + 60)
+raise SystemExit(0 if agent_timeout_secs >= required_minimum else 1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Overall agent timeout must stay materially above the browser navigation timeout so multi-step browser runs do not abort at the same 30s ceiling as page navigation"
     fi
 
     test_start "static_identity_prompt_scopes_broad_moltis_skill_authoring_requests"
@@ -179,40 +330,34 @@ PY
         test_fail "Primary Moltis identity prompt must scope broad Moltis skill-authoring/doc-review requests to relevant sections and local project guides"
     fi
 
-    test_start "static_identity_prompt_prevents_skill_false_negatives_and_prefers_skill_tools"
-    if rg -Fq 'Если навык уже объявлен в списке доступных skills/runtime snapshot, считай его существующим.' "$TOML_CONFIG" && \
-       rg -Fq 'недоступность host paths для `exec` не является доказательством отсутствия навыка' "$TOML_CONFIG" && \
-       rg -Fq 'Для запросов про текущие навыки отвечай по runtime-loaded skills или runtime snapshot текущего хода.' "$TOML_CONFIG" && \
-       rg -Fq 'предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`' "$TOML_CONFIG" && \
-       rg -Fq 'Если `create_skill` или `update_skill` вернул validation/frontmatter error' "$TOML_CONFIG"; then
+    test_start "static_telegram_learner_skill_reinforces_safe_lane_long_research_guard"
+    if [[ -f "$TELEGRAM_LEARNER_SKILL" ]] && \
+       rg -Fq '## Критический guard для user-facing Telegram DM' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'не говори `Отлично! Давай изучу...`, `Хорошо, изучу...`, `Начну...`, `Начну с поиска...`, `Сейчас изучу...`, `Сначала найду...`' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TELEGRAM_LEARNER_SKILL"; then
         test_pass
     else
-        test_fail "Primary Moltis identity prompt must prevent skills-path false negatives and prefer dedicated skill tools over exec-based probing"
+        test_fail "Auto-loaded telegram-learner skill must reinforce a deterministic fail-closed reply for broad Telegram long-research requests"
     fi
 
-    test_start "static_telegram_lane_is_pinned_to_safe_provider_without_tools"
-    if rg -Fq '[providers.custom-zai-telegram-safe]' "$TOML_CONFIG" && \
-       rg -Fq 'alias = "zai-telegram-safe"' "$TOML_CONFIG" && \
-       rg -Fq 'tool_mode = "off"' "$TOML_CONFIG" && \
-       rg -Fq 'model = "custom-zai-telegram-safe::glm-5"' "$TOML_CONFIG" && \
-       rg -Fq 'model_provider = "custom-zai-telegram-safe"' "$TOML_CONFIG" && \
-       rg -Fq 'stream_mode = "off"' "$TOML_CONFIG"; then
+    test_start "static_identity_prompt_prevents_skill_false_negatives_and_prefers_dedicated_skill_tools"
+    if rg -Fq 'Для вопросов про навыки и skill-authoring не используй sandbox filesystem как primary truth.' "$TOML_CONFIG" && \
+       rg -Fq 'Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.' "$TOML_CONFIG" && \
+       rg -Fq 'Для skill visibility/create/update/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Telegram lane must be pinned to a dedicated safe provider with tool_mode disabled and classic final-message delivery"
+        test_fail "Primary Moltis identity prompt must prevent skill false negatives and steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing"
     fi
 
-    test_start "static_project_local_telegram_safe_hook_exists_and_covers_after_llm_before_tool_plus_message_sending"
-    if [[ -f "$TELEGRAM_SAFE_HOOK_DOC" ]] && \
-       [[ -x "$TELEGRAM_SAFE_HOOK_SCRIPT" ]] && \
-       [[ -x "$TELEGRAM_SAFE_GUARD_SCRIPT" ]] && \
-       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_DOC" && \
-       rg -Fq 'command = "./handler.sh"' "$TELEGRAM_SAFE_HOOK_DOC" && \
-       ! rg -q '(^|[^[:alnum:]_])(jq|python3?|node(js)?)([^[:alnum:]_]|$)' "$TELEGRAM_SAFE_HOOK_SCRIPT" && \
-       ! rg -q '(^|[^[:alnum:]_])(jq|python3?|node(js)?)([^[:alnum:]_]|$)' "$TELEGRAM_SAFE_GUARD_SCRIPT"; then
+    test_start "static_deploy_verifies_project_local_telegram_safe_hook_bundle_visibility"
+    if rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$DEPLOY_SCRIPT" && \
+       rg -Fq '/server/.moltis/hooks/telegram-safe-llm-guard/HOOK.md' "$DEPLOY_SCRIPT" && \
+       rg -Fq '/server/.moltis/hooks/telegram-safe-llm-guard/handler.sh' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'moltis hooks list --json' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'telegram-safe-llm-guard' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Project-local telegram-safe hook bundle must exist, subscribe to BeforeLLMCall + AfterLLMCall + BeforeToolCall + MessageSending, and remain shell-only"
+        test_fail "Deploy verification must assert the full telegram-safe hook bundle visibility, including tracked script and manifest/handler copies plus live hook discovery"
     fi
 
     test_start "static_moltis_version_helper_enforces_tracked_nonlatest_version"
@@ -250,14 +395,100 @@ PY
         test_fail "MTProto user-monitor cron should be opt-in and disabled by default to avoid unsolicited chat noise"
     fi
 
-    test_start "static_deploy_verifies_project_local_telegram_safe_hook_discovery"
-    if rg -Fq '/server/.moltis/hooks/telegram-safe-llm-guard/HOOK.md' "$DEPLOY_SCRIPT" && \
-       rg -Fq '/server/scripts/telegram-safe-llm-guard.sh' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'moltis hooks list --json' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'telegram-safe-llm-guard' "$DEPLOY_SCRIPT"; then
+    test_start "static_storage_maintenance_cron_uses_active_root_script"
+    if [[ -f "$STORAGE_MAINTENANCE_CRON" ]] && \
+       rg -q '^MOLTIS_STORAGE_JOURNAL_VACUUM_SIZE=1G$' "$STORAGE_MAINTENANCE_CRON" && \
+       rg -q '^MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS=10$' "$STORAGE_MAINTENANCE_CRON" && \
+       rg -q '/opt/moltinger-active/scripts/moltis-storage-maintenance\.sh reclaim' "$STORAGE_MAINTENANCE_CRON"; then
         test_pass
     else
-        test_fail "Deploy verification must assert the full telegram-safe hook bundle visibility, including the runtime logic script, and live hook discovery"
+        test_fail "Storage maintenance cron must keep the active-root script as the source of truth and set explicit retention budgets"
+    fi
+
+    test_start "static_moltis_smoke_uses_current_auth_and_ws_rpc_contract"
+    if rg -Fq 'Authenticating via /api/auth/login' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'tests/lib/ws_rpc_cli.mjs' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'TEST_SESSION_KEY="${TEST_SESSION_KEY:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'DELETE_TEST_SESSION_ON_EXIT="${DELETE_TEST_SESSION_ON_EXIT:-false}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'sequence --steps' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'sessions.switch' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'sessions.delete' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'chat.send' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'Browser session contamination detected' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'Browser pool exhaustion detected' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       rg -Fq 'detect_browser_failure_taxonomy()' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       ! rg -Fq '/api/v1/chat' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
+       ! rg -Fq '"/login"' "$PROJECT_ROOT/scripts/test-moltis-api.sh"; then
+        test_pass
+    else
+        test_fail "scripts/test-moltis-api.sh must use /api/auth/login plus WS RPC status/chat calls, run the chat workflow in one RPC sequence for session fidelity, support dedicated session switch/delete for operator canaries, classify stale browser session/pool-exhaustion failures before the generic timeout, clear stale chat context before send, and avoid the retired /login + /api/v1/chat contract"
+    fi
+
+    test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq '*"mcp__"*)' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches"
+    fi
+
+    test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"
+    if rg -Fq 'BROWSER_SANDBOX_IMAGE_UNAVAILABLE' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'docker image inspect "$BROWSER_SANDBOX_IMAGE"' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_DOCKER_SOCKET_GID_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_CONTAINER_HOST_INVALID' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_PROFILE_ROOT_PERMISSION_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_PROFILE_DIR_PERMISSION_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'BROWSER_PROFILE_CONCURRENCY_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'prepare_moltis_browser_sandbox_image()' "$DEPLOY_SCRIPT" && \
+       rg -q 'docker build \\' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'scripts/moltis-browser-sandbox/Dockerfile' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'DOCKER_SOCKET_GID' "$DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Runtime attestation and deploy control plane must guard browser sandbox image availability, docker.sock access, host-gateway routing, writable browser profile storage, and single-instance non-persistent browser concurrency before production traffic hits Telegram"
+    fi
+
+    test_start "static_moltis_identity_degrades_tool_heavy_telegram_paths"
+    if rg -Fq 'В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты' "$TOML_CONFIG" && \
+       rg -Fq 'Если задача требует интерактивного браузера, цепочки tool calls или длительной диагностики' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity must explicitly degrade browser/search/memory-heavy Telegram/DM paths instead of silently triggering tool-heavy workflows on user-facing chat"
+    fi
+
+    test_start "static_moltis_identity_hard_disables_tools_for_telegram_dm_status"
+    if rg -Fq 'В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты' "$TOML_CONFIG" && \
+       rg -Fq 'Если Telegram/DM запрос требует внешнего исследования, чтения курса или документации целиком' "$TOML_CONFIG" && \
+       rg -Fq 'Для команды `/status` в Telegram/DM никогда не используй инструменты' "$TOML_CONFIG" && \
+       rg -Fq 'Модель: custom-zai-telegram-safe::glm-5' "$TOML_CONFIG" && \
+       rg -Fq 'Провайдер: custom-zai-telegram-safe' "$TOML_CONFIG" && \
+       rg -Fq 'Режим: safe-text' "$TOML_CONFIG" && \
+       rg -Fq 'не подставляй устаревшее `zai::glm-5`' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis identity must hard-disable tool use for Telegram DM status/long-research paths and require the canonical Telegram-safe model contract instead of stale provider/model guesses"
+    fi
+
+    test_start "static_tracked_browser_sandbox_wrapper_normalizes_profile_ownership_and_drops_privileges"
+    if [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" ]] && \
+       [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" ]] && \
+       rg -q '^ARG BASE_IMAGE=browserless/chrome$' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^FROM \$\{BASE_IMAGE\}$' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -q '^USER root$' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
+       rg -Fq 'chown -R 999:999 "$profile_dir"' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" && \
+       rg -Fq 'export HOME="$runtime_home"' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" && \
+       rg -Fq "exec setpriv --reuid=999 --regid=999 --init-groups /bin/sh -lc 'cd /usr/src/app && exec ./start.sh'" "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh"; then
+        test_pass
+    else
+        test_fail "Tracked browser sandbox wrapper must normalize the bind-mounted profile ownership as root, provide a writable non-root HOME, and then drop privileges back to the upstream browserless runtime user before Chrome starts"
     fi
 
     test_start "static_config_has_no_hardcoded_secrets"
@@ -299,7 +530,41 @@ PY
        rg -Fq 'MOLTIS_CODEX_UPDATE_TELEGRAM_SEND_SCRIPT = "/server/scripts/telegram-bot-send.sh"' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis config must use container-visible /server paths for codex-update skill code and ~/.moltis paths for writable state"
+        test_fail "Primary Moltis config must keep repo-side codex-update scripts container-visible under /server and keep writable runtime state under ~/.moltis"
+    fi
+
+    test_start "static_config_codex_update_remote_surface_contract_is_advisory_safe"
+    if rg -Fq 'Если `codex-update` уже объявлен в списке доступных навыков, считай этот навык существующим.' "$TOML_CONFIG" && \
+       rg -Fq 'Не пытайся опровергнуть это через `exec`, `cat`, `find`' "$TOML_CONFIG" && \
+       rg -Fq 'Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме' "$TOML_CONFIG" && \
+       rg -Fq 'На remote user-facing surface не запускай молча `make codex-update`, `moltis-codex-update-run.sh`' "$TOML_CONFIG" && \
+       rg -Fq 'primary truth — runtime state helper `bash /server/scripts/moltis-codex-update-state.sh get --json`' "$TOML_CONFIG" && \
+       rg -Fq 'не используй `memory_search`, общую память чата' "$TOML_CONFIG" && \
+       rg -Fq 'Если trusted operator/local surface реально видит `/server`' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must treat codex-update as an advisory-safe capability on remote Telegram surfaces while reserving direct /server runtime usage for trusted operator/local contexts"
+    fi
+
+    test_start "static_config_does_not_claim_repo_search_paths_are_live_skill_contract"
+    if rg -Fq 'search_paths = []' "$TOML_CONFIG" && \
+       ! rg -Fq 'search_paths = ["/server/skills"]' "$TOML_CONFIG" && \
+       rg -Fq 'auto_load = []' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must not rely on repo-mounted /server/skills for live discovery and must keep the Telegram safe lane free of always-on skill preload drift"
+    fi
+
+    test_start "static_config_forces_exact_telegram_safe_broad_research_fallback"
+    if rg -Fq 'Для user-facing Telegram/DM запросов, где пользователь просит изучить документацию или курс целиком' "$TOML_CONFIG" && \
+       rg -Fq 'не обещай начинать исследование и не формулируй план действий.' "$TOML_CONFIG" && \
+       rg -Fq 'Для такого класса Telegram-safe long-research запросов запрещены ответы-обещания вида `Отлично! Давай изучу...`' "$TOML_CONFIG" && \
+       rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TOML_CONFIG" && \
+       rg -Fq 'Могу дать краткое объяснение без поиска или продолжить задачу в web UI/операторской сессии для полного пошагового разбора.' "$TOML_CONFIG" && \
+       rg -Fq 'В user-facing Telegram/DM не упоминай автоматически конкретные runtime skills, например `codex-update` или `telegram-learner`' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must hard-code a deterministic Telegram-safe fallback for broad research/doc-study asks and forbid automatic runtime-skill examples in DM replies"
     fi
 
     test_start "static_config_pins_memory_provider_and_repo_watch_dirs"
@@ -320,28 +585,6 @@ PY
         test_fail "Production Moltis container must receive OLLAMA_API_KEY so cloud-backed Ollama chat models can appear in the runtime provider catalog"
     fi
 
-    test_start "static_config_avoids_top_level_telegram_boolean_accounts"
-    if ! rg -Uq '^\[channels\.telegram\]\nenabled = true$' "$TOML_CONFIG"; then
-        test_pass
-    else
-        test_fail "Primary Moltis config must not declare enabled=true under [channels.telegram] because Moltis parses it as a bogus Telegram account entry"
-    fi
-
-    test_start "static_moltis_auth_ownership_contract_stays_aligned"
-    if rg -Fq 'MOLTIS_FLEET_SERVICE_TOKEN_ENV = "MOLTINGER_SERVICE_TOKEN"' "$TOML_CONFIG" && \
-       rg -Fq 'MOLTINGER_SERVICE_TOKEN: ${{ secrets.MOLTINGER_SERVICE_TOKEN }}' "$DEPLOY_WORKFLOW" && \
-       rg -Fq 'MOLTINGER_SERVICE_TOKEN: ${{ secrets.MOLTINGER_SERVICE_TOKEN }}' "$UAT_GATE_WORKFLOW" && \
-       ! rg -Fq 'TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_ALLOWED_USERS }}' "$DEPLOY_WORKFLOW" && \
-       ! rg -Fq 'TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_ALLOWED_USERS }}' "$UAT_GATE_WORKFLOW" && \
-       rg -Fq 'TELEGRAM_ALLOWED_USERS diverges from tracked Telegram allowlist' "$MOLTIS_ENV_RENDER_SCRIPT" && \
-       rg -Fq 'Moltis auth contract keeps MOLTINGER_SERVICE_TOKEN and a tracked Telegram allowlist in config/moltis.toml' "$PREFLIGHT_SCRIPT" && \
-       rg -Fq 'dm_policy = "allowlist"' "$SELF_LEARNING_DOC" && \
-       ! rg -Fq 'allowed_users = "${TELEGRAM_ALLOWED_USERS:-}"' "$SELF_LEARNING_DOC"; then
-        test_pass
-    else
-        test_fail "Moltis auth ownership must keep MOLTINGER_SERVICE_TOKEN end-to-end and treat the tracked Telegram allowlist as the single runtime source of truth"
-    fi
-
     test_start "static_codex_cli_update_delivery_script_is_executable"
     if [[ -x "$PROJECT_ROOT/scripts/codex-cli-update-delivery.sh" ]]; then
         test_pass
@@ -349,85 +592,18 @@ PY
         test_fail "scripts/codex-cli-update-delivery.sh must be executable to stay GitOps-clean after managed surface sync applies executable bits"
     fi
 
-    test_start "static_moltis_smoke_clears_chat_context_before_authoritative_run"
-    if rg -Fq 'RESET_CHAT_CONTEXT_BEFORE_SEND="${RESET_CHAT_CONTEXT_BEFORE_SEND:-true}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq -- '--method chat.clear' "$PROJECT_ROOT/scripts/test-moltis-api.sh"; then
+    test_start "static_moltis_repo_skills_sync_script_is_executable"
+    if [[ -x "$PROJECT_ROOT/scripts/moltis-repo-skills-sync.sh" ]]; then
         test_pass
     else
-        test_fail "scripts/test-moltis-api.sh must clear chat context before chat.send so authoritative smoke runs do not reuse stale operator session state"
+        test_fail "scripts/moltis-repo-skills-sync.sh must be executable so deploy can materialize repo-managed skills into the runtime discovery path"
     fi
 
-    test_start "static_moltis_smoke_can_enforce_provider_model_and_reply_contract"
-    if rg -Fq 'EXPECTED_PROVIDER="${EXPECTED_PROVIDER:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq 'EXPECTED_MODEL="${EXPECTED_MODEL:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq 'EXPECTED_REPLY_TEXT="${EXPECTED_REPLY_TEXT:-}"' "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq "Final provider mismatch" "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq "Final model mismatch" "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq "Final reply text mismatch" "$PROJECT_ROOT/scripts/test-moltis-api.sh" && \
-       rg -Fq 'EXPECTED_AUTH_PROVIDER="${EXPECTED_AUTH_PROVIDER:-openai-codex}"' "$PROJECT_ROOT/scripts/moltis-canonical-smoke.sh" && \
-       rg -Fq -- '--restart-survival' "$PROJECT_ROOT/scripts/moltis-canonical-smoke.sh"; then
+    test_start "static_moltis_repo_hooks_sync_script_is_executable"
+    if [[ -x "$MOLTIS_REPO_HOOKS_SYNC_SCRIPT" ]]; then
         test_pass
     else
-        test_fail "Canonical Moltis smoke proof must be able to enforce provider/model/reply expectations and explicitly support restart-survival verification"
-    fi
-
-    test_start "static_session_reconcile_runbook_uses_shared_operator_script"
-    if rg -Fq 'moltis-session-reconcile.sh --session-key main' "$PROJECT_ROOT/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md" && \
-       rg -Fq 'moltis-session-reconcile.sh --telegram-chat-id 262872984' "$PROJECT_ROOT/docs/knowledge/LLM-REMOTE-MOLTIS-DOCKER-RUNBOOK.md" && \
-       rg -Fq 'SESSION_KEY=""' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh" && \
-       rg -Fq 'TELEGRAM_CHAT_ID=""' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh" && \
-       rg -Fq 'sessions.patch' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh" && \
-       rg -Fq 'sessions.reset' "$PROJECT_ROOT/scripts/moltis-session-reconcile.sh"; then
-        test_pass
-    else
-        test_fail "Session reconcile automation must be documented in the runbook and implemented through the shared moltis-session-reconcile.sh script"
-    fi
-
-    test_start "static_telegram_remote_uat_enforces_status_semantics"
-    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
-        test_pass
-    else
-        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches"
-    fi
-
-    test_start "static_uat_gate_exercises_browser_search_and_repo_context_surfaces"
-    if [[ -x "$MOLTIS_SURFACE_MATRIX_SCRIPT" ]] && \
-       rg -Fq 'moltis-exercised-surface-matrix.sh' "$UAT_GATE_WORKFLOW" && \
-       rg -Fq -- '--surface browser' "$UAT_GATE_WORKFLOW" && \
-       rg -Fq -- '--surface search' "$UAT_GATE_WORKFLOW" && \
-       rg -Fq -- '--surface repo-context' "$UAT_GATE_WORKFLOW" && \
-       rg -Fq 'Introduction - Moltis Documentation' "$MOLTIS_SURFACE_MATRIX_SCRIPT" && \
-       rg -Fq 'docs.moltis.org' "$MOLTIS_SURFACE_MATRIX_SCRIPT" && \
-       rg -Fq '/server' "$MOLTIS_SURFACE_MATRIX_SCRIPT"; then
-        test_pass
-    else
-        test_fail "UAT gate must exercise browser, search, and repo-context surfaces through the shared Moltis surface matrix script"
-    fi
-
-    test_start "static_runtime_attestation_is_shared_versioned_contract"
-    if [[ -x "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
-       [[ -x "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]] && \
-       rg -Fq '"$DEPLOY_PATH/scripts/moltis-runtime-attestation.sh"' "$SSH_RUNTIME_ATTESTATION_SCRIPT" && \
-       rg -Fq 'ssh-run-moltis-runtime-attestation.sh' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq '{{.Config.WorkingDir}}' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq 'docker inspect --format' "$DRIFT_WORKFLOW"; then
-        test_pass
-    else
-        test_fail "Runtime provenance attestation must live in shared scripts and drift detection must call the shared SSH wrapper instead of inlining docker inspect logic"
-    fi
-
-    test_start "static_tracked_deploy_attests_live_runtime_before_success"
-    if rg -Fq 'moltis-runtime-attestation.sh' "$TRACKED_DEPLOY_SCRIPT" && \
-       rg -Fq 'Attesting live Moltis runtime provenance' "$TRACKED_DEPLOY_SCRIPT" && \
-       rg -Fq '"attest-live-runtime"' "$TRACKED_DEPLOY_SCRIPT"; then
-        test_pass
-    else
-        test_fail "Tracked deploy must include the shared live runtime attestation step before reporting success"
+        test_fail "scripts/moltis-repo-hooks-sync.sh must be executable so deploy can materialize repo-managed hooks into the runtime project hook discovery path"
     fi
 
     test_start "static_deploy_audit_markers_stored_in_ignored_data_dir"
@@ -481,24 +657,11 @@ PY
         test_fail "Deploy and UAT workflows should use the shared Moltis env renderer instead of inline heredocs"
     fi
 
-    test_start "static_deploy_workflows_pin_canonical_moltis_runtime_config_dir"
-    if rg -Fq 'MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime' "$DEPLOY_WORKFLOW" && \
-       rg -Fq 'MOLTIS_RUNTIME_CONFIG_DIR: /opt/moltinger-state/config-runtime' "$UAT_GATE_WORKFLOW" && \
-       ! rg -Fq "vars.MOLTIS_RUNTIME_CONFIG_DIR" "$DEPLOY_WORKFLOW" && \
-       ! rg -Fq "vars.MOLTIS_RUNTIME_CONFIG_DIR" "$UAT_GATE_WORKFLOW"; then
-        test_pass
-    else
-        test_fail "Deploy and UAT workflows must pin the canonical Moltis runtime config dir instead of accepting mutable vars overrides"
-    fi
-
     test_start "static_deploy_workflows_use_shared_tracked_deploy_entrypoint"
     if rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$DEPLOY_WORKFLOW" && \
        rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$UAT_GATE_WORKFLOW" && \
        [[ -f "$SSH_TRACKED_DEPLOY_SCRIPT" ]] && \
        rg -q 'run-tracked-moltis-deploy\.sh' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
-       rg -Fq 'ACTIVE_DEPLOY_PATH=' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
-       rg -Fq -- '--active-path "${{ env.DEPLOY_ACTIVE_PATH }}"' "$DEPLOY_WORKFLOW" && \
-       rg -Fq -- '--active-path "${{ env.DEPLOY_ACTIVE_PATH }}"' "$UAT_GATE_WORKFLOW" && \
        ! rg -q 'Prepare writable Moltis runtime config' "$DEPLOY_WORKFLOW" && \
        ! rg -q 'Deploy tracked version' "$UAT_GATE_WORKFLOW" && \
        [[ -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
@@ -539,6 +702,33 @@ PY
         test_fail "Workflows must stay aligned with the tracked deploy JSON contract they parse"
     fi
 
+    test_start "static_feature_diagnostics_workflow_stays_read_only"
+    if [[ -f "$FEATURE_DIAGNOSTICS_WORKFLOW" ]] && \
+       rg -q 'collect-feature-diagnostics\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'prod-remote-ainetic-tech-opt-moltinger' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'gitops-sync-managed-surface\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'update-active-deploy-root\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'render-moltis-env\.sh' "$FEATURE_DIAGNOSTICS_WORKFLOW" && \
+       ! rg -q 'scp ' "$FEATURE_DIAGNOSTICS_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Feature diagnostics workflow must remain read-only and must not reuse the production mutation path"
+    fi
+
+    test_start "static_feature_diagnostics_script_collects_evidence_without_mutation"
+    if [[ -f "$FEATURE_DIAGNOSTICS_SCRIPT" ]] && \
+       rg -q 'preflight-check\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q -- '--ci --json' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q -- '--dry-run' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q 'align-server-checkout\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       rg -q 'ssh-run-tracked-moltis-deploy\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       ! rg -q 'gitops-sync-managed-surface\.sh' "$FEATURE_DIAGNOSTICS_SCRIPT" && \
+       ! rg -q 'scp ' "$FEATURE_DIAGNOSTICS_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Feature diagnostics script must collect evidence via read-only checks and dry-run plans only"
+    fi
+
     test_start "static_tracked_deploy_propagates_ci_context_for_noninteractive_guarded_deploy"
     if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
        rg -Fq 'GITHUB_ACTIONS="${GITHUB_ACTIONS:-true}"' "$TRACKED_DEPLOY_SCRIPT" && \
@@ -550,6 +740,45 @@ PY
         test_fail "Tracked deploy script must propagate CI context and skip interactive GitOps confirmation when invoking deploy.sh over remote SSH orchestration"
     fi
 
+    test_start "static_prod_mutation_guard_is_wired_into_key_moltinger_mutators"
+    if [[ -f "$PROD_MUTATION_GUARD_SCRIPT" ]] && \
+       rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$PROD_MUTATION_GUARD_SCRIPT" && \
+       rg -q 'api.github.com/repos/' "$PROD_MUTATION_GUARD_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$CHECKOUT_ALIGN_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$SYNC_SURFACE_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$PROJECT_ROOT/scripts/gitops-repair-managed-checkout.sh" && \
+       rg -q 'prod-mutation-guard\.sh' "$SSH_TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$HOST_AUTOMATION_SCRIPT" && \
+       rg -q 'prod-mutation-guard\.sh' "$PROJECT_ROOT/scripts/update-active-deploy-root.sh"; then
+        test_pass
+    else
+        test_fail "Key Moltinger production-mutating entrypoints must be protected by the shared production mutation guard"
+    fi
+
+    test_start "static_uat_and_clawdiy_workflows_block_feature_branch_promotion"
+    if rg -q 'feature-diagnostics\.yml' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'UAT promotion to production is blocked for feature branches' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'Production Clawdiy deploys must run from main' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "UAT and Clawdiy workflows must explicitly block feature-branch promotion and point operators to sanctioned paths"
+    fi
+
+    test_start "static_production_workflows_pass_guard_github_run_context"
+    if rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_REPOSITORY' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_WORKFLOW' "$DEPLOY_WORKFLOW" && \
+       rg -q 'MOLTINGER_PROD_GUARD_GITHUB_TOKEN' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'permissions:' "$DEPLOY_WORKFLOW" && \
+       rg -q 'actions: read' "$DEPLOY_WORKFLOW" && \
+       rg -q 'actions: read' "$UAT_GATE_WORKFLOW" && \
+       rg -q 'actions: read' "$CLAWDIY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Production-adjacent workflows must pass GitHub run context to the mutation guard and grant actions:read"
+    fi
+
     test_start "static_tracked_deploy_detects_missing_json_contract_from_deploy_sh"
     if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
        rg -Fq "deploy.sh exited with code \$DEPLOY_EXIT before returning JSON" "$TRACKED_DEPLOY_SCRIPT" && \
@@ -557,48 +786,6 @@ PY
         test_pass
     else
         test_fail "Tracked deploy script must fail with an explicit error when deploy.sh exits before returning JSON"
-    fi
-
-    test_start "static_tracked_deploy_attests_live_runtime_provenance"
-    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
-       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
-       rg -Fq 'moltis-runtime-attestation.sh' "$TRACKED_DEPLOY_SCRIPT" && \
-       rg -Fq '"attest-live-runtime"' "$TRACKED_DEPLOY_SCRIPT" && \
-       rg -Fq 'runtime_attestation' "$TRACKED_DEPLOY_SCRIPT"; then
-        test_pass
-    else
-        test_fail "Tracked deploy control-plane must attest live runtime provenance through the shared runtime attestation script"
-    fi
-
-    test_start "static_runtime_contract_enforces_tracked_runtime_config_parity"
-    if [[ -f "$DEPLOY_SCRIPT" ]] && \
-       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
-       rg -Fq 'cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'runtime moltis.toml diverges from tracked config/moltis.toml' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"' "$RUNTIME_ATTESTATION_SCRIPT" && \
-       rg -Fq 'RUNTIME_CONFIG_FILE_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT"; then
-        test_pass
-    else
-        test_fail "Deploy verification and runtime attestation must fail closed when live runtime moltis.toml drifts from tracked config/moltis.toml"
-    fi
-
-    test_start "static_gitops_drift_detection_uses_shared_runtime_attestation_wrapper"
-    if [[ -f "$DRIFT_WORKFLOW" ]] && \
-       [[ -f "$SSH_RUNTIME_ATTESTATION_SCRIPT" ]] && \
-       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
-       rg -Fq 'ssh-run-moltis-runtime-attestation.sh' "$DRIFT_WORKFLOW" && \
-       rg -Fq 'moltis-runtime-attestation.sh' "$SSH_RUNTIME_ATTESTATION_SCRIPT" && \
-       rg -Fq -- '--expected-runtime-config-dir /opt/moltinger-state/config-runtime' "$DRIFT_WORKFLOW" && \
-       rg -Fq 'check_drift "docker-compose.yml" "${{ env.DEPLOY_ACTIVE_PATH }}/docker-compose.yml"' "$DRIFT_WORKFLOW" && \
-       rg -Fq 'check_drift "config/moltis.toml" "${{ env.DEPLOY_ACTIVE_PATH }}/config/moltis.toml"' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq 'docker inspect --format' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq '{{.Config.WorkingDir}}' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq -- '--expected-git-sha "${{ github.sha }}"' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq -- '--expected-git-ref "${{ github.ref_name }}"' "$DRIFT_WORKFLOW" && \
-       ! rg -Fq -- '--expected-version "$EXPECTED_VERSION"' "$DRIFT_WORKFLOW"; then
-        test_pass
-    else
-        test_fail "Drift detection must use the shared SSH/runtime-attestation entrypoints and stay marker-driven instead of comparing production to repo HEAD"
     fi
 
     test_start "static_deploy_script_cleans_legacy_container_name_conflicts_before_rollout"
@@ -616,23 +803,183 @@ PY
     test_start "static_deploy_script_scopes_moltis_rollout_to_core_and_sidecars"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
        rg -Fq 'TARGET_AUXILIARY_SERVICES=("watchtower" "ollama")' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'deploy_args+=(--force-recreate)' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"' "$DEPLOY_SCRIPT"; then
+       rg -Fq 'prepare_moltis_container_for_rollout' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'docker rm -f "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'run_post_deploy_storage_reclaim' "$DEPLOY_SCRIPT" && \
+       rg -Fq '"$STORAGE_MAINTENANCE_SCRIPT" reclaim' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Moltis deploy path must target only moltis + required sidecars and force-recreate the runtime so config changes take effect immediately"
+        test_fail "Moltis deploy path must converge sidecars separately, pre-stop/remove the fixed-name Moltis container, recreate only Moltis with --no-deps, and trigger post-deploy storage reclaim from the shared maintenance script"
     fi
 
-    test_start "static_deploy_syncs_tracked_knowledge_into_official_runtime_memory_path"
+    test_start "static_deploy_script_rollback_reuses_serialized_moltis_contract"
     if [[ -f "$DEPLOY_SCRIPT" ]] && \
-       [[ -f "$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh" ]] && \
-       rg -Fq 'sync_moltis_project_knowledge()' "$DEPLOY_SCRIPT" && \
-       rg -Fq '/home/moltis/.moltis/memory/project-knowledge.md' "$DEPLOY_SCRIPT" && \
-       rg -Fq -- '--knowledge-root "$PROJECT_ROOT/knowledge"' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'This file is generated from tracked repository knowledge' "$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh"; then
+       [[ "$(rg -F -c 'prepare_moltis_container_for_rollout' "$DEPLOY_SCRIPT")" -ge 2 ]] && \
+       [[ "$(rg -F -c 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$DEPLOY_SCRIPT")" -ge 2 ]] && \
+       rg -Fq 'Auto rollback trigger reason:' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'verify_failure_reason' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Deploy contract must mirror tracked knowledge into the official ~/.moltis/memory path instead of relying only on optional watch_dirs behavior"
+        test_fail "Moltis rollback path must reuse the same serialized no-deps recreate contract as rollout and preserve the failing verify reason in deploy JSON/logging"
+    fi
+
+    test_start "static_deploy_workflow_bounds_critical_jobs_and_emits_hardened_completion_notifications"
+    if [[ -f "$DEPLOY_WORKFLOW" ]] && [[ -f "$DEPLOY_STATUS_NOTIFY_WORKFLOW" ]] && \
+       python3 - "$DEPLOY_WORKFLOW" "$DEPLOY_STATUS_NOTIFY_WORKFLOW" <<'PY'
+import pathlib, re, sys
+deploy = pathlib.Path(sys.argv[1]).read_text()
+notify = pathlib.Path(sys.argv[2]).read_text()
+
+required_job_timeouts = {
+    'gitops-compliance': 'timeout-minutes: 15',
+    'preflight': 'timeout-minutes: 15',
+    'test': 'timeout-minutes: 15',
+    'backup': 'timeout-minutes: 15',
+    'deploy': 'timeout-minutes: 20',
+    'rollback': 'timeout-minutes: 15',
+    'verify': 'timeout-minutes: 15',
+}
+for job_name, timeout_fragment in required_job_timeouts.items():
+    job_match = re.search(rf'(?ms)^  {re.escape(job_name)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
+    if not job_match or timeout_fragment not in job_match.group(1):
+        raise SystemExit(1)
+
+test_job_match = re.search(r'(?ms)^  test:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
+if not test_job_match:
+    raise SystemExit(1)
+if 'test_moltis_repo_skills_sync.sh' not in test_job_match.group(1):
+    raise SystemExit(1)
+if 'test_moltis_repo_hooks_sync.sh' not in test_job_match.group(1):
+    raise SystemExit(1)
+
+required_notify_fragments = [
+    'workflow_run:',
+    'Deploy Moltis',
+    'completed',
+    'timeout-minutes: 10',
+    'workflow_run.conclusion',
+    'https://api.telegram.org/bot',
+    'action-send-mail@v16',
+    "always() && steps.email.outputs.should_send == 'true'",
+    "always() && steps.telegram.outputs.should_send == 'true'",
+    'continue-on-error: true',
+    'All configured deploy notification channels failed',
+]
+for fragment in required_notify_fragments:
+    if fragment not in notify:
+        raise SystemExit(1)
+
+for forbidden_fragment in [
+    'ref: ${{ github.event.workflow_run.head_sha }}',
+    'actions/checkout@v6',
+]:
+    if forbidden_fragment in notify:
+        raise SystemExit(1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Deploy workflow must bound all critical jobs and use a hardened workflow_run completion notifier that does not execute head_sha code under secrets"
+    fi
+
+    test_start "static_deploy_stall_watchdog_is_read_only_and_timeout_aware"
+    if [[ -f "$DEPLOY_STALL_WATCHDOG_WORKFLOW" ]] && [[ -f "$DEPLOY_STALL_WATCHDOG_SCRIPT" ]] && \
+       python3 - "$DEPLOY_STALL_WATCHDOG_WORKFLOW" "$DEPLOY_STALL_WATCHDOG_SCRIPT" <<'PY'
+import pathlib, sys
+workflow = pathlib.Path(sys.argv[1]).read_text()
+script = pathlib.Path(sys.argv[2]).read_text()
+
+required_workflow_fragments = [
+    "name: Deploy Moltis Stall Watchdog",
+    "schedule:",
+    "7,22,37,52 * * * *",
+    "timeout-minutes: 10",
+    "ref: main",
+    "actions: read",
+    "contents: read",
+    "scripts/deploy-stall-watchdog.sh",
+    '--workflow-file "deploy.yml"',
+    "--threshold-minutes 45",
+    "api.telegram.org/bot",
+    "always() && steps.watchdog.outputs.stalled_count != '0' && steps.email.outputs.should_send == 'true'",
+    "always() && steps.watchdog.outputs.stalled_count != '0' && steps.telegram.outputs.should_send == 'true'",
+    "continue-on-error: true",
+]
+for fragment in required_workflow_fragments:
+    if fragment not in workflow:
+        raise SystemExit(1)
+
+for forbidden_fragment in [
+    "cancel-in-progress: true",
+    "contents: write",
+    "actions: write",
+]:
+    if forbidden_fragment in workflow:
+        raise SystemExit(1)
+
+required_script_fragments = [
+    "gh api",
+    "actions/workflows/${WORKFLOW_FILE}/runs",
+    "status == \"queued\"",
+    "status == \"in_progress\"",
+    "status == \"waiting\"",
+    "idle_in_progress",
+    "queue_timeout_without_active_predecessor",
+    "has_older_in_progress",
+    "fromdateiso8601",
+    "stalled_count",
+]
+for fragment in required_script_fragments:
+    if fragment not in script:
+        raise SystemExit(1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Deploy stall watchdog must stay read-only, query the workflow-specific GitHub Actions API, ignore serialized/progressing runs, and keep email/Telegram channels isolated"
+    fi
+
+    test_start "static_health_monitor_respects_deploy_mutex_and_avoids_global_prune"
+    if [[ -f "$HEALTH_MONITOR_SCRIPT" ]] && [[ -f "$HEALTH_MONITOR_UNIT" ]] && [[ -f "$HEALTH_MONITOR_CONFIG_UNIT" ]] && \
+       rg -Fq 'DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'deploy_mutex_active()' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'Deploy mutex active; suspending mutating health-monitor actions' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'docker image prune -af' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'docker builder prune -af --filter "until=${DISK_BUILDER_PRUNE_UNTIL}"' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'up -d --no-deps --force-recreate "$container"' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'check_disk_space 90 || true' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'check_memory 90 || true' "$HEALTH_MONITOR_SCRIPT" && \
+       ! rg -Fq 'docker system prune' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'Environment=DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock' "$HEALTH_MONITOR_UNIT" && \
+       rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_UNIT" && \
+       rg -Fq 'Environment="DISK_BUILDER_PRUNE_UNTIL=168h"' "$HEALTH_MONITOR_UNIT" && \
+       rg -Fq 'Environment=DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock' "$HEALTH_MONITOR_CONFIG_UNIT" && \
+       rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_CONFIG_UNIT" && \
+       rg -Fq 'Environment="DISK_BUILDER_PRUNE_UNTIL=168h"' "$HEALTH_MONITOR_CONFIG_UNIT"; then
+        test_pass
+    else
+        test_fail "Health monitor must suppress mutating actions during deploy mutex, avoid global docker system prune, reclaim stale builder cache too, and ship the same mutex/cooldown contract through both tracked service definitions"
+    fi
+
+    test_start "static_watchtower_notifications_are_opt_in"
+    if rg -q 'WATCHTOWER_NOTIFICATIONS: \$\{WATCHTOWER_NOTIFICATIONS:-\}' "$COMPOSE_PROD" && \
+       ! rg -q 'WATCHTOWER_NOTIFICATIONS: "email"' "$COMPOSE_PROD"; then
+        test_pass
+    else
+        test_fail "Production compose must not hardcode Watchtower email notifications because missing SMTP env should not crash-loop the sidecar"
+    fi
+
+    test_start "static_moltis_compose_uses_extended_stop_grace_period"
+    if [[ -f "$PROJECT_ROOT/docker-compose.prod.yml" ]] && \
+       [[ -f "$PROJECT_ROOT/docker-compose.yml" ]] && \
+       rg -Fq 'stop_grace_period: 45s' "$PROJECT_ROOT/docker-compose.prod.yml" && \
+       rg -Fq 'stop_grace_period: 45s' "$PROJECT_ROOT/docker-compose.yml"; then
+        test_pass
+    else
+        test_fail "Moltis compose files must grant Moltis a longer stop_grace_period so deploys do not depend on Docker's 10s default stop timeout"
     fi
 
     test_start "static_deploy_workflow_uses_shared_host_automation_entrypoint"
@@ -673,8 +1020,20 @@ PY
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
     fi
 
+    test_start "static_deploy_batches_managed_surface_hash_checks"
+    if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
+       rg -Fq 'gitops-check-managed-surface.sh' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'managed_files_compared=' "$DEPLOY_WORKFLOW" && \
+       rg -Fq "emit_remote_script \"\$manifest_file\" | ssh \"\$SSH_TARGET\" 'bash -seu'" "$GITOPS_CHECK_SCRIPT" && \
+       rg -Fq 'Fetching remote hashes in one SSH roundtrip' "$GITOPS_CHECK_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must batch managed-surface hash checks through the dedicated helper and expose summary counts"
+    fi
+
     test_start "static_deploy_compliance_checks_prod_compose_hash"
-    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
+       rg -Fq 'append_manifest_entry "docker-compose.prod.yml"' "$GITOPS_CHECK_SCRIPT"; then
         test_pass
     else
         test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
@@ -792,6 +1151,29 @@ PY
         test_fail "UAT gate must derive the Moltis version from git and deploy only through the shared tracked deploy entrypoint backed by deploy.sh"
     fi
 
+    test_start "static_tracked_deploy_attests_live_runtime_provenance"
+    if [[ -f "$TRACKED_DEPLOY_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'moltis-runtime-attestation.sh' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq '"attest-live-runtime"' "$TRACKED_DEPLOY_SCRIPT" && \
+       rg -Fq 'runtime_attestation' "$TRACKED_DEPLOY_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Tracked deploy control-plane must attest live runtime provenance through the shared runtime attestation script"
+    fi
+
+    test_start "static_runtime_contract_enforces_tracked_runtime_config_parity"
+    if [[ -f "$DEPLOY_SCRIPT" ]] && \
+       [[ -f "$RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'runtime moltis.toml diverges from tracked config/moltis.toml' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"' "$RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'RUNTIME_CONFIG_FILE_MISMATCH' "$RUNTIME_ATTESTATION_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Deploy verification and runtime attestation must fail closed when live runtime moltis.toml drifts from tracked config/moltis.toml"
+    fi
+
     test_start "static_production_workflows_share_remote_lock_group"
     if rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$DEPLOY_WORKFLOW" && \
        rg -q 'group: prod-remote-ainetic-tech-opt-moltinger' "$CLAWDIY_WORKFLOW" && \
@@ -802,7 +1184,8 @@ PY
     fi
 
     test_start "static_deploy_compliance_checks_prod_compose_hash"
-    if rg -Fq 'compare_files "docker-compose.prod.yml"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+    if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
+       rg -Fq 'append_manifest_entry "docker-compose.prod.yml"' "$GITOPS_CHECK_SCRIPT"; then
         test_pass
     else
         test_fail "GitOps compliance must compare docker-compose.prod.yml as part of the deploy-managed surface"
@@ -1076,11 +1459,12 @@ PY
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 80 >&2' "$DEPLOY_SCRIPT" && \
        rg -q '"\$BACKUP_SCRIPT" restore-check "\$backup_path" 1>&2' "$DEPLOY_SCRIPT" && \
+       rg -q -- '--skip-journal-vacuum 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'if \[\[ "\$OUTPUT_JSON" != "true" \]\]; then' "$DEPLOY_SCRIPT" && \
        rg -q 'echo -n "\."' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "deploy.sh must keep restore-check logs, docker compose progress, docker logs, and wait dots out of JSON stdout"
+        test_fail "deploy.sh must keep restore-check logs, docker compose progress, post-deploy reclaim output, docker logs, and wait dots out of JSON stdout"
     fi
 
     test_start "static_clawdiy_workflow_validates_auth_rendering_rules"

@@ -340,6 +340,26 @@ NODE
         test_fail "Emoji-prefixed activity/tool-progress replies must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_rejects_raw_skill_tool_name_leakage"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "📋 Activity log • 🔧 create_skill • 🔧 update_skill",
+  "• create_skill\n• update_skill\n• delete_skill"
+];
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected raw tool-name leakage to be rejected: ${badReply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Raw allowlisted skill-tool names must still be treated as internal telemetry when they leak into chat"
+    fi
+
     test_start "component_telegram_web_probe_rejects_user_visible_internal_tool_planning_without_activity_log_markers"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
@@ -409,6 +429,29 @@ NODE
         test_pass
     else
         test_fail "Probe must classify recent incoming internal planning/tool-inventory leakage before send attribution begins"
+    fi
+
+    test_start "component_telegram_web_probe_detects_recent_invalid_pre_send_human_progress_prefaces"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { findInvalidIncomingActivityMessages } = await import(process.env.NODE_SCRIPT);
+const invalid = findInvalidIncomingActivityMessages([
+  { mid: 101, direction: "out", text: "создай навык codex-update-new" },
+  { mid: 102, direction: "in", text: "Поищу темплейт в системе:" },
+  { mid: 103, direction: "in", text: "Ищу темплейт:" },
+  { mid: 104, direction: "in", text: "Готово: навык создан." }
+]);
+if (!Array.isArray(invalid) || invalid.length !== 2) {
+  throw new Error(`expected two invalid human progress prefaces, got ${JSON.stringify(invalid)}`);
+}
+if (invalid[0].mid !== 102 || invalid[1].mid !== 103) {
+  throw new Error(`unexpected invalid incoming mids: ${JSON.stringify(invalid)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must classify short human progress-preface replies as contaminated pre-send incoming activity"
     fi
 
     test_start "component_telegram_web_probe_detects_human_progress_preface_replies"
