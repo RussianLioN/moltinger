@@ -6,7 +6,7 @@
 
 ## Problem This Rule Prevents
 
-`docs/GIT-TOPOLOGY-REGISTRY.md` is a generated snapshot of global git topology.
+`docs/GIT-TOPOLOGY-REGISTRY.md` is a generated publish snapshot of durable git topology.
 If ordinary feature branches, UAT branches, or the canonical `main` worktree all publish it opportunistically, parallel sessions create:
 
 - docs-only churn unrelated to the feature under work
@@ -16,8 +16,9 @@ If ordinary feature branches, UAT branches, or the canonical `main` worktree all
 ## Source Of Truth
 
 - `live git` is the topology source of truth
+- Kanban is the task/execution source of truth for bounded legacy classification follow-up
 - `docs/GIT-TOPOLOGY-INTENT.yaml` is the reviewed intent sidecar
-- `docs/GIT-TOPOLOGY-REGISTRY.md` is a sanitized branch-local audit snapshot
+- `docs/GIT-TOPOLOGY-REGISTRY.md` is a sanitized publish snapshot for audit and handoff
 
 ## Mandatory Policy
 
@@ -32,7 +33,7 @@ If ordinary feature branches, UAT branches, or the canonical `main` worktree all
    - disposable UAT/reset/rebase branches
    - ordinary `command-worktree start|attach|cleanup` flows
 3. Publish the tracked snapshot only through an explicit topology publish step from the dedicated non-main branch **`chore/topology-registry-publish`** in its own publish worktree.
-4. Ordinary worktree flows may report `stale`, but they must treat live `git` as authoritative for collision detection and continue without publishing the markdown snapshot.
+4. Ordinary worktree flows may report `stale`, but they must treat live `git` and Kanban as authoritative for collision detection and task ownership, then continue without publishing the markdown snapshot.
 5. If a UAT or child worktree holds newer registry evidence, preserve/promote that evidence into the owning branch before reset/update, per `docs/rules/uat-registry-snapshot-preservation.md`.
 
 ## Expected Publish Path
@@ -66,3 +67,4 @@ If this publish lane also needs Beads synchronization, use the localized repo wr
 
 - `stale` during ordinary work is an inspection signal, not a reason to inject a docs commit into the current feature branch
 - publishing the snapshot is an explicit maintenance checkpoint, not a side effect of every worktree mutation
+- the registry is a publishable handoff artifact, not the operational queue for merge, cleanup, or Kanban classification decisions

@@ -179,7 +179,7 @@ stale_status_message() {
   if publish_allowed_on_current_branch; then
     printf 'registry document is stale; current topology-publish branch may reconcile via %s' "${command}"
   else
-    printf "registry document is stale; live git is authoritative here; publish later from the dedicated non-main topology publish branch '%s'" "${topology_publish_branch}"
+    printf "registry document is stale; live git and Kanban are authoritative here; publish later from the dedicated non-main topology publish branch '%s'" "${topology_publish_branch}"
   fi
 }
 
@@ -753,6 +753,35 @@ default_remote_note() {
   esac
 }
 
+local_branch_should_render() {
+  local has_worktree="$1"
+  local intent="$2"
+
+  if [[ "${has_worktree}" == "true" ]]; then
+    return 0
+  fi
+
+  [[ "${intent}" != "${default_missing_intent}" ]]
+}
+
+remote_branch_is_worktree_backing() {
+  local remote_ref="$1"
+  local branch="${remote_ref#origin/}"
+
+  branch_has_worktree "${branch}"
+}
+
+remote_branch_should_render() {
+  local remote_ref="$1"
+  local intent="$2"
+
+  if remote_branch_is_worktree_backing "${remote_ref}"; then
+    return 0
+  fi
+
+  [[ "${intent}" != "${default_missing_intent}" ]]
+}
+
 collect_worktrees() {
   local line=""
   local raw_path=""
@@ -778,6 +807,12 @@ collect_worktrees() {
     fi
 
     worktree_id="$(derive_worktree_id "${raw_path}" "${branch}")"
+    record_seen_subject "worktree" "${worktree_id}"
+
+    if [[ "${branch}" == "DETACHED" ]]; then
+      return
+    fi
+
     location_class="$(derive_location_class "${raw_path}" "${branch}")"
     intent="$(lookup_intent_field "worktree" "${worktree_id}" 3 2>/dev/null || true)"
     note="$(lookup_intent_field "worktree" "${worktree_id}" 4 2>/dev/null || true)"
@@ -796,8 +831,6 @@ collect_worktrees() {
       "${raw_path}" \
       "${intent}" \
       "${pr}" >> "${worktrees_file}"
-
-    record_seen_subject "worktree" "${worktree_id}"
 
     if [[ "${branch}" != "DETACHED" ]]; then
       printf '%s\n' "${branch}" >> "${worktree_branches_file}"
@@ -884,6 +917,11 @@ collect_local_branches() {
       intent="${default_missing_intent}"
     fi
     note="$(note_or_default "${note}" "$(default_branch_note "${branch}" "${tracking_state}" "${has_worktree}" "${intent}")")"
+    record_seen_subject "branch" "${branch}"
+
+    if ! local_branch_should_render "${has_worktree}" "${intent}"; then
+      continue
+    fi
 
     if [[ "${branch}" == "main" ]]; then
       sort_group="0"
@@ -901,8 +939,6 @@ collect_local_branches() {
       "${has_worktree}" \
       "${note}" \
       "${intent}" >> "${local_branches_file}"
-
-    record_seen_subject "branch" "${branch}"
   done < <(git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads)
 
   sort -t $'\t' -k1,1 -k2,2 "${local_branches_file}" -o "${local_branches_file}"
@@ -923,6 +959,8 @@ collect_remote_branches() {
       continue
     fi
 
+    record_seen_subject "remote" "${remote_ref}"
+
     if git merge-base --is-ancestor "${remote_ref}" "refs/remotes/origin/main" 2>/dev/null; then
       continue
     fi
@@ -937,14 +975,16 @@ collect_remote_branches() {
     fi
     note="$(note_or_default "${note}" "$(default_remote_note "${remote_ref}" "${intent}")")"
 
+    if ! remote_branch_should_render "${remote_ref}" "${intent}"; then
+      continue
+    fi
+
     printf '%s\t%s\t%s\t%s\t%s\n' \
       "${remote_ref}" \
       "${branch}" \
       "${note}" \
       "${intent}" \
       "${pr}" >> "${remote_branches_file}"
-
-    record_seen_subject "remote" "${remote_ref}"
   done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin)
 
   sort -t $'\t' -k1,1 "${remote_branches_file}" -o "${remote_branches_file}"
@@ -978,9 +1018,11 @@ render_registry_markdown() {
 
 **Status**: Generated artifact from live git topology and reviewed intent sidecar
 **Scope**: Canonical maintainer workstation snapshot
-**Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
+**Purpose**: Publishable snapshot of durable local git topology, reviewed exceptions, and sidecar drift that still needs cleanup.
+**Operational Source Of Truth**: Live \`git\` state and Kanban task state. This document is a publish snapshot, not the operational queue.
 **Publish**: From the dedicated non-main topology publish branch \`${topology_publish_branch}\` run \`scripts/git-topology-registry.sh refresh --write-doc\`
 **Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
+**Omitted From This Snapshot**: Detached and ephemeral task worktrees. Inspect live \`git worktree list --porcelain\` and \`kanban task list\` for execution surfaces.
 
 ## Current Worktrees
 
@@ -1042,14 +1084,14 @@ EOF
     if [[ "${orphan_count}" -gt 0 ]]; then
       cat <<'EOF'
 
-## Reviewed Intent Awaiting Reconciliation
+## Reviewed Intent Drift
 
 | Subject Type | Subject Key | Intent | Note | PR |
 |---|---|---|---|---|
 EOF
 
       while IFS=$'\t' read -r orphan_type orphan_key orphan_intent orphan_note orphan_pr || [[ -n "${orphan_type}" ]]; do
-        orphan_note="$(note_or_default "${orphan_note}" "Reviewed intent retained until topology or sidecar is reconciled.")"
+        orphan_note="$(note_or_default "${orphan_note}" "Reviewed intent no longer matches live topology; remove or replace it in the sidecar.")"
         orphan_pr="$(note_or_default "${orphan_pr}" "-")"
         printf '| `%s` | `%s` | `%s` | %s | %s |\n' \
           "$(escape_md_cell "${orphan_type}")" \
@@ -1063,7 +1105,7 @@ EOF
 
 ## Registry Warnings
 
-- Reviewed intent contains ${orphan_count} orphan record(s); keep them until topology catches up or the sidecar is reviewed.
+- Reviewed intent contains ${orphan_count} orphan record(s); this is sidecar cleanup debt, not an operational backlog.
 EOF
     fi
 
@@ -1071,11 +1113,11 @@ EOF
 
 ## Operating Rules
 
-1. `main` remains the only operational source of truth.
-2. If a branch has a dedicated worktree, treat that worktree as the authoritative place for edits.
-3. Before deleting or merging branches, verify this registry and then verify live `git` state again.
-4. If branch/worktree state changes, this artifact must be refreshed in the same session or at the next session boundary.
-5. Live `git` state wins over this document if they diverge; refresh the registry instead of forcing git to match the doc.
+1. Live `git` state and Kanban remain the operational source of truth.
+2. Use this document as a sanitized publish snapshot for audit and handoff, not as the decision queue for merge or cleanup work.
+3. If a branch has a dedicated worktree, treat that worktree as the authoritative place for edits.
+4. Before deleting or merging branches, verify live `git` state first and use this registry only as supporting context.
+5. If branch/worktree state changes, refresh this artifact from the dedicated publish lane instead of forcing live `git` to match the doc.
 
 ## Source Commands
 
