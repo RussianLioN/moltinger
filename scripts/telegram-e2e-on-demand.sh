@@ -31,7 +31,7 @@ SERIALIZE_SHARED_TARGET="${SERIALIZE_SHARED_TARGET:-true}"
 MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
 STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"
-SKILLS_API_ATTEMPTS="${SKILLS_API_ATTEMPTS:-3}"
+SKILLS_API_ATTEMPTS="${SKILLS_API_ATTEMPTS:-5}"
 SKILLS_API_RETRY_DELAY_SECONDS="${SKILLS_API_RETRY_DELAY_SECONDS:-1}"
 
 RUN_ID=""
@@ -64,6 +64,9 @@ SKILLS_API_CACHE_JSON=""
 SKILLS_API_CACHE_ERROR=""
 SKILLS_API_CACHE_LOGIN_HTTP_CODE=""
 SKILLS_API_CACHE_HTTP_CODE=""
+PRE_SEND_SKILLS_JSON='null'
+PRE_SEND_SKILLS_CAPTURE_STATUS="not_requested"
+PRE_SEND_SKILLS_CAPTURE_ERROR=""
 
 usage() {
   cat <<'USAGE'
@@ -245,21 +248,118 @@ message_is_skill_visibility_query() {
 
 extract_requested_skill_name() {
   local normalized candidate
-  normalized="$(normalize_message_text "${1:-}")"
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
   [[ -n "$normalized" ]] || return 1
 
-  if [[ "$normalized" =~ (навык|skill)[[:space:]]*[\"\'\`\«]?([A-Za-z0-9._-]+) ]]; then
+  if [[ "$normalized" =~ (create|build|make|созда[[:alnum:]]*)[^[:alnum:]]+([A-Za-z0-9._-]+)[^[:alnum:]]+(skill|навык) ]]; then
     candidate="${BASH_REMATCH[2]}"
-    case "${candidate,,}" in
-      новый|нового|новый|new|skill|skills|навык|навыки|template|темплейт)
-        return 1
-        ;;
-    esac
-    printf '%s\n' "$candidate"
+  elif [[ "$normalized" =~ (навык|skill)[[:space:]]*[\"\'\`\«]?([A-Za-z0-9._-]+) ]]; then
+    candidate="${BASH_REMATCH[2]}"
+  else
+    return 1
+  fi
+
+  case "${candidate,,}" in
+    новый|нового|новый|new|skill|skills|навык|навыки|template|темплейт)
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$candidate"
+  return 0
+}
+
+reset_authenticated_skills_cache() {
+  SKILLS_API_CACHE_STATUS="unset"
+  SKILLS_API_CACHE_JSON=""
+  SKILLS_API_CACHE_ERROR=""
+  SKILLS_API_CACHE_LOGIN_HTTP_CODE=""
+  SKILLS_API_CACHE_HTTP_CODE=""
+}
+
+fetch_authenticated_skills_json_uncached() {
+  local cookie_file response_file skills_api_url password login_payload login_code http_code skills_json attempt
+
+  if ! command -v curl >/dev/null 2>&1; then
+    PRE_SEND_SKILLS_CAPTURE_ERROR="curl_missing"
+    SKILLS_API_CACHE_ERROR="curl_missing"
+    return 1
+  fi
+
+  password="$(read_moltis_auth_password)"
+  if [[ -z "$password" ]]; then
+    PRE_SEND_SKILLS_CAPTURE_ERROR="missing_password_env:$MOLTIS_PASSWORD_ENV"
+    SKILLS_API_CACHE_ERROR="missing_password_env:$MOLTIS_PASSWORD_ENV"
+    return 1
+  fi
+
+  cookie_file="$TMP_DIR/moltis-skills-cookie.txt"
+  response_file="$TMP_DIR/moltis-skills-response.json"
+  skills_api_url="${MOLTIS_URL%/}/api/skills"
+  login_payload="$(jq -nc --arg password "$password" '{password:$password}')"
+  login_code="$(
+    curl -sS -o /dev/null -w '%{http_code}' \
+      -c "$cookie_file" -b "$cookie_file" \
+      -X POST "${MOLTIS_URL%/}/api/auth/login" \
+      -H 'Content-Type: application/json' \
+      -d "$login_payload" \
+      --max-time 10 2>/dev/null || echo "000"
+  )"
+  SKILLS_API_CACHE_LOGIN_HTTP_CODE="${login_code:-000}"
+  if [[ "$login_code" != "200" && "$login_code" != "302" ]]; then
+    PRE_SEND_SKILLS_CAPTURE_ERROR="login_failed"
+    SKILLS_API_CACHE_ERROR="login_failed"
+    rm -f "$cookie_file" "$response_file"
+    return 1
+  fi
+
+  for (( attempt = 1; attempt <= SKILLS_API_ATTEMPTS; attempt += 1 )); do
+    http_code="$(
+      curl -sS -b "$cookie_file" -c "$cookie_file" \
+        "$skills_api_url" \
+        -o "$response_file" \
+        -w '%{http_code}' \
+        --max-time 10 2>/dev/null || echo "000"
+    )"
+    SKILLS_API_CACHE_HTTP_CODE="${http_code:-000}"
+
+    if [[ "$http_code" == "200" ]] && jq -e . "$response_file" >/dev/null 2>&1; then
+      skills_json="$(jq -c . "$response_file")"
+      rm -f "$cookie_file" "$response_file"
+      printf '%s' "$skills_json"
+      return 0
+    fi
+
+    if (( attempt < SKILLS_API_ATTEMPTS )); then
+      sleep "$SKILLS_API_RETRY_DELAY_SECONDS"
+    fi
+  done
+
+  PRE_SEND_SKILLS_CAPTURE_ERROR="skills_api_unavailable"
+  SKILLS_API_CACHE_ERROR="skills_api_unavailable"
+  rm -f "$cookie_file" "$response_file"
+  return 1
+}
+
+capture_pre_send_skills_baseline() {
+  local skills_json=""
+
+  PRE_SEND_SKILLS_JSON='null'
+  PRE_SEND_SKILLS_CAPTURE_STATUS="not_requested"
+  PRE_SEND_SKILLS_CAPTURE_ERROR=""
+
+  if ! message_is_skill_create_query "$MESSAGE"; then
     return 0
   fi
 
-  return 1
+  PRE_SEND_SKILLS_CAPTURE_STATUS="failed"
+  if skills_json="$(fetch_authenticated_skills_json_uncached)"; then
+    PRE_SEND_SKILLS_JSON="$skills_json"
+    PRE_SEND_SKILLS_CAPTURE_STATUS="captured"
+    PRE_SEND_SKILLS_CAPTURE_ERROR=""
+  fi
+
+  reset_authenticated_skills_cache
 }
 
 reply_has_skill_false_negative() {
@@ -374,9 +474,12 @@ fetch_authenticated_skills_json() {
 skills_json_has_skill_name() {
   local skill_name="$1"
   local skills_json="$2"
+  local normalized_skill_name
 
-  jq -e --arg skill_name "$skill_name" '
-    .skills[]? | select(.name == $skill_name)
+  normalized_skill_name="$(printf '%s' "$skill_name" | tr '[:upper:]' '[:lower:]')"
+
+  jq -e --arg skill_name "$normalized_skill_name" '
+    .skills[]? | (.name // empty) | ascii_downcase | select(. == $skill_name)
   ' <<<"$skills_json" >/dev/null 2>&1
 }
 
@@ -704,6 +807,53 @@ evaluate_authoritative_semantics() {
         --argjson base "$DIAGNOSTIC_JSON" \
         '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:(if $requested_skill_name == "" then null else $requested_skill_name end), runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_create_false_negative"}}')"
       RECOMMENDED_ACTION="Reconcile Telegram skill creation so it relies on dedicated skill tools and live runtime truth instead of filesystem probing, then rerun authoritative UAT."
+      return 0
+    fi
+
+    if [[ -z "$requested_skill_name" ]]; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_name_unparsed" "$RUN_STAGE" "Authoritative skill-creation message did not expose a parseable requested skill name, so persistence could not be proven" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_create_name_unparsed"}}')"
+      RECOMMENDED_ACTION="Use a Telegram create-skill prompt that includes the concrete skill name in a parseable form and rerun authoritative UAT."
+      return 0
+    fi
+
+    if [[ "$PRE_SEND_SKILLS_CAPTURE_STATUS" != "captured" ]]; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_baseline_unavailable" "$RUN_STAGE" "Authoritative skill-creation check could not capture a live pre-send /api/skills baseline" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --arg requested_skill_name "$requested_skill_name" \
+        --arg baseline_status "$PRE_SEND_SKILLS_CAPTURE_STATUS" \
+        --arg baseline_error "$PRE_SEND_SKILLS_CAPTURE_ERROR" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, baseline_status:$baseline_status, baseline_error:(if $baseline_error == "" then null else $baseline_error end), runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_create_baseline_unavailable"}}')"
+      RECOMMENDED_ACTION="Restore authenticated pre-send /api/skills baseline capture for Telegram create-skill UAT and rerun the check."
+      return 0
+    fi
+
+    if skills_json_has_skill_name "$requested_skill_name" "$PRE_SEND_SKILLS_JSON"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_preexisting_name" "$RUN_STAGE" "Authoritative skill-creation check cannot prove creation because the requested skill name already existed before send" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --arg requested_skill_name "$requested_skill_name" \
+        --argjson pre_send_skill_names "$(runtime_skill_names_json "$PRE_SEND_SKILLS_JSON")" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, pre_send_skill_names:$pre_send_skill_names, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_create_preexisting_name"}}')"
+      RECOMMENDED_ACTION="Rerun Telegram create-skill UAT with a fresh, previously unseen skill name so the wrapper can prove a true pre->post creation transition."
       return 0
     fi
 
@@ -1096,6 +1246,8 @@ run_authoritative_telegram_web() {
   if [[ -n "$DEBUG_OUTPUT_PATH" || "$VERBOSE" == "true" ]]; then
     helper_debug="true"
   fi
+
+  capture_pre_send_skills_baseline
 
   set +e
   TELEGRAM_WEB_TARGET="$AUTHORITATIVE_TARGET" \

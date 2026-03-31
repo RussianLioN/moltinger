@@ -26,15 +26,77 @@ payload_flat="$(
 
 extract_first_string() {
     local key="$1"
-    local match
 
-    match="$(printf '%s' "$payload_flat" | grep -oE "\"${key}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -n1 || true)"
-    if [[ -z "$match" ]]; then
-        return 1
-    fi
+    printf '%s' "$payload" | awk -v key="$key" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            needle = "\"" key "\""
+            state = "seek"
+            value = ""
+            escape = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (state == "seek") {
+                    if (substr(text, i, length(needle)) != needle) {
+                        continue
+                    }
+                    j = i + length(needle)
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != "\"") {
+                        continue
+                    }
+                    state = "capture"
+                    value = ""
+                    escape = 0
+                    i = j
+                    continue
+                }
 
-    printf '%s' "$match" \
-        | sed -E 's/^"[^"]*"[[:space:]]*:[[:space:]]*"//; s/"$//'
+                if (escape) {
+                    if (c == "n") {
+                        value = value "\n"
+                    } else if (c == "r") {
+                        value = value "\r"
+                    } else if (c == "t") {
+                        value = value "\t"
+                    } else {
+                        value = value c
+                    }
+                    escape = 0
+                    continue
+                }
+
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+
+                if (c == "\"") {
+                    print value
+                    exit 0
+                }
+
+                value = value c
+            }
+        }
+        END {
+            exit 1
+        }
+    '
 }
 
 extract_first_number() {
