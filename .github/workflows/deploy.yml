@@ -62,6 +62,14 @@ jobs:
     name: GitOps Compliance Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      MOLTINGER_PROD_GUARD_APPROVED: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.repair_server_checkout == 'true' && 'true' || '' }}
+      MOLTINGER_PROD_GUARD_GITHUB_TOKEN: ${{ github.token }}
+      MOLTINGER_PROD_GUARD_REPOSITORY: ${{ github.repository }}
+      MOLTINGER_PROD_GUARD_WORKFLOW: "Deploy Moltis"
+      MOLTINGER_PROD_GUARD_REF_NAME: ${{ github.ref_name }}
+      MOLTINGER_PROD_GUARD_REF_TYPE: ${{ github.ref_type }}
+      MOLTINGER_PROD_GUARD_SHA: ${{ github.sha }}
     outputs:
       compliant: ${{ steps.check.outputs.compliant }}
       drift_detected: ${{ steps.check.outputs.drift_detected }}

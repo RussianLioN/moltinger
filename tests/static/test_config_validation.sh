@@ -1048,6 +1048,16 @@ PY
         test_fail "Deploy workflow must offer an auditable checkout repair path for deploy-managed server drift"
     fi
 
+    test_start "static_deploy_checkout_repair_propagates_production_guard_context"
+    if rg -q 'gitops-compliance:' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'MOLTINGER_PROD_GUARD_APPROVED:' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'github\.event\.inputs\.repair_server_checkout == '\''true'\''' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
+       rg -q 'MOLTINGER_PROD_GUARD_WORKFLOW: "Deploy Moltis"' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must propagate approved production-guard context into the GitOps checkout repair path"
+    fi
+
     test_start "static_deploy_checkout_repair_avoids_inline_ssh_heredoc_parser_hazards"
     if rg -q 'gitops-repair-managed-checkout\.sh' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        ! rg -Fq "ssh \${{ env.SSH_USER }}@\${{ env.SSH_HOST }} <<'EOF'" "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
