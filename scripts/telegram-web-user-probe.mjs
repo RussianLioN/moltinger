@@ -681,8 +681,24 @@ export async function waitForReplySettleWithCollector({
   let stableReply = null;
   let stableReplyIsInterim = false;
 
+  const collectorFailureResult = (error) => ({
+    ok: stableReply !== null && !stableReplyIsInterim,
+    settled: false,
+    settleWaitMs: Date.now() - startedAt,
+    replyObservedAtMs: firstReplyObservedAtMs,
+    replyMessage: stableReply,
+    latestIncoming,
+    collectorClosed: true,
+    collectorError: error instanceof Error ? error.message : String(error),
+  });
+
   while (Date.now() - startedAt < maxWaitMs) {
-    const messages = await collectMessagesFn();
+    let messages;
+    try {
+      messages = await collectMessagesFn();
+    } catch (error) {
+      return collectorFailureResult(error);
+    }
     const replies = findAttributedReplies(messages, sentMid);
     latestIncoming = replies.length > 0 ? replies[replies.length - 1] : null;
 
@@ -709,7 +725,11 @@ export async function waitForReplySettleWithCollector({
       }
     }
 
-    await sleepFn(Math.min(1000, Math.max(250, Math.floor(settleMs / 3))));
+    try {
+      await sleepFn(Math.min(1000, Math.max(250, Math.floor(settleMs / 3))));
+    } catch (error) {
+      return collectorFailureResult(error);
+    }
   }
 
   return {
@@ -725,7 +745,16 @@ export async function waitForReplySettleWithCollector({
 async function waitForReplySettle(page, settleMs, maxWaitMs, sentMid) {
   return waitForReplySettleWithCollector({
     collectMessagesFn: () => collectMessages(page),
-    sleepFn: (ms) => page.waitForTimeout(ms),
+    sleepFn: async (ms) => {
+      if (page.isClosed()) {
+        throw new Error("telegram_web_probe_page_closed");
+      }
+      try {
+        await page.waitForTimeout(ms);
+      } catch (error) {
+        throw new Error(error instanceof Error ? error.message : String(error));
+      }
+    },
     settleMs,
     maxWaitMs,
     sentMid,

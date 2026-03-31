@@ -275,11 +275,14 @@ PY
        rg -Fq 'prestage_moltis_repo_hooks_into_runtime' "$DEPLOY_SCRIPT" && \
        rg -Fq 'verify_moltis_repo_hook_discovery' "$DEPLOY_SCRIPT" && \
        rg -Fq "\$MOLTIS_REPO_HOOKS_SOURCE_ROOT/\$hook_name/HOOK.md" "$DEPLOY_SCRIPT" && \
+       rg -Fq "\$MOLTIS_REPO_HOOKS_SOURCE_ROOT/\$hook_name/handler.sh" "$DEPLOY_SCRIPT" && \
+       rg -Fq "\$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/\$hook_name/handler.sh" "$DEPLOY_SCRIPT" && \
+       rg -Fq "synced runtime hook handler for '\$hook_name' differs" "$DEPLOY_SCRIPT" && \
        rg -Fq 'MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT' "$DEPLOY_SCRIPT" && \
        rg -Fq "moltis hooks list --json" "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under MOLTIS_REPO_HOOKS_SOURCE_ROOT"
+        test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest both live registration and runtime handler parity from the active data_dir hook path"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"
@@ -317,6 +320,7 @@ PY
 
     test_start "static_identity_prompt_scopes_broad_moltis_skill_authoring_requests"
     if rg -Fq 'Для запросов про создание или обновление Moltis skills сначала используй локальные проектные гайды' "$TOML_CONFIG" && \
+       rg -Fq 'Для запросов про skill template/scaffold не говори `найду темплейт`' "$TOML_CONFIG" && \
        rg -Fq 'Official docs Moltis для skill-authoring открывай точечно по релевантным разделам' "$TOML_CONFIG" && \
        rg -Fq 'не зависай в долгом browse-цикле' "$TOML_CONFIG"; then
         test_pass
@@ -328,6 +332,8 @@ PY
     if [[ -f "$TELEGRAM_LEARNER_SKILL" ]] && \
        rg -Fq '## Критический guard для user-facing Telegram DM' "$TELEGRAM_LEARNER_SKILL" && \
        rg -Fq 'не говори `Отлично! Давай изучу...`, `Хорошо, изучу...`, `Начну...`, `Начну с поиска...`, `Сейчас изучу...`, `Сначала найду...`' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'не говори `Давай найду темплейт`, `Поищу шаблон в системе`, `Смотрю в директории skills`, `Найду структуру навыка`' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'для вопросов про создание skill сначала опирайся на `/server/docs/moltis-skill-agent-authoring.md`' "$TELEGRAM_LEARNER_SKILL" && \
        rg -Fq 'В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты.' "$TELEGRAM_LEARNER_SKILL"; then
         test_pass
     else

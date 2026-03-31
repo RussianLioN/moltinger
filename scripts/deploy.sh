@@ -702,6 +702,7 @@ verify_moltis_repo_hook_discovery() {
     sync_moltis_repo_hooks_into_runtime || return 1
 
     for hook_name in "${repo_hook_names[@]}"; do
+        local source_handler_checksum runtime_handler_checksum
         if ! docker exec "$TARGET_CONTAINER" sh -lc "
             test -f '$MOLTIS_REPO_HOOKS_SOURCE_ROOT/$hook_name/HOOK.md'
         " >/dev/null 2>&1; then
@@ -711,6 +712,24 @@ verify_moltis_repo_hook_discovery() {
             test -f '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/HOOK.md'
         " >/dev/null 2>&1; then
             record_verification_failure "Moltis runtime contract mismatch: synced runtime hook is missing HOOK.md for $hook_name under $MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT"
+        fi
+
+        source_handler_checksum="$(docker exec "$TARGET_CONTAINER" sh -lc "
+            if [ -f '$MOLTIS_REPO_HOOKS_SOURCE_ROOT/$hook_name/handler.sh' ]; then
+                sha256sum '$MOLTIS_REPO_HOOKS_SOURCE_ROOT/$hook_name/handler.sh' | awk '{print \$1}'
+            fi
+        " 2>/dev/null || true)"
+        runtime_handler_checksum="$(docker exec "$TARGET_CONTAINER" sh -lc "
+            if [ -f '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/handler.sh' ]; then
+                sha256sum '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/handler.sh' | awk '{print \$1}'
+            fi
+        " 2>/dev/null || true)"
+        if [[ -n "$source_handler_checksum" ]]; then
+            if [[ -z "$runtime_handler_checksum" ]]; then
+                record_verification_failure "Moltis runtime contract mismatch: synced runtime hook is missing handler.sh for $hook_name under $MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT"
+            elif [[ "$runtime_handler_checksum" != "$source_handler_checksum" ]]; then
+                record_verification_failure "Moltis runtime contract mismatch: synced runtime hook handler for '$hook_name' differs from the tracked repo hook bundle"
+            fi
         fi
     done
 

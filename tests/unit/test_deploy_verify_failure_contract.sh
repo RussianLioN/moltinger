@@ -269,6 +269,12 @@ docker() {
         return 0
     fi
 
+    if [[ "\$*" == *"sha256sum"* && "\$*" == *"/telegram-safe-llm-guard/handler.sh"* ]]; then
+        printf 'hook-handler-checksum\n' >>"\$TRACE_FILE"
+        printf 'abc123\n'
+        return 0
+    fi
+
     if [[ "\$*" == *"moltis hooks list --json"* ]]; then
         printf 'hook-list\n' >>"\$TRACE_FILE"
         cat <<'JSON'
@@ -324,8 +330,8 @@ EOF
         return
     fi
 
-    if ! grep -Fqx 'trace=sync-hooks,hook-file-check,hook-file-check,hook-list' "$result_file"; then
-        test_fail "Hook verify path must sync repo hooks into the runtime path before performing tracked-source and runtime hook file checks"
+    if ! grep -Fqx 'trace=sync-hooks,hook-file-check,hook-file-check,hook-handler-checksum,hook-handler-checksum,hook-list' "$result_file"; then
+        test_fail "Hook verify path must sync repo hooks into the runtime path and compare runtime handler content before accepting live registration"
         rm -rf "$tmp_dir"
         return
     fi

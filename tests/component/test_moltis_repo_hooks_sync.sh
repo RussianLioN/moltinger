@@ -40,6 +40,7 @@ name = "telegram-safe-llm-guard"
 +++
 EOF
     printf 'helper\n' >"$source_root/telegram-safe-llm-guard/readme.txt"
+    printf 'new-handler\n' >"$source_root/telegram-safe-llm-guard/handler.sh"
 
     cat >"$source_root/observer-hook/HOOK.md" <<'EOF'
 +++
@@ -59,7 +60,9 @@ EOF
         --manifest "$manifest_path"
     assert_file_exists "$target_root/telegram-safe-llm-guard/HOOK.md" "Repo-managed telegram-safe hook should be installed into runtime target"
     assert_file_exists "$target_root/telegram-safe-llm-guard/readme.txt" "Repo-managed hook sidecar files should be copied together with HOOK.md"
+    assert_file_exists "$target_root/telegram-safe-llm-guard/handler.sh" "Repo-managed hook executable sidecars should be copied together with HOOK.md"
     assert_file_exists "$target_root/observer-hook/HOOK.md" "Every repo hook with HOOK.md should be installed"
+    assert_eq "new-handler" "$(cat "$target_root/telegram-safe-llm-guard/handler.sh")" "Runtime hook sidecars must refresh to the tracked repo bundle content"
     if [[ -e "$target_root/ignored-dir" ]]; then
         test_fail "Directories without HOOK.md must not be treated as runtime hooks"
     fi
@@ -73,6 +76,15 @@ EOF
         test_fail "Stale repo-managed runtime hook should be removed when it disappears from source root"
     fi
     assert_file_exists "$target_root/manual-hook/HOOK.md" "Sync must preserve runtime hooks that are not listed in the repo-managed manifest"
+    test_pass
+
+    test_start "component_moltis_repo_hooks_sync_replaces_stale_runtime_handler_content"
+    printf 'stale-handler\n' >"$target_root/telegram-safe-llm-guard/handler.sh"
+    bash "$SYNC_SCRIPT" \
+        --source-root "$source_root" \
+        --target-root "$target_root" \
+        --manifest "$manifest_path"
+    assert_eq "new-handler" "$(cat "$target_root/telegram-safe-llm-guard/handler.sh")" "Sync must replace stale runtime handler content with the tracked repo hook bundle copy"
     test_pass
 
     test_start "component_moltis_repo_hooks_sync_can_prune_unmanaged_runtime_hooks_when_requested"

@@ -562,7 +562,7 @@ fi
 
 has_after_llm_tool_intent=false
 if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою|проанализирую|сделаю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц).{0,160}(codex-update|навык|skills?|пример)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл|темплейт|template)|[Чч]ита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(у|ы)|директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|(смотрю|проверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|структур(у|ы).{0,40}(навык|skill)|как пример|как реальн(ый|ого) пример|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|((([Оо]тлично|[Сс]упер|[Оо]кей|[Лл]адно)[!,.[:space:]]{0,12})?[Дд]авай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою|проанализирую|сделаю))|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц).{0,160}(codex-update|навык|skills?|пример)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(навык|skills?|workspace|документац|файл|темплейт|template)|[Чч]ита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|([Нн]айд(у|ем)|найд(у|ем)).{0,80}(документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(у|ы)|директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|структур(у|ы).{0,40}(навык|skill)|([Дд]авай(те)?|давай(те)?).{0,40}([Нн]айду|[Пп]оищу|найду|поищу).{0,80}(темплейт|template|шаблон|структур)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон).{0,80}(навык|skill|структур)|как пример|как реальн(ый|ого) пример|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
     has_after_llm_tool_intent=true
 fi
 if [[ "$event" == "AfterLLMCall" ]] && \
@@ -572,7 +572,7 @@ fi
 
 has_user_visible_internal_planning=false
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц).{0,160}(codex-update|навык|skills?|пример)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Чч]ита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(у|ы)|директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|(смотрю|проверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|структур(у|ы).{0,40}(навык|skill)|как пример|как реальн(ый|ого) пример|mcp__|mounted workspace|skill files|existing skills|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|((([Оо]тлично|[Сс]упер|[Оо]кей|[Лл]адно)[!,.[:space:]]{0,12})?[Дд]авай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю))|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц).{0,160}(codex-update|навык|skills?|пример)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|наш[её]л.{0,120}(репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Чч]ита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|([Нн]айд(у|ем)|найд(у|ем)).{0,80}(документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(у|ы)|директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|структур(у|ы).{0,40}(навык|skill)|([Дд]авай(те)?|давай(те)?).{0,40}([Нн]айду|[Пп]оищу|найду|поищу).{0,80}(темплейт|template|шаблон|структур)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон).{0,80}(навык|skill|структур)|как пример|как реальн(ый|ого) пример|mcp__|mounted workspace|skill files|existing skills|существующ(ие|его) навык|имеющ(егося|ийся) навы"; then
     has_user_visible_internal_planning=true
 fi
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
@@ -594,6 +594,11 @@ if printf '%s' "$payload_flat" | grep -Eiq '((изучи|изучить|иссл
     looks_like_broad_research_request=true
 fi
 
+looks_like_skill_template_request=false
+if printf '%s' "$payload_flat" | grep -Eiq '((темплейт|template|шаблон).{0,120}(навык|skills?|skill|SKILL\.md|структур|путь|path))|((созда(й|дим|ть)|добав(ь|им|ить)|сдела(й|ем|ть)).{0,120}(навык|skills?|skill))|((структур(у|а|ы)).{0,80}(навык|skills?|skill))|((директори(и|ю)[[:space:]]+skills)|(skills[[:space:]]+directory))|(у тебя должен быть темплейт)|(должен быть шаблон)|(template skill)|(template-skill)'; then
+    looks_like_skill_template_request=true
+fi
+
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
     diagnostic_preview_source="text"
     diagnostic_preview_value="$response_text_flat"
@@ -607,7 +612,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             | sed 's/[[:space:]][[:space:]]*/ /g' \
             | cut -c1-220
     )"
-    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$(printf '%s' "$payload_flat" | grep -Eic 'документац|docs|codex-update|навык|skill')" -gt 0 ]]; then
+    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$looks_like_skill_template_request" == true || "$(printf '%s' "$payload_flat" | grep -Eic 'документац|docs|codex-update|навык|skill|темплейт|template|шаблон')" -gt 0 ]]; then
         log_guard_diagnostic \
             "$event" \
             "$diagnostic_preview_source" \
@@ -627,7 +632,7 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
 fi
 
 if [[ "$event" == "MessageSending" ]]; then
-    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$looks_like_skill_template_request" != true ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then
@@ -645,6 +650,11 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             long_research_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
             messages_json="[$(build_message_json system "$long_research_guard"),$(build_message_json user "$long_research_user")]"
             write_audit_line "before_modify reason=long_research_hard_override tool_count=0 guard_reapplied=true previously_present=$already_guarded_long_research"
+        elif [[ "$looks_like_skill_template_request" == true ]]; then
+            skill_template_guard=$'Telegram-safe skill-template override:\n- Ignore the prior conversation content for this turn.\n- This user-facing Telegram lane must remain text-only and must not expose internal planning.\n- Do not inspect directories, local files, mounted workspace, existing skills, or documentation right now.\n- Do not say that you are going to find a template, inspect the skills directory, or look for the structure first.\n- Return exactly this single Russian sentence and nothing else: "Шаблонный путь такой: открой docs/moltis-skill-agent-authoring.md, затем создай skills/<name>/SKILL.md. В Telegram-safe режиме я не просматриваю файлы автоматически; могу кратко описать структуру здесь или продолжить в web UI/операторской сессии."'
+            skill_template_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+            messages_json="[$(build_message_json system "$skill_template_guard"),$(build_message_json user "$skill_template_user")]"
+            write_audit_line "before_modify reason=skill_template_override tool_count=0"
         fi
         write_audit_line "before_modify reason=safe_lane tool_count=0"
         emit_before_llm_modified_payload "$messages_json" 0
@@ -652,7 +662,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$looks_like_skill_template_request" != true ]]; then
     exit 0
 fi
 
@@ -668,9 +678,14 @@ if [[ "$looks_like_status" == true ]]; then
     exit 0
 fi
 
-if [[ "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true ]]; then
+if [[ "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_skill_template_request" == true ]]; then
     fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
-    write_audit_line "emit_modify event=$event reason=fallback tool_calls_present=$tool_calls_present delivery_telemetry=$has_delivery_internal_telemetry after_llm_intent=$has_after_llm_tool_intent planning=$has_user_visible_internal_planning"
+    fallback_reason='fallback'
+    if [[ "$looks_like_skill_template_request" == true ]]; then
+        fallback_text='Шаблонный путь такой: открой docs/moltis-skill-agent-authoring.md, затем создай skills/<name>/SKILL.md. В Telegram-safe режиме я не просматриваю файлы автоматически; могу кратко описать структуру здесь или продолжить в web UI/операторской сессии.'
+        fallback_reason='skill_template_guidance'
+    fi
+    write_audit_line "emit_modify event=$event reason=$fallback_reason tool_calls_present=$tool_calls_present delivery_telemetry=$has_delivery_internal_telemetry after_llm_intent=$has_after_llm_tool_intent planning=$has_user_visible_internal_planning template_request=$looks_like_skill_template_request"
     if [[ "$event" == "AfterLLMCall" ]]; then
         emit_modified_payload "$fallback_text" true
     else
