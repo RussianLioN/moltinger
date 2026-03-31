@@ -517,6 +517,102 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "skill_visibility_false_negative_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Интересная ситуация: заявлено в системе несколько навыков, но по факту папки /home/moltis/.moltis/skills/ не существует. Навыки либо были удалены, либо ещё не созданы.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "skill_visibility_runtime_truth_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Сейчас в runtime вижу навыки: codex-update, template-skill, telegram-learner.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "skill_create_success_reply_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Готово: создал навык codex-update-new и добавил его в список доступных навыков.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 base_payload="$(cat <<'JSON'
 {
   "ok": false,
@@ -589,6 +685,96 @@ else:
 print(json.dumps(payload))
 PY
     chmod +x "$TEST_TMPDIR/telegram-real-user-e2e.py"
+
+    cat > "$TEST_TMPDIR/curl" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+output_file=""
+write_format=""
+url=""
+args=("$@")
+
+index=0
+while [[ $index -lt ${#args[@]} ]]; do
+  arg="${args[$index]}"
+  case "$arg" in
+    -o)
+      index=$((index + 1))
+      output_file="${args[$index]:-}"
+      ;;
+    -w)
+      index=$((index + 1))
+      write_format="${args[$index]:-}"
+      ;;
+    http://*|https://*)
+      url="$arg"
+      ;;
+  esac
+  index=$((index + 1))
+done
+
+mode="${MOLTIS_CURL_STUB_MODE:-runtime_skills_present}"
+status_code="200"
+body='{}'
+counter_file="${MOLTIS_CURL_STUB_COUNTER_FILE:-$(dirname "$0")/curl-skills-count}"
+
+case "$url" in
+  */api/auth/login)
+    body='{"ok":true}'
+    ;;
+  */api/skills)
+    skills_call_count=0
+    if [[ -f "$counter_file" ]]; then
+      skills_call_count="$(cat "$counter_file" 2>/dev/null || printf '0')"
+    fi
+    skills_call_count=$((skills_call_count + 1))
+    printf '%s\n' "$skills_call_count" > "$counter_file"
+    case "$mode" in
+      runtime_skills_present)
+        body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        ;;
+      create_not_persisted)
+        body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        ;;
+      create_persisted)
+        if [[ "$skills_call_count" -eq 1 ]]; then
+          body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        else
+          body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"},{"name":"codex-update-new"}]}'
+        fi
+        ;;
+      create_already_exists)
+        body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"},{"name":"codex-update-new"}]}'
+        ;;
+      empty_skills)
+        body='{"skills":[]}'
+        ;;
+      *)
+        status_code="500"
+        body='{"error":"unexpected stub mode"}'
+        ;;
+    esac
+    ;;
+  *)
+    status_code="404"
+    body='{"error":"unexpected url"}'
+    ;;
+esac
+
+if [[ -n "$output_file" && "$output_file" != "/dev/null" ]]; then
+  printf '%s\n' "$body" > "$output_file"
+fi
+
+if [[ -z "$write_format" ]]; then
+  if [[ -z "$output_file" ]]; then
+    printf '%s\n' "$body"
+  fi
+else
+  printf '%s' "${write_format//\%\{http_code\}/$status_code}"
+fi
+SH
+    chmod +x "$TEST_TMPDIR/curl"
 }
 
 cleanup_remote_uat_contract_fixture() {
@@ -892,6 +1078,147 @@ run_component_telegram_remote_uat_contract_tests() {
         test_pass
     else
         test_fail "Authoritative wrapper must not fail a correct codex-update runtime-state reply only because it contrasts with chat memory"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_visibility_false_negative_against_live_api_skills"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_MODE=runtime_skills_present \
+        TELEGRAM_WEB_STUB_MODE=skill_visibility_false_negative_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А что у тебя с навыками/skills?" \
+        --output "$TEST_TMPDIR/result-skill-visibility-false-negative.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when skills visibility falls back to sandbox filesystem absence despite live /api/skills data"
+    else
+        if jq -e '.failure.code == "semantic_skill_visibility_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-visibility-false-negative.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.runtime_skill_names == ["codex-update","template-skill","telegram-learner"]' "$TEST_TMPDIR/result-skill-visibility-false-negative.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must use live /api/skills truth to reject filesystem-based skill-visibility false negatives"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_visibility_reply_that_mentions_live_runtime_skills"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_MODE=runtime_skills_present \
+        TELEGRAM_WEB_STUB_MODE=skill_visibility_runtime_truth_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А что у тебя с навыками/skills?" \
+        --output "$TEST_TMPDIR/result-skill-visibility-runtime-truth.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must allow skills visibility replies that reflect live /api/skills names"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_create_when_requested_skill_is_not_persisted_in_live_api"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-not-persisted" \
+        MOLTIS_CURL_STUB_MODE=create_not_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_create_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Давай создадим навык codex-update-new" \
+        --output "$TEST_TMPDIR/result-skill-create-not-persisted.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when skill creation reply succeeds but the requested skill is still absent from live /api/skills"
+    else
+        if jq -e '.failure.code == "semantic_skill_create_not_persisted" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-create-not-persisted.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.requested_skill_name == "codex-update-new"' "$TEST_TMPDIR/result-skill-create-not-persisted.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must require the requested skill to appear in live /api/skills before treating Telegram skill creation as green"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_create_for_create_name_skill_word_order_when_post_state_appears"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-word-order" \
+        MOLTIS_CURL_STUB_MODE=create_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_create_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Create codex-update-new skill" \
+        --output "$TEST_TMPDIR/result-skill-create-word-order.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must parse common 'Create <name> skill' wording and accept the run only when post-state shows the new skill"
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_create_for_mixed_case_name_when_runtime_skill_slug_matches_case_insensitively"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-mixed-case" \
+        MOLTIS_CURL_STUB_MODE=create_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_create_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Create Codex-Update-New skill" \
+        --output "$TEST_TMPDIR/result-skill-create-mixed-case.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must treat requested skill names case-insensitively when comparing user wording against live /api/skills skill slugs"
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_create_when_requested_skill_is_persisted_in_live_api"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-persisted" \
+        MOLTIS_CURL_STUB_MODE=create_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_create_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Давай создадим навык codex-update-new" \
+        --output "$TEST_TMPDIR/result-skill-create-persisted.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must allow Telegram skill creation only after the requested skill appears in live /api/skills"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_create_when_requested_name_already_existed_before_send"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-preexisting" \
+        MOLTIS_CURL_STUB_MODE=create_already_exists \
+        TELEGRAM_WEB_STUB_MODE=skill_create_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Create codex-update-new skill" \
+        --output "$TEST_TMPDIR/result-skill-create-preexisting.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the requested skill name already existed before the create probe was sent"
+    else
+        if jq -e '.failure.code == "semantic_skill_create_preexisting_name" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-create-preexisting.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must require a true pre->post creation transition rather than passing when the skill name was already present"
+        fi
     fi
 
     test_start "component_telegram_remote_uat_marks_mtproto_fallback_unavailable_when_prerequisites_missing"

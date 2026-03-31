@@ -71,29 +71,24 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "BeforeLLMCall guard must still apply the hard override and force tool_count=0 even if the runtime payload omits tool_count"
     fi
 
-    test_start "component_before_llm_guard_injects_skill_snapshot_and_authoring_contract_for_template_requests"
-    local before_llm_template_output
-    before_llm_template_output="$(
+    test_start "component_before_llm_guard_preserves_skill_turn_tool_budget_and_injects_skill_guidance"
+    local before_llm_skill_turn_output
+    before_llm_skill_turn_output="$(
         env PATH="$MINIMAL_PATH" \
-            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:abg","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык. У тебя должен быть темплейт."}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:abg","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык codex-update-new"}],"tool_count":37,"iteration":1}}
 EOF
     )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages | length == 4' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[0].content | contains("create_skill, update_skill, delete_skill")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[1].content | contains("Telegram-safe skill runtime snapshot")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[1].content | contains("codex-update")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[1].content | contains("post-close-task-classifier")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[1].content | contains("telegram-learner")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[1].content | contains("template-skill присутствует: нет")' >/dev/null 2>&1 <<<"$before_llm_template_output" && \
-       jq -e '.data.messages[3].content == "Давай создадим навык. У тебя должен быть темплейт."' >/dev/null 2>&1 <<<"$before_llm_template_output"; then
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages | length == 4' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[3].content == "Давай создадим навык codex-update-new"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must inject runtime skill context and authoring guidance for template/create-skill requests instead of forcing a synthetic one-line reply"
+        test_fail "BeforeLLMCall guard must preserve the tool budget for Telegram skill turns and inject skill-authoring guidance instead of forcing text-only mode"
     fi
 
     test_start "component_before_llm_guard_replaces_history_when_session_already_contains_stale_guard"
@@ -112,7 +107,7 @@ EOF
         test_fail "BeforeLLMCall guard must replace stale session history with the hard override when an older guard copy already exists"
     fi
 
-    test_start "component_before_llm_guard_injects_runtime_skill_snapshot_even_for_plain_safe_lane_request"
+    test_start "component_before_llm_guard_forces_safe_lane_text_only_even_for_non_research_request"
     local before_llm_general_output
     before_llm_general_output="$(
         run_hook_with_minimal_path \
@@ -120,35 +115,49 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
-       jq -e '.data.messages | length == 3' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime snapshot")' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
        jq -e '.data.messages[-1].role == "user"' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
        jq -e '.data.messages[-1].content == "Ответь кратко, что умеет этот бот."' >/dev/null 2>&1 <<<"$before_llm_general_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must keep the safe lane tool-free while still injecting the runtime skill snapshot for ordinary Telegram turns"
+        test_fail "BeforeLLMCall guard must force tool_count=0 for the Telegram-safe lane even when the request is not broad research"
     fi
 
-    test_start "component_before_tool_guard_rewrites_skill_exec_probe_to_runtime_snapshot"
+    test_start "component_before_tool_guard_rewrites_skill_exec_probe_to_runtime_note"
     local before_tool_exec_output
     before_tool_exec_output="$(
         env PATH="$MINIMAL_PATH" \
-            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
-            MOLTIS_TELEGRAM_SAFE_TEMPLATE_SKILL_PRESENT='false' \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
 {"event":"BeforeToolCall","data":{"session_key":"session:tool","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"exec","arguments":{"command":"ls -la ~/.moltis/skills/"}}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
        jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
-       jq -e '.data.arguments.command | contains("Telegram-safe runtime snapshot для навыков")' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
-       jq -e '.data.arguments.command | contains("codex-update")' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
-       jq -e '.data.arguments.command | contains("post-close-task-classifier")' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
-       jq -e '.data.arguments.command | contains("telegram-learner")' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
+       jq -e '.data.arguments.command | contains("Telegram-safe runtime note for skills")' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
+       jq -e '.data.arguments.command | contains("create_skill, update_skill, delete_skill")' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
        jq -e '.data.arguments.command | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$before_tool_exec_output"; then
         test_pass
     else
-        test_fail "BeforeToolCall guard must rewrite filesystem-based skill probes into a deterministic runtime snapshot instead of letting exec touch unavailable paths"
+        test_fail "BeforeToolCall guard must rewrite skill-path exec probes into a runtime note instead of letting Telegram turns inspect filesystem paths"
+    fi
+
+    test_start "component_before_tool_guard_rewrites_quoted_skill_exec_probe_to_runtime_note"
+    local before_tool_quoted_exec_output
+    before_tool_quoted_exec_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","data":{"session_key":"session:toolq","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"exec","arguments":{"command":"bash -lc \"ls -la ~/.moltis/skills/\""}}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
+       jq -e '.data.arguments.command | contains("Telegram-safe runtime note for skills")' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
+       jq -e '.data.arguments.command | contains("codex-update")' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must also rewrite quoted exec skill probes whose command strings contain escaped quotes"
     fi
 
     test_start "component_before_tool_guard_allows_create_skill_passthrough"
@@ -202,6 +211,36 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress general Telegram-safe tool fallbacks and replace them with a clean user-facing fallback"
+    fi
+
+    test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
+    local after_skill_tool_output
+    after_skill_tool_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:skilltool","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Пользователь просит создать навык. У меня есть доступ к create_skill. Сначала найду шаблон.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}}]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_tool_output" && \
+       jq -e '.data.tool_calls[0].name == "create_skill"' >/dev/null 2>&1 <<<"$after_skill_tool_output" && \
+       jq -e '.data.text | contains("через встроенные инструменты")' >/dev/null 2>&1 <<<"$after_skill_tool_output" && \
+       jq -e '.data.text | contains("filesystem-проб")' >/dev/null 2>&1 <<<"$after_skill_tool_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must keep allowlisted create_skill tool calls reachable while replacing leaked internal planning with a safe progress line"
+    fi
+
+    test_start "component_after_llm_guard_rewrites_skill_path_false_negative_without_claiming_no_skills"
+    local after_skill_false_negative_output
+    after_skill_false_negative_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:false","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"По факту: папки /home/moltis/.moltis/skills/ не существует. Навыки либо были удалены, либо ещё не созданы.","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_false_negative_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_false_negative_output" && \
+       jq -e '.data.text | contains("не использую sandbox filesystem как доказательство отсутствия навыков")' >/dev/null 2>&1 <<<"$after_skill_false_negative_output" && \
+       jq -e '.data.text | contains("runtime skill-tools")' >/dev/null 2>&1 <<<"$after_skill_false_negative_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite skill-path false negatives so Telegram never claims that missing sandbox directories prove skills are absent"
     fi
 
     test_start "component_after_llm_guard_emits_modify_payload_without_duplicate_text_or_tool_calls_fields"
@@ -296,8 +335,7 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$template_probe_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$template_probe_output" && \
-       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$template_probe_output" && \
-       jq -e '.data.text | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$template_probe_output"; then
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$template_probe_output"; then
         test_pass
     else
         test_fail "AfterLLMCall guard must fail closed on observed template-and-skills-directory planning before text fallback turns it into queued Telegram-safe churn"
@@ -317,7 +355,7 @@ EOF
         test_fail "AfterLLMCall guard must fail closed on GitHub-repository doc-fetch wording before text fallback turns it into tavily research"
     fi
 
-    test_start "component_after_llm_guard_rewrites_skill_creation_monologue_to_authoring_guidance"
+    test_start "component_after_llm_guard_blocks_user_visible_internal_tool_monologue_without_activity_log_markers"
     local internal_monologue_output
     internal_monologue_output="$(
         run_hook_with_minimal_path \
@@ -325,12 +363,10 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$internal_monologue_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$internal_monologue_output" && \
-       jq -e '.data.text | contains("Шаблонный путь такой")' >/dev/null 2>&1 <<<"$internal_monologue_output" && \
-       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$internal_monologue_output" && \
-       jq -e '.data.text | contains("create_skill напрямую")' >/dev/null 2>&1 <<<"$internal_monologue_output"; then
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$internal_monologue_output"; then
         test_pass
     else
-        test_fail "AfterLLMCall guard must rewrite leaked skill-creation monologue into deterministic authoring guidance instead of exposing tool inventory"
+        test_fail "AfterLLMCall guard must suppress user-visible internal tool inventory and planning even when Activity log markers are absent"
     fi
 
     test_start "component_after_llm_guard_blocks_live_post_deploy_doc_search_plan_without_tool_names"
@@ -345,36 +381,6 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress live post-deploy doc-search planning text even when no raw tool names are present"
-    fi
-
-    test_start "component_after_llm_guard_blocks_live_skill_template_search_plan_from_audit"
-    local live_template_search_plan_output
-    live_template_search_plan_output="$(
-        run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz2","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо! Давай найду темплейт навыка и структуру:","tool_calls":[]}}'
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_template_search_plan_output" && \
-       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_template_search_plan_output" && \
-       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$live_template_search_plan_output" && \
-       jq -e '.data.text | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$live_template_search_plan_output"; then
-        test_pass
-    else
-        test_fail "AfterLLMCall guard must rewrite live skill-template search planning into a deterministic template answer"
-    fi
-
-    test_start "component_after_llm_guard_blocks_exact_live_template_directory_probe_phrase_from_audit"
-    local live_template_directory_probe_output
-    live_template_directory_probe_output="$(
-        run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz3","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Давай найду темплейт. Смотрю в директории skills:","tool_calls":[]}}'
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_template_directory_probe_output" && \
-       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_template_directory_probe_output" && \
-       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$live_template_directory_probe_output" && \
-       jq -e '.data.text | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$live_template_directory_probe_output"; then
-        test_pass
-    else
-        test_fail "AfterLLMCall guard must rewrite the exact live template-directory probe phrase from the runtime audit"
     fi
 
     test_start "component_after_llm_guard_blocks_exact_live_friendly_doc_search_plan_wording"
@@ -465,20 +471,18 @@ EOF
         test_fail "MessageSending guard must strip leaked internal telemetry from the final Telegram-safe reply even when it appears only at delivery time"
     fi
 
-    test_start "component_message_sending_guard_rewrites_final_skill_creation_monologue_without_activity_log_markers"
+    test_start "component_message_sending_guard_rewrites_final_internal_tool_monologue_without_activity_log_markers"
     local message_sending_internal_monologue_output
     message_sending_internal_monologue_output="$(
         run_hook_with_minimal_path \
             '{"event":"MessageSending","session_id":"session:vwy","data":{"text":"Пользователь просит изучить официальную документацию Moltis. У меня есть доступ к mcp__tavily__tavily_search, mcp__tavily__tavily_skill и create_skill. Сначала найду официальную документацию Moltis."}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_internal_monologue_output" && \
-       jq -e '.data.text | contains("Шаблонный путь такой")' >/dev/null 2>&1 <<<"$message_sending_internal_monologue_output" && \
-       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$message_sending_internal_monologue_output" && \
-       jq -e '.data.text | contains("create_skill напрямую")' >/dev/null 2>&1 <<<"$message_sending_internal_monologue_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_internal_monologue_output" && \
        jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_internal_monologue_output"; then
         test_pass
     else
-        test_fail "MessageSending guard must rewrite leaked skill-creation monologue into deterministic authoring guidance before Telegram delivery"
+        test_fail "MessageSending guard must strip final internal tool inventory/planning leakage even when Activity log markers are absent"
     fi
 
     test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"
@@ -561,23 +565,6 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must strip the exact live named doc-study wording captured by the authoritative Telegram probe"
-    fi
-
-    test_start "component_message_sending_guard_rewrites_live_skill_template_search_plan"
-    local message_sending_template_search_output
-    message_sending_template_search_output="$(
-        run_hook_with_minimal_path \
-            '{"event":"MessageSending","session_id":"session:vwx5","data":{"account_id":"moltis-bot","to":"555111","reply_to_message_id":780,"text":"Отлично! Давай найду темплейт и структуру навыков:"}}'
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_template_search_output" && \
-       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$message_sending_template_search_output" && \
-       jq -e '.data.text | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$message_sending_template_search_output" && \
-       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_template_search_output" && \
-       jq -e '.data.to == "555111"' >/dev/null 2>&1 <<<"$message_sending_template_search_output" && \
-       jq -e '.data.reply_to_message_id == 780' >/dev/null 2>&1 <<<"$message_sending_template_search_output"; then
-        test_pass
-    else
-        test_fail "MessageSending guard must rewrite live skill-template search planning and preserve Telegram routing fields"
     fi
 
     test_start "component_message_sending_guard_is_noop_for_plain_text_without_strict_delivery_log_markers"
