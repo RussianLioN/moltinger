@@ -332,6 +332,21 @@ run_component_telegram_safe_llm_guard_tests() {
         test_fail "AfterLLMCall guard must rewrite the exact live template-directory probe phrase from the runtime audit"
     fi
 
+    test_start "component_after_llm_guard_blocks_exact_live_template_skill_reading_phrase_from_runtime_capture"
+    local live_template_skill_reading_output
+    live_template_skill_reading_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz4","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Да, есть `template-skill`! Читаю его:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_template_skill_reading_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_template_skill_reading_output" && \
+       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$live_template_skill_reading_output" && \
+       jq -e '.data.text | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$live_template_skill_reading_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite the exact live template-skill reading phrase captured after the hotfix deploy"
+    fi
+
     test_start "component_after_llm_guard_blocks_exact_live_friendly_doc_search_plan_wording"
     local live_friendly_doc_search_plan_output
     live_friendly_doc_search_plan_output="$(
@@ -531,6 +546,23 @@ run_component_telegram_safe_llm_guard_tests() {
         test_pass
     else
         test_fail "MessageSending guard must rewrite live skill-template search planning and preserve Telegram routing fields"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_live_template_skill_reading_phrase"
+    local message_sending_template_skill_reading_output
+    message_sending_template_skill_reading_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","session_id":"session:vwx6","data":{"account_id":"moltis-bot","to":"555112","reply_to_message_id":781,"text":"Да, есть `template-skill`! Читаю его:"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_template_skill_reading_output" && \
+       jq -e '.data.text | contains("docs/moltis-skill-agent-authoring.md")' >/dev/null 2>&1 <<<"$message_sending_template_skill_reading_output" && \
+       jq -e '.data.text | contains("skills/<name>/SKILL.md")' >/dev/null 2>&1 <<<"$message_sending_template_skill_reading_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_template_skill_reading_output" && \
+       jq -e '.data.to == "555112"' >/dev/null 2>&1 <<<"$message_sending_template_skill_reading_output" && \
+       jq -e '.data.reply_to_message_id == 781' >/dev/null 2>&1 <<<"$message_sending_template_skill_reading_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite the live template-skill reading phrase and preserve Telegram routing fields"
     fi
 
     test_start "component_message_sending_guard_is_noop_for_plain_text_without_strict_delivery_log_markers"
