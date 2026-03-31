@@ -21,6 +21,7 @@ DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"
 DISK_AUTO_CLEANUP_ENABLED="${DISK_AUTO_CLEANUP_ENABLED:-true}"
 DISK_CLEANUP_COOLDOWN_SECONDS="${DISK_CLEANUP_COOLDOWN_SECONDS:-3600}"
 DISK_CLEANUP_STATE_FILE="${DISK_CLEANUP_STATE_FILE:-/tmp/moltis-disk-cleanup-state}"
+DISK_BUILDER_PRUNE_UNTIL="${DISK_BUILDER_PRUNE_UNTIL:-168h}"
 
 # Output format flags
 OUTPUT_JSON=false
@@ -790,8 +791,9 @@ check_disk_space() {
             elif disk_cleanup_due; then
                 # Keep cleanup scoped to unused images/build cache. Do not prune
                 # containers or networks from a background monitor.
-                log_info "Running Docker image cleanup (cooldown ${DISK_CLEANUP_COOLDOWN_SECONDS}s)"
+                log_info "Running Docker image/build-cache cleanup (cooldown ${DISK_CLEANUP_COOLDOWN_SECONDS}s)"
                 docker image prune -af 2>/dev/null || true
+                docker builder prune -af --filter "until=${DISK_BUILDER_PRUNE_UNTIL}" 2>/dev/null || true
                 record_disk_cleanup_epoch
             else
                 log_info "Skipping Docker image cleanup; cooldown window is still active"

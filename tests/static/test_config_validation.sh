@@ -30,6 +30,8 @@ MOLTIS_VERSION_SCRIPT="$PROJECT_ROOT/scripts/moltis-version.sh"
 TELEGRAM_WEBHOOK_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/telegram-webhook-monitor.sh"
 TELEGRAM_WEBHOOK_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-webhook-monitor"
 TELEGRAM_USER_MONITOR_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-telegram-user-monitor"
+STORAGE_MAINTENANCE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
+STORAGE_MAINTENANCE_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-storage-maintenance"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 DEPLOY_STALL_WATCHDOG_SCRIPT="$PROJECT_ROOT/scripts/deploy-stall-watchdog.sh"
 HEALTH_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/health-monitor.sh"
@@ -130,13 +132,17 @@ run_static_config_validation_tests() {
        rg -q 'rm -rf "\$browser_profile_dir"' "$DEPLOY_SCRIPT" && \
        rg -q 'Tracked browser contract must pin max_instances=1 when persist_profile=false' "$DEPLOY_SCRIPT" && \
        rg -q 'prepare_moltis_browser_sandbox_image' "$DEPLOY_SCRIPT" && \
+       rg -q 'browser_sandbox_spec_sha\(\)' "$DEPLOY_SCRIPT" && \
+       rg -q 'SANDBOX_SPEC_SHA="\$desired_spec_sha"' "$DEPLOY_SCRIPT" && \
+       rg -q 'BROWSER_SANDBOX_SPEC_LABEL=' "$DEPLOY_SCRIPT" && \
        [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" ]] && \
        [[ -f "$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh" ]] && \
+       rg -q 'io\.moltinger\.browser-sandbox\.spec-sha' "$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile" && \
        rg -q 'scripts/moltis-browser-sandbox/Dockerfile' "$DEPLOY_SCRIPT" && \
        rg -q 'docker build \\' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Browser-in-Docker contract must keep a dedicated non-persistent browser profile dir, pin max_instances=1, build the tracked browser sandbox wrapper image during deploy, purge stale profile state on deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
+        test_fail "Browser-in-Docker contract must keep a dedicated non-persistent browser profile dir, pin max_instances=1, rebuild the tracked browser sandbox wrapper only when its spec changes, purge stale profile state on deploy, set container_host, inject the live Docker socket GID, and publish host.docker.internal for sibling browser containers"
     fi
 
     test_start "static_compose_clawdiy_valid"
@@ -367,6 +373,16 @@ PY
         test_pass
     else
         test_fail "MTProto user-monitor cron should be opt-in and disabled by default to avoid unsolicited chat noise"
+    fi
+
+    test_start "static_storage_maintenance_cron_uses_active_root_script"
+    if [[ -f "$STORAGE_MAINTENANCE_CRON" ]] && \
+       rg -q '^MOLTIS_STORAGE_JOURNAL_VACUUM_SIZE=1G$' "$STORAGE_MAINTENANCE_CRON" && \
+       rg -q '^MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS=10$' "$STORAGE_MAINTENANCE_CRON" && \
+       rg -q '/opt/moltinger-active/scripts/moltis-storage-maintenance\.sh reclaim' "$STORAGE_MAINTENANCE_CRON"; then
+        test_pass
+    else
+        test_fail "Storage maintenance cron must keep the active-root script as the source of truth and set explicit retention budgets"
     fi
 
     test_start "static_moltis_smoke_uses_current_auth_and_ws_rpc_contract"
@@ -771,10 +787,12 @@ PY
        rg -Fq 'docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'docker rm -f "$TARGET_CONTAINER"' "$DEPLOY_SCRIPT" && \
        rg -Fq 'compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"' "$DEPLOY_SCRIPT" && \
-       rg -Fq 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$DEPLOY_SCRIPT"; then
+       rg -Fq 'compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'run_post_deploy_storage_reclaim' "$DEPLOY_SCRIPT" && \
+       rg -Fq '"$STORAGE_MAINTENANCE_SCRIPT" reclaim' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Moltis deploy path must converge sidecars separately, pre-stop/remove the fixed-name Moltis container, and recreate only Moltis with --no-deps so config changes apply without a second compose recreate race"
+        test_fail "Moltis deploy path must converge sidecars separately, pre-stop/remove the fixed-name Moltis container, recreate only Moltis with --no-deps, and trigger post-deploy storage reclaim from the shared maintenance script"
     fi
 
     test_start "static_deploy_script_rollback_reuses_serialized_moltis_contract"
@@ -910,17 +928,28 @@ PY
        rg -Fq 'deploy_mutex_active()' "$HEALTH_MONITOR_SCRIPT" && \
        rg -Fq 'Deploy mutex active; suspending mutating health-monitor actions' "$HEALTH_MONITOR_SCRIPT" && \
        rg -Fq 'docker image prune -af' "$HEALTH_MONITOR_SCRIPT" && \
+       rg -Fq 'docker builder prune -af --filter "until=${DISK_BUILDER_PRUNE_UNTIL}"' "$HEALTH_MONITOR_SCRIPT" && \
        rg -Fq 'up -d --no-deps --force-recreate "$container"' "$HEALTH_MONITOR_SCRIPT" && \
        rg -Fq 'check_disk_space 90 || true' "$HEALTH_MONITOR_SCRIPT" && \
        rg -Fq 'check_memory 90 || true' "$HEALTH_MONITOR_SCRIPT" && \
        ! rg -Fq 'docker system prune' "$HEALTH_MONITOR_SCRIPT" && \
        rg -Fq 'Environment=DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock' "$HEALTH_MONITOR_UNIT" && \
        rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_UNIT" && \
+       rg -Fq 'Environment="DISK_BUILDER_PRUNE_UNTIL=168h"' "$HEALTH_MONITOR_UNIT" && \
        rg -Fq 'Environment=DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock' "$HEALTH_MONITOR_CONFIG_UNIT" && \
-       rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_CONFIG_UNIT"; then
+       rg -Fq 'Environment="DISK_CLEANUP_COOLDOWN_SECONDS=3600"' "$HEALTH_MONITOR_CONFIG_UNIT" && \
+       rg -Fq 'Environment="DISK_BUILDER_PRUNE_UNTIL=168h"' "$HEALTH_MONITOR_CONFIG_UNIT"; then
         test_pass
     else
-        test_fail "Health monitor must suppress mutating actions during deploy mutex, avoid global docker system prune, and ship the same mutex/cooldown unit contract through both tracked service definitions"
+        test_fail "Health monitor must suppress mutating actions during deploy mutex, avoid global docker system prune, reclaim stale builder cache too, and ship the same mutex/cooldown contract through both tracked service definitions"
+    fi
+
+    test_start "static_watchtower_notifications_are_opt_in"
+    if rg -q 'WATCHTOWER_NOTIFICATIONS: \$\{WATCHTOWER_NOTIFICATIONS:-\}' "$COMPOSE_PROD" && \
+       ! rg -q 'WATCHTOWER_NOTIFICATIONS: "email"' "$COMPOSE_PROD"; then
+        test_pass
+    else
+        test_fail "Production compose must not hardcode Watchtower email notifications because missing SMTP env should not crash-loop the sidecar"
     fi
 
     test_start "static_moltis_compose_uses_extended_stop_grace_period"
@@ -1410,11 +1439,12 @@ PY
     if rg -q 'docker compose "\$\{compose_args\[@\]\}" "\$\{args\[@\]\}" 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'docker logs "\$container" --tail 80 >&2' "$DEPLOY_SCRIPT" && \
        rg -q '"\$BACKUP_SCRIPT" restore-check "\$backup_path" 1>&2' "$DEPLOY_SCRIPT" && \
+       rg -q -- '--skip-journal-vacuum 1>&2' "$DEPLOY_SCRIPT" && \
        rg -q 'if \[\[ "\$OUTPUT_JSON" != "true" \]\]; then' "$DEPLOY_SCRIPT" && \
        rg -q 'echo -n "\."' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "deploy.sh must keep restore-check logs, docker compose progress, docker logs, and wait dots out of JSON stdout"
+        test_fail "deploy.sh must keep restore-check logs, docker compose progress, post-deploy reclaim output, docker logs, and wait dots out of JSON stdout"
     fi
 
     test_start "static_clawdiy_workflow_validates_auth_rendering_rules"

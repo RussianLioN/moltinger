@@ -245,8 +245,15 @@ Critical rule:
 ### Weekly (Automated)
 
 - Full backup
-- Docker cleanup
+- Storage maintenance (`/opt/moltinger-active/scripts/moltis-storage-maintenance.sh reclaim`)
 - Log rotation
+
+Repository-managed storage maintenance now reclaims:
+
+- unused Docker images older than the configured retention window
+- stale BuildKit cache
+- known ephemeral probe volumes
+- excess journald usage above the configured size budget
 
 ### Monthly (Manual)
 

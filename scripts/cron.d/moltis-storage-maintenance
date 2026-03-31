@@ -1,0 +1,19 @@
+# Moltis Storage Maintenance Cron
+# ==============================
+# Reclaims safe Docker cache, trims stale probe volumes, and keeps journald
+# under a bounded budget without touching live service volumes.
+#
+# Installed by: .github/workflows/deploy.yml (GitOps)
+# Manual install: sudo cp /opt/moltinger-active/scripts/cron.d/moltis-storage-maintenance /etc/cron.d/
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock
+MOLTIS_STORAGE_IMAGE_PRUNE_UNTIL=168h
+MOLTIS_STORAGE_BUILDER_PRUNE_UNTIL=168h
+MOLTIS_STORAGE_JOURNAL_VACUUM_SIZE=1G
+MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS=10
+
+# Daily reclaim pass at 01:37 UTC.
+37 1 * * * root mkdir -p /var/log/moltis && /opt/moltinger-active/scripts/moltis-storage-maintenance.sh reclaim >> /var/log/moltis/storage-maintenance.log 2>&1
