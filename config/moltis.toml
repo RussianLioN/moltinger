@@ -72,7 +72,8 @@ MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS = "24"
 MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND = "/codex-advisory-followup"
 # Canonical Moltis-native Codex update skill runtime.
-# Live Moltis must see the repo through /server; writable skill state lives under ~/.moltis.
+# The repo remains the Git source of truth under /server; deploy syncs repo-managed skills
+# into the official runtime-discovered skills directory under ~/.moltis/skills.
 MOLTIS_CODEX_UPDATE_STATE_FILE = "/home/moltis/.moltis/codex-update/state.json"
 MOLTIS_CODEX_UPDATE_STATE_SCRIPT = "/server/scripts/moltis-codex-update-state.sh"
 MOLTIS_CODEX_UPDATE_PROFILE_SCRIPT = "/server/scripts/moltis-codex-update-profile.sh"
@@ -137,22 +138,43 @@ soul = """
 - Код: давай готовые примеры, которые можно скопировать
 - При использовании Tavily search не заполняй параметр `country`, если пользователь явно не просил географический буст или ограничение.
 - Если параметр `country` всё же нужен для Tavily, используй только lowercase plain English значения из Tavily schema, например `russia` или `united states`.
-- Если пользователь просит проверить обновления Codex CLI, не делай старые shell-пробы вроде `npm list -g @openai/codex` или `codex --version` по умолчанию.
-- Для такого запроса сразу используй навык `codex-update` и его канонический runtime `bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary`.
-- Локальную установленную версию Codex CLI проверяй только если пользователь явно спрашивает именно про локальную установку.
-- Если навык уже объявлен в списке доступных skills/runtime snapshot, считай его существующим. Не пытайся опровергнуть это через `exec`, `cat`, `find` и другие filesystem-пробы по `~/.moltis/skills`, `/home/moltis/.moltis/skills`, `/server/skills`, mounted workspace или repo paths.
-- В Telegram и других sandboxed user-facing сессиях недоступность host paths для `exec` не является доказательством отсутствия навыка, шаблона или функции.
+- Если пользователь просит проверить обновления Codex CLI, не делай старые shell-пробы вроде `npm list -g @openai/codex`, `codex --version`, `cat ~/.moltis/skills/...` или `find /home/moltis/.moltis/skills` по умолчанию.
+- Если `codex-update` уже объявлен в списке доступных навыков, считай этот навык существующим. Не пытайся опровергнуть это через `exec`, `cat`, `find` или другие filesystem-пробы по `/home/moltis/.moltis/skills`, `/server` и похожим host paths.
+- В Telegram и других sandboxed user-facing сессиях host paths и repo runtime scripts могут быть недоступны sandbox-командам. Это не доказательство отсутствия навыка или функции.
+- Для вопросов про навыки и skill-authoring не используй sandbox filesystem как primary truth. Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.
+- Для skill visibility/create/update/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`, а не `exec`/browser/web-search пути.
+- Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме: проверь доступную информацию, кратко объясни статус и дай рекомендации, но не обещай удалённо обновить локальную установку Codex пользователя.
+- На remote user-facing surface не запускай молча `make codex-update`, `moltis-codex-update-run.sh` и другие operator-only runtime path; они допустимы только для trusted operator/local контекста с реально доступными `/server` и writable runtime state.
+- Для любых семантически эквивалентных вопросов про уже сохранённое состояние `codex-update` primary truth — runtime state helper `bash /server/scripts/moltis-codex-update-state.sh get --json`, если он реально доступен на текущей surface.
+- Для таких вопросов не используй `memory_search`, общую память чата или формулировки `в памяти не найдено` как замену чтению runtime state.
+- Если trusted operator/local surface реально видит `/server` и writable runtime state, можно использовать канонический runtime `bash /server/scripts/moltis-codex-update-run.sh --mode manual --stdout summary`.
+- Если канонический local runtime path недоступен на текущей surface, используй official внешние источники как primary truth вместо ложного вывода “skill path не существует”.
+- Локальную установленную версию Codex CLI или локальный auto-update behavior обсуждай только если пользователь явно спрашивает именно про локальную машину.
 - Для запросов про создание или обновление Moltis skills сначала используй локальные проектные гайды `/server/docs/moltis-skill-agent-authoring.md` и `/server/docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md`.
-- Для запросов про текущие навыки отвечай по runtime-loaded skills или runtime snapshot текущего хода. Не обещай “сейчас посмотрю в директории skills”.
-- Для запросов про создание/обновление/удаление навыка предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`, а не запись файлов через `exec`.
-- Для запросов про skill template/scaffold не говори `найду темплейт`, `поищу шаблон в системе`, `смотрю в директории skills`; используй канонический формат `skills/<name>/SKILL.md` из project guides.
-- Если `create_skill` или `update_skill` вернул validation/frontmatter error, кратко объясни ошибку и повтори попытку с валидным `SKILL.md` вместо перехода к filesystem probing.
 - Official docs Moltis для skill-authoring открывай точечно по релевантным разделам (`creating a skill`, `updating a skill`, `system prompt`, `session state`, `scheduling`), а не буквальным обходом всего сайта в одном run.
 - Если пользователь просит "изучить всю официальную документацию" или формулирует слишком широкий обзорный запрос, не зависай в долгом browse-цикле: кратко сузь задачу до релевантных разделов и сразу переходи к итоговому объяснению.
+- Для user-facing Telegram/DM запросов, где пользователь просит изучить документацию или курс целиком, "полностью" разобрать тему, "пошагово научить" на базе полного исследования, сравнить много источников или сначала что-то поискать/прочитать, не обещай начинать исследование и не формулируй план действий.
+- Для такого класса Telegram-safe long-research запросов запрещены ответы-обещания вида `Отлично! Давай изучу...`, `Хорошо, изучу...`, `Начну...`, `Начну с поиска...`, `Сейчас изучу...`, `Сначала найду...`.
+- В таком Telegram-safe случае отвечай одним коротким финальным сообщением без префейса и без ссылок на скрытые внутренние шаги. Используй точный шаблон: `В Telegram-safe режиме я не провожу длительное исследование и не запускаю инструменты. Могу дать краткое объяснение без поиска или продолжить задачу в web UI/операторской сессии для полного пошагового разбора.`
+- В user-facing Telegram/DM не упоминай автоматически конкретные runtime skills, например `codex-update` или `telegram-learner`, как "реальный пример" или "существующий навык", если пользователь не спросил про них явно по имени.
 - В пользовательских мессенджер-каналах, особенно Telegram, никогда не отправляй внутренние activity/tool-progress трассы.
 - Запрещено публиковать как обычный ответ `Activity log`, `Running`, `Searching memory`, `thinking`, raw tool names, raw shell commands и другие служебные шаги выполнения.
 - Разрешено максимум одно короткое человеческое префейс-сообщение уровня "Сейчас проверю память и файлы", после чего должен идти только нормальный итоговый ответ.
+- Исключение: для широких long-research запросов в user-facing Telegram/DM даже такое короткое префейс-сообщение запрещено; сразу дай финальный safe-text ответ.
 - Если инструмент или рантайм ошибся, кратко перескажи ошибку человеческим языком без сырого activity dump.
+- В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты для обычных пользовательских запросов.
+- Если Telegram/DM запрос требует внешнего исследования, чтения курса или документации целиком, фоновой работы, длинной диагностики или нескольких tool calls, не используй инструменты в этом чате. Кратко объясни ограничение и предложи продолжить задачу в web UI или trusted operator-сессии.
+- Для команды `/status` в Telegram/DM никогда не используй инструменты и не делай tool calls.
+- Для команды `/status` в Telegram/DM отвечай одним коротким сообщением и обязательно явно укажи: `Статус: Online`, `Канал: Telegram (@moltinger_bot)`, `Модель: custom-zai-telegram-safe::glm-5`, `Провайдер: custom-zai-telegram-safe`, `Режим: safe-text`.
+- Для `/status` запрещено брать модель или провайдера из старой памяти, старых сообщений или догадок. Если точное значение не подтверждено, так и напиши, но не подставляй устаревшее `zai::glm-5`.
+- Если задача требует интерактивного браузера, цепочки tool calls или длительной диагностики, сначала предложи продолжить её в web UI/операторской сессии и не запускай browser-path молча.
+- Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.
+- Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search, MCP и другие tool calls, если пользователь явно не просил расширенную диагностику.
+- Для `/status` в Telegram не перечисляй skills, не проверяй tmux/cron/runtime вручную и не импровизируй свободный обзор состояния.
+- Для `/status` в Telegram отвечай только коротким финальным статусом в стабильном формате: Время, Сессия, Канал, Модель, Sandbox, затем одна короткая итоговая строка.
+- В ответе на `/status` для user-facing Telegram аккаунта `@moltinger_bot` всегда указывай канонический model id `custom-zai-telegram-safe::glm-5` именно целиком; не сокращай до `glm-5` и не подменяй на `zai::glm-5`.
+- Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай даже если остальные параметры даются в сокращённом виде.
+- Если для `/status` какое-то поле не проверялось без инструментов, так и пиши человеческим языком, но не компенсируй это запуском инструментов по умолчанию.
 """                                # Freeform personality text injected into system prompt
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -218,6 +240,10 @@ base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
 alias = "zai"
 models = ["glm-5"]                                  # Keep GLM-5 as third step in chain
 
+# ── Telegram-safe Z.ai lane ───────────────────────────────────────────────────
+# Keep the user-facing Telegram bot on a guarded provider surface. Dedicated
+# skill tools stay available for Telegram skill-authoring turns, while the
+# repo-managed hook blocks browser/search/filesystem drift and telemetry leaks.
 [providers.custom-zai-telegram-safe]
 enabled = true
 api_key = "${GLM_API_KEY}"
@@ -225,7 +251,7 @@ model = "glm-5"
 base_url = "https://api.z.ai/api/coding/paas/v4"
 alias = "zai-telegram-safe"
 models = ["glm-5"]
-tool_mode = "off"
+tool_mode = "auto"
 
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
@@ -305,7 +331,7 @@ priority_models = [
 # ══════════════════════════════════════════════════════════════════════════════
 
 [tools]
-agent_timeout_secs = 30           # Max seconds for an agent run (30s for fast failover on rate limits)
+agent_timeout_secs = 90           # Max seconds for an agent run; keep headroom above 30s browser navigation so multi-step browser runs can finish cleanly
 max_tool_result_bytes = 50000     # Max bytes per tool result before truncation (50KB)
 
 # ── Command Execution ─────────────────────────────────────────────────────────
@@ -471,17 +497,19 @@ cache_ttl_minutes = 15            # Cache fetched pages for this many minutes (0
 max_redirects = 3                 # Maximum HTTP redirects to follow
 readability = true                # Use readability extraction for HTML (cleaner output)
 
+[channels.telegram]
+enabled = true                    # Keep Telegram integration explicitly enabled
+
 # ── Telegram Bot Configuration ────────────────────────────────────────────────
-# Configure Telegram accounts directly under [channels.telegram.<account>].
 # Create bot via @BotFather, get token
 # Get user ID via @userinfobot
 [channels.telegram.moltis-bot]
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
-model = "custom-zai-telegram-safe::glm-5"
+model = "custom-zai-telegram-safe::glm-5"  # Telegram channel sessions resolve the explicit runtime model ID more reliably than a bare model name.
 model_provider = "custom-zai-telegram-safe"
-stream_mode = "off"
+stream_mode = "off"        # Official changelog adds Telegram reply streaming; pin classic final-message delivery so user chats never receive partial/tool-progress output
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
 # webhook_url = "${TELEGRAM_WEBHOOK_URL}"
 # webhook_secret = "${TELEGRAM_WEBHOOK_SECRET}"
@@ -496,7 +524,7 @@ headless = true                   # Run without visible window (true = backgroun
 viewport_width = 2560             # Default viewport width in pixels (QHD for tech users)
 viewport_height = 1440            # Default viewport height in pixels
 device_scale_factor = 2.0         # HiDPI/Retina scaling (2.0 = Retina, 1.0 = standard)
-max_instances = 3                 # Maximum concurrent browser instances
+max_instances = 1                 # Non-persistent browserless profiles must stay single-instance to avoid Chrome SingletonLock contention
 idle_timeout_secs = 300           # Close idle browsers after this many seconds (5 min)
 navigation_timeout_ms = 30000     # Page load timeout in milliseconds (30 sec)
 # chrome_path = "/path/to/chrome" # Custom Chrome/Chromium binary path (auto-detected)
@@ -509,10 +537,11 @@ navigation_timeout_ms = 30000     # Page load timeout in milliseconds (30 sec)
 # This helps prevent prompt injection from untrusted websites.
 allowed_domains = []              # Empty = all domains allowed
 memory_limit_percent = 90
-sandbox_image = "browserless/chrome"
-profile_dir = "/tmp/moltis-browser-profile/shared"  # Host-visible path shared with the Moltis container so sibling browser sandboxes can write Chrome profile state
-persist_profile = false           # Keep profile state non-persistent across sibling browser containers unless a verified canary proves a different strategy is needed
-container_host = "host.docker.internal"  # Moltis-in-Docker sibling browser access via host-gateway on Linux
+chrome_args = []
+sandbox_image = "moltis-browserless-chrome:tracked"
+profile_dir = "/tmp/moltis-browser-profile/browserless"  # Dedicated host-visible profile dir for sibling browser sandboxes; do not reuse a shared multi-instance Chrome profile
+persist_profile = false           # Keep browser profiles ephemeral in Docker mode; deploy will recreate this dir so stale host-owned state cannot poison browser startup
+container_host = "host.docker.internal"  # Moltis runs in Docker; sibling browser container must be reached via host gateway, not 127.0.0.1
 # allowed_domains = [
 #     "docs.example.com",         # Exact match
 #     "*.github.com",             # Wildcard: matches any subdomain of github.com
@@ -526,11 +555,9 @@ container_host = "host.docker.internal"  # Moltis-in-Docker sibling browser acce
 # Reusable prompt templates and workflows.
 
 [skills]
-enabled = true                    # Enable skills system
-search_paths = ["/server/skills"] # Additional directories to search for skills
-                                  # Default locations: ~/.config/moltis/skills/, ./skills/
-auto_load = ["telegram-learner", "codex-update"]  # Skills to always load without explicit activation
-                                  # Example: ["code-review", "commit"]
+enabled = true  # Enable skills system
+search_paths = []  # Production must not rely on repo-mounted /server/skills for discovery
+auto_load = []  # User-facing Telegram safe lane must not preload long-research or operator-oriented skills into every DM turn
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MCP SERVERS
@@ -686,6 +713,7 @@ provider = "ollama"              # Pin embeddings to Ollama instead of chat-prov
                                   #   "ollama"  - Ollama server
                                   #   "openai"  - OpenAI API
                                   #   "custom"  - Custom endpoint
+                                  #   (none)    - Auto-detect from available providers
 base_url = "http://ollama:11434"  # Root Ollama endpoint keeps model probes/pulls on /api/* working in Docker
 model = "nomic-embed-text"       # Lightweight embedding model verified on the live Ollama sidecar
 # api_key = "..."                 # API key (optional for local endpoints like Ollama)
@@ -759,9 +787,6 @@ rate_limit_window_secs = 60
 # Shell commands triggered by events.
 
 [hooks]
-# User-facing Telegram protection is enforced through the project-local hook at
-# /server/.moltis/hooks/telegram-safe-llm-guard so discovery survives runtime
-# paths where config-defined hooks are not registered consistently.
 # Historical repo-side consent routing is intentionally not enabled here.
 # The old `/codex_*` and `/codex-followup ...` user-facing flow is retired.
 # Codex advisories now move through a producer contract plus a Moltis-native
@@ -799,6 +824,17 @@ rate_limit_window_secs = 60
 # MOLTIS_CODEX_ADVISORY_ROUTER_ENV_FILE = "/opt/moltinger/.env"
 # MOLTIS_CODEX_ADVISORY_ROUTER_SEND_REPLY = "true"
 # MOLTIS_CODEX_ADVISORY_CALLBACK_PREFIX = "codex-advisory"
+
+# Keep the matching repo-managed hook bundle under
+# `/.moltis/hooks/telegram-safe-llm-guard/HOOK.md`.
+# Deploy sync materializes that bundle into the runtime-discovered project hook
+# path under `<data_dir>/.moltis/hooks/`, because Moltis 0.10.18 does not
+# reliably register this tracked config-defined hook in live Telegram runtime.
+[[hooks.hooks]]
+name = "telegram-safe-llm-guard"
+command = "./scripts/telegram-safe-llm-guard.sh"
+events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]
+timeout = 5
 
 # [hooks]
 # [[hooks.hooks]]
