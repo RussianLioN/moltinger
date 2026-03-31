@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 export DISK_AUTO_CLEANUP_ENABLED=true
 export DISK_CLEANUP_COOLDOWN_SECONDS=3600
+export DISK_BUILDER_PRUNE_UNTIL=168h
 export COMPOSE_PROJECT_NAME=moltinger
 
 # shellcheck source=scripts/health-monitor.sh
@@ -51,8 +52,8 @@ test_disk_cleanup_skips_while_deploy_mutex_is_active() {
     test_pass
 }
 
-test_disk_cleanup_prunes_images_only_after_cooldown() {
-    test_start "health monitor should prune images only when cooldown allows it"
+test_disk_cleanup_prunes_images_and_builder_cache_after_cooldown() {
+    test_start "health monitor should prune images and builder cache only when cooldown allows it"
 
     DOCKER_CALLS=()
     RECORDED_CLEANUP=false
@@ -65,7 +66,8 @@ test_disk_cleanup_prunes_images_only_after_cooldown() {
         return
     fi
 
-    assert_contains "${DOCKER_CALLS[*]}" "image prune -af" "Expected image-only cleanup call"
+    assert_contains "${DOCKER_CALLS[*]}" "image prune -af" "Expected image cleanup call"
+    assert_contains "${DOCKER_CALLS[*]}" "builder prune -af --filter until=${DISK_BUILDER_PRUNE_UNTIL}" "Expected builder-cache cleanup call"
     if [[ "${DOCKER_CALLS[*]}" == *"system prune"* ]]; then
         test_fail "Global docker system prune must not be used by health monitor disk cleanup"
         return
@@ -122,7 +124,7 @@ run_component_health_monitor_runtime_guard_tests() {
     start_timer
 
     test_disk_cleanup_skips_while_deploy_mutex_is_active
-    test_disk_cleanup_prunes_images_only_after_cooldown
+    test_disk_cleanup_prunes_images_and_builder_cache_after_cooldown
     test_full_recovery_skips_mutation_while_deploy_mutex_is_active
     test_full_recovery_recreates_only_target_container
 

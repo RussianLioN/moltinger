@@ -80,6 +80,7 @@ CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-conf
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
+STORAGE_MAINTENANCE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
@@ -91,6 +92,9 @@ DEPLOY_MUTEX_WAIT_SECONDS="${DEPLOY_MUTEX_WAIT_SECONDS:-3600}"
 DEPLOY_MUTEX_TTL_SECONDS="${DEPLOY_MUTEX_TTL_SECONDS:-5400}"
 DEPLOY_MUTEX_POLL_SECONDS="${DEPLOY_MUTEX_POLL_SECONDS:-5}"
 DEPLOY_MUTEX_OWNER="${DEPLOY_MUTEX_OWNER:-}"
+POST_DEPLOY_STORAGE_RECLAIM="${POST_DEPLOY_STORAGE_RECLAIM:-true}"
+POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS="${POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS:-10}"
+BROWSER_SANDBOX_SPEC_LABEL="io.moltinger.browser-sandbox.spec-sha"
 
 DEPLOY_LOCK_MODE=""
 DEPLOY_LOCK_FD=""
@@ -1584,6 +1588,28 @@ deploy_containers() {
     log_success "Containers deployed for target $TARGET"
 }
 
+run_post_deploy_storage_reclaim() {
+    if [[ "$TARGET" != "moltis" || "$POST_DEPLOY_STORAGE_RECLAIM" != "true" ]]; then
+        return 0
+    fi
+
+    if [[ ! -x "$STORAGE_MAINTENANCE_SCRIPT" ]]; then
+        log_warn "Skipping post-deploy storage reclaim because the maintenance script is not executable: $STORAGE_MAINTENANCE_SCRIPT"
+        return 0
+    fi
+
+    log_info "Running post-deploy storage reclaim for Moltis"
+    if ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
+        "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
+            --ignore-deploy-mutex \
+            --skip-journal-vacuum; then
+        log_warn "Post-deploy storage reclaim reported warnings; continuing because rollout is already healthy"
+        return 0
+    fi
+
+    log_success "Post-deploy storage reclaim completed"
+}
+
 rollback() {
     log_warn "Initiating rollback for target $TARGET..."
 
@@ -1835,12 +1861,44 @@ prepare_moltis_browser_profile_dir() {
     return 0
 }
 
+browser_sandbox_spec_sha() {
+    local sandbox_dockerfile="$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile"
+    local sandbox_entrypoint="$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        {
+            cat "$sandbox_dockerfile"
+            printf '\0'
+            cat "$sandbox_entrypoint"
+        } | sha256sum | awk '{print $1}'
+        return 0
+    fi
+
+    {
+        cat "$sandbox_dockerfile"
+        printf '\0'
+        cat "$sandbox_entrypoint"
+    } | shasum -a 256 | awk '{print $1}'
+}
+
+browser_sandbox_image_spec_sha() {
+    local image_ref="$1"
+    local label_value
+
+    label_value="$(docker image inspect --format "{{ index .Config.Labels \"$BROWSER_SANDBOX_SPEC_LABEL\" }}" "$image_ref" 2>/dev/null || true)"
+    if [[ "$label_value" == "<no value>" ]]; then
+        label_value=""
+    fi
+
+    printf '%s\n' "$label_value"
+}
+
 prepare_moltis_browser_sandbox_image() {
     if [[ "$TARGET" != "moltis" ]]; then
         return 0
     fi
 
-    local browser_contract browser_enabled sandbox_image sandbox_build_context sandbox_dockerfile
+    local browser_contract browser_enabled sandbox_image sandbox_build_context sandbox_dockerfile desired_spec_sha existing_spec_sha
     browser_contract="$(awk '
         BEGIN {
             in_section = 0
@@ -1894,13 +1952,21 @@ prepare_moltis_browser_sandbox_image() {
             return 1
         fi
 
+        desired_spec_sha="$(browser_sandbox_spec_sha)"
+        existing_spec_sha="$(browser_sandbox_image_spec_sha "$sandbox_image")"
+        if [[ -n "$existing_spec_sha" && "$existing_spec_sha" == "$desired_spec_sha" ]]; then
+            log_info "Tracked Moltis browser sandbox image is already current: $sandbox_image ($desired_spec_sha)"
+            return 0
+        fi
+
         log_info "Building tracked Moltis browser sandbox image: $sandbox_image"
         docker build \
             --build-arg BASE_IMAGE=browserless/chrome \
+            --build-arg SANDBOX_SPEC_SHA="$desired_spec_sha" \
             -t "$sandbox_image" \
             -f "$sandbox_dockerfile" \
             "$sandbox_build_context" >/dev/null
-        log_success "Tracked Moltis browser sandbox image built: $sandbox_image"
+        log_success "Tracked Moltis browser sandbox image built: $sandbox_image ($desired_spec_sha)"
         return 0
     fi
 
@@ -1969,6 +2035,7 @@ cmd_deploy() {
     if verify_deployment; then
         DEPLOY_IMAGE="$(get_current_version)"
         add_json_services
+        run_post_deploy_storage_reclaim
 
         log_success "=========================================="
         log_success "${TARGET_DISPLAY} deployment completed successfully"

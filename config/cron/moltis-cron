@@ -21,8 +21,8 @@ MAILTO=""
 # Rotate logs weekly
 0 4 * * 0 root find /var/log/moltis -name "*.log" -mtime +30 -delete
 
-# Clean Docker resources weekly (keeps last 4 versions)
-0 5 * * 0 root docker image prune -af --filter "until=168h" >> /var/log/moltis/maintenance.log 2>&1
+# Reclaim Docker cache, stale probe volumes, and excess journal usage daily
+37 1 * * * root DEPLOY_MUTEX_PATH=/var/lock/moltinger/deploy.lock MOLTIS_STORAGE_IMAGE_PRUNE_UNTIL=168h MOLTIS_STORAGE_BUILDER_PRUNE_UNTIL=168h MOLTIS_STORAGE_JOURNAL_VACUUM_SIZE=1G MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS=10 /opt/moltinger-active/scripts/moltis-storage-maintenance.sh reclaim >> /var/log/moltis/maintenance.log 2>&1
 
 # ========================================================================
 # HEALTH CHECK

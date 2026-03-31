@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "moltinger-scripts",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Server automation scripts for Moltinger project",
   "maintainer": "DevOps Team",
   "repository": "https://github.com/RussianLioN/moltinger",
@@ -59,6 +59,14 @@
       "description": "Moltis-native Codex update scheduler with duplicate-safe Telegram delivery",
       "command": "/opt/moltinger/scripts/moltis-codex-update-run.sh --mode scheduler --include-issue-signals --stdout none",
       "issue": "moltinger-eajx"
+    },
+    "moltis-storage-maintenance": {
+      "source": "cron.d/moltis-storage-maintenance",
+      "target": "/etc/cron.d/moltis-storage-maintenance",
+      "schedule": "37 1 * * *",
+      "description": "Daily safe reclaim of Docker cache, probe volumes, and journald budget",
+      "command": "/opt/moltinger-active/scripts/moltis-storage-maintenance.sh reclaim",
+      "issue": "follow-up-required"
     }
   },
   "scripts": {
@@ -908,6 +916,23 @@
         "alert"
       ],
       "cron": "*/5 * * * *"
+    },
+    "moltis-storage-maintenance.sh": {
+      "version": "1.0.0",
+      "description": "Safely reclaim Docker cache, stale probe volumes, journald budget, and old pre_deploy sidecars on the Moltinger host",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "docker",
+        "find",
+        "journalctl",
+        "jq"
+      ],
+      "provides": [
+        "moltis-storage-maintenance"
+      ],
+      "gitops": true,
+      "cron": "37 1 * * *"
     },
     "moltis-version.sh": {
       "version": "1.0.0",
