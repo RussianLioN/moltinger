@@ -26,17 +26,12 @@ FLEET_INTERNAL_NETWORK="${FLEET_INTERNAL_NETWORK:-fleet-internal}"
 MONITORING_NETWORK="${MONITORING_NETWORK:-moltinger_monitoring}"
 CLAWDIY_RUNTIME_UID="${CLAWDIY_RUNTIME_UID:-1000}"
 CLAWDIY_RUNTIME_GID="${CLAWDIY_RUNTIME_GID:-1000}"
+MOLTIS_SERVICE_UID="${MOLTIS_SERVICE_UID:-1000}"
+MOLTIS_SERVICE_GID="${MOLTIS_SERVICE_GID:-1000}"
 CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR="${CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR:-/opt/moltinger-state/config-runtime}"
 MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="${MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
-MOLTIS_RUNTIME_DATA_DIR="${MOLTIS_RUNTIME_DATA_DIR:-/home/moltis/.moltis}"
-MOLTIS_REPO_SKILLS_SOURCE_ROOT="${MOLTIS_REPO_SKILLS_SOURCE_ROOT:-/server/skills}"
-MOLTIS_RUNTIME_SKILLS_ROOT="${MOLTIS_RUNTIME_SKILLS_ROOT:-$MOLTIS_RUNTIME_DATA_DIR/skills}"
-MOLTIS_RUNTIME_SKILLS_MANIFEST="${MOLTIS_RUNTIME_SKILLS_MANIFEST:-$MOLTIS_RUNTIME_DATA_DIR/.repo-managed-skills.txt}"
-MOLTIS_REPO_HOOKS_SOURCE_ROOT="${MOLTIS_REPO_HOOKS_SOURCE_ROOT:-/server/.moltis/hooks}"
-MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT="${MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT:-$MOLTIS_RUNTIME_DATA_DIR/.moltis/hooks}"
-MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST="${MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST:-$MOLTIS_RUNTIME_DATA_DIR/.moltis/.repo-managed-hooks.txt}"
-MOLTIS_STOP_TIMEOUT_SECONDS="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
 CANONICAL_MOLTIS_BROWSER_PROFILE_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_DIR:-/tmp/moltis-browser-profile}"
+CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR="${CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR:-$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR/shared}"
 
 HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-300}"
 HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-10}"
@@ -77,14 +72,13 @@ TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
 CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
 CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
+MOLTIS_KNOWLEDGE_SYNC_SCRIPT="$PROJECT_ROOT/scripts/sync-moltis-project-knowledge.sh"
 DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
-STORAGE_MAINTENANCE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
-VERIFY_FAILURE_REASON=""
 CLAWDIY_HEALTH_CHECK_TIMEOUT="${CLAWDIY_HEALTH_CHECK_TIMEOUT:-420}"
 DEPLOY_MUTEX_ENABLED="${DEPLOY_MUTEX_ENABLED:-true}"
 DEPLOY_MUTEX_PATH="${DEPLOY_MUTEX_PATH:-/var/lock/moltinger/deploy.lock}"
@@ -92,9 +86,6 @@ DEPLOY_MUTEX_WAIT_SECONDS="${DEPLOY_MUTEX_WAIT_SECONDS:-3600}"
 DEPLOY_MUTEX_TTL_SECONDS="${DEPLOY_MUTEX_TTL_SECONDS:-5400}"
 DEPLOY_MUTEX_POLL_SECONDS="${DEPLOY_MUTEX_POLL_SECONDS:-5}"
 DEPLOY_MUTEX_OWNER="${DEPLOY_MUTEX_OWNER:-}"
-POST_DEPLOY_STORAGE_RECLAIM="${POST_DEPLOY_STORAGE_RECLAIM:-true}"
-POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS="${POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS:-10}"
-BROWSER_SANDBOX_SPEC_LABEL="io.moltinger.browser-sandbox.spec-sha"
 
 DEPLOY_LOCK_MODE=""
 DEPLOY_LOCK_FD=""
@@ -282,20 +273,6 @@ get_timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
-record_verification_failure() {
-    local message="$1"
-
-    if [[ -z "$VERIFY_FAILURE_REASON" ]]; then
-        VERIFY_FAILURE_REASON="$message"
-    fi
-    log_error "$message"
-    return 0
-}
-
-verification_failure_recorded() {
-    [[ -n "$VERIFY_FAILURE_REASON" ]]
-}
-
 output_json_result() {
     local status="$1"
     local action="$2"
@@ -304,6 +281,7 @@ output_json_result() {
     local services_json="[]"
     local errors_json="[]"
     local details="{}"
+    local evidence_file_json="null"
 
     if [[ $DEPLOY_START_TIME -gt 0 ]]; then
         duration_ms=$(( ($(date +%s) - DEPLOY_START_TIME) * 1000 ))
@@ -317,23 +295,16 @@ output_json_result() {
         errors_json=$(printf '%s\n' "${JSON_ERRORS[@]}" | jq -R '{code: "DEPLOY_ERROR", message: .}' | jq -s '.')
     fi
 
-    details=$(jq -n \
-        --arg image "$DEPLOY_IMAGE" \
-        --argjson duration "$duration_ms" \
-        --arg health "$health" \
-        --arg evidence_file "$DEPLOY_EVIDENCE_FILE" \
-        --arg restore_check_file "$DEPLOY_RESTORE_CHECK_FILE" \
-        --arg verify_failure_reason "$VERIFY_FAILURE_REASON" \
-        --argjson services "$services_json" \
-        '{
-            image: (if $image == "" then null else $image end),
-            duration_ms: $duration,
-            health: $health,
-            services: $services,
-            rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end),
-            restore_check_file: (if $restore_check_file == "" then null else $restore_check_file end),
-            verify_failure_reason: (if $verify_failure_reason == "" then null else $verify_failure_reason end)
-        }')
+    if [[ -n "$DEPLOY_IMAGE" ]]; then
+        details=$(jq -n \
+            --arg image "$DEPLOY_IMAGE" \
+            --argjson duration "$duration_ms" \
+            --arg health "$health" \
+            --arg evidence_file "$DEPLOY_EVIDENCE_FILE" \
+            --arg restore_check_file "$DEPLOY_RESTORE_CHECK_FILE" \
+            --argjson services "$services_json" \
+            '{image: $image, duration_ms: $duration, health: $health, services: $services, rollback_evidence_file: (if $evidence_file == "" then null else $evidence_file end), restore_check_file: (if $restore_check_file == "" then null else $restore_check_file end)}')
+    fi
 
     jq -n \
         --arg status "$status" \
@@ -446,301 +417,6 @@ container_mount_rw() {
         head -n 1
 }
 
-dir_mode_allows_other_write_exec() {
-    local path="$1"
-    local mode last_digit
-
-    mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
-    if [[ -z "$mode" ]]; then
-        mode="$(stat -f '%Mp%Lp' "$path" 2>/dev/null || true)"
-    fi
-    [[ -n "$mode" ]] || return 1
-
-    last_digit="${mode: -1}"
-    [[ -n "$last_digit" ]] || return 1
-
-    (( (10#$last_digit & 2) == 2 && (10#$last_digit & 1) == 1 ))
-}
-
-read_toml_key() {
-    local file_path="$1"
-    local section="$2"
-    local key="$3"
-
-    awk -v section="$section" -v key="$key" '
-        BEGIN { in_section = 0 }
-        $0 ~ "^[[:space:]]*\\[.*\\][[:space:]]*$" {
-            in_section = ($0 == section)
-            next
-        }
-        in_section {
-            line = $0
-            sub(/[[:space:]]*#.*/, "", line)
-            if (line ~ "^[[:space:]]*" key "[[:space:]]*=") {
-                sub("^[[:space:]]*" key "[[:space:]]*=[[:space:]]*", "", line)
-                gsub(/^[[:space:]]*"/, "", line)
-                gsub(/"[[:space:]]*$/, "", line)
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
-                print line
-                exit
-            }
-        }
-    ' "$file_path"
-}
-
-extract_json_payload() {
-    local raw_output="$1"
-
-    awk '
-        BEGIN { capture = 0 }
-        /^[[:space:]]*[\[{]/ { capture = 1 }
-        capture { print }
-    ' <<<"$raw_output"
-}
-
-list_repo_skill_names() {
-    local skills_dir="$PROJECT_ROOT/skills"
-    local skill_dir
-    shopt -s nullglob
-    for skill_dir in "$skills_dir"/*; do
-        [[ -d "$skill_dir" ]] || continue
-        [[ -f "$skill_dir/SKILL.md" ]] || continue
-        basename "$skill_dir"
-    done | LC_ALL=C sort
-    shopt -u nullglob
-}
-
-list_repo_hook_names() {
-    local hooks_dir="$PROJECT_ROOT/.moltis/hooks"
-    local hook_dir
-    shopt -s nullglob
-    for hook_dir in "$hooks_dir"/*; do
-        [[ -d "$hook_dir" ]] || continue
-        [[ -f "$hook_dir/HOOK.md" ]] || continue
-        basename "$hook_dir"
-    done | LC_ALL=C sort
-    shopt -u nullglob
-}
-
-sync_moltis_repo_skills_into_runtime() {
-    local sync_script="/server/scripts/moltis-repo-skills-sync.sh"
-
-    if ! docker exec "$TARGET_CONTAINER" sh -lc "
-        test -x '$sync_script' &&
-        export MOLTIS_RUNTIME_SKILLS_PRUNE_UNMANAGED=1 &&
-        '$sync_script' \
-          --source-root '$MOLTIS_REPO_SKILLS_SOURCE_ROOT' \
-          --target-root '$MOLTIS_RUNTIME_SKILLS_ROOT' \
-          --manifest '$MOLTIS_RUNTIME_SKILLS_MANIFEST'
-    " >/dev/null 2>&1; then
-        record_verification_failure "Moltis runtime contract mismatch: failed to sync repo-managed skills into runtime discovery path"
-        return 1
-    fi
-
-    return 0
-}
-
-sync_moltis_repo_hooks_into_runtime() {
-    local sync_script="/server/scripts/moltis-repo-hooks-sync.sh"
-
-    if ! docker exec "$TARGET_CONTAINER" sh -lc "
-        test -x '$sync_script' &&
-        '$sync_script' \
-          --source-root '$MOLTIS_REPO_HOOKS_SOURCE_ROOT' \
-          --target-root '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT' \
-          --manifest '$MOLTIS_RUNTIME_PROJECT_HOOKS_MANIFEST'
-    " >/dev/null 2>&1; then
-        record_verification_failure "Moltis runtime contract mismatch: failed to sync repo-managed hooks into the runtime project hook discovery path"
-        return 1
-    fi
-
-    return 0
-}
-
-prestage_moltis_repo_hooks_into_runtime() {
-    local container_id hook_name
-    local -a repo_hook_names=()
-
-    while IFS= read -r hook_name; do
-        [[ -n "$hook_name" ]] || continue
-        repo_hook_names+=("$hook_name")
-    done < <(list_repo_hook_names)
-
-    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
-        return 0
-    fi
-
-    container_id="$(docker ps -q --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
-    [[ -n "$container_id" ]] || return 0
-
-    sync_moltis_repo_hooks_into_runtime || return 1
-    return 0
-}
-
-read_moltis_auth_password() {
-    local password_file="$PROJECT_ROOT/secrets/moltis_password.txt"
-    local password=""
-
-    if [[ -f "$password_file" ]]; then
-        password="$(tr -d '\r\n' < "$password_file")"
-    elif read_env_file_value "MOLTIS_PASSWORD" >/dev/null 2>&1; then
-        password="$(read_env_file_value "MOLTIS_PASSWORD")"
-    fi
-
-    [[ -n "$password" ]] || return 1
-    printf '%s\n' "$password"
-}
-
-moltis_login_session() {
-    local cookie_file="$1"
-    local login_url="${TARGET_HEALTH_URL%/health}/api/auth/login"
-    local password login_payload login_code
-
-    password="$(read_moltis_auth_password 2>/dev/null || true)"
-    if [[ -z "$password" ]]; then
-        record_verification_failure "Moltis runtime contract mismatch: cannot authenticate live /api/skills verification because MOLTIS_PASSWORD is unavailable"
-        return 1
-    fi
-
-    login_payload="$(jq -nc --arg password "$password" '{password:$password}')"
-    login_code="$(
-        curl -sS -o /dev/null -w '%{http_code}' \
-            -c "$cookie_file" -b "$cookie_file" \
-            -X POST "$login_url" \
-            -H 'Content-Type: application/json' \
-            -d "$login_payload" \
-            --max-time 10 2>/dev/null || echo "000"
-    )"
-
-    if [[ "$login_code" != "200" ]]; then
-        record_verification_failure "Moltis runtime contract mismatch: live /api/auth/login failed before /api/skills verification (HTTP $login_code)"
-        return 1
-    fi
-
-    return 0
-}
-
-verify_moltis_repo_skills_discovery() {
-    local skills_api_url repo_skill_name skills_json attempt cookie_file
-    local -a repo_skill_names=()
-
-    while IFS= read -r repo_skill_name; do
-        [[ -n "$repo_skill_name" ]] || continue
-        repo_skill_names+=("$repo_skill_name")
-    done < <(list_repo_skill_names)
-
-    if [[ ${#repo_skill_names[@]} -eq 0 ]]; then
-        return 0
-    fi
-
-    sync_moltis_repo_skills_into_runtime || return 1
-
-    for repo_skill_name in "${repo_skill_names[@]}"; do
-        if ! docker exec "$TARGET_CONTAINER" sh -lc "
-            test -f '$MOLTIS_RUNTIME_SKILLS_ROOT/$repo_skill_name/SKILL.md'
-        " >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: synced runtime skill is missing SKILL.md for $repo_skill_name"
-        fi
-    done
-
-    skills_api_url="${TARGET_HEALTH_URL%/health}/api/skills"
-    cookie_file="$(mktemp)"
-    if ! moltis_login_session "$cookie_file"; then
-        rm -f "$cookie_file"
-        return 1
-    fi
-
-    for attempt in {1..10}; do
-        skills_json="$(curl -fsS -b "$cookie_file" -c "$cookie_file" "$skills_api_url" --max-time 10 2>/dev/null || true)"
-        if [[ -n "$skills_json" ]]; then
-            local missing_skill=0
-            for repo_skill_name in "${repo_skill_names[@]}"; do
-                if ! jq -e --arg skill_name "$repo_skill_name" '
-                    .skills[]? | select(.name == $skill_name)
-                ' <<<"$skills_json" >/dev/null; then
-                    missing_skill=1
-                    break
-                fi
-            done
-            if [[ $missing_skill -eq 0 ]]; then
-                rm -f "$cookie_file"
-                return 0
-            fi
-        fi
-        sleep 2
-    done
-    rm -f "$cookie_file"
-
-    if [[ -z "$skills_json" ]]; then
-        record_verification_failure "Moltis runtime contract mismatch: failed to query authenticated live /api/skills after repo skill sync"
-    else
-        for repo_skill_name in "${repo_skill_names[@]}"; do
-            if ! jq -e --arg skill_name "$repo_skill_name" '
-                .skills[]? | select(.name == $skill_name)
-            ' <<<"$skills_json" >/dev/null; then
-                record_verification_failure "Moltis runtime contract mismatch: authenticated live /api/skills does not expose repo-managed skill '$repo_skill_name'"
-            fi
-        done
-    fi
-
-    if verification_failure_recorded; then
-        return 1
-    fi
-
-    return 0
-}
-
-verify_moltis_repo_hook_discovery() {
-    local hook_name hooks_json hooks_output
-    local -a repo_hook_names=()
-
-    while IFS= read -r hook_name; do
-        [[ -n "$hook_name" ]] || continue
-        repo_hook_names+=("$hook_name")
-    done < <(list_repo_hook_names)
-
-    if [[ ${#repo_hook_names[@]} -eq 0 ]]; then
-        return 0
-    fi
-
-    sync_moltis_repo_hooks_into_runtime || return 1
-
-    for hook_name in "${repo_hook_names[@]}"; do
-        if ! docker exec "$TARGET_CONTAINER" sh -lc "
-            test -f '$MOLTIS_REPO_HOOKS_SOURCE_ROOT/$hook_name/HOOK.md'
-        " >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: tracked repo hook bundle is missing HOOK.md for $hook_name under $MOLTIS_REPO_HOOKS_SOURCE_ROOT"
-        fi
-        if ! docker exec "$TARGET_CONTAINER" sh -lc "
-            test -f '$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT/$hook_name/HOOK.md'
-        " >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: synced runtime hook is missing HOOK.md for $hook_name under $MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT"
-        fi
-    done
-
-    hooks_output="$(docker exec "$TARGET_CONTAINER" moltis hooks list --json 2>/dev/null || true)"
-    hooks_json="$(extract_json_payload "$hooks_output")"
-    if [[ -z "$hooks_json" ]]; then
-        record_verification_failure "Moltis runtime contract mismatch: failed to query live hook registration via 'moltis hooks list --json'"
-        return 1
-    fi
-
-    for hook_name in "${repo_hook_names[@]}"; do
-        if ! jq -e --arg hook_name "$hook_name" '
-            .[] | select(
-                .name == $hook_name and
-                .source == "project" and
-                .eligible == true and
-                .path == ($runtime_root + "/" + $hook_name)
-            )
-        ' --arg runtime_root "$MOLTIS_RUNTIME_PROJECT_HOOKS_ROOT" <<<"$hooks_json" >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: repo-managed hook '$hook_name' is not registered from the active runtime project hook discovery path"
-        fi
-    done
-
-    return 0
-}
-
 tracked_moltis_version() {
     if [[ ! -x "$MOLTIS_VERSION_HELPER" ]]; then
         log_error "Moltis version helper is missing or not executable: $MOLTIS_VERSION_HELPER"
@@ -836,7 +512,7 @@ compose_cmd() {
 
     local args=("$@")
     local -a compose_args=()
-    local -a env_prefix=(env)
+    local docker_socket_gid=""
     local redirect_stdout=false
 
     if [[ -n "$ENV_FILE" && -f "$ENV_FILE" ]]; then
@@ -850,34 +526,26 @@ compose_cmd() {
     fi
 
     if [[ "$TARGET" == "moltis" ]]; then
-        local docker_socket_gid="${DOCKER_SOCKET_GID:-}"
-        if [[ -z "$docker_socket_gid" && -S /var/run/docker.sock ]]; then
+        if [[ -S /var/run/docker.sock ]]; then
             docker_socket_gid="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
         fi
-        if [[ -z "$docker_socket_gid" ]]; then
-            log_error "Moltis browser sandbox contract requires a detectable DOCKER_SOCKET_GID for /var/run/docker.sock"
-            exit 2
-        fi
-        if [[ ! "$docker_socket_gid" =~ ^[0-9]+$ ]]; then
-            log_error "DOCKER_SOCKET_GID must be numeric; got '$docker_socket_gid'"
-            exit 2
-        fi
+        (
+            if [[ -n "$docker_socket_gid" ]]; then
+                export DOCKER_SOCKET_GID="$docker_socket_gid"
+            fi
 
-        if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" == "true" && -n "${MOLTIS_VERSION:-}" ]]; then
-            env_prefix=(env "DOCKER_SOCKET_GID=$docker_socket_gid" "MOLTIS_VERSION=$MOLTIS_VERSION")
-            if [[ "$redirect_stdout" == "true" ]]; then
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+            if [[ "${ALLOW_MOLTIS_VERSION_OVERRIDE:-false}" == "true" && -n "${MOLTIS_VERSION:-}" ]]; then
+                export MOLTIS_VERSION="$MOLTIS_VERSION"
             else
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}"
+                unset MOLTIS_VERSION
             fi
-        else
-            env_prefix=(env -u MOLTIS_VERSION "DOCKER_SOCKET_GID=$docker_socket_gid")
+
             if [[ "$redirect_stdout" == "true" ]]; then
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}" 1>&2
+                docker compose "${compose_args[@]}" "${args[@]}" 1>&2
             else
-                "${env_prefix[@]}" docker compose "${compose_args[@]}" "${args[@]}"
+                docker compose "${compose_args[@]}" "${args[@]}"
             fi
-        fi
+        )
         return
     fi
 
@@ -1043,54 +711,6 @@ resolve_container_name_conflicts() {
     done < <(managed_container_names_for_target)
 }
 
-prepare_moltis_container_for_rollout() {
-    local stop_timeout="${MOLTIS_STOP_TIMEOUT_SECONDS:-45}"
-    local container_id=""
-
-    if [[ "$TARGET" != "moltis" ]]; then
-        return 0
-    fi
-
-    if [[ ! "$stop_timeout" =~ ^[0-9]+$ ]] || (( stop_timeout < 1 )); then
-        log_error "MOLTIS_STOP_TIMEOUT_SECONDS must be a positive integer; got '$stop_timeout'"
-        exit 2
-    fi
-
-    container_id="$(docker ps -aq --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
-    [[ -n "$container_id" ]] || return 0
-
-    if docker ps -q --filter "id=$container_id" | grep -q .; then
-        log_json_stderr INFO "Stopping existing Moltis container '$TARGET_CONTAINER' with ${stop_timeout}s grace before rollout"
-        if [[ "$OUTPUT_JSON" == "true" ]]; then
-            if ! docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER" 1>&2; then
-                log_error "Failed to stop existing Moltis container: $TARGET_CONTAINER"
-                exit 1
-            fi
-        else
-            if ! docker stop --timeout "$stop_timeout" "$TARGET_CONTAINER"; then
-                log_error "Failed to stop existing Moltis container: $TARGET_CONTAINER"
-                exit 1
-            fi
-        fi
-    fi
-
-    container_id="$(docker ps -aq --filter "name=^/${TARGET_CONTAINER}$" | head -1 || true)"
-    [[ -n "$container_id" ]] || return 0
-
-    log_json_stderr INFO "Removing existing Moltis container '$TARGET_CONTAINER' before rollout"
-    if [[ "$OUTPUT_JSON" == "true" ]]; then
-        if ! docker rm -f "$TARGET_CONTAINER" 1>&2; then
-            log_error "Failed to remove existing Moltis container: $TARGET_CONTAINER"
-            exit 1
-        fi
-    else
-        if ! docker rm -f "$TARGET_CONTAINER"; then
-            log_error "Failed to remove existing Moltis container: $TARGET_CONTAINER"
-            exit 1
-        fi
-    fi
-}
-
 ensure_clawdiy_runtime_paths() {
     local required_paths=(
         "$PROJECT_ROOT/data/clawdiy"
@@ -1249,7 +869,7 @@ capture_moltis_rollback_evidence() {
   "schema_version": "v1",
   "target": "moltis",
   "captured_at": "$(get_timestamp)",
-  "rollback_reason": $(printf '%s' "$reason" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "rollback_reason": "$reason",
   "backup_reference": $(printf '%s' "$backup_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "restore_check_reference": $(printf '%s' "$restore_check_ref" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
   "pre_rollback_image": "$current_image",
@@ -1313,7 +933,7 @@ capture_clawdiy_rollback_evidence() {
   "schema_version": "v1",
   "target": "clawdiy",
   "captured_at": "$(get_timestamp)",
-  "rollback_reason": $(printf '%s' "$reason" | jq -Rsc 'if . == "" then null else rtrimstr("\n") end'),
+  "rollback_reason": "$reason",
   "pre_rollback_image": "$current_image",
   "pre_rollback_health": "$current_health",
   "audit_root": "$PROJECT_ROOT/data/clawdiy/audit",
@@ -1555,67 +1175,22 @@ pull_images() {
 deploy_containers() {
     log_info "Deploying containers for target $TARGET..."
     local -a deploy_services=("$TARGET_SERVICE")
-    local -a auxiliary_services=()
     local -a deploy_args=(up -d --remove-orphans)
     local service
 
     for service in "${TARGET_AUXILIARY_SERVICES[@]}"; do
         [[ -n "$service" ]] || continue
         deploy_services+=("$service")
-        auxiliary_services+=("$service")
     done
 
     if [[ "$TARGET" == "moltis" ]]; then
         # Moltis loads runtime config at process start, so bind-mounted config
-        # changes must force a recreate to avoid stale live state. Prestage the
-        # repo-managed hook bundles into the runtime data-dir hook path before
-        # recreate, because Moltis 0.10.18 discovers project hooks relative to
-        # the active data_dir instead of the bind-mounted /server workspace.
-        # Keep sidecars converged without forcing a second Moltis recreate in the
-        # same compose transaction. Then pre-stop/remove the fixed-name Moltis
-        # container and recreate only the Moltis service with --no-deps.
-        if [[ ${#auxiliary_services[@]} -gt 0 ]]; then
-            compose_cmd normal up -d --remove-orphans "${auxiliary_services[@]}"
-        fi
-        prestage_moltis_repo_hooks_into_runtime
-        prepare_moltis_container_for_rollout
-        compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
-        log_success "Containers deployed for target $TARGET"
-        return 0
+        # changes must force a recreate to avoid stale live state.
+        deploy_args+=(--force-recreate)
     fi
 
     compose_cmd normal "${deploy_args[@]}" "${deploy_services[@]}"
     log_success "Containers deployed for target $TARGET"
-}
-
-run_post_deploy_storage_reclaim() {
-    if [[ "$TARGET" != "moltis" || "$POST_DEPLOY_STORAGE_RECLAIM" != "true" ]]; then
-        return 0
-    fi
-
-    if [[ ! -x "$STORAGE_MAINTENANCE_SCRIPT" ]]; then
-        log_warn "Skipping post-deploy storage reclaim because the maintenance script is not executable: $STORAGE_MAINTENANCE_SCRIPT"
-        return 0
-    fi
-
-    log_info "Running post-deploy storage reclaim for Moltis"
-    if [[ "$OUTPUT_JSON" == "true" ]]; then
-        if ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
-            "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
-                --ignore-deploy-mutex \
-                --skip-journal-vacuum 1>&2; then
-            log_warn "Post-deploy storage reclaim reported warnings; continuing because rollout is already healthy"
-            return 0
-        fi
-    elif ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
-        "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
-            --ignore-deploy-mutex \
-            --skip-journal-vacuum; then
-        log_warn "Post-deploy storage reclaim reported warnings; continuing because rollout is already healthy"
-        return 0
-    fi
-
-    log_success "Post-deploy storage reclaim completed"
 }
 
 rollback() {
@@ -1638,12 +1213,9 @@ rollback() {
         log_info "Rolling back target $TARGET to $last_image"
 
         if [[ "$TARGET" == "moltis" ]]; then
-            local rollback_version
-            rollback_version="$(extract_moltis_version_tag "$last_image")"
-            prepare_moltis_container_for_rollout
             ALLOW_MOLTIS_VERSION_OVERRIDE=true \
-                MOLTIS_VERSION="$rollback_version" \
-                compose_cmd normal up -d --no-deps --force-recreate "$TARGET_SERVICE"
+                MOLTIS_VERSION="$(extract_moltis_version_tag "$last_image")" \
+                compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         else
             CLAWDIY_IMAGE="$last_image" compose_cmd normal up -d --force-recreate "$TARGET_SERVICE"
         fi
@@ -1676,16 +1248,16 @@ rollback() {
 
 verify_deployment() {
     log_info "Verifying deployment for target $TARGET..."
-    VERIFY_FAILURE_REASON=""
 
     if ! wait_for_healthy "$TARGET_CONTAINER" "$TARGET_HEALTH_TIMEOUT"; then
-        record_verification_failure "Health wait timed out for target $TARGET"
+        return 1
     fi
 
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_HEALTH_URL" 2>/dev/null || echo "000")
     if [[ "$http_code" != "200" ]]; then
-        record_verification_failure "Health endpoint returned HTTP $http_code for target $TARGET"
+        log_error "Health endpoint returned HTTP $http_code for target $TARGET"
+        return 1
     fi
 
     if [[ -n "$TARGET_METRICS_URL" ]]; then
@@ -1699,219 +1271,154 @@ verify_deployment() {
         local expected_workspace expected_runtime_config
         local actual_workspace_source actual_runtime_config_source
         local actual_runtime_config_rw working_dir
-        local browser_profile_dir browser_profile_root browser_persist_profile browser_max_instances actual_browser_profile_source actual_browser_profile_rw
         local tracked_runtime_toml runtime_runtime_toml
 
         working_dir="$(docker inspect --format '{{.Config.WorkingDir}}' "$TARGET_CONTAINER" 2>/dev/null || echo "")"
         if [[ "$working_dir" != "/server" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: working_dir is '$working_dir', expected '/server'"
+            log_error "Moltis runtime contract mismatch: working_dir is '$working_dir', expected '/server'"
+            return 1
         fi
 
         expected_workspace="$(canonicalize_existing_path "$PROJECT_ROOT" || printf '%s\n' "$PROJECT_ROOT")"
         actual_workspace_source="$(container_mount_source "$TARGET_CONTAINER" "/server")"
         if [[ -z "$actual_workspace_source" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: /server mount is missing in container $TARGET_CONTAINER"
+            log_error "Moltis runtime contract mismatch: /server mount is missing in container $TARGET_CONTAINER"
+            return 1
         fi
         actual_workspace_source="$(canonicalize_existing_path "$actual_workspace_source" || printf '%s\n' "$actual_workspace_source")"
         if [[ "$actual_workspace_source" != "$expected_workspace" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: /server source is '$actual_workspace_source', expected '$expected_workspace'"
+            log_error "Moltis runtime contract mismatch: /server source is '$actual_workspace_source', expected '$expected_workspace'"
+            return 1
         fi
 
         expected_runtime_config="$(read_env_file_value "MOLTIS_RUNTIME_CONFIG_DIR" || true)"
         expected_runtime_config="${expected_runtime_config:-$CANONICAL_MOLTIS_RUNTIME_CONFIG_DIR}"
         expected_runtime_config="$(normalize_runtime_config_path "$expected_runtime_config")"
         if ! runtime_config_dir_allowed "$expected_runtime_config"; then
-            record_verification_failure "Moltis runtime contract mismatch: runtime config dir '$expected_runtime_config' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
+            log_error "Moltis runtime contract mismatch: runtime config dir '$expected_runtime_config' is outside the production allowlist '$MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST'"
+            return 1
         fi
         expected_runtime_config="$(canonicalize_existing_path "$expected_runtime_config" || printf '%s\n' "$expected_runtime_config")"
         actual_runtime_config_source="$(container_mount_source "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
         if [[ -z "$actual_runtime_config_source" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: runtime config mount is missing for /home/moltis/.config/moltis"
+            log_error "Moltis runtime contract mismatch: runtime config mount is missing for /home/moltis/.config/moltis"
+            return 1
         fi
         actual_runtime_config_source="$(canonicalize_existing_path "$actual_runtime_config_source" || printf '%s\n' "$actual_runtime_config_source")"
         if [[ "$actual_runtime_config_source" != "$expected_runtime_config" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: runtime config source is '$actual_runtime_config_source', expected '$expected_runtime_config'"
+            log_error "Moltis runtime contract mismatch: runtime config source is '$actual_runtime_config_source', expected '$expected_runtime_config'"
+            return 1
         fi
 
         actual_runtime_config_rw="$(container_mount_rw "$TARGET_CONTAINER" "/home/moltis/.config/moltis")"
         if [[ "$actual_runtime_config_rw" != "true" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: runtime config mount must be writable for runtime-managed auth/key files"
+            log_error "Moltis runtime contract mismatch: runtime config mount must be writable for runtime-managed auth/key files"
+            return 1
         fi
 
         tracked_runtime_toml="$PROJECT_ROOT/config/moltis.toml"
         runtime_runtime_toml="$expected_runtime_config/moltis.toml"
         if [[ ! -f "$tracked_runtime_toml" || ! -f "$runtime_runtime_toml" ]]; then
-            record_verification_failure "Moltis runtime contract mismatch: tracked or runtime moltis.toml is missing"
+            log_error "Moltis runtime contract mismatch: tracked or runtime moltis.toml is missing"
+            return 1
         fi
         if ! cmp -s "$tracked_runtime_toml" "$runtime_runtime_toml"; then
-            record_verification_failure "Moltis runtime contract mismatch: runtime moltis.toml diverges from tracked config/moltis.toml"
+            log_error "Moltis runtime contract mismatch: runtime moltis.toml diverges from tracked config/moltis.toml"
+            return 1
         fi
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
             test -d /server &&
             test -d /server/skills &&
+            test -x /server/scripts/telegram-safe-llm-guard.sh &&
+            test -f /server/.moltis/hooks/telegram-safe-llm-guard/HOOK.md &&
+            test -x /server/.moltis/hooks/telegram-safe-llm-guard/handler.sh &&
             test -f /home/moltis/.config/moltis/moltis.toml &&
             tmp_path="/home/moltis/.config/moltis/provider_keys.json.tmp.contract-check.$$" &&
             : > "$tmp_path" &&
             rm -f "$tmp_path"
         ' >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: repo skills are not visible or runtime config is not writable inside the container"
-        fi
-
-        verify_moltis_repo_skills_discovery || true
-        verify_moltis_repo_hook_discovery || true
-
-        if ! docker exec "$TARGET_CONTAINER" sh -lc '
-            sock_gid="$(stat -c %g /var/run/docker.sock)" &&
-            id -G | tr " " "\n" | grep -qx "$sock_gid"
-        ' >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: mounted docker.sock gid is not present in the live Moltis process groups"
+            log_error "Moltis runtime contract mismatch: repo skills/hooks are not visible or runtime config is not writable inside the container"
+            return 1
         fi
 
         if ! docker exec "$TARGET_CONTAINER" sh -lc '
-            grep -Eq "(^|[[:space:]])host\.docker\.internal([[:space:]]|$)" /etc/hosts
+            hooks_json="$(moltis hooks list --json 2>/dev/null | sed -n "/^[[:space:]]*\\[/,\$p")" &&
+            printf "%s" "$hooks_json" | jq -e ".[] | select(.name == \"telegram-safe-llm-guard\" and .path == \"/server/.moltis/hooks/telegram-safe-llm-guard\" and .source == \"project\" and .eligible == true)" >/dev/null
         ' >/dev/null 2>&1; then
-            record_verification_failure "Moltis runtime contract mismatch: host.docker.internal is not mapped inside the live container for sibling browser connectivity"
+            log_error "Moltis runtime contract mismatch: project-local telegram-safe-llm-guard hook was not discovered by the live runtime"
+            return 1
         fi
-
-        browser_profile_dir="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "profile_dir" || true)"
-        browser_persist_profile="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "persist_profile" || true)"
-        browser_max_instances="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "max_instances" || true)"
-        if [[ -n "$browser_profile_dir" ]]; then
-            browser_profile_root="$(dirname "$browser_profile_dir")"
-            actual_browser_profile_source="$(container_mount_source "$TARGET_CONTAINER" "$browser_profile_root")"
-            if [[ -z "$actual_browser_profile_source" ]]; then
-                log_error "Moltis browser contract mismatch: browser profile root mount '$browser_profile_root' is missing"
-                return 1
-            fi
-            actual_browser_profile_source="$(canonicalize_existing_path "$actual_browser_profile_source" || printf '%s\n' "$actual_browser_profile_source")"
-            browser_profile_root="$(canonicalize_existing_path "$browser_profile_root" || printf '%s\n' "$browser_profile_root")"
-            browser_profile_dir="$(canonicalize_existing_path "$browser_profile_dir" || printf '%s\n' "$browser_profile_dir")"
-            if [[ "$actual_browser_profile_source" != "$browser_profile_root" ]]; then
-                log_error "Moltis browser contract mismatch: browser profile source is '$actual_browser_profile_source', expected '$browser_profile_root'"
-                return 1
-            fi
-
-            actual_browser_profile_rw="$(container_mount_rw "$TARGET_CONTAINER" "$browser_profile_root")"
-            if [[ "$actual_browser_profile_rw" != "true" ]]; then
-                log_error "Moltis browser contract mismatch: browser profile mount '$browser_profile_root' must be writable"
-                return 1
-            fi
-
-            if [[ ! -d "$browser_profile_root" || ! -d "$browser_profile_dir" ]]; then
-                log_error "Moltis browser contract mismatch: browser profile root or configured dir is missing on host"
-                return 1
-            fi
-
-            if ! dir_mode_allows_other_write_exec "$browser_profile_root" || ! dir_mode_allows_other_write_exec "$browser_profile_dir"; then
-                log_error "Moltis browser contract mismatch: browser profile root/configured dir must be writable for arbitrary non-root browser users"
-                return 1
-            fi
-
-            if [[ "$browser_profile_dir" == "$browser_profile_root" ]]; then
-                log_error "Moltis browser contract mismatch: browser profile_dir must be a dedicated child path, not the mounted root itself"
-                return 1
-            fi
-
-            if [[ "$browser_persist_profile" == "false" && "${browser_max_instances:-}" != "1" ]]; then
-                log_error "Moltis browser contract mismatch: persist_profile=false requires max_instances=1 to avoid shared Chrome profile lock contention"
-                return 1
-            fi
-        fi
-    fi
-
-    if verification_failure_recorded; then
-        return 1
     fi
 
     log_success "Deployment verification passed for target $TARGET"
     return 0
 }
 
-prepare_moltis_browser_profile_dir() {
-    local tracked_runtime_toml browser_profile_dir browser_profile_root browser_persist_profile browser_max_instances
+sync_moltis_project_knowledge() {
+    local runtime_home_source canonical_runtime_home
 
     if [[ "$TARGET" != "moltis" ]]; then
         return 0
     fi
 
-    tracked_runtime_toml="$PROJECT_ROOT/config/moltis.toml"
-    browser_profile_dir="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "profile_dir" || true)"
-    browser_persist_profile="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "persist_profile" || true)"
-    browser_max_instances="$(read_toml_key "$tracked_runtime_toml" "[tools.browser]" "max_instances" || true)"
-    if [[ -z "$browser_profile_dir" ]]; then
-        log_error "Missing tools.browser.profile_dir in tracked config: $tracked_runtime_toml"
+    if [[ ! -d "$PROJECT_ROOT/knowledge" ]]; then
+        log_info "Tracked knowledge/ directory not present; skipping project knowledge sync"
+        return 0
+    fi
+
+    if [[ ! -x "$MOLTIS_KNOWLEDGE_SYNC_SCRIPT" ]]; then
+        log_error "Moltis knowledge sync script is missing or not executable: $MOLTIS_KNOWLEDGE_SYNC_SCRIPT"
         return 1
     fi
 
-    browser_profile_root="$(dirname "$browser_profile_dir")"
-    if [[ "$browser_profile_root" != "$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" ]]; then
-        log_error "Tracked browser profile root '$browser_profile_root' must stay under canonical mount root '$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR'"
+    runtime_home_source="$(container_mount_source "$TARGET_CONTAINER" "/home/moltis/.moltis")"
+    if [[ -z "$runtime_home_source" ]]; then
+        log_error "Moltis runtime contract mismatch: /home/moltis/.moltis mount source is missing"
+        return 1
+    fi
+    canonical_runtime_home="$(canonicalize_existing_path "$runtime_home_source" || printf '%s\n' "$runtime_home_source")"
+
+    if ! MOLTIS_SERVICE_UID="$MOLTIS_SERVICE_UID" \
+         MOLTIS_SERVICE_GID="$MOLTIS_SERVICE_GID" \
+         bash "$MOLTIS_KNOWLEDGE_SYNC_SCRIPT" \
+            --knowledge-root "$PROJECT_ROOT/knowledge" \
+            --runtime-home "$canonical_runtime_home"; then
+        log_error "Failed to sync tracked project knowledge into Moltis runtime memory"
         return 1
     fi
 
-    if [[ "$browser_profile_dir" == "$browser_profile_root" ]]; then
-        log_error "Tracked browser profile_dir must be a dedicated child path under '$browser_profile_root'"
+    if ! docker exec "$TARGET_CONTAINER" sh -lc 'test -f /home/moltis/.moltis/memory/project-knowledge.md' >/dev/null 2>&1; then
+        log_error "Moltis knowledge sync did not materialize /home/moltis/.moltis/memory/project-knowledge.md"
         return 1
     fi
 
-    if [[ "$browser_persist_profile" == "false" && "${browser_max_instances:-}" != "1" ]]; then
-        log_error "Tracked browser contract must pin max_instances=1 when persist_profile=false"
-        return 1
-    fi
-
-    mkdir -p "$browser_profile_root"
-    chmod 0777 "$browser_profile_root"
-    rm -rf "$browser_profile_dir"
-    mkdir -p "$browser_profile_dir"
-    chmod 0777 "$browser_profile_dir"
-    log_success "Prepared dedicated Moltis browser profile dir: $browser_profile_dir"
+    log_success "Tracked project knowledge synced into Moltis runtime memory"
     return 0
 }
 
-browser_sandbox_spec_sha() {
-    local sandbox_dockerfile="$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile"
-    local sandbox_entrypoint="$PROJECT_ROOT/scripts/moltis-browser-sandbox/entrypoint.sh"
-
-    if command -v sha256sum >/dev/null 2>&1; then
-        {
-            cat "$sandbox_dockerfile"
-            printf '\0'
-            cat "$sandbox_entrypoint"
-        } | sha256sum | awk '{print $1}'
-        return 0
-    fi
-
-    {
-        cat "$sandbox_dockerfile"
-        printf '\0'
-        cat "$sandbox_entrypoint"
-    } | shasum -a 256 | awk '{print $1}'
-}
-
-browser_sandbox_image_spec_sha() {
-    local image_ref="$1"
-    local label_value
-
-    label_value="$(docker image inspect --format "{{ index .Config.Labels \"$BROWSER_SANDBOX_SPEC_LABEL\" }}" "$image_ref" 2>/dev/null || true)"
-    if [[ "$label_value" == "<no value>" ]]; then
-        label_value=""
-    fi
-
-    printf '%s\n' "$label_value"
-}
-
-prepare_moltis_browser_sandbox_image() {
+prepare_moltis_browser_profile_dir() {
     if [[ "$TARGET" != "moltis" ]]; then
         return 0
     fi
 
-    local browser_contract browser_enabled sandbox_image sandbox_build_context sandbox_dockerfile desired_spec_sha existing_spec_sha
+    mkdir -p "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    chmod 0777 "$CANONICAL_MOLTIS_BROWSER_PROFILE_DIR" "$CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    log_success "Prepared shared Moltis browser profile dir: $CANONICAL_MOLTIS_BROWSER_PROFILE_SHARED_DIR"
+    return 0
+}
+
+prepull_moltis_browser_sandbox_image() {
+    if [[ "$TARGET" != "moltis" ]]; then
+        return 0
+    fi
+
+    local browser_contract browser_enabled sandbox_image
     browser_contract="$(awk '
         BEGIN {
             in_section = 0
             enabled = "true"
-            image = "moltis-browserless-chrome:tracked"
+            image = "browserless/chrome"
         }
         /^\[tools\.browser\][[:space:]]*$/ {
             in_section = 1
@@ -1944,41 +1451,15 @@ prepare_moltis_browser_sandbox_image() {
     sandbox_image="${browser_contract#*|}"
 
     if [[ "$browser_enabled" != "true" ]]; then
-        log_info "Tracked Moltis browser tool is disabled; skipping sandbox image preparation"
+        log_info "Tracked Moltis browser tool is disabled; skipping sandbox image pre-pull"
         return 0
     fi
 
     if [[ -z "$sandbox_image" || "$sandbox_image" == "null" ]]; then
-        sandbox_image="moltis-browserless-chrome:tracked"
+        sandbox_image="browserless/chrome"
     fi
 
-    if [[ "$sandbox_image" == "moltis-browserless-chrome:tracked" ]]; then
-        sandbox_build_context="$PROJECT_ROOT/scripts/moltis-browser-sandbox"
-        sandbox_dockerfile="$PROJECT_ROOT/scripts/moltis-browser-sandbox/Dockerfile"
-        if [[ ! -f "$sandbox_dockerfile" ]]; then
-            log_error "Tracked Moltis browser sandbox Dockerfile is missing: $sandbox_dockerfile"
-            return 1
-        fi
-
-        desired_spec_sha="$(browser_sandbox_spec_sha)"
-        existing_spec_sha="$(browser_sandbox_image_spec_sha "$sandbox_image")"
-        if [[ -n "$existing_spec_sha" && "$existing_spec_sha" == "$desired_spec_sha" ]]; then
-            log_info "Tracked Moltis browser sandbox image is already current: $sandbox_image ($desired_spec_sha)"
-            return 0
-        fi
-
-        log_info "Building tracked Moltis browser sandbox image: $sandbox_image"
-        docker build \
-            --build-arg BASE_IMAGE=browserless/chrome \
-            --build-arg SANDBOX_SPEC_SHA="$desired_spec_sha" \
-            -t "$sandbox_image" \
-            -f "$sandbox_dockerfile" \
-            "$sandbox_build_context" >/dev/null
-        log_success "Tracked Moltis browser sandbox image built: $sandbox_image ($desired_spec_sha)"
-        return 0
-    fi
-
-    log_info "Pulling Moltis browser sandbox image: $sandbox_image"
+    log_info "Pre-pulling Moltis browser sandbox image: $sandbox_image"
     docker pull "$sandbox_image" >/dev/null
     log_success "Moltis browser sandbox image ready: $sandbox_image"
     return 0
@@ -2037,13 +1518,20 @@ cmd_deploy() {
     backup_current_state
     pull_images
     prepare_moltis_browser_profile_dir
-    prepare_moltis_browser_sandbox_image
+    prepull_moltis_browser_sandbox_image
     deploy_containers
 
     if verify_deployment; then
+        if ! sync_moltis_project_knowledge; then
+            log_error "${TARGET_DISPLAY} post-deploy knowledge sync failed"
+            if [[ "$OUTPUT_JSON" == "true" ]]; then
+                output_json_result "failure" "deploy" "unhealthy"
+            fi
+            exit 1
+        fi
+
         DEPLOY_IMAGE="$(get_current_version)"
         add_json_services
-        run_post_deploy_storage_reclaim
 
         log_success "=========================================="
         log_success "${TARGET_DISPLAY} deployment completed successfully"
@@ -2058,12 +1546,7 @@ cmd_deploy() {
         local health_status="unhealthy"
 
         if [[ "$ROLLBACK_ENABLED" == "true" ]]; then
-            if [[ -n "$VERIFY_FAILURE_REASON" ]]; then
-                log_error "Auto rollback trigger reason: $VERIFY_FAILURE_REASON"
-                ROLLBACK_REASON="deployment-verification-failed: $VERIFY_FAILURE_REASON"
-            else
-                ROLLBACK_REASON="deployment-verification-failed"
-            fi
+            ROLLBACK_REASON="deployment-verification-failed"
             rollback
             if [[ "$TARGET" == "clawdiy" ]] && ! docker ps --format '{{.Names}}' | grep -qx "$TARGET_CONTAINER"; then
                 health_status="disabled"
