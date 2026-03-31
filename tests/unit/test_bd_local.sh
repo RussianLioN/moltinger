@@ -201,6 +201,7 @@ test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     worktree_path="${fixture_root}/moltinger-broken-runtime"
     git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/broken-runtime" "main"
+    worktree_path="$(cd "${worktree_path}" && pwd -P)"
 
     install_fake_bd "${worktree_path}"
     seed_broken_post_migration_runtime_state "${worktree_path}"
@@ -215,7 +216,7 @@ test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
     assert_eq "25" "${rc}" "bd-local must fail closed when the Dolt runtime exists only as an incomplete shell"
     assert_contains "${output}" "local Dolt-backed Beads runtime is incomplete" "bd-local must describe the failure as a runtime repair problem"
     assert_contains "${output}" "Tracked .beads/issues.jsonl is retired here" "bd-local must not ask operators to restore retired JSONL"
-    assert_contains "${output}" "./scripts/beads-worktree-localize.sh --path ." "bd-local must point operators to the managed runtime repair helper for runtime-only failures"
+    assert_contains "${output}" "cd ${worktree_path} && /usr/local/bin/bd doctor --json && ./scripts/beads-worktree-localize.sh --path ." "bd-local must point operators to a repo-root-anchored runtime repair helper for runtime-only failures"
 
     rm -rf "${fixture_root}"
     test_pass

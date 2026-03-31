@@ -14,7 +14,7 @@ If `.beads/config.yaml` exists, tracked `.beads/issues.jsonl` is already retired
 1. Treat the state as **local runtime repair drift**.
 2. Run `/usr/local/bin/bd doctor --json` first.
 3. Recover with `./scripts/beads-worktree-localize.sh --path .` so stale runtime artifacts are quarantined before bootstrap is retried.
-4. Import the newest compatibility backup (`.beads/backup/*.jsonl` first, then `.beads/legacy-jsonl-backup/*.jsonl`) when one exists.
+4. Import the newest compatibility issues backup (`issues*.jsonl`) found across `.beads/backup/` and `.beads/legacy-jsonl-backup/` when one exists.
 5. Do **not** restore `.beads/issues.jsonl`.
 
 ## Why

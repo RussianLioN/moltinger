@@ -87,7 +87,7 @@ That contract was stale. With the current installed Beads CLI, raw `bd bootstrap
    - detects runtime-only stale-shell drift
    - quarantines stale runtime artifacts under `.beads/recovery/`
    - reruns `bd bootstrap` against the cleaned runtime
-   - imports the newest compatibility backup from `.beads/backup/` or `.beads/legacy-jsonl-backup/` when present
+   - imports the newest compatibility issues backup found across `.beads/backup/` and `.beads/legacy-jsonl-backup/`
 2. Re-routed repo-local repair surfaces away from raw `bd bootstrap`:
    - `scripts/beads-resolve-db.sh`
    - `scripts/beads-worktree-audit.sh`
@@ -103,14 +103,14 @@ That contract was stale. With the current installed Beads CLI, raw `bd bootstrap
    - `tests/unit/test_worktree_phase_a.sh`
    - `tests/unit/test_worktree_ready.sh`
    - `tests/static/test_beads_worktree_ownership.sh`
-4. Repaired the target dedicated publish worktree with the managed helper and confirmed `bd status` now reads the backlog there.
+4. Repaired the target dedicated publish worktree with the managed helper and manually verified, via sequential probes, that `bd status` now reads the backlog there.
 
 ## Verification Notes
 
 Two additional observations mattered during verification:
 
 1. Running multiple `bd` probes in parallel against the same worktree can create misleading `dial tcp ... connect: connection refused` races during auto-start. Verification must be sequential.
-2. The target worktree is still ahead of its remote branch, but its local Beads runtime is now readable and classified as `post_migration_runtime_only`.
+2. The target worktree is still ahead of its remote branch, but manual sequential verification showed its local Beads runtime was readable and classified as `post_migration_runtime_only`.
 
 ## Prevention
 

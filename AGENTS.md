@@ -52,7 +52,7 @@ bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
 bd status             # Inspect the current Beads state
-bd bootstrap          # Initialize or repair a local Dolt-backed clone safely
+bd bootstrap          # Initialize a local Dolt-backed clone; use localize helper for runtime-only repair
 ```
 
 ## Beads Worktree Ownership

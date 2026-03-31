@@ -10,7 +10,7 @@ When repo-local helpers materialize or repair Beads state for a dedicated worktr
 4. Use the managed non-committing official path instead:
    - quarantine the stale `.beads/dolt/` shell under `.beads/recovery/`
    - run `bd bootstrap` only after the stale shell has been quarantined
-   - if a tracked or compatibility JSONL backup exists, run `bd --db <runtime-db> import <tracked-or-compatibility-jsonl>`
+   - if a tracked or compatibility issues backup exists, run `bd --db <runtime-db> import <issues-jsonl>`
 
 ## Why
 

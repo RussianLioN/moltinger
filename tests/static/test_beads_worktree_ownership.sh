@@ -116,6 +116,7 @@ run_static_beads_worktree_ownership_tests() {
     if rg -q -F 'Do not treat a missing tracked `.beads/issues.jsonl` as proof that the Beads backlog is unavailable' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F 'Treat `config + local runtime + no tracked .beads/issues.jsonl` as the expected post-migration local-runtime state' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F 'local Beads repair problem' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
+       rg -q -F 'bd bootstrap          # Initialize a local Dolt-backed clone; use localize helper for runtime-only repair' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F './scripts/beads-worktree-localize.sh --path .' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS" && \
        rg -q -F 'bd status' "$SHARED_CORE_INSTRUCTIONS" "$ROOT_AGENTS"; then
         test_pass

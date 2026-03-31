@@ -273,12 +273,13 @@ find_runtime_import_source() {
       if [[ -z "${latest}" || "${candidate}" -nt "${latest}" ]]; then
         latest="${candidate}"
       fi
-    done < <(find "${search_dir}" -maxdepth 1 -type f -name '*.jsonl' -print 2>/dev/null)
-    if [[ -n "${latest}" ]]; then
-      printf '%s\n' "${latest}"
-      return 0
-    fi
+    done < <(find "${search_dir}" -maxdepth 1 -type f -name 'issues*.jsonl' -print 2>/dev/null)
   done
+
+  if [[ -n "${latest}" ]]; then
+    printf '%s\n' "${latest}"
+    return 0
+  fi
 
   return 1
 }
