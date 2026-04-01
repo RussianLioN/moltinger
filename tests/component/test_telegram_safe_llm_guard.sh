@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
 MINIMAL_PATH="/usr/bin:/bin"
 export MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=false
+export MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=false
 
 setup_component_telegram_safe_llm_guard() {
     require_commands_or_skip bash jq tr sed grep || return 2
@@ -196,6 +197,149 @@ EOF
         test_fail "BeforeLLMCall guard must force template requests into a deterministic text-only reply instead of using the broken direct-send block path"
     fi
 
+    test_start "component_before_llm_guard_direct_fastpaths_status_via_bot_send_when_enabled"
+    local fastpath_status_tmp fastpath_status_send_script fastpath_status_log fastpath_status_stdout fastpath_status_stderr fastpath_status_status
+    fastpath_status_tmp="$(secure_temp_dir telegram-safe-fastpath-status)"
+    fastpath_status_send_script="$fastpath_status_tmp/send.sh"
+    fastpath_status_log="$fastpath_status_tmp/send.log"
+    cat >"$fastpath_status_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'chat_id=%s\ntext=%s\n' "$2" "$4" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_status_send_script"
+    fastpath_status_stdout="$fastpath_status_tmp/stdout.log"
+    fastpath_status_stderr="$fastpath_status_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_status_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_status_send_script" \
+        bash "$HOOK_SCRIPT" >"$fastpath_status_stdout" 2>"$fastpath_status_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:faststatus","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_status_status=$?
+    set -e
+    if [[ "$fastpath_status_status" -eq 1 ]] && \
+       [[ ! -s "$fastpath_status_stdout" ]] && \
+       [[ ! -s "$fastpath_status_stderr" ]] && \
+       grep -Fq 'chat_id=262872984' "$fastpath_status_log" && \
+       grep -Fq 'text=Статус: Online' "$fastpath_status_log" && \
+       grep -Fq 'custom-zai-telegram-safe::glm-5' "$fastpath_status_log"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must bypass the broken modify path and send canonical /status directly via Telegram Bot API when fastpath mode is enabled"
+    fi
+
+    test_start "component_before_llm_guard_direct_fastpaths_skill_visibility_via_bot_send_when_enabled"
+    local fastpath_visibility_tmp fastpath_visibility_send_script fastpath_visibility_log fastpath_visibility_stdout fastpath_visibility_stderr fastpath_visibility_status
+    fastpath_visibility_tmp="$(secure_temp_dir telegram-safe-fastpath-visibility)"
+    fastpath_visibility_send_script="$fastpath_visibility_tmp/send.sh"
+    fastpath_visibility_log="$fastpath_visibility_tmp/send.log"
+    cat >"$fastpath_visibility_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'chat_id=%s\ntext=%s\n' "$2" "$4" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_visibility_send_script"
+    fastpath_visibility_stdout="$fastpath_visibility_tmp/stdout.log"
+    fastpath_visibility_stderr="$fastpath_visibility_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_visibility_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_visibility_send_script" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+        bash "$HOOK_SCRIPT" >"$fastpath_visibility_stdout" 2>"$fastpath_visibility_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastvis","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_visibility_status=$?
+    set -e
+    if [[ "$fastpath_visibility_status" -eq 1 ]] && \
+       [[ ! -s "$fastpath_visibility_stdout" ]] && \
+       [[ ! -s "$fastpath_visibility_stderr" ]] && \
+       grep -Fq 'chat_id=262872984' "$fastpath_visibility_log" && \
+       grep -Fq 'text=Навыки (3): codex-update, post-close-task-classifier, telegram-learner.' "$fastpath_visibility_log"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must bypass the broken modify path and send the deterministic skill list directly via Telegram Bot API when fastpath mode is enabled"
+    fi
+
+    test_start "component_before_llm_guard_direct_fastpaths_skill_template_via_bot_send_when_enabled"
+    local fastpath_template_tmp fastpath_template_send_script fastpath_template_log fastpath_template_stdout fastpath_template_stderr fastpath_template_status
+    fastpath_template_tmp="$(secure_temp_dir telegram-safe-fastpath-template)"
+    fastpath_template_send_script="$fastpath_template_tmp/send.sh"
+    fastpath_template_log="$fastpath_template_tmp/send.log"
+    cat >"$fastpath_template_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'chat_id=%s\ntext=%s\n' "$2" "$4" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_template_send_script"
+    fastpath_template_stdout="$fastpath_template_tmp/stdout.log"
+    fastpath_template_stderr="$fastpath_template_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_template_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_template_send_script" \
+        bash "$HOOK_SCRIPT" >"$fastpath_template_stdout" 2>"$fastpath_template_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fasttemplate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Сначала покажу шаблон навыка."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_template_status=$?
+    set -e
+    if [[ "$fastpath_template_status" -eq 1 ]] && \
+       [[ ! -s "$fastpath_template_stdout" ]] && \
+       [[ ! -s "$fastpath_template_stderr" ]] && \
+       grep -Fq 'chat_id=262872984' "$fastpath_template_log" && \
+       grep -Fq 'text=Канонический минимальный шаблон навыка:' "$fastpath_template_log"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must bypass the broken modify path and send the canonical skill template directly via Telegram Bot API when fastpath mode is enabled"
+    fi
+
+    test_start "component_before_llm_guard_direct_fastpaths_sparse_skill_create_into_runtime_scaffold_when_enabled"
+    local fastpath_create_tmp fastpath_create_send_script fastpath_create_log fastpath_create_stdout fastpath_create_stderr fastpath_create_status fastpath_runtime_skills_root fastpath_created_skill
+    fastpath_create_tmp="$(secure_temp_dir telegram-safe-fastpath-create)"
+    fastpath_create_send_script="$fastpath_create_tmp/send.sh"
+    fastpath_create_log="$fastpath_create_tmp/send.log"
+    fastpath_runtime_skills_root="$fastpath_create_tmp/skills"
+    fastpath_created_skill="$fastpath_runtime_skills_root/codex-update-new-fastpath/SKILL.md"
+    cat >"$fastpath_create_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'chat_id=%s\ntext=%s\n' "$2" "$4" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_create_send_script"
+    fastpath_create_stdout="$fastpath_create_tmp/stdout.log"
+    fastpath_create_stderr="$fastpath_create_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_create_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_create_send_script" \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_runtime_skills_root" \
+        bash "$HOOK_SCRIPT" >"$fastpath_create_stdout" 2>"$fastpath_create_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastcreate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык codex-update-new-fastpath"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_create_status=$?
+    set -e
+    if [[ "$fastpath_create_status" -eq 1 ]] && \
+       [[ ! -s "$fastpath_create_stdout" ]] && \
+       [[ ! -s "$fastpath_create_stderr" ]] && \
+       [[ -f "$fastpath_created_skill" ]] && \
+       grep -Fq 'name: codex-update-new-fastpath' "$fastpath_created_skill" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_create_log" && \
+       grep -Fq 'text=Создал базовый шаблон навыка `codex-update-new-fastpath`.' "$fastpath_create_log"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must bypass the broken modify path, create the runtime scaffold, and send the deterministic create confirmation directly via Telegram Bot API when fastpath mode is enabled"
+    fi
+
     test_start "component_before_llm_guard_does_not_persist_stale_status_intent_for_template_followup"
     local stale_status_template_dir stale_status_template_output stale_status_template_intent
     stale_status_template_dir="$(secure_temp_dir telegram-safe-stale-status-template)"
@@ -214,6 +358,50 @@ EOF
         test_pass
     else
         test_fail "BeforeLLMCall guard must not persist a stale /status intent when the latest user turn is a template follow-up"
+    fi
+
+    test_start "component_before_llm_guard_does_not_persist_stale_skill_visibility_intent_for_template_followup"
+    local stale_visibility_template_dir stale_visibility_template_output stale_visibility_template_intent
+    stale_visibility_template_dir="$(secure_temp_dir telegram-safe-stale-visibility-template)"
+    printf '%s\tskill_visibility\n' "$(date +%s)" >"$stale_visibility_template_dir/session_template-after-visibility.intent"
+    stale_visibility_template_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_visibility_template_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:template-after-visibility","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis\n<available_skills>\n- codex-update\n</available_skills>"},{"role":"assistant","content":"Навыки (3): codex-update, post-close-task-classifier, telegram-learner."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    stale_visibility_template_intent="$(cat "$stale_visibility_template_dir/session_template-after-visibility.intent" 2>/dev/null || true)"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_visibility_template_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-template hard override")' >/dev/null 2>&1 <<<"$stale_visibility_template_output" && \
+       [[ "$stale_visibility_template_intent" == *$'\tskill_template' ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must let a template follow-up replace stale persisted skill-visibility intent instead of reusing the previous skills turn"
+    fi
+
+    test_start "component_before_llm_guard_does_not_persist_stale_skill_visibility_intent_for_create_followup"
+    local stale_visibility_create_dir stale_visibility_create_output stale_visibility_create_intent stale_visibility_create_file
+    stale_visibility_create_dir="$(secure_temp_dir telegram-safe-stale-visibility-create)"
+    stale_visibility_create_file="$stale_visibility_create_dir/runtime/codex-update-new-from-stale/SKILL.md"
+    printf '%s\tskill_visibility\n' "$(date +%s)" >"$stale_visibility_create_dir/session_create-after-visibility.intent"
+    stale_visibility_create_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$stale_visibility_create_dir/runtime" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_visibility_create_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:create-after-visibility","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Навыки (3): codex-update, post-close-task-classifier, telegram-learner."},{"role":"user","content":"Создай навык codex-update-new-from-stale"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    stale_visibility_create_intent="$(cat "$stale_visibility_create_dir/session_create-after-visibility.intent" 2>/dev/null || true)"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-create hard override")' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
+       [[ -f "$stale_visibility_create_file" ]] && \
+       grep -Fq 'name: codex-update-new-from-stale' "$stale_visibility_create_file" && \
+       [[ "$stale_visibility_create_intent" == *$'\tskill_create_created:codex-update-new-from-stale' ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must let a sparse create follow-up replace stale persisted skill-visibility intent instead of reusing the previous skills turn"
     fi
 
     test_start "component_message_sending_guard_reuses_persisted_skill_create_intent_for_final_confirmation"
