@@ -1107,10 +1107,12 @@ tool_name="$(extract_first_string tool || true)"
 command_arg="$(extract_first_string command || true)"
 messages_json="$(extract_json_array messages || true)"
 latest_user_message="$(extract_last_message_content_by_role "${messages_json:-}" user || true)"
+latest_assistant_message="$(extract_last_message_content_by_role "${messages_json:-}" assistant || true)"
 tool_calls_json="$(extract_json_array tool_calls || true)"
 response_text_flat="$(flatten_text_for_match "${response_text:-}")"
 user_message_flat="$(flatten_text_for_match "${user_message:-}")"
 latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
+latest_assistant_message_flat="$(flatten_text_for_match "${latest_assistant_message:-}")"
 intent_text_flat="${latest_user_message_flat:-${user_message_flat:-$payload_flat}}"
 
 write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
@@ -1180,6 +1182,16 @@ fi
 
 looks_like_skill_turn=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
+    looks_like_skill_turn=true
+fi
+
+looks_like_skill_followup_turn=false
+if [[ -n "$latest_user_message_flat" ]] && \
+   printf '%s' "$latest_assistant_message_flat" | grep -Eiq '(созда(е|ё)м[^[:cntrl:]]{0,160}навык|опиши[^[:cntrl:]]{0,120}навык|описание[^[:cntrl:]]{0,120}навык|мне нужны детали|дай мне инструкц|жду от тебя инструкц|тело[[:space:]]*\(инструкц|разреш[её]нные инструменты|что должен делать этот навык|это обновл[её]нная версия|skill description|skill body|allowed tools|what should (this|the) skill do|waiting for your instructions)'; then
+    looks_like_skill_followup_turn=true
+fi
+
+if [[ "$looks_like_skill_followup_turn" == true ]]; then
     looks_like_skill_turn=true
 fi
 

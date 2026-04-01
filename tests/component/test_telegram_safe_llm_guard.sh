@@ -151,6 +151,26 @@ EOF
         test_fail "BeforeLLMCall guard must classify sparse create from the latest user turn instead of being contaminated by older visibility turns"
     fi
 
+    test_start "component_before_llm_guard_keeps_skill_authoring_flow_on_followup_details_turn_without_repeating_create_keywords"
+    local before_llm_skill_followup_output
+    before_llm_skill_followup_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:abgj","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык codex-update-new"},{"role":"assistant","content":"Окей, создаём `codex-update-new`. Мне нужны детали: описание, тело инструкций и разрешённые инструменты. Что должен делать этот навык?"},{"role":"user","content":"Следить за версиями Codex CLI и уведомлять пользователя о новых релизах."}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output" && \
+       jq -e '.data.messages | length == 6' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output" && \
+       jq -e '.data.messages[-1].content == "Следить за версиями Codex CLI и уведомлять пользователя о новых релизах."' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must keep the skill-authoring flow active when the latest user turn is a follow-up description for a previously requested create-skill flow"
+    fi
+
     test_start "component_before_llm_guard_replaces_history_when_session_already_contains_stale_guard"
     local before_llm_existing_guard_output
     before_llm_existing_guard_output="$(
