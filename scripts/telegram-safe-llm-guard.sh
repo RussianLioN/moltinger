@@ -9,6 +9,7 @@ fi
 AUDIT_FILE="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE:-}"
 INTENT_DIR="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR:-/tmp/moltis-telegram-safe-llm-guard-intent}"
 INTENT_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_TTL_SEC:-900}"
+SUPPRESS_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SUPPRESS_TTL_SEC:-300}"
 DIRECT_FASTPATH_ENABLED="${MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH:-true}"
 DIRECT_SEND_SCRIPT="${MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT:-/server/scripts/telegram-bot-send.sh}"
 
@@ -700,6 +701,16 @@ intent_file_path() {
     printf '%s/%s.intent' "$INTENT_DIR" "$safe_key"
 }
 
+suppress_file_path() {
+    local raw_key="${1:-}"
+    local safe_key=""
+
+    safe_key="$(sanitize_intent_key "$raw_key" || true)"
+    [[ -n "$safe_key" ]] || return 1
+
+    printf '%s/%s.suppress' "$INTENT_DIR" "$safe_key"
+}
+
 persist_safe_lane_marker() {
     local raw_key="${1:-}"
     local lane_file=""
@@ -748,6 +759,59 @@ clear_safe_lane_marker() {
     [[ -n "$lane_file" ]] || return 0
 
     rm -f "$lane_file" 2>/dev/null || true
+}
+
+persist_delivery_suppression() {
+    local raw_key="${1:-}"
+    local token="${2:-}"
+    local suppress_file=""
+
+    [[ -n "$raw_key" && -n "$token" ]] || return 0
+
+    suppress_file="$(suppress_file_path "$raw_key" || true)"
+    [[ -n "$suppress_file" ]] || return 0
+
+    mkdir -p "$INTENT_DIR" 2>/dev/null || true
+    printf '%s\t%s\n' "$(date +%s)" "$token" >"$suppress_file" 2>/dev/null || true
+    write_audit_line "suppress_set key=$(basename "$suppress_file") token=$token"
+}
+
+load_delivery_suppression() {
+    local raw_key="${1:-}"
+    local suppress_file=""
+    local stored_epoch=""
+    local stored_token=""
+    local now_epoch=0
+    local age_sec=0
+
+    [[ -n "$raw_key" ]] || return 1
+
+    suppress_file="$(suppress_file_path "$raw_key" || true)"
+    [[ -n "$suppress_file" && -f "$suppress_file" ]] || return 1
+
+    IFS=$'\t' read -r stored_epoch stored_token <"$suppress_file" || return 1
+    [[ "$stored_epoch" =~ ^[0-9]+$ && -n "$stored_token" ]] || return 1
+
+    now_epoch="$(date +%s)"
+    age_sec=$((now_epoch - stored_epoch))
+    if (( age_sec < 0 || age_sec > SUPPRESS_TTL_SEC )); then
+        rm -f "$suppress_file" 2>/dev/null || true
+        return 1
+    fi
+
+    printf '%s' "$stored_token"
+}
+
+clear_delivery_suppression() {
+    local raw_key="${1:-}"
+    local suppress_file=""
+
+    [[ -n "$raw_key" ]] || return 0
+
+    suppress_file="$(suppress_file_path "$raw_key" || true)"
+    [[ -n "$suppress_file" ]] || return 0
+
+    rm -f "$suppress_file" 2>/dev/null || true
 }
 
 persist_turn_intent() {
@@ -1458,6 +1522,7 @@ latest_system_message_flat="$(flatten_text_for_match "${latest_system_message:-}
 intent_text_flat="${latest_user_message_flat:-$user_message_flat}"
 status_query_text_flat="${intent_text_flat:-$user_message_flat}"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
+persisted_delivery_suppression="$(load_delivery_suppression "${turn_session_key:-}" || true)"
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
 has_current_user_turn=false
 if [[ -n "$intent_text_flat" ]]; then
@@ -1722,8 +1787,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         if [[ "$current_turn_status_request" == true ]]; then
             if send_telegram_direct_message "$telegram_chat_id" "$canonical_status"; then
                 write_audit_line "direct_fastpath kind=status chat_id=$telegram_chat_id"
+                persist_delivery_suppression "${turn_session_key:-}" "status"
                 clear_turn_intent "${turn_session_key:-}"
-                exit 1
+                exit 0
             fi
             write_audit_line "direct_fastpath_failed kind=status chat_id=${telegram_chat_id:-missing}"
         fi
@@ -1732,8 +1798,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
             if send_telegram_direct_message "$telegram_chat_id" "$visibility_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_visibility chat_id=$telegram_chat_id snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
+                persist_delivery_suppression "${turn_session_key:-}" "skill_visibility"
                 clear_turn_intent "${turn_session_key:-}"
-                exit 1
+                exit 0
             fi
             write_audit_line "direct_fastpath_failed kind=skill_visibility chat_id=${telegram_chat_id:-missing}"
         fi
@@ -1741,8 +1808,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             template_reply_text="$(build_skill_template_reply_text)"
             if send_telegram_direct_message "$telegram_chat_id" "$template_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_template chat_id=$telegram_chat_id"
+                persist_delivery_suppression "${turn_session_key:-}" "skill_template"
                 clear_turn_intent "${turn_session_key:-}"
-                exit 1
+                exit 0
             fi
             write_audit_line "direct_fastpath_failed kind=skill_template chat_id=${telegram_chat_id:-missing}"
         fi
@@ -1750,8 +1818,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state" || true)"
             if [[ -n "$create_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_create chat_id=$telegram_chat_id skill=$requested_skill_name state=$next_turn_skill_create_state"
+                persist_delivery_suppression "${turn_session_key:-}" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}"
                 clear_turn_intent "${turn_session_key:-}"
-                exit 1
+                exit 0
             fi
             write_audit_line "direct_fastpath_failed kind=skill_create chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing} state=${next_turn_skill_create_state:-missing}"
         fi
@@ -1814,6 +1883,13 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
 fi
 
 if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
+    if [[ -n "$persisted_delivery_suppression" ]]; then
+        synthetic_command="$(build_exec_heredoc_command "Telegram-safe direct fastpath already handled this reply.")"
+        write_audit_line "emit_modify event=$event reason=direct_fastpath_tool_suppress token=$persisted_delivery_suppression tool=${tool_name:-missing}"
+        emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
+        exit 0
+    fi
+
     if tool_name_is_allowlisted "$tool_name"; then
         exit 0
     fi
@@ -1833,6 +1909,14 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
         emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
         exit 0
     fi
+fi
+
+if [[ "$event" == "MessageSending" && -n "$persisted_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
+    write_audit_line "emit_modify event=$event reason=direct_fastpath_delivery_suppress token=$persisted_delivery_suppression"
+    clear_delivery_suppression "${turn_session_key:-}"
+    clear_turn_intent "${turn_session_key:-}"
+    emit_modified_payload "NO_REPLY" false
+    exit 0
 fi
 
 if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then

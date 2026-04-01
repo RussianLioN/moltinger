@@ -6,14 +6,15 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
+HOOK_HANDLER="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard/handler.sh"
 MINIMAL_PATH="/usr/bin:/bin"
 export MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=false
 export MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=false
 
 setup_component_telegram_safe_llm_guard() {
     require_commands_or_skip bash jq tr sed grep || return 2
-    if [[ ! -x "$HOOK_SCRIPT" ]]; then
-        test_skip "Hook script is missing or not executable: $HOOK_SCRIPT"
+    if [[ ! -x "$HOOK_SCRIPT" || ! -x "$HOOK_HANDLER" ]]; then
+        test_skip "Hook script or handler is missing/executable: $HOOK_SCRIPT | $HOOK_HANDLER"
         return 2
     fi
     return 0
@@ -22,6 +23,11 @@ setup_component_telegram_safe_llm_guard() {
 run_hook_with_minimal_path() {
     local input_json="$1"
     printf '%s\n' "$input_json" | env PATH="$MINIMAL_PATH" bash "$HOOK_SCRIPT"
+}
+
+run_hook_bundle_with_minimal_path() {
+    local input_json="$1"
+    printf '%s\n' "$input_json" | env PATH="$MINIMAL_PATH" MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" bash "$HOOK_HANDLER"
 }
 
 run_component_telegram_safe_llm_guard_tests() {
@@ -198,10 +204,12 @@ EOF
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_status_via_bot_send_when_enabled"
-    local fastpath_status_tmp fastpath_status_send_script fastpath_status_log fastpath_status_stdout fastpath_status_stderr fastpath_status_status
+    local fastpath_status_tmp fastpath_status_send_script fastpath_status_log fastpath_status_stdout fastpath_status_stderr fastpath_status_status fastpath_status_intent_dir fastpath_status_suppress_file
     fastpath_status_tmp="$(secure_temp_dir telegram-safe-fastpath-status)"
     fastpath_status_send_script="$fastpath_status_tmp/send.sh"
     fastpath_status_log="$fastpath_status_tmp/send.log"
+    fastpath_status_intent_dir="$fastpath_status_tmp/intent"
+    fastpath_status_suppress_file="$fastpath_status_intent_dir/session_faststatus.suppress"
     cat >"$fastpath_status_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -215,28 +223,34 @@ EOF
     env PATH="$MINIMAL_PATH" \
         FASTPATH_LOG="$fastpath_status_log" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_status_intent_dir" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_status_send_script" \
-        bash "$HOOK_SCRIPT" >"$fastpath_status_stdout" 2>"$fastpath_status_stderr" <<'EOF'
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_status_stdout" 2>"$fastpath_status_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:faststatus","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_status_status=$?
     set -e
-    if [[ "$fastpath_status_status" -eq 1 ]] && \
+    if [[ "$fastpath_status_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_status_stdout" ]] && \
        [[ ! -s "$fastpath_status_stderr" ]] && \
+       [[ -f "$fastpath_status_suppress_file" ]] && \
+       grep -Fq $'\tstatus' "$fastpath_status_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_status_log" && \
        grep -Fq 'text=Статус: Online' "$fastpath_status_log" && \
        grep -Fq 'custom-zai-telegram-safe::glm-5' "$fastpath_status_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must bypass the broken modify path and send canonical /status directly via Telegram Bot API when fastpath mode is enabled"
+        test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, and leave only a delivery-suppression marker instead of triggering hook-block"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_visibility_via_bot_send_when_enabled"
-    local fastpath_visibility_tmp fastpath_visibility_send_script fastpath_visibility_log fastpath_visibility_stdout fastpath_visibility_stderr fastpath_visibility_status
+    local fastpath_visibility_tmp fastpath_visibility_send_script fastpath_visibility_log fastpath_visibility_stdout fastpath_visibility_stderr fastpath_visibility_status fastpath_visibility_intent_dir fastpath_visibility_suppress_file
     fastpath_visibility_tmp="$(secure_temp_dir telegram-safe-fastpath-visibility)"
     fastpath_visibility_send_script="$fastpath_visibility_tmp/send.sh"
     fastpath_visibility_log="$fastpath_visibility_tmp/send.log"
+    fastpath_visibility_intent_dir="$fastpath_visibility_tmp/intent"
+    fastpath_visibility_suppress_file="$fastpath_visibility_intent_dir/session_fastvis.suppress"
     cat >"$fastpath_visibility_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -250,28 +264,34 @@ EOF
     env PATH="$MINIMAL_PATH" \
         FASTPATH_LOG="$fastpath_visibility_log" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_visibility_intent_dir" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_visibility_send_script" \
         MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
-        bash "$HOOK_SCRIPT" >"$fastpath_visibility_stdout" 2>"$fastpath_visibility_stderr" <<'EOF'
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_visibility_stdout" 2>"$fastpath_visibility_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:fastvis","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_visibility_status=$?
     set -e
-    if [[ "$fastpath_visibility_status" -eq 1 ]] && \
+    if [[ "$fastpath_visibility_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_visibility_stdout" ]] && \
        [[ ! -s "$fastpath_visibility_stderr" ]] && \
+       [[ -f "$fastpath_visibility_suppress_file" ]] && \
+       grep -Fq $'\tskill_visibility' "$fastpath_visibility_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_visibility_log" && \
        grep -Fq 'text=Навыки (3): codex-update, post-close-task-classifier, telegram-learner.' "$fastpath_visibility_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must bypass the broken modify path and send the deterministic skill list directly via Telegram Bot API when fastpath mode is enabled"
+        test_fail "Direct skill-visibility fastpath must stay handler-safe: send the deterministic runtime list, return rc=0, and store only a delivery-suppression marker"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_template_via_bot_send_when_enabled"
-    local fastpath_template_tmp fastpath_template_send_script fastpath_template_log fastpath_template_stdout fastpath_template_stderr fastpath_template_status
+    local fastpath_template_tmp fastpath_template_send_script fastpath_template_log fastpath_template_stdout fastpath_template_stderr fastpath_template_status fastpath_template_intent_dir fastpath_template_suppress_file
     fastpath_template_tmp="$(secure_temp_dir telegram-safe-fastpath-template)"
     fastpath_template_send_script="$fastpath_template_tmp/send.sh"
     fastpath_template_log="$fastpath_template_tmp/send.log"
+    fastpath_template_intent_dir="$fastpath_template_tmp/intent"
+    fastpath_template_suppress_file="$fastpath_template_intent_dir/session_fasttemplate.suppress"
     cat >"$fastpath_template_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -285,29 +305,35 @@ EOF
     env PATH="$MINIMAL_PATH" \
         FASTPATH_LOG="$fastpath_template_log" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_template_intent_dir" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_template_send_script" \
-        bash "$HOOK_SCRIPT" >"$fastpath_template_stdout" 2>"$fastpath_template_stderr" <<'EOF'
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_template_stdout" 2>"$fastpath_template_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:fasttemplate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Сначала покажу шаблон навыка."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_template_status=$?
     set -e
-    if [[ "$fastpath_template_status" -eq 1 ]] && \
+    if [[ "$fastpath_template_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_template_stdout" ]] && \
        [[ ! -s "$fastpath_template_stderr" ]] && \
+       [[ -f "$fastpath_template_suppress_file" ]] && \
+       grep -Fq $'\tskill_template' "$fastpath_template_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_template_log" && \
        grep -Fq 'text=Канонический минимальный шаблон навыка:' "$fastpath_template_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must bypass the broken modify path and send the canonical skill template directly via Telegram Bot API when fastpath mode is enabled"
+        test_fail "Direct skill-template fastpath must stay handler-safe: send the canonical scaffold, return rc=0, and leave only a delivery-suppression marker"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_sparse_skill_create_into_runtime_scaffold_when_enabled"
-    local fastpath_create_tmp fastpath_create_send_script fastpath_create_log fastpath_create_stdout fastpath_create_stderr fastpath_create_status fastpath_runtime_skills_root fastpath_created_skill
+    local fastpath_create_tmp fastpath_create_send_script fastpath_create_log fastpath_create_stdout fastpath_create_stderr fastpath_create_status fastpath_runtime_skills_root fastpath_created_skill fastpath_create_intent_dir fastpath_create_suppress_file
     fastpath_create_tmp="$(secure_temp_dir telegram-safe-fastpath-create)"
     fastpath_create_send_script="$fastpath_create_tmp/send.sh"
     fastpath_create_log="$fastpath_create_tmp/send.log"
     fastpath_runtime_skills_root="$fastpath_create_tmp/skills"
     fastpath_created_skill="$fastpath_runtime_skills_root/codex-update-new-fastpath/SKILL.md"
+    fastpath_create_intent_dir="$fastpath_create_tmp/intent"
+    fastpath_create_suppress_file="$fastpath_create_intent_dir/session_fastcreate.suppress"
     cat >"$fastpath_create_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -321,23 +347,69 @@ EOF
     env PATH="$MINIMAL_PATH" \
         FASTPATH_LOG="$fastpath_create_log" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_create_intent_dir" \
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_create_send_script" \
         MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_runtime_skills_root" \
-        bash "$HOOK_SCRIPT" >"$fastpath_create_stdout" 2>"$fastpath_create_stderr" <<'EOF'
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_create_stdout" 2>"$fastpath_create_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:fastcreate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык codex-update-new-fastpath"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_create_status=$?
     set -e
-    if [[ "$fastpath_create_status" -eq 1 ]] && \
+    if [[ "$fastpath_create_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_create_stdout" ]] && \
        [[ ! -s "$fastpath_create_stderr" ]] && \
+       [[ -f "$fastpath_create_suppress_file" ]] && \
+       grep -Fq $'\tskill_create:created:codex-update-new-fastpath' "$fastpath_create_suppress_file" && \
        [[ -f "$fastpath_created_skill" ]] && \
        grep -Fq 'name: codex-update-new-fastpath' "$fastpath_created_skill" && \
        grep -Fq 'chat_id=262872984' "$fastpath_create_log" && \
        grep -Fq 'text=Создал базовый шаблон навыка `codex-update-new-fastpath`.' "$fastpath_create_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must bypass the broken modify path, create the runtime scaffold, and send the deterministic create confirmation directly via Telegram Bot API when fastpath mode is enabled"
+        test_fail "Direct sparse-create fastpath must stay handler-safe: create the scaffold, send the deterministic confirmation, return rc=0, and store only a delivery-suppression marker"
+    fi
+
+    test_start "component_before_tool_guard_suppresses_followup_tools_after_direct_fastpath_marker"
+    local direct_fastpath_tool_dir direct_fastpath_tool_output direct_fastpath_tool_marker
+    direct_fastpath_tool_dir="$(secure_temp_dir telegram-safe-direct-fastpath-tool)"
+    direct_fastpath_tool_marker="$direct_fastpath_tool_dir/session_fastcreate.suppress"
+    mkdir -p "$direct_fastpath_tool_dir"
+    printf '%s\tskill_create:created:codex-update-new-fastpath\n' "$(date +%s)" >"$direct_fastpath_tool_marker"
+    direct_fastpath_tool_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_tool_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:fastcreate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"create_skill","arguments":{"name":"codex-update-new-fastpath"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_tool_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$direct_fastpath_tool_output" && \
+       jq -e '.data.arguments.command | contains("direct fastpath already handled this reply")' >/dev/null 2>&1 <<<"$direct_fastpath_tool_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must turn follow-up tool attempts into a no-op exec when the direct fastpath already handled the Telegram-visible reply"
+    fi
+
+    test_start "component_message_sending_guard_suppresses_runtime_delivery_after_direct_fastpath"
+    local direct_fastpath_delivery_dir direct_fastpath_delivery_output direct_fastpath_delivery_marker
+    direct_fastpath_delivery_dir="$(secure_temp_dir telegram-safe-direct-fastpath-delivery)"
+    direct_fastpath_delivery_marker="$direct_fastpath_delivery_dir/session_faststatus.suppress"
+    mkdir -p "$direct_fastpath_delivery_dir"
+    printf '%s\tstatus\n' "$(date +%s)" >"$direct_fastpath_delivery_marker"
+    direct_fastpath_delivery_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_delivery_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:faststatus","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":999,"text":"Error: blocked by BeforeLLMCall hook: hook 'telegram-safe-llm-guard' blocked the action"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_delivery_output" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$direct_fastpath_delivery_output" && \
+       [[ ! -f "$direct_fastpath_delivery_marker" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must suppress the runtime's trailing reply after a successful direct fastpath instead of surfacing a second Telegram message"
     fi
 
     test_start "component_before_llm_guard_does_not_persist_stale_status_intent_for_template_followup"
