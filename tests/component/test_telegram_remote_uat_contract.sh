@@ -7,9 +7,12 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 WRAPPER_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+REMOTE_UAT_CONTRACT_ORIG_SHARED_TARGET_LOCK="__unset__"
 
 setup_remote_uat_contract_fixture() {
     TEST_TMPDIR="$(mktemp -d)"
+    REMOTE_UAT_CONTRACT_ORIG_SHARED_TARGET_LOCK="${SHARED_TARGET_LOCK-__unset__}"
+    export SHARED_TARGET_LOCK="$TEST_TMPDIR/telegram-remote-uat.lock"
     cp "$WRAPPER_SCRIPT" "$TEST_TMPDIR/telegram-e2e-on-demand.sh"
     chmod +x "$TEST_TMPDIR/telegram-e2e-on-demand.sh"
 
@@ -387,6 +390,38 @@ if [[ "$mode" == "template_live_reply_pass" ]]; then
   "status": "pass",
   "stage": "wait_reply",
   "reply_text": "Канонический минимальный шаблон навыка: ```md --- name: <skill-name> description: Базовый навык <skill-name>. Использовать, когда пользователь явно просит сценарий <skill-name>. --- # <skill-name> ## Активация Когда пользователь явно просит сценарий <skill-name> или доработку этого навыка, используй его. ## Workflow 1. Уточни цель, если для точного выполнения не хватает контекста. 2. Выполни основной сценарий навыка. 3. Верни краткий итог и предложи, как доработать навык дальше. ## Templates - TODO: добавить конкретные шаблоны под сценарий навыка. ``` Если хочешь, следующим сообщением я создам такой базовый навык по имени/slug.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "template_wrong_reply_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Навыки (3): codex-update, template-skill, telegram-learner.",
   "reply_mid": 42,
   "sent_mid": 41,
   "checks": {
@@ -1009,6 +1044,11 @@ cleanup_remote_uat_contract_fixture() {
     if [[ -n "${TEST_TMPDIR:-}" && -d "${TEST_TMPDIR:-}" ]]; then
         rm -rf "$TEST_TMPDIR"
     fi
+    if [[ "$REMOTE_UAT_CONTRACT_ORIG_SHARED_TARGET_LOCK" == "__unset__" ]]; then
+        unset SHARED_TARGET_LOCK || true
+    else
+        export SHARED_TARGET_LOCK="$REMOTE_UAT_CONTRACT_ORIG_SHARED_TARGET_LOCK"
+    fi
 }
 
 run_component_telegram_remote_uat_contract_tests() {
@@ -1263,6 +1303,24 @@ run_component_telegram_remote_uat_contract_tests() {
 	        fi
 	    else
 	        test_fail "Authoritative wrapper must pass the exact live template reply when /api/skills is available"
+	    fi
+
+	    test_start "component_telegram_remote_uat_fails_template_reply_that_does_not_match_template_contract"
+	    if TELEGRAM_WEB_STUB_MODE=template_wrong_reply_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "У тебя должен быть темплейт" \
+	        --output "$TEST_TMPDIR/result-template-wrong-reply.json" \
+	        >/dev/null 2>&1
+	    then
+	        test_fail "Authoritative wrapper must fail when a template request receives a non-template reply that lacks the deterministic scaffold contract"
+	    else
+	        if jq -e '.failure.code == "semantic_skill_template_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-template-wrong-reply.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Wrapper must classify non-template replies on template turns as semantic_skill_template_mismatch"
+	        fi
 	    fi
 
 	    test_start "component_telegram_remote_uat_fails_exact_live_friendly_doc_search_plan_even_if_helper_passes"

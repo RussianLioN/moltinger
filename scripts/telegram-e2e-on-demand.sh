@@ -816,10 +816,6 @@ evaluate_authoritative_semantics() {
     return 0
   fi
 
-  if message_is_skill_template_query "$normalized_message"; then
-    return 0
-  fi
-
   if message_is_skill_visibility_query "$normalized_message" || message_is_skill_create_query "$normalized_message"; then
     if ! skill_query_skills_json="$(fetch_authenticated_skills_json)"; then
       fail_skill_semantics_when_api_unavailable "$normalized_message" "$reply_text"
