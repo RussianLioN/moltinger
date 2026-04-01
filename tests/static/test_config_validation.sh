@@ -343,10 +343,12 @@ PY
     test_start "static_identity_prompt_prevents_skill_false_negatives_and_prefers_dedicated_skill_tools"
     if rg -Fq 'Для вопросов про навыки и skill-authoring не используй sandbox filesystem как primary truth.' "$TOML_CONFIG" && \
        rg -Fq 'Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.' "$TOML_CONFIG" && \
+       rg -Fq 'Для вопросов вида `какие у тебя навыки`, `что у тебя с навыками`, `skills?` сначала дай прямой список имён навыков' "$TOML_CONFIG" && \
+       rg -Fq 'Для такого skill visibility ответа не ограничивайся только количеством навыков' "$TOML_CONFIG" && \
        rg -Fq 'Для skill visibility/create/update/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis identity prompt must prevent skill false negatives and steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing"
+        test_fail "Primary Moltis identity prompt must prevent skill false negatives, force direct skill-name listing for visibility questions, and steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing"
     fi
 
     test_start "static_identity_prompt_forces_sparse_skill_create_to_use_minimal_scaffold_without_template_search"
@@ -438,15 +440,19 @@ PY
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
     if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'PRODUCTION_MOLTIS_URL_DEFAULT="${PRODUCTION_MOLTIS_URL_DEFAULT:-https://moltis.ainetic.tech}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'LOCAL_MOLTIS_URL_DEFAULT="${LOCAL_MOLTIS_URL_DEFAULT:-http://localhost:13131}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'MOLTIS_URL="$(resolve_moltis_url_default)"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'verification_gate_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq '*"mcp__"*)' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
+       rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'export MOLTIS_URL=http://localhost:13131' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml"; then
         test_pass
     else
-        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches"
+        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches while defaulting local live /api/skills verification to the production domain and preserving explicit localhost override in the remote workflow"
     fi
 
     test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"

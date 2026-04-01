@@ -718,6 +718,11 @@ mode="${MOLTIS_CURL_STUB_MODE:-runtime_skills_present}"
 status_code="200"
 body='{}'
 counter_file="${MOLTIS_CURL_STUB_COUNTER_FILE:-$(dirname "$0")/curl-skills-count}"
+url_log_file="${MOLTIS_CURL_URL_LOG_FILE:-}"
+
+if [[ -n "$url_log_file" && -n "$url" ]]; then
+  printf '%s\n' "$url" >> "$url_log_file"
+fi
 
 case "$url" in
   */api/auth/login)
@@ -1118,6 +1123,59 @@ run_component_telegram_remote_uat_contract_tests() {
         test_pass
     else
         test_fail "Authoritative wrapper must allow skills visibility replies that reflect live /api/skills names"
+    fi
+
+    test_start "component_telegram_remote_uat_defaults_live_skills_api_to_production_domain_for_local_authoritative_runs"
+    local production_url_log="$TEST_TMPDIR/curl-production-urls.log"
+    : > "$production_url_log"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_MODE=runtime_skills_present \
+        MOLTIS_CURL_URL_LOG_FILE="$production_url_log" \
+        TELEGRAM_WEB_STUB_MODE=skill_visibility_runtime_truth_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А что у тебя с навыками/skills?" \
+        --output "$TEST_TMPDIR/result-skill-visibility-production-default.json" \
+        >/dev/null 2>&1
+    then
+        if grep -Fqx 'https://moltis.ainetic.tech/api/auth/login' "$production_url_log" \
+            && grep -Fqx 'https://moltis.ainetic.tech/api/skills' "$production_url_log"
+        then
+            test_pass
+        else
+            test_fail "Local authoritative Telegram UAT must default live skills verification to the production Moltis domain when no explicit MOLTIS_URL override is supplied"
+        fi
+    else
+        test_fail "Local authoritative Telegram UAT should stay green while proving the production-domain default for live /api/skills verification"
+    fi
+
+    test_start "component_telegram_remote_uat_honors_explicit_moltis_url_override_for_live_skills_api"
+    local localhost_url_log="$TEST_TMPDIR/curl-localhost-urls.log"
+    : > "$localhost_url_log"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        MOLTIS_URL=http://localhost:13131 \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_MODE=runtime_skills_present \
+        MOLTIS_CURL_URL_LOG_FILE="$localhost_url_log" \
+        TELEGRAM_WEB_STUB_MODE=skill_visibility_runtime_truth_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А что у тебя с навыками/skills?" \
+        --output "$TEST_TMPDIR/result-skill-visibility-explicit-localhost.json" \
+        >/dev/null 2>&1
+    then
+        if grep -Fqx 'http://localhost:13131/api/auth/login' "$localhost_url_log" \
+            && grep -Fqx 'http://localhost:13131/api/skills' "$localhost_url_log"
+        then
+            test_pass
+        else
+            test_fail "Explicit MOLTIS_URL overrides must keep authoritative Telegram UAT on the requested live /api/skills base URL"
+        fi
+    else
+        test_fail "Authoritative Telegram UAT should allow an explicit MOLTIS_URL override while keeping live skills verification green"
     fi
 
     test_start "component_telegram_remote_uat_fails_skill_create_when_requested_skill_is_not_persisted_in_live_api"

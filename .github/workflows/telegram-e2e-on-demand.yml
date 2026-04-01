@@ -144,6 +144,7 @@ jobs:
           export TARGET_ENVIRONMENT=production
           export PRODUCTION_TRANSPORT_MODE=polling
           export SERIALIZE_SHARED_TARGET=true
+          export MOLTIS_URL=http://localhost:13131
 
           "$REMOTE_RUN_DIR/scripts/telegram-e2e-on-demand.sh" \
             --mode authoritative \

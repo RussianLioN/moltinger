@@ -28,7 +28,9 @@ AUTHORITATIVE_TARGET="${TELEGRAM_WEB_TARGET:-@moltinger_bot}"
 AUTHORITATIVE_STATE="${TELEGRAM_WEB_STATE:-/opt/moltinger/data/.telegram-web-state.json}"
 SHARED_TARGET_LOCK="${SHARED_TARGET_LOCK:-/tmp/moltinger-telegram-remote-uat.lock}"
 SERIALIZE_SHARED_TARGET="${SERIALIZE_SHARED_TARGET:-true}"
-MOLTIS_URL="${MOLTIS_URL:-http://localhost:13131}"
+MOLTIS_URL="${MOLTIS_URL:-}"
+LOCAL_MOLTIS_URL_DEFAULT="${LOCAL_MOLTIS_URL_DEFAULT:-http://localhost:13131}"
+PRODUCTION_MOLTIS_URL_DEFAULT="${PRODUCTION_MOLTIS_URL_DEFAULT:-https://moltis.ainetic.tech}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
 STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"
 SKILLS_API_ATTEMPTS="${SKILLS_API_ATTEMPTS:-5}"
@@ -109,6 +111,22 @@ now_ms() {
     return 0
   fi
   echo $(( sec * 1000 ))
+}
+
+resolve_moltis_url_default() {
+  if [[ -n "$MOLTIS_URL" ]]; then
+    printf '%s\n' "$MOLTIS_URL"
+    return 0
+  fi
+
+  case "${TARGET_ENVIRONMENT,,}" in
+    production)
+      printf '%s\n' "$PRODUCTION_MOLTIS_URL_DEFAULT"
+      ;;
+    *)
+      printf '%s\n' "$LOCAL_MOLTIS_URL_DEFAULT"
+      ;;
+  esac
 }
 
 tail_sanitized() {
@@ -1121,6 +1139,8 @@ validate_args() {
       precondition_fail "--secondary-diagnostics must be none or mtproto" "init"
       ;;
   esac
+
+  MOLTIS_URL="$(resolve_moltis_url_default)"
 }
 
 init_runtime() {

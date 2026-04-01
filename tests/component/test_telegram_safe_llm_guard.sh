@@ -93,6 +93,28 @@ EOF
         test_fail "BeforeLLMCall guard must preserve the tool budget for Telegram skill turns and inject skill-authoring guidance instead of forcing text-only mode"
     fi
 
+    test_start "component_before_llm_guard_injects_skill_visibility_override_for_runtime_skill_queries"
+    local before_llm_skill_visibility_output
+    before_llm_skill_visibility_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:abv","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages | length == 5' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[2].content | contains("Telegram-safe skill-visibility override")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[2].content | contains("Не отвечай только количеством навыков")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[4].content == "А что у тебя с навыками/skills?"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must inject a dedicated visibility override so Telegram skill-list requests enumerate runtime skill names instead of answering with a generic count"
+    fi
+
     test_start "component_before_llm_guard_replaces_history_when_session_already_contains_stale_guard"
     local before_llm_existing_guard_output
     before_llm_existing_guard_output="$(
@@ -213,6 +235,23 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress general Telegram-safe tool fallbacks and replace them with a clean user-facing fallback"
+    fi
+
+    test_start "component_after_llm_guard_rewrites_generic_skill_count_reply_to_deterministic_runtime_skill_list"
+    local after_skill_visibility_output
+    after_skill_visibility_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:skillvis","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"У меня 3 навыка. Ты спрашиваешь третий раз. Что ты хочешь сделать?","tool_calls":[],"messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_visibility_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$after_skill_visibility_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must replace generic repeated-turn skill-count replies with a deterministic runtime skill list"
     fi
 
     test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
