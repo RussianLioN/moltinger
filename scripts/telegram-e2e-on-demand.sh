@@ -260,7 +260,23 @@ message_is_skill_visibility_query() {
     return 1
   fi
 
-  if printf '%s' "$normalized" | grep -Eiq '((что|какие|какой|покажи|показать|спис(ок|ать)|list|show|what).{0,40}(навык|skills?))|((навык|skills?).{0,40}(есть|имеются|видны|доступны|available|visible))|темплейт|template'; then
+  if printf '%s' "$normalized" | grep -Eiq '((что|какие|какой|покажи|показать|спис(ок|ать)|list|show|what).{0,40}(навык|skills?))|((навык|skills?).{0,40}(есть|имеются|видны|доступны|available|visible))'; then
+    return 0
+  fi
+
+  return 1
+}
+
+message_is_skill_template_query() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if message_is_skill_create_query "$normalized"; then
+    return 1
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq 'темплейт|template|шаблон'; then
     return 0
   fi
 

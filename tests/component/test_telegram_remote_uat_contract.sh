@@ -348,6 +348,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "template_minimal_reply_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Канонический минимальный шаблон навыка: ```md --- name: <skill-name> description: Базовый навык <skill-name>. Использовать, когда пользователь явно просит этот workflow. --- ```",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "codex_update_reading_plan_pass" ]]; then
   cat <<'JSON'
 {
@@ -1139,6 +1171,24 @@ run_component_telegram_remote_uat_contract_tests() {
 	        else
 	            test_fail "Wrapper must surface the exact short 'Ищу темплейт' reply as failed authoritative outcome"
 	        fi
+	    fi
+
+	    test_start "component_telegram_remote_uat_allows_deterministic_template_reply_without_runtime_skill_visibility_semantics"
+	    if TELEGRAM_WEB_STUB_MODE=template_minimal_reply_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "У тебя должен быть темплейт" \
+	        --output "$TEST_TMPDIR/result-template-minimal-reply.json" \
+	        >/dev/null 2>&1
+	    then
+	        if jq -e '.run.verdict == "passed" and .failure == null' "$TEST_TMPDIR/result-template-minimal-reply.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Wrapper must allow a deterministic template reply without misclassifying it as skills visibility"
+	        fi
+	    else
+	        test_fail "Authoritative wrapper must pass a deterministic template reply for template requests"
 	    fi
 
 	    test_start "component_telegram_remote_uat_fails_exact_live_friendly_doc_search_plan_even_if_helper_passes"
