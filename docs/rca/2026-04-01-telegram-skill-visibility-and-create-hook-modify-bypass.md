@@ -64,6 +64,22 @@ LLM path при этом блокируется, чтобы пользовате
 
 Это не оказалось потерей skill как таковой. Это расхождение host/container path projection, которое давало ложное ощущение, что skill "создался только на словах".
 
+После live-fix всплыл ещё один ложный след в ручной диагностике:
+
+- ручной server-side запуск authoritative wrapper сначала показывал `semantic_skills_api_unavailable`;
+- буквальная проверка `POST /api/auth/login -> GET /api/skills` при этом уже возвращала `200/200`;
+- реальная причина была не в Moltis, а в операторской shell-сессии: `/opt/moltinger/.env` был только `source`-нут, но не экспортирован, поэтому дочерний `bash scripts/telegram-e2e-on-demand.sh ...` не наследовал `MOLTIS_PASSWORD`.
+
+После запуска через:
+
+```bash
+set -a
+source /opt/moltinger/.env
+set +a
+```
+
+authoritative `skills` снова стал зелёным, а authoritative `create skill` подтвердил новый навык follow-up сообщением `Навыки (4): ...`.
+
 ## Дополнительная корневая причина
 
 После первого repo-side fast-path фикса остался второй repo-side дефект:

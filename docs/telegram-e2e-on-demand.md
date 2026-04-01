@@ -73,6 +73,21 @@ gh workflow run telegram-e2e-on-demand.yml \
   --output /tmp/telegram-e2e-result.json
 ```
 
+### Важное правило для ручного server-side запуска
+
+Если authoritative wrapper запускается прямо на host shell после `source /opt/moltinger/.env`,
+нужно экспортировать переменные в дочерний процесс:
+
+```bash
+set -a
+source /opt/moltinger/.env
+set +a
+```
+
+Иначе дочерний `bash scripts/telegram-e2e-on-demand.sh ...` не увидит `MOLTIS_PASSWORD`,
+и ручная проверка может дать ложный `semantic_skills_api_unavailable`, хотя live
+`/api/auth/login -> /api/skills` на самом деле работает.
+
 С secondary MTProto diagnostics:
 
 ```bash
