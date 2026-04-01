@@ -39,8 +39,49 @@ require_bin() {
     }
 }
 
+json_escape() {
+    printf '%s' "$1" | awk '
+        BEGIN { ORS = "" }
+        {
+            gsub(/\\/, "\\\\")
+            gsub(/"/, "\\\"")
+            gsub(/\t/, "\\t")
+            gsub(/\r/, "\\r")
+            if (NR > 1) {
+                printf "\\n"
+            }
+            printf "%s", $0
+        }
+    '
+}
+
+has_working_jq() {
+    command -v jq >/dev/null 2>&1 || return 1
+    jq -nc '{}' >/dev/null 2>&1
+}
+
+validate_reply_markup_json() {
+    local value="${1:-}"
+    local compact=""
+
+    if [[ -z "$value" ]]; then
+        return 0
+    fi
+
+    if has_working_jq; then
+        jq -e 'type == "object"' >/dev/null 2>&1 <<<"$value"
+        return $?
+    fi
+
+    compact="$(
+        printf '%s' "$value" \
+            | tr '\r\n' '  ' \
+            | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+    )"
+    [[ "$compact" == \{*\} ]]
+}
+
 require_bin curl
-require_bin jq
 
 if [[ -f "$MOLTIS_ENV_FILE" ]]; then
     set -a
@@ -112,31 +153,42 @@ if [[ -z "$CHAT_ID" || -z "$TEXT" ]]; then
     exit 2
 fi
 
-if [[ -n "$REPLY_MARKUP_JSON" ]] && ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$REPLY_MARKUP_JSON"; then
+if [[ -n "$REPLY_MARKUP_JSON" ]] && ! validate_reply_markup_json "$REPLY_MARKUP_JSON"; then
     echo "{\"ok\":false,\"error\":\"--reply-markup-json must be a JSON object\",\"script\":\"$SCRIPT_NAME\"}"
     exit 2
 fi
 
-payload="$(jq -cn \
-    --arg chat_id "$CHAT_ID" \
-    --arg text "$TEXT" \
-    --arg parse_mode "$PARSE_MODE" \
-    --argjson disable_notification "$DISABLE_NOTIFICATION" \
-    --arg reply_to_message_id "$REPLY_TO" \
-    --arg reply_markup_json "$REPLY_MARKUP_JSON" \
-    '{
-        chat_id: $chat_id,
-        text: $text,
-        disable_notification: $disable_notification
-    }
-    + (if ($parse_mode|length) > 0 then {parse_mode: $parse_mode} else {} end)
-    + (if ($reply_to_message_id|length) > 0 then {reply_to_message_id: ($reply_to_message_id|tonumber)} else {} end)
-    + (if ($reply_markup_json|length) > 0 then {reply_markup: ($reply_markup_json|fromjson)} else {} end)
-    '
+if [[ -n "$REPLY_TO" && ! "$REPLY_TO" =~ ^-?[0-9]+$ ]]; then
+    echo "{\"ok\":false,\"error\":\"--reply-to must be numeric\",\"script\":\"$SCRIPT_NAME\"}"
+    exit 2
+fi
+
+payload="{"
+payload+="\"chat_id\":\"$(json_escape "$CHAT_ID")\""
+payload+=",\"text\":\"$(json_escape "$TEXT")\""
+payload+=",\"disable_notification\":$DISABLE_NOTIFICATION"
+if [[ -n "$PARSE_MODE" ]]; then
+    payload+=",\"parse_mode\":\"$(json_escape "$PARSE_MODE")\""
+fi
+if [[ -n "$REPLY_TO" ]]; then
+    payload+=",\"reply_to_message_id\":$REPLY_TO"
+fi
+if [[ -n "$REPLY_MARKUP_JSON" ]]; then
+    payload+=",\"reply_markup\":$REPLY_MARKUP_JSON"
+fi
+payload+="}"
+
+response="$(
+    curl -sS --max-time "$TELEGRAM_TIMEOUT_SECONDS" \
+        -X POST \
+        -H "content-type: application/json" \
+        -d "$payload" \
+        "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
 )"
 
-curl -sS --max-time "$TELEGRAM_TIMEOUT_SECONDS" \
-    -X POST \
-    -H "content-type: application/json" \
-    -d "$payload" \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+printf '%s\n' "$response"
+if printf '%s' "$response" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
+    exit 0
+fi
+
+exit 1

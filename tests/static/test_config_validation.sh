@@ -449,10 +449,12 @@ PY
        rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq '*"mcp__"*)' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml" && \
+       rg -Fq 'remote_env_prefix="MOLTIS_PASSWORD=${moltis_password_q} "' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml" && \
        rg -Fq 'export MOLTIS_URL=http://localhost:13131' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml"; then
         test_pass
     else
-        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches while defaulting local live /api/skills verification to the production domain and preserving explicit localhost override in the remote workflow"
+        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches while defaulting local live /api/skills verification to the production domain, passing MOLTIS_PASSWORD through workflow dispatch, and preserving explicit localhost override in the remote workflow"
     fi
 
     test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"

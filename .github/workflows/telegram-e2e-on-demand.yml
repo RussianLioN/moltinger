@@ -75,6 +75,7 @@ jobs:
         id: remote_uat
         shell: bash
         env:
+          MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}
           TELEGRAM_TEST_API_ID: ${{ secrets.TELEGRAM_TEST_API_ID }}
           TELEGRAM_TEST_API_HASH: ${{ secrets.TELEGRAM_TEST_API_HASH }}
           TELEGRAM_TEST_SESSION: ${{ secrets.TELEGRAM_TEST_SESSION }}
@@ -104,12 +105,16 @@ jobs:
           upload_debug_q="$(printf '%q' "${{ inputs.upload_restricted_debug }}")"
 
           remote_env_prefix=""
+          if [[ -n "${MOLTIS_PASSWORD:-}" ]]; then
+            moltis_password_q="$(printf '%q' "${MOLTIS_PASSWORD}")"
+            remote_env_prefix="MOLTIS_PASSWORD=${moltis_password_q} "
+          fi
           if [[ "$secondary_mode" == "mtproto" ]]; then
             api_id_q="$(printf '%q' "${TELEGRAM_TEST_API_ID}")"
             api_hash_q="$(printf '%q' "${TELEGRAM_TEST_API_HASH}")"
             session_q="$(printf '%q' "${TELEGRAM_TEST_SESSION}")"
             bot_username_q="$(printf '%q' "${TELEGRAM_TEST_BOT_USERNAME}")"
-            remote_env_prefix="TELEGRAM_TEST_API_ID=${api_id_q} TELEGRAM_TEST_API_HASH=${api_hash_q} TELEGRAM_TEST_SESSION=${session_q} TELEGRAM_TEST_BOT_USERNAME=${bot_username_q} "
+            remote_env_prefix="${remote_env_prefix}TELEGRAM_TEST_API_ID=${api_id_q} TELEGRAM_TEST_API_HASH=${api_hash_q} TELEGRAM_TEST_SESSION=${session_q} TELEGRAM_TEST_BOT_USERNAME=${bot_username_q} "
           fi
 
           ssh "${{ env.SSH_USER }}@${{ env.SSH_HOST }}" "mkdir -p $(printf '%q' "$REMOTE_RUN_DIR/scripts")"
