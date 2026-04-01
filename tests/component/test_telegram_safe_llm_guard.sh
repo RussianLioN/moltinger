@@ -93,7 +93,7 @@ EOF
         test_fail "BeforeLLMCall guard must preserve the tool budget for Telegram skill turns and inject skill-authoring guidance instead of forcing text-only mode"
     fi
 
-    test_start "component_before_llm_guard_injects_skill_visibility_override_for_runtime_skill_queries"
+    test_start "component_before_llm_guard_hard_overrides_skill_visibility_queries_to_deterministic_runtime_list"
     local before_llm_skill_visibility_output
     before_llm_skill_visibility_output="$(
         env PATH="$MINIMAL_PATH" \
@@ -103,16 +103,14 @@ EOF
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.messages | length == 5' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.messages[2].content | contains("Telegram-safe skill-visibility override")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.messages[2].content | contains("Не отвечай только количеством навыков")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
-       jq -e '.data.messages[4].content == "А что у тебя с навыками/skills?"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output"; then
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-visibility hard override")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[0].content | contains("Навыки (3): codex-update, post-close-task-classifier, telegram-learner.")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must inject a dedicated visibility override so Telegram skill-list requests enumerate runtime skill names instead of answering with a generic count"
+        test_fail "BeforeLLMCall guard must hard-override Telegram skill-visibility turns into a deterministic text-only runtime skill list"
     fi
 
     test_start "component_before_llm_guard_replaces_history_when_session_already_contains_stale_guard"

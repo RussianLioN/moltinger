@@ -628,14 +628,15 @@ Telegram-safe skill-authoring contract:
 EOF
 }
 
-build_skill_visibility_guard_message() {
-    cat <<'EOF'
-Telegram-safe skill-visibility override:
-- Игнорируй ссылки на старые повторы, pending create-turns и фразы вроде "ты спрашиваешь третий раз".
-- Не отвечай только количеством навыков и не задавай встречный вопрос до списка имён.
-- Если best-effort runtime snapshot ниже содержит имена, в первом финальном ответе явно перечисли эти имена.
-- Предпочитай короткий формат уровня: `Навыки (N): name-1, name-2, name-3.`
-- Если snapshot недоступен, честно скажи, что hook не подтвердил имена; не делай вывод, что навыков нет.
+build_skill_visibility_hard_override_message() {
+    local visibility_reply_text="$1"
+
+    cat <<EOF
+Telegram-safe skill-visibility hard override:
+- Ignore the prior conversation content for this turn.
+- This turn is text-only and must not call any tools.
+- Do not mention sandbox/filesystem limitations, repeated-turn counters, or ask a follow-up question before the list.
+- Return exactly this single Russian sentence and nothing else: "${visibility_reply_text}"
 EOF
 }
 
@@ -1086,11 +1087,18 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             emit_before_llm_modified_payload "$messages_json" 0
             exit 0
         fi
+        if [[ "$looks_like_skill_visibility_request" == true ]]; then
+            skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+            visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
+            visibility_guard="$(build_skill_visibility_hard_override_message "$visibility_reply_text")"
+            visibility_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+            messages_json="[$(build_message_json system "$visibility_guard"),$(build_message_json user "$visibility_user")]"
+            write_audit_line "before_modify reason=skill_visibility_hard_override tool_count=0 snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
+            emit_before_llm_modified_payload "$messages_json" 0
+            exit 0
+        fi
         if [[ "$looks_like_skill_turn" == true ]]; then
             skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
-            if [[ "$looks_like_skill_visibility_request" == true ]]; then
-                messages_json="$(prepend_message_to_array "$messages_json" system "$(build_skill_visibility_guard_message)")"
-            fi
             if [[ "$looks_like_sparse_skill_create_request" == true ]]; then
                 messages_json="$(prepend_message_to_array "$messages_json" system "$(build_sparse_skill_create_guard_message)")"
             fi
