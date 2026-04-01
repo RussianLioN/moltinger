@@ -959,7 +959,6 @@ suppress_file_path() {
 
     printf '%s/%s.suppress' "$INTENT_DIR" "$safe_key"
 }
-
 persist_safe_lane_marker() {
     local raw_key="${1:-}"
     local lane_file=""
@@ -3401,6 +3400,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 fi
 
+canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
+
 if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     if [[ -n "$effective_delivery_suppression" ]]; then
         synthetic_command="$(build_exec_heredoc_command "Telegram-safe direct fastpath already handled this reply.")"
@@ -3480,7 +3481,6 @@ fi
 if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$current_turn_skill_detail_request" != true && -z "$persisted_skill_detail_name" && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
-
 if [[ "$looks_like_status" == true ]]; then
     write_audit_line "emit_modify event=$event reason=status"
     if [[ "$event" == "AfterLLMCall" ]]; then
