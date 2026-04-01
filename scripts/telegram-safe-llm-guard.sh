@@ -678,6 +678,16 @@ sanitize_intent_key() {
         | cut -c1-120
 }
 
+lane_file_path() {
+    local raw_key="${1:-}"
+    local safe_key=""
+
+    safe_key="$(sanitize_intent_key "$raw_key" || true)"
+    [[ -n "$safe_key" ]] || return 1
+
+    printf '%s/%s.lane' "$INTENT_DIR" "$safe_key"
+}
+
 intent_file_path() {
     local raw_key="${1:-}"
     local safe_key=""
@@ -686,6 +696,44 @@ intent_file_path() {
     [[ -n "$safe_key" ]] || return 1
 
     printf '%s/%s.intent' "$INTENT_DIR" "$safe_key"
+}
+
+persist_safe_lane_marker() {
+    local raw_key="${1:-}"
+    local lane_file=""
+
+    [[ -n "$raw_key" ]] || return 0
+
+    lane_file="$(lane_file_path "$raw_key" || true)"
+    [[ -n "$lane_file" ]] || return 0
+
+    mkdir -p "$INTENT_DIR" 2>/dev/null || true
+    printf '%s\n' "$(date +%s)" >"$lane_file" 2>/dev/null || true
+}
+
+safe_lane_marker_is_fresh() {
+    local raw_key="${1:-}"
+    local lane_file=""
+    local stored_epoch=""
+    local now_epoch=0
+    local age_sec=0
+
+    [[ -n "$raw_key" ]] || return 1
+
+    lane_file="$(lane_file_path "$raw_key" || true)"
+    [[ -n "$lane_file" && -f "$lane_file" ]] || return 1
+
+    IFS= read -r stored_epoch <"$lane_file" || return 1
+    [[ "$stored_epoch" =~ ^[0-9]+$ ]] || return 1
+
+    now_epoch="$(date +%s)"
+    age_sec=$((now_epoch - stored_epoch))
+    if (( age_sec < 0 || age_sec > INTENT_TTL_SEC )); then
+        rm -f "$lane_file" 2>/dev/null || true
+        return 1
+    fi
+
+    return 0
 }
 
 persist_turn_intent() {
@@ -1129,18 +1177,37 @@ build_exec_heredoc_command() {
 }
 
 emit_before_tool_modified_payload() {
-    local tool_name_fragment="$1"
+    local tool_name="$1"
     local arguments_json="$2"
     local data_object_json modified_data_json
+    local tool_field_fragment=""
+    local tool_name_field_fragment=""
 
-    data_object_json="$(extract_json_object data || true)"
-    if [[ -z "$data_object_json" ]]; then
-        return 1
+    if [[ -n "$tool_name" ]]; then
+        tool_field_fragment="$(json_string_field tool "$tool_name")"
+        tool_name_field_fragment="$(json_string_field tool_name "$tool_name")"
     fi
 
-    modified_data_json="$(filter_top_level_object_fields "$data_object_json" tool arguments)"
-    if [[ -n "$tool_name_fragment" ]]; then
-        modified_data_json="$(append_field_to_object "$modified_data_json" "$tool_name_fragment")"
+    data_object_json="$(extract_json_object data || true)"
+    if [[ -n "$data_object_json" ]]; then
+        modified_data_json="$(filter_top_level_object_fields "$data_object_json" tool tool_name arguments)"
+        if [[ -n "$tool_field_fragment" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$tool_field_fragment")"
+        fi
+        if [[ -n "$tool_name_field_fragment" ]]; then
+            modified_data_json="$(append_field_to_object "$modified_data_json" "$tool_name_field_fragment")"
+        fi
+        modified_data_json="$(append_field_to_object "$modified_data_json" "\"arguments\":$arguments_json")"
+        printf '{"action":"modify","data":%s}\n' "$modified_data_json"
+        return
+    fi
+
+    modified_data_json="$(filter_top_level_object_fields "$payload" event tool tool_name arguments)"
+    if [[ -n "$tool_field_fragment" ]]; then
+        modified_data_json="$(append_field_to_object "$modified_data_json" "$tool_field_fragment")"
+    fi
+    if [[ -n "$tool_name_field_fragment" ]]; then
+        modified_data_json="$(append_field_to_object "$modified_data_json" "$tool_name_field_fragment")"
     fi
     modified_data_json="$(append_field_to_object "$modified_data_json" "\"arguments\":$arguments_json")"
     printf '{"action":"modify","data":%s}\n' "$modified_data_json"
@@ -1336,6 +1403,9 @@ if [[ -z "$turn_session_key" ]]; then
     turn_session_key="$(extract_first_string session_id || true)"
 fi
 tool_name="$(extract_first_string tool || true)"
+if [[ -z "$tool_name" ]]; then
+    tool_name="$(extract_first_string tool_name || true)"
+fi
 command_arg="$(extract_first_string command || true)"
 messages_json="$(extract_json_array messages || true)"
 latest_user_message="$(extract_last_message_content_by_role "${messages_json:-}" user || true)"
@@ -1364,6 +1434,13 @@ if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-t
 fi
 if [[ "${account_id:-}" == "moltis-bot" || "${channel_account:-}" == "moltis-bot" ]]; then
     is_telegram_safe_lane=true
+fi
+if [[ "$is_telegram_safe_lane" != true ]] && safe_lane_marker_is_fresh "${turn_session_key:-}"; then
+    is_telegram_safe_lane=true
+    write_audit_line "safe_lane_restored source=marker session=${turn_session_key:-missing}"
+fi
+if [[ "$is_telegram_safe_lane" == true ]]; then
+    persist_safe_lane_marker "${turn_session_key:-}"
 fi
 
 if [[ "$event" != "BeforeLLMCall" && "$event" != "AfterLLMCall" && "$event" != "BeforeToolCall" && "$event" != "MessageSending" ]]; then
@@ -1410,7 +1487,10 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
 fi
 
 looks_like_status=false
-if printf '%s' "$payload_flat" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|параметр[[:space:]]*\||канал: telegram|провайдер:|режим: safe-text|модель: custom-zai-telegram-safe::glm-5'; then
+if printf '%s' "${intent_text_flat} ${user_message_flat} ${latest_user_message_flat} ${response_text_flat} ${payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|параметр[[:space:]]*\||канал: telegram|провайдер:|режим: safe-text|модель: custom-zai-telegram-safe::glm-5'; then
+    looks_like_status=true
+fi
+if [[ "$persisted_turn_intent" == "status" ]]; then
     looks_like_status=true
 fi
 
@@ -1532,7 +1612,9 @@ fi
 if [[ "$event" == "BeforeLLMCall" ]]; then
     next_turn_intent=""
     next_turn_skill_create_state=""
-    if [[ "$looks_like_skill_visibility_request" == true ]]; then
+    if [[ "$looks_like_status" == true ]]; then
+        next_turn_intent="status"
+    elif [[ "$looks_like_skill_visibility_request" == true ]]; then
         next_turn_intent="skill_visibility"
     elif [[ "$looks_like_skill_template_request" == true ]]; then
         next_turn_intent="skill_template"
@@ -1622,8 +1704,17 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 fi
 
+canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
+
 if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     if tool_name_is_allowlisted "$tool_name"; then
+        exit 0
+    fi
+
+    if [[ "$looks_like_status" == true ]] && [[ "$tool_name" =~ ^(sessions_list|nodes_list|process|cron)$ ]]; then
+        synthetic_command="$(build_exec_heredoc_command "$canonical_status")"
+        write_audit_line "emit_modify event=$event reason=status_tool_rewrite tool=$tool_name"
+        emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
         exit 0
     fi
 
@@ -1632,7 +1723,7 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
         skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
         synthetic_command="$(build_exec_heredoc_command "$(build_skill_probe_result_text "$skill_snapshot_csv")")"
         write_audit_line "emit_modify event=$event reason=skill_exec_probe tool=$tool_name"
-        emit_before_tool_modified_payload '"tool":"exec"' "{\"command\":\"$(json_escape "$synthetic_command")\"}"
+        emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
         exit 0
     fi
 fi
@@ -1640,8 +1731,6 @@ fi
 if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
-
-canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
 
 if [[ "$looks_like_status" == true ]]; then
     write_audit_line "emit_modify event=$event reason=status"

@@ -323,6 +323,61 @@ EOF
         test_fail "BeforeToolCall guard must also rewrite quoted exec skill probes whose command strings contain escaped quotes"
     fi
 
+    test_start "component_before_tool_guard_restores_safe_lane_for_top_level_tool_name_payload"
+    local top_level_tool_intent_dir before_tool_top_level_output
+    top_level_tool_intent_dir="$(secure_temp_dir telegram-safe-before-tool-top-level)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$top_level_tool_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:tooltop","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+EOF
+    before_tool_top_level_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$top_level_tool_intent_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:tooltop","tool_name":"exec","arguments":{"command":"ls -la /home/moltis/.moltis/skills/"}}
+EOF
+    )"
+    rm -rf "$top_level_tool_intent_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_top_level_output" && \
+       jq -e '.data.session_key == "session:tooltop"' >/dev/null 2>&1 <<<"$before_tool_top_level_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_top_level_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_top_level_output" && \
+       jq -e '.data.arguments.command | contains("Telegram-safe runtime note for skills")' >/dev/null 2>&1 <<<"$before_tool_top_level_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must restore Telegram-safe lane from the persisted marker and rewrite live top-level tool_name payloads"
+    fi
+
+    test_start "component_before_tool_guard_rewrites_status_tool_from_top_level_tool_name_payload"
+    local top_level_status_intent_dir before_tool_status_output
+    top_level_status_intent_dir="$(secure_temp_dir telegram-safe-before-tool-status)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$top_level_status_intent_dir" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:toolstatus","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
+EOF
+    before_tool_status_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$top_level_status_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:toolstatus","tool_name":"sessions_list","arguments":{"limit":10}}
+EOF
+    )"
+    rm -rf "$top_level_status_intent_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_status_output" && \
+       jq -e '.data.session_key == "session:toolstatus"' >/dev/null 2>&1 <<<"$before_tool_status_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_status_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_status_output" && \
+       jq -e '.data.arguments.command | contains("Статус: Online")' >/dev/null 2>&1 <<<"$before_tool_status_output" && \
+       jq -e '.data.arguments.command | contains("Режим: safe-text")' >/dev/null 2>&1 <<<"$before_tool_status_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must rewrite top-level status tools like sessions_list after restoring the persisted Telegram-safe status intent"
+    fi
+
     test_start "component_before_tool_guard_allows_create_skill_passthrough"
     local before_tool_create_output
     before_tool_create_output="$(
