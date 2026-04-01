@@ -361,6 +361,32 @@ EOF
         test_fail "AfterLLMCall guard must rewrite the observed config-without-files create-prompt phrase to the canonical runtime skill list even when the runtime omits current-turn context"
     fi
 
+    test_start "component_after_llm_guard_reuses_persisted_skill_visibility_intent_when_runtime_omits_turn_context"
+    local persisted_intent_dir after_skill_visibility_persisted_output
+    persisted_intent_dir="$(mktemp -d)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_dir" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skillpersist-after","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+EOF
+    after_skill_visibility_persisted_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:skillpersist-after","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"3 навыка. Создать новый?","tool_calls":[]}}
+EOF
+    )"
+    rm -rf "$persisted_intent_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_persisted_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_visibility_persisted_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$after_skill_visibility_persisted_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must reuse the persisted skill-visibility intent when the runtime drops turn context and leaves only a short generic prompt"
+    fi
+
     test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
     local after_skill_tool_output
     after_skill_tool_output="$(
@@ -706,6 +732,34 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must rewrite the observed config-without-files create-prompt phrase even when the runtime omits both messages[] and user_message"
+    fi
+
+    test_start "component_message_sending_guard_reuses_persisted_skill_visibility_intent_when_delivery_payload_omits_turn_context"
+    local persisted_intent_send_dir message_sending_skill_visibility_persisted_output
+    persisted_intent_send_dir="$(mktemp -d)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_send_dir" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skillpersist-send","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+EOF
+    message_sending_skill_visibility_persisted_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_send_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:skillpersist-send","data":{"account_id":"moltis-bot","to":"262872987","reply_to_message_id":958,"text":"3 навыка. Создать новый?"}}
+EOF
+    )"
+    rm -rf "$persisted_intent_send_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_persisted_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_persisted_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_persisted_output" && \
+       jq -e '.data.to == "262872987"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_persisted_output" && \
+       jq -e '.data.reply_to_message_id == 958' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_persisted_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must reuse the persisted skill-visibility intent when delivery omits both messages[] and user_message and leaves only a short generic prompt"
     fi
 
     test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"

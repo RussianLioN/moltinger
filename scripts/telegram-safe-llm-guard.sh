@@ -7,6 +7,8 @@ if [[ -z "${payload:-}" ]]; then
 fi
 
 AUDIT_FILE="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE:-}"
+INTENT_DIR="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR:-/tmp/moltis-telegram-safe-llm-guard-intent}"
+INTENT_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_TTL_SEC:-900}"
 
 write_audit_line() {
     local message="$1"
@@ -665,6 +667,80 @@ extract_last_message_content_by_role() {
     '
 }
 
+sanitize_intent_key() {
+    local raw_key="${1:-}"
+
+    [[ -n "$raw_key" ]] || return 1
+
+    printf '%s' "$raw_key" \
+        | tr -cs 'A-Za-z0-9._-' '_' \
+        | sed -E 's/^_+//; s/_+$//' \
+        | cut -c1-120
+}
+
+intent_file_path() {
+    local raw_key="${1:-}"
+    local safe_key=""
+
+    safe_key="$(sanitize_intent_key "$raw_key" || true)"
+    [[ -n "$safe_key" ]] || return 1
+
+    printf '%s/%s.intent' "$INTENT_DIR" "$safe_key"
+}
+
+persist_turn_intent() {
+    local raw_key="${1:-}"
+    local intent_name="${2:-}"
+    local intent_file=""
+
+    [[ -n "$raw_key" && -n "$intent_name" ]] || return 0
+
+    intent_file="$(intent_file_path "$raw_key" || true)"
+    [[ -n "$intent_file" ]] || return 0
+
+    mkdir -p "$INTENT_DIR" 2>/dev/null || true
+    printf '%s\t%s\n' "$(date +%s)" "$intent_name" >"$intent_file" 2>/dev/null || true
+    write_audit_line "intent_set key=$(basename "$intent_file") intent=$intent_name"
+}
+
+load_turn_intent() {
+    local raw_key="${1:-}"
+    local intent_file=""
+    local stored_epoch=""
+    local stored_intent=""
+    local now_epoch=0
+    local age_sec=0
+
+    [[ -n "$raw_key" ]] || return 1
+
+    intent_file="$(intent_file_path "$raw_key" || true)"
+    [[ -n "$intent_file" && -f "$intent_file" ]] || return 1
+
+    IFS=$'\t' read -r stored_epoch stored_intent <"$intent_file" || return 1
+    [[ "$stored_epoch" =~ ^[0-9]+$ && -n "$stored_intent" ]] || return 1
+
+    now_epoch="$(date +%s)"
+    age_sec=$((now_epoch - stored_epoch))
+    if (( age_sec < 0 || age_sec > INTENT_TTL_SEC )); then
+        rm -f "$intent_file" 2>/dev/null || true
+        return 1
+    fi
+
+    printf '%s' "$stored_intent"
+}
+
+clear_turn_intent() {
+    local raw_key="${1:-}"
+    local intent_file=""
+
+    [[ -n "$raw_key" ]] || return 0
+
+    intent_file="$(intent_file_path "$raw_key" || true)"
+    [[ -n "$intent_file" ]] || return 0
+
+    rm -f "$intent_file" 2>/dev/null || true
+}
+
 discover_runtime_skill_names_csv() {
     local csv_override="${MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES:-}"
     local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
@@ -1103,6 +1179,10 @@ model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
 response_text="$(extract_first_string text || true)"
 user_message="$(extract_first_string user_message || true)"
+turn_session_key="$(extract_first_string session_key || true)"
+if [[ -z "$turn_session_key" ]]; then
+    turn_session_key="$(extract_first_string session_id || true)"
+fi
 tool_name="$(extract_first_string tool || true)"
 command_arg="$(extract_first_string command || true)"
 messages_json="$(extract_json_array messages || true)"
@@ -1114,6 +1194,7 @@ user_message_flat="$(flatten_text_for_match "${user_message:-}")"
 latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
 latest_assistant_message_flat="$(flatten_text_for_match "${latest_assistant_message:-}")"
 intent_text_flat="${latest_user_message_flat:-${user_message_flat:-$payload_flat}}"
+persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
 
 write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
 
@@ -1201,6 +1282,9 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((какие|что|что у т
         looks_like_skill_visibility_request=true
     fi
 fi
+if [[ "$persisted_turn_intent" == "skill_visibility" ]]; then
+    looks_like_skill_visibility_request=true
+fi
 
 looks_like_sparse_skill_create_request=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|сдела(й|ем|ть)|create|build|make).{0,120}(навык|skills?|skill))|((create|build|make)[[:space:]]+[A-Za-z0-9._-]+[[:space:]]+(skill|навык))'; then
@@ -1262,6 +1346,11 @@ elif [[ "$is_telegram_safe_lane" != true ]]; then
 fi
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
+    if [[ "$looks_like_skill_visibility_request" == true ]]; then
+        persist_turn_intent "${turn_session_key:-}" "skill_visibility"
+    else
+        clear_turn_intent "${turn_session_key:-}"
+    fi
     if [[ -n "${messages_json:-}" ]]; then
         if [[ "$looks_like_broad_research_request" == true ]]; then
             # Hard override broad doc-study turns so the provider never sees the
