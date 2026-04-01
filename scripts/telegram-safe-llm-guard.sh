@@ -1669,6 +1669,12 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|д�
 fi
 looks_like_sparse_skill_create_request="$current_turn_sparse_skill_create_request"
 
+if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_delivery_suppression" ]]; then
+    write_audit_line "suppress_clear reason=new_user_turn token=$persisted_delivery_suppression"
+    clear_delivery_suppression "${turn_session_key:-}"
+    persisted_delivery_suppression=""
+fi
+
 requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
 requested_skill_name_re=""
 if [[ -n "$requested_skill_name" ]]; then

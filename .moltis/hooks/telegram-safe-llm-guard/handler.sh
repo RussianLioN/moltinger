@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_PATH="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT:-/server/scripts/telegram-safe-llm-guard.sh}"
 if [[ ! -x "$SCRIPT_PATH" ]]; then
     HANDLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    FALLBACK_SCRIPT_PATH="$(cd "$HANDLER_DIR/../../../scripts" && pwd)/telegram-safe-llm-guard.sh"
+    FALLBACK_SCRIPT_PATH="$HANDLER_DIR/../../../scripts/telegram-safe-llm-guard.sh"
     if [[ -x "$FALLBACK_SCRIPT_PATH" ]]; then
         SCRIPT_PATH="$FALLBACK_SCRIPT_PATH"
     fi

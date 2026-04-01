@@ -412,6 +412,26 @@ EOF
         test_fail "MessageSending guard must suppress the runtime's trailing reply after a successful direct fastpath instead of surfacing a second Telegram message"
     fi
 
+    test_start "component_before_llm_guard_clears_stale_direct_fastpath_suppression_on_new_user_turn"
+    local stale_direct_fastpath_dir stale_direct_fastpath_marker stale_direct_fastpath_output
+    stale_direct_fastpath_dir="$(secure_temp_dir telegram-safe-stale-direct-fastpath)"
+    stale_direct_fastpath_marker="$stale_direct_fastpath_dir/session_plain-followup.suppress"
+    mkdir -p "$stale_direct_fastpath_dir"
+    printf '%s\tstatus\n' "$(date +%s)" >"$stale_direct_fastpath_marker"
+    stale_direct_fastpath_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_direct_fastpath_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:plain-followup","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Привет"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_direct_fastpath_output" && \
+       [[ ! -f "$stale_direct_fastpath_marker" ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must clear stale direct-fastpath suppression at the start of a new user turn so the next normal reply is not silenced"
+    fi
+
     test_start "component_before_llm_guard_does_not_persist_stale_status_intent_for_template_followup"
     local stale_status_template_dir stale_status_template_output stale_status_template_intent
     stale_status_template_dir="$(secure_temp_dir telegram-safe-stale-status-template)"
