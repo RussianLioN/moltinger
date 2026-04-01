@@ -1106,6 +1106,22 @@ build_skill_create_hard_override_message() {
     build_text_only_hard_override_message "Telegram-safe skill-create hard override" "$reply_text"
 }
 
+build_skill_apply_reply_text() {
+    local skill_name="${1:-}"
+
+    if [[ -n "$skill_name" ]]; then
+        printf 'В Telegram-safe режиме я не запускаю навык `%s` через инструменты. Могу кратко объяснить, что делает этот навык, или продолжить в web UI/операторской сессии.' "$skill_name"
+        return 0
+    fi
+
+    printf '%s' 'В Telegram-safe режиме я не запускаю навыки через инструменты. Могу кратко объяснить, что делает нужный навык, или продолжить в web UI/операторской сессии.'
+}
+
+build_skill_apply_hard_override_message() {
+    local reply_text="$1"
+    build_text_only_hard_override_message "Telegram-safe skill-apply hard override" "$reply_text"
+}
+
 build_skill_template_hard_override_message() {
     local reply_text="$1"
     build_text_only_hard_override_message "Telegram-safe skill-template hard override" "$reply_text"
@@ -1533,11 +1549,11 @@ write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} mod
 
 is_telegram_safe_lane=false
 case "${model:-}" in
-    custom-zai-telegram-safe::*)
+    custom-zai-telegram-safe::*|openai-codex::*)
         is_telegram_safe_lane=true
         ;;
 esac
-if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-telegram-safe" ]]; then
+if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-telegram-safe" || "${provider:-}" == "openai-codex" ]]; then
     is_telegram_safe_lane=true
 fi
 if [[ "${account_id:-}" == "moltis-bot" || "${channel_account:-}" == "moltis-bot" ]]; then
@@ -1601,7 +1617,7 @@ fi
 
 looks_like_observed_status_reply=false
 if [[ ( "$event" == "AfterLLMCall" || "$event" == "MessageSending" ) && -z "$status_query_text_flat" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|активность:|канал: telegram|провайдер:|режим: safe-text|модель: custom-zai-telegram-safe::glm-5'; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|активность:|канал: telegram|провайдер:|режим: safe-text|модель: (custom-zai-telegram-safe::glm-5|openai-codex::gpt-5\.4)'; then
     looks_like_observed_status_reply=true
 fi
 
@@ -1668,6 +1684,12 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|д�
     fi
 fi
 looks_like_sparse_skill_create_request="$current_turn_sparse_skill_create_request"
+
+current_turn_skill_apply_request=false
+if printf '%s' "$intent_text_flat" | grep -Eiq '((примен(и|ить|им)|используй|использовать|запуст(и|ить|им)|активир(уй|овать)|apply|use|run).{0,120}(навык|skills?|skill))|((навык|skills?|skill).{0,120}(примен(и|ить|им)|используй|запуст(и|ить|им)|активир(уй|овать)|apply|use|run))'; then
+    current_turn_skill_apply_request=true
+    looks_like_skill_turn=true
+fi
 
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_delivery_suppression" ]]; then
     write_audit_line "suppress_clear reason=new_user_turn token=$persisted_delivery_suppression"
@@ -1747,7 +1769,7 @@ elif [[ "$is_telegram_safe_lane" != true ]]; then
     exit 0
 fi
 
-canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text'
+canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text'
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
     telegram_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
@@ -1830,6 +1852,16 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             fi
             write_audit_line "direct_fastpath_failed kind=skill_create chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing} state=${next_turn_skill_create_state:-missing}"
         fi
+        if [[ "$current_turn_skill_apply_request" == true ]]; then
+            apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
+            if [[ -n "$apply_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$apply_reply_text"; then
+                write_audit_line "direct_fastpath kind=skill_apply chat_id=$telegram_chat_id skill=${requested_skill_name:-missing}"
+                persist_delivery_suppression "${turn_session_key:-}" "skill_apply:${requested_skill_name:-generic}"
+                clear_turn_intent "${turn_session_key:-}"
+                exit 0
+            fi
+            write_audit_line "direct_fastpath_failed kind=skill_apply chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing}"
+        fi
     fi
 
     if [[ -n "${messages_json:-}" ]]; then
@@ -1870,6 +1902,17 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             write_audit_line "before_modify reason=skill_create_hard_override tool_count=0 skill=$requested_skill_name state=$next_turn_skill_create_state"
             emit_before_llm_modified_payload "$messages_json" 0
             exit 0
+        fi
+        if [[ "$current_turn_skill_apply_request" == true ]]; then
+            apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
+            if [[ -n "$apply_reply_text" ]]; then
+                apply_guard="$(build_skill_apply_hard_override_message "$apply_reply_text")"
+                apply_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+                messages_json="[$(build_message_json system "$apply_guard"),$(build_message_json user "$apply_user")]"
+                write_audit_line "before_modify reason=skill_apply_hard_override tool_count=0 skill=${requested_skill_name:-missing}"
+                emit_before_llm_modified_payload "$messages_json" 0
+                exit 0
+            fi
         fi
         if [[ "$looks_like_skill_turn" == true ]]; then
             skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"

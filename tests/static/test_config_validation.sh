@@ -196,10 +196,10 @@ PY
     test_start "static_identity_prompt_makes_telegram_status_deterministic_and_tool_free"
     if rg -Fq 'Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.' "$TOML_CONFIG" && \
        rg -Fq 'Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search, MCP и другие tool calls' "$TOML_CONFIG" && \
-       rg -Fq 'всегда указывай канонический model id `custom-zai-telegram-safe::glm-5` именно целиком' "$TOML_CONFIG" && \
-       rg -Fq 'Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай' "$TOML_CONFIG" && \
+       rg -Fq 'всегда указывай канонический model id `openai-codex::gpt-5.4` именно целиком' "$TOML_CONFIG" && \
+       rg -Fq 'Строку `Модель: openai-codex::gpt-5.4` в exact `/status` не опускай' "$TOML_CONFIG" && \
        rg -Fq 'Для `/status` в Telegram не перечисляй skills, не проверяй tmux/cron/runtime вручную и не импровизируй свободный обзор состояния.' "$TOML_CONFIG" && \
-       rg -Fq 'Для `/status` в Telegram отвечай только коротким финальным статусом в стабильном формате: Время, Сессия, Канал, Модель, Sandbox, затем одна короткая итоговая строка.' "$TOML_CONFIG"; then
+       rg -Fq 'Для `/status` в Telegram отвечай только пятью строками и ничем больше:' "$TOML_CONFIG"; then
         test_pass
     else
         test_fail "Primary Moltis identity prompt must make Telegram /status deterministic, tool-free, and pinned to the canonical Telegram-safe model id"
@@ -228,19 +228,16 @@ with path.open('rb') as fh:
 
 providers = config.get('providers', {})
 telegram = config.get('channels', {}).get('telegram', {}).get('moltis-bot', {})
-default_zai = providers.get('openai', {})
-safe_lane = providers.get('custom-zai-telegram-safe', {})
+safe_lane = providers.get('openai-codex', {})
 
 conditions = [
     safe_lane.get('enabled') is True,
     safe_lane.get('tool_mode') == 'auto',
-    safe_lane.get('model') == 'glm-5',
-    safe_lane.get('models') == ['glm-5'],
-    safe_lane.get('alias') == 'zai-telegram-safe',
-    safe_lane.get('api_key') == default_zai.get('api_key'),
-    safe_lane.get('base_url') == default_zai.get('base_url'),
-    telegram.get('model') == 'custom-zai-telegram-safe::glm-5',
-    telegram.get('model_provider') == 'custom-zai-telegram-safe',
+    safe_lane.get('model') == 'gpt-5.4',
+    safe_lane.get('models') == ['gpt-5.4'],
+    safe_lane.get('alias') == 'openai-codex',
+    telegram.get('model') == 'openai-codex::gpt-5.4',
+    telegram.get('model_provider') == 'openai-codex',
 ]
 
 raise SystemExit(0 if all(conditions) else 1)
@@ -439,7 +436,7 @@ PY
     fi
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
-    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+    if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'PRODUCTION_MOLTIS_URL_DEFAULT="${PRODUCTION_MOLTIS_URL_DEFAULT:-https://moltis.ainetic.tech}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'LOCAL_MOLTIS_URL_DEFAULT="${LOCAL_MOLTIS_URL_DEFAULT:-http://localhost:13131}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'MOLTIS_URL="$(resolve_moltis_url_default)"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
@@ -486,10 +483,10 @@ PY
     if rg -Fq 'В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты' "$TOML_CONFIG" && \
        rg -Fq 'Если Telegram/DM запрос требует внешнего исследования, чтения курса или документации целиком' "$TOML_CONFIG" && \
        rg -Fq 'Для команды `/status` в Telegram/DM никогда не используй инструменты' "$TOML_CONFIG" && \
-       rg -Fq 'Модель: custom-zai-telegram-safe::glm-5' "$TOML_CONFIG" && \
-       rg -Fq 'Провайдер: custom-zai-telegram-safe' "$TOML_CONFIG" && \
+       rg -Fq 'Модель: openai-codex::gpt-5.4' "$TOML_CONFIG" && \
+       rg -Fq 'Провайдер: openai-codex' "$TOML_CONFIG" && \
        rg -Fq 'Режим: safe-text' "$TOML_CONFIG" && \
-       rg -Fq 'не подставляй устаревшее `zai::glm-5`' "$TOML_CONFIG"; then
+       rg -Fq 'не сокращай до `gpt-5.4`' "$TOML_CONFIG"; then
         test_pass
     else
         test_fail "Primary Moltis identity must hard-disable tool use for Telegram DM status/long-research paths and require the canonical Telegram-safe model contract instead of stale provider/model guesses"

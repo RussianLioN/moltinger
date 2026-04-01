@@ -203,6 +203,25 @@ EOF
         test_fail "BeforeLLMCall guard must force template requests into a deterministic text-only reply instead of using the broken direct-send block path"
     fi
 
+    test_start "component_before_llm_guard_hard_overrides_skill_apply_requests"
+    local before_llm_skill_apply_output
+    before_llm_skill_apply_output="$(
+        env PATH="$MINIMAL_PATH" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:skill-apply-hard","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай применим навык codex-update"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-apply hard override")' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output" && \
+       jq -e '.data.messages[0].content | contains("В Telegram-safe режиме я не запускаю навыки через инструменты.")' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must hard-override skill-apply requests so Telegram-safe turns do not spin in execution/tool loops"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_status_via_bot_send_when_enabled"
     local fastpath_status_tmp fastpath_status_send_script fastpath_status_log fastpath_status_stdout fastpath_status_stderr fastpath_status_status fastpath_status_intent_dir fastpath_status_suppress_file
     fastpath_status_tmp="$(secure_temp_dir telegram-safe-fastpath-status)"
@@ -238,7 +257,7 @@ EOF
        grep -Fq $'\tstatus' "$fastpath_status_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_status_log" && \
        grep -Fq 'text=Статус: Online' "$fastpath_status_log" && \
-       grep -Fq 'custom-zai-telegram-safe::glm-5' "$fastpath_status_log"; then
+       grep -Fq 'openai-codex::gpt-5.4' "$fastpath_status_log"; then
         test_pass
     else
         test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, and leave only a delivery-suppression marker instead of triggering hook-block"
@@ -753,7 +772,7 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_status_output" && \
-       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$after_status_output" && \
+       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.provider == "custom-zai-telegram-safe"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.model == "custom-zai-telegram-safe::glm-5"' >/dev/null 2>&1 <<<"$after_status_output"; then
         test_pass
@@ -1169,7 +1188,7 @@ EOF
             '{"event":"MessageSending","session_id":"session:stu","data":{"account_id":"moltis-bot","to":"123456","reply_to_message_id":777,"user_message":"/status","text":"**Статус системы**\nАктивность:\n- Tmux: нет сессий\n- Cron: нет задач\nНавыки: codex-update\nГотов к работе. Что делаем?\nActivity log • process • Running: `uptime`"}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
-       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
+       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
        jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
        jq -e '.data.to == "123456"' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
        jq -e '.data.reply_to_message_id == 777' >/dev/null 2>&1 <<<"$message_sending_status_output" && \
@@ -1192,7 +1211,7 @@ EOF
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_persisted_status_output" && \
-       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_persisted_status_output" && \
+       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_persisted_status_output" && \
        [[ ! -f "$persisted_status_send_dir/session_status-consume.intent" ]]; then
         test_pass
     else

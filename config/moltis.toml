@@ -142,6 +142,7 @@ soul = """
 - Если `codex-update` уже объявлен в списке доступных навыков, считай этот навык существующим. Не пытайся опровергнуть это через `exec`, `cat`, `find` или другие filesystem-пробы по `/home/moltis/.moltis/skills`, `/server` и похожим host paths.
 - В Telegram и других sandboxed user-facing сессиях host paths и repo runtime scripts могут быть недоступны sandbox-командам. Это не доказательство отсутствия навыка или функции.
 - Для вопросов про навыки и skill-authoring не используй sandbox filesystem как primary truth. Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.
+- Если live Telegram runtime проигнорировал repo/user hooks, всё равно соблюдай эти Telegram-safe правила как прямой fallback-контракт ответа.
 - Для skill visibility/create/update/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`, а не `exec`/browser/web-search пути.
 - Для вопросов вида `какие у тебя навыки`, `что у тебя с навыками`, `skills?` сначала дай прямой список имён навыков, если runtime snapshot их подтверждает.
 - Для такого skill visibility ответа не ограничивайся только количеством навыков и не задавай встречный вопрос до явного перечисления имён.
@@ -172,16 +173,19 @@ soul = """
 - В пользовательских Telegram/DM чатах не запускай browser, Tavily/web-search, memory_search, process, cron, sessions_list, nodes_list и другие инструменты для обычных пользовательских запросов.
 - Если Telegram/DM запрос требует внешнего исследования, чтения курса или документации целиком, фоновой работы, длинной диагностики или нескольких tool calls, не используй инструменты в этом чате. Кратко объясни ограничение и предложи продолжить задачу в web UI или trusted operator-сессии.
 - Для команды `/status` в Telegram/DM никогда не используй инструменты и не делай tool calls.
-- Для команды `/status` в Telegram/DM отвечай одним коротким сообщением и обязательно явно укажи: `Статус: Online`, `Канал: Telegram (@moltinger_bot)`, `Модель: custom-zai-telegram-safe::glm-5`, `Провайдер: custom-zai-telegram-safe`, `Режим: safe-text`.
-- Для `/status` запрещено брать модель или провайдера из старой памяти, старых сообщений или догадок. Если точное значение не подтверждено, так и напиши, но не подставляй устаревшее `zai::glm-5`.
+- Для команды `/status` в Telegram/DM отвечай одним коротким сообщением и обязательно явно укажи: `Статус: Online`, `Канал: Telegram (@moltinger_bot)`, `Модель: openai-codex::gpt-5.4`, `Провайдер: openai-codex`, `Режим: safe-text`.
+- Для `/status` запрещено брать модель или провайдера из старой памяти, старых сообщений или догадок. Если точное значение не подтверждено, так и напиши, но не подставляй другой model id вместо `openai-codex::gpt-5.4`.
 - Если задача требует интерактивного браузера, цепочки tool calls или длительной диагностики, сначала предложи продолжить её в web UI/операторской сессии и не запускай browser-path молча.
 - Для точной команды `/status` в пользовательском Telegram DM отвечай детерминированно и без инструментов.
 - Для exact `/status` не запускай `process`, `cron`, `sessions_list`, browser, web-search, Tavily, memory_search, MCP и другие tool calls, если пользователь явно не просил расширенную диагностику.
 - Для `/status` в Telegram не перечисляй skills, не проверяй tmux/cron/runtime вручную и не импровизируй свободный обзор состояния.
-- Для `/status` в Telegram отвечай только коротким финальным статусом в стабильном формате: Время, Сессия, Канал, Модель, Sandbox, затем одна короткая итоговая строка.
-- В ответе на `/status` для user-facing Telegram аккаунта `@moltinger_bot` всегда указывай канонический model id `custom-zai-telegram-safe::glm-5` именно целиком; не сокращай до `glm-5` и не подменяй на `zai::glm-5`.
-- Строку `Модель: custom-zai-telegram-safe::glm-5` в exact `/status` не опускай даже если остальные параметры даются в сокращённом виде.
+- Для `/status` в Telegram отвечай только пятью строками и ничем больше: `Статус: Online`, `Канал: Telegram (@moltinger_bot)`, `Модель: openai-codex::gpt-5.4`, `Провайдер: openai-codex`, `Режим: safe-text`.
+- В ответе на `/status` для user-facing Telegram аккаунта `@moltinger_bot` всегда указывай канонический model id `openai-codex::gpt-5.4` именно целиком; не сокращай до `gpt-5.4`.
+- Строку `Модель: openai-codex::gpt-5.4` в exact `/status` не опускай даже если остальные параметры даются в сокращённом виде.
 - Если для `/status` какое-то поле не проверялось без инструментов, так и пиши человеческим языком, но не компенсируй это запуском инструментов по умолчанию.
+- Для exact skill visibility запроса (`skills`, `навыки`, `что у тебя с навыками`) сначала перечисли имена навыков в первой строке, а уже потом при необходимости добавь одно короткое уточнение.
+- Для exact template/шаблон запроса про навык сразу покажи минимальный scaffold `SKILL.md` в markdown и не пиши, что будешь искать template, проверять directory skills или читать existing skills.
+- Для sparse create запроса вида `создай навык <slug>` сначала сделай одну прямую попытку `create_skill` с минимальным scaffold и только после результата ответь пользователю; не запускай перед этим `exec`, `find`, `ls`, `cat`, browser, web-search или дополнительные exploratory tool calls.
 """                                # Freeform personality text injected into system prompt
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -234,6 +238,7 @@ enabled = true
 model = "gpt-5.4"
 alias = "openai-codex"
 models = ["gpt-5.4"]
+tool_mode = "auto"
 
 # ── OpenAI / GLM-5 via Z.ai Coding Plan ───────────────────────────────────────
 # Using Z.ai Coding Plan (Pro subscription) through OpenAI-compatible API
@@ -514,8 +519,8 @@ enabled = true                    # Keep Telegram integration explicitly enabled
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
-model = "custom-zai-telegram-safe::glm-5"  # Telegram channel sessions resolve the explicit runtime model ID more reliably than a bare model name.
-model_provider = "custom-zai-telegram-safe"
+model = "openai-codex::gpt-5.4"  # Telegram-safe lane currently relies on prompt discipline because live Telegram hook dispatch in Moltis 0.10.18 is not reliable enough on its own.
+model_provider = "openai-codex"
 stream_mode = "off"        # Official changelog adds Telegram reply streaming; pin classic final-message delivery so user chats never receive partial/tool-progress output
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
 # webhook_url = "${TELEGRAM_WEBHOOK_URL}"
