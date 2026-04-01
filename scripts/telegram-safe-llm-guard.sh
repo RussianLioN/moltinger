@@ -9,8 +9,6 @@ fi
 AUDIT_FILE="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE:-}"
 INTENT_DIR="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR:-/tmp/moltis-telegram-safe-llm-guard-intent}"
 INTENT_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_TTL_SEC:-900}"
-DIRECT_FASTPATH_ENABLED="${MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH:-true}"
-DIRECT_SEND_SCRIPT="${MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT:-/server/scripts/telegram-bot-send.sh}"
 
 write_audit_line() {
     local message="$1"
@@ -873,16 +871,22 @@ Telegram-safe skill-authoring contract:
 EOF
 }
 
-build_skill_visibility_hard_override_message() {
-    local visibility_reply_text="$1"
+build_text_only_hard_override_message() {
+    local label="$1"
+    local reply_text="$2"
 
     cat <<EOF
-Telegram-safe skill-visibility hard override:
+${label}:
 - Ignore the prior conversation content for this turn.
 - This turn is text-only and must not call any tools.
 - Do not mention sandbox/filesystem limitations, repeated-turn counters, or ask a follow-up question before the list.
-- Return exactly this single Russian sentence and nothing else: "${visibility_reply_text}"
+- Return exactly this single Russian sentence and nothing else: "${reply_text}"
 EOF
+}
+
+build_skill_visibility_hard_override_message() {
+    local visibility_reply_text="$1"
+    build_text_only_hard_override_message "Telegram-safe skill-visibility hard override" "$visibility_reply_text"
 }
 
 build_sparse_skill_create_guard_message() {
@@ -949,6 +953,38 @@ build_skill_visibility_reply_text() {
     printf 'Навыки (%s): %s.' "$count" "$inline_names"
 }
 
+build_skill_create_reply_text() {
+    local skill_name="${1:-}"
+    local create_state="${2:-}"
+
+    [[ -n "$skill_name" ]] || return 1
+
+    case "$create_state" in
+        exists)
+            printf 'Навык `%s` уже существует. Могу следующим сообщением обновить его или показать текущий шаблон.' "$skill_name"
+            ;;
+        created)
+            printf 'Создал базовый шаблон навыка `%s`. Могу следующим сообщением доработать описание, workflow и templates.' "$skill_name"
+            ;;
+        failed)
+            printf 'Не смог создать базовый шаблон навыка `%s` в runtime skills. Могу показать канонический шаблон SKILL.md текстом и подготовить содержимое для ручного создания.' "$skill_name"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+build_skill_create_hard_override_message() {
+    local reply_text="$1"
+    build_text_only_hard_override_message "Telegram-safe skill-create hard override" "$reply_text"
+}
+
+build_skill_template_hard_override_message() {
+    local reply_text="$1"
+    build_text_only_hard_override_message "Telegram-safe skill-template hard override" "$reply_text"
+}
+
 build_minimal_skill_scaffold() {
     local skill_name="$1"
 
@@ -997,17 +1033,6 @@ description: Базовый навык <skill-name>. Использовать, �
 
 Если хочешь, следующим сообщением я создам такой базовый навык по имени/slug.
 EOF
-}
-
-flag_enabled() {
-    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
-        1|true|yes|on)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
 }
 
 extract_runtime_field_from_text() {
@@ -1071,16 +1096,6 @@ runtime_skill_dir_path() {
 
     [[ -n "$skill_name" ]] || return 1
     printf '%s/%s' "$runtime_root" "$skill_name"
-}
-
-send_telegram_direct_message() {
-    local chat_id="${1:-}"
-    local text="${2:-}"
-
-    [[ -n "$chat_id" && -n "$text" ]] || return 1
-    [[ -x "$DIRECT_SEND_SCRIPT" ]] || return 1
-
-    "$DIRECT_SEND_SCRIPT" --chat-id "$chat_id" --text "$text" >/dev/null 2>&1
 }
 
 reply_mentions_any_skill_from_csv() {
@@ -1315,6 +1330,7 @@ model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
 response_text="$(extract_first_string text || true)"
 user_message="$(extract_first_string user_message || true)"
+account_id="$(extract_first_string account_id || true)"
 turn_session_key="$(extract_first_string session_key || true)"
 if [[ -z "$turn_session_key" ]]; then
     turn_session_key="$(extract_first_string session_id || true)"
@@ -1331,8 +1347,9 @@ user_message_flat="$(flatten_text_for_match "${user_message:-}")"
 latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
 latest_assistant_message_flat="$(flatten_text_for_match "${latest_assistant_message:-}")"
 latest_system_message_flat="$(flatten_text_for_match "${latest_system_message:-}")"
-intent_text_flat="${latest_user_message_flat:-${user_message_flat:-$payload_flat}}"
+intent_text_flat="${latest_user_message_flat:-$user_message_flat}"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
+channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
 
 write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
 
@@ -1343,6 +1360,9 @@ case "${model:-}" in
         ;;
 esac
 if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-telegram-safe" ]]; then
+    is_telegram_safe_lane=true
+fi
+if [[ "${account_id:-}" == "moltis-bot" || "${channel_account:-}" == "moltis-bot" ]]; then
     is_telegram_safe_lane=true
 fi
 
@@ -1412,6 +1432,9 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '(темплейт|template|ша�
         looks_like_skill_template_request=true
     fi
 fi
+if [[ "$persisted_turn_intent" == "skill_template" ]]; then
+    looks_like_skill_template_request=true
+fi
 
 looks_like_skill_followup_turn=false
 if [[ -n "$latest_user_message_flat" ]] && \
@@ -1438,6 +1461,20 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|д�
     if ! printf '%s' "$intent_text_flat" | grep -Eiq '(SKILL\.md|frontmatter|markdown|описан|тело|body|workflow|templates?|шаблон|template)'; then
         looks_like_sparse_skill_create_request=true
     fi
+fi
+
+requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
+persisted_skill_create_state=""
+persisted_skill_create_name=""
+if [[ "$persisted_turn_intent" =~ ^skill_create_([a-z]+):([A-Za-z0-9._-]+)$ ]]; then
+    persisted_skill_create_state="${BASH_REMATCH[1]}"
+    persisted_skill_create_name="${BASH_REMATCH[2]}"
+fi
+if [[ -z "$requested_skill_name" && -n "$persisted_skill_create_name" ]]; then
+    requested_skill_name="$persisted_skill_create_name"
+fi
+if [[ -n "$persisted_skill_create_state" && -n "$requested_skill_name" ]]; then
+    looks_like_sparse_skill_create_request=true
 fi
 
 has_skill_path_false_negative=false
@@ -1485,7 +1522,7 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
 fi
 
 if [[ "$event" == "MessageSending" ]]; then
-    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then
@@ -1493,57 +1530,42 @@ elif [[ "$is_telegram_safe_lane" != true ]]; then
 fi
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
+    next_turn_intent=""
+    next_turn_skill_create_state=""
     if [[ "$looks_like_skill_visibility_request" == true ]]; then
-        persist_turn_intent "${turn_session_key:-}" "skill_visibility"
+        next_turn_intent="skill_visibility"
+    elif [[ "$looks_like_skill_template_request" == true ]]; then
+        next_turn_intent="skill_template"
+    elif [[ "$looks_like_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" ]]; then
+        skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+        case ",${skill_snapshot_csv}," in
+            *,"${requested_skill_name}",*)
+                next_turn_intent="skill_create_exists:${requested_skill_name}"
+                next_turn_skill_create_state="exists"
+                ;;
+            *)
+                if [[ "$is_telegram_safe_lane" == true ]]; then
+                    if create_runtime_skill_scaffold "$requested_skill_name"; then
+                        next_turn_intent="skill_create_created:${requested_skill_name}"
+                        next_turn_skill_create_state="created"
+                    else
+                        next_turn_intent="skill_create_failed:${requested_skill_name}"
+                        next_turn_skill_create_state="failed"
+                    fi
+                else
+                    next_turn_intent="skill_create_failed:${requested_skill_name}"
+                    next_turn_skill_create_state="failed"
+                fi
+                ;;
+        esac
+    fi
+
+    if [[ -n "$next_turn_intent" ]]; then
+        persist_turn_intent "${turn_session_key:-}" "$next_turn_intent"
     else
         clear_turn_intent "${turn_session_key:-}"
     fi
-    if [[ "$is_telegram_safe_lane" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED"; then
-        telegram_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
-        if [[ "$looks_like_skill_visibility_request" == true && -n "${telegram_chat_id:-}" ]]; then
-            skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
-            visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
-            if send_telegram_direct_message "$telegram_chat_id" "$visibility_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_visibility chat_id=$telegram_chat_id snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
-                exit 1
-            fi
-            write_audit_line "direct_fastpath_failed kind=skill_visibility chat_id=${telegram_chat_id:-missing}"
-        fi
-        if [[ "$looks_like_skill_template_request" == true && -n "${telegram_chat_id:-}" ]]; then
-            template_reply_text="$(build_skill_template_reply_text)"
-            if send_telegram_direct_message "$telegram_chat_id" "$template_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_template chat_id=$telegram_chat_id"
-                exit 1
-            fi
-            write_audit_line "direct_fastpath_failed kind=skill_template chat_id=${telegram_chat_id:-missing}"
-        fi
-        if [[ "$looks_like_sparse_skill_create_request" == true && -n "${telegram_chat_id:-}" ]]; then
-            requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
-            if [[ -n "${requested_skill_name:-}" ]]; then
-                skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
-                case ",${skill_snapshot_csv}," in
-                    *,"${requested_skill_name}",*)
-                        create_reply_text="Навык \`${requested_skill_name}\` уже существует. Могу следующим сообщением обновить его или показать текущий шаблон."
-                        if send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
-                            write_audit_line "direct_fastpath kind=skill_create_exists chat_id=$telegram_chat_id skill=$requested_skill_name"
-                            exit 1
-                        fi
-                        ;;
-                    *)
-                        if create_runtime_skill_scaffold "$requested_skill_name"; then
-                            create_reply_text="Создал базовый шаблон навыка \`${requested_skill_name}\`. Могу следующим сообщением доработать описание, workflow и templates."
-                            if send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
-                                write_audit_line "direct_fastpath kind=skill_create chat_id=$telegram_chat_id skill=$requested_skill_name"
-                                exit 1
-                            fi
-                            rm -rf "$(runtime_skill_dir_path "$requested_skill_name")" 2>/dev/null || true
-                        fi
-                        write_audit_line "direct_fastpath_failed kind=skill_create chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing}"
-                        ;;
-                esac
-            fi
-        fi
-    fi
+
     if [[ -n "${messages_json:-}" ]]; then
         if [[ "$looks_like_broad_research_request" == true ]]; then
             # Hard override broad doc-study turns so the provider never sees the
@@ -1562,6 +1584,24 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             visibility_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
             messages_json="[$(build_message_json system "$visibility_guard"),$(build_message_json user "$visibility_user")]"
             write_audit_line "before_modify reason=skill_visibility_hard_override tool_count=0 snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
+            emit_before_llm_modified_payload "$messages_json" 0
+            exit 0
+        fi
+        if [[ "$looks_like_skill_template_request" == true ]]; then
+            template_reply_text="$(build_skill_template_reply_text)"
+            template_guard="$(build_skill_template_hard_override_message "$template_reply_text")"
+            template_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+            messages_json="[$(build_message_json system "$template_guard"),$(build_message_json user "$template_user")]"
+            write_audit_line "before_modify reason=skill_template_hard_override tool_count=0"
+            emit_before_llm_modified_payload "$messages_json" 0
+            exit 0
+        fi
+        if [[ -n "$requested_skill_name" && -n "$next_turn_skill_create_state" ]]; then
+            create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state")"
+            create_guard="$(build_skill_create_hard_override_message "$create_reply_text")"
+            create_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+            messages_json="[$(build_message_json system "$create_guard"),$(build_message_json user "$create_user")]"
+            write_audit_line "before_modify reason=skill_create_hard_override tool_count=0 skill=$requested_skill_name state=$next_turn_skill_create_state"
             emit_before_llm_modified_payload "$messages_json" 0
             exit 0
         fi
@@ -1597,7 +1637,7 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
 
@@ -1628,6 +1668,28 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
                 fi
                 exit 0
             fi
+        fi
+    fi
+    if [[ "$looks_like_skill_template_request" == true ]]; then
+        template_reply_text="$(build_skill_template_reply_text)"
+        write_audit_line "emit_modify event=$event reason=skill_template_reply_override"
+        if [[ "$event" == "AfterLLMCall" ]]; then
+            emit_modified_payload "$template_reply_text" true
+        else
+            emit_modified_payload "$template_reply_text" false
+        fi
+        exit 0
+    fi
+    if [[ -n "$persisted_skill_create_state" && -n "$requested_skill_name" ]]; then
+        create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$persisted_skill_create_state" || true)"
+        if [[ -n "$create_reply_text" ]]; then
+            write_audit_line "emit_modify event=$event reason=skill_create_reply_override skill=$requested_skill_name state=$persisted_skill_create_state"
+            if [[ "$event" == "AfterLLMCall" ]]; then
+                emit_modified_payload "$create_reply_text" true
+            else
+                emit_modified_payload "$create_reply_text" false
+            fi
+            exit 0
         fi
     fi
 fi
