@@ -498,6 +498,173 @@ prepend_message_to_array() {
     printf '[%s,%s' "$message_json" "${messages_json#\[}"
 }
 
+flatten_text_for_match() {
+    local text="${1:-}"
+
+    printf '%s' "$text" \
+        | tr '\r\n' '  ' \
+        | sed 's/[[:space:]][[:space:]]*/ /g'
+}
+
+extract_last_message_content_by_role() {
+    local messages_json="${1:-}"
+    local target_role="${2:-user}"
+
+    [[ -n "$messages_json" ]] || return 1
+
+    printf '%s' "$messages_json" | awk -v target_role="$target_role" '
+        function extract_string_value(obj, key,    needle, state, value, escape, n, i, j, c) {
+            needle = "\"" key "\""
+            state = "seek"
+            value = ""
+            escape = 0
+            n = length(obj)
+
+            for (i = 1; i <= n; i++) {
+                c = substr(obj, i, 1)
+                if (state == "seek") {
+                    if (substr(obj, i, length(needle)) != needle) {
+                        continue
+                    }
+                    j = i + length(needle)
+                    while (j <= n && substr(obj, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(obj, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(obj, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(obj, j, 1) != "\"") {
+                        continue
+                    }
+                    state = "capture"
+                    value = ""
+                    escape = 0
+                    i = j
+                    continue
+                }
+
+                if (escape) {
+                    if (c == "n") {
+                        value = value "\n"
+                    } else if (c == "r") {
+                        value = value "\r"
+                    } else if (c == "t") {
+                        value = value "\t"
+                    } else {
+                        value = value c
+                    }
+                    escape = 0
+                    continue
+                }
+
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+
+                if (c == "\"") {
+                    return value
+                }
+
+                value = value c
+            }
+
+            return ""
+        }
+
+        function flush_object(obj,    role, content) {
+            role = extract_string_value(obj, "role")
+            if (role != target_role) {
+                return
+            }
+            content = extract_string_value(obj, "content")
+            if (content != "") {
+                last_content = content
+            }
+        }
+
+        BEGIN {
+            RS = ""
+            ORS = ""
+            in_string = 0
+            escape = 0
+            depth = 0
+            capturing = 0
+            obj = ""
+            last_content = ""
+        }
+
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+
+                if (!capturing) {
+                    if (c == "{") {
+                        capturing = 1
+                        obj = "{"
+                        depth = 1
+                        in_string = 0
+                        escape = 0
+                    }
+                    continue
+                }
+
+                if (i > 1 || obj != "{") {
+                    obj = obj c
+                }
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+
+                if (c == "\\") {
+                    if (in_string) {
+                        escape = 1
+                    }
+                    continue
+                }
+
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+
+                if (in_string) {
+                    continue
+                }
+
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        flush_object(obj)
+                        capturing = 0
+                        obj = ""
+                    }
+                }
+            }
+        }
+
+        END {
+            if (last_content == "") {
+                exit 1
+            }
+            print last_content
+        }
+    '
+}
+
 discover_runtime_skill_names_csv() {
     local csv_override="${MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES:-}"
     local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
@@ -937,12 +1104,12 @@ provider="$(extract_first_string provider || true)"
 response_text="$(extract_first_string text || true)"
 tool_name="$(extract_first_string tool || true)"
 command_arg="$(extract_first_string command || true)"
+messages_json="$(extract_json_array messages || true)"
+latest_user_message="$(extract_last_message_content_by_role "${messages_json:-}" user || true)"
 tool_calls_json="$(extract_json_array tool_calls || true)"
-response_text_flat="$(
-    printf '%s' "${response_text:-}" \
-        | tr '\r\n' '  ' \
-        | sed 's/[[:space:]][[:space:]]*/ /g'
-)"
+response_text_flat="$(flatten_text_for_match "${response_text:-}")"
+latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
+intent_text_flat="${latest_user_message_flat:-$payload_flat}"
 
 write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
 
@@ -1005,25 +1172,25 @@ if printf '%s' "$payload_flat" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:
 fi
 
 looks_like_broad_research_request=false
-if printf '%s' "$payload_flat" | grep -Eiq '((изучи|изучить|исследуй|исследовать|прочитай|прочитать|study|research|analy[sz]e|read).{0,120}(документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site))|((документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site).{0,120}(полностью|целиком|всю|весь|глубоко|thoroughly|fully|end[ -]?to[ -]?end))'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((изучи|изучить|исследуй|исследовать|прочитай|прочитать|study|research|analy[sz]e|read).{0,120}(документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site))|((документац|инструкц|курс|официальн|docs|documentation|manual|guide|гайд|сайт|site).{0,120}(полностью|целиком|всю|весь|глубоко|thoroughly|fully|end[ -]?to[ -]?end))'; then
     looks_like_broad_research_request=true
 fi
 
 looks_like_skill_turn=false
-if printf '%s' "$payload_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
     looks_like_skill_turn=true
 fi
 
 looks_like_skill_visibility_request=false
-if printf '%s' "$payload_flat" | grep -Eiq '((какие|что|что у тебя с|покажи|перечисли|list|show|which|what).{0,80}(навык(и|ов)?|skills?))|((навык(и|ов)?|skills?).{0,80}(какие|что|list|show|which|what))'; then
-    if ! printf '%s' "$payload_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?|create|update|delete|build|make).{0,120}(навык|skills?|skill))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((какие|что|что у тебя с|покажи|перечисли|list|show|which|what).{0,80}(навык(и|ов)?|skills?))|((навык(и|ов)?|skills?).{0,80}(какие|что|list|show|which|what))'; then
+    if ! printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?|create|update|delete|build|make).{0,120}(навык|skills?|skill))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))'; then
         looks_like_skill_visibility_request=true
     fi
 fi
 
 looks_like_sparse_skill_create_request=false
-if printf '%s' "$payload_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|сдела(й|ем|ть)|create|build|make).{0,120}(навык|skills?|skill))|((create|build|make)[[:space:]]+[A-Za-z0-9._-]+[[:space:]]+(skill|навык))'; then
-    if ! printf '%s' "$payload_flat" | grep -Eiq '(SKILL\.md|frontmatter|markdown|описан|тело|body|workflow|templates?|шаблон|template)'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|сдела(й|ем|ть)|create|build|make).{0,120}(навык|skills?|skill))|((create|build|make)[[:space:]]+[A-Za-z0-9._-]+[[:space:]]+(skill|навык))'; then
+    if ! printf '%s' "$intent_text_flat" | grep -Eiq '(SKILL\.md|frontmatter|markdown|описан|тело|body|workflow|templates?|шаблон|template)'; then
         looks_like_sparse_skill_create_request=true
     fi
 fi
@@ -1075,7 +1242,6 @@ elif [[ "$is_telegram_safe_lane" != true ]]; then
 fi
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
-    messages_json="$(extract_json_array messages || true)"
     if [[ -n "${messages_json:-}" ]]; then
         if [[ "$looks_like_broad_research_request" == true ]]; then
             # Hard override broad doc-study turns so the provider never sees the

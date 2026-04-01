@@ -113,6 +113,44 @@ EOF
         test_fail "BeforeLLMCall guard must hard-override Telegram skill-visibility turns into a deterministic text-only runtime skill list"
     fi
 
+    test_start "component_before_llm_guard_classifies_skill_visibility_from_latest_user_turn_even_when_history_contains_create_skill_turns"
+    local before_llm_skill_visibility_history_output
+    before_llm_skill_visibility_history_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:abvh","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык codex-update-new"},{"role":"assistant","content":"Опиши навык подробнее."},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_history_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_history_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_history_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-visibility hard override")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_history_output" && \
+       jq -e '.data.messages[0].content | contains("Навыки (3): codex-update, post-close-task-classifier, telegram-learner.")' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_history_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must classify skill visibility from the latest user turn instead of being contaminated by older create-skill history"
+    fi
+
+    test_start "component_before_llm_guard_classifies_sparse_create_from_latest_user_turn_even_when_history_contains_visibility_turns"
+    local before_llm_skill_create_history_output
+    before_llm_skill_create_history_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:abgi","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"},{"role":"assistant","content":"Навыки (2): codex-update, telegram-learner."},{"role":"user","content":"Создай навык codex-update-new"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_create_history_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_create_history_output" && \
+       jq -e '.data.messages | length == 7' >/dev/null 2>&1 <<<"$before_llm_skill_create_history_output" && \
+       jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$before_llm_skill_create_history_output" && \
+       jq -e '.data.messages[-1].content == "Создай навык codex-update-new"' >/dev/null 2>&1 <<<"$before_llm_skill_create_history_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must classify sparse create from the latest user turn instead of being contaminated by older visibility turns"
+    fi
+
     test_start "component_before_llm_guard_replaces_history_when_session_already_contains_stale_guard"
     local before_llm_existing_guard_output
     before_llm_existing_guard_output="$(
@@ -250,6 +288,23 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must replace generic repeated-turn skill-count replies with a deterministic runtime skill list"
+    fi
+
+    test_start "component_after_llm_guard_rewrites_skill_visibility_reply_from_latest_user_turn_even_when_history_contains_create_skill_turns"
+    local after_skill_visibility_history_output
+    after_skill_visibility_history_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:skillvish","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"У меня 3 навыка. Что ты хочешь сделать?","tool_calls":[],"messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык codex-update-new"},{"role":"assistant","content":"Опиши его подробнее."},{"role":"user","content":"А что у тебя с навыками/skills?"}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_history_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_visibility_history_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$after_skill_visibility_history_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must classify visibility from the latest user turn instead of older create-skill history"
     fi
 
     test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
