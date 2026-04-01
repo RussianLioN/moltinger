@@ -24,7 +24,7 @@ if [[ "$mode" == "status_semantic_mismatch" ]]; then
   "ok": true,
   "status": "pass",
   "stage": "wait_reply",
-  "reply_text": "## Статус системы\nМодель: zai::glm-5",
+  "reply_text": "## Статус системы\nМодель: gpt-5.4",
   "reply_mid": 42,
   "sent_mid": 41,
   "checks": {
@@ -1021,7 +1021,7 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must fail when /status reply omits the canonical model contract"
     else
         if jq -e '.failure.code == "semantic_status_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1 \
-            && jq -e '.diagnostic_context.semantic_review.expected_model == "custom-zai-telegram-safe::glm-5"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
+            && jq -e '.diagnostic_context.semantic_review.expected_model == "openai-codex::gpt-5.4"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
         then
             test_pass
         else
@@ -1189,6 +1189,27 @@ run_component_telegram_remote_uat_contract_tests() {
 	        fi
 	    else
 	        test_fail "Authoritative wrapper must pass a deterministic template reply for template requests"
+	    fi
+
+	    test_start "component_telegram_remote_uat_allows_live_template_reply_even_when_authenticated_skills_api_is_available"
+	    if PATH="$TEST_TMPDIR:$PATH" \
+	        MOLTIS_PASSWORD='stub-password' \
+	        MOLTIS_CURL_STUB_MODE=runtime_skills_present \
+	        TELEGRAM_WEB_STUB_MODE=template_minimal_reply_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "У тебя должен быть темплейт" \
+	        --output "$TEST_TMPDIR/result-template-minimal-reply-with-skills-api.json" \
+	        >/dev/null 2>&1
+	    then
+	        if jq -e '.run.verdict == "passed" and .failure == null' "$TEST_TMPDIR/result-template-minimal-reply-with-skills-api.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Template replies must not be reclassified as skill visibility checks when live /api/skills is available"
+	        fi
+	    else
+	        test_fail "Authoritative wrapper must keep template replies green even with authenticated /api/skills access"
 	    fi
 
 	    test_start "component_telegram_remote_uat_fails_exact_live_friendly_doc_search_plan_even_if_helper_passes"

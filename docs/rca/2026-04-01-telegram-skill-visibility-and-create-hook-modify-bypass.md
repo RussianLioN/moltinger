@@ -48,6 +48,34 @@ Synthetic hook tests давали ложное ощущение завершён
 
 LLM path при этом блокируется, чтобы пользователь не получил второй сырой ответ модели.
 
+## Что подтвердили после live deploy
+
+После deploy `47eab85` и authoritative Telegram Web UAT выяснилось следующее:
+
+- `/status` проходит по живому Telegram path и возвращает канонический safe-text ответ без `Activity log`.
+- `А что у тебя с навыками/skills?` проходит по живому Telegram path и перечисляет live runtime skills, включая freshly created skill.
+- `Давай создадим навык <slug>` проходит по живому Telegram path, а follow-up visibility сразу видит новый skill.
+- запрос `У тебя должен быть темплейт` тоже возвращает хороший user-facing шаблон без внутренних логов, но старый UAT harness ошибочно помечал такой ответ как `semantic_skill_visibility_mismatch`.
+
+Отдельно выявили ещё один важный операторский источник путаницы:
+
+- внутри runtime/логов live skills видны по контейнерному пути `/home/moltis/.moltis/skills/...`;
+- на host filesystem тот же созданный skill лежит в `/opt/moltinger/data/skills/...`.
+
+Это не оказалось потерей skill как таковой. Это расхождение host/container path projection, которое давало ложное ощущение, что skill "создался только на словах".
+
+## Дополнительная корневая причина
+
+После первого repo-side fast-path фикса остался второй repo-side дефект:
+
+- stale suppression marker мог пережить fast-path turn и заглушить следующий нормальный ответ;
+- authoritative on-demand harness мог ложно заваливать template-reply, применяя семантику проверки live skill visibility к запросу про template.
+
+То есть инцидент был не одним багом, а связкой:
+
+1. runtime/upstream gap: live Moltis Telegram path не всегда уважал hook `modify` так, как это доказывали synthetic tests;
+2. repo-side follow-up defects: suppression lifecycle и UAT semantic classifier были слишком хрупкими.
+
 ## Предотвращение
 
 1. Не считать shell-hook `modify` доказанным до живого Telegram UAT.
@@ -57,3 +85,7 @@ LLM path при этом блокируется, чтобы пользовате
    - direct sparse create;
    - template reply;
    - отсутствие второго сырого ответа после direct send.
+4. Не смешивать semantic contracts:
+   - `skills?` должен проверяться against live `/api/skills`;
+   - `template` должен проверяться как deterministic scaffold reply, а не как skill visibility response.
+5. Документировать container-vs-host skill path projection, чтобы оператор не принимал её за потерю данных.

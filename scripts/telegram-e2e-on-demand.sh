@@ -32,7 +32,7 @@ MOLTIS_URL="${MOLTIS_URL:-}"
 LOCAL_MOLTIS_URL_DEFAULT="${LOCAL_MOLTIS_URL_DEFAULT:-http://localhost:13131}"
 PRODUCTION_MOLTIS_URL_DEFAULT="${PRODUCTION_MOLTIS_URL_DEFAULT:-https://moltis.ainetic.tech}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
-STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"
+STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"
 SKILLS_API_ATTEMPTS="${SKILLS_API_ATTEMPTS:-5}"
 SKILLS_API_RETRY_DELAY_SECONDS="${SKILLS_API_RETRY_DELAY_SECONDS:-1}"
 SKILL_CREATE_FOLLOWUP_MESSAGE="${SKILL_CREATE_FOLLOWUP_MESSAGE:-А что у тебя с навыками/skills?}"
@@ -800,6 +800,10 @@ evaluate_authoritative_semantics() {
       --argjson base "$DIAGNOSTIC_JSON" \
       '$base + {semantic_review:{recent_invalid_incoming:$planning_text, failure:"semantic_pre_send_internal_planning_leak"}}')"
     RECOMMENDED_ACTION="Clear or reconcile the contaminated Telegram chat/session and rerun authoritative UAT only after the last invalid incoming planning leak is gone."
+    return 0
+  fi
+
+  if message_is_skill_template_query "$normalized_message"; then
     return 0
   fi
 
