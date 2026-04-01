@@ -283,6 +283,19 @@ message_is_skill_template_query() {
   return 1
 }
 
+reply_matches_skill_template_contract() {
+  local normalized_reply
+  normalized_reply="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized_reply" ]] || return 1
+
+  if printf '%s' "$normalized_reply" | grep -Eiq \
+    'каноническ.{0,60}(минимальн.{0,20})?(темплейт|template|шаблон).{0,60}(навык|skill)|минимальн.{0,40}(темплейт|template|шаблон).{0,60}(навык|skill)|---[[:space:]]*name:[[:space:]]*<skill-name>|если хочешь, следующим сообщением я создам'; then
+    return 0
+  fi
+
+  return 1
+}
+
 extract_requested_skill_name() {
   local normalized candidate
   normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -813,6 +826,23 @@ evaluate_authoritative_semantics() {
       return 0
     fi
     runtime_skill_names="$(runtime_skill_names_json "$skill_query_skills_json")"
+  fi
+
+  if message_is_skill_template_query "$normalized_message"; then
+    if reply_matches_skill_template_contract "$reply_text"; then
+      return 0
+    fi
+
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_skill_template_mismatch" "$RUN_STAGE" "Authoritative template reply did not match the deterministic skill-template contract" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_skill_template_mismatch"}}')"
+    RECOMMENDED_ACTION="Reconcile Telegram template replies with the deterministic skill-template scaffold contract and rerun authoritative UAT."
+    return 0
   fi
 
   if message_is_skill_visibility_query "$normalized_message" && reply_has_skill_false_negative "$reply_text"; then

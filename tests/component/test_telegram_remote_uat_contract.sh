@@ -380,6 +380,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "template_live_reply_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Канонический минимальный шаблон навыка: ```md --- name: <skill-name> description: Базовый навык <skill-name>. Использовать, когда пользователь явно просит сценарий <skill-name>. --- # <skill-name> ## Активация Когда пользователь явно просит сценарий <skill-name> или доработку этого навыка, используй его. ## Workflow 1. Уточни цель, если для точного выполнения не хватает контекста. 2. Выполни основной сценарий навыка. 3. Верни краткий итог и предложи, как доработать навык дальше. ## Templates - TODO: добавить конкретные шаблоны под сценарий навыка. ``` Если хочешь, следующим сообщением я создам такой базовый навык по имени/slug.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "codex_update_reading_plan_pass" ]]; then
   cat <<'JSON'
 {
@@ -1210,6 +1242,27 @@ run_component_telegram_remote_uat_contract_tests() {
 	        fi
 	    else
 	        test_fail "Authoritative wrapper must keep template replies green even with authenticated /api/skills access"
+	    fi
+
+	    test_start "component_telegram_remote_uat_allows_exact_live_template_reply_even_when_authenticated_skills_api_is_available"
+	    if PATH="$TEST_TMPDIR:$PATH" \
+	        MOLTIS_PASSWORD='stub-password' \
+	        MOLTIS_CURL_STUB_MODE=runtime_skills_present \
+	        TELEGRAM_WEB_STUB_MODE=template_live_reply_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "У тебя должен быть темплейт" \
+	        --output "$TEST_TMPDIR/result-template-live-reply-with-skills-api.json" \
+	        >/dev/null 2>&1
+	    then
+	        if jq -e '.run.verdict == "passed" and .failure == null' "$TEST_TMPDIR/result-template-live-reply-with-skills-api.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Exact live template replies must stay green instead of being misclassified as skill visibility checks"
+	        fi
+	    else
+	        test_fail "Authoritative wrapper must pass the exact live template reply when /api/skills is available"
 	    fi
 
 	    test_start "component_telegram_remote_uat_fails_exact_live_friendly_doc_search_plan_even_if_helper_passes"
