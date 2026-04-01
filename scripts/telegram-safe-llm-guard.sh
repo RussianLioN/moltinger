@@ -1778,6 +1778,10 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
                 fi
                 exit 0
             fi
+            if [[ "$looks_like_skill_visibility_request" == true && -n "$persisted_skill_create_state" ]]; then
+                write_audit_line "intent_clear reason=skill_visibility_followup_consumed_create_intent skill=$requested_skill_name state=$persisted_skill_create_state"
+                clear_turn_intent "${turn_session_key:-}"
+            fi
         fi
     fi
     if [[ "$looks_like_skill_template_request" == true ]]; then
@@ -1790,7 +1794,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
         fi
         exit 0
     fi
-    if [[ -n "$persisted_skill_create_state" && -n "$requested_skill_name" ]] && \
+    if [[ -n "$persisted_skill_create_state" && -n "$requested_skill_name" && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$looks_like_status" != true ]] && \
        [[ "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true || "$tool_calls_present" == true || "$response_text_flat" == *"$requested_skill_name"* || "$payload_flat" == *"$requested_skill_name"* || "$event" == "MessageSending" ]]; then
         create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$persisted_skill_create_state" || true)"
         if [[ -n "$create_reply_text" ]]; then

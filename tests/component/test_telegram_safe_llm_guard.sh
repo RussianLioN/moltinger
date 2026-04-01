@@ -241,6 +241,25 @@ EOF
         test_fail "MessageSending guard must consume persisted skill-create intent after the first final rewrite so later unrelated deliveries are not rewritten to a false create-success reply"
     fi
 
+    test_start "component_message_sending_guard_does_not_override_immediate_skill_visibility_followup_with_stale_create_confirmation"
+    local skill_create_visibility_dir skill_create_visibility_output
+    skill_create_visibility_dir="$(secure_temp_dir telegram-safe-skill-create-visibility)"
+    printf '%s\tskill_create_created:codex-update-new\n' "$(date +%s)" >"$skill_create_visibility_dir/session_skill_create.intent"
+    skill_create_visibility_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_create_visibility_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,codex-update-new,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session_skill_create","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":961,"user_message":"А что у тебя с навыками/skills?","text":"Навыки (3): codex-update, codex-update-new, telegram-learner."}}
+EOF
+    )"
+    if [[ -z "$skill_create_visibility_output" ]] && \
+       [[ ! -f "$skill_create_visibility_dir/session_skill_create.intent" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must not overwrite an immediate skill-visibility follow-up with stale create confirmation and must clear the old create intent once visibility is proven"
+    fi
+
     test_start "component_message_sending_guard_reuses_persisted_skill_template_intent_for_final_delivery"
     local skill_template_intent_dir skill_template_output
     skill_template_intent_dir="$(secure_temp_dir telegram-safe-skill-template-intent)"
