@@ -196,6 +196,26 @@ EOF
         test_fail "BeforeLLMCall guard must force template requests into a deterministic text-only reply instead of using the broken direct-send block path"
     fi
 
+    test_start "component_before_llm_guard_does_not_persist_stale_status_intent_for_template_followup"
+    local stale_status_template_dir stale_status_template_output stale_status_template_intent
+    stale_status_template_dir="$(secure_temp_dir telegram-safe-stale-status-template)"
+    printf '%s\tstatus\n' "$(date +%s)" >"$stale_status_template_dir/session_template-followup.intent"
+    stale_status_template_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_status_template_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:template-followup","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"<available_skills>\n- codex-update\n</available_skills>"},{"role":"assistant","content":"Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    stale_status_template_intent="$(cat "$stale_status_template_dir/session_template-followup.intent" 2>/dev/null || true)"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_status_template_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-template hard override")' >/dev/null 2>&1 <<<"$stale_status_template_output" && \
+       [[ "$stale_status_template_intent" == *$'\tskill_template' ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must not persist a stale /status intent when the latest user turn is a template follow-up"
+    fi
+
     test_start "component_message_sending_guard_reuses_persisted_skill_create_intent_for_final_confirmation"
     local skill_create_intent_dir skill_create_intent_output
     skill_create_intent_dir="$(secure_temp_dir telegram-safe-skill-create-intent)"
@@ -570,6 +590,26 @@ EOF
         test_fail "AfterLLMCall guard must reuse the persisted skill-visibility intent when the runtime drops turn context and leaves only a short generic prompt"
     fi
 
+    test_start "component_after_llm_guard_does_not_let_stale_status_intent_override_skill_visibility_followup"
+    local stale_status_visibility_dir after_skill_visibility_from_status_output
+    stale_status_visibility_dir="$(secure_temp_dir telegram-safe-stale-status-visibility)"
+    printf '%s\tstatus\n' "$(date +%s)" >"$stale_status_visibility_dir/session_status-visibility.intent"
+    after_skill_visibility_from_status_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_status_visibility_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:status-visibility","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"assistant","content":"Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"text":"**Навыки: 4 в конфиге, файлов нет в sandbox.** Ты 12-й раз спрашиваешь.","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_from_status_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_visibility_from_status_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$after_skill_visibility_from_status_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must let the latest skill-visibility turn win over stale /status history and persisted status intent"
+    fi
+
     test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
     local after_skill_tool_output
     after_skill_tool_output="$(
@@ -858,6 +898,25 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must canonicalize final /status delivery so Telegram never sees status drift or appended Activity log traces"
+    fi
+
+    test_start "component_message_sending_guard_consumes_persisted_status_intent_after_final_delivery"
+    local persisted_status_send_dir message_sending_persisted_status_output
+    persisted_status_send_dir="$(secure_temp_dir telegram-safe-status-consume)"
+    printf '%s\tstatus\n' "$(date +%s)" >"$persisted_status_send_dir/session_status-consume.intent"
+    message_sending_persisted_status_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_status_send_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:status-consume","data":{"account_id":"moltis-bot","to":"123457","reply_to_message_id":778,"text":"**Статус системы**\nActivity log • Running: `uptime`"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_persisted_status_output" && \
+       jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"' >/dev/null 2>&1 <<<"$message_sending_persisted_status_output" && \
+       [[ ! -f "$persisted_status_send_dir/session_status-consume.intent" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must consume the persisted status intent after final canonical delivery so later turns are not contaminated by stale /status state"
     fi
 
     test_start "component_message_sending_guard_rewrites_final_internal_telemetry_for_safe_lane"

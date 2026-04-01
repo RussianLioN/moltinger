@@ -1433,6 +1433,7 @@ latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
 latest_assistant_message_flat="$(flatten_text_for_match "${latest_assistant_message:-}")"
 latest_system_message_flat="$(flatten_text_for_match "${latest_system_message:-}")"
 intent_text_flat="${latest_user_message_flat:-$user_message_flat}"
+status_query_text_flat="${intent_text_flat:-$user_message_flat}"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
 
@@ -1501,11 +1502,26 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
     has_user_visible_internal_planning=true
 fi
 
-looks_like_status=false
-if printf '%s' "${intent_text_flat} ${user_message_flat} ${latest_user_message_flat} ${response_text_flat} ${payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|параметр[[:space:]]*\||канал: telegram|провайдер:|режим: safe-text|модель: custom-zai-telegram-safe::glm-5'; then
-    looks_like_status=true
+looks_like_status_request=false
+if printf '%s' "$status_query_text_flat" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?'; then
+    looks_like_status_request=true
 fi
-if [[ "$persisted_turn_intent" == "status" ]]; then
+
+looks_like_observed_status_reply=false
+if [[ ( "$event" == "AfterLLMCall" || "$event" == "MessageSending" ) && -z "$status_query_text_flat" ]] && \
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|активность:|канал: telegram|провайдер:|режим: safe-text|модель: custom-zai-telegram-safe::glm-5'; then
+    looks_like_observed_status_reply=true
+fi
+
+looks_like_status=false
+if [[ "$looks_like_status_request" == true ]]; then
+    looks_like_status=true
+elif [[ "$looks_like_observed_status_reply" == true ]]; then
+    looks_like_status=true
+elif [[ "$persisted_turn_intent" == "status" && -z "$status_query_text_flat" ]]; then
+    # Carry the status intent only within the same turn when the runtime omits
+    # the current user message in later hook events. Do not let an old /status
+    # reply contaminate unrelated follow-up turns such as template/skills/create.
     looks_like_status=true
 fi
 
@@ -1758,6 +1774,7 @@ if [[ "$looks_like_status" == true ]]; then
     if [[ "$event" == "AfterLLMCall" ]]; then
         emit_modified_payload "$canonical_status" true
     else
+        clear_turn_intent "${turn_session_key:-}"
         emit_modified_payload "$canonical_status" false
     fi
     exit 0
