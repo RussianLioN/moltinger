@@ -579,6 +579,25 @@ EOF
         test_fail "MessageSending guard must strip final internal tool inventory/planning leakage even when Activity log markers are absent"
     fi
 
+    test_start "component_message_sending_guard_rewrites_skill_visibility_reply_from_user_message_when_messages_array_is_absent"
+    local message_sending_skill_visibility_output
+    message_sending_skill_visibility_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:vwy-skillvis","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":955,"user_message":"А что у тебя с навыками/skills?","text":"У меня 3 навыка. Что ты хочешь сделать?"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_output" && \
+       jq -e '.data.to == "262872984"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_output" && \
+       jq -e '.data.reply_to_message_id == 955' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must use user_message as the current-turn intent source when the payload omits the messages array"
+    fi
+
     test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"
     local message_sending_stdout_file message_sending_stderr_file message_sending_output_clean message_sending_stderr
     message_sending_stdout_file="$(mktemp)"

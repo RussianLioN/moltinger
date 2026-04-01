@@ -1102,14 +1102,16 @@ event="$(extract_first_string event || true)"
 model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
 response_text="$(extract_first_string text || true)"
+user_message="$(extract_first_string user_message || true)"
 tool_name="$(extract_first_string tool || true)"
 command_arg="$(extract_first_string command || true)"
 messages_json="$(extract_json_array messages || true)"
 latest_user_message="$(extract_last_message_content_by_role "${messages_json:-}" user || true)"
 tool_calls_json="$(extract_json_array tool_calls || true)"
 response_text_flat="$(flatten_text_for_match "${response_text:-}")"
+user_message_flat="$(flatten_text_for_match "${user_message:-}")"
 latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
-intent_text_flat="${latest_user_message_flat:-$payload_flat}"
+intent_text_flat="${latest_user_message_flat:-${user_message_flat:-$payload_flat}}"
 
 write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
 
@@ -1234,7 +1236,7 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
 fi
 
 if [[ "$event" == "MessageSending" ]]; then
-    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then
@@ -1295,7 +1297,7 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
     exit 0
 fi
 
