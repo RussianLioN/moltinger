@@ -1211,8 +1211,14 @@ fi
 
 has_skill_path_false_negative=false
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills).{0,120}(не существует|отсутствует|doesn.?t exist|not found)|либо были удалены, либо( ещё| еще)? не созданы'; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills).{0,120}(не существует|отсутствует|doesn.?t exist|not found)|либо были удалены, либо( ещё| еще)? не созданы|[0-9]+[[:space:]]+навык(а|ов)?[^[:cntrl:]]{0,120}в[[:space:]]+конфиге[^[:cntrl:]]{0,160}файлов[^[:cntrl:]]{0,80}sandbox|файлов[^[:cntrl:]]{0,80}(нет|no)[^[:cntrl:]]{0,40}sandbox'; then
     has_skill_path_false_negative=true
+fi
+
+has_skill_visibility_generic_mismatch=false
+if [[ ( "$event" == "AfterLLMCall" || "$event" == "MessageSending" ) && "$tool_calls_present" != true ]] && \
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '([0-9]+[[:space:]]+навык(а|ов)?[[:space:]]+в[[:space:]]+конфиге[^[:cntrl:]]{0,160}файлов[^[:cntrl:]]{0,80}sandbox[^[:cntrl:]]{0,40}(стоп|stop)?)|(skills?[^[:cntrl:]]{0,120}(config|sandbox)[^[:cntrl:]]{0,120}(stop))'; then
+    has_skill_visibility_generic_mismatch=true
 fi
 
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
@@ -1228,7 +1234,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             | sed 's/[[:space:]][[:space:]]*/ /g' \
             | cut -c1-220
     )"
-    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$has_skill_path_false_negative" == true ]]; then
+    if [[ -z "$response_text_flat" || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$looks_like_broad_research_request" == true || "$has_skill_path_false_negative" == true || "$has_skill_visibility_generic_mismatch" == true ]]; then
         log_guard_diagnostic \
             "$event" \
             "$diagnostic_preview_source" \
@@ -1248,7 +1254,7 @@ if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; t
 fi
 
 if [[ "$event" == "MessageSending" ]]; then
-    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
+    if [[ "$is_telegram_safe_lane" != true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then
@@ -1309,7 +1315,7 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
 
@@ -1326,12 +1332,13 @@ if [[ "$looks_like_status" == true ]]; then
 fi
 
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
-    if [[ "$looks_like_skill_visibility_request" == true ]]; then
+    if [[ "$looks_like_skill_visibility_request" == true || "$has_skill_visibility_generic_mismatch" == true ]]; then
         skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
-        if [[ -n "$skill_snapshot_csv" && "$has_skill_path_false_negative" != true ]]; then
-            if ! reply_mentions_any_skill_from_csv "$response_text_flat" "$skill_snapshot_csv"; then
+        if [[ -n "$skill_snapshot_csv" || "$has_skill_visibility_generic_mismatch" == true || "$looks_like_skill_visibility_request" == true ]]; then
+            if [[ "$has_skill_path_false_negative" == true || "$has_skill_visibility_generic_mismatch" == true ]] || \
+               ! reply_mentions_any_skill_from_csv "$response_text_flat" "$skill_snapshot_csv"; then
                 visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
-                write_audit_line "emit_modify event=$event reason=skill_visibility_reply_override snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
+                write_audit_line "emit_modify event=$event reason=skill_visibility_reply_override snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv") false_negative=$has_skill_path_false_negative generic_mismatch=$has_skill_visibility_generic_mismatch"
                 if [[ "$event" == "AfterLLMCall" ]]; then
                     emit_modified_payload "$visibility_reply_text" true
                 else
