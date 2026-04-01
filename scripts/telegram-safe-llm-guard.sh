@@ -1211,13 +1211,13 @@ fi
 
 has_skill_path_false_negative=false
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills).{0,120}(не существует|отсутствует|doesn.?t exist|not found)|либо были удалены, либо( ещё| еще)? не созданы|[0-9]+[[:space:]]+навык(а|ов)?[^[:cntrl:]]{0,120}в[[:space:]]+конфиге[^[:cntrl:]]{0,160}файлов[^[:cntrl:]]{0,80}sandbox|файлов[^[:cntrl:]]{0,80}(нет|no)[^[:cntrl:]]{0,40}sandbox'; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(/home/moltis/\.moltis/skills|~/.moltis/skills).{0,120}(не существует|отсутствует|doesn.?t exist|not found)|либо были удалены, либо( ещё| еще)? не созданы|[0-9]+[[:space:]]+навык(а|ов)?[^[:cntrl:]]{0,120}в[[:space:]]+конфиге[^[:cntrl:]]{0,160}файлов[^[:cntrl:]]{0,80}(нет|no)|файлов[^[:cntrl:]]{0,80}(нет|no)[^[:cntrl:]]{0,40}sandbox'; then
     has_skill_path_false_negative=true
 fi
 
 has_skill_visibility_generic_mismatch=false
 if [[ ( "$event" == "AfterLLMCall" || "$event" == "MessageSending" ) && "$tool_calls_present" != true ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '([0-9]+[[:space:]]+навык(а|ов)?[[:space:]]+в[[:space:]]+конфиге[^[:cntrl:]]{0,160}файлов[^[:cntrl:]]{0,80}sandbox[^[:cntrl:]]{0,40}(стоп|stop)?)|(skills?[^[:cntrl:]]{0,120}(config|sandbox)[^[:cntrl:]]{0,120}(stop))'; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '([0-9]+[[:space:]]+навык(а|ов)?[[:space:]]+в[[:space:]]+конфиге[^[:cntrl:]]{0,160}файлов[^[:cntrl:]]{0,80}(нет|no)[^[:cntrl:]]{0,80}(sandbox|хочешь создать|stop|стоп))|(skills?[^[:cntrl:]]{0,120}(config|sandbox)[^[:cntrl:]]{0,120}(stop))'; then
     has_skill_visibility_generic_mismatch=true
 fi
 

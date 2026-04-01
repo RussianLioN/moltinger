@@ -344,6 +344,23 @@ EOF
         test_fail "AfterLLMCall guard must rewrite the observed config-and-sandbox stop phrase to the canonical runtime skill list even when the runtime omits current-turn context"
     fi
 
+    test_start "component_after_llm_guard_rewrites_observed_config_no_files_create_prompt_without_turn_context"
+    local after_skill_visibility_no_files_output
+    after_skill_visibility_no_files_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:skillnofiles","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"3 навыка в конфиге. Файлов нет. Хочешь создать — дай инструкцию.","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_no_files_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_visibility_no_files_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$after_skill_visibility_no_files_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite the observed config-without-files create-prompt phrase to the canonical runtime skill list even when the runtime omits current-turn context"
+    fi
+
     test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
     local after_skill_tool_output
     after_skill_tool_output="$(
@@ -670,6 +687,25 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must rewrite the observed config-and-sandbox stop phrase even when the runtime omits both messages[] and user_message"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_observed_config_no_files_create_prompt_without_user_message"
+    local message_sending_skill_visibility_no_files_output
+    message_sending_skill_visibility_no_files_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:vwy-skillnofiles","data":{"account_id":"moltis-bot","to":"262872986","reply_to_message_id":957,"text":"3 навыка в конфиге. Файлов нет. Хочешь создать — дай инструкцию."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_no_files_output" && \
+       jq -e '.data.text == "Навыки (3): codex-update, post-close-task-classifier, telegram-learner."' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_no_files_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_no_files_output" && \
+       jq -e '.data.to == "262872986"' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_no_files_output" && \
+       jq -e '.data.reply_to_message_id == 957' >/dev/null 2>&1 <<<"$message_sending_skill_visibility_no_files_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite the observed config-without-files create-prompt phrase even when the runtime omits both messages[] and user_message"
     fi
 
     test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"
