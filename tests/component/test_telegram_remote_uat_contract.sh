@@ -13,9 +13,10 @@ setup_remote_uat_contract_fixture() {
     cp "$WRAPPER_SCRIPT" "$TEST_TMPDIR/telegram-e2e-on-demand.sh"
     chmod +x "$TEST_TMPDIR/telegram-e2e-on-demand.sh"
 
-    cat > "$TEST_TMPDIR/telegram-web-user-monitor.sh" <<'SH'
+cat > "$TEST_TMPDIR/telegram-web-user-monitor.sh" <<'SH'
 #!/usr/bin/env bash
 mode="${TELEGRAM_WEB_STUB_MODE:-send_failure}"
+probe_message="${TELEGRAM_WEB_MESSAGE:-}"
 
 if [[ "$mode" == "status_semantic_mismatch" ]]; then
   cat <<'JSON'
@@ -258,6 +259,70 @@ if [[ "$mode" == "friendly_doc_search_plan_pass" ]]; then
   "status": "pass",
   "stage": "wait_reply",
   "reply_text": "Отлично! Давай изучу официальную документацию и существующие навыки как примеры. Начну с поиска документации Moltis и анализа навыка codex-update (он как раз проверяет версии):",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "template_search_plan_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Поищу темплейт в системе:",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "template_searching_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Ищу темплейт:",
   "reply_mid": 42,
   "sent_mid": 41,
   "checks": {
@@ -582,6 +647,100 @@ JSON
 fi
 
 if [[ "$mode" == "skill_create_success_reply_pass" ]]; then
+  if printf '%s' "$probe_message" | grep -Eiq 'что у тебя с навыками|skills\?'; then
+    cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Сейчас в runtime вижу навыки: codex-update, codex-update-new, template-skill, telegram-learner.",
+  "reply_mid": 43,
+  "sent_mid": 42,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+    exit 0
+  fi
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Готово: создал навык codex-update-new и добавил его в список доступных навыков.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "skill_create_followup_missing_pass" ]]; then
+  if printf '%s' "$probe_message" | grep -Eiq 'что у тебя с навыками|skills\?'; then
+    cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Сейчас в runtime вижу навыки: codex-update, template-skill, telegram-learner.",
+  "reply_mid": 43,
+  "sent_mid": 42,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+    exit 0
+  fi
   cat <<'JSON'
 {
   "ok": true,
@@ -946,6 +1105,42 @@ run_component_telegram_remote_uat_contract_tests() {
 	        fi
 	    fi
 
+	    test_start "component_telegram_remote_uat_fails_short_template_search_phrase_poiuschu_even_if_helper_passes"
+	    if TELEGRAM_WEB_STUB_MODE=template_search_plan_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "У тебя должен быть темплейт" \
+	        --output "$TEST_TMPDIR/result-template-search-plan.json" \
+	        >/dev/null 2>&1
+	    then
+	        test_fail "Authoritative wrapper must fail when the reply leaks the exact short 'Поищу темплейт в системе' planning phrase"
+	    else
+	        if jq -e '.failure.code == "semantic_internal_planning_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-template-search-plan.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Wrapper must surface the exact short 'Поищу темплейт в системе' reply as failed authoritative outcome"
+	        fi
+	    fi
+
+	    test_start "component_telegram_remote_uat_fails_short_template_search_phrase_ischu_even_if_helper_passes"
+	    if TELEGRAM_WEB_STUB_MODE=template_searching_pass \
+	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+	        --mode authoritative \
+	        --message "У тебя должен быть темплейт" \
+	        --output "$TEST_TMPDIR/result-template-searching.json" \
+	        >/dev/null 2>&1
+	    then
+	        test_fail "Authoritative wrapper must fail when the reply leaks the exact short 'Ищу темплейт' planning phrase"
+	    else
+	        if jq -e '.failure.code == "semantic_internal_planning_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-template-searching.json" >/dev/null 2>&1
+	        then
+	            test_pass
+	        else
+	            test_fail "Wrapper must surface the exact short 'Ищу темплейт' reply as failed authoritative outcome"
+	        fi
+	    fi
+
 	    test_start "component_telegram_remote_uat_fails_exact_live_friendly_doc_search_plan_even_if_helper_passes"
 	    if TELEGRAM_WEB_STUB_MODE=friendly_doc_search_plan_pass \
 	        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
@@ -1238,7 +1433,7 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must treat requested skill names case-insensitively when comparing user wording against live /api/skills skill slugs"
     fi
 
-    test_start "component_telegram_remote_uat_allows_skill_create_when_requested_skill_is_persisted_in_live_api"
+    test_start "component_telegram_remote_uat_allows_skill_create_only_after_followup_visibility_mentions_new_skill"
     if PATH="$TEST_TMPDIR:$PATH" \
         MOLTIS_PASSWORD=test-password \
         SKILLS_API_ATTEMPTS=1 \
@@ -1253,7 +1448,31 @@ run_component_telegram_remote_uat_contract_tests() {
     then
         test_pass
     else
-        test_fail "Authoritative wrapper must allow Telegram skill creation only after the requested skill appears in live /api/skills"
+        test_fail "Authoritative wrapper must allow Telegram skill creation only after live /api/skills proves persistence and the immediate follow-up visibility reply mentions the new skill"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_create_when_followup_visibility_does_not_mention_new_skill"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-followup-missing" \
+        MOLTIS_CURL_STUB_MODE=create_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_create_followup_missing_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Давай создадим навык codex-update-new" \
+        --output "$TEST_TMPDIR/result-skill-create-followup-missing.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the post-create visibility follow-up does not mention the newly created skill"
+    else
+        if jq -e '.failure.code == "semantic_skill_create_followup_visibility_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-create-followup-missing.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.skill_create_followup.requested_skill_name == "codex-update-new"' "$TEST_TMPDIR/result-skill-create-followup-missing.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must require the post-create follow-up visibility reply to mention the requested new skill"
+        fi
     fi
 
     test_start "component_telegram_remote_uat_fails_skill_create_when_requested_name_already_existed_before_send"

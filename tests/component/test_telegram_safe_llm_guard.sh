@@ -215,6 +215,32 @@ EOF
         test_fail "MessageSending guard must reuse the persisted sparse-create intent and replace final planning chatter with a deterministic create confirmation"
     fi
 
+    test_start "component_message_sending_guard_consumes_persisted_skill_create_intent_after_first_final_rewrite"
+    local skill_create_intent_first_output skill_create_intent_second_output
+    skill_create_intent_dir="$(secure_temp_dir telegram-safe-skill-create-consume)"
+    printf '%s\tskill_create_created:codex-update-new\n' "$(date +%s)" >"$skill_create_intent_dir/session_skill_create.intent"
+    skill_create_intent_first_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_create_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session_skill_create","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":959,"text":"Ищу template и существующие навыки перед созданием."}}
+EOF
+    )"
+    skill_create_intent_second_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_create_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session_skill_create","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":960,"text":"Создам навык позже, сначала уточню детали."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$skill_create_intent_first_output" && \
+       [[ -z "$skill_create_intent_second_output" ]] && \
+       [[ ! -f "$skill_create_intent_dir/session_skill_create.intent" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must consume persisted skill-create intent after the first final rewrite so later unrelated deliveries are not rewritten to a false create-success reply"
+    fi
+
     test_start "component_message_sending_guard_reuses_persisted_skill_template_intent_for_final_delivery"
     local skill_template_intent_dir skill_template_output
     skill_template_intent_dir="$(secure_temp_dir telegram-safe-skill-template-intent)"
@@ -669,6 +695,34 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must fail closed on observed template-and-skills-directory planning before text fallback turns it into queued Telegram-safe churn"
+    fi
+
+    test_start "component_after_llm_guard_blocks_exact_short_template_probe_phrase_poiuschu"
+    local short_template_probe_output
+    short_template_probe_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz2","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Поищу темплейт в системе:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$short_template_probe_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$short_template_probe_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$short_template_probe_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fail closed on the exact short 'Поищу темплейт в системе' leak seen in Telegram"
+    fi
+
+    test_start "component_after_llm_guard_blocks_exact_short_template_probe_phrase_ischu"
+    local short_template_searching_output
+    short_template_searching_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz3","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Ищу темплейт:","tool_calls":[]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$short_template_searching_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$short_template_searching_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$short_template_searching_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fail closed on the exact short 'Ищу темплейт' leak seen in Telegram"
     fi
 
     test_start "component_after_llm_guard_blocks_observed_github_repo_doc_fetch_wording_before_text_fallback_parser_can_promote_it"

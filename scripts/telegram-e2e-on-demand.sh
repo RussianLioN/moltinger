@@ -35,6 +35,7 @@ MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
 STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-custom-zai-telegram-safe::glm-5}"
 SKILLS_API_ATTEMPTS="${SKILLS_API_ATTEMPTS:-5}"
 SKILLS_API_RETRY_DELAY_SECONDS="${SKILLS_API_RETRY_DELAY_SECONDS:-1}"
+SKILL_CREATE_FOLLOWUP_MESSAGE="${SKILL_CREATE_FOLLOWUP_MESSAGE:-А что у тебя с навыками/skills?}"
 
 RUN_ID=""
 STARTED_AT=""
@@ -55,6 +56,8 @@ ARTIFACT_STATUS="review_safe"
 
 AUTHORITATIVE_RAW_JSON='null'
 AUTHORITATIVE_STDERR=""
+AUTHORITATIVE_FOLLOWUP_RAW_JSON='null'
+AUTHORITATIVE_FOLLOWUP_STDERR=""
 FALLBACK_RAW_JSON='null'
 FALLBACK_STDERR=""
 
@@ -215,7 +218,7 @@ reply_has_internal_planning_leak() {
   normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
-  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(-то)?( это)? сделаю( правильно)?|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|чита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц)|как пример|mcp__|mounted workspace|skill files|existing skills|существующ(ий|ие|его) навык|имеющ(егося|ийся) навы'; then
+  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(-то)?( это)? сделаю( правильно)?|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|чита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|как пример|mcp__|mounted workspace|skill files|existing skills|существующ(ий|ие|его) навык|имеющ(егося|ийся) навы'; then
     return 0
   fi
 
@@ -534,6 +537,18 @@ runtime_skill_names_json() {
   jq -c '[.skills[]?.name // empty]' <<<"$skills_json" 2>/dev/null
 }
 
+reply_mentions_requested_skill_name() {
+  local reply_text="$1"
+  local requested_skill_name="$2"
+  local normalized_reply normalized_skill_name
+
+  normalized_reply="$(normalize_message_text "$reply_text" | tr '[:upper:]' '[:lower:]')"
+  normalized_skill_name="$(printf '%s' "$requested_skill_name" | tr '[:upper:]' '[:lower:]')"
+
+  [[ -n "$normalized_reply" && -n "$normalized_skill_name" ]] || return 1
+  [[ "$normalized_reply" == *"$normalized_skill_name"* ]]
+}
+
 fail_skill_semantics_when_api_unavailable() {
   local normalized_message="$1"
   local reply_text="$2"
@@ -811,6 +826,7 @@ evaluate_authoritative_semantics() {
   fi
 
   if message_is_skill_create_query "$normalized_message"; then
+    local followup_reply_text=""
     requested_skill_name="$(extract_requested_skill_name "$normalized_message" || true)"
 
     if reply_has_skill_false_negative "$reply_text"; then
@@ -887,6 +903,59 @@ evaluate_authoritative_semantics() {
         --argjson base "$DIAGNOSTIC_JSON" \
         '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_create_not_persisted"}}')"
       RECOMMENDED_ACTION="Rerun Telegram skill creation only after the requested skill appears in live /api/skills, then verify the final user-facing reply again."
+      return 0
+    fi
+
+    if ! run_authoritative_telegram_web_followup "$SKILL_CREATE_FOLLOWUP_MESSAGE"; then
+      return 0
+    fi
+
+    followup_reply_text="$(jq -r '.reply_text // empty' <<< "$AUTHORITATIVE_FOLLOWUP_RAW_JSON" 2>/dev/null || true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg followup_message "$SKILL_CREATE_FOLLOWUP_MESSAGE" \
+      --arg followup_reply_text "$followup_reply_text" \
+      --arg requested_skill_name "$requested_skill_name" \
+      --argjson runtime_skill_names "$runtime_skill_names" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {skill_create_followup:{message:$followup_message, observed_reply:$followup_reply_text, requested_skill_name:$requested_skill_name, runtime_skill_names:$runtime_skill_names}}')"
+
+    if reply_has_internal_activity "$followup_reply_text"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_activity_leak" "$RUN_STAGE" "Post-create Telegram follow-up exposed internal activity/tool-progress instead of proving live skill visibility" "operator" true)"
+      RECOMMENDED_ACTION="Reconcile Telegram create-skill flow so the next visibility turn stays user-facing and free of internal activity leaks."
+      return 0
+    fi
+
+    if reply_has_internal_planning_leak "$followup_reply_text"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_internal_planning_leak" "$RUN_STAGE" "Post-create Telegram follow-up exposed internal planning instead of proving live skill visibility" "operator" true)"
+      RECOMMENDED_ACTION="Reconcile Telegram create-skill flow so the next visibility turn answers directly instead of showing internal planning."
+      return 0
+    fi
+
+    if reply_has_host_path_leak "$followup_reply_text"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_host_path_leak" "$RUN_STAGE" "Post-create Telegram follow-up exposed internal host or repo paths instead of proving live skill visibility" "operator" true)"
+      RECOMMENDED_ACTION="Remove host-path leakage from the post-create visibility turn and rerun authoritative UAT."
+      return 0
+    fi
+
+    if reply_has_skill_false_negative "$followup_reply_text"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_false_negative" "$RUN_STAGE" "Post-create Telegram follow-up still used sandbox filesystem absence as proof that skills were missing" "operator" true)"
+      RECOMMENDED_ACTION="Reconcile Telegram create-skill follow-up so skill visibility comes from live runtime truth rather than sandbox filesystem guesses."
+      return 0
+    fi
+
+    if ! reply_mentions_requested_skill_name "$followup_reply_text" "$requested_skill_name"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_visibility_mismatch" "$RUN_STAGE" "Post-create Telegram follow-up did not mention the newly created live skill, so immediate visibility/useability was not proven" "operator" true)"
+      RECOMMENDED_ACTION="Require the next Telegram visibility turn after create to mention the newly created live skill before treating the flow as green."
       return 0
     fi
   fi
@@ -985,13 +1054,17 @@ write_debug_bundle() {
     jq -cn \
       --arg run_id "$RUN_ID" \
       --arg authoritative_stderr "$AUTHORITATIVE_STDERR" \
+      --arg authoritative_followup_stderr "$AUTHORITATIVE_FOLLOWUP_STDERR" \
       --arg fallback_stderr "$FALLBACK_STDERR" \
       --argjson authoritative_raw "$AUTHORITATIVE_RAW_JSON" \
+      --argjson authoritative_followup_raw "$AUTHORITATIVE_FOLLOWUP_RAW_JSON" \
       --argjson fallback_raw "$FALLBACK_RAW_JSON" \
       '{
         run_id: $run_id,
         authoritative_raw: $authoritative_raw,
         authoritative_stderr_tail: (if $authoritative_stderr == "" then null else $authoritative_stderr end),
+        authoritative_followup_raw: (if $authoritative_followup_raw == null then null else $authoritative_followup_raw end),
+        authoritative_followup_stderr_tail: (if $authoritative_followup_stderr == "" then null else $authoritative_followup_stderr end),
         fallback_raw: $fallback_raw,
         fallback_stderr_tail: (if $fallback_stderr == "" then null else $fallback_stderr end)
       }'
@@ -1241,6 +1314,73 @@ normalize_from_authoritative_helper() {
   else
     FAILURE_JSON="$(build_failure_json "environment_precondition" "$RUN_STAGE" "Authoritative Telegram Web probe failed without a normalized failure object" "engineering" true)"
   fi
+}
+
+run_authoritative_telegram_web_followup() {
+  local followup_message="$1"
+  local helper_script="$SCRIPT_DIR/telegram-web-user-monitor.sh"
+  local helper_output_file="$TMP_DIR/telegram-web-followup-result.json"
+  local helper_error_file="$TMP_DIR/telegram-web-followup-error.log"
+  local helper_debug="false"
+  local helper_exit=0
+
+  AUTHORITATIVE_FOLLOWUP_RAW_JSON='null'
+  AUTHORITATIVE_FOLLOWUP_STDERR=""
+
+  if [[ ! -f "$helper_script" ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_unavailable" "$RUN_STAGE" "Post-create Telegram follow-up probe is unavailable, so new-skill visibility could not be proven" "engineering" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {skill_create_followup:{failure:"semantic_skill_create_followup_unavailable", reason:"telegram_web_monitor_missing"}}')"
+    RECOMMENDED_ACTION="Restore the Telegram Web helper and rerun the create-skill authoritative check."
+    return 1
+  fi
+
+  if [[ -n "$DEBUG_OUTPUT_PATH" || "$VERBOSE" == "true" ]]; then
+    helper_debug="true"
+  fi
+
+  set +e
+  TELEGRAM_WEB_TARGET="$AUTHORITATIVE_TARGET" \
+  TELEGRAM_WEB_STATE="$AUTHORITATIVE_STATE" \
+  TELEGRAM_WEB_MESSAGE="$followup_message" \
+  TELEGRAM_WEB_TIMEOUT_SECONDS="$TIMEOUT_SEC" \
+  TELEGRAM_WEB_DEBUG="$helper_debug" \
+  "$helper_script" >"$helper_output_file" 2>"$helper_error_file"
+  helper_exit=$?
+  set -e
+
+  capture_helper_json "$helper_output_file" "$helper_error_file" AUTHORITATIVE_FOLLOWUP_RAW_JSON AUTHORITATIVE_FOLLOWUP_STDERR
+
+  if ! jq -e . "$helper_output_file" >/dev/null 2>&1; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_unavailable" "$RUN_STAGE" "Post-create Telegram follow-up probe returned invalid JSON, so new-skill visibility could not be proven" "engineering" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg stderr "$AUTHORITATIVE_FOLLOWUP_STDERR" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {skill_create_followup:{failure:"semantic_skill_create_followup_unavailable", stderr:(if $stderr == "" then null else $stderr end)}}')"
+    RECOMMENDED_ACTION="Inspect the follow-up Telegram Web probe and rerun the create-skill authoritative check."
+    return 1
+  fi
+
+  if [[ "$(jq -r '.ok' <<<"$AUTHORITATIVE_FOLLOWUP_RAW_JSON")" != "true" ]]; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_unavailable" "$RUN_STAGE" "Post-create Telegram follow-up probe did not complete successfully, so new-skill visibility could not be proven" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg followup_message "$followup_message" \
+      --argjson helper_exit "$helper_exit" \
+      --argjson helper_json "$AUTHORITATIVE_FOLLOWUP_RAW_JSON" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {skill_create_followup:{message:$followup_message, helper_exit_code:$helper_exit, helper:$helper_json, failure:"semantic_skill_create_followup_unavailable"}}')"
+    RECOMMENDED_ACTION="Rerun Telegram create-skill UAT and require a successful follow-up visibility reply before treating the new skill as usable."
+    return 1
+  fi
+
+  return 0
 }
 
 run_authoritative_telegram_web() {
