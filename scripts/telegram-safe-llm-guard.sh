@@ -9,6 +9,8 @@ fi
 AUDIT_FILE="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE:-}"
 INTENT_DIR="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR:-/tmp/moltis-telegram-safe-llm-guard-intent}"
 INTENT_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_TTL_SEC:-900}"
+DIRECT_FASTPATH_ENABLED="${MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH:-true}"
+DIRECT_SEND_SCRIPT="${MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT:-/server/scripts/telegram-bot-send.sh}"
 
 write_audit_line() {
     local message="$1"
@@ -947,6 +949,140 @@ build_skill_visibility_reply_text() {
     printf 'Навыки (%s): %s.' "$count" "$inline_names"
 }
 
+build_minimal_skill_scaffold() {
+    local skill_name="$1"
+
+    cat <<EOF
+---
+name: ${skill_name}
+description: Базовый навык ${skill_name}. Использовать, когда пользователь явно просит сценарий ${skill_name}.
+---
+# ${skill_name}
+
+## Активация
+Когда пользователь явно просит сценарий ${skill_name} или доработку этого навыка, используй его.
+
+## Workflow
+1. Уточни цель, если для точного выполнения не хватает контекста.
+2. Выполни основной сценарий навыка.
+3. Верни краткий итог и предложи, как доработать навык дальше.
+
+## Templates
+- TODO: добавить конкретные шаблоны под сценарий навыка.
+EOF
+}
+
+build_skill_template_reply_text() {
+    cat <<'EOF'
+Канонический минимальный шаблон навыка:
+
+```md
+---
+name: <skill-name>
+description: Базовый навык <skill-name>. Использовать, когда пользователь явно просит сценарий <skill-name>.
+---
+# <skill-name>
+
+## Активация
+Когда пользователь явно просит сценарий <skill-name> или доработку этого навыка, используй его.
+
+## Workflow
+1. Уточни цель, если для точного выполнения не хватает контекста.
+2. Выполни основной сценарий навыка.
+3. Верни краткий итог и предложи, как доработать навык дальше.
+
+## Templates
+- TODO: добавить конкретные шаблоны под сценарий навыка.
+```
+
+Если хочешь, следующим сообщением я создам такой базовый навык по имени/slug.
+EOF
+}
+
+flag_enabled() {
+    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes|on)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+extract_runtime_field_from_text() {
+    local source_text="${1:-}"
+    local field_name="${2:-}"
+
+    [[ -n "$source_text" && -n "$field_name" ]] || return 1
+
+    printf '%s' "$source_text" \
+        | grep -oE "${field_name}=[^ |]+" \
+        | head -n 1 \
+        | sed -E "s/^${field_name}=//"
+}
+
+extract_requested_skill_name() {
+    local source_text="${1:-}"
+    local normalized_text=""
+
+    [[ -n "$source_text" ]] || return 1
+
+    normalized_text="$(
+        printf '%s' "$source_text" \
+            | tr '\r\n' '  ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+
+    if [[ "$normalized_text" =~ [Сс]озда(й|ть|дим)[[:space:]]+(нов(ый|ую)[[:space:]]+)?(навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        printf '%s' "${BASH_REMATCH[5]}"
+        return 0
+    fi
+
+    if [[ "$normalized_text" =~ [Cc]reate[[:space:]]+(new[[:space:]]+)?skill[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        printf '%s' "${BASH_REMATCH[2]}"
+        return 0
+    fi
+
+    if [[ "$normalized_text" =~ [Cc]reate[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*)[[:space:]]+skill ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    return 1
+}
+
+create_runtime_skill_scaffold() {
+    local skill_name="${1:-}"
+    local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
+    local skill_dir=""
+
+    [[ -n "$skill_name" ]] || return 1
+    [[ "$skill_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 1
+
+    skill_dir="${runtime_root}/${skill_name}"
+    mkdir -p "$skill_dir" || return 1
+    build_minimal_skill_scaffold "$skill_name" > "${skill_dir}/SKILL.md"
+}
+
+runtime_skill_dir_path() {
+    local skill_name="${1:-}"
+    local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
+
+    [[ -n "$skill_name" ]] || return 1
+    printf '%s/%s' "$runtime_root" "$skill_name"
+}
+
+send_telegram_direct_message() {
+    local chat_id="${1:-}"
+    local text="${2:-}"
+
+    [[ -n "$chat_id" && -n "$text" ]] || return 1
+    [[ -x "$DIRECT_SEND_SCRIPT" ]] || return 1
+
+    "$DIRECT_SEND_SCRIPT" --chat-id "$chat_id" --text "$text" >/dev/null 2>&1
+}
+
 reply_mentions_any_skill_from_csv() {
     local reply_text="${1:-}"
     local csv="${2:-}"
@@ -1188,11 +1324,13 @@ command_arg="$(extract_first_string command || true)"
 messages_json="$(extract_json_array messages || true)"
 latest_user_message="$(extract_last_message_content_by_role "${messages_json:-}" user || true)"
 latest_assistant_message="$(extract_last_message_content_by_role "${messages_json:-}" assistant || true)"
+latest_system_message="$(extract_last_message_content_by_role "${messages_json:-}" system || true)"
 tool_calls_json="$(extract_json_array tool_calls || true)"
 response_text_flat="$(flatten_text_for_match "${response_text:-}")"
 user_message_flat="$(flatten_text_for_match "${user_message:-}")"
 latest_user_message_flat="$(flatten_text_for_match "${latest_user_message:-}")"
 latest_assistant_message_flat="$(flatten_text_for_match "${latest_assistant_message:-}")"
+latest_system_message_flat="$(flatten_text_for_match "${latest_system_message:-}")"
 intent_text_flat="${latest_user_message_flat:-${user_message_flat:-$payload_flat}}"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
 
@@ -1264,6 +1402,15 @@ fi
 looks_like_skill_turn=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
     looks_like_skill_turn=true
+fi
+
+looks_like_skill_template_request=false
+if printf '%s' "$intent_text_flat" | grep -Eiq '(темплейт|template|шаблон)'; then
+    if [[ "$looks_like_skill_turn" == true ]] || \
+       printf '%s' "$latest_assistant_message_flat" | grep -Eiq '(навык|skills?|skill|темплейт|template|шаблон|create_skill|update_skill|delete_skill)' || \
+       printf '%s' "$latest_system_message_flat" | grep -Eiq '<available_skills>|канонический минимальный scaffold'; then
+        looks_like_skill_template_request=true
+    fi
 fi
 
 looks_like_skill_followup_turn=false
@@ -1350,6 +1497,52 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         persist_turn_intent "${turn_session_key:-}" "skill_visibility"
     else
         clear_turn_intent "${turn_session_key:-}"
+    fi
+    if [[ "$is_telegram_safe_lane" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED"; then
+        telegram_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
+        if [[ "$looks_like_skill_visibility_request" == true && -n "${telegram_chat_id:-}" ]]; then
+            skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+            visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
+            if send_telegram_direct_message "$telegram_chat_id" "$visibility_reply_text"; then
+                write_audit_line "direct_fastpath kind=skill_visibility chat_id=$telegram_chat_id snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
+                exit 1
+            fi
+            write_audit_line "direct_fastpath_failed kind=skill_visibility chat_id=${telegram_chat_id:-missing}"
+        fi
+        if [[ "$looks_like_skill_template_request" == true && -n "${telegram_chat_id:-}" ]]; then
+            template_reply_text="$(build_skill_template_reply_text)"
+            if send_telegram_direct_message "$telegram_chat_id" "$template_reply_text"; then
+                write_audit_line "direct_fastpath kind=skill_template chat_id=$telegram_chat_id"
+                exit 1
+            fi
+            write_audit_line "direct_fastpath_failed kind=skill_template chat_id=${telegram_chat_id:-missing}"
+        fi
+        if [[ "$looks_like_sparse_skill_create_request" == true && -n "${telegram_chat_id:-}" ]]; then
+            requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
+            if [[ -n "${requested_skill_name:-}" ]]; then
+                skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+                case ",${skill_snapshot_csv}," in
+                    *,"${requested_skill_name}",*)
+                        create_reply_text="Навык \`${requested_skill_name}\` уже существует. Могу следующим сообщением обновить его или показать текущий шаблон."
+                        if send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
+                            write_audit_line "direct_fastpath kind=skill_create_exists chat_id=$telegram_chat_id skill=$requested_skill_name"
+                            exit 1
+                        fi
+                        ;;
+                    *)
+                        if create_runtime_skill_scaffold "$requested_skill_name"; then
+                            create_reply_text="Создал базовый шаблон навыка \`${requested_skill_name}\`. Могу следующим сообщением доработать описание, workflow и templates."
+                            if send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
+                                write_audit_line "direct_fastpath kind=skill_create chat_id=$telegram_chat_id skill=$requested_skill_name"
+                                exit 1
+                            fi
+                            rm -rf "$(runtime_skill_dir_path "$requested_skill_name")" 2>/dev/null || true
+                        fi
+                        write_audit_line "direct_fastpath_failed kind=skill_create chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing}"
+                        ;;
+                esac
+            fi
+        fi
     fi
     if [[ -n "${messages_json:-}" ]]; then
         if [[ "$looks_like_broad_research_request" == true ]]; then
