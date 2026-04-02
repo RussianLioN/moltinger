@@ -1,23 +1,23 @@
 # RCA Index
 
 **Last Updated**: 2026-04-02
-**Version**: 1.18.0
+**Version**: 1.19.0
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total RCA | 26 |
+| Total RCA | 27 |
 | Avg Resolution Time | N/A |
-| This Month | 26 |
+| This Month | 27 |
 
 ## By Category
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| generic | 4 | 17% |
-| process | 10 | 40% |
-| cicd | 10 | 38% |
+| generic | 4 | 15% |
+| process | 11 | 41% |
+| cicd | 10 | 37% |
 | security | 1 | 4% |
 | shell | 1 | 4% |
 
@@ -26,7 +26,7 @@
 | Severity | Count | Description |
 |----------|-------|-------------|
 | P0 | 1 | Critical - blocks release |
-| P1 | 10 | High - production impact |
+| P1 | 11 | High - production impact |
 | P2 | 10 | Medium - process issue |
 | P3 | 4 | Low - minor issue |
 | P4 | 1 | Backlog |
@@ -35,6 +35,7 @@
 
 | ID | Date | Category | Severity | Status | Root Cause | Fix |
 |----|------|----------|----------|--------|------------|-----|
+| RCA-027 | 2026-04-02 | process | P1 | resolved | commit `adb00b0` removed the direct Bot API fastpath for Telegram `skill_detail` turns and relied on a single in-band hook path that live Moltis 0.10.18 Telegram runtime still did not honor reliably | restored direct `skill_detail` fastpath with same-turn suppression, reverted regression tests to the live-proven delivery contract, and revalidated the guard suites |
 | RCA-026 | 2026-04-02 | cicd | P2 | resolved | `run-tracked-moltis-deploy.sh` treated empty `deploy.sh` stdout as acceptable `jq` input, so the GitHub Actions step could fail with empty `OUTPUT/STATUS` instead of structured failure JSON | rejected empty/whitespace payloads before `jq`, added a unit regression for empty deploy stdout, and confirmed rerun deploy success plus updated markers |
 | RCA-025 | 2026-03-29 | process | P1 | resolved | repo-local runtime repair guidance still routed `runtime_bootstrap_required` to raw `bd bootstrap`, but current installed Beads CLI can no-op when a stale `.beads/dolt` shell already exists without the named `beads` DB | routed runtime-only repair through managed stale-shell quarantine + bootstrap/import helper, updated active rules/docs, and added live-contract regressions |
 | RCA-024 | 2026-03-28 | cicd | P2 | resolved | deploy stall watchdog passed full GitHub Actions workflow-run payloads into `jq` through `--argjson` shell arguments twice, so scheduled monitoring failed with `Argument list too long` before classification | switched watchdog payload transport to temp files + `jq --slurpfile` and added an oversized API-payload unit test |

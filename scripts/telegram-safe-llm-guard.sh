@@ -3038,6 +3038,17 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             fi
             write_audit_line "direct_fastpath_failed kind=skill_template chat_id=${telegram_chat_id:-missing}"
         fi
+        if [[ "$current_turn_skill_detail_request" == true ]]; then
+            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            write_audit_line "skill_detail_probe stage=direct requested=${requested_skill_reference_name:-missing} resolved=${resolved_skill_name:-missing} chat_id=${telegram_chat_id:-missing} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
+            if [[ -n "$skill_detail_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$skill_detail_reply_text"; then
+                write_audit_line "direct_fastpath kind=skill_detail chat_id=$telegram_chat_id skill=${resolved_skill_name:-missing}"
+                persist_delivery_suppression "${turn_session_key:-}" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+                clear_turn_intent "${turn_session_key:-}"
+                exit 0
+            fi
+            write_audit_line "direct_fastpath_failed kind=skill_detail chat_id=${telegram_chat_id:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
+        fi
         if [[ "$current_turn_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" && -n "${next_turn_skill_create_state:-}" ]]; then
             create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state" || true)"
             if [[ -n "$create_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then

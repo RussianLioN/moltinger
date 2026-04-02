@@ -424,8 +424,8 @@ EOF
         test_fail "Direct skill-template fastpath must stay handler-safe: send the canonical scaffold, return rc=0, and leave only a delivery-suppression marker"
     fi
 
-    test_start "component_before_llm_guard_hard_overrides_skill_detail_without_direct_send_even_when_fastpath_enabled"
-    local fastpath_skill_detail_tmp fastpath_skill_detail_send_script fastpath_skill_detail_log fastpath_skill_detail_output fastpath_skill_detail_intent_dir fastpath_skill_detail_suppress_file fastpath_skill_detail_runtime_root fastpath_skill_detail_fakebin
+    test_start "component_before_llm_guard_direct_fastpaths_skill_detail_via_bot_send_when_enabled"
+    local fastpath_skill_detail_tmp fastpath_skill_detail_send_script fastpath_skill_detail_log fastpath_skill_detail_stdout fastpath_skill_detail_stderr fastpath_skill_detail_status fastpath_skill_detail_intent_dir fastpath_skill_detail_suppress_file fastpath_skill_detail_runtime_root fastpath_skill_detail_fakebin
     fastpath_skill_detail_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail)"
     fastpath_skill_detail_send_script="$fastpath_skill_detail_tmp/send.sh"
     fastpath_skill_detail_log="$fastpath_skill_detail_tmp/send.log"
@@ -443,40 +443,60 @@ EOF
     cat >"$fastpath_skill_detail_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'unexpected direct send\n' >"$FASTPATH_LOG"
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
 printf '{"ok":true}\n'
 EOF
     chmod +x "$fastpath_skill_detail_send_script"
-    fastpath_skill_detail_output="$(
-        env PATH="$fastpath_skill_detail_fakebin:$MINIMAL_PATH" \
-            FASTPATH_LOG="$fastpath_skill_detail_log" \
-            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
-            MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_runtime_root" \
-            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_intent_dir" \
-            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_send_script" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+    fastpath_skill_detail_stdout="$fastpath_skill_detail_tmp/stdout.log"
+    fastpath_skill_detail_stderr="$fastpath_skill_detail_tmp/stderr.log"
+    set +e
+    env PATH="$fastpath_skill_detail_fakebin:$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_stdout" 2>"$fastpath_skill_detail_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
 EOF
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe skill-detail hard override")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[0].content | contains("telegram-learner")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[0].content | contains("@tsingular")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[0].content | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[0].content | contains("В Telegram-чате этот навык даёт короткий результат")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[0].content | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM") | not' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$fastpath_skill_detail_output" && \
-       [[ ! -e "$fastpath_skill_detail_log" ]] && \
-       [[ ! -e "$fastpath_skill_detail_suppress_file" ]]; then
+    fastpath_skill_detail_status=$?
+    set -e
+    if [[ "$fastpath_skill_detail_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_stdout" ]] && \
+       [[ ! -s "$fastpath_skill_detail_stderr" ]] && \
+       [[ -f "$fastpath_skill_detail_suppress_file" ]] && \
+       grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_log" && \
+       grep -Fq 'telegram-learner' "$fastpath_skill_detail_log" && \
+       grep -Fq '@tsingular' "$fastpath_skill_detail_log" && \
+       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_log" && \
+       grep -Fq 'В Telegram-чате этот навык даёт короткий результат' "$fastpath_skill_detail_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must hard-override skill-detail turns and avoid any direct-send suppression path even when Telegram fastpath remains enabled globally"
+        test_fail "Direct skill-detail fastpath must resolve the runtime skill, answer from SKILL.md, and leave only a same-turn delivery-suppression marker"
     fi
 
-    test_start "component_before_llm_guard_hard_overrides_skill_detail_after_prior_history_without_python3"
-    local fastpath_skill_detail_history_tmp fastpath_skill_detail_history_send_script fastpath_skill_detail_history_log fastpath_skill_detail_history_output fastpath_skill_detail_history_intent_dir fastpath_skill_detail_history_suppress_file fastpath_skill_detail_history_runtime_root fastpath_skill_detail_history_fakebin
+    test_start "component_before_llm_guard_direct_fastpaths_skill_detail_after_prior_history_without_python3"
+    local fastpath_skill_detail_history_tmp fastpath_skill_detail_history_send_script fastpath_skill_detail_history_log fastpath_skill_detail_history_stdout fastpath_skill_detail_history_stderr fastpath_skill_detail_history_status fastpath_skill_detail_history_intent_dir fastpath_skill_detail_history_suppress_file fastpath_skill_detail_history_runtime_root fastpath_skill_detail_history_fakebin
     fastpath_skill_detail_history_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-history)"
     fastpath_skill_detail_history_send_script="$fastpath_skill_detail_history_tmp/send.sh"
     fastpath_skill_detail_history_log="$fastpath_skill_detail_history_tmp/send.log"
@@ -494,38 +514,59 @@ EOF
     cat >"$fastpath_skill_detail_history_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'unexpected direct send\n' >"$FASTPATH_LOG"
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
 printf '{"ok":true}\n'
 EOF
     chmod +x "$fastpath_skill_detail_history_send_script"
-    fastpath_skill_detail_history_output="$(
-        env PATH="$fastpath_skill_detail_history_fakebin:$MINIMAL_PATH" \
-            FASTPATH_LOG="$fastpath_skill_detail_history_log" \
-            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
-            MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_history_runtime_root" \
-            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_history_intent_dir" \
-            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_history_send_script" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+    fastpath_skill_detail_history_stdout="$fastpath_skill_detail_history_tmp/stdout.log"
+    fastpath_skill_detail_history_stderr="$fastpath_skill_detail_history_tmp/stderr.log"
+    set +e
+    env PATH="$fastpath_skill_detail_history_fakebin:$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_history_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_history_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_history_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_history_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_history_stdout" 2>"$fastpath_skill_detail_history_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:historydetail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Что нового?"},{"role":"assistant","content":"Немногое, но по делу."},{"role":"user","content":"А какие навыки у тебя есть?"},{"role":"assistant","content":"Сейчас доступны навыки: `codex-update`, `post-close-task-classifier`, `telegram-learner`."},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
 EOF
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe skill-detail hard override")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.messages[0].content | contains("telegram-learner")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.messages[0].content | contains("@tsingular")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.messages[0].content | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$fastpath_skill_detail_history_output" && \
-       [[ ! -e "$fastpath_skill_detail_history_log" ]] && \
-       [[ ! -e "$fastpath_skill_detail_history_suppress_file" ]]; then
+    fastpath_skill_detail_history_status=$?
+    set -e
+    if [[ "$fastpath_skill_detail_history_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_history_stdout" ]] && \
+       [[ ! -s "$fastpath_skill_detail_history_stderr" ]] && \
+       [[ -f "$fastpath_skill_detail_history_suppress_file" ]] && \
+       grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_history_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_history_log" && \
+       grep -Fq 'telegram-learner' "$fastpath_skill_detail_history_log" && \
+       grep -Fq '@tsingular' "$fastpath_skill_detail_history_log" && \
+       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_history_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_history_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must classify skill-detail from the latest user turn, stay deterministic with prior chat history, and avoid the old direct-send branch"
+        test_fail "Direct skill-detail fastpath must remain deterministic even with prior chat history and no working python3 binary in PATH"
     fi
 
-    test_start "component_before_llm_guard_hard_overrides_skill_detail_without_perl_or_python3"
-    local fastpath_skill_detail_nolang_tmp fastpath_skill_detail_nolang_send_script fastpath_skill_detail_nolang_log fastpath_skill_detail_nolang_output fastpath_skill_detail_nolang_intent_dir fastpath_skill_detail_nolang_suppress_file fastpath_skill_detail_nolang_runtime_root fastpath_skill_detail_nolang_fakebin
+    test_start "component_before_llm_guard_direct_fastpaths_skill_detail_without_perl_or_python3"
+    local fastpath_skill_detail_nolang_tmp fastpath_skill_detail_nolang_send_script fastpath_skill_detail_nolang_log fastpath_skill_detail_nolang_stdout fastpath_skill_detail_nolang_stderr fastpath_skill_detail_nolang_status fastpath_skill_detail_nolang_intent_dir fastpath_skill_detail_nolang_suppress_file fastpath_skill_detail_nolang_runtime_root fastpath_skill_detail_nolang_fakebin
     fastpath_skill_detail_nolang_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-nolang)"
     fastpath_skill_detail_nolang_send_script="$fastpath_skill_detail_nolang_tmp/send.sh"
     fastpath_skill_detail_nolang_log="$fastpath_skill_detail_nolang_tmp/send.log"
@@ -547,35 +588,56 @@ EOF
     cat >"$fastpath_skill_detail_nolang_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'unexpected direct send\n' >"$FASTPATH_LOG"
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
 printf '{"ok":true}\n'
 EOF
     chmod +x "$fastpath_skill_detail_nolang_send_script"
-    fastpath_skill_detail_nolang_output="$(
-        env PATH="$fastpath_skill_detail_nolang_fakebin:$MINIMAL_PATH" \
-            FASTPATH_LOG="$fastpath_skill_detail_nolang_log" \
-            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
-            MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_nolang_runtime_root" \
-            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_nolang_intent_dir" \
-            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_nolang_send_script" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+    fastpath_skill_detail_nolang_stdout="$fastpath_skill_detail_nolang_tmp/stdout.log"
+    fastpath_skill_detail_nolang_stderr="$fastpath_skill_detail_nolang_tmp/stderr.log"
+    set +e
+    env PATH="$fastpath_skill_detail_nolang_fakebin:$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_nolang_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_nolang_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_nolang_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_nolang_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_nolang_stdout" 2>"$fastpath_skill_detail_nolang_stderr" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:nolangdetail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
 EOF
-    )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe skill-detail hard override")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages[0].content | contains("telegram-learner")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages[0].content | contains("@tsingular")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages[0].content | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages[0].content | contains("В Telegram-чате этот навык даёт короткий результат")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$fastpath_skill_detail_nolang_output" && \
-       [[ ! -e "$fastpath_skill_detail_nolang_log" ]] && \
-       [[ ! -e "$fastpath_skill_detail_nolang_suppress_file" ]]; then
+    fastpath_skill_detail_nolang_status=$?
+    set -e
+    if [[ "$fastpath_skill_detail_nolang_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_nolang_stdout" ]] && \
+       [[ ! -s "$fastpath_skill_detail_nolang_stderr" ]] && \
+       [[ -f "$fastpath_skill_detail_nolang_suppress_file" ]] && \
+       grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_nolang_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'telegram-learner' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq '@tsingular' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'В Telegram-чате этот навык даёт короткий результат' "$fastpath_skill_detail_nolang_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_nolang_log"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must fall back to shell-only skill parsing for skill-detail requests and still avoid any direct-send path"
+        test_fail "Direct skill-detail fastpath must stay deterministic even when both perl and python3 are unavailable"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_sparse_skill_create_into_runtime_scaffold_when_enabled"
