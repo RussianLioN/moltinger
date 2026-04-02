@@ -70,7 +70,7 @@
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### P3 (11 lessons)
-- [Telegram skill-detail requests lacked a deterministic runtime path and leaked tool errors](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
+- [Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
@@ -122,7 +122,7 @@
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
 
 #### generic (7 lessons)
-- [Telegram skill-detail requests lacked a deterministic runtime path and leaked tool errors](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
+- [Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)

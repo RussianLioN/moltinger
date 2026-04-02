@@ -201,6 +201,80 @@ extract_first_number() {
 
 extract_json_array() {
     local key="$1"
+    local perl_output=""
+
+    if command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            printf '%s' "$payload" | perl -e '
+                use strict;
+                use warnings;
+                use utf8;
+                use open qw(:std :utf8);
+
+                my $key = shift @ARGV // q();
+                exit 1 unless length $key;
+
+                local $/;
+                my $text = <STDIN>;
+                my $needle = q(") . $key . q(");
+                my $start = index($text, $needle);
+                exit 1 if $start < 0;
+
+                my $i = $start + length($needle);
+                my $n = length($text);
+                while ($i < $n && substr($text, $i, 1) =~ /\s/) {
+                    $i++;
+                }
+                exit 1 unless $i < $n && substr($text, $i, 1) eq q(:);
+                $i++;
+                while ($i < $n && substr($text, $i, 1) =~ /\s/) {
+                    $i++;
+                }
+                exit 1 unless $i < $n && substr($text, $i, 1) eq q([);
+
+                my $value = q();
+                my $depth = 0;
+                my $in_string = 0;
+                my $escape = 0;
+                for (; $i < $n; $i++) {
+                    my $char = substr($text, $i, 1);
+                    $value .= $char;
+
+                    if ($escape) {
+                        $escape = 0;
+                        next;
+                    }
+                    if ($char eq q(\\)) {
+                        $escape = 1;
+                        next;
+                    }
+                    if ($char eq q(")) {
+                        $in_string = !$in_string;
+                        next;
+                    }
+                    next if $in_string;
+
+                    if ($char eq q([)) {
+                        $depth++;
+                        next;
+                    }
+                    if ($char eq q(])) {
+                        $depth--;
+                        if ($depth == 0) {
+                            print $value;
+                            exit 0;
+                        }
+                    }
+                }
+
+                exit 1;
+            ' -- "$key" 2>/dev/null
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s' "$perl_output"
+            return 0
+        fi
+    fi
 
     printf '%s' "$payload" | awk -v key="$key" '
         BEGIN {
@@ -596,8 +670,99 @@ flatten_text_for_match() {
 extract_last_message_content_by_role() {
     local messages_json="${1:-}"
     local target_role="${2:-user}"
+    local perl_output=""
 
     [[ -n "$messages_json" ]] || return 1
+
+    if command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            printf '%s' "$messages_json" | perl -e '
+                use strict;
+                use warnings;
+                use utf8;
+                use open qw(:std :utf8);
+
+                sub unescape_json_string {
+                    my ($value) = @_;
+                    return q() unless defined $value;
+                    $value =~ s/\\\\/\0/g;
+                    $value =~ s/\\"/"/g;
+                    $value =~ s/\\n/\n/g;
+                    $value =~ s/\\r/\r/g;
+                    $value =~ s/\\t/\t/g;
+                    $value =~ s/\0/\\/g;
+                    return $value;
+                }
+
+                sub extract_string_value {
+                    my ($obj, $key) = @_;
+                    return undef unless defined $obj && defined $key;
+                    return undef unless $obj =~ /"$key"\s*:\s*"((?:\\\\.|[^"\\\\])*)"/s;
+                    return unescape_json_string($1);
+                }
+
+                my $target_role = shift @ARGV // "user";
+                local $/;
+                my $text = <STDIN>;
+                my $depth = 0;
+                my $in_string = 0;
+                my $escape = 0;
+                my $capturing = 0;
+                my $obj = q();
+                my $last = q();
+
+                for my $char (split //, $text) {
+                    $obj .= $char if $capturing;
+
+                    if ($escape) {
+                        $escape = 0;
+                        next;
+                    }
+                    if ($char eq q(\\)) {
+                        $escape = 1 if $in_string;
+                        next;
+                    }
+                    if ($char eq q(")) {
+                        $in_string = !$in_string;
+                        next;
+                    }
+                    next if $in_string;
+
+                    if ($char eq q({)) {
+                        $depth++;
+                        if ($depth == 1) {
+                            $obj = q({);
+                            $capturing = 1;
+                        }
+                        next;
+                    }
+
+                    if ($char eq q(})) {
+                        if ($depth == 1 && $capturing) {
+                            my $role = extract_string_value($obj, "role");
+                            if (defined $role && $role eq $target_role) {
+                                my $content = extract_string_value($obj, "content");
+                                if (defined $content && length $content) {
+                                    $last = $content;
+                                }
+                            }
+                            $capturing = 0;
+                            $obj = q();
+                        }
+                        $depth-- if $depth > 0;
+                        next;
+                    }
+                }
+
+                exit 1 unless length $last;
+                print $last;
+            ' -- "$target_role" 2>/dev/null
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s' "$perl_output"
+            return 0
+        fi
+    fi
 
     printf '%s' "$messages_json" | awk -v target_role="$target_role" '
         function extract_string_value(obj, key,    needle, state, value, escape, n, i, j, c) {
@@ -1512,6 +1677,9 @@ resolve_runtime_skill_name_from_text() {
     local resolved=""
     local source_flat=""
     local skill_name=""
+    local perl_output=""
+    local IFS=','
+    local -a skill_items=()
 
     [[ -n "$source_text" && -n "$csv" ]] || return 1
 
@@ -1519,6 +1687,77 @@ resolve_runtime_skill_name_from_text() {
     if [[ -n "$candidate" ]] && skill_name_exists_in_csv "$csv" "$candidate"; then
         printf '%s' "$candidate"
         return 0
+    fi
+
+    if [[ -n "$candidate" ]] && command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            perl - "$candidate" "$csv" <<'PL'
+use strict;
+use warnings;
+
+sub levenshtein {
+    my ($left, $right) = @_;
+    my @left_chars = split //, $left;
+    my @right_chars = split //, $right;
+
+    my @dist;
+    $dist[$_][0] = $_ for 0 .. @left_chars;
+    $dist[0][$_] = $_ for 0 .. @right_chars;
+
+    for my $i (1 .. @left_chars) {
+        for my $j (1 .. @right_chars) {
+            my $cost = ($left_chars[$i - 1] eq $right_chars[$j - 1]) ? 0 : 1;
+            my $deletion = $dist[$i - 1][$j] + 1;
+            my $insertion = $dist[$i][$j - 1] + 1;
+            my $substitution = $dist[$i - 1][$j - 1] + $cost;
+            my $best = $deletion < $insertion ? $deletion : $insertion;
+            $best = $substitution if $substitution < $best;
+            $dist[$i][$j] = $best;
+        }
+    }
+
+    return $dist[@left_chars][@right_chars];
+}
+
+my $candidate = lc(shift @ARGV // q());
+$candidate =~ s/_/-/g;
+my $csv = shift @ARGV // q();
+my @skills = grep { length $_ } map { s/^\s+|\s+$//gr } split /,/, $csv;
+
+my %normalized;
+for my $skill (@skills) {
+    my $key = lc($skill);
+    $key =~ s/_/-/g;
+    $normalized{$key} = $skill;
+}
+
+if (exists $normalized{$candidate}) {
+    print $normalized{$candidate};
+    exit 0;
+}
+
+my $best_skill = q();
+my $best_score = -1;
+for my $normalized_name (keys %normalized) {
+    my $max_len = length($candidate) > length($normalized_name) ? length($candidate) : length($normalized_name);
+    next unless $max_len;
+    my $distance = levenshtein($candidate, $normalized_name);
+    my $score = 1 - ($distance / $max_len);
+    if ($score > $best_score) {
+        $best_score = $score;
+        $best_skill = $normalized{$normalized_name};
+    }
+}
+
+if ($best_score >= 0.72 && length $best_skill) {
+    print $best_skill;
+}
+PL
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s' "$perl_output"
+            return 0
+        fi
     fi
 
     if [[ -n "$candidate" ]] && command -v python3 >/dev/null 2>&1; then
@@ -1539,7 +1778,7 @@ matches = difflib.get_close_matches(candidate, list(normalized.keys()), n=1, cut
 if matches:
     print(normalized[matches[0]])
 PY
-        )"
+        )" || true
         if [[ -n "$resolved" ]]; then
             printf '%s' "$resolved"
             return 0
@@ -1606,7 +1845,151 @@ build_skill_detail_reply_text() {
         skill_file="$(runtime_skill_file_path "$resolved_name" || true)"
     fi
 
-    python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
+    if command -v perl >/dev/null 2>&1; then
+        perl - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PL'
+use strict;
+use warnings;
+use utf8;
+use open qw(:std :utf8);
+
+my ($requested, $resolved, $csv, $skill_file) = @ARGV;
+$requested //= q();
+$resolved //= q();
+$csv //= q();
+$skill_file //= q();
+
+my @skills = grep { length $_ } map { s/^\s+|\s+$//gr } split /,/, $csv;
+
+sub clean {
+    my ($text) = @_;
+    $text //= q();
+    $text =~ s/\s+/ /g;
+    $text =~ s/^\s+|\s+$//g;
+    return $text;
+}
+
+sub parse_frontmatter {
+    my ($text) = @_;
+    return {} unless $text =~ /\A---\n(.*?)\n---\n/s;
+    my $frontmatter = $1;
+    my %result;
+    my $current_key = q();
+    for my $raw_line (split /\n/, $frontmatter) {
+        next unless length clean($raw_line);
+        if ($raw_line =~ /\A([A-Za-z0-9_-]+):\s*(.*)\z/) {
+            $current_key = $1;
+            $result{$current_key} = clean($2);
+            next;
+        }
+        if (length $current_key && $raw_line =~ /\A\s+(.*)\z/) {
+            $result{$current_key} = clean(($result{$current_key} // q()) . q( ) . $1);
+        }
+    }
+    return \%result;
+}
+
+sub section_body {
+    my ($text, $heading) = @_;
+    return $1 if $text =~ /^##\s+\Q$heading\E\s*\n(.*?)(?=^##\s+|\z)/ms;
+    return q();
+}
+
+sub bullets_from_section {
+    my ($text, $heading, $limit) = @_;
+    $limit ||= 4;
+    my $body = section_body($text, $heading);
+    my @items;
+    for my $line (split /\n/, $body) {
+        my $stripped = clean($line);
+        next unless $stripped =~ /\A-\s+(.*)\z/;
+        push @items, clean($1);
+        last if @items >= $limit;
+    }
+    return @items;
+}
+
+sub channels_from_text {
+    my ($text) = @_;
+    my @items;
+    my $capture = 0;
+    for my $line (split /\n/, $text) {
+        my $stripped = clean($line);
+        if ($stripped =~ /\A\*\*Каналы для мониторинга\*\*/) {
+            $capture = 1;
+            next;
+        }
+        next unless $capture;
+        last if $stripped =~ /\A##\s+/;
+        if ($stripped =~ /\A-\s+(.*)\z/) {
+            push @items, clean($1);
+            last if @items >= 3;
+            next;
+        }
+        last if $stripped eq q() && @items;
+    }
+    return @items;
+}
+
+sub workflow_phases {
+    my ($text, $limit) = @_;
+    $limit ||= 5;
+    my @phases;
+    while ($text =~ /^###\s+(.+?)\s*$/mg) {
+        my $phase = clean($1);
+        $phase =~ s/\APhase\s+\d+:\s*//i;
+        push @phases, $phase;
+        last if @phases >= $limit;
+    }
+    return @phases;
+}
+
+if (length $resolved && length $skill_file && -f $skill_file) {
+    open my $fh, '<', $skill_file or exit 1;
+    local $/;
+    my $raw_text = <$fh>;
+    close $fh;
+
+    my $frontmatter = parse_frontmatter($raw_text);
+    my $description = clean($frontmatter->{description} // q());
+    my @activation = bullets_from_section($raw_text, 'Активация');
+    my @channels = channels_from_text($raw_text);
+    my @phases = workflow_phases($raw_text);
+    my $has_safe_dm_guard = index($raw_text, 'В Telegram-safe режиме я не провожу длительное исследование') >= 0 ? 1 : 0;
+
+    my @parts;
+    if (length $requested && lc($requested) ne lc($resolved)) {
+        push @parts, "Похоже, ты имеешь в виду навык `$resolved`.";
+    }
+    push @parts, "Навык `$resolved`: " . ($description || 'описание в frontmatter сейчас пустое.');
+    push @parts, "Когда использовать: " . join('; ', @activation) . q(.) if @activation;
+    push @parts, "Источники: " . join('; ', @channels) . q(.) if @channels;
+    push @parts, "Workflow: " . join(' -> ', @phases) . q(.) if @phases;
+    push @parts, 'Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.' if $has_safe_dm_guard;
+
+    print clean(join(q( ), @parts));
+    exit 0;
+}
+
+if (length $requested) {
+    if (@skills) {
+        print "Не нашёл точного подтверждённого runtime-навыка `$requested`. Сейчас вижу навыки: " . join(', ', @skills) . q(.);
+    } else {
+        print "Не нашёл точного подтверждённого runtime-навыка `$requested`. Hook сейчас не подтвердил и список навыков.";
+    }
+    exit 0;
+}
+
+if (@skills) {
+    print 'Не смог определить, про какой навык идёт речь. Сейчас вижу навыки: ' . join(', ', @skills) . q(.);
+} else {
+    print 'Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.';
+}
+PL
+        return $?
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -1721,6 +2104,23 @@ if skills:
 else:
     print("Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.")
 PY
+        return $?
+    fi
+
+    if [[ -n "$requested_name" ]]; then
+        if [[ -n "$csv" ]]; then
+            printf 'Не нашёл точного подтверждённого runtime-навыка `%s`. Сейчас вижу навыки: %s.\n' "$requested_name" "${csv//,/\, }"
+        else
+            printf 'Не нашёл точного подтверждённого runtime-навыка `%s`. Hook сейчас не подтвердил и список навыков.\n' "$requested_name"
+        fi
+        return 0
+    fi
+
+    if [[ -n "$csv" ]]; then
+        printf 'Не смог определить, про какой навык идёт речь. Сейчас вижу навыки: %s.\n' "${csv//,/\, }"
+    else
+        printf 'Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.\n'
+    fi
 }
 
 send_telegram_direct_message() {
@@ -2339,6 +2739,12 @@ resolved_skill_name=""
 requested_skill_reference_name="$(extract_referenced_skill_candidate "${latest_user_message:-${user_message:-}}" || true)"
 skill_runtime_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
 resolved_skill_name="$(resolve_runtime_skill_name_from_text "${latest_user_message:-${user_message:-}}" "$skill_runtime_snapshot_csv" || true)"
+if [[ "$current_turn_skill_detail_request" != true && -n "$requested_skill_reference_name" ]]; then
+    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
+        current_turn_skill_detail_request=true
+        looks_like_skill_turn=true
+    fi
+fi
 requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
 requested_skill_name_re=""
 if [[ -n "$requested_skill_name" ]]; then

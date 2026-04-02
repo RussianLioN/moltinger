@@ -1,11 +1,11 @@
 ---
-title: "Telegram skill-detail requests lacked a deterministic runtime path and leaked tool errors"
+title: "Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift"
 date: 2026-04-02
 tags: [telegram, moltis, skills, hooks, activity-log, mcp, tavily, rca]
-root_cause: "The Telegram-safe guard had deterministic routes for skills visibility, template, sparse create, apply denial, and codex-update, but not for skill-detail questions about a specific runtime skill. Those turns still fell back to the live LLM/tool path, so a tool-schema failure leaked internal Activity log text into Telegram instead of returning a repo-owned summary from SKILL.md."
+root_cause: "The first failure was a missing deterministic skill-detail route in the Telegram-safe guard. The first repo-side fix then still depended on host-only assumptions: python3-based skill summarization/fuzzy resolve and a fragile custom awk parser for last-user extraction. In the live Moltis container python3 was absent and the parser behaved differently, so the same payload that direct-fastpathed on the host fell back to generic safe-lane / tool behavior in production."
 ---
 
-# RCA: Telegram skill-detail requests lacked a deterministic runtime path and leaked tool errors
+# RCA: Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift
 
 ## Ошибка
 
@@ -47,7 +47,15 @@ root_cause: "The Telegram-safe guard had deterministic routes for skills visibil
 
 ## Корневая причина
 
-В `telegram-safe-llm-guard.sh` отсутствовал deterministic runtime path для skill-detail вопросов о конкретном навыке. В результате даже при наличии `SKILL.md` live Telegram turn всё ещё зависел от LLM/tool path, а tool failure снова утекал пользователю как `Activity log` и validator/schema error.
+Корневая причина оказалась двухслойной:
+
+1. Изначально в `telegram-safe-llm-guard.sh` вообще отсутствовал deterministic runtime path для skill-detail вопросов о конкретном навыке.
+2. После первой правки всплыл второй, более глубокий дефект portability:
+   - skill-detail summary и fuzzy resolve зависели от `python3`;
+   - извлечение последнего user turn зависело от кастомного `awk`-парсинга `messages[]`;
+   - в live Moltis container `python3` отсутствовал, а этот self-made parser вёл себя иначе, чем на host replay.
+
+Из-за этого получился ложный локальный успех: exact payload на host уже уходил в `direct_fastpath kind=skill_detail`, но тот же payload внутри live container всё ещё падал в generic `safe_lane`/tool path и выдавал пользователю ответ вида «не получилось прочитать файл навыка через инструменты».
 
 ## Внешние подтверждения
 
@@ -71,8 +79,13 @@ root_cause: "The Telegram-safe guard had deterministic routes for skills visibil
    - user-facing summary строится прямо из runtime `SKILL.md`, без LLM speculation и без tool probes.
 2. Добавлен direct fastpath для skill-detail turn через Bot API send, аналогично уже существующим safe routes.
 3. Добавлен hard-override и final-delivery rewrite для skill-detail, чтобы даже при fallback/runtime drift Telegram видел deterministic summary, а не internal tool error.
-4. Добавлены regression tests:
+4. Убрана host-only зависимость из critical path:
+   - `extract_last_message_content_by_role` теперь сначала использует container-friendly `perl + JSON::PP`, а только потом старый awk fallback;
+   - `resolve_runtime_skill_name_from_text` получил `perl`-based fuzzy match и исправленный CSV split fallback;
+   - `build_skill_detail_reply_text` теперь умеет собирать deterministic summary через `perl` без `python3`.
+5. Добавлены regression tests:
    - direct fastpath для `Расскажи мне про навык telegram-lerner`;
+   - direct fastpath для skill-detail даже при сломанном `python3` и с prior history;
    - MessageSending rewrite для реального leakage-pattern с `missing 'command' parameter`.
 
 ## Проверка
@@ -85,4 +98,5 @@ root_cause: "The Telegram-safe guard had deterministic routes for skills visibil
 
 1. Skill contract в Telegram должен покрывать не только visibility/create/template, но и detail/describe path для уже существующих runtime skills.
 2. Если user-facing answer можно построить из runtime `SKILL.md`, нельзя оставлять этот turn зависеть от best-effort tool path модели.
-3. Любой новый deterministic Telegram route должен сразу получать regression test на exact live leakage wording, а не только на «похожий» synthetic сценарий.
+3. Нельзя принимать host replay за доказательство исправления для Moltis container/runtime path: hook code должен проверяться в той же среде исполнения, где он реально крутится.
+4. Любой новый deterministic Telegram route должен сразу получать regression test не только на текст leakage, но и на отсутствие host-only зависимостей (`python3`, jq, locale/awk quirks).
