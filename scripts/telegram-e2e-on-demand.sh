@@ -17,7 +17,7 @@ MODE="authoritative"
 SECONDARY_DIAGNOSTICS="none"
 MESSAGE=""
 TIMEOUT_SEC=45
-OUTPUT_PATH="telegram-e2e-result.json"
+OUTPUT_PATH="${TMPDIR:-/tmp}/telegram-e2e-result.json"
 DEBUG_OUTPUT_PATH="${REMOTE_UAT_DEBUG_OUTPUT:-}"
 VERBOSE=false
 TRIGGER_SOURCE="${TRIGGER_SOURCE:-cli}"
@@ -84,7 +84,7 @@ Options:
                                     Optional secondary diagnostics (default: none)
   --message "<text>"                Input message/command to send (required)
   --timeout-sec <int>               Timeout in seconds (default: 45)
-  --output <path>                   Review-safe JSON output path (default: telegram-e2e-result.json)
+  --output <path>                   Review-safe JSON output path (default: ${TMPDIR:-/tmp}/telegram-e2e-result.json)
   --debug-output <path>             Restricted debug bundle output path
   --target-environment <name>       Target environment label (default: production)
   --operator-intent <name>          Operator intent label (default: post_deploy_verification)

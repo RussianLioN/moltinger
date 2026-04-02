@@ -1114,6 +1114,38 @@ run_component_telegram_remote_uat_contract_tests() {
         fi
     fi
 
+    test_start "component_telegram_remote_uat_defaults_output_into_tmpdir_not_repo_root"
+    local tmp_output_root default_output_cwd
+    tmp_output_root="$TEST_TMPDIR/default-output-root"
+    default_output_cwd="$TEST_TMPDIR/default-output-cwd"
+    mkdir -p "$tmp_output_root"
+    mkdir -p "$default_output_cwd"
+    local default_output_status=0
+    set +e
+    (
+        cd "$default_output_cwd"
+        TMPDIR="$tmp_output_root" \
+            TELEGRAM_WEB_STUB_MODE=status_semantic_mismatch \
+            "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+                --mode authoritative \
+                --message "/status" >/dev/null 2>&1
+    )
+    default_output_status=$?
+    set -e
+    if [[ "$default_output_status" -eq 0 ]]
+    then
+        test_fail "Authoritative wrapper should still fail on semantic mismatch when using default output path"
+    else
+        if [[ -f "$tmp_output_root/telegram-e2e-result.json" ]] && \
+           [[ ! -f "$default_output_cwd/telegram-e2e-result.json" ]] && \
+           jq -e '.failure.code == "semantic_status_mismatch"' "$tmp_output_root/telegram-e2e-result.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must default review-safe output into TMPDIR so manual server-side runs do not dirty the repository root"
+        fi
+    fi
+
     test_start "component_telegram_remote_uat_fails_status_reply_without_canonical_model"
     if TELEGRAM_WEB_STUB_MODE=status_semantic_mismatch \
         "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
