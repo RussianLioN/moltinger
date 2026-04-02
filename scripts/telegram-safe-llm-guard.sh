@@ -1063,6 +1063,17 @@ Filesystem-пробы по ~/.moltis/skills, /home/moltis/.moltis/skills, /serve
 EOF
 }
 
+build_disallowed_tool_runtime_note() {
+    local tool_name="${1:-unknown-tool}"
+
+    cat <<EOF
+Telegram-safe runtime note:
+- Tool \`${tool_name}\` blocked for the user-facing Telegram lane.
+- Do not call Tavily, browser, MCP, web-search, process, cron, or filesystem probes here.
+- Continue text-only, or use only dedicated skill tools: create_skill, update_skill, delete_skill, session_state, send_message, send_image.
+EOF
+}
+
 build_skill_visibility_reply_text() {
     local csv="${1:-}"
     local inline_names=""
@@ -1590,7 +1601,7 @@ fi
 # Keep delivery-time stripping strict, but allow broader AfterLLM fail-closed
 # interception before text-fallback parsing can promote intent text into tools.
 has_delivery_internal_telemetry=false
-if printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|tool-progress|tool call"; then
+if printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress|tool call"; then
     has_delivery_internal_telemetry=true
 fi
 
@@ -1958,6 +1969,12 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
         emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
         exit 0
     fi
+
+    disallowed_tool_note="$(build_disallowed_tool_runtime_note "${tool_name:-unknown-tool}")"
+    synthetic_command="$(build_exec_heredoc_command "$disallowed_tool_note")"
+    write_audit_line "emit_modify event=$event reason=disallowed_tool_block tool=${tool_name:-missing}"
+    emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
+    exit 0
 fi
 
 if [[ "$event" == "MessageSending" && -n "$persisted_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then

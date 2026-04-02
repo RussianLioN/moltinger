@@ -754,6 +754,23 @@ EOF
         test_fail "BeforeToolCall guard must not block dedicated skill tools such as create_skill"
     fi
 
+    test_start "component_before_tool_guard_blocks_disallowed_tavily_tool_in_safe_lane"
+    local before_tool_tavily_output
+    before_tool_tavily_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","session_key":"session:tavily","provider":"openai-codex","model":"gpt-5.4","tool_name":"mcp__tavily__tavily_search","arguments":{"query":"openai codex releases"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
+       jq -e '.data.session_key == "session:tavily"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
+       jq -e '.data.arguments.command | contains("Tool `mcp__tavily__tavily_search` blocked")' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
+       jq -e '.data.arguments.command | contains("create_skill, update_skill, delete_skill")' >/dev/null 2>&1 <<<"$before_tool_tavily_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must fail closed on disallowed Tavily/MCP tools for the Telegram-safe lane"
+    fi
+
     test_start "component_before_llm_guard_emits_modify_payload_without_duplicate_messages_or_tool_count_fields"
     local before_tool_count_field_count before_messages_field_count
     before_tool_count_field_count="$(printf '%s' "$before_llm_output" | grep -o '"tool_count":' | wc -l | tr -d ' ')"
@@ -1244,6 +1261,20 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must strip final internal tool inventory/planning leakage even when Activity log markers are absent"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_tavily_validation_error_and_fetch_trace"
+    local message_sending_tavily_validation_output
+    message_sending_tavily_validation_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"MessageSending","session_id":"session:vwy-tavily","data":{"text":"📋 Activity log • 🔧 mcp__tavily__tavily_search • ❌ MCP tool error: Internal error: 3 validation errors for call[tavily_search] • 🔗 Fetching github.com/openai/codex/releases/latest"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_tavily_validation_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$message_sending_tavily_validation_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_tavily_validation_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must strip Tavily validation errors and fetch traces from final Telegram-safe delivery"
     fi
 
     test_start "component_message_sending_guard_rewrites_skill_visibility_reply_from_user_message_when_messages_array_is_absent"
