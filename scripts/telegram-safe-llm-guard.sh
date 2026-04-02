@@ -1282,14 +1282,72 @@ send_telegram_direct_message() {
     "$DIRECT_SEND_SCRIPT" --chat-id "$chat_id" --text "$text" >/dev/null 2>&1
 }
 
+response_has_delivery_internal_trace() {
+    local text="${1:-}"
+    local flat=""
+
+    flat="$(
+        printf '%s' "$text" \
+            | tr '\r\n' ' ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+
+    if printf '%s' "$flat" | grep -Eiq "activity log([[:space:]]|$).*(•|running:|searching memory|fetching (github\\.com|https?://)|mcp tool error|validation errors for call\\[|tool-progress|mcp__|nodes_list|sessions_list|missing 'action' parameter|list failed:)"; then
+        return 0
+    fi
+    if printf '%s' "$flat" | grep -Eiq "running:|searching memory|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress"; then
+        return 0
+    fi
+    if printf '%s' "$flat" | grep -Eiq '(^|[[:space:]])(•|🔧|🗺️|💻|🔗|🌐|🧠|❌)[[:space:]]*mcp__'; then
+        return 0
+    fi
+
+    return 1
+}
+
+delivery_internal_suffix_is_appended() {
+    local text="${1:-}"
+    local flat=""
+
+    flat="$(
+        printf '%s' "$text" \
+            | tr '\r\n' ' ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+
+    if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+Activity log[[:space:]]+(•|running:|searching memory|fetching (github\.com|https?://)|mcp tool error|validation errors for call\[|tool-progress|mcp__|nodes_list|sessions_list|missing '\''action'\'' parameter|list failed:)'; then
+        return 0
+    fi
+    if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+•[[:space:]]+mcp__[A-Za-z0-9_:.:-]+'; then
+        return 0
+    fi
+
+    return 1
+}
+
 strip_delivery_internal_suffix() {
     local text="${1:-}"
     local cleaned="$text"
 
-    if [[ "$cleaned" == *"Activity log"* ]]; then
+    cleaned="$(
+        printf '%s' "$cleaned" \
+            | tr '\r\n' ' ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+
+    if ! delivery_internal_suffix_is_appended "$cleaned"; then
+        printf '%s' "$text"
+        return 0
+    fi
+
+    if [[ "$cleaned" == *" Activity log "* ]]; then
+        cleaned="${cleaned%% Activity log*}"
+    elif [[ "$cleaned" == *"Activity log "* ]]; then
         cleaned="${cleaned%%Activity log*}"
     fi
-    if [[ "$cleaned" == *"• mcp__"* ]]; then
+    if [[ "$cleaned" == *" • mcp__"* ]]; then
+        cleaned="${cleaned%% • mcp__*}"
+    elif [[ "$cleaned" == *"• mcp__"* ]]; then
         cleaned="${cleaned%%• mcp__*}"
     fi
 
@@ -1694,8 +1752,13 @@ fi
 # interception before text-fallback parsing can promote intent text into tools.
 has_delivery_internal_telemetry=false
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress|tool call"; then
+   response_has_delivery_internal_trace "${response_text:-$payload_flat}"; then
     has_delivery_internal_telemetry=true
+fi
+
+has_appended_delivery_internal_suffix=false
+if [[ "$event" == "MessageSending" ]] && delivery_internal_suffix_is_appended "${response_text:-}"; then
+    has_appended_delivery_internal_suffix=true
 fi
 
 has_after_llm_tool_intent=false
@@ -2083,7 +2146,7 @@ if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRE
     delivery_reply_to="$(extract_first_number reply_to_message_id || true)"
     clean_delivery_text="$(strip_delivery_internal_suffix "${response_text:-}")"
 
-    if [[ -n "$delivery_chat_id" && -n "$clean_delivery_text" && "$clean_delivery_text" != "${response_text:-}" ]]; then
+    if [[ "$has_appended_delivery_internal_suffix" == true && -n "$delivery_chat_id" && -n "$clean_delivery_text" && "$clean_delivery_text" != "${response_text:-}" ]]; then
         if send_telegram_direct_message "$delivery_chat_id" "$clean_delivery_text" "${delivery_reply_to:-}"; then
             write_audit_line "direct_fastpath kind=clean_delivery chat_id=$delivery_chat_id reply_to=${delivery_reply_to:-none}"
             persist_delivery_suppression "${turn_session_key:-}" "clean_delivery"
