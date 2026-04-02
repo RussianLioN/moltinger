@@ -73,6 +73,10 @@ gh workflow run telegram-e2e-on-demand.yml \
   --output /tmp/telegram-e2e-result.json
 ```
 
+По умолчанию review-safe артефакт теперь пишется в `${TMPDIR:-/tmp}/telegram-e2e-result.json`.
+Это сделано специально, чтобы ручной запуск на production host не создавал `telegram-e2e-result.json`
+в корне `/opt/moltinger` и не ломал следующий `Deploy Moltis` через GitOps dirty-worktree gate.
+
 ### Важное правило для ручного server-side запуска
 
 Если authoritative wrapper запускается прямо на host shell после `source /opt/moltinger/.env`,
