@@ -123,7 +123,7 @@
 | `038-telegram-cloneable-agent` | `origin/038-telegram-cloneable-agent` | Needs decision |
 | `039-telegram-project-hook-guard` | `origin/039-telegram-project-hook-guard` | Needs decision |
 | `chore/retire-001-clawdiy-topology` | `origin/main` | Needs decision |
-| `chore/topology-registry-publish` | `origin/main` | Needs decision |
+| `chore/topology-registry-publish` | `origin/chore/topology-registry-publish` | Needs decision |
 | `codex/full-review` | `origin/codex/full-review` | Open parallel branch; separate worktree exists. |
 | `feat/activity-log-llm-tool-logging-fix` | `origin/feat/activity-log-llm-tool-logging-fix` | Needs decision |
 | `feat/moltinger-248-telegram-e2e-default-branch` | `none` | Needs decision |
