@@ -488,7 +488,9 @@ EOF
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_log" && \
        grep -Fq 'telegram-learner' "$fastpath_skill_detail_log" && \
        grep -Fq '@tsingular' "$fastpath_skill_detail_log" && \
-       grep -Fq 'не уходит в длительное исследование' "$fastpath_skill_detail_log"; then
+       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_log" && \
+       grep -Fq 'В Telegram-чате этот навык даёт короткий результат' "$fastpath_skill_detail_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_log"; then
         test_pass
     else
         test_fail "Direct skill-detail fastpath must resolve the runtime skill, answer from SKILL.md, and leave only a same-turn delivery-suppression marker"
@@ -556,7 +558,9 @@ EOF
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_history_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_history_log" && \
        grep -Fq 'telegram-learner' "$fastpath_skill_detail_history_log" && \
-       grep -Fq '@tsingular' "$fastpath_skill_detail_history_log"; then
+       grep -Fq '@tsingular' "$fastpath_skill_detail_history_log" && \
+       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_history_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_history_log"; then
         test_pass
     else
         test_fail "Direct skill-detail fastpath must remain deterministic even with prior chat history and no working python3 binary in PATH"
@@ -629,7 +633,9 @@ EOF
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_nolang_log" && \
        grep -Fq 'telegram-learner' "$fastpath_skill_detail_nolang_log" && \
        grep -Fq '@tsingular' "$fastpath_skill_detail_nolang_log" && \
-       grep -Fq 'не уходит в длительное исследование' "$fastpath_skill_detail_nolang_log"; then
+       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'В Telegram-чате этот навык даёт короткий результат' "$fastpath_skill_detail_nolang_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_nolang_log"; then
         test_pass
     else
         test_fail "Direct skill-detail fastpath must fall back to pure shell parsing when both perl and python3 are unavailable"
@@ -1950,7 +1956,9 @@ EOF
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.text | contains("telegram-learner")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.text | contains("@tsingular")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
-       jq -e '.data.text | contains("не уходит в длительное исследование")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("В Telegram-чате этот навык даёт короткий результат")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM") | not' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.to == "262872988"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.reply_to_message_id == 959' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
@@ -1988,7 +1996,9 @@ EOF
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.text | contains("telegram-learner")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.text | contains("@tsingular")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
-       jq -e '.data.text | contains("не уходит в длительное исследование")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("В Telegram-чате этот навык даёт короткий результат")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM") | not' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.to == "262872989"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.reply_to_message_id == 960' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \

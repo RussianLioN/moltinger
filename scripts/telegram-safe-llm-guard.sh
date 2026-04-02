@@ -1992,20 +1992,18 @@ if (length $resolved && length $skill_file && -f $skill_file) {
 
     my $frontmatter = parse_frontmatter($raw_text);
     my $description = clean($frontmatter->{description} // q());
+    my $display_description = $description || 'в описании навыка пока нет короткого summary.';
+    $display_description =~ s/[.?!]+\z//;
     my @activation = bullets_from_section($raw_text, 'Активация');
     my @channels = channels_from_text($raw_text);
     my @phases = workflow_phases($raw_text);
     my $has_safe_dm_guard = index($raw_text, 'В Telegram-safe режиме я не провожу длительное исследование') >= 0 ? 1 : 0;
 
     my @parts;
-    if (length $requested && lc($requested) ne lc($resolved)) {
-        push @parts, "Похоже, ты имеешь в виду навык `$resolved`.";
-    }
-    push @parts, "Навык `$resolved`: " . ($description || 'описание в frontmatter сейчас пустое.');
-    push @parts, "Когда использовать: " . join('; ', @activation) . q(.) if @activation;
-    push @parts, "Источники: " . join('; ', @channels) . q(.) if @channels;
-    push @parts, "Workflow: " . join(' -> ', @phases) . q(.) if @phases;
-    push @parts, 'Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.' if $has_safe_dm_guard;
+    push @parts, "Навык `$resolved` — " . $display_description . q(.);
+    push @parts, "Сейчас в описании навыка указаны источники: " . join('; ', @channels) . q(.) if @channels;
+    push @parts, "Обычно он работает по шагам: " . join(' -> ', @phases) . q(.) if @phases;
+    push @parts, 'В Telegram-чате этот навык даёт короткий результат; для полного разбора лучше продолжать задачу в web UI или операторской сессии.' if $has_safe_dm_guard;
 
     print clean(join(q( ), @parts));
     exit 0;
@@ -2118,23 +2116,20 @@ if resolved and skill_file and skill_file.is_file():
     raw_text = skill_file.read_text(encoding="utf-8")
     frontmatter = parse_frontmatter(raw_text)
     description = clean(frontmatter.get("description", ""))
+    summary_description = (description.rstrip(" .!?") if description else "") or "в описании навыка пока нет короткого summary"
     activation = bullets_from_section(raw_text, "Активация")
     channels = channels_from_text(raw_text)
     phases = workflow_phases(raw_text)
     has_safe_dm_guard = "В Telegram-safe режиме я не провожу длительное исследование" in raw_text
 
     parts = []
-    if requested and requested.lower() != resolved.lower():
-        parts.append(f"Похоже, ты имеешь в виду навык `{resolved}`.")
-    parts.append(f"Навык `{resolved}`: {description or 'описание в frontmatter сейчас пустое.'}")
-    if activation:
-        parts.append("Когда использовать: " + "; ".join(activation) + ".")
+    parts.append(f"Навык `{resolved}` — {summary_description}.")
     if channels:
-        parts.append("Источники: " + "; ".join(channels) + ".")
+        parts.append("Сейчас в описании навыка указаны источники: " + "; ".join(channels) + ".")
     if phases:
-        parts.append("Workflow: " + " -> ".join(phases) + ".")
+        parts.append("Обычно он работает по шагам: " + " -> ".join(phases) + ".")
     if has_safe_dm_guard:
-        parts.append("Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.")
+        parts.append("В Telegram-чате этот навык даёт короткий результат; для полного разбора лучше продолжать задачу в web UI или операторской сессии.")
     print(clean(" ".join(parts)))
     raise SystemExit(0)
 
@@ -2174,7 +2169,7 @@ PY
                 }
             ' "$skill_file" \
                 | tr '\r\n' '  ' \
-                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; s/[[:space:]]*[.?!][.?![:space:]]*$//'
         )" || true
         activation_lines="$(
             awk '
@@ -2202,7 +2197,7 @@ PY
         channels_lines="$(
             awk '
                 BEGIN { capture = 0; count = 0 }
-                /^\*\*Каналы для мониторинга\*\*[[:space:]]*$/ { capture = 1; next }
+                /^\*\*Каналы для мониторинга\*\*:?[[:space:]]*$/ { capture = 1; next }
                 capture && /^##[[:space:]]+/ { exit }
                 capture && /^[[:space:]]*-[[:space:]]+/ {
                     line = $0
@@ -2231,26 +2226,20 @@ PY
                 | sed 's/\t$//; s/\t/ -> /g'
         )" || true
         if grep -Fq 'В Telegram-safe режиме я не провожу длительное исследование' "$skill_file"; then
-            safe_dm_line='Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.'
+            safe_dm_line='В Telegram-чате этот навык даёт короткий результат; для полного разбора лучше продолжать задачу в web UI или операторской сессии.'
         fi
 
-        if [[ -n "$requested_name" ]] && [[ "$(printf '%s' "$requested_name" | tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$resolved_name" | tr '[:upper:]' '[:lower:]')" ]]; then
-            parts+=("Похоже, ты имеешь в виду навык \`$resolved_name\`.")
-        fi
-        parts+=("Навык \`$resolved_name\`: ${description_line:-описание в frontmatter сейчас пустое.}")
-        if [[ -n "$activation_lines" ]]; then
-            parts+=("Когда использовать: $activation_lines.")
-        fi
+        parts+=("Навык \`$resolved_name\` — ${description_line:-в описании навыка пока нет короткого summary.}.")
         if [[ -n "$channels_lines" ]]; then
-            parts+=("Источники: $channels_lines.")
+            parts+=("Сейчас в описании навыка указаны источники: $channels_lines.")
         fi
         if [[ -n "$phases_lines" ]]; then
-            parts+=("Workflow: $phases_lines.")
+            parts+=("Обычно он работает по шагам: $phases_lines.")
         fi
         if [[ -n "$safe_dm_line" ]]; then
             parts+=("$safe_dm_line")
         fi
-        printf '%s\n' "$(printf '%s ' "${parts[@]}" | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//')"
+        printf '%s\n' "$(printf '%s ' "${parts[@]}" | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; s/ \([.,;:!?]\)/\1/g')"
         return 0
     fi
 
