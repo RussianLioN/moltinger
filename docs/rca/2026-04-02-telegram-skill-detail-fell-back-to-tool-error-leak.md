@@ -1,11 +1,11 @@
 ---
-title: "Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift"
+title: "Telegram skill-detail requests lacked a deterministic runtime path, regressed on container drift, and bypassed MessageSending rewrite"
 date: 2026-04-02
 tags: [telegram, moltis, skills, hooks, activity-log, mcp, tavily, rca]
-root_cause: "The first failure was a missing deterministic skill-detail route in the Telegram-safe guard. The first repo-side fix then still depended on host-only assumptions: python3-based skill summarization/fuzzy resolve, Perl snippets that imported open.pm, and a fragile custom awk parser for last-user extraction. In the live Moltis container python3 and open.pm were absent and the parser behaved differently, so the same payload that direct-fastpathed on the host fell back to generic safe-lane / tool behavior in production."
+root_cause: "The incident had three stacked causes. First, Telegram skill-detail turns had no deterministic runtime-owned route, so the model fell into exec/tool behavior. Second, the first repo-side fix still depended on host-only assumptions: python3-based summarization/fuzzy resolve, Perl snippets importing open.pm, and a fragile awk parser, while the live Moltis container lacked python3/open.pm and behaved differently. Third, once the reply degraded into plain prose without explicit Activity log markers, the MessageSending guard exited early for skill-detail turns, so the final deterministic rewrite never ran and the user still saw the wrong fallback text."
 ---
 
-# RCA: Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift
+# RCA: Telegram skill-detail requests lacked a deterministic runtime path, regressed on container drift, and bypassed MessageSending rewrite
 
 ## Ошибка
 
@@ -34,20 +34,21 @@ root_cause: "The first failure was a missing deterministic skill-detail route in
 - skill-detail turn не попадал ни в один из уже существующих deterministic routes;
 - live runtime skill file реально существовал и в repo, и в runtime discovery path;
 - утечка шла не потому, что skill отсутствовал, а потому что вопрос про skill detail проваливался в tool path.
+- после первой волны фикса остался ещё один слой: когда raw reply стал выглядеть как обычный текст про сломанный инструмент, а не как явный `Activity log`, финальный rewrite всё ещё мог не сработать.
 
 ## Анализ 5 Почему
 
 | Уровень | Вопрос | Ответ |
 |---------|--------|-------|
-| 1 | Почему пользователь увидел `Activity log` и tool error вместо описания навыка? | Потому что turn ушёл в LLM/tool path и не был перехвачен deterministic skill-detail ответом. |
+| 1 | Почему пользователь увидел плохой ответ вместо описания навыка? | Потому что turn ушёл в LLM/tool path и не был перехвачен deterministic skill-detail ответом. |
 | 2 | Почему не было deterministic ответа? | Потому что guard покрывал visibility/template/create/apply/codex-update, но не покрывал запросы "расскажи про конкретный навык". |
 | 3 | Почему модель вообще пыталась лезть в инструменты, хотя runtime `SKILL.md` уже существовал? | Потому что для такого типа вопроса в repo не было прямого runtime reader/summarizer из `SKILL.md`, и модель пыталась сама читать файл через tool path. |
-| 4 | Почему tool path оказался пользовательски опасным? | Потому что при tool-schema/runtime failure live Telegram path снова потащил наружу внутренние шаги и ошибку валидации вместо чистого user-facing ответа. |
-| 5 | Почему эта щель осталась после прошлых фиксов? | Потому что предыдущий инцидент закрывал другой slice (`skills?`, `template`, `create skill`, `codex-update`) и не расширил deterministic contract на skill-detail queries. |
+| 4 | Почему после первого фикса пользователь всё ещё видел неправильный ответ, уже даже без явного `Activity log`? | Потому что runtime всё равно проваливался в exec/tool path, а модель возвращала уже не telemetry leak, а "чистый" prose fallback про то, что не может открыть `SKILL.md`. |
+| 5 | Почему этот "чистый" fallback не был переписан final MessageSending guard'ом? | Потому что в `MessageSending` оставался ранний `exit 0` для payload'ов без telemetry-маркеров, а skill-detail turn не был исключён из этого условия. Поэтому блок `skill_detail_reply_override` просто не исполнялся. |
 
 ## Корневая причина
 
-Корневая причина оказалась двухслойной:
+Корневая причина оказалась трёхслойной:
 
 1. Изначально в `telegram-safe-llm-guard.sh` вообще отсутствовал deterministic runtime path для skill-detail вопросов о конкретном навыке.
 2. После первой правки всплыл второй, более глубокий дефект portability:
@@ -55,8 +56,13 @@ root_cause: "The first failure was a missing deterministic skill-detail route in
    - Perl-ветка для summary/JSON parsing зависела от `use open qw(:std :utf8)`, а `open.pm` в live container отсутствует;
    - извлечение последнего user turn зависело от кастомного `awk`-парсинга `messages[]`;
    - в live Moltis container `python3` и `open.pm` отсутствовали, а этот self-made parser вёл себя иначе, чем на host replay.
+3. После устранения portability-проблем остался ещё один дефект final-delivery logic:
+   - ранний `MessageSending` early-exit пропускал "чистые", но неправильные skill-detail ответы без telemetry markers;
+   - `skill_detail_reply_override` не исполнялся, если raw fallback выглядел как обычный текст, а не как `Activity log`.
 
-Из-за этого получился ложный локальный успех: exact payload на host уже уходил в `direct_fastpath kind=skill_detail`, но тот же payload внутри live container всё ещё падал в generic `safe_lane`/tool path и выдавал пользователю ответ вида «не получилось прочитать файл навыка через инструменты».
+Из-за этого получилось два последовательных ложных сигнала успеха:
+- сначала host replay показывал `direct_fastpath kind=skill_detail`, но live container всё ещё падал в generic `safe_lane`/tool path и выдавал пользователю ответ вида «не получилось прочитать файл навыка через инструменты»;
+- затем, даже когда этот ответ уже приходил без явного `Activity log`, финальный rewrite его всё ещё не перехватывал из-за раннего выхода в `MessageSending`.
 
 ## Внешние подтверждения
 
@@ -88,7 +94,11 @@ root_cause: "The first failure was a missing deterministic skill-detail route in
 5. Добавлены regression tests:
    - direct fastpath для `Расскажи мне про навык telegram-lerner`;
    - direct fastpath для skill-detail даже при сломанном `python3` и с prior history;
-   - MessageSending rewrite для реального leakage-pattern с `missing 'command' parameter`.
+   - MessageSending rewrite для реального leakage-pattern с `missing 'command' parameter`;
+   - MessageSending rewrite для prod-паттерна, где raw reply уже не содержит `Activity log`, а выглядит как «не могу открыть `SKILL.md`».
+6. Исправлен final-delivery early-exit:
+   - `MessageSending` больше не делает ранний `exit 0` для текущего или persisted `skill_detail` turn;
+   - это гарантирует, что блок `skill_detail_reply_override` успеет переписать даже "чистый", но неправильный prose fallback.
 
 ## Проверка
 
@@ -102,3 +112,4 @@ root_cause: "The first failure was a missing deterministic skill-detail route in
 2. Если user-facing answer можно построить из runtime `SKILL.md`, нельзя оставлять этот turn зависеть от best-effort tool path модели.
 3. Нельзя принимать host replay за доказательство исправления для Moltis container/runtime path: hook code должен проверяться в той же среде исполнения, где он реально крутится.
 4. Любой новый deterministic Telegram route должен сразу получать regression test не только на текст leakage, но и на отсутствие host-only зависимостей (`python3`, `open.pm`, jq, locale/awk quirks).
+5. Для детерминированных Telegram-сценариев нельзя полагаться только на поиск явных telemetry-маркеров. Если turn уже классифицирован как `skill_detail`, final `MessageSending` rewrite должен доходить до конца даже тогда, когда raw fallback выглядит как обычный пользовательский текст.

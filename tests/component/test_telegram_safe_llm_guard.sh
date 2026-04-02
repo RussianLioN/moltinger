@@ -1887,6 +1887,44 @@ EOF
         test_fail "MessageSending guard must rewrite skill-detail tool failures into a deterministic runtime skill summary instead of leaking Activity log"
     fi
 
+    test_start "component_message_sending_guard_rewrites_skill_detail_plain_runtime_failure_without_activity_log"
+    local skill_detail_plain_dir message_sending_skill_detail_plain_output skill_detail_plain_fakebin
+    skill_detail_plain_dir="$(secure_temp_dir telegram-safe-skill-detail-plain-runtime)"
+    skill_detail_plain_fakebin="$skill_detail_plain_dir/fakebin"
+    mkdir -p "$skill_detail_plain_dir/telegram-learner" "$skill_detail_plain_fakebin"
+    cp "$PROJECT_ROOT/skills/telegram-learner/SKILL.md" "$skill_detail_plain_dir/telegram-learner/SKILL.md"
+    cat >"$skill_detail_plain_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$skill_detail_plain_fakebin/python3"
+    env PATH="$skill_detail_plain_fakebin:$MINIMAL_PATH" \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$skill_detail_plain_dir" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skilldetail-plain","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=e83ca23c6e07 | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+EOF
+    message_sending_skill_detail_plain_output="$(
+        env PATH="$skill_detail_plain_fakebin:$MINIMAL_PATH" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$skill_detail_plain_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:skilldetail-plain","data":{"account_id":"moltis-bot","to":"262872989","reply_to_message_id":960,"text":"Ладно, тут инструмент чтения снова сломан на самом вызове, так что честно: я по-прежнему не могу открыть `SKILL.md` и не буду сочинять детали."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("telegram-learner")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("@tsingular")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("не уходит в длительное исследование")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.to == "262872989"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.reply_to_message_id == 960' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite plain skill-detail runtime failures even when the raw delivery text no longer includes Activity log"
+    fi
+
     test_start "component_telegram_bot_send_prefers_env_token_when_env_file_is_unreadable"
     local telegram_send_tmp telegram_send_fakebin telegram_send_env telegram_send_stdout telegram_send_stderr telegram_send_status telegram_send_curl_log
     telegram_send_tmp="$(secure_temp_dir telegram-bot-send-env-token)"
