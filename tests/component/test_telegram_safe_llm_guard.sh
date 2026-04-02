@@ -562,6 +562,79 @@ EOF
         test_fail "Direct skill-detail fastpath must remain deterministic even with prior chat history and no working python3 binary in PATH"
     fi
 
+    test_start "component_before_llm_guard_direct_fastpaths_skill_detail_without_perl_or_python3"
+    local fastpath_skill_detail_nolang_tmp fastpath_skill_detail_nolang_send_script fastpath_skill_detail_nolang_log fastpath_skill_detail_nolang_stdout fastpath_skill_detail_nolang_stderr fastpath_skill_detail_nolang_status fastpath_skill_detail_nolang_intent_dir fastpath_skill_detail_nolang_suppress_file fastpath_skill_detail_nolang_runtime_root fastpath_skill_detail_nolang_fakebin
+    fastpath_skill_detail_nolang_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-nolang)"
+    fastpath_skill_detail_nolang_send_script="$fastpath_skill_detail_nolang_tmp/send.sh"
+    fastpath_skill_detail_nolang_log="$fastpath_skill_detail_nolang_tmp/send.log"
+    fastpath_skill_detail_nolang_intent_dir="$fastpath_skill_detail_nolang_tmp/intent"
+    fastpath_skill_detail_nolang_suppress_file="$fastpath_skill_detail_nolang_intent_dir/session_nolangdetail.suppress"
+    fastpath_skill_detail_nolang_runtime_root="$fastpath_skill_detail_nolang_tmp/runtime-skills"
+    fastpath_skill_detail_nolang_fakebin="$fastpath_skill_detail_nolang_tmp/fakebin"
+    mkdir -p "$fastpath_skill_detail_nolang_runtime_root/telegram-learner" "$fastpath_skill_detail_nolang_fakebin"
+    cp "$PROJECT_ROOT/skills/telegram-learner/SKILL.md" "$fastpath_skill_detail_nolang_runtime_root/telegram-learner/SKILL.md"
+    cat >"$fastpath_skill_detail_nolang_fakebin/perl" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    cat >"$fastpath_skill_detail_nolang_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$fastpath_skill_detail_nolang_fakebin/perl" "$fastpath_skill_detail_nolang_fakebin/python3"
+    cat >"$fastpath_skill_detail_nolang_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_skill_detail_nolang_send_script"
+    fastpath_skill_detail_nolang_stdout="$fastpath_skill_detail_nolang_tmp/stdout.log"
+    fastpath_skill_detail_nolang_stderr="$fastpath_skill_detail_nolang_tmp/stderr.log"
+    set +e
+    env PATH="$fastpath_skill_detail_nolang_fakebin:$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_nolang_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_nolang_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_nolang_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_nolang_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_nolang_stdout" 2>"$fastpath_skill_detail_nolang_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:nolangdetail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_skill_detail_nolang_status=$?
+    set -e
+    if [[ "$fastpath_skill_detail_nolang_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_nolang_stdout" ]] && \
+       [[ ! -s "$fastpath_skill_detail_nolang_stderr" ]] && \
+       [[ -f "$fastpath_skill_detail_nolang_suppress_file" ]] && \
+       grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_nolang_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'telegram-learner' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq '@tsingular' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'не уходит в длительное исследование' "$fastpath_skill_detail_nolang_log"; then
+        test_pass
+    else
+        test_fail "Direct skill-detail fastpath must fall back to pure shell parsing when both perl and python3 are unavailable"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_sparse_skill_create_into_runtime_scaffold_when_enabled"
     local fastpath_create_tmp fastpath_create_send_script fastpath_create_log fastpath_create_stdout fastpath_create_stderr fastpath_create_status fastpath_runtime_skills_root fastpath_created_skill fastpath_create_intent_dir fastpath_create_suppress_file
     fastpath_create_tmp="$(secure_temp_dir telegram-safe-fastpath-create)"

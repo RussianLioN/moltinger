@@ -1680,6 +1680,10 @@ resolve_runtime_skill_name_from_text() {
     local source_flat=""
     local skill_name=""
     local perl_output=""
+    local candidate_normalized=""
+    local candidate_skeleton=""
+    local skill_normalized=""
+    local skill_skeleton=""
     local IFS=','
     local -a skill_items=()
 
@@ -1793,9 +1797,33 @@ PY
             | tr '\r\n' '  ' \
             | sed 's/[[:space:]][[:space:]]*/ /g'
     )"
+    candidate_normalized="$(
+        printf '%s' "${candidate:-}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr '_' '-' \
+            | sed 's/[^a-z0-9-]//g'
+    )"
+    candidate_skeleton="$(
+        printf '%s' "$candidate_normalized" \
+            | tr -d 'aeiouy'
+    )"
     read -r -a skill_items <<<"$csv"
     for skill_name in "${skill_items[@]}"; do
         [[ -n "$skill_name" ]] || continue
+        skill_normalized="$(
+            printf '%s' "$skill_name" \
+                | tr '[:upper:]' '[:lower:]' \
+                | tr '_' '-' \
+                | sed 's/[^a-z0-9-]//g'
+        )"
+        skill_skeleton="$(
+            printf '%s' "$skill_normalized" \
+                | tr -d 'aeiouy'
+        )"
+        if [[ -n "$candidate_skeleton" && "$candidate_skeleton" == "$skill_skeleton" ]]; then
+            printf '%s' "$skill_name"
+            return 0
+        fi
         if [[ "$source_flat" == *"$(printf '%s' "$skill_name" | tr '[:upper:]' '[:lower:]')"* ]]; then
             printf '%s' "$skill_name"
             return 0
@@ -1847,6 +1875,7 @@ build_skill_detail_reply_text() {
     local channels_lines=""
     local phases_lines=""
     local safe_dm_line=""
+    local generated_reply=""
     local -a parts=()
 
     if [[ -n "$resolved_name" ]]; then
@@ -1854,7 +1883,8 @@ build_skill_detail_reply_text() {
     fi
 
     if command -v perl >/dev/null 2>&1; then
-        perl - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PL'
+        generated_reply="$(
+            perl - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PL'
 use strict;
 use warnings;
 use utf8;
@@ -1996,11 +2026,15 @@ if (@skills) {
     print 'Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.';
 }
 PL
-        return $?
+        )" || true
+        if [[ -n "$generated_reply" ]]; then
+            printf '%s' "$generated_reply"
+            return 0
+        fi
     fi
 
     if command -v python3 >/dev/null 2>&1; then
-        resolved="$(
+        generated_reply="$(
             python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
 import re
 import sys
@@ -2117,8 +2151,8 @@ else:
     print("Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.")
 PY
         )" || true
-        if [[ -n "$resolved" ]]; then
-            printf '%s' "$resolved"
+        if [[ -n "$generated_reply" ]]; then
+            printf '%s' "$generated_reply"
             return 0
         fi
     fi
@@ -2200,7 +2234,7 @@ PY
             safe_dm_line='Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.'
         fi
 
-        if [[ -n "$requested_name" ]] && [[ "${requested_name,,}" != "${resolved_name,,}" ]]; then
+        if [[ -n "$requested_name" ]] && [[ "$(printf '%s' "$requested_name" | tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$resolved_name" | tr '[:upper:]' '[:lower:]')" ]]; then
             parts+=("Похоже, ты имеешь в виду навык \`$resolved_name\`.")
         fi
         parts+=("Навык \`$resolved_name\`: ${description_line:-описание в frontmatter сейчас пустое.}")
