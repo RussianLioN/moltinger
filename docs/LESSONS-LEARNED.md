@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-02
-**Total Lessons**: 63
+**Total Lessons**: 64
 
 ---
 
@@ -69,7 +69,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (10 lessons)
+#### P3 (11 lessons)
+- [Telegram skill-detail requests lacked a deterministic runtime path and leaked tool errors](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
@@ -120,7 +121,8 @@
 #### configuration (1 lessons)
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
 
-#### generic (6 lessons)
+#### generic (7 lessons)
+- [Telegram skill-detail requests lacked a deterministic runtime path and leaked tool errors](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
@@ -166,13 +168,13 @@
 
 ### Popular Tags
 
-- `moltis` (19 lessons)
+- `moltis` (20 lessons)
 - `deploy` (17 lessons)
 - `gitops` (16 lessons)
 - `github-actions` (16 lessons)
 - `cicd` (16 lessons)
-- `rca` (13 lessons)
-- `telegram` (9 lessons)
+- `rca` (14 lessons)
+- `telegram` (10 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `git-worktree` (9 lessons)
@@ -184,7 +186,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 63 |
+| Total Lessons | 64 |
 | Critical (P0/P1) | 31 |
 | Categories | 6 |
 | Unique Tags | 143 |

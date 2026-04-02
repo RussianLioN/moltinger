@@ -424,6 +424,69 @@ EOF
         test_fail "Direct skill-template fastpath must stay handler-safe: send the canonical scaffold, return rc=0, and leave only a delivery-suppression marker"
     fi
 
+    test_start "component_before_llm_guard_direct_fastpaths_skill_detail_via_bot_send_when_enabled"
+    local fastpath_skill_detail_tmp fastpath_skill_detail_send_script fastpath_skill_detail_log fastpath_skill_detail_stdout fastpath_skill_detail_stderr fastpath_skill_detail_status fastpath_skill_detail_intent_dir fastpath_skill_detail_suppress_file fastpath_skill_detail_runtime_root
+    fastpath_skill_detail_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail)"
+    fastpath_skill_detail_send_script="$fastpath_skill_detail_tmp/send.sh"
+    fastpath_skill_detail_log="$fastpath_skill_detail_tmp/send.log"
+    fastpath_skill_detail_intent_dir="$fastpath_skill_detail_tmp/intent"
+    fastpath_skill_detail_suppress_file="$fastpath_skill_detail_intent_dir/session_fastdetail.suppress"
+    fastpath_skill_detail_runtime_root="$fastpath_skill_detail_tmp/runtime-skills"
+    mkdir -p "$fastpath_skill_detail_runtime_root/telegram-learner"
+    cp "$PROJECT_ROOT/skills/telegram-learner/SKILL.md" "$fastpath_skill_detail_runtime_root/telegram-learner/SKILL.md"
+    cat >"$fastpath_skill_detail_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_skill_detail_send_script"
+    fastpath_skill_detail_stdout="$fastpath_skill_detail_tmp/stdout.log"
+    fastpath_skill_detail_stderr="$fastpath_skill_detail_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_stdout" 2>"$fastpath_skill_detail_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_skill_detail_status=$?
+    set -e
+    if [[ "$fastpath_skill_detail_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_stdout" ]] && \
+       [[ ! -s "$fastpath_skill_detail_stderr" ]] && \
+       [[ -f "$fastpath_skill_detail_suppress_file" ]] && \
+       grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_log" && \
+       grep -Fq 'telegram-learner' "$fastpath_skill_detail_log" && \
+       grep -Fq '@tsingular' "$fastpath_skill_detail_log" && \
+       grep -Fq 'не уходит в длительное исследование' "$fastpath_skill_detail_log"; then
+        test_pass
+    else
+        test_fail "Direct skill-detail fastpath must resolve the runtime skill, answer from SKILL.md, and leave only a same-turn delivery-suppression marker"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_sparse_skill_create_into_runtime_scaffold_when_enabled"
     local fastpath_create_tmp fastpath_create_send_script fastpath_create_log fastpath_create_stdout fastpath_create_stderr fastpath_create_status fastpath_runtime_skills_root fastpath_created_skill fastpath_create_intent_dir fastpath_create_suppress_file
     fastpath_create_tmp="$(secure_temp_dir telegram-safe-fastpath-create)"
@@ -1714,6 +1777,32 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must reuse the persisted skill-visibility intent when delivery omits both messages[] and user_message and leaves only a short generic prompt"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_skill_detail_tool_error_into_runtime_skill_summary"
+    local skill_detail_runtime_root message_sending_skill_detail_output
+    skill_detail_runtime_root="$(secure_temp_dir telegram-safe-skill-detail-runtime)"
+    mkdir -p "$skill_detail_runtime_root/telegram-learner"
+    cp "$PROJECT_ROOT/skills/telegram-learner/SKILL.md" "$skill_detail_runtime_root/telegram-learner/SKILL.md"
+    message_sending_skill_detail_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$skill_detail_runtime_root" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:skilldetail-send","data":{"account_id":"moltis-bot","to":"262872988","reply_to_message_id":959,"user_message":"Расскажи мне про навык telegram-lerner","text":"Похоже, у меня сейчас не сработало чтение файла навыка через инструмент. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/telegram-learner/SKILL.md` • ❌ missing 'command' parameter"}}"
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("telegram-learner")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("@tsingular")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("не уходит в длительное исследование")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.to == "262872988"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.reply_to_message_id == 959' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e 'has("data") and (.data | has("tool_calls") | not)' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite skill-detail tool failures into a deterministic runtime skill summary instead of leaking Activity log"
     fi
 
     test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"

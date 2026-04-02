@@ -1051,6 +1051,22 @@ count_skill_names_csv() {
     printf '%s' "$count"
 }
 
+skill_name_exists_in_csv() {
+    local csv="${1:-}"
+    local target="${2:-}"
+
+    [[ -n "$csv" && -n "$target" ]] || return 1
+
+    case ",${csv}," in
+        *,"${target}",*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 build_skill_runtime_snapshot_message() {
     local csv="${1:-}"
     local bullets=""
@@ -1214,6 +1230,11 @@ build_skill_apply_reply_text() {
 build_skill_apply_hard_override_message() {
     local reply_text="$1"
     build_text_only_hard_override_message "Telegram-safe skill-apply hard override" "$reply_text"
+}
+
+build_skill_detail_hard_override_message() {
+    local reply_text="$1"
+    build_text_only_hard_override_message "Telegram-safe skill-detail hard override" "$reply_text"
 }
 
 read_codex_update_state_json() {
@@ -1459,6 +1480,90 @@ extract_requested_skill_name() {
     return 1
 }
 
+extract_referenced_skill_candidate() {
+    local source_text="${1:-}"
+    local normalized_text=""
+
+    [[ -n "$source_text" ]] || return 1
+
+    normalized_text="$(
+        printf '%s' "$source_text" \
+            | tr '\r\n' '  ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+
+    if [[ "$normalized_text" =~ [Пп]ро[[:space:]]+(навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        printf '%s' "${BASH_REMATCH[2]}"
+        return 0
+    fi
+
+    if [[ "$normalized_text" =~ (навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        printf '%s' "${BASH_REMATCH[2]}"
+        return 0
+    fi
+
+    return 1
+}
+
+resolve_runtime_skill_name_from_text() {
+    local source_text="${1:-}"
+    local csv="${2:-}"
+    local candidate=""
+    local resolved=""
+    local source_flat=""
+    local skill_name=""
+
+    [[ -n "$source_text" && -n "$csv" ]] || return 1
+
+    candidate="$(extract_referenced_skill_candidate "$source_text" || true)"
+    if [[ -n "$candidate" ]] && skill_name_exists_in_csv "$csv" "$candidate"; then
+        printf '%s' "$candidate"
+        return 0
+    fi
+
+    if [[ -n "$candidate" ]] && command -v python3 >/dev/null 2>&1; then
+        resolved="$(
+            python3 - "$candidate" "$csv" <<'PY'
+import difflib
+import sys
+
+candidate = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower().replace("_", "-")
+skills = [item.strip() for item in (sys.argv[2] if len(sys.argv) > 2 else "").split(",") if item.strip()]
+normalized = {skill.lower().replace("_", "-"): skill for skill in skills}
+
+if candidate in normalized:
+    print(normalized[candidate])
+    raise SystemExit(0)
+
+matches = difflib.get_close_matches(candidate, list(normalized.keys()), n=1, cutoff=0.72)
+if matches:
+    print(normalized[matches[0]])
+PY
+        )"
+        if [[ -n "$resolved" ]]; then
+            printf '%s' "$resolved"
+            return 0
+        fi
+    fi
+
+    source_flat="$(
+        printf '%s' "$source_text" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr '\r\n' '  ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+    read -r -a skill_items <<<"$csv"
+    for skill_name in "${skill_items[@]}"; do
+        [[ -n "$skill_name" ]] || continue
+        if [[ "$source_flat" == *"$(printf '%s' "$skill_name" | tr '[:upper:]' '[:lower:]')"* ]]; then
+            printf '%s' "$skill_name"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 create_runtime_skill_scaffold() {
     local skill_name="${1:-}"
     local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
@@ -1481,6 +1586,141 @@ runtime_skill_dir_path() {
 
     [[ -n "$skill_name" ]] || return 1
     printf '%s/%s' "$runtime_root" "$skill_name"
+}
+
+runtime_skill_file_path() {
+    local skill_name="${1:-}"
+    local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
+
+    [[ -n "$skill_name" ]] || return 1
+    printf '%s/%s/SKILL.md' "$runtime_root" "$skill_name"
+}
+
+build_skill_detail_reply_text() {
+    local requested_name="${1:-}"
+    local resolved_name="${2:-}"
+    local csv="${3:-}"
+    local skill_file=""
+
+    if [[ -n "$resolved_name" ]]; then
+        skill_file="$(runtime_skill_file_path "$resolved_name" || true)"
+    fi
+
+    python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+requested = (sys.argv[1] if len(sys.argv) > 1 else "").strip()
+resolved = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+csv = (sys.argv[3] if len(sys.argv) > 3 else "").strip()
+skill_file = Path(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else None
+skills = [item.strip() for item in csv.split(",") if item.strip()]
+
+def clean(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+def parse_frontmatter(text: str) -> dict[str, str]:
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    frontmatter = parts[1]
+    result: dict[str, str] = {}
+    current_key = None
+    for raw_line in frontmatter.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+        if re.match(r"^[A-Za-z0-9_-]+:\s*", line):
+            key, value = line.split(":", 1)
+            current_key = key.strip()
+            result[current_key] = clean(value)
+            continue
+        if current_key and raw_line[:1].isspace():
+            result[current_key] = clean(f"{result.get(current_key, '')} {line}")
+    return result
+
+def section_body(text: str, heading: str) -> str:
+    pattern = rf"(?ms)^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)"
+    match = re.search(pattern, text)
+    return match.group(1).strip() if match else ""
+
+def bullets_from_section(text: str, heading: str, limit: int = 4) -> list[str]:
+    body = section_body(text, heading)
+    items = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            items.append(clean(stripped[2:]))
+        if len(items) >= limit:
+            break
+    return items
+
+def channels_from_text(text: str) -> list[str]:
+    lines = text.splitlines()
+    capture = False
+    items = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("**Каналы для мониторинга**"):
+            capture = True
+            continue
+        if capture:
+            if stripped.startswith("## "):
+                break
+            if stripped.startswith("- "):
+                items.append(clean(stripped[2:]))
+            elif stripped == "":
+                if items:
+                    break
+    return items[:3]
+
+def workflow_phases(text: str, limit: int = 5) -> list[str]:
+    phases = []
+    for phase in re.findall(r"^###\s+(.+?)\s*$", text, flags=re.M):
+        phases.append(clean(re.sub(r"^Phase\s+\d+:\s*", "", phase, flags=re.I)))
+        if len(phases) >= limit:
+            break
+    return phases
+
+if resolved and skill_file and skill_file.is_file():
+    raw_text = skill_file.read_text(encoding="utf-8")
+    frontmatter = parse_frontmatter(raw_text)
+    description = clean(frontmatter.get("description", ""))
+    activation = bullets_from_section(raw_text, "Активация")
+    channels = channels_from_text(raw_text)
+    phases = workflow_phases(raw_text)
+    has_safe_dm_guard = "В Telegram-safe режиме я не провожу длительное исследование" in raw_text
+
+    parts = []
+    if requested and requested.lower() != resolved.lower():
+        parts.append(f"Похоже, ты имеешь в виду навык `{resolved}`.")
+    parts.append(f"Навык `{resolved}`: {description or 'описание в frontmatter сейчас пустое.'}")
+    if activation:
+        parts.append("Когда использовать: " + "; ".join(activation) + ".")
+    if channels:
+        parts.append("Источники: " + "; ".join(channels) + ".")
+    if phases:
+        parts.append("Workflow: " + " -> ".join(phases) + ".")
+    if has_safe_dm_guard:
+        parts.append("Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.")
+    print(clean(" ".join(parts)))
+    raise SystemExit(0)
+
+if requested:
+    if skills:
+        print(f"Не нашёл точного подтверждённого runtime-навыка `{requested}`. Сейчас вижу навыки: {', '.join(skills)}.")
+    else:
+        print(f"Не нашёл точного подтверждённого runtime-навыка `{requested}`. Hook сейчас не подтвердил и список навыков.")
+    raise SystemExit(0)
+
+if skills:
+    print(f"Не смог определить, про какой навык идёт речь. Сейчас вижу навыки: {', '.join(skills)}.")
+else:
+    print("Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.")
+PY
 }
 
 send_telegram_direct_message() {
@@ -2081,12 +2321,24 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((примен(и|ить|им)|�
     looks_like_skill_turn=true
 fi
 
+current_turn_skill_detail_request=false
+if printf '%s' "$intent_text_flat" | grep -Eiq '((расскажи|опиши|объясни|что делает|что это|как работает|tell me about|describe|explain|what does).{0,120}(навык|skills?|skill))|((навык|skills?|skill).{0,120}(расскажи|опиши|объясни|что делает|что это|как работает|about|describe|explain|what does))'; then
+    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
+        current_turn_skill_detail_request=true
+        looks_like_skill_turn=true
+    fi
+fi
+
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_delivery_suppression" ]]; then
     write_audit_line "suppress_clear reason=new_user_turn token=$persisted_delivery_suppression"
     clear_delivery_suppression "${turn_session_key:-}"
     persisted_delivery_suppression=""
 fi
 
+resolved_skill_name=""
+requested_skill_reference_name="$(extract_referenced_skill_candidate "${latest_user_message:-${user_message:-}}" || true)"
+skill_runtime_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+resolved_skill_name="$(resolve_runtime_skill_name_from_text "${latest_user_message:-${user_message:-}}" "$skill_runtime_snapshot_csv" || true)"
 requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
 requested_skill_name_re=""
 if [[ -n "$requested_skill_name" ]]; then
@@ -2100,6 +2352,16 @@ if [[ "$persisted_turn_intent" =~ ^skill_create_([a-z]+):([A-Za-z0-9._-]+)$ ]]; 
 fi
 if [[ -z "$requested_skill_name" && -n "$persisted_skill_create_name" ]]; then
     requested_skill_name="$persisted_skill_create_name"
+fi
+persisted_skill_detail_name=""
+if [[ "$persisted_turn_intent" =~ ^skill_detail:([A-Za-z0-9._-]+)$ ]]; then
+    persisted_skill_detail_name="${BASH_REMATCH[1]}"
+fi
+if [[ -z "$resolved_skill_name" && -n "$persisted_skill_detail_name" ]]; then
+    resolved_skill_name="$persisted_skill_detail_name"
+fi
+if [[ -z "$requested_skill_reference_name" && -n "$resolved_skill_name" ]]; then
+    requested_skill_reference_name="$resolved_skill_name"
 fi
 if [[ "$has_current_user_turn" != true && -n "$persisted_skill_create_state" && -n "$requested_skill_name" && -n "$requested_skill_name_re" ]] && \
    printf '%s' "${intent_text_flat} ${latest_user_message_flat} ${latest_assistant_message_flat} ${response_text_flat} ${payload_flat}" \
@@ -2171,6 +2433,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         next_turn_intent="skill_visibility"
     elif [[ "$looks_like_skill_template_request" == true ]]; then
         next_turn_intent="skill_template"
+    elif [[ "$current_turn_skill_detail_request" == true && -n "${resolved_skill_name:-}" ]]; then
+        next_turn_intent="skill_detail:${resolved_skill_name}"
     elif [[ "$looks_like_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" ]]; then
         skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
         case ",${skill_snapshot_csv}," in
@@ -2231,6 +2495,16 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
                 exit 0
             fi
             write_audit_line "direct_fastpath_failed kind=skill_template chat_id=${telegram_chat_id:-missing}"
+        fi
+        if [[ "$current_turn_skill_detail_request" == true ]]; then
+            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            if [[ -n "$skill_detail_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$skill_detail_reply_text"; then
+                write_audit_line "direct_fastpath kind=skill_detail chat_id=$telegram_chat_id skill=${resolved_skill_name:-missing}"
+                persist_delivery_suppression "${turn_session_key:-}" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+                clear_turn_intent "${turn_session_key:-}"
+                exit 0
+            fi
+            write_audit_line "direct_fastpath_failed kind=skill_detail chat_id=${telegram_chat_id:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}}"
         fi
         if [[ "$current_turn_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" && -n "${next_turn_skill_create_state:-}" ]]; then
             create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state" || true)"
@@ -2293,6 +2567,17 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             write_audit_line "before_modify reason=skill_template_hard_override tool_count=0"
             emit_before_llm_modified_payload "$messages_json" 0
             exit 0
+        fi
+        if [[ "$current_turn_skill_detail_request" == true ]]; then
+            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            if [[ -n "$skill_detail_reply_text" ]]; then
+                skill_detail_guard="$(build_skill_detail_hard_override_message "$skill_detail_reply_text")"
+                skill_detail_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
+                messages_json="[$(build_message_json system "$skill_detail_guard"),$(build_message_json user "$skill_detail_user")]"
+                write_audit_line "before_modify reason=skill_detail_hard_override tool_count=0 skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}}"
+                emit_before_llm_modified_payload "$messages_json" 0
+                exit 0
+            fi
         fi
         if [[ -n "$requested_skill_name" && -n "$next_turn_skill_create_state" ]]; then
             create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state")"
@@ -2455,6 +2740,19 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             emit_modified_payload "$template_reply_text" false
         fi
         exit 0
+    fi
+    if [[ "$current_turn_skill_detail_request" == true || -n "$persisted_skill_detail_name" ]]; then
+        skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+        if [[ -n "$skill_detail_reply_text" ]]; then
+            write_audit_line "emit_modify event=$event reason=skill_detail_reply_override skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}}"
+            if [[ "$event" == "AfterLLMCall" ]]; then
+                emit_modified_payload "$skill_detail_reply_text" true
+            else
+                clear_turn_intent "${turn_session_key:-}"
+                emit_modified_payload "$skill_detail_reply_text" false
+            fi
+            exit 0
+        fi
     fi
     if [[ -n "$persisted_skill_create_state" && -n "$requested_skill_name" && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$looks_like_status" != true ]] && \
        [[ "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true || "$tool_calls_present" == true || "$response_text_flat" == *"$requested_skill_name"* || "$payload_flat" == *"$requested_skill_name"* || "$event" == "MessageSending" ]]; then
