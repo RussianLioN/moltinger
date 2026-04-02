@@ -93,6 +93,33 @@ Last reviewed: 2026-03-27
 - плодить ad-hoc shell команды вместо одного канонического runtime;
 - дублировать длинные инструкции и шаблоны сразу в нескольких skills.
 
+### 3.1 Telegram-safe learner skills оформлять отдельно от operator workflow
+
+Если skill:
+
+- собирает сигналы из Telegram, issues, releases или docs;
+- потенциально запускает длительный сбор, верификацию, ранжирование или запись knowledge;
+- может снаружи выглядеть как "пойди изучи и вернись";
+
+то в `SKILL.md` нужно разделять два surface:
+
+1. **Telegram-safe explainer surface**
+   - короткий `telegram_summary`;
+   - value statement;
+   - `official-first` sourcing order;
+   - краткий degraded mode для DM-safe чатов.
+2. **Operator/worker surface**
+   - canonical runtime;
+   - workflow шаги;
+   - state model;
+   - acceptance/rollout boundary.
+
+Практическое правило:
+
+- user-facing skill detail не должен пересказывать `Workflow`, `Phase`, file paths, tool names или operator templates;
+- learner skill не должен обещать скрытый поиск/анализ в Telegram-safe DM, если canonical runtime для этого не доступен на этой поверхности;
+- Telegram и community sources для learner skill должны быть сигналом, а не единственным источником истины.
+
 ### 4. Агент нужен только когда skill уже недостаточен
 
 Создавай отдельный `agent preset`, если нужен хотя бы один из признаков:

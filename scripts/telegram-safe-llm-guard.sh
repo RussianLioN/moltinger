@@ -2014,10 +2014,11 @@ build_skill_detail_reply_text() {
     local csv="${3:-}"
     local skill_file=""
     local description_line=""
-    local activation_lines=""
-    local channels_lines=""
-    local phases_lines=""
-    local safe_dm_line=""
+    local telegram_summary=""
+    local value_statement=""
+    local source_priority=""
+    local telegram_safe_note=""
+    local first_source_line=""
     local generated_reply=""
     local -a parts=()
 
@@ -2025,7 +2026,7 @@ build_skill_detail_reply_text() {
         skill_file="$(runtime_skill_file_path "$resolved_name" || true)"
     fi
 
-    if command -v perl >/dev/null 2>&1; then
+    if false && command -v perl >/dev/null 2>&1; then
         generated_reply="$(
             perl - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PL'
 use strict;
@@ -2135,18 +2136,42 @@ if (length $resolved && length $skill_file && -f $skill_file) {
 
     my $frontmatter = parse_frontmatter($raw_text);
     my $description = clean($frontmatter->{description} // q());
-    my $display_description = $description || 'в описании навыка пока нет короткого summary.';
-    $display_description =~ s/[.?!]+\z//;
-    my @activation = bullets_from_section($raw_text, 'Активация');
-    my @channels = channels_from_text($raw_text);
-    my @phases = workflow_phases($raw_text);
+    my $summary = clean($frontmatter->{telegram_summary} // q());
+    my $value = clean($frontmatter->{value_statement} // q());
+    my $priority = clean($frontmatter->{source_priority} // q());
+    my $telegram_note = clean($frontmatter->{telegram_safe_note} // q());
     my $has_safe_dm_guard = index($raw_text, 'В Telegram-safe режиме я не провожу длительное исследование') >= 0 ? 1 : 0;
+    my $first_source = q();
+
+    my $sources_body = section_body($raw_text, 'Источники по приоритету');
+    for my $line (split /\n/, $sources_body) {
+        my $stripped = clean($line);
+        next unless length $stripped;
+        if ($stripped =~ /\A[0-9]+[.)]\s+(.*)\z/) {
+            $first_source = clean($1);
+            last;
+        }
+        if ($stripped =~ /\A-\s+(.*)\z/) {
+            $first_source = clean($1);
+            last;
+        }
+    }
 
     my @parts;
-    push @parts, "Навык `$resolved` — " . $display_description . q(.);
-    push @parts, "Сейчас в описании навыка указаны источники: " . join('; ', @channels) . q(.) if @channels;
-    push @parts, "Обычно он работает по шагам: " . join(' -> ', @phases) . q(.) if @phases;
-    push @parts, 'В Telegram-чате этот навык даёт короткий результат; для полного разбора лучше продолжать задачу в web UI или операторской сессии.' if $has_safe_dm_guard;
+    my $display_summary = $summary || $description || 'в описании навыка пока нет короткого summary';
+    $display_summary =~ s/[.?!]+\z//;
+    push @parts, $resolved . " — " . $display_summary . q(.);
+    push @parts, $value if length $value;
+    if (length $priority) {
+        push @parts, $priority;
+    } elsif (length $first_source) {
+        push @parts, "Главный источник по приоритету: " . $first_source . q(.);
+    }
+    if (length $telegram_note) {
+        push @parts, $telegram_note;
+    } elsif ($has_safe_dm_guard) {
+        push @parts, 'В Telegram-safe чате даю только краткое описание; полный разбор лучше продолжать в web UI или операторской сессии.';
+    }
 
     print clean(join(q( ), @parts));
     exit 0;
@@ -2217,62 +2242,42 @@ def section_body(text: str, heading: str) -> str:
     match = re.search(pattern, text)
     return match.group(1).strip() if match else ""
 
-def bullets_from_section(text: str, heading: str, limit: int = 4) -> list[str]:
+def first_source_from_section(text: str, heading: str) -> str:
     body = section_body(text, heading)
-    items = []
     for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- "):
-            items.append(clean(stripped[2:]))
-        if len(items) >= limit:
-            break
-    return items
-
-def channels_from_text(text: str) -> list[str]:
-    lines = text.splitlines()
-    capture = False
-    items = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("**Каналы для мониторинга**"):
-            capture = True
+        stripped = clean(line)
+        if not stripped:
             continue
-        if capture:
-            if stripped.startswith("## "):
-                break
-            if stripped.startswith("- "):
-                items.append(clean(stripped[2:]))
-            elif stripped == "":
-                if items:
-                    break
-    return items[:3]
-
-def workflow_phases(text: str, limit: int = 5) -> list[str]:
-    phases = []
-    for phase in re.findall(r"^###\s+(.+?)\s*$", text, flags=re.M):
-        phases.append(clean(re.sub(r"^Phase\s+\d+:\s*", "", phase, flags=re.I)))
-        if len(phases) >= limit:
-            break
-    return phases
+        if re.match(r"^[0-9]+[.)]\s+", stripped):
+            return clean(re.sub(r"^[0-9]+[.)]\s+", "", stripped))
+        if stripped.startswith("- "):
+            return clean(stripped[2:])
+    return ""
 
 if resolved and skill_file and skill_file.is_file():
     raw_text = skill_file.read_text(encoding="utf-8")
     frontmatter = parse_frontmatter(raw_text)
     description = clean(frontmatter.get("description", ""))
-    summary_description = (description.rstrip(" .!?") if description else "") or "в описании навыка пока нет короткого summary"
-    activation = bullets_from_section(raw_text, "Активация")
-    channels = channels_from_text(raw_text)
-    phases = workflow_phases(raw_text)
+    telegram_summary = clean(frontmatter.get("telegram_summary", ""))
+    value_statement = clean(frontmatter.get("value_statement", ""))
+    source_priority = clean(frontmatter.get("source_priority", ""))
+    telegram_safe_note = clean(frontmatter.get("telegram_safe_note", ""))
     has_safe_dm_guard = "В Telegram-safe режиме я не провожу длительное исследование" in raw_text
+    first_source = first_source_from_section(raw_text, "Источники по приоритету")
 
     parts = []
-    parts.append(f"Навык `{resolved}` — {summary_description}.")
-    if channels:
-        parts.append("Сейчас в описании навыка указаны источники: " + "; ".join(channels) + ".")
-    if phases:
-        parts.append("Обычно он работает по шагам: " + " -> ".join(phases) + ".")
-    if has_safe_dm_guard:
-        parts.append("В Telegram-чате этот навык даёт короткий результат; для полного разбора лучше продолжать задачу в web UI или операторской сессии.")
+    summary_description = (telegram_summary or description or "в описании навыка пока нет короткого summary").rstrip(" .!?")
+    parts.append(f"{resolved} — {summary_description}.")
+    if value_statement:
+        parts.append(value_statement)
+    if source_priority:
+        parts.append(source_priority)
+    elif first_source:
+        parts.append(f"Главный источник по приоритету: {first_source}.")
+    if telegram_safe_note:
+        parts.append(telegram_safe_note)
+    elif has_safe_dm_guard:
+        parts.append("В Telegram-safe чате даю только краткое описание; полный разбор лучше продолжать в web UI или операторской сессии.")
     print(clean(" ".join(parts)))
     raise SystemExit(0)
 
@@ -2297,90 +2302,150 @@ PY
 
     if [[ -n "$resolved_name" && -n "$skill_file" && -f "$skill_file" ]]; then
         description_line="$(
-            sed -n '
-                /^description:[[:space:]]*/{
-                    s/^description:[[:space:]]*//
-                    p
-                    :desc
-                    n
-                    /^[[:space:]]\{2,\}/{
-                        s/^[[:space:]]*//
-                        p
-                        b desc
-                    }
-                    q
+            awk -v key="description" '
+                BEGIN { in_frontmatter = 0; capture = 0 }
+                NR == 1 && $0 == "---" { in_frontmatter = 1; next }
+                in_frontmatter && $0 == "---" { exit }
+                in_frontmatter && $0 ~ ("^" key ":[[:space:]]*") {
+                    capture = 1
+                    sub("^" key ":[[:space:]]*", "", $0)
+                    print $0
+                    next
                 }
+                in_frontmatter && capture && $0 ~ /^[[:space:]]+/ {
+                    sub(/^[[:space:]]+/, "", $0)
+                    print $0
+                    next
+                }
+                capture { exit }
             ' "$skill_file" \
                 | tr '\r\n' '  ' \
                 | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; s/[[:space:]]*[.?!][.?![:space:]]*$//'
         )" || true
-        activation_lines="$(
+        telegram_summary="$(
+            awk -v key="telegram_summary" '
+                BEGIN { in_frontmatter = 0; capture = 0 }
+                NR == 1 && $0 == "---" { in_frontmatter = 1; next }
+                in_frontmatter && $0 == "---" { exit }
+                in_frontmatter && $0 ~ ("^" key ":[[:space:]]*") {
+                    capture = 1
+                    sub("^" key ":[[:space:]]*", "", $0)
+                    print $0
+                    next
+                }
+                in_frontmatter && capture && $0 ~ /^[[:space:]]+/ {
+                    sub(/^[[:space:]]+/, "", $0)
+                    print $0
+                    next
+                }
+                capture { exit }
+            ' "$skill_file" \
+                | tr '\r\n' '  ' \
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; s/[[:space:]]*[.?!][.?![:space:]]*$//'
+        )" || true
+        value_statement="$(
+            awk -v key="value_statement" '
+                BEGIN { in_frontmatter = 0; capture = 0 }
+                NR == 1 && $0 == "---" { in_frontmatter = 1; next }
+                in_frontmatter && $0 == "---" { exit }
+                in_frontmatter && $0 ~ ("^" key ":[[:space:]]*") {
+                    capture = 1
+                    sub("^" key ":[[:space:]]*", "", $0)
+                    print $0
+                    next
+                }
+                in_frontmatter && capture && $0 ~ /^[[:space:]]+/ {
+                    sub(/^[[:space:]]+/, "", $0)
+                    print $0
+                    next
+                }
+                capture { exit }
+            ' "$skill_file" \
+                | tr '\r\n' '  ' \
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+        )" || true
+        source_priority="$(
+            awk -v key="source_priority" '
+                BEGIN { in_frontmatter = 0; capture = 0 }
+                NR == 1 && $0 == "---" { in_frontmatter = 1; next }
+                in_frontmatter && $0 == "---" { exit }
+                in_frontmatter && $0 ~ ("^" key ":[[:space:]]*") {
+                    capture = 1
+                    sub("^" key ":[[:space:]]*", "", $0)
+                    print $0
+                    next
+                }
+                in_frontmatter && capture && $0 ~ /^[[:space:]]+/ {
+                    sub(/^[[:space:]]+/, "", $0)
+                    print $0
+                    next
+                }
+                capture { exit }
+            ' "$skill_file" \
+                | tr '\r\n' '  ' \
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+        )" || true
+        telegram_safe_note="$(
+            awk -v key="telegram_safe_note" '
+                BEGIN { in_frontmatter = 0; capture = 0 }
+                NR == 1 && $0 == "---" { in_frontmatter = 1; next }
+                in_frontmatter && $0 == "---" { exit }
+                in_frontmatter && $0 ~ ("^" key ":[[:space:]]*") {
+                    capture = 1
+                    sub("^" key ":[[:space:]]*", "", $0)
+                    print $0
+                    next
+                }
+                in_frontmatter && capture && $0 ~ /^[[:space:]]+/ {
+                    sub(/^[[:space:]]+/, "", $0)
+                    print $0
+                    next
+                }
+                capture { exit }
+            ' "$skill_file" \
+                | tr '\r\n' '  ' \
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+        )" || true
+        first_source_line="$(
             awk '
-                BEGIN { capture = 0; count = 0 }
-                /^##[[:space:]]+Активация[[:space:]]*$/ { capture = 1; next }
+                BEGIN { capture = 0 }
+                /^##[[:space:]]+Источники по приоритету[[:space:]]*$/ { capture = 1; next }
                 capture && /^##[[:space:]]+/ { exit }
+                capture && /^[[:space:]]*[0-9]+[.)][[:space:]]+/ {
+                    line = $0
+                    sub(/^[[:space:]]*[0-9]+[.)][[:space:]]+/, "", line)
+                    gsub(/[[:space:]]+/, " ", line)
+                    sub(/^[[:space:]]+/, "", line)
+                    sub(/[[:space:]]+$/, "", line)
+                    print line
+                    exit
+                }
                 capture && /^[[:space:]]*-[[:space:]]+/ {
                     line = $0
                     sub(/^[[:space:]]*-[[:space:]]+/, "", line)
                     gsub(/[[:space:]]+/, " ", line)
                     sub(/^[[:space:]]+/, "", line)
                     sub(/[[:space:]]+$/, "", line)
-                    if (length(line)) {
-                        print line
-                        count++
-                        if (count >= 4) {
-                            exit
-                        }
-                    }
+                    print line
+                    exit
                 }
-            ' "$skill_file" \
-                | tr '\n' '\t' \
-                | sed 's/\t$//; s/\t/; /g'
+            ' "$skill_file"
         )" || true
-        channels_lines="$(
-            awk '
-                BEGIN { capture = 0; count = 0 }
-                /^\*\*Каналы для мониторинга\*\*:?[[:space:]]*$/ { capture = 1; next }
-                capture && /^##[[:space:]]+/ { exit }
-                capture && /^[[:space:]]*-[[:space:]]+/ {
-                    line = $0
-                    sub(/^[[:space:]]*-[[:space:]]+/, "", line)
-                    gsub(/[[:space:]]+/, " ", line)
-                    sub(/^[[:space:]]+/, "", line)
-                    sub(/[[:space:]]+$/, "", line)
-                    if (length(line)) {
-                        print line
-                        count++
-                        if (count >= 3) {
-                            exit
-                        }
-                    }
-                }
-                capture && count > 0 && /^[[:space:]]*$/ { exit }
-            ' "$skill_file" \
-                | tr '\n' '\t' \
-                | sed 's/\t$//; s/\t/; /g'
-        )" || true
-        phases_lines="$(
-            grep -E '^### ' "$skill_file" \
-                | sed -E 's/^### +//; s/^Phase[[:space:]]+[0-9]+:[[:space:]]*//I' \
-                | head -n 5 \
-                | tr '\n' '\t' \
-                | sed 's/\t$//; s/\t/ -> /g'
-        )" || true
-        if grep -Fq 'В Telegram-safe режиме я не провожу длительное исследование' "$skill_file"; then
-            safe_dm_line='В Telegram-чате этот навык даёт короткий результат; для полного разбора лучше продолжать задачу в web UI или операторской сессии.'
+        if [[ -z "$telegram_safe_note" ]] && grep -Fq 'В Telegram-safe режиме я не провожу длительное исследование' "$skill_file"; then
+            telegram_safe_note='В Telegram-safe чате даю только краткое описание; полный разбор лучше продолжать в web UI или операторской сессии.'
         fi
 
-        parts+=("Навык \`$resolved_name\` — ${description_line:-в описании навыка пока нет короткого summary.}.")
-        if [[ -n "$channels_lines" ]]; then
-            parts+=("Сейчас в описании навыка указаны источники: $channels_lines.")
+        parts+=("${resolved_name} — ${telegram_summary:-${description_line:-в описании навыка пока нет короткого summary}}.")
+        if [[ -n "$value_statement" ]]; then
+            parts+=("$value_statement")
         fi
-        if [[ -n "$phases_lines" ]]; then
-            parts+=("Обычно он работает по шагам: $phases_lines.")
+        if [[ -n "$source_priority" ]]; then
+            parts+=("$source_priority")
+        elif [[ -n "$first_source_line" ]]; then
+            parts+=("Главный источник по приоритету: $first_source_line.")
         fi
-        if [[ -n "$safe_dm_line" ]]; then
-            parts+=("$safe_dm_line")
+        if [[ -n "$telegram_safe_note" ]]; then
+            parts+=("$telegram_safe_note")
         fi
         printf '%s\n' "$(printf '%s ' "${parts[@]}" | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; s/ \([.,;:!?]\)/\1/g')"
         return 0

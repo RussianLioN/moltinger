@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-03
-**Total Lessons**: 68
+**Total Lessons**: 69
 
 ---
 
@@ -70,9 +70,10 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (14 lessons)
+#### P3 (15 lessons)
 - [Telegram skill-detail regressed after removing direct fastpath and relying on a single in-band hook path](../docs/rca/2026-04-02-telegram-skill-detail-single-inband-path-regressed-live-runtime.md)
 - [Telegram skill-detail requests regressed through dual delivery paths, container drift, rewrite gaps, and skill-internal wording leaks](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
+- [Telegram learner skill-detail still leaked tool failures because the summary builder kept a shell-unsafe Perl branch and the skill contract was too operator-heavy](../docs/rca/2026-04-02-telegram-learner-skill-detail-hardening.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
 - [Telegram direct fastpath suppression needed chat scope because live runtime drifted session identity](../docs/rca/2026-04-02-telegram-direct-fastpath-suppression-needed-chat-scope.md)
 - [Telegram repeated BeforeLLMCall iteration was misclassified as a new user turn after direct fastpath](../docs/rca/2026-04-02-telegram-direct-fastpath-repeat-before-llm-iteration-was-misclassified-as-new-turn.md)
@@ -126,9 +127,10 @@
 #### configuration (1 lessons)
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
 
-#### generic (10 lessons)
+#### generic (11 lessons)
 - [Telegram skill-detail regressed after removing direct fastpath and relying on a single in-band hook path](../docs/rca/2026-04-02-telegram-skill-detail-single-inband-path-regressed-live-runtime.md)
 - [Telegram skill-detail requests regressed through dual delivery paths, container drift, rewrite gaps, and skill-internal wording leaks](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
+- [Telegram learner skill-detail still leaked tool failures because the summary builder kept a shell-unsafe Perl branch and the skill contract was too operator-heavy](../docs/rca/2026-04-02-telegram-learner-skill-detail-hardening.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
 - [Telegram direct fastpath suppression needed chat scope because live runtime drifted session identity](../docs/rca/2026-04-02-telegram-direct-fastpath-suppression-needed-chat-scope.md)
 - [Telegram repeated BeforeLLMCall iteration was misclassified as a new user turn after direct fastpath](../docs/rca/2026-04-02-telegram-direct-fastpath-repeat-before-llm-iteration-was-misclassified-as-new-turn.md)
@@ -176,13 +178,13 @@
 
 ### Popular Tags
 
-- `moltis` (24 lessons)
+- `moltis` (25 lessons)
+- `rca` (18 lessons)
 - `deploy` (18 lessons)
-- `rca` (17 lessons)
 - `github-actions` (17 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `telegram` (13 lessons)
+- `telegram` (14 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `git-worktree` (9 lessons)
@@ -194,10 +196,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 68 |
+| Total Lessons | 69 |
 | Critical (P0/P1) | 31 |
 | Categories | 6 |
-| Unique Tags | 143 |
+| Unique Tags | 144 |
 
 ---
 

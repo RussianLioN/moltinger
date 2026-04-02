@@ -487,9 +487,10 @@ EOF
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_log" && \
        grep -Fq 'telegram-learner' "$fastpath_skill_detail_log" && \
        grep -Fq '@tsingular' "$fastpath_skill_detail_log" && \
-       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_log" && \
-       grep -Fq 'В Telegram-чате этот навык даёт короткий результат' "$fastpath_skill_detail_log" && \
-       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_log"; then
+       grep -Fq 'Полезен, когда нужно быстро собрать новые практики' "$fastpath_skill_detail_log" && \
+       grep -Fq 'official docs, релизам, issues и официальному репозиторию' "$fastpath_skill_detail_log" && \
+       grep -Fq 'В Telegram-safe чате даю только краткое описание' "$fastpath_skill_detail_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM|Обычно он работает по шагам:|Сейчас в описании навыка указаны источники:' "$fastpath_skill_detail_log"; then
         test_pass
     else
         test_fail "Direct skill-detail fastpath must resolve the runtime skill, answer from SKILL.md, and leave only a same-turn delivery-suppression marker"
@@ -542,6 +543,7 @@ EOF
        jq -e '.data.messages[0].content | contains("Telegram-safe skill-detail hard override")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
        jq -e '.data.messages[0].content | contains("telegram-learner")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
        jq -e '.data.messages[0].content | contains("@tsingular")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
+       jq -e '.data.messages[0].content | contains("official docs, релизам, issues и официальному репозиторию")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
        jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output"; then
         test_pass
     else
@@ -611,8 +613,9 @@ EOF
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_history_log" && \
        grep -Fq 'telegram-learner' "$fastpath_skill_detail_history_log" && \
        grep -Fq '@tsingular' "$fastpath_skill_detail_history_log" && \
-       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_history_log" && \
-       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_history_log"; then
+       grep -Fq 'Полезен, когда нужно быстро собрать новые практики' "$fastpath_skill_detail_history_log" && \
+       grep -Fq 'В Telegram-safe чате даю только краткое описание' "$fastpath_skill_detail_history_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM|Обычно он работает по шагам:|Сейчас в описании навыка указаны источники:' "$fastpath_skill_detail_history_log"; then
         test_pass
     else
         test_fail "Direct skill-detail fastpath must remain deterministic even with prior chat history and no working python3 binary in PATH"
@@ -685,9 +688,9 @@ EOF
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_nolang_log" && \
        grep -Fq 'telegram-learner' "$fastpath_skill_detail_nolang_log" && \
        grep -Fq '@tsingular' "$fastpath_skill_detail_nolang_log" && \
-       grep -Fq 'Обычно он работает по шагам:' "$fastpath_skill_detail_nolang_log" && \
-       grep -Fq 'В Telegram-чате этот навык даёт короткий результат' "$fastpath_skill_detail_nolang_log" && \
-       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM' "$fastpath_skill_detail_nolang_log"; then
+       grep -Fq 'Полезен, когда нужно быстро собрать новые практики' "$fastpath_skill_detail_nolang_log" && \
+       grep -Fq 'В Telegram-safe чате даю только краткое описание' "$fastpath_skill_detail_nolang_log" && \
+       ! grep -Eq 'Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM|Обычно он работает по шагам:|Сейчас в описании навыка указаны источники:' "$fastpath_skill_detail_nolang_log"; then
         test_pass
     else
         test_fail "Direct skill-detail fastpath must stay deterministic even when both perl and python3 are unavailable"
@@ -2112,9 +2115,10 @@ EOF
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.text | contains("telegram-learner")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.text | contains("@tsingular")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
-       jq -e '.data.text | contains("В Telegram-чате этот навык даёт короткий результат")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
-       jq -e '.data.text | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
-       jq -e '.data.text | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM") | not' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("Полезен, когда нужно быстро собрать новые практики")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("official docs, релизам, issues и официальному репозиторию")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | contains("В Telegram-safe чате даю только краткое описание")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
+       jq -e '.data.text | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM|Обычно он работает по шагам:|Сейчас в описании навыка указаны источники") | not' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.to == "262872988"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
        jq -e '.data.reply_to_message_id == 959' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
@@ -2152,9 +2156,10 @@ EOF
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.text | contains("telegram-learner")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.text | contains("@tsingular")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
-       jq -e '.data.text | contains("В Telegram-чате этот навык даёт короткий результат")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
-       jq -e '.data.text | contains("Обычно он работает по шагам:")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
-       jq -e '.data.text | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM") | not' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("Полезен, когда нужно быстро собрать новые практики")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("official docs, релизам, issues и официальному репозиторию")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | contains("В Telegram-safe чате даю только краткое описание")' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
+       jq -e '.data.text | test("Похоже, ты имеешь в виду|Когда использовать:|Workflow:|Telegram-safe DM|Обычно он работает по шагам:|Сейчас в описании навыка указаны источники") | not' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.to == "262872989"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
        jq -e '.data.reply_to_message_id == 960' >/dev/null 2>&1 <<<"$message_sending_skill_detail_plain_output" && \
@@ -2162,6 +2167,39 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must rewrite plain skill-detail runtime failures even when the raw delivery text no longer includes Activity log"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_similar_learner_skill_into_clean_runtime_summary"
+    local similar_learner_dir message_sending_similar_learner_output similar_learner_fakebin
+    similar_learner_dir="$(secure_temp_dir telegram-safe-similar-learner-runtime)"
+    similar_learner_fakebin="$similar_learner_dir/fakebin"
+    mkdir -p "$similar_learner_dir/openclaw-improvement-learner" "$similar_learner_fakebin"
+    cp "$PROJECT_ROOT/skills/openclaw-improvement-learner/SKILL.md" "$similar_learner_dir/openclaw-improvement-learner/SKILL.md"
+    cat >"$similar_learner_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$similar_learner_fakebin/python3"
+    message_sending_similar_learner_output="$(
+        env PATH="$similar_learner_fakebin:$MINIMAL_PATH" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$similar_learner_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,openclaw-improvement-learner,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:similar-learner","data":{"account_id":"moltis-bot","to":"262872990","reply_to_message_id":961,"user_message":"Расскажи мне про навык openclaw-improvement-learner","text":"Сейчас скажу честно: инструмент чтения навыка опять не сработал. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/openclaw-improvement-learner/SKILL.md` • ❌ missing 'command' parameter"}}"
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.text | contains("openclaw-improvement-learner")' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.text | contains("какие upstream-изменения и инструкции по OpenClaw стоит внедрять")' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.text | contains("official docs, releases, changelog и issues OpenClaw")' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.text | contains("В Telegram-safe чате даю только краткое описание и приоритеты")' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.text | test("Activity log|SKILL.md|/home/moltis|missing '\''command'\'' parameter|Обычно он работает по шагам:|Сейчас в описании навыка указаны источники") | not' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.to == "262872990"' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
+       jq -e '.data.reply_to_message_id == 961' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must produce the same clean learner-style summary for a similar runtime learner skill"
     fi
 
     test_start "component_telegram_bot_send_prefers_env_token_when_env_file_is_unreadable"
