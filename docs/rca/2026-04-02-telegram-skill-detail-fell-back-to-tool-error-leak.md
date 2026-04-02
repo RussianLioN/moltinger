@@ -1,11 +1,11 @@
 ---
-title: "Telegram skill-detail requests lacked a deterministic runtime path, regressed on container drift, bypassed MessageSending rewrite, and reused skill-internal wording in user-visible replies"
+title: "Telegram skill-detail requests regressed through dual delivery paths, container drift, rewrite gaps, and skill-internal wording leaks"
 date: 2026-04-02
 tags: [telegram, moltis, skills, hooks, activity-log, mcp, tavily, rca]
-root_cause: "The incident had five stacked causes. First, Telegram skill-detail turns had no deterministic runtime-owned route, so the model fell into exec/tool behavior. Second, the first repo-side fix still depended on host-only assumptions: python3-based summarization/fuzzy resolve, Perl snippets importing open.pm, and a fragile awk parser, while the live Moltis container lacked python3/open.pm and behaved differently. Third, once the reply degraded into plain prose without explicit Activity log markers, the MessageSending guard exited early for skill-detail turns, so the final deterministic rewrite never ran and the user still saw the wrong fallback text. Fourth, the supposedly fast deterministic path still had a hidden runtime bug: the Perl summary branch returned immediately even when it produced an empty result, so the function never reached the shell fallback in production; additionally, the shell fallback still contained a Bash-4-only lowercase expansion, which broke shell-only execution on Bash 3.2 during regression testing. Fifth, even after the deterministic reply began arriving, its wording still mirrored raw SKILL.md authoring structure ('Когда использовать', 'Workflow', 'Похоже, ты имеешь в виду'), so the authoritative Telegram probe correctly classified it as internal planning rather than clean user-facing prose."
+root_cause: "The incident had six stacked causes. First, Telegram skill-detail turns had no deterministic runtime-owned route, so the model fell into exec/tool behavior. Second, the first repo-side fix still depended on host-only assumptions: python3-based summarization/fuzzy resolve, Perl snippets importing open.pm, and a fragile awk parser, while the live Moltis container lacked python3/open.pm and behaved differently. Third, once the reply degraded into plain prose without explicit Activity log markers, the MessageSending guard exited early for skill-detail turns, so the final deterministic rewrite never ran and the user still saw the wrong fallback text. Fourth, the supposedly fast deterministic path still had a hidden runtime bug: the Perl summary branch returned immediately even when it produced an empty result, so the function never reached the shell fallback in production; additionally, the shell fallback still contained a Bash-4-only lowercase expansion, which broke shell-only execution on Bash 3.2 during regression testing. Fifth, even after the deterministic reply began arriving, its wording still mirrored raw SKILL.md authoring structure ('Когда использовать', 'Workflow', 'Похоже, ты имеешь в виду'), so the authoritative Telegram probe correctly classified it as internal planning rather than clean user-facing prose. Sixth, skill-detail still kept two competing delivery paths at once: a direct Bot API fastpath in BeforeLLMCall and a normal in-band hard override/final rewrite path; that dual architecture could emit duplicate clean replies and still allow a late tool/error tail to leak when suppression drifted in live Telegram delivery."
 ---
 
-# RCA: Telegram skill-detail requests lacked a deterministic runtime path, regressed on container drift, bypassed MessageSending rewrite, and reused skill-internal wording in user-visible replies
+# RCA: Telegram skill-detail requests regressed through dual delivery paths, container drift, rewrite gaps, and skill-internal wording leaks
 
 ## Ошибка
 
@@ -37,6 +37,7 @@ root_cause: "The incident had five stacked causes. First, Telegram skill-detail 
 - после первой волны фикса остался ещё один слой: когда raw reply стал выглядеть как обычный текст про сломанный инструмент, а не как явный `Activity log`, финальный rewrite всё ещё мог не сработать;
 - после починки final rewrite выяснилось, что сам быстрый `skill_detail` route в live контейнере вызывает `direct_fastpath`, но возвращает `reply_len=0`, то есть ломается уже на генерации deterministic summary.
 - после починки runtime-builder и final rewrite обнаружился ещё один слой: deterministic reply уже приходил, но authoritative probe всё равно справедливо браковал его как внутреннее планирование из-за формулировок, взятых почти напрямую из структуры `SKILL.md`.
+- после следующего live цикла выяснилось, что даже исправленный summary-path оставлял два конкурирующих delivery route для skill-detail: direct-send и in-band hard override. Это создавало новый класс сбоев: два одинаковых clean ответа подряд, а затем поздний грязный tool/error хвост.
 
 ## Анализ 5 Почему
 
@@ -48,6 +49,7 @@ root_cause: "The incident had five stacked causes. First, Telegram skill-detail 
 | 4 | Почему после первого фикса пользователь всё ещё видел неправильный ответ, уже даже без явного `Activity log`? | Потому что runtime всё равно проваливался в exec/tool path, а модель возвращала уже не telemetry leak, а "чистый" prose fallback про то, что не может открыть `SKILL.md`. |
 | 5 | Почему после этого быстрый deterministic route всё равно не отвечал сразу, а live turn доходил почти до timeout? | Потому что `build_skill_detail_reply_text` в проде мог вернуть пустую строку: Perl-ветка завершала функцию даже при пустом результате, не давая дойти до shell fallback, а сам shell fallback до этого ещё и содержал Bash-4-only `${var,,}`, несовместимый с Bash 3.2 в regression-среде. |
 | 6 | Почему после починки fastpath authoritative UAT всё ещё падал, хотя ответ уже приходил? | Потому что deterministic summary был сформулирован как кусок внутренней инструкции навыка: `Похоже, ты имеешь в виду`, `Когда использовать`, `Workflow`, `Telegram-safe DM`. Probe правильно классифицировал такой текст как internal planning/error signature. |
+| 7 | Почему после этого пользователь всё ещё мог получить два чистых ответа и затем поздний грязный хвост? | Потому что для `skill_detail` одновременно оставались два delivery path: direct-send в `BeforeLLMCall` и обычный in-band hard override/final rewrite. В live Telegram это создавало гонку между suppress-маркером, normal delivery и поздним tool/error tail. |
 
 ## Корневая причина
 
@@ -70,6 +72,11 @@ root_cause: "The incident had five stacked causes. First, Telegram skill-detail 
    - summary строился слишком близко к authoring-структуре `SKILL.md`;
    - в пользовательский ответ утекали фразы уровня `Похоже, ты имеешь в виду`, `Когда использовать`, `Workflow`, `Telegram-safe DM`;
    - authoritative Telegram probe корректно считал это внутренним планированием, а не чистым кратким описанием навыка.
+6. Даже после этой починки архитектура delivery для skill-detail оставалась двойной:
+   - `BeforeLLMCall` умел напрямую отправить готовый ответ через Bot API и поставить suppress-маркер;
+   - при этом тот же turn уже имел in-band hard override и `MessageSending` rewrite;
+   - локальные тесты закрепляли именно такой dual-path контракт, поэтому bug не считался регрессией;
+   - в live Telegram dual-path проявлялся как два одинаковых ответа подряд и поздний грязный хвост, если suppress drift не срабатывал идеально.
 
 Из-за этого получилось два последовательных ложных сигнала успеха:
 - сначала host replay показывал `direct_fastpath kind=skill_detail`, но live container всё ещё падал в generic `safe_lane`/tool path и выдавал пользователю ответ вида «не получилось прочитать файл навыка через инструменты»;
@@ -121,12 +128,17 @@ root_cause: "The incident had five stacked causes. First, Telegram skill-detail 
    - убраны формулировки `Похоже, ты имеешь в виду`, `Когда использовать`, `Workflow`, `Telegram-safe DM`;
    - deterministic reply теперь собирается как нейтральное краткое описание навыка, его источников и основных шагов работы;
    - regression tests дополнительно проверяют не только наличие полезной информации, но и отсутствие этих внутренних фраз.
+9. Убран dual-delivery конфликт для `skill_detail`:
+   - direct Bot API fastpath из `BeforeLLMCall` для skill-detail удалён;
+   - для skill-detail оставлен только один deterministic путь: `BeforeLLMCall` hard override + existing `AfterLLMCall/MessageSending` rewrite;
+   - regression tests теперь доказывают, что skill-detail не вызывает send-script и не создаёт suppress-маркер даже при глобально включённом Telegram fastpath.
 
 ## Проверка
 
 - `bash -n scripts/telegram-safe-llm-guard.sh`
 - `bash -n tests/component/test_telegram_safe_llm_guard.sh`
 - `bash tests/component/test_telegram_safe_llm_guard.sh`
+- `bash tests/component/test_telegram_remote_uat_contract.sh`
 
 ## Уроки
 
@@ -137,3 +149,4 @@ root_cause: "The incident had five stacked causes. First, Telegram skill-detail 
 5. Для детерминированных Telegram-сценариев нельзя полагаться только на поиск явных telemetry-маркеров. Если turn уже классифицирован как `skill_detail`, final `MessageSending` rewrite должен доходить до конца даже тогда, когда raw fallback выглядит как обычный пользовательский текст.
 6. Для helper-функций fastpath нельзя делать "ранний return по ветке реализации" без проверки, что ветка реально выдала непустой результат. Иначе nominal fastpath будет числиться вызванным, но фактически продолжит сессию в медленный LLM/tool path.
 7. User-facing deterministic reply нельзя собирать как сырой пересказ authoring-разметки `SKILL.md`. Даже без явного `Activity log` probe и пользователь справедливо воспримут такие маркеры как внутреннюю служебную речь.
+8. Для одного и того же Telegram intent нельзя одновременно держать direct-send fastpath и обычный in-band rewrite, если сценарий не требует мгновенного Bot API bypass. Иначе suppress-маркер становится ещё одним слабым местом, а не гарантией terminal delivery.
