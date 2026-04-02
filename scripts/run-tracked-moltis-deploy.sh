@@ -88,7 +88,7 @@ append_result_context() {
     local rollback_verified="$3"
     local extra_error="${4:-}"
 
-    if ! jq empty >/dev/null 2>&1 <<<"$base_json"; then
+    if [[ -z "${base_json//[[:space:]]/}" ]] || ! jq empty >/dev/null 2>&1 <<<"$base_json"; then
         emit_failure_json "run-tracked-moltis-deploy.sh received non-JSON output from deploy.sh" "failed" "$rollback_verified"
         return
     fi

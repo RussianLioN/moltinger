@@ -892,7 +892,13 @@ test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields() {
     output_json="$tmp_dir/output.json"
 
     mkdir -p "$deploy_dir/config" "$deploy_dir/scripts"
-    printf 'services: {}\n' > "$deploy_dir/docker-compose.prod.yml"
+    cat > "$deploy_dir/docker-compose.prod.yml" <<'EOF'
+services:
+  moltis:
+    image: ghcr.io/moltis-org/moltis:test
+    labels:
+      - "traefik.enable=true"
+EOF
     printf '[server]\nport = 13131\n' > "$deploy_dir/config/moltis.toml"
     : > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh"
     : > "$deploy_dir/scripts/moltis-version.sh"
@@ -914,6 +920,103 @@ test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields() {
     if [[ "$(jq -r '.details.health' "$output_json")" != "failed" ]] || \
        [[ "$(jq -r '.details.rollback_verified' "$output_json")" != "false" ]]; then
         test_fail "Tracked deploy failure JSON must keep health=failed and rollback_verified=false for workflow parsing"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_tracked_deploy_script_emits_failure_json_when_deploy_stdout_is_empty() {
+    test_start "Tracked deploy script should emit failure JSON when deploy.sh exits non-zero with empty stdout"
+
+    if [[ ! -f "$TRACKED_DEPLOY_SCRIPT" ]]; then
+        test_skip "Missing script file: $TRACKED_DEPLOY_SCRIPT"
+        return
+    fi
+
+    local tmp_dir deploy_dir output_json stderr_log runtime_dir
+    tmp_dir="$(mktemp -d)"
+    deploy_dir="$tmp_dir/deploy"
+    output_json="$tmp_dir/output.json"
+    stderr_log="$tmp_dir/stderr.log"
+    runtime_dir="$tmp_dir/runtime-config"
+
+    mkdir -p "$deploy_dir/config" "$deploy_dir/scripts" "$runtime_dir"
+    cat > "$deploy_dir/docker-compose.prod.yml" <<'EOF'
+services:
+  moltis:
+    image: ghcr.io/moltis-org/moltis:test
+    labels:
+      - "traefik.enable=true"
+EOF
+    printf '[server]\nport = 13131\n' > "$deploy_dir/config/moltis.toml"
+    printf 'MOLTIS_RUNTIME_CONFIG_DIR=%s\n' "$runtime_dir" > "$deploy_dir/.env"
+
+    cat > "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" <<'EOF'
+#!/bin/bash
+src_dir="${1:?src required}"
+dst_dir="${2:?dst required}"
+mkdir -p "$dst_dir"
+cp "$src_dir/moltis.toml" "$dst_dir/moltis.toml"
+exit 0
+EOF
+    cat > "$deploy_dir/scripts/moltis-version.sh" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == "version" ]]; then
+  printf '%s\n' "1.2.3"
+elif [[ "${1:-}" == "assert-tracked" ]]; then
+  exit 0
+else
+  exit 0
+fi
+EOF
+    cat > "$deploy_dir/scripts/deploy.sh" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == "--json" && "${2:-}" == "moltis" && "${3:-}" == "deploy" ]]; then
+  exit 1
+fi
+exit 1
+EOF
+    cat > "$deploy_dir/scripts/moltis-runtime-attestation.sh" <<'EOF'
+#!/bin/bash
+printf '%s\n' '{"status":"success","details":{},"errors":[]}'
+EOF
+    chmod +x \
+        "$deploy_dir/scripts/prepare-moltis-runtime-config.sh" \
+        "$deploy_dir/scripts/moltis-version.sh" \
+        "$deploy_dir/scripts/deploy.sh" \
+        "$deploy_dir/scripts/moltis-runtime-attestation.sh"
+
+    set +e
+    MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_dir" \
+        bash "$TRACKED_DEPLOY_SCRIPT" \
+            --json \
+            --deploy-path "$deploy_dir" \
+            --git-sha "deadbeef" \
+            --git-ref "main" \
+            --workflow-run "12345" \
+            --version "1.2.3" >"$output_json" 2>"$stderr_log"
+    local exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]]; then
+        test_fail "run-tracked-moltis-deploy.sh should fail when deploy.sh exits non-zero with empty stdout"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! jq empty "$output_json" >/dev/null 2>&1; then
+        test_fail "Tracked deploy script must emit JSON even when deploy.sh fails with empty stdout"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       [[ "$(jq -r '.details.health' "$output_json")" != "failed" ]] || \
+       [[ "$(jq -r '.errors[0].message' "$output_json")" != "run-tracked-moltis-deploy.sh received non-JSON output from deploy.sh" ]]; then
+        test_fail "Tracked deploy script must convert empty deploy stdout into structured failure JSON"
         rm -rf "$tmp_dir"
         return
     fi
@@ -1335,6 +1438,7 @@ run_all_tests() {
     test_tracked_deploy_script_dry_run_reports_control_plane_steps
     test_tracked_deploy_script_dry_run_emits_required_workflow_contract_fields
     test_tracked_deploy_script_failure_json_keeps_health_and_rollback_fields
+    test_tracked_deploy_script_emits_failure_json_when_deploy_stdout_is_empty
     test_tracked_deploy_script_requires_workflow_run_argument
     test_tracked_deploy_script_treats_env_file_as_data
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
