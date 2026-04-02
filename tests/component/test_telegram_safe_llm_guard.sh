@@ -490,6 +490,65 @@ EOF
         test_fail "MessageSending guard must direct-send the cleaned final reply and suppress the dirty runtime delivery when Activity log is appended to an otherwise valid answer"
     fi
 
+    test_start "component_message_sending_guard_direct_sends_clean_reply_when_chat_id_is_numeric"
+    local direct_clean_delivery_numeric_tmp direct_clean_delivery_numeric_send_script direct_clean_delivery_numeric_log direct_clean_delivery_numeric_stdout direct_clean_delivery_numeric_stderr direct_clean_delivery_numeric_status
+    direct_clean_delivery_numeric_tmp="$(secure_temp_dir telegram-safe-direct-clean-delivery-numeric)"
+    direct_clean_delivery_numeric_send_script="$direct_clean_delivery_numeric_tmp/send.sh"
+    direct_clean_delivery_numeric_log="$direct_clean_delivery_numeric_tmp/send.log"
+    cat >"$direct_clean_delivery_numeric_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+reply_to=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        --reply-to)
+            reply_to="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\nreply_to=%s\n' "$chat_id" "$text" "$reply_to" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$direct_clean_delivery_numeric_send_script"
+    direct_clean_delivery_numeric_stdout="$direct_clean_delivery_numeric_tmp/stdout.log"
+    direct_clean_delivery_numeric_stderr="$direct_clean_delivery_numeric_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$direct_clean_delivery_numeric_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$direct_clean_delivery_numeric_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_clean_delivery_numeric_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$direct_clean_delivery_numeric_stdout" 2>"$direct_clean_delivery_numeric_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:clean-delivery-numeric","data":{"account_id":"moltis-bot","to":262872984,"reply_to_message_id":1201,"text":"Да — новая стабильная версия есть: 0.118.0. Activity log • Searching memory... • missing 'query' parameter"}}
+EOF
+    direct_clean_delivery_numeric_status=$?
+    set -e
+    if [[ "$direct_clean_delivery_numeric_status" -eq 0 ]] && \
+       [[ ! -s "$direct_clean_delivery_numeric_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$direct_clean_delivery_numeric_stdout" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <"$direct_clean_delivery_numeric_stdout" && \
+       grep -Fq 'chat_id=262872984' "$direct_clean_delivery_numeric_log" && \
+       grep -Fq 'text=Да — новая стабильная версия есть: 0.118.0.' "$direct_clean_delivery_numeric_log" && \
+       grep -Fq 'reply_to=1201' "$direct_clean_delivery_numeric_log"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must also direct-send the cleaned final reply when the runtime emits numeric chat ids in the MessageSending payload"
+    fi
+
     test_start "component_message_sending_guard_does_not_direct_send_legitimate_activity_log_explanation"
     local legit_activity_log_tmp legit_activity_log_send_script legit_activity_log_log legit_activity_log_stdout legit_activity_log_stderr legit_activity_log_status
     legit_activity_log_tmp="$(secure_temp_dir telegram-safe-legit-activity-log)"

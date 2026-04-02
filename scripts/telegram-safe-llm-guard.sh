@@ -2143,6 +2143,9 @@ fi
 
 if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRECT_FASTPATH_ENABLED" == true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" == true ]]; then
     delivery_chat_id="$(extract_first_string to || true)"
+    if [[ -z "$delivery_chat_id" ]]; then
+        delivery_chat_id="$(extract_first_number to || true)"
+    fi
     delivery_reply_to="$(extract_first_number reply_to_message_id || true)"
     clean_delivery_text="$(strip_delivery_internal_suffix "${response_text:-}")"
 
