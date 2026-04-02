@@ -1453,6 +1453,16 @@ build_skill_detail_hard_override_message() {
     build_text_only_hard_override_message "Telegram-safe skill-detail hard override" "$reply_text"
 }
 
+build_same_turn_fastpath_guard_message() {
+    cat <<'EOF'
+Telegram-safe same-turn fastpath guard:
+- A Telegram-safe direct fastpath already delivered the user-visible reply for this turn.
+- This repeated BeforeLLMCall entry is internal runtime churn, not a new user turn.
+- Do not call tools.
+- Return exactly an empty string and nothing else.
+EOF
+}
+
 read_codex_update_state_json() {
     local state_script="${CODEX_UPDATE_STATE_SCRIPT:-}"
 
@@ -2740,6 +2750,7 @@ latest_assistant_message_flat="$(flatten_text_for_match "${latest_assistant_mess
 latest_system_message_flat="$(flatten_text_for_match "${latest_system_message:-}")"
 intent_text_flat="${latest_user_message_flat:-$user_message_flat}"
 status_query_text_flat="${intent_text_flat:-$user_message_flat}"
+current_iteration="$(extract_first_number iteration || true)"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
 persisted_delivery_suppression="$(load_delivery_suppression "${turn_session_key:-}" || true)"
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
@@ -2754,6 +2765,15 @@ effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_cha
 has_current_user_turn=false
 if [[ -n "$intent_text_flat" ]]; then
     has_current_user_turn=true
+fi
+
+before_llm_starts_new_user_turn=false
+if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true ]]; then
+    if [[ -z "$current_iteration" ]]; then
+        before_llm_starts_new_user_turn=true
+    elif [[ "$current_iteration" =~ ^[0-9]+$ ]] && (( current_iteration <= 1 )); then
+        before_llm_starts_new_user_turn=true
+    fi
 fi
 
 write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} model=${model:-<none>} payload_len=${#payload_flat} text_len=${#response_text_flat}"
@@ -2923,15 +2943,23 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((расскажи|опиши|о
 fi
 
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_delivery_suppression" ]]; then
-    write_audit_line "suppress_clear reason=new_user_turn scope=session token=$persisted_delivery_suppression"
-    clear_delivery_suppression "${turn_session_key:-}"
-    persisted_delivery_suppression=""
+    if [[ "$before_llm_starts_new_user_turn" == true ]]; then
+        write_audit_line "suppress_clear reason=new_user_turn scope=session token=$persisted_delivery_suppression iteration=${current_iteration:-missing}"
+        clear_delivery_suppression "${turn_session_key:-}"
+        persisted_delivery_suppression=""
+    else
+        write_audit_line "suppress_keep reason=same_turn_before_llm scope=session token=$persisted_delivery_suppression iteration=${current_iteration:-missing}"
+    fi
 fi
 
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_chat_delivery_suppression" && -n "${current_chat_id:-}" ]]; then
-    write_audit_line "suppress_clear reason=new_user_turn scope=chat chat_id=${current_chat_id:-missing} token=$persisted_chat_delivery_suppression"
-    clear_delivery_suppression_for_chat "${current_chat_id:-}"
-    persisted_chat_delivery_suppression=""
+    if [[ "$before_llm_starts_new_user_turn" == true ]]; then
+        write_audit_line "suppress_clear reason=new_user_turn scope=chat chat_id=${current_chat_id:-missing} token=$persisted_chat_delivery_suppression iteration=${current_iteration:-missing}"
+        clear_delivery_suppression_for_chat "${current_chat_id:-}"
+        persisted_chat_delivery_suppression=""
+    else
+        write_audit_line "suppress_keep reason=same_turn_before_llm scope=chat chat_id=${current_chat_id:-missing} token=$persisted_chat_delivery_suppression iteration=${current_iteration:-missing}"
+    fi
 fi
 
 effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
@@ -3070,6 +3098,15 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         persist_turn_intent "${turn_session_key:-}" "$next_turn_intent"
     else
         clear_turn_intent "${turn_session_key:-}"
+    fi
+
+    if [[ -n "$effective_delivery_suppression" && "$has_current_user_turn" == true && "$current_iteration" =~ ^[0-9]+$ ]] && (( current_iteration > 1 )); then
+        same_turn_guard="$(build_same_turn_fastpath_guard_message)"
+        same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
+        messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
+        write_audit_line "before_modify reason=direct_fastpath_repeat_guard token=$effective_delivery_suppression iteration=$current_iteration"
+        emit_before_llm_modified_payload "$messages_json" 0
+        exit 0
     fi
 
     if [[ "$is_telegram_safe_lane" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED" && [[ -n "${telegram_chat_id:-}" ]]; then

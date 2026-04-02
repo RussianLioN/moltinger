@@ -640,6 +640,51 @@ EOF
         test_fail "Direct skill-detail fastpath must stay deterministic even when both perl and python3 are unavailable"
     fi
 
+    test_start "component_before_llm_guard_does_not_repeat_direct_fastpath_on_same_turn_iteration_two"
+    local repeat_fastpath_tmp repeat_fastpath_send_script repeat_fastpath_log repeat_fastpath_stdout repeat_fastpath_stderr repeat_fastpath_status repeat_fastpath_intent_dir repeat_fastpath_session_marker repeat_fastpath_chat_marker
+    repeat_fastpath_tmp="$(secure_temp_dir telegram-safe-repeat-fastpath-before-llm)"
+    repeat_fastpath_send_script="$repeat_fastpath_tmp/send.sh"
+    repeat_fastpath_log="$repeat_fastpath_tmp/send.log"
+    repeat_fastpath_intent_dir="$repeat_fastpath_tmp/intent"
+    repeat_fastpath_session_marker="$repeat_fastpath_intent_dir/session_repeatdetail.suppress"
+    repeat_fastpath_chat_marker="$repeat_fastpath_intent_dir/chat-262872984.suppress"
+    mkdir -p "$repeat_fastpath_intent_dir"
+    printf '%s\tskill_detail:telegram-learner\n' "$(date +%s)" >"$repeat_fastpath_session_marker"
+    printf '%s\tskill_detail:telegram-learner\n' "$(date +%s)" >"$repeat_fastpath_chat_marker"
+    cat >"$repeat_fastpath_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected-repeat-direct-send\n' >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$repeat_fastpath_send_script"
+    repeat_fastpath_stdout="$repeat_fastpath_tmp/stdout.log"
+    repeat_fastpath_stderr="$repeat_fastpath_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$repeat_fastpath_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$repeat_fastpath_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$repeat_fastpath_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$repeat_fastpath_stdout" 2>"$repeat_fastpath_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:repeatdetail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":2}}
+EOF
+    repeat_fastpath_status=$?
+    set -e
+    if [[ "$repeat_fastpath_status" -eq 0 ]] && \
+       [[ ! -s "$repeat_fastpath_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
+       [[ -f "$repeat_fastpath_session_marker" ]] && \
+       [[ -f "$repeat_fastpath_chat_marker" ]] && \
+       [[ ! -e "$repeat_fastpath_log" ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must treat iteration>1 with an active direct-fastpath marker as same-turn runtime churn: keep suppression, avoid a duplicate direct-send, and return a no-op text-only override"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_sparse_skill_create_into_runtime_scaffold_when_enabled"
     local fastpath_create_tmp fastpath_create_send_script fastpath_create_log fastpath_create_stdout fastpath_create_stderr fastpath_create_status fastpath_runtime_skills_root fastpath_created_skill fastpath_create_intent_dir fastpath_create_suppress_file
     fastpath_create_tmp="$(secure_temp_dir telegram-safe-fastpath-create)"

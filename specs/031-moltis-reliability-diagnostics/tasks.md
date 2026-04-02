@@ -78,14 +78,24 @@
 - [x] T056 Merge `PR1` into `main`, run the canonical production deploy from `main`, and validate live `memory_search` plus Ollama provider/model availability against the authoritative remote runtime
 - [x] T057 Only after successful live verification, land `PR2` via a fresh docs-only carrier from verified `main` with RCA/consilium/rules/runbook/lessons/spec updates and then reconcile `tasks.md`
 
+---
+
+## Phase 7: Telegram Same-Turn Iteration Drift
+
+- [x] T058 Capture live hook audit/capture evidence for repeated `BeforeLLMCall` after a direct Telegram skill-detail fastpath and confirm whether suppression is being misclassified as a new user turn
+- [x] T059 Fix repeated same-turn `BeforeLLMCall` handling so `iteration>1` keeps suppression alive and does not trigger a second direct-send
+- [x] T060 Add regression coverage for the `iteration=2` duplicate-delivery pattern and validate the updated Telegram guard contract before redeploy
+
 ## Dependencies & Execution Order
 
 - Phase 0 -> Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
 - Phase 6 depends on the existing runtime-attestation hardening from Phase 5 and now lands through `PR1 -> main deploy -> PR2` rather than direct feature-branch rollout.
+- Phase 7 depends on the Telegram direct-fastpath/live-capture evidence already established earlier in this slice.
 - Phase 2 and Phase 3 are the only repository-safe implementation phases in this slice.
 - Phase 4 depends on operator action against the shared remote runtime after repository guardrails are merged.
 - Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
 - Phase 6 returns to an operator-driven live fix, but only after the runtime-only `PR1` is merged to `main` and deployed through the canonical production workflow.
+- Phase 7 is another live-root-cause closure step for Telegram reliability and should also finish with authoritative remote proof rather than local-only green tests.
 
 ## Implementation Strategy
 
@@ -95,6 +105,7 @@
 - Leave live runtime repair, session cleanup, and memory/browser operational work as explicit follow-up actions.
 - Use Phase 5 backlog items to drive the next durability-focused slice once the current operational backlog is under control.
 - Close the embedding/Ollama incident by first preparing a minimal `PR1` for `main`, then proving the live runtime consumes the tracked memory contract and receives the Ollama cloud credential needed for provider discovery, and only after that landing the deferred `PR2` documentation layer.
+- For Telegram direct fastpaths, treat repeated `BeforeLLMCall` iterations as a separate reliability class from late `AfterLLMCall`/`MessageSending` tails and require live evidence for both.
 # Tasks: Moltis Reliability Diagnostics and Runtime Guardrails
 
 **Input**: Design documents from `/specs/031-moltis-reliability-diagnostics/`  
