@@ -754,21 +754,33 @@ EOF
         test_fail "BeforeToolCall guard must not block dedicated skill tools such as create_skill"
     fi
 
-    test_start "component_before_tool_guard_blocks_disallowed_tavily_tool_in_safe_lane"
+    test_start "component_before_tool_guard_blocks_disallowed_browser_tool_in_safe_lane"
+    local before_tool_browser_output
+    before_tool_browser_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","session_key":"session:browser","provider":"openai-codex","model":"gpt-5.4","tool_name":"browser","arguments":{"action":"open","url":"https://example.com"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_browser_output" && \
+       jq -e '.data.session_key == "session:browser"' >/dev/null 2>&1 <<<"$before_tool_browser_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_browser_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_browser_output" && \
+       jq -e '.data.arguments.command | contains("Tool `browser` blocked")' >/dev/null 2>&1 <<<"$before_tool_browser_output" && \
+       jq -e '.data.arguments.command | contains("allowlisted Tavily research MCP tools")' >/dev/null 2>&1 <<<"$before_tool_browser_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must fail closed on disallowed browser-style tools while keeping the safe-lane note aligned with the Tavily passthrough contract"
+    fi
+
+    test_start "component_before_tool_guard_allows_tavily_passthrough_in_safe_lane"
     local before_tool_tavily_output
     before_tool_tavily_output="$(
         run_hook_with_minimal_path \
             '{"event":"BeforeToolCall","session_key":"session:tavily","provider":"openai-codex","model":"gpt-5.4","tool_name":"mcp__tavily__tavily_search","arguments":{"query":"openai codex releases"}}'
     )"
-    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
-       jq -e '.data.session_key == "session:tavily"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
-       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
-       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
-       jq -e '.data.arguments.command | contains("Tool `mcp__tavily__tavily_search` blocked")' >/dev/null 2>&1 <<<"$before_tool_tavily_output" && \
-       jq -e '.data.arguments.command | contains("create_skill, update_skill, delete_skill")' >/dev/null 2>&1 <<<"$before_tool_tavily_output"; then
+    if [[ -z "$before_tool_tavily_output" ]]; then
         test_pass
     else
-        test_fail "BeforeToolCall guard must fail closed on disallowed Tavily/MCP tools for the Telegram-safe lane"
+        test_fail "BeforeToolCall guard must keep allowlisted Tavily research MCP tools intact instead of rewriting them into synthetic exec payloads"
     fi
 
     test_start "component_before_llm_guard_emits_modify_payload_without_duplicate_messages_or_tool_count_fields"
@@ -939,6 +951,21 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must keep allowlisted create_skill tool calls reachable while replacing leaked internal planning with a safe progress line"
+    fi
+
+    test_start "component_after_llm_guard_preserves_allowlisted_tavily_tool_calls_while_rewriting_progress_text"
+    local after_tavily_tool_output
+    after_tavily_tool_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:tavilytool","provider":"openai-codex","model":"gpt-5.4","text":"Сейчас проверю последние релизы Codex через GitHub и Tavily.","tool_calls":[{"name":"mcp__tavily__tavily_search","arguments":{"query":"Codex CLI latest stable release"}}]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_tavily_tool_output" && \
+       jq -e '.data.tool_calls[0].name == "mcp__tavily__tavily_search"' >/dev/null 2>&1 <<<"$after_tavily_tool_output" && \
+       jq -e '.data.text | contains("Собираю подтверждение по источникам")' >/dev/null 2>&1 <<<"$after_tavily_tool_output" && \
+       jq -e '.data.text | contains("без показа внутренних логов")' >/dev/null 2>&1 <<<"$after_tavily_tool_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must preserve allowlisted Tavily tool calls and replace leaked planning only with a generic safe progress line"
     fi
 
     test_start "component_after_llm_guard_does_not_replace_allowlisted_create_skill_flow_with_visibility_list"
