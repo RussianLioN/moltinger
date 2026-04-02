@@ -1069,8 +1069,9 @@ build_disallowed_tool_runtime_note() {
     cat <<EOF
 Telegram-safe runtime note:
 - Tool \`${tool_name}\` blocked for the user-facing Telegram lane.
-- Do not call Tavily, browser, MCP, web-search, process, cron, or filesystem probes here.
-- Continue text-only, or use only dedicated skill tools: create_skill, update_skill, delete_skill, session_state, send_message, send_image.
+- Allow only dedicated skill tools and allowlisted Tavily research MCP tools here.
+- Do not call browser, arbitrary MCP/web-search, process, cron, or filesystem probes here.
+- Continue text-only, or use only safe tools: create_skill, update_skill, delete_skill, session_state, send_message, send_image, mcp__tavily__tavily_*.
 EOF
 }
 
@@ -1398,6 +1399,33 @@ tool_name_is_allowlisted() {
         create_skill|update_skill|delete_skill|session_state|send_message|send_image)
             return 0
             ;;
+        mcp__tavily__tavily_*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+tool_name_is_skill_allowlisted() {
+    local tool_name="${1:-}"
+    case "$tool_name" in
+        create_skill|update_skill|delete_skill|session_state|send_message|send_image)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+tool_name_is_tavily_allowlisted() {
+    local tool_name="${1:-}"
+    case "$tool_name" in
+        mcp__tavily__tavily_*)
+            return 0
+            ;;
         *)
             return 1
             ;;
@@ -1427,6 +1455,36 @@ tool_calls_include_disallowed() {
     while IFS= read -r tool_name; do
         [[ -n "$tool_name" ]] || continue
         if ! tool_name_is_allowlisted "$tool_name"; then
+            return 0
+        fi
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    return 1
+}
+
+tool_calls_only_skill_allowlisted() {
+    local tool_calls_json="${1:-}"
+    local saw_name=false
+    local tool_name=""
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        saw_name=true
+        if ! tool_name_is_skill_allowlisted "$tool_name"; then
+            return 1
+        fi
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    $saw_name
+}
+
+tool_calls_include_tavily_allowlisted() {
+    local tool_calls_json="${1:-}"
+    local tool_name=""
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        if tool_name_is_tavily_allowlisted "$tool_name"; then
             return 0
         fi
     done < <(extract_tool_call_names "$tool_calls_json" || true)
@@ -2049,7 +2107,12 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
 fi
 
 if [[ "$event" == "AfterLLMCall" && "$tool_calls_allowlisted_only" == true && ( "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ) ]]; then
-    fallback_text='Выполняю запрос по навыкам через встроенные инструменты без filesystem-проб. После завершения вернусь с итогом.'
+    fallback_text='Выполняю запрос через встроенные инструменты без показа внутренних логов. После завершения вернусь с итогом.'
+    if tool_calls_only_skill_allowlisted "$tool_calls_json"; then
+        fallback_text='Выполняю запрос по навыкам через встроенные инструменты без filesystem-проб. После завершения вернусь с итогом.'
+    elif tool_calls_include_tavily_allowlisted "$tool_calls_json"; then
+        fallback_text='Собираю подтверждение по источникам без показа внутренних логов. После завершения вернусь с кратким итогом.'
+    fi
     write_audit_line "emit_modify event=$event reason=allowlisted_skill_tool_progress tool_calls_present=$tool_calls_present"
     emit_modified_payload_preserve_tool_calls "$fallback_text"
     exit 0
