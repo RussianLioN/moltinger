@@ -1981,6 +1981,13 @@ EOF
         test_fail "MessageSending guard must stay inert for plain text that lacks strict delivery-log markers so it does not rewrite ordinary replies outside the real Activity log path"
     fi
 
+    test_start "component_perl_fastpaths_do_not_depend_on_open_pm"
+    if ! grep -Fq 'use open qw(:std :utf8);' "$HOOK_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Perl-based Telegram-safe fastpaths must not depend on open.pm because the live Moltis container does not ship that module"
+    fi
+
     test_start "component_telegram_safe_llm_guard_is_noop_for_non_telegram_safe_models"
     local non_safe_output
     non_safe_output="$(

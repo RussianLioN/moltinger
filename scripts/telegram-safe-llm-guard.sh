@@ -209,7 +209,8 @@ extract_json_array() {
                 use strict;
                 use warnings;
                 use utf8;
-                use open qw(:std :utf8);
+                binmode STDIN, ":encoding(UTF-8)";
+                binmode STDOUT, ":encoding(UTF-8)";
 
                 my $key = shift @ARGV // q();
                 exit 1 unless length $key;
@@ -680,7 +681,8 @@ extract_last_message_content_by_role() {
                 use strict;
                 use warnings;
                 use utf8;
-                use open qw(:std :utf8);
+                binmode STDIN, ":encoding(UTF-8)";
+                binmode STDOUT, ":encoding(UTF-8)";
 
                 sub unescape_json_string {
                     my ($value) = @_;
@@ -1850,7 +1852,7 @@ build_skill_detail_reply_text() {
 use strict;
 use warnings;
 use utf8;
-use open qw(:std :utf8);
+binmode STDOUT, ":encoding(UTF-8)";
 
 my ($requested, $resolved, $csv, $skill_file) = @ARGV;
 $requested //= q();
@@ -1945,9 +1947,12 @@ sub workflow_phases {
 
 if (length $resolved && length $skill_file && -f $skill_file) {
     open my $fh, '<', $skill_file or exit 1;
+    binmode $fh, ":encoding(UTF-8)";
     local $/;
     my $raw_text = <$fh>;
     close $fh;
+    $raw_text =~ s/\r\n/\n/g;
+    $raw_text =~ s/\r/\n/g;
 
     my $frontmatter = parse_frontmatter($raw_text);
     my $description = clean($frontmatter->{description} // q());
