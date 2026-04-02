@@ -1071,7 +1071,7 @@ Telegram-safe runtime note:
 - Tool \`${tool_name}\` blocked for the user-facing Telegram lane.
 - Allow only dedicated skill tools and allowlisted Tavily research MCP tools here.
 - Do not call browser, arbitrary MCP/web-search, process, cron, or filesystem probes here.
-- Continue text-only, or use only safe tools: create_skill, update_skill, delete_skill, session_state, send_message, send_image, mcp__tavily__tavily_*.
+- Continue text-only, or use only safe tools: create_skill, update_skill, delete_skill, session_state, send_message, send_image, mcp__tavily__tavily_search, mcp__tavily__tavily_extract, mcp__tavily__tavily_map, mcp__tavily__tavily_crawl, mcp__tavily__tavily_research.
 EOF
 }
 
@@ -1269,11 +1269,36 @@ runtime_skill_dir_path() {
 send_telegram_direct_message() {
     local chat_id="${1:-}"
     local text="${2:-}"
+    local reply_to="${3:-}"
 
     [[ -n "$chat_id" && -n "$text" ]] || return 1
     [[ -x "$DIRECT_SEND_SCRIPT" ]] || return 1
 
+    if [[ -n "$reply_to" ]]; then
+        "$DIRECT_SEND_SCRIPT" --chat-id "$chat_id" --text "$text" --reply-to "$reply_to" >/dev/null 2>&1
+        return $?
+    fi
+
     "$DIRECT_SEND_SCRIPT" --chat-id "$chat_id" --text "$text" >/dev/null 2>&1
+}
+
+strip_delivery_internal_suffix() {
+    local text="${1:-}"
+    local cleaned="$text"
+
+    if [[ "$cleaned" == *"Activity log"* ]]; then
+        cleaned="${cleaned%%Activity log*}"
+    fi
+    if [[ "$cleaned" == *"• mcp__"* ]]; then
+        cleaned="${cleaned%%• mcp__*}"
+    fi
+
+    cleaned="$(
+        printf '%s' "$cleaned" \
+            | sed 's/[[:space:]]*$//'
+    )"
+
+    printf '%s' "$cleaned"
 }
 
 reply_mentions_any_skill_from_csv() {
@@ -1395,17 +1420,10 @@ extract_tool_call_names() {
 
 tool_name_is_allowlisted() {
     local tool_name="${1:-}"
-    case "$tool_name" in
-        create_skill|update_skill|delete_skill|session_state|send_message|send_image)
-            return 0
-            ;;
-        mcp__tavily__tavily_*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    if tool_name_is_skill_allowlisted "$tool_name" || tool_name_is_tavily_allowlisted "$tool_name"; then
+        return 0
+    fi
+    return 1
 }
 
 tool_name_is_skill_allowlisted() {
@@ -1423,7 +1441,7 @@ tool_name_is_skill_allowlisted() {
 tool_name_is_tavily_allowlisted() {
     local tool_name="${1:-}"
     case "$tool_name" in
-        mcp__tavily__tavily_*)
+        mcp__tavily__tavily_search|mcp__tavily__tavily_extract|mcp__tavily__tavily_map|mcp__tavily__tavily_crawl|mcp__tavily__tavily_research)
             return 0
             ;;
         *)
@@ -1490,6 +1508,22 @@ tool_calls_include_tavily_allowlisted() {
     done < <(extract_tool_call_names "$tool_calls_json" || true)
 
     return 1
+}
+
+tool_calls_only_tavily_allowlisted() {
+    local tool_calls_json="${1:-}"
+    local saw_name=false
+    local tool_name=""
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        saw_name=true
+        if ! tool_name_is_tavily_allowlisted "$tool_name"; then
+            return 1
+        fi
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    $saw_name
 }
 
 emit_modified_payload() {
@@ -2044,6 +2078,22 @@ if [[ "$event" == "MessageSending" && -n "$persisted_delivery_suppression" && "$
     exit 0
 fi
 
+if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRECT_FASTPATH_ENABLED" == true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" == true ]]; then
+    delivery_chat_id="$(extract_first_string to || true)"
+    delivery_reply_to="$(extract_first_number reply_to_message_id || true)"
+    clean_delivery_text="$(strip_delivery_internal_suffix "${response_text:-}")"
+
+    if [[ -n "$delivery_chat_id" && -n "$clean_delivery_text" && "$clean_delivery_text" != "${response_text:-}" ]]; then
+        if send_telegram_direct_message "$delivery_chat_id" "$clean_delivery_text" "${delivery_reply_to:-}"; then
+            write_audit_line "direct_fastpath kind=clean_delivery chat_id=$delivery_chat_id reply_to=${delivery_reply_to:-none}"
+            persist_delivery_suppression "${turn_session_key:-}" "clean_delivery"
+            emit_modified_payload "NO_REPLY" false
+            exit 0
+        fi
+        write_audit_line "direct_fastpath_failed kind=clean_delivery chat_id=${delivery_chat_id:-missing} reply_to=${delivery_reply_to:-none}"
+    fi
+fi
+
 if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
@@ -2106,11 +2156,11 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
     fi
 fi
 
-if [[ "$event" == "AfterLLMCall" && "$tool_calls_allowlisted_only" == true && ( "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ) ]]; then
+if [[ "$event" == "AfterLLMCall" && "$tool_calls_allowlisted_only" == true && ( "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ) ]]; then
     fallback_text='Выполняю запрос через встроенные инструменты без показа внутренних логов. После завершения вернусь с итогом.'
     if tool_calls_only_skill_allowlisted "$tool_calls_json"; then
         fallback_text='Выполняю запрос по навыкам через встроенные инструменты без filesystem-проб. После завершения вернусь с итогом.'
-    elif tool_calls_include_tavily_allowlisted "$tool_calls_json"; then
+    elif tool_calls_only_tavily_allowlisted "$tool_calls_json"; then
         fallback_text='Собираю подтверждение по источникам без показа внутренних логов. После завершения вернусь с кратким итогом.'
     fi
     write_audit_line "emit_modify event=$event reason=allowlisted_skill_tool_progress tool_calls_present=$tool_calls_present"
