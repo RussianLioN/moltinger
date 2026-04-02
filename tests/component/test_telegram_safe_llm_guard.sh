@@ -222,6 +222,27 @@ EOF
         test_fail "BeforeLLMCall guard must hard-override skill-apply requests so Telegram-safe turns do not spin in execution/tool loops"
     fi
 
+    test_start "component_before_llm_guard_hard_overrides_codex_update_queries_to_canonical_release_reply"
+    local before_llm_codex_update_output
+    before_llm_codex_update_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-update-hard","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Проверь последние релизы Codex и кратко скажи, есть ли новая стабильная версия"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_codex_update_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_codex_update_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_codex_update_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$before_llm_codex_update_output" && \
+       jq -e '.data.messages[0].content | contains("версия 0.118.0")' >/dev/null 2>&1 <<<"$before_llm_codex_update_output" && \
+       jq -e '.data.messages[0].content | contains("Дата публикации: 2026-04-01.")' >/dev/null 2>&1 <<<"$before_llm_codex_update_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_codex_update_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must short-circuit Codex release queries into a deterministic canonical reply instead of letting the model route them through Tavily"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_status_via_bot_send_when_enabled"
     local fastpath_status_tmp fastpath_status_send_script fastpath_status_log fastpath_status_stdout fastpath_status_stderr fastpath_status_status fastpath_status_intent_dir fastpath_status_suppress_file
     fastpath_status_tmp="$(secure_temp_dir telegram-safe-fastpath-status)"
@@ -261,6 +282,65 @@ EOF
         test_pass
     else
         test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, and leave only a delivery-suppression marker instead of triggering hook-block"
+    fi
+
+    test_start "component_before_llm_guard_direct_fastpaths_codex_update_via_bot_send_when_enabled"
+    local fastpath_codex_tmp fastpath_codex_send_script fastpath_codex_log fastpath_codex_stdout fastpath_codex_stderr fastpath_codex_status fastpath_codex_intent_dir fastpath_codex_suppress_file
+    fastpath_codex_tmp="$(secure_temp_dir telegram-safe-fastpath-codex-update)"
+    fastpath_codex_send_script="$fastpath_codex_tmp/send.sh"
+    fastpath_codex_log="$fastpath_codex_tmp/send.log"
+    fastpath_codex_intent_dir="$fastpath_codex_tmp/intent"
+    fastpath_codex_suppress_file="$fastpath_codex_intent_dir/session_fastcodex.suppress"
+    cat >"$fastpath_codex_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_codex_send_script"
+    fastpath_codex_stdout="$fastpath_codex_tmp/stdout.log"
+    fastpath_codex_stderr="$fastpath_codex_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_codex_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_codex_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_codex_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_codex_stdout" 2>"$fastpath_codex_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastcodex","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Проверь последние релизы Codex и кратко скажи, есть ли новая стабильная версия"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_codex_status=$?
+    set -e
+    if [[ "$fastpath_codex_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_codex_stdout" ]] && \
+       [[ ! -s "$fastpath_codex_stderr" ]] && \
+       [[ -f "$fastpath_codex_suppress_file" ]] && \
+       grep -Fq $'\tcodex_update' "$fastpath_codex_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_codex_log" && \
+       grep -Fq 'версия 0.118.0' "$fastpath_codex_log" && \
+       grep -Fq 'Дата публикации: 2026-04-01.' "$fastpath_codex_log"; then
+        test_pass
+    else
+        test_fail "Direct Codex update fastpath must stay handler-safe: send the canonical release reply, return rc=0, and leave only a delivery-suppression marker"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_visibility_via_bot_send_when_enabled"
