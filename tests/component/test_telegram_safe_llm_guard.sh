@@ -762,6 +762,45 @@ EOF
         test_fail "AfterLLMCall guard must keep a direct-fastpath turn terminal by dropping late LLM text and tool calls for the same session"
     fi
 
+    test_start "component_message_sending_guard_suppresses_late_delivery_by_chat_id_when_runtime_changes_session_key"
+    local direct_fastpath_chat_delivery_dir direct_fastpath_chat_delivery_marker direct_fastpath_chat_delivery_output
+    direct_fastpath_chat_delivery_dir="$(secure_temp_dir telegram-safe-direct-fastpath-chat-delivery)"
+    direct_fastpath_chat_delivery_marker="$direct_fastpath_chat_delivery_dir/chat-262872984.suppress"
+    mkdir -p "$direct_fastpath_chat_delivery_dir"
+    printf '%s\tskill_detail:telegram-learner\n' "$(date +%s)" >"$direct_fastpath_chat_delivery_marker"
+    direct_fastpath_chat_delivery_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_chat_delivery_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:late-skilldetail-tail","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1294,"text":"Сейчас скажу честно и коротко: мультивызов инструментов сработал криво. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/telegram-learner/SKILL.md` • ❌ missing 'command' parameter • ❌ missing 'query' parameter"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_chat_delivery_output" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$direct_fastpath_chat_delivery_output" && \
+       [[ -f "$direct_fastpath_chat_delivery_marker" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must suppress a late dirty Telegram delivery by chat-scoped marker even when the runtime changes the session key after a direct fastpath"
+    fi
+
+    test_start "component_after_llm_guard_suppresses_late_reply_by_chat_id_when_runtime_changes_session_key"
+    local direct_fastpath_chat_after_llm_output
+    direct_fastpath_chat_after_llm_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_chat_delivery_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:late-skilldetail-tail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"text":"Сейчас скажу честно и коротко: мультивызов инструментов отработал криво.","tool_calls":[{"name":"exec","arguments":{"command":"cat /home/moltis/.moltis/skills/telegram-learner/SKILL.md"}}]}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_chat_after_llm_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$direct_fastpath_chat_after_llm_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$direct_fastpath_chat_after_llm_output" && \
+       [[ -f "$direct_fastpath_chat_delivery_marker" ]]; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must stay terminal by chat-scoped suppression even when the runtime changes the session key after a direct fastpath"
+    fi
+
     test_start "component_message_sending_guard_direct_sends_clean_reply_when_final_delivery_has_activity_log_suffix"
     local direct_clean_delivery_tmp direct_clean_delivery_send_script direct_clean_delivery_log direct_clean_delivery_stdout direct_clean_delivery_stderr direct_clean_delivery_status
     direct_clean_delivery_tmp="$(secure_temp_dir telegram-safe-direct-clean-delivery)"
@@ -958,6 +997,26 @@ EOF
         test_pass
     else
         test_fail "BeforeLLMCall guard must clear stale direct-fastpath suppression at the start of a new user turn so the next normal reply is not silenced"
+    fi
+
+    test_start "component_before_llm_guard_clears_chat_scoped_direct_fastpath_suppression_on_new_user_turn"
+    local stale_chat_direct_fastpath_dir stale_chat_direct_fastpath_marker stale_chat_direct_fastpath_output
+    stale_chat_direct_fastpath_dir="$(secure_temp_dir telegram-safe-stale-chat-direct-fastpath)"
+    stale_chat_direct_fastpath_marker="$stale_chat_direct_fastpath_dir/chat-262872984.suppress"
+    mkdir -p "$stale_chat_direct_fastpath_dir"
+    printf '%s\tskill_detail:telegram-learner\n' "$(date +%s)" >"$stale_chat_direct_fastpath_marker"
+    stale_chat_direct_fastpath_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_chat_direct_fastpath_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:plain-chat-followup","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Привет"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_chat_direct_fastpath_output" && \
+       [[ ! -f "$stale_chat_direct_fastpath_marker" ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must clear stale chat-scoped direct-fastpath suppression at the start of a new user turn so a later normal reply in the same Telegram chat is not silenced"
     fi
 
     test_start "component_before_llm_guard_does_not_persist_stale_status_intent_for_template_followup"

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-04-02
-**Total Lessons**: 64
+**Generated**: 2026-04-03
+**Total Lessons**: 67
 
 ---
 
@@ -46,7 +46,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (21 lessons)
+#### P2 (22 lessons)
+- [Tracked deploy empty stdout broke GitHub Actions JSON contract](../docs/rca/2026-04-02-tracked-deploy-empty-stdout-broke-json-contract.md)
 - [Deploy stall watchdog self-failed on oversized GitHub Actions payloads](../docs/rca/2026-03-28-deploy-stall-watchdog-argjson-overflow.md)
 - [Deploy hardening follow-up introduced a latent verify failure-path regression and queue-blind watchdog alerts](../docs/rca/2026-03-28-deploy-hardening-follow-up-verify-failure-and-watchdog-queue-semantics.md)
 - [Test Suite gate failed again because sqlite3 was installed on host runner but missing in test-runner container runtime](../docs/rca/2026-03-20-test-suite-gate-failed-on-sqlite3-runtime-context-mismatch.md)
@@ -69,9 +70,11 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### P3 (11 lessons)
-- [Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
+#### P3 (13 lessons)
+- [Telegram skill-detail regressed after removing direct fastpath and relying on a single in-band hook path](../docs/rca/2026-04-02-telegram-skill-detail-single-inband-path-regressed-live-runtime.md)
+- [Telegram skill-detail requests regressed through dual delivery paths, container drift, rewrite gaps, and skill-internal wording leaks](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
+- [Telegram direct fastpath suppression needed chat scope because live runtime drifted session identity](../docs/rca/2026-04-02-telegram-direct-fastpath-suppression-needed-chat-scope.md)
 - [Test Suite gate failed because CI runner missed sqlite3 dependency for component_codex_session_path_repair](../docs/rca/2026-03-20-test-suite-gate-failed-on-missing-sqlite3-dependency.md)
 - [Codex monitor threshold coupled to tomllib availability](../docs/rca/2026-03-15-codex-monitor-threshold-coupled-to-tomllib.md)
 - [False GitHub Auth Failure During Codex Push](../docs/rca/2026-03-08-codex-github-auth-false-failure.md)
@@ -89,7 +92,8 @@
 ### By Category
 
 
-#### cicd (27 lessons)
+#### cicd (28 lessons)
+- [Tracked deploy empty stdout broke GitHub Actions JSON contract](../docs/rca/2026-04-02-tracked-deploy-empty-stdout-broke-json-contract.md)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
 - [Deploy stall watchdog self-failed on oversized GitHub Actions payloads](../docs/rca/2026-03-28-deploy-stall-watchdog-argjson-overflow.md)
@@ -121,9 +125,11 @@
 #### configuration (1 lessons)
 - [Moltis Telegram user bots needed explicit stream_mode off](../docs/rca/2026-03-28-moltis-telegram-user-bots-needed-explicit-stream-mode-off.md)
 
-#### generic (7 lessons)
-- [Telegram skill-detail requests initially lacked a deterministic runtime path, then regressed on container-only parser/runtime drift](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
+#### generic (9 lessons)
+- [Telegram skill-detail regressed after removing direct fastpath and relying on a single in-band hook path](../docs/rca/2026-04-02-telegram-skill-detail-single-inband-path-regressed-live-runtime.md)
+- [Telegram skill-detail requests regressed through dual delivery paths, container drift, rewrite gaps, and skill-internal wording leaks](../docs/rca/2026-04-02-telegram-skill-detail-fell-back-to-tool-error-leak.md)
 - [Telegram direct fastpath tail was not terminal and live outbound hooks were incomplete](../docs/rca/2026-04-02-telegram-direct-fastpath-tail-was-not-terminal.md)
+- [Telegram direct fastpath suppression needed chat scope because live runtime drifted session identity](../docs/rca/2026-04-02-telegram-direct-fastpath-suppression-needed-chat-scope.md)
 - [2026-03-06-browser-compat-speckit-desync](../docs/rca/2026-03-06-browser-compat-speckit-desync.md)
 - [2026-03-03-sample-enhanced-rca](../docs/rca/2026-03-03-sample-enhanced-rca.md)
 - [2026-03-03-rca-skill-creation](../docs/rca/2026-03-03-rca-skill-creation.md)
@@ -168,13 +174,13 @@
 
 ### Popular Tags
 
-- `moltis` (20 lessons)
-- `deploy` (17 lessons)
+- `moltis` (23 lessons)
+- `deploy` (18 lessons)
+- `github-actions` (17 lessons)
+- `rca` (16 lessons)
 - `gitops` (16 lessons)
-- `github-actions` (16 lessons)
 - `cicd` (16 lessons)
-- `rca` (14 lessons)
-- `telegram` (10 lessons)
+- `telegram` (12 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 - `git-worktree` (9 lessons)
@@ -186,7 +192,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 64 |
+| Total Lessons | 67 |
 | Critical (P0/P1) | 31 |
 | Categories | 6 |
 | Unique Tags | 143 |

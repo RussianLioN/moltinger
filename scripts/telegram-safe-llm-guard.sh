@@ -1063,6 +1063,55 @@ clear_delivery_suppression() {
     rm -f "$suppress_file" 2>/dev/null || true
 }
 
+chat_delivery_suppression_key() {
+    local chat_id="${1:-}"
+    local safe_chat_id=""
+
+    [[ -n "$chat_id" ]] || return 1
+
+    safe_chat_id="$(sanitize_intent_key "$chat_id" || true)"
+    [[ -n "$safe_chat_id" ]] || return 1
+
+    printf 'chat-%s' "$safe_chat_id"
+}
+
+persist_delivery_suppression_for_chat() {
+    local chat_id="${1:-}"
+    local token="${2:-}"
+    local chat_key=""
+
+    [[ -n "$chat_id" && -n "$token" ]] || return 0
+
+    chat_key="$(chat_delivery_suppression_key "$chat_id" || true)"
+    [[ -n "$chat_key" ]] || return 0
+
+    persist_delivery_suppression "$chat_key" "$token"
+}
+
+load_delivery_suppression_for_chat() {
+    local chat_id="${1:-}"
+    local chat_key=""
+
+    [[ -n "$chat_id" ]] || return 1
+
+    chat_key="$(chat_delivery_suppression_key "$chat_id" || true)"
+    [[ -n "$chat_key" ]] || return 1
+
+    load_delivery_suppression "$chat_key"
+}
+
+clear_delivery_suppression_for_chat() {
+    local chat_id="${1:-}"
+    local chat_key=""
+
+    [[ -n "$chat_id" ]] || return 0
+
+    chat_key="$(chat_delivery_suppression_key "$chat_id" || true)"
+    [[ -n "$chat_key" ]] || return 0
+
+    clear_delivery_suppression "$chat_key"
+}
+
 persist_turn_intent() {
     local raw_key="${1:-}"
     local intent_name="${2:-}"
@@ -2694,6 +2743,14 @@ status_query_text_flat="${intent_text_flat:-$user_message_flat}"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
 persisted_delivery_suppression="$(load_delivery_suppression "${turn_session_key:-}" || true)"
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
+system_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
+delivery_chat_id="$(extract_first_string to || true)"
+if [[ -z "$delivery_chat_id" ]]; then
+    delivery_chat_id="$(extract_first_number to || true)"
+fi
+current_chat_id="${delivery_chat_id:-$system_chat_id}"
+persisted_chat_delivery_suppression="$(load_delivery_suppression_for_chat "${current_chat_id:-}" || true)"
+effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
 has_current_user_turn=false
 if [[ -n "$intent_text_flat" ]]; then
     has_current_user_turn=true
@@ -2866,10 +2923,18 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((расскажи|опиши|о
 fi
 
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_delivery_suppression" ]]; then
-    write_audit_line "suppress_clear reason=new_user_turn token=$persisted_delivery_suppression"
+    write_audit_line "suppress_clear reason=new_user_turn scope=session token=$persisted_delivery_suppression"
     clear_delivery_suppression "${turn_session_key:-}"
     persisted_delivery_suppression=""
 fi
+
+if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_chat_delivery_suppression" && -n "${current_chat_id:-}" ]]; then
+    write_audit_line "suppress_clear reason=new_user_turn scope=chat chat_id=${current_chat_id:-missing} token=$persisted_chat_delivery_suppression"
+    clear_delivery_suppression_for_chat "${current_chat_id:-}"
+    persisted_chat_delivery_suppression=""
+fi
+
+effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
 
 resolved_skill_name=""
 requested_skill_reference_name="$(extract_referenced_skill_candidate "${latest_user_message:-${user_message:-}}" || true)"
@@ -2966,7 +3031,7 @@ fi
 canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text'
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
-    telegram_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
+    telegram_chat_id="${system_chat_id:-}"
     next_turn_intent=""
     next_turn_skill_create_state=""
     if [[ "$looks_like_status" == true ]]; then
@@ -3012,6 +3077,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if send_telegram_direct_message "$telegram_chat_id" "$canonical_status"; then
                 write_audit_line "direct_fastpath kind=status chat_id=$telegram_chat_id"
                 persist_delivery_suppression "${turn_session_key:-}" "status"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "status"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3023,6 +3089,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if send_telegram_direct_message "$telegram_chat_id" "$visibility_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_visibility chat_id=$telegram_chat_id snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
                 persist_delivery_suppression "${turn_session_key:-}" "skill_visibility"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_visibility"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3033,6 +3100,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if send_telegram_direct_message "$telegram_chat_id" "$template_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_template chat_id=$telegram_chat_id"
                 persist_delivery_suppression "${turn_session_key:-}" "skill_template"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_template"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3044,6 +3112,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if [[ -n "$skill_detail_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$skill_detail_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_detail chat_id=$telegram_chat_id skill=${resolved_skill_name:-missing}"
                 persist_delivery_suppression "${turn_session_key:-}" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3054,6 +3123,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if [[ -n "$create_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_create chat_id=$telegram_chat_id skill=$requested_skill_name state=$next_turn_skill_create_state"
                 persist_delivery_suppression "${turn_session_key:-}" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3064,6 +3134,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if [[ -n "$apply_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$apply_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_apply chat_id=$telegram_chat_id skill=${requested_skill_name:-missing}"
                 persist_delivery_suppression "${turn_session_key:-}" "skill_apply:${requested_skill_name:-generic}"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_apply:${requested_skill_name:-generic}"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3074,6 +3145,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             if [[ -n "$codex_update_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$codex_update_reply_text"; then
                 write_audit_line "direct_fastpath kind=codex_update chat_id=$telegram_chat_id"
                 persist_delivery_suppression "${turn_session_key:-}" "codex_update"
+                persist_delivery_suppression_for_chat "$telegram_chat_id" "codex_update"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -3172,9 +3244,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
 fi
 
 if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
-    if [[ -n "$persisted_delivery_suppression" ]]; then
+    if [[ -n "$effective_delivery_suppression" ]]; then
         synthetic_command="$(build_exec_heredoc_command "Telegram-safe direct fastpath already handled this reply.")"
-        write_audit_line "emit_modify event=$event reason=direct_fastpath_tool_suppress token=$persisted_delivery_suppression tool=${tool_name:-missing}"
+        write_audit_line "emit_modify event=$event reason=direct_fastpath_tool_suppress token=$effective_delivery_suppression tool=${tool_name:-missing}"
         emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
         exit 0
     fi
@@ -3206,16 +3278,16 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     exit 0
 fi
 
-if [[ "$event" == "AfterLLMCall" && -n "$persisted_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
+if [[ "$event" == "AfterLLMCall" && -n "$effective_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
     # Direct fastpath already delivered the user-visible answer for this turn.
     # Keep the rest of the turn terminal by dropping any late LLM text/tools.
-    write_audit_line "emit_modify event=$event reason=direct_fastpath_after_llm_suppress token=$persisted_delivery_suppression"
+    write_audit_line "emit_modify event=$event reason=direct_fastpath_after_llm_suppress token=$effective_delivery_suppression"
     emit_modified_payload "" true
     exit 0
 fi
 
-if [[ "$event" == "MessageSending" && -n "$persisted_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
-    write_audit_line "emit_modify event=$event reason=direct_fastpath_delivery_suppress token=$persisted_delivery_suppression"
+if [[ "$event" == "MessageSending" && -n "$effective_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
+    write_audit_line "emit_modify event=$event reason=direct_fastpath_delivery_suppress token=$effective_delivery_suppression"
     emit_modified_payload "NO_REPLY" false
     exit 0
 fi
@@ -3232,6 +3304,7 @@ if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRE
         if send_telegram_direct_message "$delivery_chat_id" "$clean_delivery_text" "${delivery_reply_to:-}"; then
             write_audit_line "direct_fastpath kind=clean_delivery chat_id=$delivery_chat_id reply_to=${delivery_reply_to:-none}"
             persist_delivery_suppression "${turn_session_key:-}" "clean_delivery"
+            persist_delivery_suppression_for_chat "$delivery_chat_id" "clean_delivery"
             emit_modified_payload "NO_REPLY" false
             exit 0
         fi
