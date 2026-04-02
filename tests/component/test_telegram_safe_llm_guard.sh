@@ -490,6 +490,40 @@ EOF
         test_fail "MessageSending guard must direct-send the cleaned final reply and suppress the dirty runtime delivery when Activity log is appended to an otherwise valid answer"
     fi
 
+    test_start "component_message_sending_guard_does_not_direct_send_legitimate_activity_log_explanation"
+    local legit_activity_log_tmp legit_activity_log_send_script legit_activity_log_log legit_activity_log_stdout legit_activity_log_stderr legit_activity_log_status
+    legit_activity_log_tmp="$(secure_temp_dir telegram-safe-legit-activity-log)"
+    legit_activity_log_send_script="$legit_activity_log_tmp/send.sh"
+    legit_activity_log_log="$legit_activity_log_tmp/send.log"
+    cat >"$legit_activity_log_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected-direct-send\n' >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$legit_activity_log_send_script"
+    legit_activity_log_stdout="$legit_activity_log_tmp/stdout.log"
+    legit_activity_log_stderr="$legit_activity_log_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$legit_activity_log_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$legit_activity_log_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$legit_activity_log_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$legit_activity_log_stdout" 2>"$legit_activity_log_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:legit-activity-log","data":{"account_id":"moltis-bot","to":"262872985","reply_to_message_id":1201,"text":"Что такое Activity log в Moltis? Это внутренний журнал выполнения, который обычному пользователю обычно не показывают."}}
+EOF
+    legit_activity_log_status=$?
+    set -e
+    if [[ "$legit_activity_log_status" -eq 0 ]] && \
+       [[ ! -s "$legit_activity_log_stderr" ]] && \
+       [[ ! -s "$legit_activity_log_stdout" ]] && \
+       [[ ! -e "$legit_activity_log_log" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending clean-delivery fastpath must stay inert for a legitimate explanatory reply that merely mentions Activity log and does not append a runtime telemetry suffix"
+    fi
+
     test_start "component_before_llm_guard_clears_stale_direct_fastpath_suppression_on_new_user_turn"
     local stale_direct_fastpath_dir stale_direct_fastpath_marker stale_direct_fastpath_output
     stale_direct_fastpath_dir="$(secure_temp_dir telegram-safe-stale-direct-fastpath)"
