@@ -2377,10 +2377,16 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     exit 0
 fi
 
+if [[ "$event" == "AfterLLMCall" && -n "$persisted_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
+    # Direct fastpath already delivered the user-visible answer for this turn.
+    # Keep the rest of the turn terminal by dropping any late LLM text/tools.
+    write_audit_line "emit_modify event=$event reason=direct_fastpath_after_llm_suppress token=$persisted_delivery_suppression"
+    emit_modified_payload "" true
+    exit 0
+fi
+
 if [[ "$event" == "MessageSending" && -n "$persisted_delivery_suppression" && "$is_telegram_safe_lane" == true ]]; then
     write_audit_line "emit_modify event=$event reason=direct_fastpath_delivery_suppress token=$persisted_delivery_suppression"
-    clear_delivery_suppression "${turn_session_key:-}"
-    clear_turn_intent "${turn_session_key:-}"
     emit_modified_payload "NO_REPLY" false
     exit 0
 fi

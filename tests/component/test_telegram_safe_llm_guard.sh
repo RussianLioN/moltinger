@@ -505,10 +505,45 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_delivery_output" && \
        jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$direct_fastpath_delivery_output" && \
-       [[ ! -f "$direct_fastpath_delivery_marker" ]]; then
+       [[ -f "$direct_fastpath_delivery_marker" ]]; then
         test_pass
     else
-        test_fail "MessageSending guard must suppress the runtime's trailing reply after a successful direct fastpath instead of surfacing a second Telegram message"
+        test_fail "MessageSending guard must suppress the runtime's trailing reply after a successful direct fastpath and keep the same-turn suppression marker alive"
+    fi
+
+    test_start "component_message_sending_guard_keeps_suppressing_repeated_same_turn_runtime_delivery_after_direct_fastpath"
+    local direct_fastpath_delivery_repeat_output
+    direct_fastpath_delivery_repeat_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_delivery_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:faststatus","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1000,"text":"📋 Activity log • 🔧 mcp__tavily__tavily_search • ❌ MCP tool error: Internal error: 5 validation errors for call[tavily_search]"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_delivery_repeat_output" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$direct_fastpath_delivery_repeat_output" && \
+       [[ -f "$direct_fastpath_delivery_marker" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending guard must keep suppressing repeated same-turn runtime deliveries after a direct fastpath instead of consuming the marker on the first tail"
+    fi
+
+    test_start "component_after_llm_guard_suppresses_late_llm_reply_after_direct_fastpath"
+    local direct_fastpath_after_llm_output
+    direct_fastpath_after_llm_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_delivery_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:faststatus","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Да — новая стабильная версия есть: 0.118.0.","tool_calls":[{"name":"mcp__tavily__tavily_search","arguments":{"query":"OpenAI Codex latest stable release"}}]}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_after_llm_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$direct_fastpath_after_llm_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$direct_fastpath_after_llm_output" && \
+       [[ -f "$direct_fastpath_delivery_marker" ]]; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must keep a direct-fastpath turn terminal by dropping late LLM text and tool calls for the same session"
     fi
 
     test_start "component_message_sending_guard_direct_sends_clean_reply_when_final_delivery_has_activity_log_suffix"
@@ -627,6 +662,32 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must also direct-send the cleaned final reply when the runtime emits numeric chat ids in the MessageSending payload"
+    fi
+
+    test_start "component_message_sending_guard_does_not_repeat_clean_delivery_direct_send_on_second_same_turn_tail"
+    local direct_clean_delivery_repeat_stdout direct_clean_delivery_repeat_stderr direct_clean_delivery_repeat_status
+    direct_clean_delivery_repeat_stdout="$direct_clean_delivery_tmp/stdout-repeat.log"
+    direct_clean_delivery_repeat_stderr="$direct_clean_delivery_tmp/stderr-repeat.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$direct_clean_delivery_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$direct_clean_delivery_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_clean_delivery_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$direct_clean_delivery_repeat_stdout" 2>"$direct_clean_delivery_repeat_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:clean-delivery","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1202,"text":"📋 Activity log • 🔧 mcp__tavily__tavily_search • ❌ MCP tool error: Internal error: 5 validation errors for call[tavily_search]"}}
+EOF
+    direct_clean_delivery_repeat_status=$?
+    set -e
+    if [[ "$direct_clean_delivery_repeat_status" -eq 0 ]] && \
+       [[ ! -s "$direct_clean_delivery_repeat_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$direct_clean_delivery_repeat_stdout" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <"$direct_clean_delivery_repeat_stdout" && \
+       grep -Fq 'reply_to=1200' "$direct_clean_delivery_log" && \
+       ! grep -Fq 'reply_to=1202' "$direct_clean_delivery_log"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must not repeat the cleaned direct-send when a second same-turn dirty tail arrives after clean_delivery"
     fi
 
     test_start "component_message_sending_guard_does_not_direct_send_legitimate_activity_log_explanation"
