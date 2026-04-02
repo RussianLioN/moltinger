@@ -444,7 +444,7 @@ PY
        rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq '*"mcp__"*)' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq '*"mcp__"*' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml" && \
        rg -Fq 'remote_env_prefix="MOLTIS_PASSWORD=${moltis_password_q} "' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml" && \
