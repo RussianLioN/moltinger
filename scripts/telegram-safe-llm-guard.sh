@@ -1601,7 +1601,8 @@ fi
 # Keep delivery-time stripping strict, but allow broader AfterLLM fail-closed
 # interception before text-fallback parsing can promote intent text into tools.
 has_delivery_internal_telemetry=false
-if printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress|tool call"; then
+if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "activity log|running:|searching memory|thinking|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp__|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress|tool call"; then
     has_delivery_internal_telemetry=true
 fi
 

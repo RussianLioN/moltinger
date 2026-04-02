@@ -205,7 +205,7 @@ reply_has_internal_activity() {
   [[ -n "$normalized" ]] || return 1
 
   case "$normalized" in
-    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*)
+    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*|*"mcp tool error"*|*"validation errors for call["*|*"missing required argument"*|*"unexpected keyword argument"*|*"fetching github.com"*|*"fetching http://"*|*"fetching https://"*)
       return 0
       ;;
   esac

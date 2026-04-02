@@ -20,7 +20,7 @@ const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIE
 const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 const INTERNAL_TELEMETRY_RE =
-  /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b|mcp__[\p{L}\p{N}_:.-]+|create_skill\b|update_skill\b|delete_skill\b|session_state\b|send_message\b|send_image\b)/iu;
+  /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b|mcp__[\p{L}\p{N}_:.-]+|mcp tool error\b|validation errors for call\[|missing required argument\b|unexpected keyword argument\b|fetching (?:github\.com|https?:\/\/)|create_skill\b|update_skill\b|delete_skill\b|session_state\b|send_message\b|send_image\b)/iu;
 const INTERNAL_PLANNING_RE =
   /(?:пользователь просит|the user (?:is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|(?:(?:отлично|супер|окей|ладно)[!,. ]{0,12})?давай(?:те)?\s*(?:получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(?:-то)?(?: это)? сделаю(?: правильно)?|хорошо,?\s*(?:изучу|проверю|посмотрю|почитаю).{0,120}(?:документац|docs|documentation|manual|guide|инструкц)|начну с (?:поиска|анализа|изучения|просмотра)|наш[её]л.{0,120}(?:репозитор|github|документац|docs|documentation|manual|guide|инструкц)|получ(?:у|им|ить).{0,120}(?:документац|docs|documentation|manual|guide|инструкц)|чита(?:ю|ем).{0,80}(?:существующ(?:ий|его)|имеющ(?:ийся|егося)).{0,80}(?:навык|skill)|найд(?:у|ем).{0,80}(?:документац|docs|documentation|manual|guide|инструкц|темплейт|template|структур(?:у|ы)|директори(?:ю|и)\s+skills|skills\s+directory)|(?:смотрю|проверяю).{0,80}(?:директори(?:ю|и)\s+skills|skills\s+directory)|структур(?:у|ы).{0,40}(?:навык|skill)|как пример|mounted workspace|skill files|existing skills|существующ(?:ий|ие|его) навык|имеющ(?:егося|ийся) навы|mcp__[\p{L}\p{N}_:.-]+)/iu;
 const INTERNAL_CAPABILITY_DISCLOSURE_RE =
@@ -52,7 +52,7 @@ const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
 const ERROR_RE =
-  /(traceback|exception|stack\s*trace|panic|internal server error|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|missing\s+'action'\s+parameter)/i;
+  /(traceback|exception|stack\s*trace|panic|internal server error|mcp tool error|validation errors for call\[|missing required argument|unexpected keyword argument|fetching (?:github\.com|https?:\/\/)|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|missing\s+'action'\s+parameter)/i;
 const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 
 let stage = "login";

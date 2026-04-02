@@ -340,6 +340,28 @@ NODE
         test_fail "Emoji-prefixed activity/tool-progress replies must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_rejects_bare_tavily_validator_leaks_without_activity_log_prefix"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "MCP tool error: Internal error: 3 validation errors for call[tavily_search]",
+  "validation errors for call[tavily_search]: query Missing required argument",
+  "query Missing required argument; session_key Unexpected keyword argument; text Unexpected keyword argument",
+  "Fetching github.com/openai/codex/releases/latest"
+];
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected bare Tavily validator leak to be rejected: ${badReply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must reject bare Tavily validator/fetch traces even when Activity log markers are absent"
+    fi
+
     test_start "component_telegram_web_probe_rejects_raw_skill_tool_name_leakage"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";

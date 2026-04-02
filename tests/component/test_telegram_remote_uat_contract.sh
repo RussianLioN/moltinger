@@ -117,6 +117,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "tavily_validator_leak_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "MCP tool error: Internal error: 3 validation errors for call[tavily_search] query Missing required argument session_key Unexpected keyword argument text Unexpected keyword argument",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "pre_send_invalid_incoming_pass" ]]; then
   cat <<'JSON'
 {
@@ -1134,6 +1166,24 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must surface emoji-prefixed activity-log replies as failed authoritative outcomes"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_bare_tavily_validator_leak_even_without_activity_log_prefix"
+    if TELEGRAM_WEB_STUB_MODE=tavily_validator_leak_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Проверь последние релизы Codex" \
+        --output "$TEST_TMPDIR/result-tavily-validator-leak.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the helper falsely passes a bare Tavily validator leak"
+    else
+        if jq -e '.failure.code == "semantic_activity_leak" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-tavily-validator-leak.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must treat bare Tavily validator/fetch traces as semantic activity leakage"
         fi
     fi
 
