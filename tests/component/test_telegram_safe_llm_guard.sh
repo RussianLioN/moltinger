@@ -431,6 +431,65 @@ EOF
         test_fail "MessageSending guard must suppress the runtime's trailing reply after a successful direct fastpath instead of surfacing a second Telegram message"
     fi
 
+    test_start "component_message_sending_guard_direct_sends_clean_reply_when_final_delivery_has_activity_log_suffix"
+    local direct_clean_delivery_tmp direct_clean_delivery_send_script direct_clean_delivery_log direct_clean_delivery_stdout direct_clean_delivery_stderr direct_clean_delivery_status
+    direct_clean_delivery_tmp="$(secure_temp_dir telegram-safe-direct-clean-delivery)"
+    direct_clean_delivery_send_script="$direct_clean_delivery_tmp/send.sh"
+    direct_clean_delivery_log="$direct_clean_delivery_tmp/send.log"
+    cat >"$direct_clean_delivery_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+reply_to=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        --reply-to)
+            reply_to="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\nreply_to=%s\n' "$chat_id" "$text" "$reply_to" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$direct_clean_delivery_send_script"
+    direct_clean_delivery_stdout="$direct_clean_delivery_tmp/stdout.log"
+    direct_clean_delivery_stderr="$direct_clean_delivery_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$direct_clean_delivery_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$direct_clean_delivery_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_clean_delivery_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$direct_clean_delivery_stdout" 2>"$direct_clean_delivery_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:clean-delivery","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1200,"text":"Да — новая стабильная версия есть: 0.118.0. Activity log • mcp__tavily__tavily_search • mcp__tavily__tavily_search"}}
+EOF
+    direct_clean_delivery_status=$?
+    set -e
+    if [[ "$direct_clean_delivery_status" -eq 0 ]] && \
+       [[ ! -s "$direct_clean_delivery_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$direct_clean_delivery_stdout" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <"$direct_clean_delivery_stdout" && \
+       grep -Fq 'chat_id=262872984' "$direct_clean_delivery_log" && \
+       grep -Fq 'text=Да — новая стабильная версия есть: 0.118.0.' "$direct_clean_delivery_log" && \
+       grep -Fq 'reply_to=1200' "$direct_clean_delivery_log"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must direct-send the cleaned final reply and suppress the dirty runtime delivery when Activity log is appended to an otherwise valid answer"
+    fi
+
     test_start "component_before_llm_guard_clears_stale_direct_fastpath_suppression_on_new_user_turn"
     local stale_direct_fastpath_dir stale_direct_fastpath_marker stale_direct_fastpath_output
     stale_direct_fastpath_dir="$(secure_temp_dir telegram-safe-stale-direct-fastpath)"
@@ -783,6 +842,22 @@ EOF
         test_fail "BeforeToolCall guard must keep allowlisted Tavily research MCP tools intact instead of rewriting them into synthetic exec payloads"
     fi
 
+    test_start "component_before_tool_guard_blocks_non_allowlisted_tavily_tool_names"
+    local before_tool_tavily_skill_output
+    before_tool_tavily_skill_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","session_key":"session:tavily-skill","provider":"openai-codex","model":"gpt-5.4","tool_name":"mcp__tavily__tavily_skill","arguments":{"query":"openai codex releases"}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_tavily_skill_output" && \
+       jq -e '.data.session_key == "session:tavily-skill"' >/dev/null 2>&1 <<<"$before_tool_tavily_skill_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_tavily_skill_output" && \
+       jq -e '.data.arguments.command | contains("Tool `mcp__tavily__tavily_skill` blocked")' >/dev/null 2>&1 <<<"$before_tool_tavily_skill_output" && \
+       jq -e '.data.arguments.command | contains("mcp__tavily__tavily_search")' >/dev/null 2>&1 <<<"$before_tool_tavily_skill_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must restrict Tavily passthrough to the explicit research-tool allowlist instead of passing arbitrary tavily_* names"
+    fi
+
     test_start "component_before_llm_guard_emits_modify_payload_without_duplicate_messages_or_tool_count_fields"
     local before_tool_count_field_count before_messages_field_count
     before_tool_count_field_count="$(printf '%s' "$before_llm_output" | grep -o '"tool_count":' | wc -l | tr -d ' ')"
@@ -966,6 +1041,24 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must preserve allowlisted Tavily tool calls and replace leaked planning only with a generic safe progress line"
+    fi
+
+    test_start "component_after_llm_guard_uses_generic_progress_text_for_mixed_skill_and_tavily_tool_calls"
+    local after_mixed_tool_output
+    after_mixed_tool_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:mixedtool","provider":"openai-codex","model":"gpt-5.4","text":"Сейчас создам навык и параллельно проверю релизы Codex через Tavily.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}},{"name":"mcp__tavily__tavily_search","arguments":{"query":"Codex CLI latest stable release"}}]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
+       jq -e '.data.tool_calls[0].name == "create_skill"' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
+       jq -e '.data.tool_calls[1].name == "mcp__tavily__tavily_search"' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
+       jq -e '.data.text | contains("Выполняю запрос через встроенные инструменты")' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
+       jq -e '.data.text | contains("без показа внутренних логов")' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
+       jq -e '.data.text | contains("filesystem-проб") | not' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
+       jq -e '.data.text | contains("Собираю подтверждение по источникам") | not' >/dev/null 2>&1 <<<"$after_mixed_tool_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fall back to a generic progress line for mixed allowlisted skill and Tavily tool calls instead of misclassifying the turn"
     fi
 
     test_start "component_after_llm_guard_does_not_replace_allowlisted_create_skill_flow_with_visibility_list"
