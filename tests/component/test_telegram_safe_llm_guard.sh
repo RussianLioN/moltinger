@@ -1887,6 +1887,44 @@ EOF
         test_fail "MessageSending guard must rewrite skill-detail tool failures into a deterministic runtime skill summary instead of leaking Activity log"
     fi
 
+    test_start "component_telegram_bot_send_prefers_env_token_when_env_file_is_unreadable"
+    local telegram_send_tmp telegram_send_fakebin telegram_send_env telegram_send_stdout telegram_send_stderr telegram_send_status telegram_send_curl_log
+    telegram_send_tmp="$(secure_temp_dir telegram-bot-send-env-token)"
+    telegram_send_fakebin="$telegram_send_tmp/fakebin"
+    telegram_send_env="$telegram_send_tmp/unreadable.env"
+    telegram_send_stdout="$telegram_send_tmp/stdout.log"
+    telegram_send_stderr="$telegram_send_tmp/stderr.log"
+    telegram_send_curl_log="$telegram_send_tmp/curl.log"
+    mkdir -p "$telegram_send_fakebin"
+    printf 'TELEGRAM_BOT_TOKEN=from-file-should-not-be-needed\n' >"$telegram_send_env"
+    chmod 000 "$telegram_send_env"
+    cat >"$telegram_send_fakebin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"$CURL_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$telegram_send_fakebin/curl"
+    set +e
+    env PATH="$telegram_send_fakebin:$MINIMAL_PATH" \
+        TELEGRAM_BOT_TOKEN="env-token-123" \
+        MOLTIS_ENV_FILE="$telegram_send_env" \
+        CURL_LOG="$telegram_send_curl_log" \
+        bash "$PROJECT_ROOT/scripts/telegram-bot-send.sh" --chat-id 42 --text "hello from test" >"$telegram_send_stdout" 2>"$telegram_send_stderr"
+    telegram_send_status=$?
+    set -e
+    chmod 600 "$telegram_send_env"
+    if [[ "$telegram_send_status" -eq 0 ]] && \
+       grep -Fq '"ok":true' "$telegram_send_stdout" && \
+       [[ ! -s "$telegram_send_stderr" ]] && \
+       grep -Fq 'https://api.telegram.org/botenv-token-123/sendMessage' "$telegram_send_curl_log" && \
+       grep -Fq '"chat_id":"42"' "$telegram_send_curl_log" && \
+       grep -Fq '"text":"hello from test"' "$telegram_send_curl_log"; then
+        test_pass
+    else
+        test_fail "telegram-bot-send.sh must use TELEGRAM_BOT_TOKEN from env without failing on an unreadable env file"
+    fi
+
     test_start "component_message_sending_guard_keeps_stderr_empty_on_successful_modify"
     local message_sending_stdout_file message_sending_stderr_file message_sending_output_clean message_sending_stderr
     message_sending_stdout_file="$(mktemp)"

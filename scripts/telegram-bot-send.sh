@@ -81,15 +81,6 @@ validate_reply_markup_json() {
     [[ "$compact" == \{*\} ]]
 }
 
-require_bin curl
-
-if [[ -f "$MOLTIS_ENV_FILE" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$MOLTIS_ENV_FILE"
-    set +a
-fi
-
 CHAT_ID=""
 TEXT=""
 PARSE_MODE=""
@@ -141,6 +132,20 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+require_bin curl
+
+if [[ -z "${TOKEN_OVERRIDE:-}" && -z "${TELEGRAM_BOT_TOKEN:-}" && -f "$MOLTIS_ENV_FILE" ]]; then
+    if [[ -r "$MOLTIS_ENV_FILE" ]]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "$MOLTIS_ENV_FILE"
+        set +a
+    else
+        echo "{\"ok\":false,\"error\":\"Environment file is not readable: $MOLTIS_ENV_FILE\",\"script\":\"$SCRIPT_NAME\"}"
+        exit 1
+    fi
+fi
 
 TELEGRAM_BOT_TOKEN="${TOKEN_OVERRIDE:-${TELEGRAM_BOT_TOKEN:-}}"
 if [[ -z "${TELEGRAM_BOT_TOKEN}" ]]; then

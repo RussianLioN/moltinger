@@ -1842,6 +1842,12 @@ build_skill_detail_reply_text() {
     local resolved_name="${2:-}"
     local csv="${3:-}"
     local skill_file=""
+    local description_line=""
+    local activation_lines=""
+    local channels_lines=""
+    local phases_lines=""
+    local safe_dm_line=""
+    local -a parts=()
 
     if [[ -n "$resolved_name" ]]; then
         skill_file="$(runtime_skill_file_path "$resolved_name" || true)"
@@ -1994,7 +2000,8 @@ PL
     fi
 
     if command -v python3 >/dev/null 2>&1; then
-        python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
+        resolved="$(
+            python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -2109,7 +2116,108 @@ if skills:
 else:
     print("Не смог определить, про какой навык идёт речь, и hook сейчас не подтвердил список навыков.")
 PY
-        return $?
+        )" || true
+        if [[ -n "$resolved" ]]; then
+            printf '%s' "$resolved"
+            return 0
+        fi
+    fi
+
+    if [[ -n "$resolved_name" && -n "$skill_file" && -f "$skill_file" ]]; then
+        description_line="$(
+            sed -n '
+                /^description:[[:space:]]*/{
+                    s/^description:[[:space:]]*//
+                    p
+                    :desc
+                    n
+                    /^[[:space:]]\{2,\}/{
+                        s/^[[:space:]]*//
+                        p
+                        b desc
+                    }
+                    q
+                }
+            ' "$skill_file" \
+                | tr '\r\n' '  ' \
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+        )" || true
+        activation_lines="$(
+            awk '
+                BEGIN { capture = 0; count = 0 }
+                /^##[[:space:]]+Активация[[:space:]]*$/ { capture = 1; next }
+                capture && /^##[[:space:]]+/ { exit }
+                capture && /^[[:space:]]*-[[:space:]]+/ {
+                    line = $0
+                    sub(/^[[:space:]]*-[[:space:]]+/, "", line)
+                    gsub(/[[:space:]]+/, " ", line)
+                    sub(/^[[:space:]]+/, "", line)
+                    sub(/[[:space:]]+$/, "", line)
+                    if (length(line)) {
+                        print line
+                        count++
+                        if (count >= 4) {
+                            exit
+                        }
+                    }
+                }
+            ' "$skill_file" \
+                | tr '\n' '\t' \
+                | sed 's/\t$//; s/\t/; /g'
+        )" || true
+        channels_lines="$(
+            awk '
+                BEGIN { capture = 0; count = 0 }
+                /^\*\*Каналы для мониторинга\*\*[[:space:]]*$/ { capture = 1; next }
+                capture && /^##[[:space:]]+/ { exit }
+                capture && /^[[:space:]]*-[[:space:]]+/ {
+                    line = $0
+                    sub(/^[[:space:]]*-[[:space:]]+/, "", line)
+                    gsub(/[[:space:]]+/, " ", line)
+                    sub(/^[[:space:]]+/, "", line)
+                    sub(/[[:space:]]+$/, "", line)
+                    if (length(line)) {
+                        print line
+                        count++
+                        if (count >= 3) {
+                            exit
+                        }
+                    }
+                }
+                capture && count > 0 && /^[[:space:]]*$/ { exit }
+            ' "$skill_file" \
+                | tr '\n' '\t' \
+                | sed 's/\t$//; s/\t/; /g'
+        )" || true
+        phases_lines="$(
+            grep -E '^### ' "$skill_file" \
+                | sed -E 's/^### +//; s/^Phase[[:space:]]+[0-9]+:[[:space:]]*//I' \
+                | head -n 5 \
+                | tr '\n' '\t' \
+                | sed 's/\t$//; s/\t/ -> /g'
+        )" || true
+        if grep -Fq 'В Telegram-safe режиме я не провожу длительное исследование' "$skill_file"; then
+            safe_dm_line='Ограничение для Telegram-safe DM: не уходит в длительное исследование и вместо этого предлагает web UI/операторскую сессию.'
+        fi
+
+        if [[ -n "$requested_name" ]] && [[ "${requested_name,,}" != "${resolved_name,,}" ]]; then
+            parts+=("Похоже, ты имеешь в виду навык \`$resolved_name\`.")
+        fi
+        parts+=("Навык \`$resolved_name\`: ${description_line:-описание в frontmatter сейчас пустое.}")
+        if [[ -n "$activation_lines" ]]; then
+            parts+=("Когда использовать: $activation_lines.")
+        fi
+        if [[ -n "$channels_lines" ]]; then
+            parts+=("Источники: $channels_lines.")
+        fi
+        if [[ -n "$phases_lines" ]]; then
+            parts+=("Workflow: $phases_lines.")
+        fi
+        if [[ -n "$safe_dm_line" ]]; then
+            parts+=("$safe_dm_line")
+        fi
+        printf '%s\n' "$(printf '%s ' "${parts[@]}" | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//')"
+        return 0
     fi
 
     if [[ -n "$requested_name" ]]; then
@@ -2909,13 +3017,14 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         fi
         if [[ "$current_turn_skill_detail_request" == true ]]; then
             skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            write_audit_line "skill_detail_probe stage=direct requested=${requested_skill_reference_name:-missing} resolved=${resolved_skill_name:-missing} chat_id=${telegram_chat_id:-missing} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
             if [[ -n "$skill_detail_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$skill_detail_reply_text"; then
                 write_audit_line "direct_fastpath kind=skill_detail chat_id=$telegram_chat_id skill=${resolved_skill_name:-missing}"
                 persist_delivery_suppression "${turn_session_key:-}" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=skill_detail chat_id=${telegram_chat_id:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}}"
+            write_audit_line "direct_fastpath_failed kind=skill_detail chat_id=${telegram_chat_id:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
         fi
         if [[ "$current_turn_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" && -n "${next_turn_skill_create_state:-}" ]]; then
             create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state" || true)"
@@ -2981,6 +3090,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         fi
         if [[ "$current_turn_skill_detail_request" == true ]]; then
             skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            write_audit_line "skill_detail_probe stage=before_modify requested=${requested_skill_reference_name:-missing} resolved=${resolved_skill_name:-missing} reply_len=${#skill_detail_reply_text}"
             if [[ -n "$skill_detail_reply_text" ]]; then
                 skill_detail_guard="$(build_skill_detail_hard_override_message "$skill_detail_reply_text")"
                 skill_detail_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
