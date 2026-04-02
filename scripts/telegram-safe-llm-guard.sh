@@ -969,8 +969,16 @@ persist_safe_lane_marker() {
     lane_file="$(lane_file_path "$raw_key" || true)"
     [[ -n "$lane_file" ]] || return 0
 
-    mkdir -p "$INTENT_DIR" 2>/dev/null || true
-    printf '%s\n' "$(date +%s)" >"$lane_file" 2>/dev/null || true
+    if ! mkdir -p "$INTENT_DIR" 2>/dev/null; then
+        write_audit_line "safe_lane_set_failed key=$(basename "$lane_file") reason=mkdir"
+        return 0
+    fi
+    if ! printf '%s\n' "$(date +%s)" >"$lane_file" 2>/dev/null; then
+        rm -f "$lane_file" 2>/dev/null || true
+        write_audit_line "safe_lane_set_failed key=$(basename "$lane_file") reason=write"
+        return 0
+    fi
+    return 0
 }
 
 safe_lane_marker_is_fresh() {
@@ -1018,11 +1026,19 @@ persist_delivery_suppression() {
     [[ -n "$raw_key" && -n "$token" ]] || return 0
 
     suppress_file="$(suppress_file_path "$raw_key" || true)"
-    [[ -n "$suppress_file" ]] || return 0
+    [[ -n "$suppress_file" ]] || return 1
 
-    mkdir -p "$INTENT_DIR" 2>/dev/null || true
-    printf '%s\t%s\n' "$(date +%s)" "$token" >"$suppress_file" 2>/dev/null || true
+    if ! mkdir -p "$INTENT_DIR" 2>/dev/null; then
+        write_audit_line "suppress_set_failed key=$(basename "$suppress_file") token=$token reason=mkdir"
+        return 1
+    fi
+    if ! printf '%s\t%s\n' "$(date +%s)" "$token" >"$suppress_file" 2>/dev/null; then
+        rm -f "$suppress_file" 2>/dev/null || true
+        write_audit_line "suppress_set_failed key=$(basename "$suppress_file") token=$token reason=write"
+        return 1
+    fi
     write_audit_line "suppress_set key=$(basename "$suppress_file") token=$token"
+    return 0
 }
 
 load_delivery_suppression() {
@@ -1112,6 +1128,66 @@ clear_delivery_suppression_for_chat() {
     clear_delivery_suppression "$chat_key"
 }
 
+arm_direct_fastpath_delivery_suppression() {
+    local raw_key="${1:-}"
+    local chat_id="${2:-}"
+    local token="${3:-}"
+    local session_armed=false
+
+    [[ -n "$chat_id" && -n "$token" ]] || return 1
+
+    if [[ -n "$raw_key" ]]; then
+        if ! persist_delivery_suppression "$raw_key" "$token"; then
+            write_audit_line "direct_fastpath_suppress_arm_failed scope=session token=$token key=${raw_key:-missing}"
+            return 1
+        fi
+        session_armed=true
+    fi
+
+    if persist_delivery_suppression_for_chat "$chat_id" "$token"; then
+        return 0
+    fi
+
+    if [[ "$session_armed" == true ]]; then
+        clear_delivery_suppression "$raw_key"
+    fi
+    write_audit_line "direct_fastpath_suppress_arm_failed scope=chat token=$token chat_id=${chat_id:-missing}"
+    return 1
+}
+
+rollback_direct_fastpath_delivery_suppression() {
+    local raw_key="${1:-}"
+    local chat_id="${2:-}"
+
+    clear_delivery_suppression "$raw_key"
+    clear_delivery_suppression_for_chat "$chat_id"
+}
+
+direct_fastpath_send_with_suppression() {
+    local kind="${1:-}"
+    local chat_id="${2:-}"
+    local text="${3:-}"
+    local token="${4:-}"
+    local extra_audit="${5:-}"
+    local reply_to="${6:-}"
+
+    [[ -n "$kind" && -n "$chat_id" && -n "$text" && -n "$token" ]] || return 1
+
+    if ! arm_direct_fastpath_delivery_suppression "${turn_session_key:-}" "$chat_id" "$token"; then
+        write_audit_line "direct_fastpath_failed kind=$kind chat_id=${chat_id:-missing}${extra_audit:+ $extra_audit} phase=suppress_arm"
+        return 1
+    fi
+
+    if send_telegram_direct_message "$chat_id" "$text" "${reply_to:-}"; then
+        write_audit_line "direct_fastpath kind=$kind chat_id=$chat_id${extra_audit:+ $extra_audit}"
+        return 0
+    fi
+
+    rollback_direct_fastpath_delivery_suppression "${turn_session_key:-}" "$chat_id"
+    write_audit_line "direct_fastpath_failed kind=$kind chat_id=${chat_id:-missing}${extra_audit:+ $extra_audit} phase=send"
+    return 1
+}
+
 persist_turn_intent() {
     local raw_key="${1:-}"
     local intent_name="${2:-}"
@@ -1122,9 +1198,17 @@ persist_turn_intent() {
     intent_file="$(intent_file_path "$raw_key" || true)"
     [[ -n "$intent_file" ]] || return 0
 
-    mkdir -p "$INTENT_DIR" 2>/dev/null || true
-    printf '%s\t%s\n' "$(date +%s)" "$intent_name" >"$intent_file" 2>/dev/null || true
+    if ! mkdir -p "$INTENT_DIR" 2>/dev/null; then
+        write_audit_line "intent_set_failed key=$(basename "$intent_file") intent=$intent_name reason=mkdir"
+        return 0
+    fi
+    if ! printf '%s\t%s\n' "$(date +%s)" "$intent_name" >"$intent_file" 2>/dev/null; then
+        rm -f "$intent_file" 2>/dev/null || true
+        write_audit_line "intent_set_failed key=$(basename "$intent_file") intent=$intent_name reason=write"
+        return 0
+    fi
     write_audit_line "intent_set key=$(basename "$intent_file") intent=$intent_name"
+    return 0
 }
 
 load_turn_intent() {
@@ -3111,82 +3195,54 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
 
     if [[ "$is_telegram_safe_lane" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED" && [[ -n "${telegram_chat_id:-}" ]]; then
         if [[ "$current_turn_status_request" == true ]]; then
-            if send_telegram_direct_message "$telegram_chat_id" "$canonical_status"; then
-                write_audit_line "direct_fastpath kind=status chat_id=$telegram_chat_id"
-                persist_delivery_suppression "${turn_session_key:-}" "status"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "status"
+            if direct_fastpath_send_with_suppression "status" "$telegram_chat_id" "$canonical_status" "status"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=status chat_id=${telegram_chat_id:-missing}"
         fi
         if [[ "$current_turn_skill_visibility_request" == true ]]; then
             skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
             visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
-            if send_telegram_direct_message "$telegram_chat_id" "$visibility_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_visibility chat_id=$telegram_chat_id snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"
-                persist_delivery_suppression "${turn_session_key:-}" "skill_visibility"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_visibility"
+            if direct_fastpath_send_with_suppression "skill_visibility" "$telegram_chat_id" "$visibility_reply_text" "skill_visibility" "snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=skill_visibility chat_id=${telegram_chat_id:-missing}"
         fi
         if [[ "$current_turn_skill_template_request" == true ]]; then
             template_reply_text="$(build_skill_template_reply_text)"
-            if send_telegram_direct_message "$telegram_chat_id" "$template_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_template chat_id=$telegram_chat_id"
-                persist_delivery_suppression "${turn_session_key:-}" "skill_template"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_template"
+            if direct_fastpath_send_with_suppression "skill_template" "$telegram_chat_id" "$template_reply_text" "skill_template"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=skill_template chat_id=${telegram_chat_id:-missing}"
         fi
         if [[ "$current_turn_skill_detail_request" == true ]]; then
             skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
             write_audit_line "skill_detail_probe stage=direct requested=${requested_skill_reference_name:-missing} resolved=${resolved_skill_name:-missing} chat_id=${telegram_chat_id:-missing} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
-            if [[ -n "$skill_detail_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$skill_detail_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_detail chat_id=$telegram_chat_id skill=${resolved_skill_name:-missing}"
-                persist_delivery_suppression "${turn_session_key:-}" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+            if [[ -n "$skill_detail_reply_text" ]] && direct_fastpath_send_with_suppression "skill_detail" "$telegram_chat_id" "$skill_detail_reply_text" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}" "skill=${resolved_skill_name:-missing}"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=skill_detail chat_id=${telegram_chat_id:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
         fi
         if [[ "$current_turn_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" && -n "${next_turn_skill_create_state:-}" ]]; then
             create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state" || true)"
-            if [[ -n "$create_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$create_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_create chat_id=$telegram_chat_id skill=$requested_skill_name state=$next_turn_skill_create_state"
-                persist_delivery_suppression "${turn_session_key:-}" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}"
+            if [[ -n "$create_reply_text" ]] && direct_fastpath_send_with_suppression "skill_create" "$telegram_chat_id" "$create_reply_text" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}" "skill=$requested_skill_name state=$next_turn_skill_create_state"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=skill_create chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing} state=${next_turn_skill_create_state:-missing}"
         fi
         if [[ "$current_turn_skill_apply_request" == true ]]; then
             apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
-            if [[ -n "$apply_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$apply_reply_text"; then
-                write_audit_line "direct_fastpath kind=skill_apply chat_id=$telegram_chat_id skill=${requested_skill_name:-missing}"
-                persist_delivery_suppression "${turn_session_key:-}" "skill_apply:${requested_skill_name:-generic}"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "skill_apply:${requested_skill_name:-generic}"
+            if [[ -n "$apply_reply_text" ]] && direct_fastpath_send_with_suppression "skill_apply" "$telegram_chat_id" "$apply_reply_text" "skill_apply:${requested_skill_name:-generic}" "skill=${requested_skill_name:-missing}"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=skill_apply chat_id=${telegram_chat_id:-missing} skill=${requested_skill_name:-missing}"
         fi
         if [[ "$current_turn_codex_update_request" == true ]]; then
             codex_update_reply_text="$(build_codex_update_reply_text || true)"
-            if [[ -n "$codex_update_reply_text" ]] && send_telegram_direct_message "$telegram_chat_id" "$codex_update_reply_text"; then
-                write_audit_line "direct_fastpath kind=codex_update chat_id=$telegram_chat_id"
-                persist_delivery_suppression "${turn_session_key:-}" "codex_update"
-                persist_delivery_suppression_for_chat "$telegram_chat_id" "codex_update"
+            if [[ -n "$codex_update_reply_text" ]] && direct_fastpath_send_with_suppression "codex_update" "$telegram_chat_id" "$codex_update_reply_text" "codex_update"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
-            write_audit_line "direct_fastpath_failed kind=codex_update chat_id=${telegram_chat_id:-missing}"
         fi
     fi
 
@@ -3338,14 +3394,10 @@ if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRE
     clean_delivery_text="$(strip_delivery_internal_suffix "${response_text:-}")"
 
     if [[ "$has_appended_delivery_internal_suffix" == true && -n "$delivery_chat_id" && -n "$clean_delivery_text" && "$clean_delivery_text" != "${response_text:-}" ]]; then
-        if send_telegram_direct_message "$delivery_chat_id" "$clean_delivery_text" "${delivery_reply_to:-}"; then
-            write_audit_line "direct_fastpath kind=clean_delivery chat_id=$delivery_chat_id reply_to=${delivery_reply_to:-none}"
-            persist_delivery_suppression "${turn_session_key:-}" "clean_delivery"
-            persist_delivery_suppression_for_chat "$delivery_chat_id" "clean_delivery"
+        if direct_fastpath_send_with_suppression "clean_delivery" "$delivery_chat_id" "$clean_delivery_text" "clean_delivery" "reply_to=${delivery_reply_to:-none}" "${delivery_reply_to:-}"; then
             emit_modified_payload "NO_REPLY" false
             exit 0
         fi
-        write_audit_line "direct_fastpath_failed kind=clean_delivery chat_id=${delivery_chat_id:-missing} reply_to=${delivery_reply_to:-none}"
     fi
 fi
 

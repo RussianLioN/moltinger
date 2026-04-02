@@ -100,6 +100,10 @@ Guard использовал слишком грубый критерий нов
    - `iteration=2`
    - активный session/chat suppression
    - отсутствие повторного direct-send
+4. Follow-up hardening после live-closure:
+   - direct fastpath теперь arm-ит delivery-suppression marker до прямой отправки;
+   - если storage для suppression недоступен, hook не делает direct-send и уходит в deterministic `modify` path;
+   - `safe_lane` и `turn_intent` записи тоже больше не шумят в `stderr` при недоступном `INTENT_DIR`.
 
 ## Проверка
 
@@ -113,3 +117,4 @@ Guard использовал слишком грубый критерий нов
 1. Для Telegram direct fastpath недостаточно просто «держать suppression живым»; нужно ещё различать новый user turn и повторную LLM iteration того же turn.
 2. `latest user message` не является надёжным признаком нового turn в live hook runtime.
 3. Для user-facing Telegram regression suite нужно отдельно покрывать `BeforeLLMCall iteration=2` после уже доставленного direct fastpath ответа.
+4. Direct-send в Telegram-safe lane нельзя считать завершённым, пока не подтверждена возможность записать suppression marker; иначе ответ может outrun-ить собственную защиту.

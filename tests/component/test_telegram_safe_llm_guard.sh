@@ -495,6 +495,59 @@ EOF
         test_fail "Direct skill-detail fastpath must resolve the runtime skill, answer from SKILL.md, and leave only a same-turn delivery-suppression marker"
     fi
 
+    test_start "component_before_llm_guard_skill_detail_direct_fastpath_falls_back_to_modify_when_suppression_cannot_be_armed"
+    local fastpath_skill_detail_armfail_tmp fastpath_skill_detail_armfail_send_script fastpath_skill_detail_armfail_log fastpath_skill_detail_armfail_stdout fastpath_skill_detail_armfail_stderr fastpath_skill_detail_armfail_status fastpath_skill_detail_armfail_intent_dir fastpath_skill_detail_armfail_runtime_root fastpath_skill_detail_armfail_fakebin fastpath_skill_detail_armfail_output
+    fastpath_skill_detail_armfail_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-armfail)"
+    fastpath_skill_detail_armfail_send_script="$fastpath_skill_detail_armfail_tmp/send.sh"
+    fastpath_skill_detail_armfail_log="$fastpath_skill_detail_armfail_tmp/send.log"
+    fastpath_skill_detail_armfail_intent_dir="$fastpath_skill_detail_armfail_tmp/not-a-dir"
+    fastpath_skill_detail_armfail_runtime_root="$fastpath_skill_detail_armfail_tmp/runtime-skills"
+    fastpath_skill_detail_armfail_fakebin="$fastpath_skill_detail_armfail_tmp/fakebin"
+    mkdir -p "$fastpath_skill_detail_armfail_runtime_root/telegram-learner" "$fastpath_skill_detail_armfail_fakebin"
+    cp "$PROJECT_ROOT/skills/telegram-learner/SKILL.md" "$fastpath_skill_detail_armfail_runtime_root/telegram-learner/SKILL.md"
+    printf 'blocked\n' >"$fastpath_skill_detail_armfail_intent_dir"
+    cat >"$fastpath_skill_detail_armfail_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$fastpath_skill_detail_armfail_fakebin/python3"
+    cat >"$fastpath_skill_detail_armfail_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected-direct-send\n' >>"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_skill_detail_armfail_send_script"
+    fastpath_skill_detail_armfail_stdout="$fastpath_skill_detail_armfail_tmp/stdout.log"
+    fastpath_skill_detail_armfail_stderr="$fastpath_skill_detail_armfail_tmp/stderr.log"
+    set +e
+    env PATH="$fastpath_skill_detail_armfail_fakebin:$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_armfail_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_armfail_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_armfail_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_armfail_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_armfail_stdout" 2>"$fastpath_skill_detail_armfail_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail-armfail","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_skill_detail_armfail_status=$?
+    set -e
+    fastpath_skill_detail_armfail_output="$(cat "$fastpath_skill_detail_armfail_stdout")"
+    if [[ "$fastpath_skill_detail_armfail_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_armfail_stderr" ]] && \
+       [[ ! -f "$fastpath_skill_detail_armfail_log" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill-detail hard override")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
+       jq -e '.data.messages[0].content | contains("telegram-learner")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
+       jq -e '.data.messages[0].content | contains("@tsingular")' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$fastpath_skill_detail_armfail_output"; then
+        test_pass
+    else
+        test_fail "When suppression cannot be armed, direct skill-detail fastpath must not send directly and must fall back to the deterministic text-only modify path"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_skill_detail_after_prior_history_without_python3"
     local fastpath_skill_detail_history_tmp fastpath_skill_detail_history_send_script fastpath_skill_detail_history_log fastpath_skill_detail_history_stdout fastpath_skill_detail_history_stderr fastpath_skill_detail_history_status fastpath_skill_detail_history_intent_dir fastpath_skill_detail_history_suppress_file fastpath_skill_detail_history_runtime_root fastpath_skill_detail_history_fakebin
     fastpath_skill_detail_history_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-history)"

@@ -85,6 +85,8 @@
 - [x] T058 Capture live hook audit/capture evidence for repeated `BeforeLLMCall` after a direct Telegram skill-detail fastpath and confirm whether suppression is being misclassified as a new user turn
 - [x] T059 Fix repeated same-turn `BeforeLLMCall` handling so `iteration>1` keeps suppression alive and does not trigger a second direct-send
 - [x] T060 Add regression coverage for the `iteration=2` duplicate-delivery pattern and validate the updated Telegram guard contract before redeploy
+- [x] T061 Harden direct fastpaths so they only send after delivery-suppression markers are successfully armed, and fall back to deterministic `modify` replies if suppression storage is unavailable
+- [x] T062 Add regression coverage for suppression-arm failures on Telegram skill-detail direct fastpaths
 
 ## Dependencies & Execution Order
 
@@ -96,6 +98,7 @@
 - Phase 5 is a follow-up hardening backlog informed by the completed diagnosis and consilium, not a promise to land all items in this slice.
 - Phase 6 returns to an operator-driven live fix, but only after the runtime-only `PR1` is merged to `main` and deployed through the canonical production workflow.
 - Phase 7 is another live-root-cause closure step for Telegram reliability and should also finish with authoritative remote proof rather than local-only green tests.
+- T061-T062 extend Phase 7 from the proven `iteration=2` root cause into fail-closed suppression-arm hardening so a direct send cannot outrun its own guard markers.
 
 ## Implementation Strategy
 
