@@ -2524,7 +2524,6 @@ delivery_internal_suffix_is_appended() {
 
     return 1
 }
-
 strip_delivery_internal_suffix() {
     local text="${1:-}"
     local cleaned="$text"
