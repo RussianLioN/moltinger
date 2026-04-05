@@ -31,4 +31,4 @@
 ## Phase 4: RCA And Landing
 
 - [x] T040 Update RCA and lessons for the general skill-detail hardening root cause
-- [ ] T041 Reconcile Beads state, commit, push, and record handoff
+- [x] T041 Reconcile Beads state, commit, push, and record handoff
