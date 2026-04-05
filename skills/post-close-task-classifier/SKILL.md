@@ -3,6 +3,10 @@ name: post-close-task-classifier
 description: Классифицирует новую задачу после формального завершения branch/worktree
   и рекомендует, продолжать ли работу в текущем lane, вернуться в существующий
   authoritative worktree, или создать новый branch/worktree от main.
+telegram_summary: помогает понять, можно ли продолжать работу в текущей ветке или уже нужен новый worktree от main.
+value_statement: Полезен, когда после формального закрытия ветки появляются новые ошибки, follow-up задачи или спор по тому, где именно продолжать работу.
+source_priority: Сначала опирается на canonical rule artifact про post-close classification и текущее состояние branch/worktree, а не на память чата или импровизацию.
+telegram_safe_note: В Telegram-safe чате даю только краткий verdict и boundary; полный policy-разбор и handoff-шаблоны при необходимости продолжаются в web UI или операторской сессии.
 ---
 
 # Post-Close Task Classifier

@@ -1452,6 +1452,36 @@ EOF
         test_fail "BeforeToolCall guard must keep allowlisted Tavily research MCP tools intact instead of rewriting them into synthetic exec payloads"
     fi
 
+    test_start "component_before_tool_guard_blocks_allowlisted_tavily_when_skill_detail_intent_is_persisted"
+    local skill_detail_before_tool_dir before_tool_skill_detail_tavily_output
+    skill_detail_before_tool_dir="$(secure_temp_dir telegram-safe-before-tool-skill-detail)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_detail_before_tool_dir" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skilldetail-tool","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+EOF
+    before_tool_skill_detail_tavily_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_detail_before_tool_dir" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$PROJECT_ROOT/skills" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:skilldetail-tool","tool_name":"mcp__tavily__tavily_search","arguments":{"query":"telegram learner skill"}} 
+EOF
+    )"
+    rm -rf "$skill_detail_before_tool_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_skill_detail_tavily_output" && \
+       jq -e '.data.session_key == "session:skilldetail-tool"' >/dev/null 2>&1 <<<"$before_tool_skill_detail_tavily_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_skill_detail_tavily_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_skill_detail_tavily_output" && \
+       jq -e '.data.arguments.command | contains("telegram-learner")' >/dev/null 2>&1 <<<"$before_tool_skill_detail_tavily_output" && \
+       jq -e '.data.arguments.command | contains("@tsingular")' >/dev/null 2>&1 <<<"$before_tool_skill_detail_tavily_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must suppress even allowlisted Tavily research when the persisted Telegram turn is a deterministic skill-detail reply"
+    fi
+
     test_start "component_before_tool_guard_blocks_non_allowlisted_tavily_tool_names"
     local before_tool_tavily_skill_output
     before_tool_tavily_skill_output="$(
@@ -2200,6 +2230,68 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must produce the same clean learner-style summary for a similar runtime learner skill"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_codex_update_skill_detail_into_clean_runtime_summary"
+    local codex_update_skill_dir message_sending_codex_update_skill_output codex_update_skill_fakebin
+    codex_update_skill_dir="$(secure_temp_dir telegram-safe-codex-update-detail-runtime)"
+    codex_update_skill_fakebin="$codex_update_skill_dir/fakebin"
+    mkdir -p "$codex_update_skill_dir/codex-update" "$codex_update_skill_fakebin"
+    cp "$PROJECT_ROOT/skills/codex-update/SKILL.md" "$codex_update_skill_dir/codex-update/SKILL.md"
+    cat >"$codex_update_skill_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$codex_update_skill_fakebin/python3"
+    message_sending_codex_update_skill_output="$(
+        env PATH="$codex_update_skill_fakebin:$MINIMAL_PATH" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$codex_update_skill_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-update-detail","data":{"account_id":"moltis-bot","to":"262872991","reply_to_message_id":962,"user_message":"Расскажи мне про навык codex-update","text":"Инструмент чтения навыка не сработал. 📋 Activity log • 🔧 mcp__tavily__tavily_search • ❌ missing 'command' parameter"}} 
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output" && \
+       jq -e '.data.text | contains("codex-update")' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output" && \
+       jq -e '.data.text | contains("новая стабильная версия Codex CLI")' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output" && \
+       jq -e '.data.text | contains("без ручного обхода релизов и changelog")' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output" && \
+       jq -e '.data.text | contains("official releases, changelog и runtime state helper")' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output" && \
+       jq -e '.data.text | contains("В Telegram-safe чате даю только короткий advisory")' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output" && \
+       jq -e '.data.text | test("Activity log|SKILL.md|/server|/home/moltis|make codex-update|Remote-safe Moltis skill") | not' >/dev/null 2>&1 <<<"$message_sending_codex_update_skill_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite codex-update skill-detail failures into a clean Telegram-safe summary instead of falling back to operator-heavy description text"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_post_close_classifier_skill_detail_into_clean_runtime_summary"
+    local classifier_skill_dir message_sending_classifier_skill_output classifier_skill_fakebin
+    classifier_skill_dir="$(secure_temp_dir telegram-safe-post-close-classifier-detail-runtime)"
+    classifier_skill_fakebin="$classifier_skill_dir/fakebin"
+    mkdir -p "$classifier_skill_dir/post-close-task-classifier" "$classifier_skill_fakebin"
+    cp "$PROJECT_ROOT/skills/post-close-task-classifier/SKILL.md" "$classifier_skill_dir/post-close-task-classifier/SKILL.md"
+    cat >"$classifier_skill_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$classifier_skill_fakebin/python3"
+    message_sending_classifier_skill_output="$(
+        env PATH="$classifier_skill_fakebin:$MINIMAL_PATH" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$classifier_skill_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:classifier-detail","data":{"account_id":"moltis-bot","to":"262872992","reply_to_message_id":963,"user_message":"Расскажи мне про навык post-close-task-classifier","text":"Инструмент чтения навыка не сработал. 📋 Activity log • 🔧 exec • ❌ missing 'command' parameter"}} 
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output" && \
+       jq -e '.data.text | contains("post-close-task-classifier")' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output" && \
+       jq -e '.data.text | contains("можно ли продолжать работу в текущей ветке")' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output" && \
+       jq -e '.data.text | contains("после формального закрытия ветки появляются новые ошибки")' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output" && \
+       jq -e '.data.text | contains("canonical rule artifact про post-close classification")' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output" && \
+       jq -e '.data.text | contains("В Telegram-safe чате даю только краткий verdict и boundary")' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output" && \
+       jq -e '.data.text | test("Activity log|Prepared prompt|Verdict|authoritative worktree|SKILL.md|/server|/home/moltis") | not' >/dev/null 2>&1 <<<"$message_sending_classifier_skill_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite post-close-task-classifier skill-detail failures into a clean Telegram-safe summary instead of leaking policy-template wording"
     fi
 
     test_start "component_telegram_bot_send_prefers_env_token_when_env_file_is_unreadable"

@@ -1,8 +1,11 @@
 ---
 name: codex-update
-description: Remote-safe Moltis skill for Codex CLI update status. Use when a
-  user asks about new Codex versions, their importance, or recommended next
-  steps in Russian.
+description: Проверяет статус обновлений Codex CLI и объясняет, есть ли новая
+  стабильная версия и какие следующие шаги разумны.
+telegram_summary: показывает, есть ли новая стабильная версия Codex CLI, почему это важно и что стоит делать дальше.
+value_statement: Полезен, когда нужно быстро понять важность нового релиза Codex CLI без ручного обхода релизов и changelog.
+source_priority: Сначала использует official releases, changelog и runtime state helper codex-update; operator-only runtime пути остаются только для trusted local/operator surface.
+telegram_safe_note: В Telegram-safe чате даю только короткий advisory и статус; полный runtime-разбор и operator-команды остаются для web UI или доверенной операторской сессии.
 ---
 
 # Codex Update

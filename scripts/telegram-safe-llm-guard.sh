@@ -3409,6 +3409,17 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
         exit 0
     fi
 
+    if [[ "$current_turn_skill_detail_request" == true || -n "$persisted_skill_detail_name" ]]; then
+        skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+        if [[ -z "$skill_detail_reply_text" ]]; then
+            skill_detail_reply_text='В Telegram-safe режиме skill detail отвечается детерминированно и без инструментов.'
+        fi
+        synthetic_command="$(build_exec_heredoc_command "$skill_detail_reply_text")"
+        write_audit_line "emit_modify event=$event reason=skill_detail_tool_suppress tool=${tool_name:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}}"
+        emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
+        exit 0
+    fi
+
     if tool_name_is_allowlisted "$tool_name"; then
         exit 0
     fi

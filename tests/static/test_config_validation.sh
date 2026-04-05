@@ -52,6 +52,9 @@ TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
 TELEGRAM_SAFE_HOOK_HANDLER="$TELEGRAM_SAFE_HOOK_DIR/handler.sh"
 TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
 TELEGRAM_LEARNER_SKILL="$PROJECT_ROOT/skills/telegram-learner/SKILL.md"
+OPENCLAW_IMPROVEMENT_LEARNER_SKILL="$PROJECT_ROOT/skills/openclaw-improvement-learner/SKILL.md"
+CODEX_UPDATE_SKILL="$PROJECT_ROOT/skills/codex-update/SKILL.md"
+POST_CLOSE_TASK_CLASSIFIER_SKILL="$PROJECT_ROOT/skills/post-close-task-classifier/SKILL.md"
 MOLTIS_REPO_HOOKS_SYNC_SCRIPT="$PROJECT_ROOT/scripts/moltis-repo-hooks-sync.sh"
 
 validate_toml() {
@@ -335,6 +338,32 @@ PY
         test_pass
     else
         test_fail "Auto-loaded telegram-learner skill must reinforce a deterministic fail-closed reply for broad Telegram long-research requests"
+    fi
+
+    test_start "static_repo_managed_skills_define_telegram_safe_skill_detail_contract"
+    if [[ -f "$TELEGRAM_LEARNER_SKILL" ]] && \
+       [[ -f "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" ]] && \
+       [[ -f "$CODEX_UPDATE_SKILL" ]] && \
+       [[ -f "$POST_CLOSE_TASK_CLASSIFIER_SKILL" ]] && \
+       rg -Fq 'telegram_summary:' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'value_statement:' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'source_priority:' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'telegram_safe_note:' "$TELEGRAM_LEARNER_SKILL" && \
+       rg -Fq 'telegram_summary:' "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" && \
+       rg -Fq 'value_statement:' "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" && \
+       rg -Fq 'source_priority:' "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" && \
+       rg -Fq 'telegram_safe_note:' "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" && \
+       rg -Fq 'telegram_summary:' "$CODEX_UPDATE_SKILL" && \
+       rg -Fq 'value_statement:' "$CODEX_UPDATE_SKILL" && \
+       rg -Fq 'source_priority:' "$CODEX_UPDATE_SKILL" && \
+       rg -Fq 'telegram_safe_note:' "$CODEX_UPDATE_SKILL" && \
+       rg -Fq 'telegram_summary:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
+       rg -Fq 'value_statement:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
+       rg -Fq 'source_priority:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
+       rg -Fq 'telegram_safe_note:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL"; then
+        test_pass
+    else
+        test_fail "Repo-managed user-facing skills must define a Telegram-safe skill-detail contract in frontmatter instead of relying on operator-heavy body text"
     fi
 
     test_start "static_identity_prompt_prevents_skill_false_negatives_and_prefers_dedicated_skill_tools"

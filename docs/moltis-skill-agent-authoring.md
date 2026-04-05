@@ -120,6 +120,30 @@ Last reviewed: 2026-03-27
 - learner skill не должен обещать скрытый поиск/анализ в Telegram-safe DM, если canonical runtime для этого не доступен на этой поверхности;
 - Telegram и community sources для learner skill должны быть сигналом, а не единственным источником истины.
 
+### 3.2 Все repo-managed user-facing skills должны иметь явный skill-detail contract
+
+Если skill лежит в `skills/` этого репозитория и пользователь может спросить про
+него в Telegram/DM, frontmatter должен задавать отдельный skill-detail contract.
+
+Минимум:
+
+- `description` — краткое каноническое назначение;
+- `telegram_summary` — короткое user-facing описание без operator jargon;
+- `value_statement` — зачем этот skill полезен пользователю;
+- `telegram_safe_note` — краткая boundary/degraded-mode фраза для DM-safe surface.
+
+Дополнительно для learner/research/advisory skills:
+
+- `source_priority` — explicit official-first truth order.
+
+Практическое правило:
+
+- `SKILL.md` может содержать operator workflow, file paths и runtime details;
+- skill-detail reply в Telegram не должен зависеть от того, насколько длинный или
+  operator-heavy body у skill;
+- значит user-facing summary contract должен жить отдельно в frontmatter, а не
+  добываться из случайных sections по месту.
+
 ### 4. Агент нужен только когда skill уже недостаточен
 
 Создавай отдельный `agent preset`, если нужен хотя бы один из признаков:
