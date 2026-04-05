@@ -26,7 +26,7 @@
 - [x] T033 [US3] Add static skill-detail contract coverage in `tests/static/test_config_validation.sh`
 - [x] T034 Run `bash tests/component/test_telegram_safe_llm_guard.sh`
 - [x] T035 Run `bash tests/static/test_config_validation.sh`
-- [ ] T036 Run authoritative Telegram UAT for a skill-detail prompt
+- [x] T036 Run authoritative Telegram UAT for a skill-detail prompt
 
 ## Phase 4: RCA And Landing
 
