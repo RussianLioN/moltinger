@@ -9,169 +9,65 @@ defaults:
   missing_intent: needs-decision
 records:
   - subject_type: branch
-    subject_key: 001-clawdiy-agent-platform
-    intent: active
-    note: Active permanent-agent platform rollout branch; dedicated worktree exists.
-  - subject_type: branch
-    subject_key: 001-docker-deploy-improvements
-    intent: historical
-    note: Historical branch.
-  - subject_type: branch
-    subject_key: 001-fallback-llm-ollama
-    intent: historical
-    note: Historical branch.
-  - subject_type: branch
-    subject_key: 001-moltis-docker-deploy
-    intent: historical
-    note: Historical branch with local drift.
-  - subject_type: branch
-    subject_key: 001-clawdiy-agent-platform
-    intent: active
-    note: Active permanent-agent platform rollout branch; dedicated worktree exists.
-  - subject_type: branch
-    subject_key: 003-testing-infrastructure
-    intent: historical
-    note: Historical planning branch.
-  - subject_type: branch
-    subject_key: 005-worktree-ready-flow
-    intent: active
-    note: Valid parallel local feature branch; dedicated worktree exists.
-  - subject_type: branch
-    subject_key: 006-git-topology-registry
-    intent: active
-    note: Active Speckit feature branch; dedicated authoritative worktree exists.
-  - subject_type: branch
-    subject_key: codex/004-telegram-e2e-harness
-    intent: extract-only
-    note: Unmerged source branch; treat as extraction source, not merge target.
-  - subject_type: branch
-    subject_key: codex/fix-bot
-    intent: extract-only
-    note: PR #8 already merged, but branch still contains extra commits; do not merge raw.
-    pr: 8
+    subject_key: chore/topology-registry-publish
+    intent: protected
+    note: Dedicated single-writer publish lane for topology snapshots; keep out of ordinary cleanup.
   - subject_type: branch
     subject_key: codex/full-review
     intent: protected
-    note: Open parallel branch; separate worktree exists.
-    pr: 6
+    note: Protected parallel Codex review lane; keep out of automated cleanup.
   - subject_type: branch
-    subject_key: codex/gitops-metrics-fix
+    subject_key: fix/storage-maintenance-json-report
     intent: active
-    note: Fresh replacement branch with open PR #18.
-    pr: 18
+    note: Active survivor lane for storage maintenance JSON report follow-up; keep until PR #135 lands or closes.
   - subject_type: branch
-    subject_key: codex/webhook-moltinger
-    intent: extract-only
-    note: Valuable but broad operational branch; extract selectively.
-  - subject_type: branch
-    subject_key: feat/gpt-5-moltis
+    subject_key: fix/telegram-safe-guard-consolidated
     intent: active
-    note: Active documentation and research branch; dedicated worktree exists.
+    note: Active consolidated survivor lane for Telegram safe-guard hardening; keep until landed or closed.
   - subject_type: branch
-    subject_key: feat/moltinger-jb6-gpt54-primary
+    subject_key: fix/telegram-uat-output-gitops-safe
     intent: active
-    note: Active parallel task branch for GPT-5.4 primary provider-chain evaluation.
+    note: Active survivor lane for Telegram UAT output GitOps-safe delivery; keep until PR #149 lands or closes.
   - subject_type: branch
     subject_key: main
     intent: active
     note: Canonical source of truth; checked out in the primary root worktree.
-  - subject_type: branch
-    subject_key: test/rca-guard-uat-20260307-0004
-    intent: needs-decision
-    note: Local-only test branch.
-  - subject_type: branch
-    subject_key: test/rca-guard-uat-20260307-0015
-    intent: cleanup-candidate
-    note: Local-only stale test branch with gone upstream.
   - subject_type: remote
-    subject_key: origin/001-clawdiy-agent-platform
-    intent: active
-    note: Active rollout branch for Clawdiy permanent-agent platform.
-  - subject_type: remote
-    subject_key: origin/001-frontend
-    intent: cleanup-candidate
-    note: Review later; currently dangling.
-  - subject_type: remote
-    subject_key: origin/001-moltis-docker-deploy
-    intent: historical
-    note: Historical; review before cleanup.
-  - subject_type: remote
-    subject_key: origin/001-clawdiy-agent-platform
-    intent: active
-    note: Active rollout branch for Clawdiy permanent-agent platform.
-  - subject_type: remote
-    subject_key: origin/003-testing-infrastructure
-    intent: historical
-    note: Historical planning branch.
-  - subject_type: remote
-    subject_key: origin/005-worktree-ready-flow
-    intent: active
-    note: Active parallel feature branch.
-  - subject_type: remote
-    subject_key: origin/006-git-topology-registry
-    intent: active
-    note: Active topology-registry feature branch.
-  - subject_type: remote
-    subject_key: origin/codex/004-telegram-e2e-harness
-    intent: extract-only
-    note: Source for future Telegram consolidation.
-  - subject_type: remote
-    subject_key: origin/codex/fix-bot
-    intent: extract-only
-    note: Source for future Telegram consolidation.
-    pr: 8
-  - subject_type: remote
-    subject_key: origin/codex/full-review
+    subject_key: origin/chore/topology-registry-publish
     intent: protected
-    note: Active parallel session; exclude from automated cleanup.
-    pr: 6
+    note: Dedicated publish remote for topology snapshot publication.
   - subject_type: remote
-    subject_key: origin/codex/gitops-metrics-fix
+    subject_key: origin/fix/storage-maintenance-json-report
     intent: active
-    note: Active replacement PR #18.
-    pr: 18
+    note: Remote survivor lane for open PR #135.
   - subject_type: remote
-    subject_key: origin/codex/webhook-moltinger
-    intent: extract-only
-    note: Source for future Telegram consolidation.
-  - subject_type: remote
-    subject_key: origin/feat/gpt-5-moltis
+    subject_key: origin/fix/telegram-safe-guard-consolidated
     intent: active
-    note: Active feature branch.
+    note: Remote survivor lane for Telegram safe-guard hardening.
+  - subject_type: remote
+    subject_key: origin/fix/telegram-uat-output-gitops-safe
+    intent: active
+    note: Remote survivor lane for open PR #149.
   - subject_type: worktree
     subject_key: codex-full-review
     intent: protected
     note: Parallel Codex session; protect from cleanup.
-    pr: 6
   - subject_type: worktree
-    subject_key: codex-gitops-metrics-fix
-    intent: active
-    note: Active replacement branch for closed PR #3; open PR #18.
-    pr: 18
+    subject_key: moltinger-chore-topology-registry-publish
+    intent: protected
+    note: Dedicated single-writer publish worktree for topology snapshots.
   - subject_type: worktree
-    subject_key: gpt-5-moltis
+    subject_key: moltinger-fix-telegram-uat-output-gitops-safe
     intent: active
-    note: Active research and documentation worktree.
+    note: Active sibling worktree for the Telegram UAT output GitOps-safe lane.
   - subject_type: worktree
-    subject_key: moltinger-jb6-gpt54-primary
+    subject_key: moltinger-storage-maintenance-json-report
     intent: active
-    note: Active sibling worktree for the GPT-5.4 primary provider-chain task.
+    note: Active sibling worktree for the storage maintenance JSON report lane.
   - subject_type: worktree
-    subject_key: primary-feature-001
+    subject_key: moltinger-telegram-safe-guard-consolidated
     intent: active
-    note: Active dedicated feature worktree for the Clawdiy permanent-agent platform.
-  - subject_type: worktree
-    subject_key: primary-feature-001
-    intent: active
-    note: Active dedicated feature worktree for the Clawdiy permanent-agent platform.
-  - subject_type: worktree
-    subject_key: primary-feature-005
-    intent: active
-    note: Active parallel Speckit feature worktree.
-  - subject_type: worktree
-    subject_key: primary-feature-006
-    intent: active
-    note: Active authoritative worktree for topology-registry automation.
+    note: Active sibling worktree for the Telegram safe-guard consolidated lane.
   - subject_type: worktree
     subject_key: primary-root
     intent: active
