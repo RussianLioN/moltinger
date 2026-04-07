@@ -12,9 +12,6 @@
 |---|---|---|---|
 | `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `moltinger-chore-topology-registry-publish` | `chore/topology-registry-publish` | `sibling-worktree` | Dedicated single-writer publish worktree for topology snapshots. |
-| `moltinger-fix-telegram-uat-output-gitops-safe` | `fix/telegram-uat-output-gitops-safe` | `sibling-worktree` | Active sibling worktree for the Telegram UAT output GitOps-safe lane. |
-| `moltinger-storage-maintenance-json-report` | `fix/storage-maintenance-json-report` | `sibling-worktree` | Active sibling worktree for the storage maintenance JSON report lane. |
-| `moltinger-telegram-safe-guard-consolidated` | `fix/telegram-safe-guard-consolidated` | `sibling-worktree` | Active sibling worktree for the Telegram safe-guard consolidated lane. |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
@@ -24,18 +21,12 @@
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
 | `chore/topology-registry-publish` | `origin/chore/topology-registry-publish` | Dedicated single-writer publish lane for topology snapshots; keep out of ordinary cleanup. |
 | `codex/full-review` | `origin/codex/full-review` | Protected parallel Codex review lane; keep out of automated cleanup. |
-| `fix/storage-maintenance-json-report` | `origin/fix/storage-maintenance-json-report` | Active survivor lane for storage maintenance JSON report follow-up; keep until PR #135 lands or closes. |
-| `fix/telegram-safe-guard-consolidated` | `origin/fix/telegram-safe-guard-consolidated` | Active consolidated survivor lane for Telegram safe-guard hardening; keep until landed or closed. |
-| `fix/telegram-uat-output-gitops-safe` | `origin/fix/telegram-uat-output-gitops-safe` | Active survivor lane for Telegram UAT output GitOps-safe delivery; keep until PR #149 lands or closes. |
 
 ## Remote Branches Not Merged Into `origin/main`
 
 | Remote Branch | Current Intent |
 |---|---|
 | `origin/chore/topology-registry-publish` | Dedicated publish remote for topology snapshot publication. |
-| `origin/fix/storage-maintenance-json-report` | Remote survivor lane for open PR #135. |
-| `origin/fix/telegram-safe-guard-consolidated` | Remote survivor lane for Telegram safe-guard hardening. |
-| `origin/fix/telegram-uat-output-gitops-safe` | Remote survivor lane for open PR #149. |
 
 ## Operating Rules
 

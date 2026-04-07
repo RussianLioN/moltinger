@@ -17,18 +17,6 @@ records:
     intent: protected
     note: Protected parallel Codex review lane; keep out of automated cleanup.
   - subject_type: branch
-    subject_key: fix/storage-maintenance-json-report
-    intent: active
-    note: Active survivor lane for storage maintenance JSON report follow-up; keep until PR #135 lands or closes.
-  - subject_type: branch
-    subject_key: fix/telegram-safe-guard-consolidated
-    intent: active
-    note: Active consolidated survivor lane for Telegram safe-guard hardening; keep until landed or closed.
-  - subject_type: branch
-    subject_key: fix/telegram-uat-output-gitops-safe
-    intent: active
-    note: Active survivor lane for Telegram UAT output GitOps-safe delivery; keep until PR #149 lands or closes.
-  - subject_type: branch
     subject_key: main
     intent: active
     note: Canonical source of truth; checked out in the primary root worktree.
@@ -36,18 +24,6 @@ records:
     subject_key: origin/chore/topology-registry-publish
     intent: protected
     note: Dedicated publish remote for topology snapshot publication.
-  - subject_type: remote
-    subject_key: origin/fix/storage-maintenance-json-report
-    intent: active
-    note: Remote survivor lane for open PR #135.
-  - subject_type: remote
-    subject_key: origin/fix/telegram-safe-guard-consolidated
-    intent: active
-    note: Remote survivor lane for Telegram safe-guard hardening.
-  - subject_type: remote
-    subject_key: origin/fix/telegram-uat-output-gitops-safe
-    intent: active
-    note: Remote survivor lane for open PR #149.
   - subject_type: worktree
     subject_key: codex-full-review
     intent: protected
@@ -56,18 +32,6 @@ records:
     subject_key: moltinger-chore-topology-registry-publish
     intent: protected
     note: Dedicated single-writer publish worktree for topology snapshots.
-  - subject_type: worktree
-    subject_key: moltinger-fix-telegram-uat-output-gitops-safe
-    intent: active
-    note: Active sibling worktree for the Telegram UAT output GitOps-safe lane.
-  - subject_type: worktree
-    subject_key: moltinger-storage-maintenance-json-report
-    intent: active
-    note: Active sibling worktree for the storage maintenance JSON report lane.
-  - subject_type: worktree
-    subject_key: moltinger-telegram-safe-guard-consolidated
-    intent: active
-    note: Active sibling worktree for the Telegram safe-guard consolidated lane.
   - subject_type: worktree
     subject_key: primary-root
     intent: active
