@@ -1065,8 +1065,9 @@ PY
     fi
 
     test_start "static_telegram_remote_uat_default_output_avoids_repo_root_drift"
-    if rg -Fq 'OUTPUT_PATH="${TMPDIR:-/tmp}/telegram-e2e-result.json"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
-       rg -Fq 'default: ${TMPDIR:-/tmp}/telegram-e2e-result.json' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
+    if rg -Fq 'DEFAULT_OUTPUT_DIR="${TMPDIR:-/tmp}/moltinger-telegram-remote-uat"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'OUTPUT_PATH="${REMOTE_UAT_OUTPUT:-${DEFAULT_OUTPUT_DIR}/telegram-e2e-result.json}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'default: ${TMPDIR:-/tmp}/moltinger-telegram-remote-uat/telegram-e2e-result.json' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
         test_pass
     else
         test_fail "Telegram remote UAT wrapper must default review-safe output into TMPDIR so server-side manual runs do not dirty the repo root"
