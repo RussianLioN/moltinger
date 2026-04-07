@@ -959,7 +959,6 @@ suppress_file_path() {
 
     printf '%s/%s.suppress' "$INTENT_DIR" "$safe_key"
 }
-
 persist_safe_lane_marker() {
     local raw_key="${1:-}"
     local lane_file=""
@@ -2525,7 +2524,6 @@ delivery_internal_suffix_is_appended() {
 
     return 1
 }
-
 strip_delivery_internal_suffix() {
     local text="${1:-}"
     local cleaned="$text"
@@ -2541,16 +2539,11 @@ strip_delivery_internal_suffix() {
         return 0
     fi
 
-    if [[ "$cleaned" == *" Activity log "* ]]; then
-        cleaned="${cleaned%% Activity log*}"
-    elif [[ "$cleaned" == *"Activity log "* ]]; then
-        cleaned="${cleaned%%Activity log*}"
-    fi
-    if [[ "$cleaned" == *" • mcp__"* ]]; then
-        cleaned="${cleaned%% • mcp__*}"
-    elif [[ "$cleaned" == *"• mcp__"* ]]; then
-        cleaned="${cleaned%%• mcp__*}"
-    fi
+    cleaned="$(
+        printf '%s' "$cleaned" \
+            | sed -E 's/[[:space:]]+Activity log([[:space:]]*[•:-][[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call).*)$//I' \
+            | sed -E 's/[[:space:]]+•[[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call).*$//I'
+    )"
 
     cleaned="$(
         printf '%s' "$cleaned" \
@@ -2558,6 +2551,22 @@ strip_delivery_internal_suffix() {
     )"
 
     printf '%s' "$cleaned"
+}
+
+clean_delivery_text_is_safe_for_direct_send() {
+    local text="${1:-}"
+
+    [[ -n "$text" ]] || return 1
+
+    if printf '%s' "$text" | grep -Eiq 'running:|searching memory|thinking|nodes_list|sessions_list|mcp__|mcp tool error|validation errors for call\[|missing required argument|unexpected keyword argument|fetching (github\.com|https?://)|tool-progress|tool call'; then
+        return 1
+    fi
+
+    if printf '%s' "$text" | grep -Eiq '^(сейчас|сначала|сперва|для начала|первым делом|let me|i( ?|'"'"')ll|checking|opening|looking up|проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)\b|пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|начну с (поиска|анализа|изучения|просмотра)|create_skill\b|update_skill\b|delete_skill\b|session_state\b|send_message\b|send_image\b|tavily\b'; then
+        return 1
+    fi
+
+    return 0
 }
 
 reply_mentions_any_skill_from_csv() {
@@ -3401,6 +3410,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 fi
 
+canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text'
+
 if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     if [[ -n "$effective_delivery_suppression" ]]; then
         synthetic_command="$(build_exec_heredoc_command "Telegram-safe direct fastpath already handled this reply.")"
@@ -3461,7 +3472,7 @@ if [[ "$event" == "MessageSending" && -n "$effective_delivery_suppression" && "$
     exit 0
 fi
 
-if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRECT_FASTPATH_ENABLED" == true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" == true ]]; then
+if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED"; then
     delivery_chat_id="$(extract_first_string to || true)"
     if [[ -z "$delivery_chat_id" ]]; then
         delivery_chat_id="$(extract_first_number to || true)"
@@ -3469,18 +3480,20 @@ if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$DIRE
     delivery_reply_to="$(extract_first_number reply_to_message_id || true)"
     clean_delivery_text="$(strip_delivery_internal_suffix "${response_text:-}")"
 
-    if [[ "$has_appended_delivery_internal_suffix" == true && -n "$delivery_chat_id" && -n "$clean_delivery_text" && "$clean_delivery_text" != "${response_text:-}" ]]; then
+    if [[ "$has_appended_delivery_internal_suffix" == true && -n "$delivery_chat_id" && -n "$clean_delivery_text" && "$clean_delivery_text" != "${response_text:-}" ]] && clean_delivery_text_is_safe_for_direct_send "$clean_delivery_text"; then
         if direct_fastpath_send_with_suppression "clean_delivery" "$delivery_chat_id" "$clean_delivery_text" "clean_delivery" "reply_to=${delivery_reply_to:-none}" "${delivery_reply_to:-}"; then
             emit_modified_payload "NO_REPLY" false
             exit 0
         fi
+        write_audit_line "emit_modify event=$event reason=clean_delivery_fallback chat_id=${delivery_chat_id:-missing} reply_to=${delivery_reply_to:-none}"
+        emit_modified_payload "$clean_delivery_text" false
+        exit 0
     fi
 fi
 
 if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$current_turn_skill_detail_request" != true && -z "$persisted_skill_detail_name" && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
-
 if [[ "$looks_like_status" == true ]]; then
     write_audit_line "emit_modify event=$event reason=status"
     if [[ "$event" == "AfterLLMCall" ]]; then

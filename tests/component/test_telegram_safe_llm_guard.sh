@@ -1080,6 +1080,184 @@ EOF
         test_fail "MessageSending clean-delivery fastpath must stay inert for a legitimate explanatory reply that merely mentions Activity log and does not append a runtime telemetry suffix"
     fi
 
+    test_start "component_message_sending_guard_rewrites_clean_reply_when_direct_send_script_is_unavailable"
+    local clean_delivery_modify_tmp clean_delivery_modify_stdout clean_delivery_modify_stderr clean_delivery_modify_status
+    clean_delivery_modify_tmp="$(secure_temp_dir telegram-safe-clean-delivery-modify)"
+    clean_delivery_modify_stdout="$clean_delivery_modify_tmp/stdout.log"
+    clean_delivery_modify_stderr="$clean_delivery_modify_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$clean_delivery_modify_tmp/missing-send.sh" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$clean_delivery_modify_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$clean_delivery_modify_stdout" 2>"$clean_delivery_modify_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:clean-delivery-modify","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1201,"text":"Да — новая стабильная версия есть: 0.118.0. Activity log • mcp__tavily__tavily_search • Searching memory... • missing 'query' parameter"}}
+EOF
+    clean_delivery_modify_status=$?
+    set -e
+    if [[ "$clean_delivery_modify_status" -eq 0 ]] && \
+       [[ ! -s "$clean_delivery_modify_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$clean_delivery_modify_stdout" && \
+       jq -e '.data.text == "Да — новая стабильная версия есть: 0.118.0."' >/dev/null 2>&1 <"$clean_delivery_modify_stdout" && \
+       jq -e '.data.reply_to_message_id == 1201' >/dev/null 2>&1 <"$clean_delivery_modify_stdout"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite the cleaned final reply through the normal modify path when direct-send is unavailable instead of leaking the raw Activity log suffix"
+    fi
+
+    test_start "component_message_sending_guard_direct_sends_clean_reply_when_final_delivery_has_activity_log_suffix"
+    local direct_clean_delivery_tmp direct_clean_delivery_send_script direct_clean_delivery_log direct_clean_delivery_stdout direct_clean_delivery_stderr direct_clean_delivery_status
+    direct_clean_delivery_tmp="$(secure_temp_dir telegram-safe-direct-clean-delivery)"
+    direct_clean_delivery_send_script="$direct_clean_delivery_tmp/send.sh"
+    direct_clean_delivery_log="$direct_clean_delivery_tmp/send.log"
+    cat >"$direct_clean_delivery_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+reply_to=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        --reply-to)
+            reply_to="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\nreply_to=%s\n' "$chat_id" "$text" "$reply_to" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$direct_clean_delivery_send_script"
+    direct_clean_delivery_stdout="$direct_clean_delivery_tmp/stdout.log"
+    direct_clean_delivery_stderr="$direct_clean_delivery_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$direct_clean_delivery_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=1 \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$direct_clean_delivery_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_clean_delivery_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$direct_clean_delivery_stdout" 2>"$direct_clean_delivery_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:clean-delivery","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1200,"text":"Да — новая стабильная версия есть: 0.118.0. Activity log • mcp__tavily__tavily_search • mcp__tavily__tavily_search"}}
+EOF
+    direct_clean_delivery_status=$?
+    set -e
+    if [[ "$direct_clean_delivery_status" -eq 0 ]] && \
+       [[ ! -s "$direct_clean_delivery_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$direct_clean_delivery_stdout" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <"$direct_clean_delivery_stdout" && \
+       grep -Fq 'chat_id=262872984' "$direct_clean_delivery_log" && \
+       grep -Fq 'text=Да — новая стабильная версия есть: 0.118.0.' "$direct_clean_delivery_log" && \
+       grep -Fq 'reply_to=1200' "$direct_clean_delivery_log"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must direct-send the cleaned final reply and suppress the dirty runtime delivery when Activity log is appended to an otherwise valid answer"
+    fi
+
+    test_start "component_message_sending_guard_preserves_legitimate_activity_log_mentions_when_scrubbing_suffix"
+    local direct_activity_phrase_tmp direct_activity_phrase_send_script direct_activity_phrase_log direct_activity_phrase_stdout direct_activity_phrase_stderr direct_activity_phrase_status
+    direct_activity_phrase_tmp="$(secure_temp_dir telegram-safe-direct-activity-phrase)"
+    direct_activity_phrase_send_script="$direct_activity_phrase_tmp/send.sh"
+    direct_activity_phrase_log="$direct_activity_phrase_tmp/send.log"
+    cat >"$direct_activity_phrase_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+reply_to=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        --reply-to)
+            reply_to="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\nreply_to=%s\n' "$chat_id" "$text" "$reply_to" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$direct_activity_phrase_send_script"
+    direct_activity_phrase_stdout="$direct_activity_phrase_tmp/stdout.log"
+    direct_activity_phrase_stderr="$direct_activity_phrase_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$direct_activity_phrase_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=1 \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$direct_activity_phrase_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_activity_phrase_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$direct_activity_phrase_stdout" 2>"$direct_activity_phrase_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:activity-phrase","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1202,"text":"Раздел Activity log показывает историю действий пользователя. Да — новая стабильная версия есть: 0.118.0. Activity log • mcp__tavily__tavily_search • mcp__tavily__tavily_search"}}
+EOF
+    direct_activity_phrase_status=$?
+    set -e
+    if [[ "$direct_activity_phrase_status" -eq 0 ]] && \
+       [[ ! -s "$direct_activity_phrase_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$direct_activity_phrase_stdout" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <"$direct_activity_phrase_stdout" && \
+       grep -Fq 'chat_id=262872984' "$direct_activity_phrase_log" && \
+       grep -Fq 'text=Раздел Activity log показывает историю действий пользователя. Да — новая стабильная версия есть: 0.118.0.' "$direct_activity_phrase_log" && \
+       grep -Fq 'reply_to=1202' "$direct_activity_phrase_log"; then
+        test_pass
+    else
+        test_fail "MessageSending clean-delivery scrub must preserve legitimate in-text mentions of Activity log and remove only the actual internal telemetry suffix"
+    fi
+
+    test_start "component_message_sending_guard_does_not_direct_send_cleaned_progress_preface"
+    local direct_dirty_prefix_tmp direct_dirty_prefix_send_script direct_dirty_prefix_log direct_dirty_prefix_stdout direct_dirty_prefix_stderr direct_dirty_prefix_status
+    direct_dirty_prefix_tmp="$(secure_temp_dir telegram-safe-direct-dirty-prefix)"
+    direct_dirty_prefix_send_script="$direct_dirty_prefix_tmp/send.sh"
+    direct_dirty_prefix_log="$direct_dirty_prefix_tmp/send.log"
+    cat >"$direct_dirty_prefix_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected_direct_send\n' >>"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$direct_dirty_prefix_send_script"
+    direct_dirty_prefix_stdout="$direct_dirty_prefix_tmp/stdout.log"
+    direct_dirty_prefix_stderr="$direct_dirty_prefix_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$direct_dirty_prefix_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$direct_dirty_prefix_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_dirty_prefix_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$direct_dirty_prefix_stdout" 2>"$direct_dirty_prefix_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:dirty-prefix","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1201,"text":"Сейчас проверю последние релизы Codex. Activity log • mcp__tavily__tavily_search • mcp__tavily__tavily_search"}}
+EOF
+    direct_dirty_prefix_status=$?
+    set -e
+    if [[ "$direct_dirty_prefix_status" -eq 0 ]] && \
+       [[ ! -s "$direct_dirty_prefix_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$direct_dirty_prefix_stdout" && \
+       jq -e '.data.text | contains("В Telegram-safe режиме я не запускаю инструменты")' >/dev/null 2>&1 <"$direct_dirty_prefix_stdout" && \
+       [[ ! -s "$direct_dirty_prefix_log" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending clean-delivery fastpath must not direct-send a stripped progress-preface prefix; it must fall back to the normal Telegram-safe rewrite instead"
+    fi
+
     test_start "component_before_llm_guard_clears_stale_direct_fastpath_suppression_on_new_user_turn"
     local stale_direct_fastpath_dir stale_direct_fastpath_marker stale_direct_fastpath_output
     stale_direct_fastpath_dir="$(secure_temp_dir telegram-safe-stale-direct-fastpath)"
@@ -1481,7 +1659,6 @@ EOF
     else
         test_fail "BeforeToolCall guard must suppress even allowlisted Tavily research when the persisted Telegram turn is a deterministic skill-detail reply"
     fi
-
     test_start "component_before_tool_guard_blocks_non_allowlisted_tavily_tool_names"
     local before_tool_tavily_skill_output
     before_tool_tavily_skill_output="$(
@@ -1684,10 +1861,14 @@ EOF
     fi
 
     test_start "component_after_llm_guard_uses_generic_progress_text_for_mixed_skill_and_tavily_tool_calls"
-    local after_mixed_tool_output
+    local after_mixed_tool_dir after_mixed_tool_output
+    after_mixed_tool_dir="$(secure_temp_dir telegram-safe-after-mixedtool)"
     after_mixed_tool_output="$(
-        run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:mixedtool","provider":"openai-codex","model":"gpt-5.4","text":"Сейчас создам навык и параллельно проверю релизы Codex через Tavily.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}},{"name":"mcp__tavily__tavily_search","arguments":{"query":"Codex CLI latest stable release"}}]}}'
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_mixed_tool_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:mixedtool","provider":"openai-codex","model":"gpt-5.4","text":"Сейчас создам навык и параллельно проверю релизы Codex через Tavily.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}},{"name":"mcp__tavily__tavily_search","arguments":{"query":"Codex CLI latest stable release"}}]}}
+EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
        jq -e '.data.tool_calls[0].name == "create_skill"' >/dev/null 2>&1 <<<"$after_mixed_tool_output" && \
