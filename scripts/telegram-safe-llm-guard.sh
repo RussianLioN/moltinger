@@ -3485,6 +3485,9 @@ if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$look
             emit_modified_payload "NO_REPLY" false
             exit 0
         fi
+        write_audit_line "emit_modify event=$event reason=clean_delivery_fallback chat_id=${delivery_chat_id:-missing} reply_to=${delivery_reply_to:-none}"
+        emit_modified_payload "$clean_delivery_text" false
+        exit 0
     fi
 fi
 

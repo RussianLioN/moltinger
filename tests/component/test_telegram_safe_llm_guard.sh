@@ -1080,6 +1080,31 @@ EOF
         test_fail "MessageSending clean-delivery fastpath must stay inert for a legitimate explanatory reply that merely mentions Activity log and does not append a runtime telemetry suffix"
     fi
 
+    test_start "component_message_sending_guard_rewrites_clean_reply_when_direct_send_script_is_unavailable"
+    local clean_delivery_modify_tmp clean_delivery_modify_stdout clean_delivery_modify_stderr clean_delivery_modify_status
+    clean_delivery_modify_tmp="$(secure_temp_dir telegram-safe-clean-delivery-modify)"
+    clean_delivery_modify_stdout="$clean_delivery_modify_tmp/stdout.log"
+    clean_delivery_modify_stderr="$clean_delivery_modify_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$clean_delivery_modify_tmp/missing-send.sh" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$clean_delivery_modify_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$clean_delivery_modify_stdout" 2>"$clean_delivery_modify_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:clean-delivery-modify","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1201,"text":"Да — новая стабильная версия есть: 0.118.0. Activity log • mcp__tavily__tavily_search • Searching memory... • missing 'query' parameter"}}
+EOF
+    clean_delivery_modify_status=$?
+    set -e
+    if [[ "$clean_delivery_modify_status" -eq 0 ]] && \
+       [[ ! -s "$clean_delivery_modify_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$clean_delivery_modify_stdout" && \
+       jq -e '.data.text == "Да — новая стабильная версия есть: 0.118.0."' >/dev/null 2>&1 <"$clean_delivery_modify_stdout" && \
+       jq -e '.data.reply_to_message_id == 1201' >/dev/null 2>&1 <"$clean_delivery_modify_stdout"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite the cleaned final reply through the normal modify path when direct-send is unavailable instead of leaking the raw Activity log suffix"
+    fi
+
     test_start "component_message_sending_guard_direct_sends_clean_reply_when_final_delivery_has_activity_log_suffix"
     local direct_clean_delivery_tmp direct_clean_delivery_send_script direct_clean_delivery_log direct_clean_delivery_stdout direct_clean_delivery_stderr direct_clean_delivery_status
     direct_clean_delivery_tmp="$(secure_temp_dir telegram-safe-direct-clean-delivery)"
