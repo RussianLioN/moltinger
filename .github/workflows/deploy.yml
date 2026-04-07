@@ -162,19 +162,23 @@ jobs:
           echo "managed_files_pending=${PENDING_COUNT:-0}" >> "$GITHUB_OUTPUT"
           echo "managed_files_missing=${MISSING_COUNT:-0}" >> "$GITHUB_OUTPUT"
 
-          # Check 7: migrate legacy runtime pointers out of git-managed root
+          # Check 7: migrate legacy runtime/UAT artifacts out of git-managed root
           echo "=== Check 7: migrate legacy Moltis runtime pointers ==="
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             set -euo pipefail
             cd ${{ env.DEPLOY_PATH }}
 
-            mkdir -p data/moltis
+            mkdir -p data/moltis data/moltis/legacy-uat
 
             for MARKER in .last-deployed-image .last-moltis-backup .last-moltis-restore-check; do
               if [ -f "$MARKER" ]; then
                 mv "$MARKER" "data/moltis/$MARKER"
               fi
             done
+
+            if [ -f telegram-e2e-result.json ]; then
+              mv telegram-e2e-result.json "data/moltis/legacy-uat/telegram-e2e-result.json"
+            fi
           EOF
 
           # Check 8: server worktree cleanliness (hard block unless repairable)

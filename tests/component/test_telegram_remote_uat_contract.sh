@@ -1114,6 +1114,27 @@ run_component_telegram_remote_uat_contract_tests() {
         fi
     fi
 
+    test_start "component_telegram_remote_uat_default_output_path_stays_outside_repo_checkout"
+    mkdir -p "$TEST_TMPDIR/runtime-tmp"
+    rm -f "$TEST_TMPDIR/telegram-e2e-result.json"
+    if TMPDIR="$TEST_TMPDIR/runtime-tmp" \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "/status" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper should still fail closed on the default send_failure stub"
+    else
+        if [[ ! -f "$TEST_TMPDIR/telegram-e2e-result.json" ]] \
+            && [[ -f "$TEST_TMPDIR/runtime-tmp/moltinger-telegram-remote-uat/telegram-e2e-result.json" ]] \
+            && jq -e '.failure.code == "send_failure"' "$TEST_TMPDIR/runtime-tmp/moltinger-telegram-remote-uat/telegram-e2e-result.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Default authoritative output must land under TMPDIR outside the checkout so manual server-side runs cannot dirty /opt/moltinger"
+        fi
+    fi
+
     test_start "component_telegram_remote_uat_fails_status_reply_without_canonical_model"
     if TELEGRAM_WEB_STUB_MODE=status_semantic_mismatch \
         "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \

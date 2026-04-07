@@ -9,7 +9,7 @@ Path: `scripts/telegram-e2e-on-demand.sh`
 - `--mode synthetic|real_user` (required)
 - `--message "<text>"` (required)
 - `--timeout-sec <int>` (optional, default 30)
-- `--output <path>` (optional, default `telegram-e2e-result.json`)
+- `--output <path>` (optional, default `${TMPDIR:-/tmp}/telegram-e2e-result.json`)
 - `--moltis-url <url>` (optional, default `http://localhost:13131`)
 - `--moltis-password-env <ENV_NAME>` (optional, default `MOLTIS_PASSWORD`)
 - `--verbose` (optional)
@@ -44,7 +44,7 @@ Path: `.github/workflows/telegram-e2e-on-demand.yml`
 
 ### Artifacts
 
-- `telegram-e2e-result.json`
+- `${TMPDIR:-/tmp}/telegram-e2e-result.json` by default, or the explicit `--output` path
 - optional `telegram-e2e.log`
 - Sample artifact: `specs/004-telegram-e2e-harness/contracts/sample-result-synthetic.json`
 

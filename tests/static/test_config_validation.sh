@@ -1064,6 +1064,24 @@ PY
         test_fail "Deploy workflow should distinguish pending sync from dirty worktree drift"
     fi
 
+    test_start "static_telegram_remote_uat_default_output_avoids_repo_root_drift"
+    if rg -Fq 'DEFAULT_OUTPUT_DIR="${TMPDIR:-/tmp}/moltinger-telegram-remote-uat"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'OUTPUT_PATH="${REMOTE_UAT_OUTPUT:-${DEFAULT_OUTPUT_DIR}/telegram-e2e-result.json}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'default: ${TMPDIR:-/tmp}/moltinger-telegram-remote-uat/telegram-e2e-result.json' "$TELEGRAM_REMOTE_UAT_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Telegram remote UAT wrapper must default review-safe output into TMPDIR so server-side manual runs do not dirty the repo root"
+    fi
+
+    test_start "static_deploy_migrates_legacy_telegram_uat_artifact_out_of_repo_root"
+    if rg -Fq 'mkdir -p data/moltis data/moltis/legacy-uat' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'if [ -f telegram-e2e-result.json ]; then' "$DEPLOY_WORKFLOW" && \
+       rg -Fq 'data/moltis/legacy-uat/telegram-e2e-result.json' "$DEPLOY_WORKFLOW"; then
+        test_pass
+    else
+        test_fail "Deploy workflow must relocate legacy telegram-e2e-result.json artifacts before GitOps cleanliness checks"
+    fi
+
     test_start "static_deploy_batches_managed_surface_hash_checks"
     if [[ -f "$GITOPS_CHECK_SCRIPT" ]] && \
        rg -Fq 'gitops-check-managed-surface.sh' "$DEPLOY_WORKFLOW" && \
