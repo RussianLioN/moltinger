@@ -69,13 +69,16 @@ gh workflow run telegram-e2e-on-demand.yml \
 ./scripts/telegram-e2e-on-demand.sh \
   --mode authoritative \
   --message '/status' \
-  --timeout-sec 45 \
-  --output /tmp/telegram-e2e-result.json
+  --timeout-sec 45
 ```
 
-По умолчанию review-safe артефакт теперь пишется в `${TMPDIR:-/tmp}/telegram-e2e-result.json`.
-Это сделано специально, чтобы ручной запуск на production host не создавал `telegram-e2e-result.json`
-в корне `/opt/moltinger` и не ломал следующий `Deploy Moltis` через GitOps dirty-worktree gate.
+Если `--output` не указан, review-safe artifact теперь по умолчанию пишется вне git checkout:
+
+```bash
+${TMPDIR:-/tmp}/moltinger-telegram-remote-uat/telegram-e2e-result.json
+```
+
+Это специально сделано, чтобы ручной запуск wrapper на production не создавал untracked файлы в `/opt/moltinger` и не блокировал следующий GitOps deploy.
 
 ### Важное правило для ручного server-side запуска
 
