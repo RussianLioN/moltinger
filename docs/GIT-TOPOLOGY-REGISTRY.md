@@ -10,7 +10,6 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `codex-full-review` | `codex/full-review` | `codex-managed` | Parallel Codex session; protect from cleanup. |
 | `moltinger-chore-topology-registry-publish` | `chore/topology-registry-publish` | `sibling-worktree` | Dedicated single-writer publish worktree for topology snapshots. |
 | `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
@@ -20,7 +19,6 @@
 |---|---|---|
 | `main` | `origin/main` | Canonical source of truth; checked out in the primary root worktree. |
 | `chore/topology-registry-publish` | `origin/chore/topology-registry-publish` | Dedicated single-writer publish lane for topology snapshots; keep out of ordinary cleanup. |
-| `codex/full-review` | `origin/codex/full-review` | Protected parallel Codex review lane; keep out of automated cleanup. |
 
 ## Remote Branches Not Merged Into `origin/main`
 

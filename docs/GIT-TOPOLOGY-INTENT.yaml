@@ -13,10 +13,6 @@ records:
     intent: protected
     note: Dedicated single-writer publish lane for topology snapshots; keep out of ordinary cleanup.
   - subject_type: branch
-    subject_key: codex/full-review
-    intent: protected
-    note: Protected parallel Codex review lane; keep out of automated cleanup.
-  - subject_type: branch
     subject_key: main
     intent: active
     note: Canonical source of truth; checked out in the primary root worktree.
@@ -24,10 +20,6 @@ records:
     subject_key: origin/chore/topology-registry-publish
     intent: protected
     note: Dedicated publish remote for topology snapshot publication.
-  - subject_type: worktree
-    subject_key: codex-full-review
-    intent: protected
-    note: Parallel Codex session; protect from cleanup.
   - subject_type: worktree
     subject_key: moltinger-chore-topology-registry-publish
     intent: protected
