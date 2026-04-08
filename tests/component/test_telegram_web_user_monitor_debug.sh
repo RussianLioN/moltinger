@@ -12,7 +12,7 @@ run_component_telegram_web_user_monitor_debug_tests() {
 
     local test_tmpdir
     test_tmpdir="$(mktemp -d)"
-    trap 'rm -rf "$test_tmpdir"' EXIT
+    trap 'rm -rf -- '"$(printf '%q' "$test_tmpdir")" EXIT
 
     cp "$MONITOR_SCRIPT" "$test_tmpdir/telegram-web-user-monitor.sh"
     chmod +x "$test_tmpdir/telegram-web-user-monitor.sh"

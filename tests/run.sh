@@ -413,6 +413,7 @@ normalize_suite_json_for_exit_code() {
         }])
       ' "$suite_json_file" > "$temp_file"
     mv "$temp_file" "$suite_json_file"
+    chmod 644 "$suite_json_file" 2>/dev/null || true
 
     return 1
 }

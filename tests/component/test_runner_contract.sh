@@ -8,8 +8,12 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 RUNNER_SCRIPT="$PROJECT_ROOT/tests/run.sh"
 
 setup_component_runner_contract() {
-    require_commands_or_skip bash jq mktemp cat cp rm tail sed chmod || return 2
+    require_commands_or_skip bash jq mktemp cat cp rm tail sed chmod stat || return 2
     return 0
+}
+
+portable_mode() {
+    stat -c "%a" "$1" 2>/dev/null || stat -f "%Lp" "$1"
 }
 
 write_runner_source_fixture() {
@@ -147,6 +151,7 @@ EOF
     assert_eq "1" "$(jq -r '.summary.failed' "$suite_json")" "Normalized suite should record one failed case"
     assert_contains "$(jq -r '.failures | join("\n")' "$suite_json")" "Suite exited with code 1" "Normalized suite should explain the runtime mismatch"
     assert_file_exists "$fixture_root/pass-then-fail.raw.json" "Runner should preserve the pre-normalization report for diagnostics"
+    assert_eq "644" "$(portable_mode "$suite_json")" "Normalized suite report must stay artifact-readable"
 
     assert_eq "failed" "$(jq -r '.status' "$aggregate_json")" "Aggregate summary must fail after normalization"
     assert_eq "1" "$(jq -r '.summary.failed' "$aggregate_json")" "Aggregate summary should count the synthetic failure"
