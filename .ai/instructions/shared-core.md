@@ -26,6 +26,15 @@ Use `refresh --write-doc` only for explicit topology snapshot publication from a
 In Codex/App sessions, `refresh --write-doc` may require approval if the shared repo `.git` directory is outside the current writable boundary.
 Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 
+## Canonical Main Role
+
+The canonical `main` worktree is for review and control-plane hygiene, not feature implementation.
+
+- Use canonical `main` for triage, PR review, topology inspection, merge coordination, and close/cleanup flows.
+- Do not implement new tasks directly in canonical `main`.
+- If the task changes runtime behavior, CI, deploy, scripts, config, instructions, AGENTS, rules, skills, auth, topology, or any shared contract, create a dedicated branch/worktree from `main` first.
+- Read-only inspection and explicit topology or cleanup maintenance may stay in canonical `main`.
+
 ## Post-Close Task Classification
 
 If the active branch/worktree has already completed its planned tasks and the user brings a new task, do not continue in the same lane by default.

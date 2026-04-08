@@ -124,36 +124,37 @@ append_manifest_entry() {
     esac
 }
 
-append_optional_manifest_entry() {
-    local relative_path="$1"
-    local absolute_path="$2"
-    local bucket="$3"
-
-    [[ -f "$absolute_path" ]] || return 0
-    append_manifest_entry "$relative_path" "$absolute_path" "$bucket"
-}
-
-append_top_level_directory_files() {
-    local relative_dir="$1"
-    local absolute_dir="$2"
-    local bucket="$3"
-    local absolute_path relative_path
+append_deploy_managed_directory_files() {
+    local absolute_dir="$1"
+    local bucket="$2"
+    local top_level_entry absolute_path relative_path
 
     [[ -d "$absolute_dir" ]] || return 0
 
-    while IFS= read -r absolute_path; do
-        [[ -n "$absolute_path" ]] || continue
-        relative_path="${relative_dir}/$(basename "$absolute_path")"
-        append_manifest_entry "$relative_path" "$absolute_path" "$bucket"
-    done < <(find "$absolute_dir" -mindepth 1 -maxdepth 1 -type f | LC_ALL=C sort)
+    while IFS= read -r top_level_entry; do
+        [[ -n "$top_level_entry" ]] || continue
+
+        if [[ -f "$top_level_entry" ]]; then
+            relative_path="${top_level_entry#"$SOURCE_ROOT/"}"
+            append_manifest_entry "$relative_path" "$top_level_entry" "$bucket"
+            continue
+        fi
+
+        if [[ -d "$top_level_entry" ]]; then
+            while IFS= read -r absolute_path; do
+                [[ -n "$absolute_path" ]] || continue
+                relative_path="${absolute_path#"$SOURCE_ROOT/"}"
+                append_manifest_entry "$relative_path" "$absolute_path" "$bucket"
+            done < <(find "$top_level_entry" -type f | LC_ALL=C sort)
+        fi
+    done < <(find "$absolute_dir" -mindepth 1 -maxdepth 1 ! -name '.*' | LC_ALL=C sort)
 }
 
 append_manifest_entry "docker-compose.yml" "$SOURCE_ROOT/docker-compose.yml" "compose"
 append_manifest_entry "docker-compose.prod.yml" "$SOURCE_ROOT/docker-compose.prod.yml" "compose"
-append_manifest_entry "config/moltis.toml" "$SOURCE_ROOT/config/moltis.toml" "config"
-append_optional_manifest_entry "config/mcp-servers.json" "$SOURCE_ROOT/config/mcp-servers.json" "config"
-append_top_level_directory_files "scripts" "$SOURCE_ROOT/scripts" "scripts"
-append_top_level_directory_files "systemd" "$SOURCE_ROOT/systemd" "systemd"
+append_deploy_managed_directory_files "$SOURCE_ROOT/config" "config"
+append_deploy_managed_directory_files "$SOURCE_ROOT/scripts" "scripts"
+append_deploy_managed_directory_files "$SOURCE_ROOT/systemd" "systemd"
 
 notice "Managed surface manifest: compose=$compose_count config=$config_count scripts=$script_count systemd=$systemd_count total=$manifest_count"
 notice "Fetching remote hashes in one SSH roundtrip from ${SSH_TARGET}:${DEPLOY_PATH}"

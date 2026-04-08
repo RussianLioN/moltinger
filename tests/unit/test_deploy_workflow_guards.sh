@@ -608,6 +608,28 @@ test_deploy_workflow_uses_shared_host_automation_script() {
     test_pass
 }
 
+test_deploy_workflow_validates_scripts_manifest_bidirectionally() {
+    test_start "Deploy workflow should validate scripts manifest in both directions"
+
+    if [[ ! -f "$DEPLOY_WORKFLOW" ]]; then
+        test_skip "Missing workflow file: $DEPLOY_WORKFLOW"
+        return
+    fi
+
+    if ! grep -Fq 'Script missing: $script (in manifest but not in repo)' "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml should still fail when manifest entries are missing from the repo"
+        return
+    fi
+
+    if ! grep -Fq 'for script_path in scripts/*.sh; do' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'Script entrypoint missing from manifest: $script_name' "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml should fail when repo shell entrypoints are missing from scripts/manifest.json"
+        return
+    fi
+
+    test_pass
+}
+
 test_active_root_script_migrates_legacy_directory() {
     test_start "Shared active-root script should migrate legacy directory into backup"
 
@@ -1433,6 +1455,7 @@ run_all_tests() {
     test_ssh_tracked_deploy_wrapper_dry_run_quotes_unsafe_refs
     test_checkout_align_script_dry_run_uses_constant_remote_command
     test_deploy_workflow_uses_shared_host_automation_script
+    test_deploy_workflow_validates_scripts_manifest_bidirectionally
     test_gitops_sync_script_dry_run_covers_managed_surface
     test_render_moltis_env_script_renders_runtime_contract
     test_tracked_deploy_script_dry_run_reports_control_plane_steps
