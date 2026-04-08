@@ -62,7 +62,7 @@ run_clawdiy_auth_boundary_tests() {
 
     local tmpdir
     tmpdir="$(mktemp -d)"
-    trap 'rm -rf "$tmpdir"' EXIT
+    trap 'rm -rf -- '"$(printf '%q' "$tmpdir")" EXIT
 
     local pass_env="$tmpdir/pass.env"
     local missing_telegram_env="$tmpdir/missing-telegram.env"
