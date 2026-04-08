@@ -177,7 +177,11 @@ bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/c
 bash|component_codex_session_path_repair|Codex session path repair component|$SCRIPT_DIR/component/test_codex_session_path_repair.sh
 bash|component_beads_worktree_audit|Beads worktree audit component|$SCRIPT_DIR/unit/test_beads_worktree_audit.sh
 bash|component_beads_git_hooks|Beads git hook bootstrap-source component|$SCRIPT_DIR/unit/test_beads_git_hooks.sh
+bash|component_deploy_stall_watchdog|Deploy stall watchdog component|$SCRIPT_DIR/unit/test_deploy_stall_watchdog.sh
 bash|component_deploy_workflow_guards|Deploy workflow guard component|$SCRIPT_DIR/unit/test_deploy_workflow_guards.sh
+bash|component_gitops_check_managed_surface|GitOps managed-surface component|$SCRIPT_DIR/component/test_gitops_check_managed_surface.sh
+bash|component_runner_contract|Test runner contract component|$SCRIPT_DIR/component/test_runner_contract.sh
+bash|component_scripts_verify|Scripts verify component|$SCRIPT_DIR/unit/test_scripts_verify.sh
 bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh
 bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$SCRIPT_DIR/component/test_codex_telegram_consent_e2e.sh
 bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh
@@ -337,6 +341,82 @@ write_suite_json() {
         }' > "$suite_json_file"
 }
 
+suite_status_exit_code() {
+    case "$1" in
+        pass) printf '0\n' ;;
+        fail) printf '1\n' ;;
+        skip) printf '2\n' ;;
+        *) printf '1\n' ;;
+    esac
+}
+
+normalize_suite_json_for_exit_code() {
+    local suite_json_file="$1"
+    local suite_log_file="$2"
+    local exit_code="$3"
+    local suite_id="$4"
+    local suite_name="$5"
+    local lane_name="$6"
+    local reported_status expected_exit diagnostic_copy message temp_file
+
+    if ! jq -e . "$suite_json_file" >/dev/null 2>&1; then
+        write_suite_json "$suite_json_file" fail "$suite_id" "$suite_name" "$lane_name" "Suite produced invalid JSON report (exit $exit_code)"
+        printf 'Suite produced invalid JSON report (exit %s)\n' "$exit_code" >> "$suite_log_file"
+        return 1
+    fi
+
+    reported_status="$(jq -r '.status // "fail"' "$suite_json_file")"
+    expected_exit="$(suite_status_exit_code "$reported_status")"
+
+    if [[ "$exit_code" -eq "$expected_exit" ]]; then
+        return "$expected_exit"
+    fi
+
+    diagnostic_copy="${suite_json_file%.json}.raw.json"
+    cp "$suite_json_file" "$diagnostic_copy"
+
+    message="Suite exited with code $exit_code after producing report status '$reported_status' (expected exit $expected_exit)"
+    printf '%s\n' "$message" >> "$suite_log_file"
+
+    temp_file="$(mktemp)"
+    jq \
+      --arg message "$message" \
+      --arg suite_id "$suite_id" \
+      --arg suite_name "$suite_name" \
+      --arg lane "$lane_name" \
+      '
+      .status = "fail"
+      | .lane = (.lane // $lane)
+      | .suite = {
+          id: (.suite.id // $suite_id),
+          name: (.suite.name // $suite_name)
+        }
+      | .summary = {
+          total: ((.summary.total // ((.cases // []) | length)) + 1),
+          passed: (.summary.passed // 0),
+          failed: ((.summary.failed // 0) + 1),
+          skipped: (.summary.skipped // 0),
+          duration_seconds: (.summary.duration_seconds // 0)
+        }
+      | .failures = ((.failures // []) + [$message])
+      | .cases = ((.cases // []) + [{
+          id: ((.suite.id // $suite_id // "suite") + "_runtime_exit"),
+          name: "runtime_exit",
+          status: "failed",
+          message: $message,
+          lane: (.lane // $lane),
+          duration_ms: 0,
+          suite: {
+            id: (.suite.id // $suite_id),
+            name: (.suite.name // $suite_name)
+          }
+        }])
+      ' "$suite_json_file" > "$temp_file"
+    mv "$temp_file" "$suite_json_file"
+
+    return 1
+}
+
 suite_client_ip() {
     local suite_id="$1"
     local checksum third_octet fourth_octet
@@ -344,6 +424,14 @@ suite_client_ip() {
     third_octet=$((((checksum / 250) % 250) + 1))
     fourth_octet=$(((checksum % 250) + 1))
     printf '10.250.%s.%s\n' "$third_octet" "$fourth_octet"
+}
+
+restore_errexit_state() {
+    if [[ "$1" == "true" ]]; then
+        set -e
+    else
+        set +e
+    fi
 }
 
 execute_suite() {
@@ -357,8 +445,10 @@ execute_suite() {
     local suite_junit_file="$8"
     local stdout_file="$suite_log_file.stdout"
     local client_ip
+    local errexit_was_enabled=false
 
     client_ip=$(suite_client_ip "$suite_id")
+    [[ $- == *e* ]] && errexit_was_enabled=true
 
     mkdir -p "$(dirname "$suite_json_file")" "$(dirname "$suite_log_file")"
     : > "$suite_log_file"
@@ -383,7 +473,7 @@ execute_suite() {
             TEST_CLIENT_IP="$client_ip" \
             bash "$suite_path" >"$stdout_file" 2>"$suite_log_file"
             exit_code=$?
-            set -e
+            restore_errexit_state "$errexit_was_enabled"
             ;;
         node)
             set +e
@@ -396,7 +486,7 @@ execute_suite() {
             TEST_CLIENT_IP="$client_ip" \
             node "$suite_path" >"$suite_json_file" 2>"$suite_log_file"
             exit_code=$?
-            set -e
+            restore_errexit_state "$errexit_was_enabled"
             ;;
         *)
             write_suite_json "$suite_json_file" fail "$suite_id" "$suite_name" "$lane_name" "Unknown runtime: $runtime"
@@ -416,7 +506,12 @@ execute_suite() {
         return 1
     fi
 
-    return "$exit_code"
+    local normalized_exit=0
+    set +e
+    normalize_suite_json_for_exit_code "$suite_json_file" "$suite_log_file" "$exit_code" "$suite_id" "$suite_name" "$lane_name"
+    normalized_exit=$?
+    restore_errexit_state "$errexit_was_enabled"
+    return "$normalized_exit"
 }
 
 write_aggregate_json() {
@@ -510,7 +605,14 @@ run_inside_current_context() {
             local suite_json_file="$TEST_REPORT_DIR/suites/${suite_id}.json"
             local suite_log_file="$TEST_REPORT_DIR/logs/${suite_id}.log"
             local suite_junit_file="$TEST_REPORT_DIR/suites/${suite_id}.xml"
-            execute_suite "$runtime" "$lane_name" "$suite_id" "$suite_name" "$suite_path" "$suite_json_file" "$suite_log_file" "$suite_junit_file" || true
+            local suite_exit_code=0
+            set +e
+            execute_suite "$runtime" "$lane_name" "$suite_id" "$suite_name" "$suite_path" "$suite_json_file" "$suite_log_file" "$suite_junit_file"
+            suite_exit_code=$?
+            set -e
+            if [[ "$suite_exit_code" -gt 2 ]]; then
+                printf 'Runner reported unexpected suite exit code %s for %s\n' "$suite_exit_code" "$suite_id" >> "$suite_log_file"
+            fi
             suite_json_files+=("$suite_json_file")
             selected_any=true
         done < <(suite_entries_for_lane "$lane_name")

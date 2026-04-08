@@ -89,7 +89,8 @@ validate_no_orphans() {
     done
 
     if [[ $orphans -gt 0 ]]; then
-        log_warn "Found $orphans orphan scripts (not in manifest)"
+        log_error "Found $orphans orphan scripts (not in manifest)"
+        return $orphans
     fi
 
     return 0
@@ -235,7 +236,7 @@ main() {
 
     validate_manifest_syntax || errors=$((errors + 1))
     validate_scripts_exist || errors=$((errors + 1))
-    validate_no_orphans
+    validate_no_orphans || errors=$((errors + 1))
     validate_permissions "$fix_mode"
     verify_hashes
     check_dependencies || errors=$((errors + 1))

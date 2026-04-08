@@ -699,6 +699,21 @@
       ],
       "gitops": true
     },
+    "deploy-stall-watchdog.sh": {
+      "version": "1.0.0",
+      "description": "Detect stalled deploy workflow runs from fixture or GitHub API payloads",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "gh",
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "deploy-stall-watchdog"
+      ],
+      "ci": true
+    },
     "align-server-checkout.sh": {
       "version": "1.0.0",
       "description": "Safely align the remote deploy checkout to a target ref/SHA before GitOps sync",
@@ -879,6 +894,23 @@
       ],
       "provides": [
         "gitops-sync-managed-surface"
+      ],
+      "gitops": true,
+      "ci": true
+    },
+    "gitops-check-managed-surface.sh": {
+      "version": "1.0.0",
+      "description": "Compare the GitOps-managed deploy surface against the remote host in one SSH roundtrip",
+      "entrypoint": true,
+      "requires": [
+        "awk",
+        "bash",
+        "jq",
+        "sha256sum",
+        "ssh"
+      ],
+      "provides": [
+        "gitops-check-managed-surface"
       ],
       "gitops": true,
       "ci": true

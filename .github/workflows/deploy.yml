@@ -463,6 +463,22 @@ jobs:
               exit 1
             fi
 
+            # Check every top-level shell entrypoint in repo is tracked by the manifest.
+            ORPHANS=0
+            shopt -s nullglob
+            for script_path in scripts/*.sh; do
+              script_name="${script_path##*/}"
+              if ! jq -e --arg script "$script_name" '.scripts[$script]' scripts/manifest.json >/dev/null 2>&1; then
+                echo "::error::Script entrypoint missing from manifest: $script_name"
+                ORPHANS=$((ORPHANS + 1))
+              fi
+            done
+            shopt -u nullglob
+
+            if [ $ORPHANS -gt 0 ]; then
+              exit 1
+            fi
+
             # Summary
             TOTAL=$(jq -r '.scripts | length' scripts/manifest.json)
             ENTRYPOINTS=$(jq -r '[.scripts[] | select(.entrypoint == true)] | length' scripts/manifest.json)
