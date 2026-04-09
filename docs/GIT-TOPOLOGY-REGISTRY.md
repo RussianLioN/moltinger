@@ -10,8 +10,7 @@
 
 | Worktree ID | Branch | Location Class | Status |
 |---|---|---|---|
-| `moltinger-chore-topology-registry-publish` | `chore/topology-registry-publish` | `sibling-worktree` | Dedicated single-writer publish worktree for topology snapshots. |
-| `primary-root` | `main` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
+| `primary-root` | `chore/topology-registry-publish` | `primary` | Canonical root worktree; neutral base for triage, cleanup, and merges. |
 
 ## Active Local Branches
 
@@ -25,6 +24,16 @@
 | Remote Branch | Current Intent |
 |---|---|
 | `origin/chore/topology-registry-publish` | Dedicated publish remote for topology snapshot publication. |
+
+## Reviewed Intent Awaiting Reconciliation
+
+| Subject Type | Subject Key | Intent | Note | PR |
+|---|---|---|---|---|
+| `worktree` | `moltinger-chore-topology-registry-publish` | `protected` | Dedicated single-writer publish worktree for topology snapshots. | - |
+
+## Registry Warnings
+
+- Reviewed intent contains 1 orphan record(s); keep them until topology catches up or the sidecar is reviewed.
 
 ## Operating Rules
 
