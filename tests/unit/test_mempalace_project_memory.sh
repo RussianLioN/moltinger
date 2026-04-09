@@ -12,6 +12,7 @@ SHARED_CORE_INSTRUCTIONS="$PROJECT_ROOT/.ai/instructions/shared-core.md"
 ROOT_AGENTS="$PROJECT_ROOT/AGENTS.md"
 CLAUDE_SETTINGS="$PROJECT_ROOT/.claude/settings.json"
 MCP_CONFIG_FILE="$PROJECT_ROOT/.mcp.json"
+PROJECT_MEMORY_SKILL="$PROJECT_ROOT/.claude/skills/project-memory/SKILL.md"
 
 setup_unit_mempalace_project_memory() {
     require_commands_or_skip bash jq mktemp cat mkdir rm grep sort || return 2
@@ -107,6 +108,20 @@ run_unit_mempalace_project_memory_tests() {
         test_pass
     else
         test_fail "MemPalace MCP entry must use the repo-managed wrapper script"
+    fi
+
+    test_start "unit_mempalace_docs_offer_simple_skill_entrypoint"
+    if [[ -f "$PROJECT_MEMORY_SKILL" ]] && \
+       grep -Fq 'name: project-memory' "$PROJECT_MEMORY_SKILL" && \
+       grep -Fq 'память проекта' "$PROJECT_MEMORY_SKILL" && \
+       grep -Fq 'Preferred Daily Usage In Codex Or Claude' "$MEMPALACE_DOC" && \
+       grep -Fq 'What "Restart The Session" Means' "$MEMPALACE_DOC" && \
+       grep -Fq 'project-memory' "$MEMPALACE_DOC" && \
+       grep -Fq 'память проекта:' "$MEMPALACE_DOC" && \
+       ! grep -Fq 'If your client reads the repo `.mcp.json`' "$MEMPALACE_DOC"; then
+        test_pass
+    else
+        test_fail "Docs and source skill must expose a simple project-memory entrypoint instead of vague client wording"
     fi
 
     generate_report
