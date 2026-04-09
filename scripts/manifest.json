@@ -949,6 +949,71 @@
       ],
       "cron": "*/5 * * * *"
     },
+    "mempalace-bootstrap.sh": {
+      "version": "1.0.0",
+      "description": "Bootstrap an isolated pinned MemPalace install for Moltinger project-memory search",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "mempalace-bootstrap"
+      ]
+    },
+    "mempalace-common.sh": {
+      "version": "1.0.0",
+      "description": "Shared helper functions and path policy for the repo-managed MemPalace wrapper",
+      "entrypoint": false,
+      "type": "library",
+      "exports": [
+        "write_wrapper_config",
+        "mempalace_current_version",
+        "run_mempalace",
+        "ensure_bootstrap_ready",
+        "ensure_index_ready",
+        "collect_curated_corpus_paths",
+        "rebuild_curated_corpus_snapshot",
+        "acquire_refresh_lock",
+        "swap_built_palace"
+      ]
+    },
+    "mempalace-mcp-server.sh": {
+      "version": "1.0.0",
+      "description": "Expose the pinned repo-managed MemPalace MCP server with fail-closed bootstrap and index guards",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "mempalace-mcp-server"
+      ]
+    },
+    "mempalace-refresh.sh": {
+      "version": "1.0.0",
+      "description": "Rebuild the curated Moltinger project-memory corpus and refresh the pinned MemPalace index serially",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "mempalace-refresh"
+      ]
+    },
+    "mempalace-search.sh": {
+      "version": "1.0.0",
+      "description": "Query the curated Moltinger project-memory index through the pinned MemPalace wrapper",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "python3"
+      ],
+      "provides": [
+        "mempalace-search"
+      ]
+    },
     "moltis-storage-maintenance.sh": {
       "version": "1.0.0",
       "description": "Safely reclaim Docker cache, stale probe volumes, journald budget, and old pre_deploy sidecars on the Moltinger host",

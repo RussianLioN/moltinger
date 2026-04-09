@@ -181,6 +181,7 @@ bash|component_deploy_stall_watchdog|Deploy stall watchdog component|$SCRIPT_DIR
 bash|component_deploy_workflow_guards|Deploy workflow guard component|$SCRIPT_DIR/unit/test_deploy_workflow_guards.sh
 bash|component_gitops_check_managed_surface|GitOps managed-surface component|$SCRIPT_DIR/component/test_gitops_check_managed_surface.sh
 bash|component_runner_contract|Test runner contract component|$SCRIPT_DIR/component/test_runner_contract.sh
+bash|component_mempalace_project_memory|MemPalace project memory contract|$SCRIPT_DIR/unit/test_mempalace_project_memory.sh
 bash|component_scripts_verify|Scripts verify component|$SCRIPT_DIR/unit/test_scripts_verify.sh
 bash|component_test_stack_contract|Hermetic test stack contract|$SCRIPT_DIR/unit/test_test_stack_contract.sh
 bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh

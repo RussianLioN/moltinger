@@ -1,0 +1,9 @@
+# Curated MemPalace corpus for Moltinger project memory.
+MEMORY.md
+SESSION_SUMMARY.md
+docs/**/*.md
+!docs/GIT-TOPOLOGY-REGISTRY.md
+knowledge/**/*.md
+specs/**/spec.md
+specs/**/plan.md
+specs/**/tasks.md
