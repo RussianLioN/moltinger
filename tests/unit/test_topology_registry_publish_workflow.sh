@@ -37,23 +37,27 @@ run_all_tests() {
     test_start "topology_registry_publish_workflow_updates_only_publish_branch_and_registry_doc"
     if [[ -f "$WORKFLOW_FILE" ]] && \
        rg -q 'PUBLISH_BRANCH="chore/topology-registry-publish"' "$WORKFLOW_FILE" && \
-       rg -q 'git switch -C "\$PUBLISH_BRANCH"' "$WORKFLOW_FILE" && \
+       rg -q 'git switch -C "\$PUBLISH_BRANCH" "origin/main"' "$WORKFLOW_FILE" && \
        rg -q './scripts/git-topology-registry.sh refresh --write-doc' "$WORKFLOW_FILE" && \
+       rg -q 'git diff --name-only origin/main\.\.HEAD' "$WORKFLOW_FILE" && \
        rg -q 'docs/GIT-TOPOLOGY-REGISTRY.md' "$WORKFLOW_FILE" && \
        ! rg -q 'docs/GIT-TOPOLOGY-INTENT.yaml' "$WORKFLOW_FILE"; then
         test_pass
     else
-        test_fail "Topology registry publish workflow must reconcile only the publish branch and the generated registry doc"
+        test_fail "Topology registry publish workflow must recreate the publish branch from origin/main and keep the branch diff limited to the generated registry doc"
     fi
 
-    test_start "topology_registry_publish_workflow_creates_or_updates_pr"
+    test_start "topology_registry_publish_workflow_handles_pr_creation_or_manual_fallback"
     if [[ -f "$WORKFLOW_FILE" ]] && \
        rg -q 'gh pr list --base main --head "\$PUBLISH_BRANCH"' "$WORKFLOW_FILE" && \
        rg -q 'gh pr edit "\$EXISTING_PR_NUMBER"' "$WORKFLOW_FILE" && \
-       rg -q 'gh pr create --base main --head "\$PUBLISH_BRANCH"' "$WORKFLOW_FILE"; then
+       rg -q 'gh pr create --base main --head "\$PUBLISH_BRANCH"' "$WORKFLOW_FILE" && \
+       rg -q 'createPullRequest\|not permitted to create or approve pull requests' "$WORKFLOW_FILE" && \
+       rg -q 'pr_state=manual_required' "$WORKFLOW_FILE" && \
+       rg -q '::warning::GitHub Actions cannot open the publish PR automatically' "$WORKFLOW_FILE"; then
         test_pass
     else
-        test_fail "Topology registry publish workflow must create or update the dedicated publish PR"
+        test_fail "Topology registry publish workflow must update the publish PR when possible and degrade cleanly when GitHub Actions cannot create it"
     fi
 
     generate_report
