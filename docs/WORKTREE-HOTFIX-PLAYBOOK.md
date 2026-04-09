@@ -17,6 +17,14 @@ Do not fix `command-worktree` directly in `main`.
 
 Always use a short-lived fix branch from fresh `main`.
 
+If the helper or command behaves abnormally:
+
+- do not continue the original task through manual git, PR, cleanup, or publish steps just to get past the broken helper
+- treat the abnormal behavior itself as the defect to fix
+- run RCA and repair the owning contract first
+
+Manual cleanup or hygiene actions are acceptable only as temporary mitigation under explicit user direction, never as a substitute for the helper fix.
+
 ## Simple Workflow
 
 1. Reproduce the problem once.
