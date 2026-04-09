@@ -67,6 +67,7 @@ services:
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-moltinger-test}
     volumes:
       - ./:/workspace
+      - /workspace/node_modules
     depends_on:
       moltis:
         condition: service_healthy

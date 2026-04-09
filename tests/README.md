@@ -21,12 +21,12 @@ Legacy-скрипты `./tests/run_unit.sh`, `./tests/run_integration.sh`, `./te
 
 | Group | Состав |
 | --- | --- |
-| `pr` | `static`, `component`, `integration_local`, `security_api`, `mcp_fake` |
+| `pr` | `static`, `component`, `topology_registry`, `integration_local`, `security_api`, `mcp_fake` |
 | `main` | `pr` + `e2e_browser` |
-| `nightly` | `resilience`, `live_external`, `security_runtime_smoke` |
+| `nightly` | `resilience`, `security_runtime_smoke`, `clawdiy_live_deploy`, `telegram_live`, `provider_live`, `mcp_real` |
 | `all` | `main` + `nightly` |
-| `unit_legacy` | `static`, `component` |
-| `integration_legacy` | `integration_local`, `provider_live`, `telegram_live`, `mcp_real` |
+| `unit_legacy` | `static`, `component`, `topology_registry` |
+| `integration_legacy` | `topology_registry`, `integration_local`, `provider_live`, `telegram_live`, `mcp_real` |
 | `security_legacy` | `security_api`, `security_runtime_smoke` |
 | `e2e_legacy` | `e2e_browser`, `resilience` |
 
@@ -77,6 +77,8 @@ Exit contract:
 - writable config volume для Moltis поверх seed-конфига из `tests/fixtures/config`
 - автоматический bootstrap product onboarding до chat-ready состояния перед `integration_local`, `security_api` и `e2e_browser`
 - отдельный `test-runner` container с pinned toolchain (`bash`, `curl`, `jq`, `coreutils`, Playwright base image)
+- `test-runner` изолирует `/workspace/node_modules`, чтобы локальные host-пакеты не ломали pinned container runtime
+- CI использует lockfile + `npm ci`, а не floating `npm install`
 - отсутствие зависимости от `/opt/moltinger/.env` и production bind-mounts
 
 Этот hermetic stack является test fixture для CI и локальной воспроизводимости blocking lanes. Он не считается authoritative runtime для production/remote проверки; реальные удалённые проверки остаются только в `live_external` и `resilience`.
