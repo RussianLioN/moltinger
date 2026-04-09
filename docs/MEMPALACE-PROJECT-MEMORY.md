@@ -38,7 +38,28 @@ The wrapper follows the official MemPalace `init -> mine` flow against a curated
 ./scripts/mempalace-search.sh "why did we change deploy flow"
 ```
 
-If your client reads the repo `.mcp.json`, restart it after bootstrap and refresh so the `mempalace` MCP server becomes available through the wrapper script.
+### Preferred Daily Usage In Codex Or Claude
+
+For everyday work, you should not need to remember shell commands.
+
+After the skill sync, you can simply write things like:
+
+- `память проекта: почему мы меняли deploy flow?`
+- `найди в памяти проекта RCA про gitops`
+- `use project-memory to recall the old rollout decision`
+
+That should trigger the `project-memory` skill, which reads the lightweight project memory files first and then uses the MemPalace wrapper when broader recall is needed.
+
+### What "Restart The Session" Means
+
+This does **not** mean restarting Moltis or the shell.
+
+It means an already open Codex or Claude conversation/session that started **before**:
+
+- the repo gained the new `.mcp.json` entry;
+- or the new `project-memory` skill was synced into the local Codex skill bridge.
+
+In that case, the already running session may not discover the new MCP server or the newly added skill automatically. Starting a new Codex or Claude session is usually needed only once after setup or after adding a new skill, not for everyday queries.
 
 ## What Gets Indexed
 
@@ -105,6 +126,10 @@ Use MemPalace for:
 - past decision lookup;
 - cross-doc historical recall;
 - finding related RCA, plans, and knowledge notes.
+
+Preferred user-facing entrypoint in Codex/Claude:
+- mention `project-memory`
+- or start the request with `память проекта:`
 
 Do not use MemPalace as proof of:
 - current runtime state;
