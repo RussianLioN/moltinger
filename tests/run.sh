@@ -200,6 +200,7 @@ LIST
         topology_registry)
             cat <<LIST
 bash|topology_registry_unit|Git topology registry unit|$SCRIPT_DIR/unit/test_git_topology_registry.sh
+bash|topology_registry_publish_workflow|Git topology registry publish workflow|$SCRIPT_DIR/unit/test_topology_registry_publish_workflow.sh
 bash|topology_registry_integration|Git topology registry integration|$SCRIPT_DIR/integration/test_git_topology_registry.sh
 bash|topology_registry_e2e|Git topology registry workflow E2E|$SCRIPT_DIR/e2e/test_git_topology_registry_workflow.sh
 LIST

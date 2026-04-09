@@ -1,0 +1,119 @@
+name: Topology Registry Publish
+
+concurrency:
+  group: topology-registry-publish
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    name: Publish shared topology registry snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Prepare dedicated publish branch
+        id: branch
+        run: |
+          set -euo pipefail
+
+          PUBLISH_BRANCH="chore/topology-registry-publish"
+          echo "branch=$PUBLISH_BRANCH" >> "$GITHUB_OUTPUT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin "$PUBLISH_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$PUBLISH_BRANCH"
+            git switch -C "$PUBLISH_BRANCH" "origin/$PUBLISH_BRANCH"
+          else
+            git fetch origin main
+            git switch -C "$PUBLISH_BRANCH" "origin/main"
+          fi
+
+      - name: Refresh tracked topology registry
+        id: refresh
+        run: |
+          set -euo pipefail
+
+          PUBLISH_BRANCH="${{ steps.branch.outputs.branch }}"
+
+          ./scripts/git-topology-registry.sh refresh --write-doc
+
+          mapfile -t changed_files < <(git status --porcelain | awk '{print $2}')
+
+          if [[ "${#changed_files[@]}" -eq 0 ]]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for file in "${changed_files[@]}"; do
+            if [[ "$file" != "docs/GIT-TOPOLOGY-REGISTRY.md" ]]; then
+              echo "::error::Unexpected file changed during topology publish: $file"
+              git status --short
+              exit 1
+            fi
+          done
+
+          git add docs/GIT-TOPOLOGY-REGISTRY.md
+          git commit -m "docs(topology): publish remote-governance snapshot"
+          git push --force-with-lease origin "$PUBLISH_BRANCH"
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update publish PR
+        if: steps.refresh.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          PUBLISH_BRANCH="${{ steps.branch.outputs.branch }}"
+          TITLE="docs(topology): publish remote-governance snapshot"
+          BODY_FILE="$(mktemp)"
+
+          cat > "$BODY_FILE" <<'EOF'
+          ## Automated topology registry publish
+
+          This PR updates the tracked `docs/GIT-TOPOLOGY-REGISTRY.md` snapshot from the dedicated publish branch.
+
+          Contract:
+          - tracked registry scope: shared remote governance snapshot
+          - local worktrees and local-only branches remain live-only
+          - generation performed through `scripts/git-topology-registry.sh refresh --write-doc` on `chore/topology-registry-publish`
+          EOF
+
+          EXISTING_PR_NUMBER="$(gh pr list --base main --head "$PUBLISH_BRANCH" --state open --json number --jq '.[0].number // empty')"
+
+          if [[ -n "$EXISTING_PR_NUMBER" ]]; then
+            gh pr edit "$EXISTING_PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"
+          else
+            gh pr create --base main --head "$PUBLISH_BRANCH" --title "$TITLE" --body-file "$BODY_FILE"
+          fi
+
+          rm -f "$BODY_FILE"
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## Topology Registry Publish"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Publish branch | \`${{ steps.branch.outputs.branch || 'n/a' }}\` |"
+            echo "| Changes pushed | \`${{ steps.refresh.outputs.has_changes || 'false' }}\` |"
+            echo "| Tracked scope | \`shared_remote_governance\` |"
+            echo "| Local topology | \`live_only\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

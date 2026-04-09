@@ -16,13 +16,16 @@ docs/GIT-TOPOLOGY-REGISTRY.md
 It is generated from live git topology plus reviewed intent sidecar.
 
 ```bash
+scripts/git-topology-registry.sh publish
 scripts/git-topology-registry.sh check
-scripts/git-topology-registry.sh refresh --write-doc
 scripts/git-topology-registry.sh status
+scripts/git-topology-registry.sh refresh --write-doc
 ```
 
 Use `check` when branch/worktree context matters or before cleanup actions.
-Use `refresh --write-doc` only for explicit topology snapshot publication from a dedicated non-main publish worktree/branch, not from ordinary feature branches.
+`docs/GIT-TOPOLOGY-REGISTRY.md` is the tracked shared remote-governance snapshot; local worktrees and local-only branches remain live-only through `status`/`check`.
+Use `publish` as the normal path to dispatch the official topology publish workflow.
+Use `refresh --write-doc` only as the low-level manual publication path from the dedicated non-main publish worktree/branch, not from ordinary feature branches.
 In Codex/App sessions, `refresh --write-doc` may require approval if the shared repo `.git` directory is outside the current writable boundary.
 Rule: `docs/rules/topology-registry-single-writer-publish-path.md`
 

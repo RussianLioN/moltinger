@@ -1,35 +1,38 @@
-# UAT Registry Snapshot Preservation (RCA-010)
+# UAT Registry Drift Handling
 
 **Status:** Active
-**Effective date:** 2026-03-09
+**Effective date:** 2026-04-09
 **Scope:** All UAT worktrees and maintainers working with `docs/GIT-TOPOLOGY-REGISTRY.md`
 
 ## Problem This Rule Prevents
 
-Blindly resetting, rebasing, or fast-forwarding a UAT worktree can discard a newer branch-local topology snapshot before it is promoted into the owning branch.
+After the remote-governance scope change, `docs/GIT-TOPOLOGY-REGISTRY.md` is no longer a branch-local or workstation-local audit trail.
+If a UAT worktree carries local modifications to that file, treating them as authoritative evidence can promote accidental drift into the tracked publish lane.
 
 ## Mandatory Protocol
 
-Before updating or resetting any UAT worktree that contains `docs/GIT-TOPOLOGY-REGISTRY.md`:
+Before updating, resetting, rebasing, or fast-forwarding any UAT worktree that contains local changes to `docs/GIT-TOPOLOGY-REGISTRY.md`:
 
-1. Check whether UAT has a local diff:
+1. Inspect whether the diff is real:
    - `git -C <uat-worktree> status --short -- docs/GIT-TOPOLOGY-REGISTRY.md`
-2. If yes, compare it to the owning branch snapshot:
-   - `diff -u <owning-branch>/docs/GIT-TOPOLOGY-REGISTRY.md <uat-worktree>/docs/GIT-TOPOLOGY-REGISTRY.md`
-3. If UAT contains newer or additional topology evidence, promote that snapshot into the owning branch first:
-   - either by copying the snapshot and landing it there
-   - or by running `scripts/git-topology-registry.sh refresh --write-doc` from the owning branch and landing the result there
-4. Only after the owning branch has absorbed the snapshot may the UAT worktree be reset, rebased, or fast-forwarded.
+2. If the file is dirty, compare it to the current tracked snapshot:
+   - `diff -u docs/GIT-TOPOLOGY-REGISTRY.md <uat-worktree>/docs/GIT-TOPOLOGY-REGISTRY.md`
+3. Treat any UAT-local diff as **drift to inspect**, not as authoritative branch-local evidence.
+4. If live remote topology or reviewed intent truly changed, refresh the official tracked snapshot through:
+   - `scripts/git-topology-registry.sh publish`
+   - or the emergency low-level publish path on `chore/topology-registry-publish`
+5. Only after the tracked publish path is safe may the UAT worktree be reset, rebased, or fast-forwarded.
 
 ## Ownership Rule
 
 - `live git` remains the source of truth for topology
-- `docs/GIT-TOPOLOGY-REGISTRY.md` remains the branch-local audit trail
-- UAT may generate newer audit evidence during testing
-- that evidence belongs in the owning branch before UAT is treated as disposable
+- `docs/GIT-TOPOLOGY-REGISTRY.md` is the shared remote-governance snapshot
+- local UAT topology remains live-only and must not be promoted blindly into the tracked markdown
+- UAT is not an authoritative publication lane for the tracked snapshot
 
 ## Expected Behavior
 
-- First: inspect UAT for a local registry diff
-- Second: preserve/promote the snapshot into the owning branch if it is newer
-- Third: update or reset UAT only after the owning branch is safe
+- First: inspect a UAT registry diff as possible drift
+- Second: decide whether there is real shared remote-governance change or just local snapshot noise
+- Third: use the official publish flow if the tracked snapshot really needs refresh
+- Fourth: reset or update UAT only after the shared publish path is safe

@@ -10,7 +10,8 @@ if [[ -x "$REGISTRY_SCRIPT" ]]; then
   if ! output="$("$REGISTRY_SCRIPT" check 2>&1)"; then
     printf '%s\n' "$output" >&2
     echo "[git-topology-registry] post-rewrite detected topology drift." >&2
-    echo "[git-topology-registry] Ordinary branches may continue; publish the tracked snapshot later from the dedicated non-main branch 'chore/topology-registry-publish' in its own publish worktree." >&2
+    echo "[git-topology-registry] Ordinary branches may continue; local worktree and local-only branch topology remain live-only here." >&2
+    echo "[git-topology-registry] Dispatch the shared publish flow later via scripts/git-topology-registry.sh publish if the tracked remote-governance snapshot needs refresh." >&2
   fi
 fi
 

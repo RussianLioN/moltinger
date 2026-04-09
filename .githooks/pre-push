@@ -33,7 +33,8 @@ if [[ -x "$REGISTRY_SCRIPT" ]]; then
     fi
     echo "[git-topology-registry] Push allowed with stale topology snapshot." >&2
     echo "[git-topology-registry] Ordinary branches do not own tracked snapshot publication." >&2
-    echo "[git-topology-registry] Publish later from the dedicated non-main branch 'chore/topology-registry-publish' in its own publish worktree via scripts/git-topology-registry.sh refresh --write-doc." >&2
+    echo "[git-topology-registry] Local worktree and local-only branch topology remain live-only here." >&2
+    echo "[git-topology-registry] Dispatch the shared publish flow later via scripts/git-topology-registry.sh publish." >&2
   fi
 fi
 

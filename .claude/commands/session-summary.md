@@ -80,7 +80,7 @@ This command should be run:
 - Before creating PRs
 
 When topology changed outside `/worktree`, this command is the preferred session-boundary inspection point.
-If the tracked topology snapshot must be published, do that separately via `command-git-topology refresh` or `scripts/git-topology-registry.sh refresh --write-doc` from a dedicated non-main topology-publish worktree/branch.
+If the tracked topology snapshot must be published, do that separately via `command-git-topology publish` or `scripts/git-topology-registry.sh publish`. Keep `refresh --write-doc` as the low-level manual path for the dedicated non-main topology-publish worktree/branch only.
 
 ## Example Output
 

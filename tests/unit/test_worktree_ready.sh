@@ -372,7 +372,7 @@ set -euo pipefail
 if [[ "\${1:-}" == "check" ]]; then
   printf 'status=%s\n' "${raw_status}"
   if [[ "${raw_status}" == "stale" ]]; then
-    printf "Publish from the dedicated non-main topology publish branch 'chore/topology-registry-publish': scripts/git-topology-registry.sh refresh --write-doc\n"
+    printf "Dispatch the shared publish flow via: scripts/git-topology-registry.sh publish\n"
     exit 1
   fi
   exit 0
@@ -1095,7 +1095,7 @@ test_doctor_stale_topology_remains_warning_not_blocker() {
     assert_eq "0" "$rc" "Stale topology should remain non-blocking for ordinary doctor"
     assert_contains "$output" 'Status: ready_for_codex' "Ordinary doctor should remain ready when stale topology is the only issue"
     assert_contains "$output" 'Topology: stale' "Ordinary doctor should surface stale topology explicitly"
-    assert_contains "$output" 'Publish the tracked snapshot later from a dedicated non-main topology-publish worktree/branch' "Ordinary doctor should defer topology publication to the dedicated publish path"
+    assert_contains "$output" 'scripts/git-topology-registry.sh publish' "Ordinary doctor should defer topology publication to the shared publish flow"
     if [[ "$output" == *'refresh --write-doc'* ]]; then
         test_fail "Ordinary doctor should not suggest auto-publishing topology from the current branch"
     fi
@@ -1223,7 +1223,7 @@ test_finish_stale_topology_remains_warning_not_blocker() {
     assert_contains "$output" 'Phase: finish' "Ordinary finish should render the finish phase"
     assert_contains "$output" 'Final State: finish_ready' "Ordinary finish should keep a ready final state when topology is merely stale"
     assert_contains "$output" 'Topology: stale' "Ordinary finish should surface stale topology explicitly"
-    assert_contains "$output" 'Publish the tracked snapshot later from a dedicated non-main topology-publish worktree/branch' "Ordinary finish should defer topology publication to the dedicated publish path"
+    assert_contains "$output" 'scripts/git-topology-registry.sh publish' "Ordinary finish should defer topology publication to the shared publish flow"
     if [[ "$output" == *'refresh --write-doc'* ]]; then
         test_fail "Ordinary finish should not suggest auto-publishing topology from the current branch"
     fi
