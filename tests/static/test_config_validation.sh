@@ -56,6 +56,15 @@ OPENCLAW_IMPROVEMENT_LEARNER_SKILL="$PROJECT_ROOT/skills/openclaw-improvement-le
 CODEX_UPDATE_SKILL="$PROJECT_ROOT/skills/codex-update/SKILL.md"
 POST_CLOSE_TASK_CLASSIFIER_SKILL="$PROJECT_ROOT/skills/post-close-task-classifier/SKILL.md"
 MOLTIS_REPO_HOOKS_SYNC_SCRIPT="$PROJECT_ROOT/scripts/moltis-repo-hooks-sync.sh"
+CODEX_UPSTREAM_WATCHER_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-upstream-watcher.sh"
+CODEX_UPSTREAM_WATCHER_REPORT_HELPER="$PROJECT_ROOT/scripts/codex-cli-upstream-watcher-report.py"
+CODEX_UPDATE_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-monitor.sh"
+CODEX_UPDATE_MONITOR_CONTEXT_HELPER="$PROJECT_ROOT/scripts/codex-cli-update-monitor-context.py"
+CODEX_UPDATE_MONITOR_REPORT_HELPER="$PROJECT_ROOT/scripts/codex-cli-update-monitor-report.py"
+CODEX_UPDATE_ADVISOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-advisor.sh"
+CODEX_UPDATE_ADVISOR_REPORT_HELPER="$PROJECT_ROOT/scripts/codex-cli-update-advisor-report.py"
+CODEX_ADVISORY_DOC="$PROJECT_ROOT/docs/codex-moltis-native-advisory.md"
+CODEX_WATCHER_DOC="$PROJECT_ROOT/docs/codex-cli-upstream-watcher.md"
 
 validate_toml() {
     local file_path="$1"
@@ -286,6 +295,39 @@ PY
         test_pass
     else
         test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under MOLTIS_REPO_HOOKS_SOURCE_ROOT"
+    fi
+
+    test_start "static_codex_advisory_telegram_contract_stays_one_way_until_upstream_supports_terminal_ingress"
+    if rg -Fq 'Telegram channel capabilities do not advertise interactive components.' "$TOML_CONFIG" && \
+       rg -Fq '`MessageReceived` and `Command` hooks are read-only' "$TOML_CONFIG" && \
+       ! rg -Fq 'name = "codex-advisory-router"' "$TOML_CONFIG" && \
+       [[ -f "$CODEX_UPSTREAM_WATCHER_REPORT_HELPER" ]] && \
+       [[ -f "$CODEX_ADVISORY_DOC" ]] && \
+       [[ -f "$CODEX_WATCHER_DOC" ]] && \
+       rg -Fq 'Telegram channel не заявляет interactive components' "$CODEX_ADVISORY_DOC" && \
+       rg -Fq 'MessageReceived` и `Command` hooks остаются read-only' "$CODEX_ADVISORY_DOC" && \
+       rg -Fq 'Telegram channel не заявляет interactive components' "$CODEX_WATCHER_DOC" && \
+       ! rg -Fq "python3 - \\" "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
+       ! rg -Fq '/codex_da' "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
+       ! rg -Fq '/codex_net' "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
+       ! rg -Fq '/codex-followup' "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
+       ! rg -Fq 'codex-consent:' "$CODEX_UPSTREAM_WATCHER_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Codex advisory Telegram contract must stay honest: repo config/docs must state the official one-way limitation, no MessageReceived router hook should be configured, and watcher source must not carry retired /codex_* or codex-consent artifacts"
+    fi
+
+    test_start "static_codex_advisory_report_renderers_use_file_backed_helpers"
+    if [[ -f "$CODEX_UPSTREAM_WATCHER_REPORT_HELPER" ]] && \
+       [[ -f "$CODEX_UPDATE_MONITOR_CONTEXT_HELPER" ]] && \
+       [[ -f "$CODEX_UPDATE_MONITOR_REPORT_HELPER" ]] && \
+       [[ -f "$CODEX_UPDATE_ADVISOR_REPORT_HELPER" ]] && \
+       ! rg -Fq "python3 - \\" "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
+       ! rg -Fq "python3 - \\" "$CODEX_UPDATE_MONITOR_SCRIPT" && \
+       ! rg -Fq "python3 - \\" "$CODEX_UPDATE_ADVISOR_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Codex advisory watcher, monitor, and advisor must use tracked file-backed Python helpers on the critical path instead of inline python blocks"
     fi
 
     test_start "static_browser_config_declares_container_host_for_docker_runtime"

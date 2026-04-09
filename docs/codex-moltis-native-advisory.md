@@ -2,11 +2,11 @@
 
 ## Статус
 
-На `2026-03-12` Telegram-ownership для advisory flow считается такой:
+На `2026-04-09` authoritative Telegram-contract для advisory flow считается такой:
 
 - watcher и advisor в этом репозитории только готовят нормализованный сигнал;
 - Moltis должен быть единственным владельцем Telegram alert UX;
-- production-safe default остаётся `one_way_only`, пока callback path в Moltis не подтверждён end-to-end.
+- production-safe default остаётся `one_way_only`, потому что официальный контракт Moltis пока не даёт этому репозиторию честно включить интерактивный Telegram follow-up.
 
 ## Простыми словами
 
@@ -16,6 +16,11 @@
 2. Moltis отвечает на вопрос: `как показать это пользователю в Telegram и как принять его действие`.
 
 Это сделано специально, чтобы больше не повторять старую ошибку, когда repo-side script задавал вопрос в Telegram, а ответ перехватывал generic Moltis chat.
+
+Причина теперь зафиксирована явно:
+
+- в официальной документации Moltis Telegram channel не заявляет interactive components;
+- `MessageReceived` и `Command` hooks остаются read-only, то есть не могут терминально перехватить ingress раньше generic chat.
 
 ## Новый producer contract
 
@@ -44,18 +49,19 @@ scripts/moltis-codex-advisory-intake.sh
 
 Он принимает уже нормализованный advisory event и делает одну из двух вещей:
 
-- healthy path: рендерит alert с inline callback-ready markup;
-- degraded path: рендерит честный `one-way alert` без `/codex_*`.
+- contract preview path: может отрендерить interactive-ready артефакт для hermetic/handoff проверки;
+- production-safe path: рендерит честный `one-way alert` без `/codex_*`.
 
 Важно:
 
 - этот helper не должен снова становиться “вторым владельцем Telegram”;
 - его задача здесь — зафиксировать contract, текст уведомления, audit record и repo-managed runtime surface;
+- interactive preview не равен live Telegram capability;
 - конечный callback UX всё равно должен жить внутри Moltis core.
 
 ## Advisory session store и router
 
-Для интерактивного пути теперь есть ещё два helper-а:
+Для contract/handoff surface есть ещё два helper-а:
 
 ```bash
 scripts/codex-advisory-session-store.sh
@@ -75,9 +81,9 @@ scripts/moltis-codex-advisory-router.sh
 
 Важно:
 
-- recovery-команда теперь есть только как запасной путь восстановления;
+- recovery-команда теперь есть только как запасной путь восстановления в hermetic contract;
 - она не должна рекламироваться как primary UX в самом Telegram alert;
-- primary UX для пользователя остаётся только через inline callback-кнопки Moltis.
+- primary UX для пользователя в production сейчас вообще не интерактивный: Telegram advisory остаётся one-way.
 
 ## Audit record
 
@@ -124,7 +130,8 @@ Repository-managed config теперь фиксирует такие env keys:
 - `MOLTIS_CODEX_ADVISORY_CALLBACK_WINDOW_HOURS`
 - `MOLTIS_CODEX_ADVISORY_RECOVERY_COMMAND`
 
-Пока `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE` должен оставаться `one_way_only`, если Moltis runtime не подтвердил рабочий callback ingress.
+Пока `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE` должен оставаться `one_way_only`.
+В этом репозитории это уже не условная осторожность, а зафиксированный production contract до появления upstream Moltis capability для terminal Telegram ingress.
 
 ## Минимальная локальная проверка
 
@@ -150,7 +157,7 @@ bash scripts/moltis-codex-advisory-intake.sh \
   --stdout summary
 ```
 
-3. Hermetic healthy path: alert -> accept -> recommendations:
+3. Hermetic contract path: alert -> accept -> recommendations:
 
 ```bash
 make codex-advisory-e2e
@@ -173,14 +180,14 @@ bash scripts/moltis-codex-advisory-intake.sh \
 
 Этот отчёт уже содержит:
 
-- текст alert для healthy path;
+- текст alert для contract-preview path;
 - текст follow-up рекомендаций;
 - вшитый audit record для interactive path;
 - вшитый audit record для degraded path.
 
-## Live-proof checklist
+## Verification checklist
 
-Перед rollout или review достаточно пройти такой минимальный набор:
+Перед review достаточно пройти такой минимальный набор:
 
 ```bash
 ./scripts/sync-claude-skills-to-codex.sh --check
@@ -194,13 +201,13 @@ make codex-advisory-e2e
 
 - bridge остаётся в синхроне;
 - runtime docs/config не расходятся;
-- healthy path доказан;
-- degraded path доказан;
+- one-way contract доказан;
+- hermetic handoff surface доказан;
 - audit trail виден в одном JSON-артефакте.
 
 ## Safe Disable и Rollback
 
-Если interactive advisory path временно нельзя держать включённым, безопасный rollback должен быть только конфигурационным:
+Если interactive advisory path когда-нибудь появится upstream и его временно нельзя будет держать включённым, безопасный rollback должен быть только конфигурационным:
 
 1. Оставить `MOLTIS_CODEX_ADVISORY_INTERACTIVE_MODE=one_way_only`.
 2. Не подключать или временно отключить Moltis callback hook для `moltis-codex-advisory-router.sh`.

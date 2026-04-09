@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 WATCHER_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-upstream-watcher.sh"
 CONSENT_STORE_SCRIPT="$PROJECT_ROOT/scripts/codex-telegram-consent-store.sh"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-upstream-watcher"
+WATCHER_TIMEOUT_SECONDS="${WATCHER_TIMEOUT_SECONDS:-20}"
 FAKE_TELEGRAM_BIN_DIR=""
 FAKE_TELEGRAM_STATE_DIR=""
 FAKE_TELEGRAM_ENV_FILE=""
@@ -58,13 +59,39 @@ run_watcher() {
     local state_file="$3"
     shift 3
 
+    local stdout_file="$output_dir/watcher.stdout.log"
+    local stderr_file="$output_dir/watcher.stderr.log"
+    local pid elapsed rc
+
     bash "$WATCHER_SCRIPT" \
         --mode "$mode" \
         --state-file "$state_file" \
         --json-out "$output_dir/report.json" \
         --summary-out "$output_dir/summary.md" \
         --stdout none \
-        "$@"
+        "$@" >"$stdout_file" 2>"$stderr_file" &
+    pid=$!
+    elapsed=0
+
+    while kill -0 "$pid" 2>/dev/null; do
+        if (( elapsed >= WATCHER_TIMEOUT_SECONDS )); then
+            pkill -P "$pid" 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            [[ -s "$stdout_file" ]] && cat "$stdout_file"
+            [[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+            printf 'Watcher timed out after %ss; likely reintroduced non-terminating report path.\n' "$WATCHER_TIMEOUT_SECONDS" >&2
+            return 124
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
+    wait "$pid"
+    rc=$?
+    [[ -s "$stdout_file" ]] && cat "$stdout_file"
+    [[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+    return $rc
 }
 
 run_component_codex_cli_upstream_watcher_tests() {
@@ -80,7 +107,20 @@ run_component_codex_cli_upstream_watcher_tests() {
         return
     fi
 
-    local work_dir state_file report summary summary_text call_text consent_store_dir request_id store_record
+    local work_dir state_file report summary summary_text call_text consent_store_dir
+
+    test_start "component_codex_cli_upstream_watcher_manual_path_finishes_within_timeout_budget"
+    work_dir="$(secure_temp_dir codex-upstream-watcher-timeout)"
+    state_file="$work_dir/state.json"
+    if run_watcher manual "$work_dir" "$state_file" \
+        --release-file "$FIXTURE_DIR/releases-0.113.0.html" \
+        --advisor-bridge-disabled; then
+        assert_file_exists "$work_dir/report.json" "Watcher should produce a JSON report before the timeout budget expires"
+        assert_file_exists "$work_dir/summary.md" "Watcher should produce a summary before the timeout budget expires"
+        test_pass
+    else
+        test_fail "Watcher manual path must finish inside the bounded timeout budget"
+    fi
 
     test_start "component_codex_cli_upstream_watcher_emits_extended_schema_shape"
     work_dir="$(secure_temp_dir codex-upstream-watcher-schema)"
@@ -180,14 +220,13 @@ run_component_codex_cli_upstream_watcher_tests() {
         --telegram-consent-store-dir "$consent_store_dir"
     report="$work_dir/report.json"
     call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
-    request_id="$(jq -r '.followup.consent.pending_state.request_id' "$report")"
-    store_record="$consent_store_dir/${request_id}.json"
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Fresh scheduler run should deliver the upstream alert"
     assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Retired watcher flow should keep consent disabled"
     assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Retired watcher flow should stay in one-way mode"
-    assert_contains "$(jq -r '.notes[]' "$report")" "Legacy Telegram consent UX retired" "Watcher should explain that the old consent flow is retired"
-    if [[ -n "$request_id" && -f "$store_record" ]]; then
-        test_fail "Retired watcher flow must not persist a consent store record"
+    assert_contains "$(jq -r '.notes[]' "$report")" "Telegram without interactive components" "Watcher should explain the official Telegram capability limit"
+    assert_contains "$(jq -r '.followup.consent.reason' "$report")" "MessageReceived и Command hooks остаются read-only" "Watcher should surface the root-cause constraint directly in the report"
+    if [[ "$(jq -r '.followup.consent.pending_state == null' "$report")" != "true" ]]; then
+        test_fail "Retired watcher flow must not keep a pending consent state"
     elif grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
         test_fail "Retired watcher flow must not ask for practical recommendations"
     elif grep -q "/codex_da" <<<"$call_text"; then
@@ -215,11 +254,12 @@ run_component_codex_cli_upstream_watcher_tests() {
         --telegram-consent-store-dir "$consent_store_dir"
     report="$work_dir/report.json"
     call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
-    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should disable consent until the runtime confirms command-hook support"
-    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that command-hook support is not confirmed"
-    assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should degrade to one-way alert when command-hook support is unconfirmed"
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should keep consent disabled under the official one-way contract"
+    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that no repo-side router path is active"
+    assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should stay one-way only"
+    assert_contains "$(jq -r '.followup.consent.reason' "$report")" "Telegram channel сейчас не заявляет interactive components" "Reason should point to the official Telegram capability limit"
     if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
-        test_fail "One-way alert should not promise a consent flow when command-hook support is unconfirmed"
+        test_fail "One-way alert should not promise a consent flow under the official one-way contract"
     else
         test_pass
     fi
@@ -244,8 +284,8 @@ run_component_codex_cli_upstream_watcher_tests() {
     report="$work_dir/report.json"
     call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Remote sender should still deliver the upstream alert"
-    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Remote sender should disable consent when store and router are on a different runtime"
-    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Remote sender should mark authoritative router unavailable for this local run"
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Remote sender should keep consent disabled because watcher no longer owns Telegram follow-up"
+    assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Remote sender should still expose no active repo-side router path"
     if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
         test_fail "Remote-sender alert should not promise an unreachable follow-up path"
     else
@@ -283,7 +323,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     report="$work_dir/report.json"
     call_text="$(cat "$FAKE_TELEGRAM_STATE_DIR/call-1.txt")"
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Router-disabled scheduler run should still deliver the upstream alert"
-    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should disable consent when the authoritative router is unavailable"
+    assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Watcher should disable consent when the advisory flow stays one-way"
     assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should mark the alert as one-way only"
     assert_eq "false" "$(jq -r '.automation.alert.consent_requested' "$report")" "Watcher should not advertise consent when the router is unavailable"
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Report should expose that the router is disabled"
