@@ -12,7 +12,6 @@
 | Remote Branch | Current Intent |
 |---|---|
 | `origin/chore/topology-registry-publish` | Needs decision |
-| `origin/fix/topology-registry-ux` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
