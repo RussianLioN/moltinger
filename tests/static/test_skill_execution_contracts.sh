@@ -28,9 +28,11 @@ run_static_skill_execution_contract_tests() {
 
     test_start "static_abnormal_helper_rule_requires_root_fix_not_workaround"
     if [[ -f "$ABNORMAL_BEHAVIOR_RULE" ]] && \
+       rg -q -F 'repo-owned skill, helper, workflow, instruction surface, or repo-managed command' "$ABNORMAL_BEHAVIOR_RULE" && \
        rg -q -F '1. Stop normal task continuation at the abnormal boundary.' "$ABNORMAL_BEHAVIOR_RULE" && \
        rg -q -F '2. Run the lessons pre-check and then RCA.' "$ABNORMAL_BEHAVIOR_RULE" && \
        rg -q -F 'Do not use a manual workaround as a substitute for fixing the broken skill/helper path.' "$ABNORMAL_BEHAVIOR_RULE" && \
+       rg -q -F 'if the failure is external/transient, record the RCA and owner classification without inventing a fake local contract fix.' "$ABNORMAL_BEHAVIOR_RULE" && \
        rg -q -F 'If temporary mitigation is used, it must still produce:' "$ABNORMAL_BEHAVIOR_RULE"; then
         test_pass
     else
@@ -40,9 +42,11 @@ run_static_skill_execution_contract_tests() {
     test_start "static_shared_core_carries_operator_report_and_root_fix_contracts"
     if rg -q -F '## Operator-Facing Task Reports' "$SHARED_CORE_INSTRUCTIONS" && \
        rg -q -F 'Rule: `docs/rules/operator-facing-task-report-contract.md`' "$SHARED_CORE_INSTRUCTIONS" && \
+       rg -q -F '"кратко"' "$SHARED_CORE_INSTRUCTIONS" && \
        rg -q -F '## Abnormal Skill Or Helper Behavior' "$SHARED_CORE_INSTRUCTIONS" && \
        rg -q -F 'Rule: `docs/rules/abnormal-skill-helper-behavior-needs-root-cause-fix.md`' "$SHARED_CORE_INSTRUCTIONS" && \
-       rg -q -F 'treat the behavior as a first-class defect, not as a cue to improvise a workaround completion path' "$SHARED_CORE_INSTRUCTIONS"; then
+       rg -q -F 'treat the behavior as a first-class defect, not as a cue to improvise a workaround completion path' "$SHARED_CORE_INSTRUCTIONS" && \
+       rg -q -F 'For clearly external or transient failures, do not invent a fake local root-fix.' "$SHARED_CORE_INSTRUCTIONS"; then
         test_pass
     else
         test_fail "Shared source instructions must carry both the simple-report and abnormal-helper root-fix contracts"
@@ -51,8 +55,10 @@ run_static_skill_execution_contract_tests() {
     test_start "static_generated_root_agents_inherits_new_contracts"
     if rg -q -F '## Operator-Facing Task Reports' "$ROOT_AGENTS" && \
        rg -q -F '## Abnormal Skill Or Helper Behavior' "$ROOT_AGENTS" && \
+       rg -q -F '"кратко"' "$ROOT_AGENTS" && \
        rg -q -F 'Что сделано' "$ROOT_AGENTS" && \
-       rg -q -F 'fix the source contract in the owning layer before treating the broader task as resolved' "$ROOT_AGENTS"; then
+       rg -q -F 'fix the source contract in the owning layer before treating the broader task as resolved' "$ROOT_AGENTS" && \
+       rg -q -F 'For clearly external or transient failures, do not invent a fake local root-fix.' "$ROOT_AGENTS"; then
         test_pass
     else
         test_fail "Generated AGENTS.md must inherit the simple-report and root-fix behavior contracts"

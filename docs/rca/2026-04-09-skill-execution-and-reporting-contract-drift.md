@@ -71,6 +71,7 @@ Two connected process defects overlapped:
 
 1. Added a project-level rule:
    - [docs/rules/abnormal-skill-helper-behavior-needs-root-cause-fix.md](/Users/rl/coding/moltinger/moltinger-main-moltinger-ik6d-skill-execution-rca-hardening/docs/rules/abnormal-skill-helper-behavior-needs-root-cause-fix.md)
+   - narrowed the rule to repo-owned contract failures and documented how external/transient incidents are classified without inventing fake local root-fixes
 2. Added a project-level operator report rule:
    - [docs/rules/operator-facing-task-report-contract.md](/Users/rl/coding/moltinger/moltinger-main-moltinger-ik6d-skill-execution-rca-hardening/docs/rules/operator-facing-task-report-contract.md)
 3. Updated shared source instructions so both rules become part of generated [AGENTS.md](/Users/rl/coding/moltinger/moltinger-main-moltinger-ik6d-skill-execution-rca-hardening/AGENTS.md).
@@ -81,8 +82,9 @@ Two connected process defects overlapped:
 
 1. Treat repo-managed skills and helper workflows as operator contracts, not prose guidance.
 2. If a helper behaves abnormally, stop the parent task and repair the helper path first.
-3. Keep user-facing simple reports short and structurally predictable.
-4. Guard project-level execution rules with static tests, not just tribal memory.
+3. Keep repo-owned contract defects separate from external/transient incidents; only localize a fix when a repo-owned layer actually caused or failed to contain the problem.
+4. Keep user-facing simple reports short and structurally predictable.
+5. Guard project-level execution rules with static tests, not just tribal memory.
 
 ## Уроки
 

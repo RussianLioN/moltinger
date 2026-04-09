@@ -7,7 +7,7 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 
 ## Operator-Facing Task Reports
 
-If the user asks for a task report, summary, "простыми словами", or a short executive update after implementation/review work:
+If the user asks for a task report, summary, "простыми словами", "кратко", or a short executive update after implementation/review work:
 
 - default to this shape:
   - `Что сделано`
@@ -21,12 +21,14 @@ Rule: `docs/rules/operator-facing-task-report-contract.md`
 
 ## Abnormal Skill Or Helper Behavior
 
-If a skill, helper, workflow, or repo-managed command behaves unexpectedly:
+If a repo-owned skill, helper, workflow, instruction surface, or repo-managed command behaves unexpectedly:
 
 - stop normal task continuation at that boundary
 - run lessons pre-check and RCA
 - treat the behavior as a first-class defect, not as a cue to improvise a workaround completion path
 - fix the source contract in the owning layer before treating the broader task as resolved
+
+For clearly external or transient failures, do not invent a fake local root-fix. Record the RCA and owner classification, then fix a local source contract only if a repo-owned layer caused, amplified, or failed to contain the problem.
 
 Temporary mitigation is allowed only when the user explicitly asked for it and it is clearly labeled as temporary hygiene, not as the real fix.
 

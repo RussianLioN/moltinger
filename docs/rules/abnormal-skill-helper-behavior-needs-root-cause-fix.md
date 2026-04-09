@@ -1,6 +1,15 @@
 # Abnormal Skill Or Helper Behavior Needs Root-Cause Fix
 
-If a skill, helper, workflow, or repo-managed command behaves unexpectedly, treat it as a first-class defect.
+If a repo-owned skill, helper, workflow, instruction surface, or repo-managed command behaves unexpectedly, treat it as a first-class defect.
+
+This rule is for **repo-owned contract failures** such as:
+
+- source instructions and generated instruction drift
+- helper or workflow scripts with ambiguous or contradictory behavior
+- skill or command guidance that pushes the session into workaround-style execution
+- operator-facing response formats that violate an explicit project rule
+
+It is **not** a rule that every external or transient failure must invent a local root-fix. Remote outages, auth expiry, connector instability, rate limits, or other third-party incidents still require evidence and classification, but they only require a local source-contract fix when a repo-owned layer caused, amplified, or failed to contain the problem.
 
 Examples:
 
@@ -38,6 +47,22 @@ If temporary mitigation is used, it must still produce:
 1. RCA
 2. follow-up issue
 3. dedicated fix lane when shared contracts are involved
+
+## Ownership boundary
+
+`Fix the source contract in the owning layer` means:
+
+- fix the repo-owned layer that created the broken expectation, or
+- if the failure is external/transient, record the RCA and owner classification without inventing a fake local contract fix.
+
+Examples of repo-owned owning layers:
+
+- source instructions
+- generated instructions
+- rule files
+- helper/workflow scripts
+- skill or command source
+- regression tests
 
 ## Rationale
 
