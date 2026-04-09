@@ -102,6 +102,17 @@ For this project specifically:
 
 Ask the user only if required data is still missing or contradictory after these checks.
 
+## Project Memory Search
+
+For historical project questions, past decisions, prior RCA context, or cross-document recall:
+
+1. Read `MEMORY.md` and `SESSION_SUMMARY.md` first.
+2. If the repo-managed MemPalace wrapper is installed and healthy, use it as a secondary search layer over curated project docs.
+3. Treat MemPalace as search/index only, not as the source of truth for topology, runtime state, deploy truth, cleanup decisions, or secrets.
+4. If MemPalace is missing or stale, continue with durable docs and live repo evidence instead of inferring from empty memory results.
+
+Usage and guardrails: `docs/MEMPALACE-PROJECT-MEMORY.md`
+
 ## Official-Only Setup Rule (Critical)
 
 For any application, library, dependency, package, service, runtime integration, or provider setup:

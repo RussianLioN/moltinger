@@ -37,6 +37,9 @@
         "--context",
         "ide-assistant"
       ]
+    },
+    "mempalace": {
+      "command": "./scripts/mempalace-mcp-server.sh"
     }
   }
 }

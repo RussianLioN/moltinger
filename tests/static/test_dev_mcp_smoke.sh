@@ -27,13 +27,20 @@ run_dev_mcp_smoke_tests() {
     test_start "dev_mcp_required_servers_present"
     local missing=()
     local server
-    for server in context7 sequential-thinking supabase playwright shadcn serena; do
+    for server in context7 sequential-thinking supabase playwright shadcn serena mempalace; do
         jq -e --arg server "$server" '.mcpServers[$server]' "$MCP_CONFIG_FILE" >/dev/null 2>&1 || missing+=("$server")
     done
     if [[ ${#missing[@]} -eq 0 ]]; then
         test_pass
     else
         test_fail "Missing MCP servers: ${missing[*]}"
+    fi
+
+    test_start "dev_mcp_mempalace_uses_repo_wrapper"
+    if jq -e '.mcpServers.mempalace.command == "./scripts/mempalace-mcp-server.sh"' "$MCP_CONFIG_FILE" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "MemPalace MCP entry must use repo wrapper"
     fi
 
     test_start "dev_mcp_entries_have_transport_definition"
