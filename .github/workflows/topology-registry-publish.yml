@@ -34,13 +34,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          git fetch origin main
           if git ls-remote --exit-code --heads origin "$PUBLISH_BRANCH" >/dev/null 2>&1; then
             git fetch origin "$PUBLISH_BRANCH"
-            git switch -C "$PUBLISH_BRANCH" "origin/$PUBLISH_BRANCH"
-          else
-            git fetch origin main
-            git switch -C "$PUBLISH_BRANCH" "origin/main"
           fi
+
+          # Recreate the dedicated publish branch from origin/main every time so the
+          # resulting PR carries only the current snapshot diff, never stale history.
+          git switch -C "$PUBLISH_BRANCH" "origin/main"
 
       - name: Refresh tracked topology registry
         id: refresh
@@ -68,12 +69,23 @@ jobs:
 
           git add docs/GIT-TOPOLOGY-REGISTRY.md
           git commit -m "docs(topology): publish remote-governance snapshot"
+
+          mapfile -t publish_range_files < <(git diff --name-only origin/main..HEAD)
+          for file in "${publish_range_files[@]}"; do
+            if [[ "$file" != "docs/GIT-TOPOLOGY-REGISTRY.md" ]]; then
+              echo "::error::Unexpected file present in publish branch diff: $file"
+              git diff --name-status origin/main..HEAD
+              exit 1
+            fi
+          done
+
           git push --force-with-lease origin "$PUBLISH_BRANCH"
 
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
       - name: Create or update publish PR
         if: steps.refresh.outputs.has_changes == 'true'
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -82,6 +94,7 @@ jobs:
           PUBLISH_BRANCH="${{ steps.branch.outputs.branch }}"
           TITLE="docs(topology): publish remote-governance snapshot"
           BODY_FILE="$(mktemp)"
+          PR_OUTPUT_FILE="$(mktemp)"
 
           cat > "$BODY_FILE" <<'EOF'
           ## Automated topology registry publish
@@ -96,13 +109,42 @@ jobs:
 
           EXISTING_PR_NUMBER="$(gh pr list --base main --head "$PUBLISH_BRANCH" --state open --json number --jq '.[0].number // empty')"
 
+          set +e
           if [[ -n "$EXISTING_PR_NUMBER" ]]; then
-            gh pr edit "$EXISTING_PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"
+            gh pr edit "$EXISTING_PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE" >"$PR_OUTPUT_FILE" 2>&1
+            rc=$?
+            pr_state="updated"
           else
-            gh pr create --base main --head "$PUBLISH_BRANCH" --title "$TITLE" --body-file "$BODY_FILE"
+            gh pr create --base main --head "$PUBLISH_BRANCH" --title "$TITLE" --body-file "$BODY_FILE" >"$PR_OUTPUT_FILE" 2>&1
+            rc=$?
+            pr_state="created"
+          fi
+          set -e
+
+          if [[ "$rc" -ne 0 ]]; then
+            if grep -Eq 'createPullRequest|not permitted to create or approve pull requests' "$PR_OUTPUT_FILE"; then
+              echo "::warning::GitHub Actions cannot open the publish PR automatically in this repository. Branch update succeeded; open or refresh the PR manually from $PUBLISH_BRANCH."
+              cat "$PR_OUTPUT_FILE"
+              echo "pr_state=manual_required" >> "$GITHUB_OUTPUT"
+              echo "pr_number=" >> "$GITHUB_OUTPUT"
+              rm -f "$BODY_FILE" "$PR_OUTPUT_FILE"
+              exit 0
+            fi
+
+            cat "$PR_OUTPUT_FILE" >&2
+            rm -f "$BODY_FILE" "$PR_OUTPUT_FILE"
+            exit "$rc"
           fi
 
-          rm -f "$BODY_FILE"
+          echo "pr_state=$pr_state" >> "$GITHUB_OUTPUT"
+          if [[ -n "$EXISTING_PR_NUMBER" ]]; then
+            echo "pr_number=$EXISTING_PR_NUMBER" >> "$GITHUB_OUTPUT"
+          else
+            PR_NUMBER="$(gh pr list --base main --head "$PUBLISH_BRANCH" --state open --json number --jq '.[0].number // empty')"
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+
+          rm -f "$BODY_FILE" "$PR_OUTPUT_FILE"
 
       - name: Publish summary
         if: always()
@@ -114,6 +156,13 @@ jobs:
             echo "|---|---|"
             echo "| Publish branch | \`${{ steps.branch.outputs.branch || 'n/a' }}\` |"
             echo "| Changes pushed | \`${{ steps.refresh.outputs.has_changes || 'false' }}\` |"
+            echo "| PR state | \`${{ steps.pr.outputs.pr_state || 'n/a' }}\` |"
+            echo "| PR number | \`${{ steps.pr.outputs.pr_number || 'n/a' }}\` |"
             echo "| Tracked scope | \`shared_remote_governance\` |"
             echo "| Local topology | \`live_only\` |"
+            if [[ "${{ steps.pr.outputs.pr_state || '' }}" == "manual_required" ]]; then
+              echo ""
+              echo "Manual next step:"
+              echo "- Open or refresh the PR from \`${{ steps.branch.outputs.branch || 'chore/topology-registry-publish' }}\` to \`main\`."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
