@@ -157,6 +157,7 @@ bash|static_config_validation|Config validation|$SCRIPT_DIR/static/test_config_v
 bash|static_fleet_registry|Fleet registry and policy|$SCRIPT_DIR/static/test_fleet_registry.sh
 bash|static_dev_mcp_smoke|Dev MCP smoke|$SCRIPT_DIR/static/test_dev_mcp_smoke.sh
 bash|static_beads_worktree_ownership|Beads worktree ownership guardrails|$SCRIPT_DIR/static/test_beads_worktree_ownership.sh
+bash|static_skill_execution_contracts|Skill execution and reporting contracts|$SCRIPT_DIR/static/test_skill_execution_contracts.sh
 LIST
             ;;
         component)

@@ -178,6 +178,9 @@ Rules:
 - Do not auto-mutate `docs/GIT-TOPOLOGY-REGISTRY.md` in the invoking branch during ordinary Phase A worktree flows.
 - If topology is stale, report it honestly and point to the dedicated publish path instead of injecting a docs-only commit into the invoking branch.
 - If a separate UAT worktree later carries local changes to `docs/GIT-TOPOLOGY-REGISTRY.md`, inspect them as drift instead of treating them as authoritative branch-local evidence before treating the UAT branch as disposable.
+- If the helper output is abnormal (hang, contradictory boundary, ambiguous next step, partial mutation), stop the original task and treat the helper behavior as a defect.
+- Do not finish the downstream task through manual git/PR/publish workarounds just because the intended helper path felt unreliable.
+- If temporary mitigation is explicitly requested, label it as mitigation only, then create the root-fix follow-up and repair the source contract in the owning layer.
 
 ## Start Workflow
 

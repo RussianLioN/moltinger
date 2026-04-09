@@ -11,6 +11,35 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 - If the user writes in Russian or explicitly asks for Russian-only communication, respond only in Russian unless the user later asks to switch languages.
 - Do not alternate between Russian and English in user-facing replies unless the user explicitly requests bilingual output or translation.
 
+## Operator-Facing Task Reports
+
+If the user asks for a task report, summary, "простыми словами", "кратко", or a short executive update after implementation/review work:
+
+- default to this shape:
+  - `Что сделано`
+  - `Что это дает`
+  - `Что дальше`
+- keep each section short and practical
+- prefer operator meaning over file inventory
+- do not lead with branch names, commit SHAs, or path dumps unless the user asked for technical status
+
+Rule: `docs/rules/operator-facing-task-report-contract.md`
+
+## Abnormal Skill Or Helper Behavior
+
+If a repo-owned skill, helper, workflow, instruction surface, or repo-managed command behaves unexpectedly:
+
+- stop normal task continuation at that boundary
+- run lessons pre-check and RCA
+- treat the behavior as a first-class defect, not as a cue to improvise a workaround completion path
+- fix the source contract in the owning layer before treating the broader task as resolved
+
+For clearly external or transient failures, do not invent a fake local root-fix. Record the RCA and owner classification, then fix a local source contract only if a repo-owned layer caused, amplified, or failed to contain the problem.
+
+Temporary mitigation is allowed only when the user explicitly asked for it and it is clearly labeled as temporary hygiene, not as the real fix.
+
+Rule: `docs/rules/abnormal-skill-helper-behavior-needs-root-cause-fix.md`
+
 ## Git Topology Reference
 
 Current branch/worktree registry lives in:
