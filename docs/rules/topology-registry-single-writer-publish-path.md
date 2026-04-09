@@ -1,23 +1,24 @@
 # Topology Registry Single-Writer Publish Path
 
-**Status:** Active  
-**Effective date:** 2026-03-14  
-**Scope:** `command-worktree`, `command-session-summary`, `command-git-topology`, and any manual workflow touching `docs/GIT-TOPOLOGY-REGISTRY.md`
+**Status:** Active
+**Effective date:** 2026-04-09
+**Scope:** `command-worktree`, `command-session-summary`, `command-git-topology`, GitHub workflow automation, and any manual workflow touching `docs/GIT-TOPOLOGY-REGISTRY.md`
 
 ## Problem This Rule Prevents
 
-`docs/GIT-TOPOLOGY-REGISTRY.md` is a generated snapshot of global git topology.
-If ordinary feature branches, UAT branches, or the canonical `main` worktree all publish it opportunistically, parallel sessions create:
+`docs/GIT-TOPOLOGY-REGISTRY.md` is a generated **shared remote-governance snapshot**.
+If ordinary feature branches, UAT branches, or canonical `main` publish it opportunistically, parallel sessions create:
 
-- docs-only churn unrelated to the feature under work
+- docs-only churn unrelated to the active slice
 - repeated rebase/push conflicts on one shared file
-- misleading pressure to edit global topology state from the wrong branch
+- false authority for branch-local or workstation-local topology evidence
 
 ## Source Of Truth
 
 - `live git` is the topology source of truth
 - `docs/GIT-TOPOLOGY-INTENT.yaml` is the reviewed intent sidecar
-- `docs/GIT-TOPOLOGY-REGISTRY.md` is a sanitized branch-local audit snapshot
+- `docs/GIT-TOPOLOGY-REGISTRY.md` is the tracked shared remote-governance snapshot
+- local worktrees and local-only branches remain live-only through `scripts/git-topology-registry.sh status` / `check`
 
 ## Mandatory Policy
 
@@ -30,39 +31,55 @@ If ordinary feature branches, UAT branches, or the canonical `main` worktree all
    - canonical `main`
    - the invoking ordinary feature branch
    - disposable UAT/reset/rebase branches
-   - ordinary `command-worktree start|attach|cleanup` flows
-3. Publish the tracked snapshot only through an explicit topology publish step from the dedicated non-main branch **`chore/topology-registry-publish`** in its own publish worktree.
-4. Ordinary worktree flows may report `stale`, but they must treat live `git` as authoritative for collision detection and continue without publishing the markdown snapshot.
-5. If a UAT or child worktree holds newer registry evidence, preserve/promote that evidence into the owning branch before reset/update, per `docs/rules/uat-registry-snapshot-preservation.md`.
+   - ordinary `command-worktree start|attach|finish|cleanup` flows
+3. Publish the tracked snapshot through the official shared publish flow:
+   - preferred path: `scripts/git-topology-registry.sh publish`
+   - execution surface: `.github/workflows/topology-registry-publish.yml`
+   - publication lane: dedicated non-main branch **`chore/topology-registry-publish`**
+4. The tracked snapshot must cover only shared remote-governance state:
+   - unmerged remote branches
+   - reviewed intent awaiting reconciliation for tracked branch/remote subjects
+   - registry warnings and operating rules
+5. Ordinary worktree flows may report `stale`, but they must treat live `git` as authoritative for collision detection and continue without publishing the markdown snapshot.
+6. `refresh --write-doc` remains a low-level manual path only for emergency/manual publication from the exact dedicated branch `chore/topology-registry-publish` in its own publish worktree.
 
-## Expected Publish Path
+## Preferred Publish Path
 
-Use the dedicated topology publish lane, for example:
+Dispatch the workflow:
+
+```bash
+scripts/git-topology-registry.sh publish
+```
+
+The workflow must:
+
+- checkout or create `chore/topology-registry-publish`
+- run `scripts/git-topology-registry.sh refresh --write-doc`
+- allow changes only to `docs/GIT-TOPOLOGY-REGISTRY.md`
+- push the dedicated publish branch
+- create or update a PR from `chore/topology-registry-publish` to `main`
+
+## Low-Level Manual Recovery Path
+
+Use this only when the workflow path is unavailable and a human must repair publication manually:
 
 ```bash
 git worktree add ../moltinger-topology-publish -b chore/topology-registry-publish main
 cd ../moltinger-topology-publish
 scripts/git-topology-registry.sh refresh --write-doc
-git add docs/GIT-TOPOLOGY-REGISTRY.md docs/GIT-TOPOLOGY-INTENT.yaml
-git commit -m "docs(topology): publish registry snapshot"
+git add docs/GIT-TOPOLOGY-REGISTRY.md
+git commit -m "docs(topology): publish remote-governance snapshot"
 git push -u origin chore/topology-registry-publish
 ```
 
-If the branch already exists, attach it instead:
-
-```bash
-git worktree add ../moltinger-topology-publish chore/topology-registry-publish
-```
-
-The publish lane must be:
+The manual publish lane must be:
 
 - the exact branch `chore/topology-registry-publish`
 - isolated from ordinary feature work
 - not the canonical `main` worktree
 
-If this publish lane also needs Beads synchronization, use the localized repo wrapper from a managed worktree session. Do not assume a bare `bd sync` belongs in an ad-hoc manual topology-publish lane.
-
 ## Operational Meaning
 
 - `stale` during ordinary work is an inspection signal, not a reason to inject a docs commit into the current feature branch
-- publishing the snapshot is an explicit maintenance checkpoint, not a side effect of every worktree mutation
+- local workstation topology is still real and still matters for live operations, but it is not the tracked markdown contract anymore
+- publishing the snapshot is an explicit shared maintenance checkpoint, not a side effect of every worktree mutation

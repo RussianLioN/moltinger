@@ -12,6 +12,19 @@ source "$LIB_DIR/git_topology_fixture.sh"
 
 REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
 
+assert_not_contains_literal() {
+    local haystack="$1"
+    local needle="$2"
+    local message="$3"
+
+    if [[ "$haystack" == *"$needle"* ]]; then
+        test_fail "$message (needle: '$needle')"
+        return 1
+    fi
+
+    return 0
+}
+
 write_demo_intent() {
     local repo_dir="$1"
     cat > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
@@ -73,10 +86,12 @@ test_refresh_writes_sanitized_registry() {
     )
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
-    assert_contains "$doc" 'Generated artifact from live git topology' "Registry should be rendered by generator"
-    assert_contains "$doc" 'Demo feature branch.' "Registry should merge reviewed branch intent"
-    assert_contains "$doc" '`primary-feature-007`' "Registry should canonicalize numeric feature worktree identifiers"
-    assert_contains "$doc" 'Demo feature worktree.' "Canonical feature row should preserve legacy reviewed note"
+    assert_contains "$doc" 'Generated artifact from shared remote-governance topology' "Registry should be rendered as the shared remote-governance snapshot"
+    assert_contains "$doc" 'Demo remote feature branch.' "Registry should render reviewed remote intent"
+    assert_contains "$doc" '`origin/007-demo-feature`' "Registry should include the unmerged remote branch row"
+    assert_not_contains_literal "$doc" '## Current Worktrees' "Tracked registry should not publish local worktree inventory"
+    assert_not_contains_literal "$doc" '## Active Local Branches' "Tracked registry should not publish local branch inventory"
+    assert_not_contains_literal "$doc" 'Demo feature worktree.' "Tracked registry should keep worktree-only intent out of the shared snapshot"
 
     if [[ "$doc" == *"$fixture_root"* ]] || [[ "$doc" == *"$repo_dir"* ]]; then
         test_fail "Registry leaked absolute integration fixture paths"
@@ -125,12 +140,14 @@ test_orphan_intent_and_default_needs_decision_are_rendered() {
     assert_contains "$doc" '## Reviewed Intent Awaiting Reconciliation' "Registry should surface orphan reviewed intent"
     assert_contains "$doc" '099-retired-feature' "Registry should list orphan subject key"
     assert_contains "$doc" 'Preserve this reviewed note until the sidecar is pruned.' "Registry should preserve orphan reviewed note"
-    assert_contains "$doc" '| `008-unreviewed` | `none` | Needs decision |' "Unreviewed local branch should fall back to needs-decision"
+    assert_not_contains_literal "$doc" '008-unreviewed' "Unreviewed local-only branches should stay out of the tracked remote-governance snapshot"
+    assert_not_contains_literal "$doc" '| `branch` | `007-demo-feature` |' "Branch intent backed by a live remote branch should not linger as an orphan"
     if [[ "$doc" == *"parallel-feature-007"* ]]; then
         test_fail "Legacy numeric feature alias should not render as a separate orphan record"
         rm -rf "$fixture_root"
         return 1
     fi
+    assert_not_contains_literal "$doc" 'Demo feature worktree.' "Tracked registry should not surface worktree-only intent in orphan output"
 
     rm -rf "$fixture_root"
     test_pass

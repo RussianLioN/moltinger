@@ -4,6 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
+  scripts/git-topology-registry.sh publish
   scripts/git-topology-registry.sh refresh [--write-doc]
   scripts/git-topology-registry.sh check
   scripts/git-topology-registry.sh status
@@ -21,7 +22,7 @@ prune=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    refresh|check|status|doctor)
+    publish|refresh|check|status|doctor)
       if [[ -n "${action}" ]]; then
         echo "[git-topology-registry] Multiple actions provided." >&2
         usage >&2
@@ -77,6 +78,9 @@ tmp_dir=""
 lock_held=false
 default_missing_intent="needs-decision"
 topology_publish_branch="${GIT_TOPOLOGY_REGISTRY_PUBLISH_BRANCH:-chore/topology-registry-publish}"
+topology_publish_workflow="${GIT_TOPOLOGY_REGISTRY_PUBLISH_WORKFLOW:-topology-registry-publish.yml}"
+topology_publish_ref="${GIT_TOPOLOGY_REGISTRY_PUBLISH_REF:-main}"
+tracked_scope="shared_remote_governance"
 
 intent_records_file=""
 seen_subjects_file=""
@@ -106,6 +110,9 @@ now_utc() {
 
 write_doc_command() {
   case "${action}" in
+    publish)
+      printf 'scripts/git-topology-registry.sh refresh --write-doc'
+      ;;
     refresh)
       printf 'scripts/git-topology-registry.sh refresh --write-doc'
       ;;
@@ -120,6 +127,10 @@ write_doc_command() {
       printf 'scripts/git-topology-registry.sh refresh --write-doc'
       ;;
   esac
+}
+
+publish_command() {
+  printf 'scripts/git-topology-registry.sh publish'
 }
 
 current_branch_display() {
@@ -163,23 +174,25 @@ publish_allowed_string() {
 
 stale_publish_guidance_line() {
   local command=""
-  command="$(write_doc_command)"
 
   if publish_allowed_on_current_branch; then
+    command="$(write_doc_command)"
     printf 'Run: %s' "${command}"
   else
-    printf "Publish from the dedicated non-main topology publish branch '%s': %s" "${topology_publish_branch}" "${command}"
+    command="$(publish_command)"
+    printf 'Dispatch the shared publish flow via: %s' "${command}"
   fi
 }
 
 stale_status_message() {
   local command=""
-  command="$(write_doc_command)"
 
   if publish_allowed_on_current_branch; then
-    printf 'registry document is stale; current topology-publish branch may reconcile via %s' "${command}"
+    command="$(write_doc_command)"
+    printf 'registry document is stale for the shared remote-governance snapshot; current topology-publish branch may reconcile via %s' "${command}"
   else
-    printf "registry document is stale; live git is authoritative here; publish later from the dedicated non-main topology publish branch '%s'" "${topology_publish_branch}"
+    command="$(publish_command)"
+    printf 'registry document is stale for the shared remote-governance snapshot; local worktree and local-only branch topology remain live-only here; dispatch publish later via %s' "${command}"
   fi
 }
 
@@ -560,6 +573,15 @@ lookup_intent_field() {
   ' "${intent_records_file}"
 }
 
+lookup_remote_or_branch_field() {
+  local remote_ref="$1"
+  local branch="$2"
+  local field_index="$3"
+
+  lookup_intent_field "remote" "${remote_ref}" "${field_index}" 2>/dev/null || \
+    lookup_intent_field "branch" "${branch}" "${field_index}" 2>/dev/null || true
+}
+
 record_seen_subject() {
   local subject_type="$1"
   local subject_key="$2"
@@ -588,7 +610,7 @@ collect_orphan_records() {
       seen[$1 FS $2] = 1
       next
     }
-    !(($1 FS $2) in seen) {
+    ($1 == "branch" || $1 == "remote") && !(($1 FS $2) in seen) {
       print $0
     }
   ' "${seen_subjects_file}" "${intent_records_file}" > "${orphan_records_file}"
@@ -928,9 +950,9 @@ collect_remote_branches() {
     fi
 
     branch="${remote_ref#origin/}"
-    intent="$(lookup_intent_field "remote" "${remote_ref}" 3 2>/dev/null || true)"
-    note="$(lookup_intent_field "remote" "${remote_ref}" 4 2>/dev/null || true)"
-    pr="$(lookup_intent_field "remote" "${remote_ref}" 5 2>/dev/null || true)"
+    intent="$(lookup_remote_or_branch_field "${remote_ref}" "${branch}" 3)"
+    note="$(lookup_remote_or_branch_field "${remote_ref}" "${branch}" 4)"
+    pr="$(lookup_remote_or_branch_field "${remote_ref}" "${branch}" 5)"
 
     if [[ -z "${intent}" ]]; then
       intent="${default_missing_intent}"
@@ -945,6 +967,7 @@ collect_remote_branches() {
       "${pr}" >> "${remote_branches_file}"
 
     record_seen_subject "remote" "${remote_ref}"
+    record_seen_subject "branch" "${branch}"
   done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin)
 
   sort -t $'\t' -k1,1 "${remote_branches_file}" -o "${remote_branches_file}"
@@ -952,15 +975,7 @@ collect_remote_branches() {
 
 render_registry_markdown() {
   local orphan_count="$1"
-  local worktree_id=""
-  local branch=""
-  local location_class=""
   local note=""
-  local raw_path=""
-  local intent=""
-  local tracking=""
-  local tracking_state=""
-  local has_worktree=""
   local remote_ref=""
   local remote_branch=""
   local orphan_type=""
@@ -976,54 +991,13 @@ render_registry_markdown() {
     cat <<EOF
 # Git Topology Registry
 
-**Status**: Generated artifact from live git topology and reviewed intent sidecar
-**Scope**: Canonical maintainer workstation snapshot
-**Purpose**: Single reference for current git worktrees, active branches, and branches that still require a decision.
-**Publish**: From the dedicated non-main topology publish branch \`${topology_publish_branch}\` run \`scripts/git-topology-registry.sh refresh --write-doc\`
+**Status**: Generated artifact from shared remote-governance topology and reviewed intent sidecar
+**Scope**: Shared remote governance snapshot
+**Purpose**: Single reference for unmerged remote branches and reviewed topology intent that still require merge or cleanup decisions.
+**Publish**: Dispatch \`scripts/git-topology-registry.sh publish\`; the workflow updates dedicated branch \`${topology_publish_branch}\` and opens or updates a PR to \`main\`
+**Local Note**: Local worktrees and local-only branches remain live-only via \`scripts/git-topology-registry.sh status\` and \`check\`
 **Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
-
-## Current Worktrees
-
-| Worktree ID | Branch | Location Class | Status |
-|---|---|---|---|
 EOF
-
-    while IFS=$'\t' read -r worktree_id branch location_class note raw_path intent pr || [[ -n "${worktree_id}" ]]; do
-      printf '| `%s` | `%s` | `%s` | %s |\n' \
-        "$(escape_md_cell "${worktree_id}")" \
-        "$(escape_md_cell "${branch}")" \
-        "$(escape_md_cell "${location_class}")" \
-        "$(escape_md_cell "${note}")"
-    done < "${worktrees_file}"
-
-    cat <<'EOF'
-
-## Active Local Branches
-
-| Branch | Tracking | Status |
-|---|---|---|
-EOF
-
-    while IFS= read -r local_branch_row || [[ -n "${local_branch_row}" ]]; do
-      branch="$(printf '%s\n' "${local_branch_row}" | cut -f2)"
-      tracking="$(printf '%s\n' "${local_branch_row}" | cut -f3)"
-      tracking_state="$(printf '%s\n' "${local_branch_row}" | cut -f4)"
-      note="$(printf '%s\n' "${local_branch_row}" | cut -f6)"
-
-      case "${tracking_state}" in
-        gone)
-          tracking="gone"
-          ;;
-        none)
-          tracking="none"
-          ;;
-      esac
-
-      printf '| `%s` | `%s` | %s |\n' \
-        "$(escape_md_cell "${branch}")" \
-        "$(escape_md_cell "${tracking}")" \
-        "$(escape_md_cell "${note}")"
-    done < "${local_branches_file}"
 
     cat <<'EOF'
 
@@ -1072,17 +1046,16 @@ EOF
 ## Operating Rules
 
 1. `main` remains the only operational source of truth.
-2. If a branch has a dedicated worktree, treat that worktree as the authoritative place for edits.
+2. This tracked document covers shared remote-governance state only; local worktree and local-only branch topology stay live-only.
 3. Before deleting or merging branches, verify this registry and then verify live `git` state again.
-4. If branch/worktree state changes, this artifact must be refreshed in the same session or at the next session boundary.
+4. If remote topology or reviewed intent changes, dispatch the publish flow to refresh this snapshot.
 5. Live `git` state wins over this document if they diverge; refresh the registry instead of forcing git to match the doc.
 
 ## Source Commands
 
 ```bash
-git worktree list --porcelain
-git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads
 git for-each-ref --format='%(refname:short)' refs/remotes/origin
+cat docs/GIT-TOPOLOGY-INTENT.yaml
 ```
 EOF
   } > "${expected_doc_file}"
@@ -1093,9 +1066,8 @@ build_snapshot() {
   : > "${seen_subjects_file}"
 
   parse_intent_sidecar
-  collect_worktrees
-  collect_local_branches
   collect_remote_branches
+  record_seen_subject "branch" "main"
   collect_orphan_records
   local orphan_count=""
   orphan_count="$(orphan_intent_count)"
@@ -1106,12 +1078,9 @@ compute_current_hash() {
   local combined="${tmp_dir}/combined-snapshot.txt"
   {
     printf 'default_missing_intent=%s\n' "${default_missing_intent}"
+    printf 'tracked_scope=%s\n' "${tracked_scope}"
     printf '\n[intent]\n'
     cat "${intent_records_file}"
-    printf '\n[worktrees]\n'
-    cat "${worktrees_file}"
-    printf '\n[local_branches]\n'
-    cat "${local_branches_file}"
     printf '\n[remote_branches]\n'
     cat "${remote_branches_file}"
     printf '\n[orphan_records]\n'
@@ -1251,6 +1220,8 @@ status_flow() {
   echo "intent_file=${intent_file}"
   echo "registry_doc=${registry_doc}"
   echo "state_file=${state_file}"
+  echo "tracked_scope=${tracked_scope}"
+  echo "local_topology=live_only"
   echo "status=${health_status}"
   echo "publish_lane=${publish_lane}"
   echo "publish_allowed=${publish_allowed}"
@@ -1276,6 +1247,8 @@ check_flow() {
   publish_allowed="$(publish_allowed_string)"
 
   if docs_match_expected; then
+    echo "tracked_scope=${tracked_scope}"
+    echo "local_topology=live_only"
     echo "status=ok"
     echo "publish_lane=${publish_lane}"
     echo "publish_allowed=${publish_allowed}"
@@ -1285,6 +1258,8 @@ check_flow() {
     exit 0
   fi
 
+  echo "tracked_scope=${tracked_scope}"
+  echo "local_topology=live_only"
   echo "status=stale"
   echo "publish_lane=${publish_lane}"
   echo "publish_allowed=${publish_allowed}"
@@ -1355,6 +1330,38 @@ refresh_flow() {
   echo "[git-topology-registry] Registry refreshed."
 }
 
+publish_flow() {
+  local gh_bin="${GIT_TOPOLOGY_REGISTRY_GH_BIN:-gh}"
+  local output=""
+  local rc=0
+
+  if ! command -v "${gh_bin}" >/dev/null 2>&1; then
+    echo "[git-topology-registry] Cannot dispatch publish workflow because '${gh_bin}' is unavailable." >&2
+    echo "[git-topology-registry] Install/authenticate GitHub CLI or dispatch workflow '${topology_publish_workflow}' manually from the Actions UI." >&2
+    exit 1
+  fi
+
+  set +e
+  output="$("${gh_bin}" workflow run "${topology_publish_workflow}" --ref "${topology_publish_ref}" 2>&1)"
+  rc=$?
+  set -e
+
+  if [[ "${rc}" -ne 0 ]]; then
+    printf '%s\n' "${output}" >&2
+    echo "[git-topology-registry] Publish workflow dispatch failed." >&2
+    echo "[git-topology-registry] Verify 'gh auth status' and rerun: ${gh_bin} workflow run ${topology_publish_workflow} --ref ${topology_publish_ref}" >&2
+    exit "${rc}"
+  fi
+
+  echo "[git-topology-registry] Publish workflow dispatched."
+  echo "[git-topology-registry] Workflow: ${topology_publish_workflow}"
+  echo "[git-topology-registry] Ref: ${topology_publish_ref}"
+  if [[ -n "${output}" ]]; then
+    printf '%s\n' "${output}"
+  fi
+  echo "[git-topology-registry] Track runs with: gh run list --workflow ${topology_publish_workflow} --limit 5"
+}
+
 doctor_flow() {
   local current_hash=""
   local rendered_hash=""
@@ -1387,7 +1394,11 @@ doctor_flow() {
 
   if [[ "${write_doc}" != "true" ]]; then
     write_recovery_draft
-    message="doctor detected drift; draft saved to ${draft_file}; rerun with --write-doc to reconcile"
+    if publish_allowed_on_current_branch; then
+      message="doctor detected drift; draft saved to ${draft_file}; rerun with --write-doc to reconcile"
+    else
+      message="doctor detected drift; draft saved to ${draft_file}; local topology remains live-only here; dispatch the shared publish flow later via $(publish_command)"
+    fi
     write_health_state "stale" "${current_hash}" "${rendered_hash}" "${document_hash}" "${orphan_count}" "${message}"
     echo "[git-topology-registry] ${message}" >&2
     exit 1
@@ -1414,6 +1425,9 @@ case "${action}" in
     ;;
   check)
     check_flow
+    ;;
+  publish)
+    publish_flow
     ;;
   refresh)
     refresh_flow

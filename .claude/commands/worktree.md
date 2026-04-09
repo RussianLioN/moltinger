@@ -177,7 +177,7 @@ Rules:
 - If explicit `--handoff terminal` or `--handoff codex` is requested and succeeds, stop the current session immediately after reporting the launched handoff.
 - Do not auto-mutate `docs/GIT-TOPOLOGY-REGISTRY.md` in the invoking branch during ordinary Phase A worktree flows.
 - If topology is stale, report it honestly and point to the dedicated publish path instead of injecting a docs-only commit into the invoking branch.
-- If a separate UAT worktree later needs reset/update and carries a newer `docs/GIT-TOPOLOGY-REGISTRY.md` snapshot, preserve/promote that snapshot into the owning branch before treating the UAT branch as disposable.
+- If a separate UAT worktree later carries local changes to `docs/GIT-TOPOLOGY-REGISTRY.md`, inspect them as drift instead of treating them as authoritative branch-local evidence before treating the UAT branch as disposable.
 
 ## Start Workflow
 
@@ -348,7 +348,7 @@ Process:
 7. `bd status`
 8. `git push -u origin <current-branch>`
 9. If `scripts/git-topology-registry.sh` exists, run `scripts/git-topology-registry.sh check`
-   - if stale, report: `Publish the topology snapshot later from a dedicated non-main topology-publish worktree/branch using command-git-topology or scripts/git-topology-registry.sh refresh --write-doc`
+   - if stale, report: `Dispatch the shared publish flow later using command-git-topology publish or scripts/git-topology-registry.sh publish`
    - Stale topology is informational only for ordinary doctor/finish; do not auto-publish from the invoking branch.
 10. `bd close <ISSUE_ID> --reason "<reason>"`
    - if direct DB access fails in the current environment, retry with `bd close --no-db <ISSUE_ID> --reason "<reason>"`

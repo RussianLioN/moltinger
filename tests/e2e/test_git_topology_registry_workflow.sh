@@ -126,9 +126,10 @@ test_managed_start_and_cleanup_refresh_registry() {
     git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
-    assert_contains "$doc" '`007-demo-feature`' "Managed start should refresh branch entry"
-    assert_contains "$doc" '`primary-feature-007`' "Managed start should refresh worktree entry"
     assert_contains "$doc" '`origin/007-demo-feature`' "Managed start should refresh remote entry"
+    assert_not_contains_literal "$doc" '## Current Worktrees' "Managed start should keep local worktree inventory out of the tracked snapshot"
+    assert_not_contains_literal "$doc" '`primary-feature-007`' "Managed start should not publish dedicated worktree ids into the tracked snapshot"
+    assert_not_contains_literal "$doc" '`007-demo-feature` | `origin/007-demo-feature`' "Managed start should not render the local branch inventory table"
 
     git_topology_fixture_remove_worktree "$repo_dir" "$worktree_path"
     git_topology_fixture_delete_branch "$repo_dir" "007-demo-feature"
@@ -136,9 +137,8 @@ test_managed_start_and_cleanup_refresh_registry() {
     git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
-    assert_not_contains_literal "$doc" '`007-demo-feature`' "Cleanup should remove deleted branch from registry"
-    assert_not_contains_literal "$doc" '`primary-feature-007`' "Cleanup should remove deleted worktree from registry"
     assert_not_contains_literal "$doc" '`origin/007-demo-feature`' "Cleanup should remove deleted remote branch from registry"
+    assert_not_contains_literal "$doc" '`primary-feature-007`' "Cleanup should keep deleted worktree ids out of the tracked snapshot"
 
     rm -rf "$fixture_root"
     test_pass
@@ -188,6 +188,7 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     pre_push_rc="$(printf '%s\n' "$pre_push_output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
     assert_eq "0" "$pre_push_rc" "Pre-push hook should stay non-blocking on ordinary branches"
     assert_contains "$pre_push_output" 'Push allowed with stale topology snapshot.' "Ordinary pre-push hook should explain the warning-only path"
+    assert_contains "$pre_push_output" 'scripts/git-topology-registry.sh publish' "Ordinary pre-push hook should point to the shared publish flow"
 
     publish_worktree="$(git_topology_fixture_prepare_publish_worktree "$repo_dir" "$(git_topology_fixture_publish_branch_name)")"
     git_topology_fixture_copy_registry_assets_between_worktrees "$repo_dir" "$repo_dir" "$publish_worktree"
@@ -212,8 +213,8 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     assert_contains "$doctor_output" 'draft saved to' "Doctor stale path should write a recovery draft"
     assert_file_exists "$draft_file" "Doctor stale path should save the rendered draft"
     assert_eq "$doc_before_doctor" "$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")" "Doctor without --write-doc should preserve the last committed registry"
-    assert_contains "$(cat "$draft_file")" 'Reviewed branch note retained across doctor.' "Recovery draft should preserve reviewed branch intent"
-    assert_contains "$(cat "$draft_file")" 'Reviewed worktree note retained across doctor.' "Recovery draft should preserve reviewed worktree intent"
+    assert_contains "$(cat "$draft_file")" 'Reviewed remote note retained across doctor.' "Recovery draft should preserve reviewed remote intent"
+    assert_not_contains_literal "$(cat "$draft_file")" 'Reviewed worktree note retained across doctor.' "Recovery draft should keep worktree-only intent out of the tracked snapshot"
 
     git_topology_fixture_doctor_write_doc_from_publish_branch "$repo_dir" "./scripts/git-topology-registry.sh"
 
@@ -221,11 +222,11 @@ test_hooks_and_session_boundary_reconcile_out_of_band_drift() {
     assert_eq "ok" "$status_after_doctor" "Session-boundary doctor should reconcile stale topology"
 
     doc="$(cat "$repo_dir/docs/GIT-TOPOLOGY-REGISTRY.md")"
-    assert_contains "$doc" 'Reviewed branch note retained across doctor.' "Doctor reconciliation should preserve reviewed branch annotation"
     assert_contains "$doc" 'Reviewed remote note retained across doctor.' "Doctor reconciliation should preserve reviewed remote annotation"
-    assert_contains "$doc" 'Reviewed worktree note retained across doctor.' "Doctor reconciliation should preserve reviewed worktree annotation"
-    assert_contains "$doc" '`008-out-of-band`' "Doctor reconciliation should refresh branch entry"
-    assert_contains "$doc" '`primary-feature-008`' "Doctor reconciliation should refresh worktree entry"
+    assert_contains "$doc" '`origin/008-out-of-band`' "Doctor reconciliation should refresh remote entry"
+    assert_not_contains_literal "$doc" 'Reviewed branch note retained across doctor.' "Tracked snapshot should not surface branch-only intent once the remote ref reconciles it"
+    assert_not_contains_literal "$doc" 'Reviewed worktree note retained across doctor.' "Tracked snapshot should not surface worktree-only intent"
+    assert_not_contains_literal "$doc" '`primary-feature-008`' "Tracked snapshot should not publish worktree identifiers during doctor reconcile"
     assert_not_contains_literal "$doc" '`branch` | `008-out-of-band`' "Reconciled branch should no longer appear in orphan intent table"
     assert_dir_exists "$backup_dir" "Doctor reconciliation should create backup directory"
     latest_backup="$(find "$backup_dir" -type f -name 'registry-*.md' | sort | tail -1)"
@@ -259,8 +260,8 @@ test_pre_push_fails_closed_when_registry_check_errors() {
     test_pass
 }
 
-test_child_branch_doctor_preserves_authoritative_feature_identity() {
-    test_start "git_topology_registry_child_branch_doctor_preserves_authoritative_feature_identity"
+test_child_branch_doctor_keeps_tracked_snapshot_remote_only() {
+    test_start "git_topology_registry_child_branch_doctor_keeps_tracked_snapshot_remote_only"
 
     local fixture_root repo_dir feature_worktree child_worktree doc
     fixture_root="$(mktemp -d /tmp/git-topology-e2e.XXXXXX)"
@@ -297,11 +298,10 @@ test_child_branch_doctor_preserves_authoritative_feature_identity() {
     git_topology_fixture_doctor_write_doc_from_publish_branch "$child_worktree" "./scripts/git-topology-registry.sh"
 
     doc="$(cat "$child_worktree/docs/GIT-TOPOLOGY-REGISTRY.md")"
-    assert_contains "$doc" '`primary-feature-006`' "Child-branch reconcile should preserve canonical authoritative feature worktree id"
-    assert_contains "$doc" 'Authoritative worktree for demo feature.' "Child-branch reconcile should preserve authoritative worktree note"
-    assert_contains "$doc" '`demo-child`' "Child-branch reconcile should include the new task worktree"
-    assert_not_contains_literal "$doc" '`parallel-feature-006`' "Child-branch reconcile must not downgrade authoritative feature worktree to a parallel id"
-    assert_not_contains_literal "$doc" '| `worktree` | `primary-feature-006` |' "Canonical authoritative worktree must not be rendered as orphan intent"
+    assert_contains "$doc" '`origin/006-demo-feature`' "Child-branch reconcile should keep the authoritative remote branch in the tracked snapshot"
+    assert_not_contains_literal "$doc" '`primary-feature-006`' "Tracked snapshot should not publish authoritative worktree ids"
+    assert_not_contains_literal "$doc" 'Authoritative worktree for demo feature.' "Tracked snapshot should not publish worktree-only notes"
+    assert_not_contains_literal "$doc" '`demo-child`' "Tracked snapshot should not publish child local branch inventory"
 
     rm -rf "$fixture_root"
     test_pass
@@ -327,7 +327,7 @@ run_all_tests() {
     test_managed_start_and_cleanup_refresh_registry
     test_hooks_and_session_boundary_reconcile_out_of_band_drift
     test_pre_push_fails_closed_when_registry_check_errors
-    test_child_branch_doctor_preserves_authoritative_feature_identity
+    test_child_branch_doctor_keeps_tracked_snapshot_remote_only
 
     generate_report
 }

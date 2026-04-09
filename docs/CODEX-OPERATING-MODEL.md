@@ -103,10 +103,12 @@ Override defaults when needed with `CODEX_MODEL=...` and `CODEX_BASE_BRANCH=...`
 4. `branch-slug` should be the branch name with `/` replaced by `-`.
 5. If a branch has a dedicated worktree, edits belong there and not in the canonical `main` directory.
 6. Inspect topology state with `status`/`check` during ordinary worktree flows.
-7. Publish `docs/GIT-TOPOLOGY-REGISTRY.md` only from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
-8. Do not treat canonical `main` or an ordinary feature branch as the default publish path for topology snapshots.
-9. `/tmp` worktrees are acceptable for disposable or emergency lanes, but the preferred long-lived pattern is the sibling path above.
-10. If the topology registry disagrees with live `git` state, live `git` state wins.
+7. Treat `docs/GIT-TOPOLOGY-REGISTRY.md` as the tracked shared remote-governance snapshot; local worktrees and local-only branches stay live-only through `status`/`check`.
+8. Dispatch tracked snapshot publication through `scripts/git-topology-registry.sh publish`; the workflow updates the dedicated non-main branch `chore/topology-registry-publish`.
+9. Use `refresh --write-doc` only as the low-level manual publication path from the dedicated non-main branch `chore/topology-registry-publish` in its own publish worktree.
+10. Do not treat canonical `main` or an ordinary feature branch as the default publish path for topology snapshots.
+11. `/tmp` worktrees are acceptable for disposable or emergency lanes, but the preferred long-lived pattern is the sibling path above.
+12. If the topology registry disagrees with live `git` state, live `git` state wins.
 
 ### Path Relocation Recovery
 
