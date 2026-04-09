@@ -49,30 +49,30 @@ setup_fake_telegram_sender() {
     FAKE_TELEGRAM_ENV_FILE="$FAKE_TELEGRAM_STATE_DIR/fake.env"
     : > "$FAKE_TELEGRAM_STATE_DIR/calls.log"
 
-    cat > "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" <<'SEND'
-#!/usr/bin/env bash
-set -euo pipefail
-state_dir="${FAKE_TELEGRAM_STATE_DIR:?}"
-count_file="$state_dir/count.txt"
-count=0
-if [[ -f "$count_file" ]]; then
-  count="$(cat "$count_file")"
-fi
-count=$((count + 1))
-printf '%s\n' "$count" > "$count_file"
-printf 'call\n' >> "$state_dir/calls.log"
-printf '%s\n' "$*" > "$state_dir/call-${count}.txt"
-if [[ "${FAKE_TELEGRAM_FAIL:-0}" == "1" ]]; then
-  echo "fake telegram failure" >&2
-  exit 1
-fi
-printf '{"ok":true,"result":{"message_id":%s}}\n' "$count"
-SEND
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -euo pipefail' \
+        'state_dir="${FAKE_TELEGRAM_STATE_DIR:?}"' \
+        'count_file="$state_dir/count.txt"' \
+        'count=0' \
+        'if [[ -f "$count_file" ]]; then' \
+        '  count="$(cat "$count_file")"' \
+        'fi' \
+        'count=$((count + 1))' \
+        'printf '"'"'%s\n'"'"' "$count" > "$count_file"' \
+        'printf '"'"'call\n'"'"' >> "$state_dir/calls.log"' \
+        'printf '"'"'%s\n'"'"' "$*" > "$state_dir/call-${count}.txt"' \
+        'if [[ "${FAKE_TELEGRAM_FAIL:-0}" == "1" ]]; then' \
+        '  echo "fake telegram failure" >&2' \
+        '  exit 1' \
+        'fi' \
+        "printf '{\"ok\":true,\"result\":{\"message_id\":%s}}\\n' \"\$count\"" \
+        > "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
     chmod +x "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
 
-    cat > "$FAKE_TELEGRAM_ENV_FILE" <<'ENV'
-TELEGRAM_BOT_TOKEN=fake-token
-ENV
+    printf '%s\n' \
+        'TELEGRAM_BOT_TOKEN=fake-token' \
+        > "$FAKE_TELEGRAM_ENV_FILE"
 }
 
 copy_fixture_record() {

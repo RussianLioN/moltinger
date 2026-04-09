@@ -22,28 +22,27 @@ JSON_OUT=""
 STDOUT_FORMAT="json"
 
 usage() {
-    cat <<'EOF'
-Usage:
-  moltis-codex-consent-router.sh [options]
-
-Route one Codex consent action from the authoritative Telegram ingress.
-
-Options:
-  --event-file PATH            Read one inbound event JSON from PATH
-  --command-text TEXT          Structured fallback command text
-  --callback-data TEXT         Telegram callback data
-  --chat-id ID                 Telegram chat id
-  --actor-id ID                Telegram actor id
-  --reply-to MESSAGE_ID        Reply to this Telegram message id
-  --store-script PATH          Consent store helper path
-  --store-dir PATH             Consent store directory
-  --telegram-send-script PATH  Telegram sender script for contextual replies
-  --telegram-env-file PATH     Env file for Telegram sender token loading
-  --send-reply true|false      Whether to send a contextual reply (default: true)
-  --json-out PATH              Write JSON result to PATH
-  --stdout MODE                json|none (default: json)
-  -h, --help                   Show help
-EOF
+    printf '%s\n' \
+        'Usage:' \
+        '  moltis-codex-consent-router.sh [options]' \
+        '' \
+        'Route one Codex consent action from the authoritative Telegram ingress.' \
+        '' \
+        'Options:' \
+        '  --event-file PATH            Read one inbound event JSON from PATH' \
+        '  --command-text TEXT          Structured fallback command text' \
+        '  --callback-data TEXT         Telegram callback data' \
+        '  --chat-id ID                 Telegram chat id' \
+        '  --actor-id ID                Telegram actor id' \
+        '  --reply-to MESSAGE_ID        Reply to this Telegram message id' \
+        '  --store-script PATH          Consent store helper path' \
+        '  --store-dir PATH             Consent store directory' \
+        '  --telegram-send-script PATH  Telegram sender script for contextual replies' \
+        '  --telegram-env-file PATH     Env file for Telegram sender token loading' \
+        '  --send-reply true|false      Whether to send a contextual reply (default: true)' \
+        '  --json-out PATH              Write JSON result to PATH' \
+        '  --stdout MODE                json|none (default: json)' \
+        '  -h, --help                   Show help'
 }
 
 fail() {
@@ -57,6 +56,18 @@ require_command() {
 
 ensure_parent_dir() {
     mkdir -p "$(dirname "$1")"
+}
+
+jq_read_string() {
+    local filter="$1"
+    local input_json="$2"
+    printf '%s\n' "$input_json" | jq -r "$filter"
+}
+
+jq_filter_string() {
+    local input_json="$1"
+    shift
+    printf '%s\n' "$input_json" | jq "$@"
 }
 
 normalize_bool() {
@@ -159,44 +170,44 @@ extract_if_missing() {
     case "$field" in
         callback)
             if [[ -z "$CALLBACK_DATA" ]]; then
-                CALLBACK_DATA="$(jq -r '
+                CALLBACK_DATA="$(jq_read_string '
                     .callback_query.data //
                     .callback.data //
                     .telegram.callback_query.data //
                     ""
-                ' <<<"$event_json")"
+                ' "$event_json")"
             fi
             ;;
         command)
             if [[ -z "$COMMAND_TEXT" ]]; then
-                COMMAND_TEXT="$(jq -r '
+                COMMAND_TEXT="$(jq_read_string '
                     .command.text //
                     .message.text //
                     .telegram.message.text //
                     .text //
                     ""
-                ' <<<"$event_json")"
+                ' "$event_json")"
             fi
             ;;
         chat)
             if [[ -z "$CHAT_ID" ]]; then
-                CHAT_ID="$(jq -r '
+                CHAT_ID="$(jq_read_string '
                     (.callback_query.message.chat.id // .message.chat.id // .chat.id // .chat_id // "") | tostring
-                ' <<<"$event_json")"
+                ' "$event_json")"
             fi
             ;;
         actor)
             if [[ -z "$ACTOR_ID" ]]; then
-                ACTOR_ID="$(jq -r '
+                ACTOR_ID="$(jq_read_string '
                     (.callback_query.from.id // .message.from.id // .from.id // .actor_id // "") | tostring
-                ' <<<"$event_json")"
+                ' "$event_json")"
             fi
             ;;
         reply_to)
             if [[ -z "$REPLY_TO_MESSAGE_ID" ]]; then
-                REPLY_TO_MESSAGE_ID="$(jq -r '
+                REPLY_TO_MESSAGE_ID="$(jq_read_string '
                     (.callback_query.message.message_id // .message.message_id // .reply_to_message_id // 0) | tostring
-                ' <<<"$event_json")"
+                ' "$event_json")"
                 if [[ "$REPLY_TO_MESSAGE_ID" == "0" ]]; then
                     REPLY_TO_MESSAGE_ID=""
                 fi
@@ -285,7 +296,7 @@ store_mark_delivery() {
 
 build_recommendations_reply() {
     local record_json="$1"
-    python3 - <<'PY' "$record_json"
+    python3 -c '
 import json
 import sys
 
@@ -315,7 +326,7 @@ if items:
         if rationale:
             lines.append(f"  Почему: {rationale}")
         if impacted:
-            lines.append(f"  Затронутые пути: {', '.join(impacted[:4])}")
+            lines.append("  Затронутые пути: " + ", ".join(impacted[:4]))
         for step in next_steps[:3]:
             lines.append(f"  Дальше: {step}")
     if len(items) > 3:
@@ -324,7 +335,7 @@ else:
     lines.append("Подробный список не был подготовлен, но стоит проверить связанные инструкции и workflow проекта вручную.")
 
 print("\n".join(lines).strip())
-PY
+' "$record_json"
 }
 
 result_json() {
@@ -433,8 +444,8 @@ main() {
 
         case "$alias_lookup_code" in
             0)
-                request_id="$(jq -r '.request.request_id' <<<"$record_json")"
-                action_token="$(jq -r '.request.action_token' <<<"$record_json")"
+                request_id="$(jq_read_string '.request.request_id' "$record_json")"
+                action_token="$(jq_read_string '.request.action_token' "$record_json")"
                 ;;
             3)
                 reply_text="Сейчас нет активного запроса на рекомендации. Дождитесь нового уведомления."
@@ -504,22 +515,22 @@ main() {
             set -e
         fi
     else
-        stored_chat_id="$(jq -r '.request.chat_id' <<<"$record_json")"
-        stored_token="$(jq -r '.request.action_token' <<<"$record_json")"
-        stored_status="$(jq -r '.request.status' <<<"$record_json")"
-        stored_delivery_status="$(jq -r '.delivery.status // "not_sent"' <<<"$record_json")"
-        stored_question_message_id="$(jq -r '(.request.question_message_id // 0) | tostring' <<<"$record_json")"
-        expires_at="$(jq -r '.request.expires_at' <<<"$record_json")"
+        stored_chat_id="$(jq_read_string '.request.chat_id' "$record_json")"
+        stored_token="$(jq_read_string '.request.action_token' "$record_json")"
+        stored_status="$(jq_read_string '.request.status' "$record_json")"
+        stored_delivery_status="$(jq_read_string '.delivery.status // "not_sent"' "$record_json")"
+        stored_question_message_id="$(jq_read_string '(.request.question_message_id // 0) | tostring' "$record_json")"
+        expires_at="$(jq_read_string '.request.expires_at' "$record_json")"
         now_epoch="$(date -u +%s)"
-        expiry_epoch="$(python3 - <<'PY' "$expires_at"
+        expiry_epoch="$(python3 -c '
 import datetime as dt
 import sys
 value = sys.argv[1]
 try:
-    print(int(dt.datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()))
+    print(int(dt.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()))
 except Exception:
     print(0)
-PY
+' "$expires_at"
 )"
 
         if [[ -n "$CHAT_ID" && "$stored_chat_id" != "$CHAT_ID" ]]; then
@@ -593,7 +604,7 @@ PY
         fi
     fi
 
-    reply_status="$(jq -r '.delivery.status' <<<"$result")"
+    reply_status="$(jq_read_string '.delivery.status' "$result")"
     reply_error=""
     if [[ "$SEND_REPLY" == "true" ]]; then
         if [[ -z "$CHAT_ID" ]]; then
@@ -610,10 +621,10 @@ PY
             fi
         else
             set +e
-            sender_output="$(run_sender "$CHAT_ID" "$(jq -r '.reply_text' <<<"$result")" "$outbound_reply_to" 2>&1)"
+            sender_output="$(run_sender "$CHAT_ID" "$(jq_read_string '.reply_text' "$result")" "$outbound_reply_to" 2>&1)"
             if [[ $? -eq 0 ]]; then
                 reply_status="sent"
-                followup_delivery_message_id="$(jq -r '.result.message_id // ""' <<<"$sender_output" 2>/dev/null || true)"
+                followup_delivery_message_id="$(jq_read_string '.result.message_id // ""' "$sender_output" 2>/dev/null || true)"
                 if [[ -n "$followup_delivery_on_success" ]]; then
                     store_mark_delivery "$request_id" "$followup_delivery_on_success" "$followup_delivery_message_id" "" "$followup_note" || true
                 fi
@@ -627,14 +638,13 @@ PY
             set -e
         fi
 
-        result="$(jq \
+        result="$(jq_filter_string "$result" \
             --arg reply_status "$reply_status" \
             --arg reply_error "$reply_error" \
             --arg reply_message_id "$followup_delivery_message_id" \
-            '.delivery.status = $reply_status | .delivery.error = (if $reply_error == "" then null else $reply_error end)' \
-            <<<"$result")"
+            '.delivery.status = $reply_status | .delivery.error = (if $reply_error == "" then null else $reply_error end)')"
         if [[ -n "$followup_delivery_message_id" ]]; then
-            result="$(jq --arg reply_message_id "$followup_delivery_message_id" '.delivery.message_id = ($reply_message_id | tonumber)' <<<"$result")"
+            result="$(jq_filter_string "$result" --arg reply_message_id "$followup_delivery_message_id" '.delivery.message_id = ($reply_message_id | tonumber)')"
         fi
     fi
 

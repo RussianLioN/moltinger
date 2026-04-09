@@ -152,119 +152,99 @@ group_to_lanes() {
 suite_entries_for_lane() {
     case "$1" in
         static)
-            cat <<LIST
-bash|static_config_validation|Config validation|$SCRIPT_DIR/static/test_config_validation.sh
-bash|static_fleet_registry|Fleet registry and policy|$SCRIPT_DIR/static/test_fleet_registry.sh
-bash|static_dev_mcp_smoke|Dev MCP smoke|$SCRIPT_DIR/static/test_dev_mcp_smoke.sh
-bash|static_beads_worktree_ownership|Beads worktree ownership guardrails|$SCRIPT_DIR/static/test_beads_worktree_ownership.sh
-bash|static_skill_execution_contracts|Skill execution and reporting contracts|$SCRIPT_DIR/static/test_skill_execution_contracts.sh
-LIST
+            printf '%s\n' \
+                "bash|static_config_validation|Config validation|$SCRIPT_DIR/static/test_config_validation.sh" \
+                "bash|static_fleet_registry|Fleet registry and policy|$SCRIPT_DIR/static/test_fleet_registry.sh" \
+                "bash|static_dev_mcp_smoke|Dev MCP smoke|$SCRIPT_DIR/static/test_dev_mcp_smoke.sh" \
+                "bash|static_beads_worktree_ownership|Beads worktree ownership guardrails|$SCRIPT_DIR/static/test_beads_worktree_ownership.sh" \
+                "bash|static_skill_execution_contracts|Skill execution and reporting contracts|$SCRIPT_DIR/static/test_skill_execution_contracts.sh"
             ;;
         component)
-            cat <<LIST
-bash|component_backup_restore_readiness|Backup restore-readiness component|$SCRIPT_DIR/component/test_backup_restore_readiness.sh
-bash|component_moltis_version_helper|Moltis version helper component|$SCRIPT_DIR/component/test_moltis_version_helper.sh
-bash|component_circuit_breaker|Circuit breaker component|$SCRIPT_DIR/component/test_circuit_breaker.sh
-bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/component/test_prometheus_metrics.sh
-bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_llm_failover_component.sh
-bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh
-bash|component_moltis_storage_maintenance|Moltis storage maintenance component|$SCRIPT_DIR/component/test_moltis_storage_maintenance.sh
-bash|component_sync_claude_skills_bridge|Claude skills bridge component|$SCRIPT_DIR/component/test_sync_claude_skills_bridge.sh
-bash|component_codex_cli_update_monitor|Codex CLI update monitor component|$SCRIPT_DIR/component/test_codex_cli_update_monitor.sh
-bash|component_codex_cli_upstream_watcher|Codex CLI upstream watcher component|$SCRIPT_DIR/component/test_codex_cli_upstream_watcher.sh
-bash|component_codex_cli_update_advisor|Codex CLI update advisor component|$SCRIPT_DIR/component/test_codex_cli_update_advisor.sh
-bash|component_codex_cli_update_delivery|Codex CLI update delivery component|$SCRIPT_DIR/component/test_codex_cli_update_delivery.sh
-bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/component/test_codex_profile_launch.sh
-bash|component_codex_session_path_repair|Codex session path repair component|$SCRIPT_DIR/component/test_codex_session_path_repair.sh
-bash|component_beads_worktree_audit|Beads worktree audit component|$SCRIPT_DIR/unit/test_beads_worktree_audit.sh
-bash|component_beads_git_hooks|Beads git hook bootstrap-source component|$SCRIPT_DIR/unit/test_beads_git_hooks.sh
-bash|component_deploy_stall_watchdog|Deploy stall watchdog component|$SCRIPT_DIR/unit/test_deploy_stall_watchdog.sh
-bash|component_deploy_workflow_guards|Deploy workflow guard component|$SCRIPT_DIR/unit/test_deploy_workflow_guards.sh
-bash|component_gitops_check_managed_surface|GitOps managed-surface component|$SCRIPT_DIR/component/test_gitops_check_managed_surface.sh
-bash|component_runner_contract|Test runner contract component|$SCRIPT_DIR/component/test_runner_contract.sh
-bash|component_mempalace_project_memory|MemPalace project memory contract|$SCRIPT_DIR/unit/test_mempalace_project_memory.sh
-bash|component_scripts_verify|Scripts verify component|$SCRIPT_DIR/unit/test_scripts_verify.sh
-bash|component_test_stack_contract|Hermetic test stack contract|$SCRIPT_DIR/unit/test_test_stack_contract.sh
-bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh
-bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$SCRIPT_DIR/component/test_codex_telegram_consent_e2e.sh
-bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh
-bash|component_moltis_codex_advisory_intake|Moltis Codex advisory intake component|$SCRIPT_DIR/component/test_moltis_codex_advisory_intake.sh
-bash|component_moltis_codex_advisory_router|Moltis Codex advisory router component|$SCRIPT_DIR/component/test_moltis_codex_advisory_router.sh
-bash|component_moltis_codex_update_run|Moltis Codex update run component|$SCRIPT_DIR/component/test_moltis_codex_update_run.sh
-bash|component_moltis_codex_update_state|Moltis Codex update state component|$SCRIPT_DIR/component/test_moltis_codex_update_state.sh
-bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh
-bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh
-bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh
-bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh
-bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh
-bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh
-LIST
+            printf '%s\n' \
+                "bash|component_backup_restore_readiness|Backup restore-readiness component|$SCRIPT_DIR/component/test_backup_restore_readiness.sh" \
+                "bash|component_moltis_version_helper|Moltis version helper component|$SCRIPT_DIR/component/test_moltis_version_helper.sh" \
+                "bash|component_circuit_breaker|Circuit breaker component|$SCRIPT_DIR/component/test_circuit_breaker.sh" \
+                "bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/component/test_prometheus_metrics.sh" \
+                "bash|component_llm_failover|LLM failover component|$SCRIPT_DIR/component/test_llm_failover_component.sh" \
+                "bash|component_docker_helpers|Docker helper component|$SCRIPT_DIR/component/test_docker_helpers.sh" \
+                "bash|component_moltis_storage_maintenance|Moltis storage maintenance component|$SCRIPT_DIR/component/test_moltis_storage_maintenance.sh" \
+                "bash|component_sync_claude_skills_bridge|Claude skills bridge component|$SCRIPT_DIR/component/test_sync_claude_skills_bridge.sh" \
+                "bash|component_codex_cli_update_monitor|Codex CLI update monitor component|$SCRIPT_DIR/component/test_codex_cli_update_monitor.sh" \
+                "bash|component_codex_cli_upstream_watcher|Codex CLI upstream watcher component|$SCRIPT_DIR/component/test_codex_cli_upstream_watcher.sh" \
+                "bash|component_codex_cli_update_advisor|Codex CLI update advisor component|$SCRIPT_DIR/component/test_codex_cli_update_advisor.sh" \
+                "bash|component_codex_cli_update_delivery|Codex CLI update delivery component|$SCRIPT_DIR/component/test_codex_cli_update_delivery.sh" \
+                "bash|component_codex_profile_launch|Codex profile launch component|$SCRIPT_DIR/component/test_codex_profile_launch.sh" \
+                "bash|component_codex_session_path_repair|Codex session path repair component|$SCRIPT_DIR/component/test_codex_session_path_repair.sh" \
+                "bash|component_beads_worktree_audit|Beads worktree audit component|$SCRIPT_DIR/unit/test_beads_worktree_audit.sh" \
+                "bash|component_beads_git_hooks|Beads git hook bootstrap-source component|$SCRIPT_DIR/unit/test_beads_git_hooks.sh" \
+                "bash|component_deploy_stall_watchdog|Deploy stall watchdog component|$SCRIPT_DIR/unit/test_deploy_stall_watchdog.sh" \
+                "bash|component_deploy_workflow_guards|Deploy workflow guard component|$SCRIPT_DIR/unit/test_deploy_workflow_guards.sh" \
+                "bash|component_gitops_check_managed_surface|GitOps managed-surface component|$SCRIPT_DIR/component/test_gitops_check_managed_surface.sh" \
+                "bash|component_runner_contract|Test runner contract component|$SCRIPT_DIR/component/test_runner_contract.sh" \
+                "bash|component_mempalace_project_memory|MemPalace project memory contract|$SCRIPT_DIR/unit/test_mempalace_project_memory.sh" \
+                "bash|component_scripts_verify|Scripts verify component|$SCRIPT_DIR/unit/test_scripts_verify.sh" \
+                "bash|component_test_stack_contract|Hermetic test stack contract|$SCRIPT_DIR/unit/test_test_stack_contract.sh" \
+                "bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh" \
+                "bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$SCRIPT_DIR/component/test_codex_telegram_consent_e2e.sh" \
+                "bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh" \
+                "bash|component_moltis_codex_advisory_intake|Moltis Codex advisory intake component|$SCRIPT_DIR/component/test_moltis_codex_advisory_intake.sh" \
+                "bash|component_moltis_codex_advisory_router|Moltis Codex advisory router component|$SCRIPT_DIR/component/test_moltis_codex_advisory_router.sh" \
+                "bash|component_moltis_codex_update_run|Moltis Codex update run component|$SCRIPT_DIR/component/test_moltis_codex_update_run.sh" \
+                "bash|component_moltis_codex_update_state|Moltis Codex update state component|$SCRIPT_DIR/component/test_moltis_codex_update_state.sh" \
+                "bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh" \
+                "bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh" \
+                "bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh" \
+                "bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh" \
+                "bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh" \
+                "bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh"
             ;;
         topology_registry)
-            cat <<LIST
-bash|topology_registry_unit|Git topology registry unit|$SCRIPT_DIR/unit/test_git_topology_registry.sh
-bash|topology_registry_publish_workflow|Git topology registry publish workflow|$SCRIPT_DIR/unit/test_topology_registry_publish_workflow.sh
-bash|topology_registry_integration|Git topology registry integration|$SCRIPT_DIR/integration/test_git_topology_registry.sh
-bash|topology_registry_e2e|Git topology registry workflow E2E|$SCRIPT_DIR/e2e/test_git_topology_registry_workflow.sh
-LIST
+            printf '%s\n' \
+                "bash|topology_registry_unit|Git topology registry unit|$SCRIPT_DIR/unit/test_git_topology_registry.sh" \
+                "bash|topology_registry_publish_workflow|Git topology registry publish workflow|$SCRIPT_DIR/unit/test_topology_registry_publish_workflow.sh" \
+                "bash|topology_registry_integration|Git topology registry integration|$SCRIPT_DIR/integration/test_git_topology_registry.sh" \
+                "bash|topology_registry_e2e|Git topology registry workflow E2E|$SCRIPT_DIR/e2e/test_git_topology_registry_workflow.sh"
             ;;
         integration_local)
-            cat <<LIST
-bash|integration_local_api_endpoints|Local API endpoints|$SCRIPT_DIR/integration_local/test_api_endpoints.sh
-bash|integration_local_clawdiy_handoff|Clawdiy handoff contract|$SCRIPT_DIR/integration_local/test_clawdiy_handoff.sh
-bash|integration_local_clawdiy_extraction_readiness|Clawdiy extraction readiness|$SCRIPT_DIR/integration_local/test_clawdiy_extraction_readiness.sh
-LIST
+            printf '%s\n' \
+                "bash|integration_local_api_endpoints|Local API endpoints|$SCRIPT_DIR/integration_local/test_api_endpoints.sh" \
+                "bash|integration_local_clawdiy_handoff|Clawdiy handoff contract|$SCRIPT_DIR/integration_local/test_clawdiy_handoff.sh" \
+                "bash|integration_local_clawdiy_extraction_readiness|Clawdiy extraction readiness|$SCRIPT_DIR/integration_local/test_clawdiy_extraction_readiness.sh"
             ;;
         security_api)
-            cat <<LIST
-bash|security_api_authentication|Authentication security|$SCRIPT_DIR/security_api/test_authentication.sh
-bash|security_api_input_validation|Input validation security|$SCRIPT_DIR/security_api/test_input_validation.sh
-bash|security_api_auth_rate_limit|Authentication rate limit|$SCRIPT_DIR/security_api/test_auth_rate_limit.sh
-bash|security_api_clawdiy_auth_boundaries|Clawdiy auth boundaries|$SCRIPT_DIR/security_api/test_clawdiy_auth_boundaries.sh
-LIST
+            printf '%s\n' \
+                "bash|security_api_authentication|Authentication security|$SCRIPT_DIR/security_api/test_authentication.sh" \
+                "bash|security_api_input_validation|Input validation security|$SCRIPT_DIR/security_api/test_input_validation.sh" \
+                "bash|security_api_auth_rate_limit|Authentication rate limit|$SCRIPT_DIR/security_api/test_auth_rate_limit.sh" \
+                "bash|security_api_clawdiy_auth_boundaries|Clawdiy auth boundaries|$SCRIPT_DIR/security_api/test_clawdiy_auth_boundaries.sh"
             ;;
         mcp_fake)
-            cat <<LIST
-node|mcp_fake_runtime|MCP fake runtime|$SCRIPT_DIR/mcp_fake/runtime_mcp_fake.mjs
-LIST
+            printf '%s\n' "node|mcp_fake_runtime|MCP fake runtime|$SCRIPT_DIR/mcp_fake/runtime_mcp_fake.mjs"
             ;;
         e2e_browser)
-            cat <<LIST
-node|e2e_browser_chat_flow|Browser chat flow|$SCRIPT_DIR/e2e_browser/chat_flow.mjs
-LIST
+            printf '%s\n' "node|e2e_browser_chat_flow|Browser chat flow|$SCRIPT_DIR/e2e_browser/chat_flow.mjs"
             ;;
         resilience)
-            cat <<LIST
-bash|resilience_rate_limiting|Rate limiting resilience|$SCRIPT_DIR/resilience/test_rate_limiting.sh
-bash|resilience_full_failover_chain|Full failover chain|$SCRIPT_DIR/resilience/test_full_failover_chain.sh
-bash|resilience_deployment_recovery|Deployment recovery|$SCRIPT_DIR/resilience/test_deployment_recovery.sh
-bash|resilience_clawdiy_rollback|Clawdiy rollback and restore|$SCRIPT_DIR/resilience/test_clawdiy_rollback.sh
-LIST
+            printf '%s\n' \
+                "bash|resilience_rate_limiting|Rate limiting resilience|$SCRIPT_DIR/resilience/test_rate_limiting.sh" \
+                "bash|resilience_full_failover_chain|Full failover chain|$SCRIPT_DIR/resilience/test_full_failover_chain.sh" \
+                "bash|resilience_deployment_recovery|Deployment recovery|$SCRIPT_DIR/resilience/test_deployment_recovery.sh" \
+                "bash|resilience_clawdiy_rollback|Clawdiy rollback and restore|$SCRIPT_DIR/resilience/test_clawdiy_rollback.sh"
             ;;
         security_runtime_smoke)
-            cat <<LIST
-bash|security_runtime_smoke|Security runtime smoke|$SCRIPT_DIR/live_external/test_security_runtime_smoke.sh
-LIST
+            printf '%s\n' "bash|security_runtime_smoke|Security runtime smoke|$SCRIPT_DIR/live_external/test_security_runtime_smoke.sh"
             ;;
         clawdiy_live_deploy)
-            cat <<LIST
-bash|live_clawdiy_deploy_smoke|Clawdiy deploy smoke|$SCRIPT_DIR/live_external/test_clawdiy_deploy_smoke.sh
-LIST
+            printf '%s\n' "bash|live_clawdiy_deploy_smoke|Clawdiy deploy smoke|$SCRIPT_DIR/live_external/test_clawdiy_deploy_smoke.sh"
             ;;
         mcp_real)
-            cat <<LIST
-bash|live_mcp_real|Real MCP smoke|$SCRIPT_DIR/live_external/test_mcp_real.sh
-LIST
+            printf '%s\n' "bash|live_mcp_real|Real MCP smoke|$SCRIPT_DIR/live_external/test_mcp_real.sh"
             ;;
         telegram_live)
-            cat <<LIST
-bash|live_telegram_smoke|Telegram live smoke|$SCRIPT_DIR/live_external/test_telegram_external_smoke.sh
-LIST
+            printf '%s\n' "bash|live_telegram_smoke|Telegram live smoke|$SCRIPT_DIR/live_external/test_telegram_external_smoke.sh"
             ;;
         provider_live)
-            cat <<LIST
-bash|live_provider_smoke|Provider live smoke|$SCRIPT_DIR/live_external/test_provider_live.sh
-LIST
+            printf '%s\n' "bash|live_provider_smoke|Provider live smoke|$SCRIPT_DIR/live_external/test_provider_live.sh"
             ;;
         *)
             return 1

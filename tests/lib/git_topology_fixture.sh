@@ -188,6 +188,7 @@ git_topology_fixture_copy_registry_assets_between_worktrees() {
   mkdir -p "${target_repo}/docs" "${target_repo}/scripts" "${target_repo}/.githooks"
 
   cp "${asset_source_repo}/scripts/git-topology-registry.sh" "${target_repo}/scripts/git-topology-registry.sh"
+  cp "${asset_source_repo}/scripts/git-topology-registry-render.py" "${target_repo}/scripts/git-topology-registry-render.py"
   cp "${asset_source_repo}/.githooks/_repo-local-path.sh" "${target_repo}/.githooks/_repo-local-path.sh"
   cp "${asset_source_repo}/.githooks/pre-push" "${target_repo}/.githooks/pre-push"
   cp "${asset_source_repo}/.githooks/post-checkout" "${target_repo}/.githooks/post-checkout"
@@ -204,6 +205,7 @@ git_topology_fixture_copy_registry_assets_between_worktrees() {
 
   chmod +x \
     "${target_repo}/scripts/git-topology-registry.sh" \
+    "${target_repo}/scripts/git-topology-registry-render.py" \
     "${target_repo}/.githooks/_repo-local-path.sh" \
     "${target_repo}/.githooks/pre-push" \
     "${target_repo}/.githooks/post-checkout" \
@@ -289,6 +291,7 @@ git_topology_fixture_seed_registry_assets() {
   mkdir -p "${repo_dir}/docs" "${repo_dir}/scripts" "${repo_dir}/.githooks"
 
   cp "${project_root}/scripts/git-topology-registry.sh" "${repo_dir}/scripts/git-topology-registry.sh"
+  cp "${project_root}/scripts/git-topology-registry-render.py" "${repo_dir}/scripts/git-topology-registry-render.py"
   cp "${project_root}/.githooks/_repo-local-path.sh" "${repo_dir}/.githooks/_repo-local-path.sh"
   cp "${project_root}/.githooks/pre-push" "${repo_dir}/.githooks/pre-push"
   cp "${project_root}/.githooks/post-checkout" "${repo_dir}/.githooks/post-checkout"
@@ -298,6 +301,7 @@ git_topology_fixture_seed_registry_assets() {
   chmod +x \
     "${repo_dir}/.githooks/_repo-local-path.sh" \
     "${repo_dir}/scripts/git-topology-registry.sh" \
+    "${repo_dir}/scripts/git-topology-registry-render.py" \
     "${repo_dir}/.githooks/pre-push" \
     "${repo_dir}/.githooks/post-checkout" \
     "${repo_dir}/.githooks/post-merge" \

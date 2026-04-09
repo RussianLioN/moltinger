@@ -24,33 +24,33 @@ setup_fake_telegram_sender() {
     FAKE_TELEGRAM_ENV_FILE="$FAKE_TELEGRAM_STATE_DIR/fake.env"
     : > "$FAKE_TELEGRAM_STATE_DIR/calls.log"
 
-    cat > "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh" <<'SEND'
-#!/usr/bin/env bash
-set -euo pipefail
-state_dir="${FAKE_TELEGRAM_STATE_DIR:?}"
-mkdir -p "$state_dir"
-count_file="$state_dir/count.txt"
-count=0
-if [[ -f "$count_file" ]]; then
-  count="$(cat "$count_file")"
-fi
-count=$((count + 1))
-printf '%s\n' "$count" > "$count_file"
-printf 'call\n' >> "$state_dir/calls.log"
-printf '%s\n' "$*" >> "$state_dir/last-args.txt"
-printf '%s\n' "$*" > "$state_dir/call-${count}.txt"
-if [[ "${FAKE_TELEGRAM_FAIL:-0}" == "1" ]]; then
-  echo "fake telegram failure" >&2
-  exit 1
-fi
-printf '{"ok":true,"result":{"message_id":%s}}\n' "$count"
-SEND
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -euo pipefail' \
+        'state_dir="${FAKE_TELEGRAM_STATE_DIR:?}"' \
+        'mkdir -p "$state_dir"' \
+        'count_file="$state_dir/count.txt"' \
+        'count=0' \
+        'if [[ -f "$count_file" ]]; then' \
+        '  count="$(cat "$count_file")"' \
+        'fi' \
+        'count=$((count + 1))' \
+        'printf '"'"'%s\n'"'"' "$count" > "$count_file"' \
+        'printf '"'"'call\n'"'"' >> "$state_dir/calls.log"' \
+        'printf '"'"'%s\n'"'"' "$*" >> "$state_dir/last-args.txt"' \
+        'printf '"'"'%s\n'"'"' "$*" > "$state_dir/call-${count}.txt"' \
+        'if [[ "${FAKE_TELEGRAM_FAIL:-0}" == "1" ]]; then' \
+        '  echo "fake telegram failure" >&2' \
+        '  exit 1' \
+        'fi' \
+        "printf '{\"ok\":true,\"result\":{\"message_id\":%s}}\\n' \"\$count\"" \
+        > "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
     chmod +x "$FAKE_TELEGRAM_BIN_DIR/telegram-bot-send.sh"
 
-    cat > "$FAKE_TELEGRAM_ENV_FILE" <<'ENV'
-TELEGRAM_ALLOWED_USERS=123456
-TELEGRAM_BOT_TOKEN=fake-token
-ENV
+    printf '%s\n' \
+        'TELEGRAM_ALLOWED_USERS=123456' \
+        'TELEGRAM_BOT_TOKEN=fake-token' \
+        > "$FAKE_TELEGRAM_ENV_FILE"
 }
 
 run_watcher() {
@@ -227,9 +227,9 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_contains "$(jq -r '.followup.consent.reason' "$report")" "MessageReceived и Command hooks остаются read-only" "Watcher should surface the root-cause constraint directly in the report"
     if [[ "$(jq -r '.followup.consent.pending_state == null' "$report")" != "true" ]]; then
         test_fail "Retired watcher flow must not keep a pending consent state"
-    elif grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+    elif printf '%s\n' "$call_text" | grep -q "Хотите получить практические рекомендации"; then
         test_fail "Retired watcher flow must not ask for practical recommendations"
-    elif grep -q "/codex_da" <<<"$call_text"; then
+    elif printf '%s\n' "$call_text" | grep -q "/codex_da"; then
         test_fail "Retired watcher flow must not expose /codex_da"
     elif grep -q -- "--reply-markup-json" "$FAKE_TELEGRAM_STATE_DIR/last-args.txt"; then
         test_fail "Retired watcher flow must not send reply keyboard markup"
@@ -258,7 +258,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that no repo-side router path is active"
     assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Watcher should stay one-way only"
     assert_contains "$(jq -r '.followup.consent.reason' "$report")" "Telegram channel сейчас не заявляет interactive components" "Reason should point to the official Telegram capability limit"
-    if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+    if printf '%s\n' "$call_text" | grep -q "Хотите получить практические рекомендации"; then
         test_fail "One-way alert should not promise a consent flow under the official one-way contract"
     else
         test_pass
@@ -286,7 +286,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "deliver" "$(jq -r '.decision.status' "$report")" "Remote sender should still deliver the upstream alert"
     assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Remote sender should keep consent disabled because watcher no longer owns Telegram follow-up"
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Remote sender should still expose no active repo-side router path"
-    if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+    if printf '%s\n' "$call_text" | grep -q "Хотите получить практические рекомендации"; then
         test_fail "Remote-sender alert should not promise an unreachable follow-up path"
     else
         test_pass
@@ -328,7 +328,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "false" "$(jq -r '.automation.alert.consent_requested' "$report")" "Watcher should not advertise consent when the router is unavailable"
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_enabled' "$report")" "Report should expose that the router is disabled"
     assert_eq "false" "$(jq -r '.telegram_target.consent_router_ready' "$report")" "Report should expose that the router is not ready"
-    if grep -q "Хотите получить практические рекомендации" <<<"$call_text"; then
+    if printf '%s\n' "$call_text" | grep -q "Хотите получить практические рекомендации"; then
         test_fail "One-way alert should not ask a broken consent question"
     else
         test_pass

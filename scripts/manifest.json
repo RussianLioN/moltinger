@@ -1629,12 +1629,25 @@
         "NETWORK"
       ]
     },
+    "git-topology-registry-render.py": {
+      "version": "1.0.0",
+      "description": "File-backed renderer for the tracked shared git topology registry markdown",
+      "entrypoint": false,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "git-topology-render"
+      ],
+      "gitops": true
+    },
     "git-topology-registry.sh": {
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Owner script for the sanitized git topology registry and reviewed intent sidecar",
       "entrypoint": true,
       "requires": [
-        "git"
+        "git",
+        "python3"
       ],
       "provides": [
         "git-topology-refresh",

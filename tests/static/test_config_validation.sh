@@ -66,18 +66,21 @@ CODEX_UPDATE_ADVISOR_REPORT_HELPER="$PROJECT_ROOT/scripts/codex-cli-update-advis
 CODEX_ADVISORY_DOC="$PROJECT_ROOT/docs/codex-moltis-native-advisory.md"
 CODEX_WATCHER_DOC="$PROJECT_ROOT/docs/codex-cli-upstream-watcher.md"
 
+python_code() {
+    printf '%s\n' "$@"
+}
+
 validate_toml() {
     local file_path="$1"
-    python3 - "$file_path" <<'PY'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-with path.open('rb') as fh:
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        import tomli as tomllib
-    tomllib.load(fh)
-PY
+    python3 -c "$(python_code \
+        'import pathlib, sys' \
+        'path = pathlib.Path(sys.argv[1])' \
+        'with path.open("rb") as fh:' \
+        '    try:' \
+        '        import tomllib' \
+        '    except ModuleNotFoundError:' \
+        '        import tomli as tomllib' \
+        '    tomllib.load(fh)')" "$file_path"
 }
 
 run_static_config_validation_tests() {
@@ -165,14 +168,13 @@ run_static_config_validation_tests() {
     fi
 
     test_start "static_clawdiy_config_pins_codex_default_model"
-    if python3 - "$PROJECT_ROOT/config/clawdiy/openclaw.json" <<'PY'
-import json, sys
-from pathlib import Path
-cfg = json.loads(Path(sys.argv[1]).read_text())
-primary = cfg.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
-models = cfg.get("agents", {}).get("defaults", {}).get("models", {})
-raise SystemExit(0 if primary == "openai-codex/gpt-5.4" and "openai-codex/gpt-5.4" in models else 1)
-PY
+    if python3 -c "$(python_code \
+        'import json, sys' \
+        'from pathlib import Path' \
+        'cfg = json.loads(Path(sys.argv[1]).read_text())' \
+        'primary = cfg.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")' \
+        'models = cfg.get("agents", {}).get("defaults", {}).get("models", {})' \
+        'raise SystemExit(0 if primary == "openai-codex/gpt-5.4" and "openai-codex/gpt-5.4" in models else 1)')" "$PROJECT_ROOT/config/clawdiy/openclaw.json"
     then
         test_pass
     else
@@ -226,34 +228,29 @@ PY
     fi
 
     test_start "static_telegram_account_pins_text_only_safe_provider_lane"
-    if python3 - "$TOML_CONFIG" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-with path.open('rb') as fh:
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        import tomli as tomllib
-    config = tomllib.load(fh)
-
-providers = config.get('providers', {})
-telegram = config.get('channels', {}).get('telegram', {}).get('moltis-bot', {})
-safe_lane = providers.get('openai-codex', {})
-
-conditions = [
-    safe_lane.get('enabled') is True,
-    safe_lane.get('tool_mode') == 'auto',
-    safe_lane.get('model') == 'gpt-5.4',
-    safe_lane.get('models') == ['gpt-5.4'],
-    safe_lane.get('alias') == 'openai-codex',
-    telegram.get('model') == 'openai-codex::gpt-5.4',
-    telegram.get('model_provider') == 'openai-codex',
-]
-
-raise SystemExit(0 if all(conditions) else 1)
-PY
+    if python3 -c "$(python_code \
+        'import pathlib' \
+        'import sys' \
+        'path = pathlib.Path(sys.argv[1])' \
+        'with path.open("rb") as fh:' \
+        '    try:' \
+        '        import tomllib' \
+        '    except ModuleNotFoundError:' \
+        '        import tomli as tomllib' \
+        '    config = tomllib.load(fh)' \
+        'providers = config.get("providers", {})' \
+        'telegram = config.get("channels", {}).get("telegram", {}).get("moltis-bot", {})' \
+        'safe_lane = providers.get("openai-codex", {})' \
+        'conditions = [' \
+        '    safe_lane.get("enabled") is True,' \
+        '    safe_lane.get("tool_mode") == "auto",' \
+        '    safe_lane.get("model") == "gpt-5.4",' \
+        '    safe_lane.get("models") == ["gpt-5.4"],' \
+        '    safe_lane.get("alias") == "openai-codex",' \
+        '    telegram.get("model") == "openai-codex::gpt-5.4",' \
+        '    telegram.get("model_provider") == "openai-codex",' \
+        ']' \
+        'raise SystemExit(0 if all(conditions) else 1)')" "$TOML_CONFIG"
     then
         test_pass
     else
@@ -338,25 +335,22 @@ PY
     fi
 
     test_start "static_browser_agent_timeout_keeps_headroom_above_navigation_budget"
-    if python3 - "$TOML_CONFIG" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-with path.open('rb') as fh:
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        import tomli as tomllib
-    config = tomllib.load(fh)
-
-tools = config.get('tools', {})
-browser = tools.get('browser', {})
-agent_timeout_secs = int(tools.get('agent_timeout_secs', 0))
-navigation_timeout_ms = int(browser.get('navigation_timeout_ms', 0))
-required_minimum = max(90, (navigation_timeout_ms // 1000) + 60)
-raise SystemExit(0 if agent_timeout_secs >= required_minimum else 1)
-PY
+    if python3 -c "$(python_code \
+        'import pathlib' \
+        'import sys' \
+        'path = pathlib.Path(sys.argv[1])' \
+        'with path.open("rb") as fh:' \
+        '    try:' \
+        '        import tomllib' \
+        '    except ModuleNotFoundError:' \
+        '        import tomli as tomllib' \
+        '    config = tomllib.load(fh)' \
+        'tools = config.get("tools", {})' \
+        'browser = tools.get("browser", {})' \
+        'agent_timeout_secs = int(tools.get("agent_timeout_secs", 0))' \
+        'navigation_timeout_ms = int(browser.get("navigation_timeout_ms", 0))' \
+        'required_minimum = max(90, (navigation_timeout_ms // 1000) + 60)' \
+        'raise SystemExit(0 if agent_timeout_secs >= required_minimum else 1)')" "$TOML_CONFIG"
     then
         test_pass
     else
@@ -914,57 +908,52 @@ PY
 
     test_start "static_deploy_workflow_bounds_critical_jobs_and_emits_hardened_completion_notifications"
     if [[ -f "$DEPLOY_WORKFLOW" ]] && [[ -f "$DEPLOY_STATUS_NOTIFY_WORKFLOW" ]] && \
-       python3 - "$DEPLOY_WORKFLOW" "$DEPLOY_STATUS_NOTIFY_WORKFLOW" <<'PY'
-import pathlib, re, sys
-deploy = pathlib.Path(sys.argv[1]).read_text()
-notify = pathlib.Path(sys.argv[2]).read_text()
-
-required_job_timeouts = {
-    'gitops-compliance': 'timeout-minutes: 15',
-    'preflight': 'timeout-minutes: 15',
-    'test': 'timeout-minutes: 15',
-    'backup': 'timeout-minutes: 15',
-    'deploy': 'timeout-minutes: 20',
-    'rollback': 'timeout-minutes: 15',
-    'verify': 'timeout-minutes: 15',
-}
-for job_name, timeout_fragment in required_job_timeouts.items():
-    job_match = re.search(rf'(?ms)^  {re.escape(job_name)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
-    if not job_match or timeout_fragment not in job_match.group(1):
-        raise SystemExit(1)
-
-test_job_match = re.search(r'(?ms)^  test:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)', deploy)
-if not test_job_match:
-    raise SystemExit(1)
-if 'test_moltis_repo_skills_sync.sh' not in test_job_match.group(1):
-    raise SystemExit(1)
-if 'test_moltis_repo_hooks_sync.sh' not in test_job_match.group(1):
-    raise SystemExit(1)
-
-required_notify_fragments = [
-    'workflow_run:',
-    'Deploy Moltis',
-    'completed',
-    'timeout-minutes: 10',
-    'workflow_run.conclusion',
-    'https://api.telegram.org/bot',
-    'action-send-mail@v16',
-    "always() && steps.email.outputs.should_send == 'true'",
-    "always() && steps.telegram.outputs.should_send == 'true'",
-    'continue-on-error: true',
-    'All configured deploy notification channels failed',
-]
-for fragment in required_notify_fragments:
-    if fragment not in notify:
-        raise SystemExit(1)
-
-for forbidden_fragment in [
-    'ref: ${{ github.event.workflow_run.head_sha }}',
-    'actions/checkout@v6',
-]:
-    if forbidden_fragment in notify:
-        raise SystemExit(1)
-PY
+       python3 -c "$(python_code \
+        'import pathlib, re, sys' \
+        'deploy = pathlib.Path(sys.argv[1]).read_text()' \
+        'notify = pathlib.Path(sys.argv[2]).read_text()' \
+        'required_job_timeouts = {' \
+        '    "gitops-compliance": "timeout-minutes: 15",' \
+        '    "preflight": "timeout-minutes: 15",' \
+        '    "test": "timeout-minutes: 15",' \
+        '    "backup": "timeout-minutes: 15",' \
+        '    "deploy": "timeout-minutes: 20",' \
+        '    "rollback": "timeout-minutes: 15",' \
+        '    "verify": "timeout-minutes: 15",' \
+        '}' \
+        'for job_name, timeout_fragment in required_job_timeouts.items():' \
+        '    job_match = re.search(rf"(?ms)^  {re.escape(job_name)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", deploy)' \
+        '    if not job_match or timeout_fragment not in job_match.group(1):' \
+        '        raise SystemExit(1)' \
+        'test_job_match = re.search(r"(?ms)^  test:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", deploy)' \
+        'if not test_job_match:' \
+        '    raise SystemExit(1)' \
+        'if "test_moltis_repo_skills_sync.sh" not in test_job_match.group(1):' \
+        '    raise SystemExit(1)' \
+        'if "test_moltis_repo_hooks_sync.sh" not in test_job_match.group(1):' \
+        '    raise SystemExit(1)' \
+        'required_notify_fragments = [' \
+        '    "workflow_run:",' \
+        '    "Deploy Moltis",' \
+        '    "completed",' \
+        '    "timeout-minutes: 10",' \
+        '    "workflow_run.conclusion",' \
+        '    "https://api.telegram.org/bot",' \
+        '    "action-send-mail@v16",' \
+        '    "always() && steps.email.outputs.should_send == \u0027true\u0027",' \
+        '    "always() && steps.telegram.outputs.should_send == \u0027true\u0027",' \
+        '    "continue-on-error: true",' \
+        '    "All configured deploy notification channels failed",' \
+        ']' \
+        'for fragment in required_notify_fragments:' \
+        '    if fragment not in notify:' \
+        '        raise SystemExit(1)' \
+        'for forbidden_fragment in [' \
+        '    "ref: ${{ github.event.workflow_run.head_sha }}",' \
+        '    "actions/checkout@v6",' \
+        ']:' \
+        '    if forbidden_fragment in notify:' \
+        '        raise SystemExit(1)')" "$DEPLOY_WORKFLOW" "$DEPLOY_STATUS_NOTIFY_WORKFLOW"
     then
         test_pass
     else
@@ -973,55 +962,51 @@ PY
 
     test_start "static_deploy_stall_watchdog_is_read_only_and_timeout_aware"
     if [[ -f "$DEPLOY_STALL_WATCHDOG_WORKFLOW" ]] && [[ -f "$DEPLOY_STALL_WATCHDOG_SCRIPT" ]] && \
-       python3 - "$DEPLOY_STALL_WATCHDOG_WORKFLOW" "$DEPLOY_STALL_WATCHDOG_SCRIPT" <<'PY'
-import pathlib, sys
-workflow = pathlib.Path(sys.argv[1]).read_text()
-script = pathlib.Path(sys.argv[2]).read_text()
-
-required_workflow_fragments = [
-    "name: Deploy Moltis Stall Watchdog",
-    "schedule:",
-    "7,22,37,52 * * * *",
-    "timeout-minutes: 10",
-    "ref: main",
-    "actions: read",
-    "contents: read",
-    "scripts/deploy-stall-watchdog.sh",
-    '--workflow-file "deploy.yml"',
-    "--threshold-minutes 45",
-    "api.telegram.org/bot",
-    "always() && steps.watchdog.outputs.stalled_count != '0' && steps.email.outputs.should_send == 'true'",
-    "always() && steps.watchdog.outputs.stalled_count != '0' && steps.telegram.outputs.should_send == 'true'",
-    "continue-on-error: true",
-]
-for fragment in required_workflow_fragments:
-    if fragment not in workflow:
-        raise SystemExit(1)
-
-for forbidden_fragment in [
-    "cancel-in-progress: true",
-    "contents: write",
-    "actions: write",
-]:
-    if forbidden_fragment in workflow:
-        raise SystemExit(1)
-
-required_script_fragments = [
-    "gh api",
-    "actions/workflows/${WORKFLOW_FILE}/runs",
-    "status == \"queued\"",
-    "status == \"in_progress\"",
-    "status == \"waiting\"",
-    "idle_in_progress",
-    "queue_timeout_without_active_predecessor",
-    "has_older_in_progress",
-    "fromdateiso8601",
-    "stalled_count",
-]
-for fragment in required_script_fragments:
-    if fragment not in script:
-        raise SystemExit(1)
-PY
+       python3 -c "$(python_code \
+        'import pathlib, sys' \
+        'workflow = pathlib.Path(sys.argv[1]).read_text()' \
+        'script = pathlib.Path(sys.argv[2]).read_text()' \
+        'required_workflow_fragments = [' \
+        '    "name: Deploy Moltis Stall Watchdog",' \
+        '    "schedule:",' \
+        '    "7,22,37,52 * * * *",' \
+        '    "timeout-minutes: 10",' \
+        '    "ref: main",' \
+        '    "actions: read",' \
+        '    "contents: read",' \
+        '    "scripts/deploy-stall-watchdog.sh",' \
+        '    "--workflow-file \"deploy.yml\"",' \
+        '    "--threshold-minutes 45",' \
+        '    "api.telegram.org/bot",' \
+        '    "always() && steps.watchdog.outputs.stalled_count != \u00270\u0027 && steps.email.outputs.should_send == \u0027true\u0027",' \
+        '    "always() && steps.watchdog.outputs.stalled_count != \u00270\u0027 && steps.telegram.outputs.should_send == \u0027true\u0027",' \
+        '    "continue-on-error: true",' \
+        ']' \
+        'for fragment in required_workflow_fragments:' \
+        '    if fragment not in workflow:' \
+        '        raise SystemExit(1)' \
+        'for forbidden_fragment in [' \
+        '    "cancel-in-progress: true",' \
+        '    "contents: write",' \
+        '    "actions: write",' \
+        ']:' \
+        '    if forbidden_fragment in workflow:' \
+        '        raise SystemExit(1)' \
+        'required_script_fragments = [' \
+        '    "gh api",' \
+        '    "actions/workflows/${WORKFLOW_FILE}/runs",' \
+        '    "status == \"queued\"",' \
+        '    "status == \"in_progress\"",' \
+        '    "status == \"waiting\"",' \
+        '    "idle_in_progress",' \
+        '    "queue_timeout_without_active_predecessor",' \
+        '    "has_older_in_progress",' \
+        '    "fromdateiso8601",' \
+        '    "stalled_count",' \
+        ']' \
+        'for fragment in required_script_fragments:' \
+        '    if fragment not in script:' \
+        '        raise SystemExit(1)')" "$DEPLOY_STALL_WATCHDOG_WORKFLOW" "$DEPLOY_STALL_WATCHDOG_SCRIPT"
     then
         test_pass
     else
