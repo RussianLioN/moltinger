@@ -2,7 +2,7 @@
 # Scripts Integrity Checker
 # Version: 1.0
 # Purpose: Validate scripts manifest and verify integrity
-# Usage: scripts-verify.sh [--fix] [--ci]
+# Usage: scripts-verify.sh [--fix] [--refresh-hashes] [--ci]
 
 set -euo pipefail
 
@@ -12,6 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="$SCRIPT_DIR/manifest.json"
 HASHES_FILE="$SCRIPT_DIR/.scripts-hashes"
+FIX_PERMISSIONS=false
+REFRESH_HASHES=false
+CI_MODE=false
 
 # Colors
 RED='\033[0;31m'
@@ -28,6 +31,27 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --fix)
+                FIX_PERMISSIONS=true
+                ;;
+            --refresh-hashes)
+                REFRESH_HASHES=true
+                ;;
+            --ci)
+                CI_MODE=true
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+}
 
 # Check if jq is available
 check_jq() {
@@ -99,7 +123,6 @@ validate_no_orphans() {
 # Check script permissions
 validate_permissions() {
     log_info "Checking script permissions..."
-    local errors=0
 
     while IFS= read -r script; do
         local script_path="$SCRIPT_DIR/$script"
@@ -109,7 +132,7 @@ validate_permissions() {
 
             if [[ "$perms" != "755" ]] && [[ "$perms" != "744" ]]; then
                 log_warn "Non-standard permissions on $script: $perms"
-                if [[ "${1:-}" == "--fix" ]]; then
+                if [[ "$FIX_PERMISSIONS" == "true" ]]; then
                     chmod 755 "$script_path"
                     log_info "Fixed permissions for $script"
                 fi
@@ -120,53 +143,82 @@ validate_permissions() {
     return 0
 }
 
-# Generate/verify hashes
-verify_hashes() {
-    log_info "Verifying script hashes..."
-
-    # Generate current hashes
-    local temp_hashes
-    temp_hashes=$(mktemp)
-
+# Generate current hashes into a file.
+generate_hashes_file() {
+    local output_file="$1"
     for script in "$SCRIPT_DIR"/*.sh; do
         if [[ -f "$script" ]]; then
             local basename
             basename=$(basename "$script")
             local hash
             hash=$(sha256sum "$script" | cut -d' ' -f1)
-            echo "$basename:$hash" >> "$temp_hashes"
+            echo "$basename:$hash"
         fi
-    done
+    done | sort > "$output_file"
+}
 
-    if [[ -f "$HASHES_FILE" ]]; then
-        # Compare with stored hashes
-        local changed=0
-        while IFS=: read -r script hash; do
-            local stored_hash
-            stored_hash="$(grep "^$script:" "$HASHES_FILE" | cut -d: -f2 || true)"
+# Generate/verify hashes
+verify_hashes() {
+    log_info "Verifying script hashes..."
 
-            if [[ "$hash" != "$stored_hash" ]]; then
-                if [[ -n "$stored_hash" ]]; then
-                    log_warn "CHANGED: $script"
-                    log_info "  Old: $stored_hash"
-                    log_info "  New: $hash"
-                    changed=$((changed + 1))
-                else
-                    log_info "NEW: $script"
-                fi
-            fi
-        done < "$temp_hashes"
+    local temp_hashes
+    local stored_hashes
+    temp_hashes=$(mktemp)
+    stored_hashes=$(mktemp)
+    generate_hashes_file "$temp_hashes"
 
-        if [[ $changed -gt 0 ]]; then
-            log_warn "$changed scripts have changed since last hash"
-        fi
-    else
-        log_info "No previous hashes found (first run)"
+    if [[ "$REFRESH_HASHES" == "true" ]]; then
+        rm -f "$stored_hashes"
+        mv "$temp_hashes" "$HASHES_FILE"
+        log_success "Hashes refreshed in $HASHES_FILE"
+        return 0
     fi
 
-    # Update hashes file
-    mv "$temp_hashes" "$HASHES_FILE"
-    log_success "Hashes updated in $HASHES_FILE"
+    if [[ ! -f "$HASHES_FILE" ]]; then
+        rm -f "$temp_hashes" "$stored_hashes"
+        log_error "Hash baseline missing: $HASHES_FILE"
+        log_info "Run ./scripts/scripts-verify.sh --refresh-hashes to create or update the baseline"
+        return 1
+    fi
+
+    local drift=0
+    local script
+    local current_hash
+    local stored_hash
+
+    sort "$HASHES_FILE" > "$stored_hashes"
+
+    while IFS=: read -r script current_hash; do
+        [[ -n "$script" && -n "$current_hash" ]] || continue
+        stored_hash="$(awk -F: -v script="$script" '$1 == script { print $2; exit }' "$stored_hashes")"
+        if [[ -z "$stored_hash" ]]; then
+            log_error "NEW without baseline: $script"
+            drift=$((drift + 1))
+        elif [[ "$current_hash" != "$stored_hash" ]]; then
+            log_error "CHANGED: $script"
+            log_info "  Old: $stored_hash"
+            log_info "  New: $current_hash"
+            drift=$((drift + 1))
+        fi
+    done < "$temp_hashes"
+
+    while IFS=: read -r script stored_hash; do
+        [[ -n "$script" && -n "$stored_hash" ]] || continue
+        if ! awk -F: -v script="$script" '$1 == script { found=1; exit } END { exit found ? 0 : 1 }' "$temp_hashes"; then
+            log_error "MISSING from current tree: $script"
+            drift=$((drift + 1))
+        fi
+    done < "$stored_hashes"
+
+    rm -f "$temp_hashes" "$stored_hashes"
+
+    if [[ $drift -gt 0 ]]; then
+        log_error "Detected $drift hash drift issue(s)"
+        log_info "Review script changes and rerun ./scripts/scripts-verify.sh --refresh-hashes only when the new baseline is intentional"
+        return 1
+    fi
+
+    log_success "Script hashes match $HASHES_FILE"
 
     return 0
 }
@@ -221,8 +273,7 @@ generate_summary() {
 # ========================================================================
 
 main() {
-    local fix_mode="${1:-}"
-    local ci_mode="${2:-}"
+    parse_args "$@"
 
     echo ""
     echo "╔═══════════════════════════════════════════╗"
@@ -237,8 +288,8 @@ main() {
     validate_manifest_syntax || errors=$((errors + 1))
     validate_scripts_exist || errors=$((errors + 1))
     validate_no_orphans || errors=$((errors + 1))
-    validate_permissions "$fix_mode"
-    verify_hashes
+    validate_permissions
+    verify_hashes || errors=$((errors + 1))
     check_dependencies || errors=$((errors + 1))
     generate_summary
 
@@ -250,9 +301,16 @@ main() {
     log_success "All checks passed!"
 
     # Output for CI
-    if [[ "$ci_mode" == "--ci" ]]; then
-        echo "::set-output name=scripts_valid::true"
-        echo "::set-output name=total_scripts::$(jq -r '.scripts | length' "$MANIFEST_FILE")"
+    if [[ "$CI_MODE" == "true" ]]; then
+        if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+            {
+                echo "scripts_valid=true"
+                echo "total_scripts=$(jq -r '.scripts | length' "$MANIFEST_FILE")"
+            } >> "$GITHUB_OUTPUT"
+        else
+            echo "::set-output name=scripts_valid::true"
+            echo "::set-output name=total_scripts::$(jq -r '.scripts | length' "$MANIFEST_FILE")"
+        fi
     fi
 }
 

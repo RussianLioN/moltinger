@@ -182,6 +182,7 @@ bash|component_deploy_workflow_guards|Deploy workflow guard component|$SCRIPT_DI
 bash|component_gitops_check_managed_surface|GitOps managed-surface component|$SCRIPT_DIR/component/test_gitops_check_managed_surface.sh
 bash|component_runner_contract|Test runner contract component|$SCRIPT_DIR/component/test_runner_contract.sh
 bash|component_scripts_verify|Scripts verify component|$SCRIPT_DIR/unit/test_scripts_verify.sh
+bash|component_test_stack_contract|Hermetic test stack contract|$SCRIPT_DIR/unit/test_test_stack_contract.sh
 bash|component_codex_advisory_e2e|Codex advisory E2E component|$SCRIPT_DIR/component/test_codex_advisory_e2e.sh
 bash|component_codex_telegram_consent_e2e|Codex Telegram consent E2E component|$SCRIPT_DIR/component/test_codex_telegram_consent_e2e.sh
 bash|component_moltis_codex_consent_router|Moltis Codex consent router component|$SCRIPT_DIR/component/test_moltis_codex_consent_router.sh

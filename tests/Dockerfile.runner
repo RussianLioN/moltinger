@@ -1,9 +1,14 @@
-FROM mcr.microsoft.com/playwright:v1.52.0-jammy
+ARG PLAYWRIGHT_VERSION=1.52.0
+FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-jammy
+ARG PLAYWRIGHT_VERSION
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash curl jq sqlite3 coreutils ca-certificates python3 python3-tomli ripgrep docker.io docker-compose-v2 \
-    && npm install -g @playwright/test@1.52.0 \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends bash curl jq sqlite3 coreutils ca-certificates python3 python3-tomli ripgrep docker.io docker-compose-v2; \
+    npm uninstall -g @playwright/test playwright >/dev/null 2>&1 || true; \
+    npm install -g --force "@playwright/test@${PLAYWRIGHT_VERSION}" "playwright@${PLAYWRIGHT_VERSION}"; \
+    node -e 'process.exit(require("/usr/lib/node_modules/playwright/package.json").version === process.argv[1] ? 0 : 1)' "${PLAYWRIGHT_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 ENV CI=1 \

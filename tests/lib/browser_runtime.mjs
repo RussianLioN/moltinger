@@ -18,12 +18,17 @@ export async function getPlaywright() {
     }
   })();
 
-  const requireCandidates = [
-    'playwright',
-    '@playwright/test',
+  const globalCandidates = [
     globalNodeModules ? path.join(globalNodeModules, 'playwright') : '',
     globalNodeModules ? path.join(globalNodeModules, '@playwright/test') : '',
   ].filter(Boolean);
+  const workspaceCandidates = [
+    'playwright',
+    '@playwright/test',
+  ].filter(Boolean);
+  const requireCandidates = process.env.TEST_IN_CONTAINER === '1'
+    ? [...globalCandidates, ...workspaceCandidates]
+    : [...workspaceCandidates, ...globalCandidates];
 
   for (const candidate of requireCandidates) {
     try {

@@ -1,6 +1,6 @@
 # GitOps & Infrastructure Roadmap
 
-> **Last Updated**: 2026-02-27
+> **Last Updated**: 2026-04-09
 > **Status**: Active Development
 
 ---
@@ -14,6 +14,16 @@ Phase 3 (Observability)  ████░░░░░░░░  30% 🔄
 Phase 4 (GitOps 2.0)     ██░░░░░░░░░░  15% 📋
 Phase 5 (IaC)            ░░░░░░░░░░░░   0% 📋
 ```
+
+---
+
+## ✅ Current Priority Repairs
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| F0 | Deterministic hermetic PR test foundation | ✅ DONE | `compose.test.yml` now isolates workspace `node_modules`; CI moved to lockfile + `npm ci` |
+| F1 | Read-only verification tooling | ✅ DONE | `scripts/scripts-verify.sh` no longer rewrites hash baseline during ordinary verify runs |
+| F2 | Test runner/docs contract sync | ✅ DONE | lane group docs, workflow install contract, and test stack guards now match the canonical runner |
 
 ---
 
