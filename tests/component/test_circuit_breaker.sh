@@ -12,6 +12,8 @@ export FALLBACK_COUNTER_FILE="$COUNTER_FILE"
 export CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
 export CIRCUIT_BREAKER_RECOVERY_TIMEOUT=2
 export CIRCUIT_BREAKER_SUCCESS_THRESHOLD=2
+export PRIMARY_PROVIDER="openai-codex"
+export FALLBACK_PROVIDER="ollama"
 export GLM_API_KEY="fixture-glm"
 export OLLAMA_HOST="http://127.0.0.1:11434"
 
@@ -19,8 +21,8 @@ export OLLAMA_HOST="http://127.0.0.1:11434"
 source "$PROJECT_ROOT/scripts/health-monitor.sh"
 
 send_alert() { :; }
-check_glm_health() { return 0; }
-check_ollama_health() { return 0; }
+check_primary_provider_health() { return 0; }
+check_fallback_provider_health() { return 0; }
 
 setup_component_circuit_breaker() {
     require_commands_or_skip jq flock || return 2
@@ -70,7 +72,7 @@ run_component_circuit_breaker_tests() {
     reset_state
     init_circuit_breaker
     assert_eq "closed" "$(get_current_state)" "Circuit breaker should initialize in CLOSED state"
-    assert_eq "glm" "$(get_active_provider)" "Active provider should default to glm"
+    assert_eq "openai-codex" "$(get_active_provider)" "Active provider should default to openai-codex"
     test_pass
 
     test_start "component_circuit_breaker_opens_after_threshold"

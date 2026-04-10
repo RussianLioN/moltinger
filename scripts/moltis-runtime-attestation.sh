@@ -205,6 +205,21 @@ oauth_tokens_have_refresh_token() {
         "$oauth_tokens_file" >/dev/null 2>&1
 }
 
+provider_keys_first_model_for_provider() {
+    local runtime_config_dir="$1"
+    local provider="$2"
+    local provider_keys_file="$runtime_config_dir/provider_keys.json"
+
+    [[ -f "$provider_keys_file" ]] || return 1
+
+    jq -r \
+        --arg provider "$provider" \
+        '
+        (.[$provider].models // [])
+        | if type == "array" and length > 0 then .[0] else "" end
+        ' "$provider_keys_file" 2>/dev/null
+}
+
 run_auth_provider_canary() {
     local base_url="$1"
     local password="$2"
@@ -357,6 +372,8 @@ emit_failure_json() {
         --arg auth_validation_path "${AUTH_VALIDATION_PATH:-}" \
         --arg auth_canary_attempted "${AUTH_CANARY_ATTEMPTED:-}" \
         --arg auth_canary_succeeded "${AUTH_CANARY_SUCCEEDED:-}" \
+        --arg expected_auth_model "${EXPECTED_AUTH_MODEL:-}" \
+        --arg auth_provider_model_preference "${AUTH_PROVIDER_MODEL_PREFERENCE:-}" \
         '{
           status: $status,
           target: $target,
@@ -372,6 +389,8 @@ emit_failure_json() {
             recorded_git_sha: (if $recorded_git_sha == "" then null else $recorded_git_sha end),
             live_git_sha: (if $live_git_sha == "" then null else $live_git_sha end),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
+            expected_auth_model: (if $expected_auth_model == "" then null else $expected_auth_model end),
+            auth_provider_model_preference: (if $auth_provider_model_preference == "" then null else $auth_provider_model_preference end),
             auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
             auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
             auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end),
@@ -485,6 +504,8 @@ AUTH_CANARY_SUCCEEDED=""
 AUTH_CANARY_OUTPUT=""
 TRACKED_RUNTIME_TOML=""
 RUNTIME_RUNTIME_TOML=""
+EXPECTED_AUTH_MODEL=""
+AUTH_PROVIDER_MODEL_PREFERENCE=""
 
 if [[ ! -L "$ACTIVE_PATH" ]]; then
     fail_with "ACTIVE_ROOT_NOT_SYMLINK" "Active deploy root is not a symlink: $ACTIVE_PATH"
@@ -606,6 +627,16 @@ if [[ ! -f "$TRACKED_RUNTIME_TOML" || ! -f "$RUNTIME_RUNTIME_TOML" ]]; then
 fi
 if ! cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"; then
     fail_with "RUNTIME_CONFIG_FILE_MISMATCH" "Runtime moltis.toml diverges from tracked config/moltis.toml"
+fi
+
+if [[ -n "$EXPECTED_AUTH_PROVIDER" ]]; then
+    EXPECTED_AUTH_MODEL="$(read_toml_key "$TRACKED_RUNTIME_TOML" "[providers.${EXPECTED_AUTH_PROVIDER}]" "model" || true)"
+    if [[ -n "$EXPECTED_AUTH_MODEL" ]]; then
+        AUTH_PROVIDER_MODEL_PREFERENCE="$(provider_keys_first_model_for_provider "$EXPECTED_RUNTIME_CONFIG" "$EXPECTED_AUTH_PROVIDER" || true)"
+        if [[ -n "$AUTH_PROVIDER_MODEL_PREFERENCE" && "$AUTH_PROVIDER_MODEL_PREFERENCE" != "$EXPECTED_AUTH_MODEL" ]]; then
+            fail_with "AUTH_PROVIDER_MODEL_PREFERENCE_MISMATCH" "Expected auth provider '$EXPECTED_AUTH_PROVIDER' to prefer model '$EXPECTED_AUTH_MODEL', but runtime provider_keys.json prefers '$AUTH_PROVIDER_MODEL_PREFERENCE'"
+        fi
+    fi
 fi
 
 BROWSER_ENABLED="$(read_toml_key "$RUNTIME_RUNTIME_TOML" "[tools.browser]" "enabled" || true)"
@@ -797,6 +828,8 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg auth_validation_path "$AUTH_VALIDATION_PATH" \
         --arg auth_canary_attempted "$AUTH_CANARY_ATTEMPTED" \
         --arg auth_canary_succeeded "$AUTH_CANARY_SUCCEEDED" \
+        --arg expected_auth_model "$EXPECTED_AUTH_MODEL" \
+        --arg auth_provider_model_preference "$AUTH_PROVIDER_MODEL_PREFERENCE" \
         '{
           status: $status,
           target: $target,
@@ -842,6 +875,8 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             container_group_ids: (if $container_group_ids == "" then null else ($container_group_ids | split(" ")) end),
             host_docker_internal_mapped: (if $host_docker_internal_mapped == "" then null else ($host_docker_internal_mapped == "true") end),
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
+            expected_auth_model: (if $expected_auth_model == "" then null else $expected_auth_model end),
+            auth_provider_model_preference: (if $auth_provider_model_preference == "" then null else $auth_provider_model_preference end),
             auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
             auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
             auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end),
@@ -885,6 +920,8 @@ docker_socket_mode=${DOCKER_SOCKET_MODE:-none}
 container_group_ids=${CONTAINER_GROUP_IDS:-none}
 host_docker_internal_mapped=${HOST_DOCKER_INTERNAL_MAPPED:-false}
 expected_auth_provider=${EXPECTED_AUTH_PROVIDER:-none}
+expected_auth_model=${EXPECTED_AUTH_MODEL:-none}
+auth_provider_model_preference=${AUTH_PROVIDER_MODEL_PREFERENCE:-none}
 auth_status_raw=${AUTH_STATUS_RAW:-none}
 auth_status_post_canary=${AUTH_STATUS_POST_CANARY:-none}
 auth_status_valid=${AUTH_STATUS_VALID:-skipped}

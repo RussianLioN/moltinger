@@ -15,6 +15,8 @@ export FALLBACK_COUNTER_FILE="$COUNTER_FILE"
 export PROMETHEUS_TEXTFILE_DIR="$PROM_DIR"
 export PROMETHEUS_METRICS_FILE="$PROM_FILE"
 export CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
+export PRIMARY_PROVIDER="openai-codex"
+export FALLBACK_PROVIDER="ollama"
 export GLM_API_KEY="fixture-glm"
 export OLLAMA_HOST="http://127.0.0.1:11434"
 
@@ -22,8 +24,8 @@ export OLLAMA_HOST="http://127.0.0.1:11434"
 source "$PROJECT_ROOT/scripts/health-monitor.sh"
 
 send_alert() { :; }
-check_glm_health() { return 0; }
-check_ollama_health() { return 0; }
+check_primary_provider_health() { return 0; }
+check_fallback_provider_health() { return 0; }
 
 reset_metrics_fixture() {
     cat > "$STATE_FILE" <<JSON
@@ -33,7 +35,7 @@ reset_metrics_fixture() {
   "success_count": 0,
   "last_failure_time": null,
   "last_state_change": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-  "active_provider": "glm",
+  "active_provider": "openai-codex",
   "fallback_provider": "ollama"
 }
 JSON
@@ -54,11 +56,11 @@ run_component_prometheus_metrics_tests() {
     export_prometheus_metrics
     local metrics
     metrics=$(cat "$PROM_FILE")
-    assert_contains "$metrics" 'llm_provider_available{provider="glm"}' "GLM availability metric should exist"
+    assert_contains "$metrics" 'llm_provider_available{provider="openai-codex"}' "OpenAI Codex availability metric should exist"
     assert_contains "$metrics" 'llm_provider_available{provider="ollama"}' "Ollama availability metric should exist"
     assert_contains "$metrics" 'llm_fallback_triggered_total' "Fallback counter should exist"
     assert_contains "$metrics" 'moltis_circuit_state' "Circuit state metric should exist"
-    assert_contains "$metrics" 'moltis_active_provider{provider="glm"} 1' "Active provider metric should exist"
+    assert_contains "$metrics" 'moltis_active_provider{provider="openai-codex"} 1' "Active provider metric should exist"
     test_pass
 
     test_start "component_metrics_include_help_and_type_annotations"
@@ -86,10 +88,10 @@ run_component_prometheus_metrics_tests() {
     test_pass
 
     test_start "component_metrics_reflect_active_provider_changes"
-    jq '.state = "half_open" | .active_provider = "glm" | .success_count = 1' "$STATE_FILE" > "$STATE_FILE.tmp"
+    jq '.state = "half_open" | .active_provider = "openai-codex" | .success_count = 1' "$STATE_FILE" > "$STATE_FILE.tmp"
     mv "$STATE_FILE.tmp" "$STATE_FILE"
     export_prometheus_metrics
-    assert_contains "$(cat "$PROM_FILE")" 'moltis_active_provider{provider="glm"} 1' "Metric should show glm as active"
+    assert_contains "$(cat "$PROM_FILE")" 'moltis_active_provider{provider="openai-codex"} 1' "Metric should show OpenAI Codex as active"
     test_pass
 
     test_start "component_metrics_output_is_parseable"

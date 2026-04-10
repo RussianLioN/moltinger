@@ -118,9 +118,9 @@ GLM-5 (Z.ai) -> Ollama Gemini -> Google Gemini
 
 | State | Meaning | Active provider |
 |-------|---------|-----------------|
-| `CLOSED` | normal operation | GLM-5 |
+| `CLOSED` | normal operation | OpenAI Codex (`gpt-5.4`) |
 | `OPEN` | failover active | Ollama |
-| `HALF-OPEN` | testing primary recovery | GLM-5 probe |
+| `HALF-OPEN` | testing primary recovery | OpenAI Codex auth probe |
 
 ### Primary Checks
 
@@ -135,13 +135,13 @@ cat /tmp/moltis-llm-state.json | jq .
 Force failover:
 
 ```bash
-echo '{"state":"OPEN","primary_provider":"glm","active_provider":"ollama","consecutive_failures":3,"last_check":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","last_failover":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' > /tmp/moltis-llm-state.json
+echo '{"state":"open","failure_count":3,"success_count":0,"last_failure_time":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","last_state_change":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","active_provider":"ollama","fallback_provider":"ollama"}' > /tmp/moltis-llm-state.json
 ```
 
-Force recovery to GLM:
+Force recovery to OpenAI Codex:
 
 ```bash
-echo '{"state":"CLOSED","primary_provider":"glm","active_provider":"glm","consecutive_failures":0,"last_check":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","last_failover":null}' > /tmp/moltis-llm-state.json
+echo '{"state":"closed","failure_count":0,"success_count":0,"last_failure_time":null,"last_state_change":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","active_provider":"openai-codex","fallback_provider":"ollama"}' > /tmp/moltis-llm-state.json
 ```
 
 Restart Ollama:

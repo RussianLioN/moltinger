@@ -268,17 +268,17 @@ groups:
       # CIRCUIT BREAKER & FAILOVER ALERTS (Fallback LLM Feature)
       # ====================================================================
 
-      # GLM provider unavailable
-      - alert: GLMProviderDown
-        expr: llm_provider_available{provider="glm"} == 0
+      # Primary OpenAI Codex OAuth provider unavailable
+      - alert: PrimaryLLMProviderDown
+        expr: llm_provider_available{provider="openai-codex"} == 0
         for: 1m
         labels:
           severity: warning
           service: moltis
           component: llm-failover
         annotations:
-          summary: "GLM (Z.ai) provider is unavailable"
-          description: "Primary LLM provider GLM has been unavailable for more than 1 minute. Fallback to Ollama may be active."
+          summary: "Primary OpenAI Codex provider is unavailable"
+          description: "Primary LLM provider openai-codex has been unavailable for more than 1 minute. Fallback to Ollama may be active."
 
       # Circuit breaker opened (failover active)
       - alert: CircuitBreakerOpen
@@ -290,7 +290,7 @@ groups:
           component: llm-failover
         annotations:
           summary: "Circuit breaker is OPEN - using fallback provider"
-          description: "Circuit breaker has opened due to GLM failures. System is now using Ollama fallback. Check GLM API status."
+          description: "Circuit breaker has opened due to openai-codex failures. System is now using Ollama fallback. Check Moltis OAuth auth status."
 
       # Circuit breaker half-open (testing recovery)
       - alert: CircuitBreakerHalfOpen
@@ -302,12 +302,12 @@ groups:
           component: llm-failover
         annotations:
           summary: "Circuit breaker is HALF-OPEN - testing recovery"
-          description: "Circuit breaker is testing if GLM provider has recovered. If successful, will return to CLOSED state."
+          description: "Circuit breaker is testing if the primary openai-codex provider has recovered. If successful, will return to CLOSED state."
 
       # Critical: Both providers down
       - alert: AllLLMProvidersDown
         expr: |
-          (llm_provider_available{provider="glm"} == 0) and (llm_provider_available{provider="ollama"} == 0)
+          (llm_provider_available{provider="openai-codex"} == 0) and (llm_provider_available{provider="ollama"} == 0)
         for: 30s
         labels:
           severity: critical
@@ -315,7 +315,7 @@ groups:
           component: llm-failover
         annotations:
           summary: "CRITICAL: All LLM providers are unavailable"
-          description: "Both GLM and Ollama providers are down. Moltis cannot process LLM requests. Immediate intervention required."
+          description: "Both openai-codex and Ollama providers are down. Moltis cannot process LLM requests. Immediate intervention required."
 
       # Fallback triggered (counter increased)
       - alert: LLMFallbackTriggered
