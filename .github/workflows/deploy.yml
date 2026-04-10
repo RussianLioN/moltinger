@@ -1327,6 +1327,17 @@ jobs:
               echo "::warning::No authenticated providers are currently loaded in live Moltis"
             fi
 
+            # Test 8: Real OpenAI Codex chat canary
+            echo "Test 8: Real OpenAI Codex chat canary..."
+            MOLTIS_ACTIVE_ROOT="${{ env.DEPLOY_ACTIVE_PATH }}" \
+            MOLTIS_URL="http://localhost:13131" \
+            TEST_TIMEOUT="25" \
+            EXPECTED_PROVIDER="openai-codex" \
+            EXPECTED_MODEL="openai-codex::gpt-5.4" \
+            EXPECTED_REPLY_TEXT="OK" \
+            bash "${{ env.DEPLOY_ACTIVE_PATH }}/scripts/test-moltis-api.sh" \
+              "Reply with exactly OK and nothing else."
+
             echo "All smoke tests passed!"
           EOF
           echo "::endgroup::"
