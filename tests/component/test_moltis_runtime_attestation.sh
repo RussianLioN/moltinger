@@ -199,6 +199,10 @@ provider = "ollama"
 base_url = "http://ollama:11434"
 model = "nomic-embed-text"
 
+[providers.openai-codex]
+model = "gpt-5.4"
+models = ["gpt-5.4"]
+
 [tools.browser]
 enabled = true
 sandbox_image = "moltis-browserless-chrome:tracked"
@@ -238,6 +242,13 @@ run_component_moltis_runtime_attestation_tests() {
     live_sha="$(git -C "$workspace_root" rev-parse HEAD)"
     cp "$workspace_root/config/moltis.toml" "$original_tracked_toml"
     cp "$workspace_root/config/moltis.toml" "$runtime_config_dir/moltis.toml"
+    cat >"$runtime_config_dir/provider_keys.json" <<'EOF'
+{
+  "openai-codex": {
+    "models": ["gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark"]
+  }
+}
+EOF
 
     cat >"$workspace_root/.env" <<EOF
 MOLTIS_RUNTIME_CONFIG_DIR=$runtime_config_dir
@@ -313,6 +324,8 @@ EOF
        [[ "$(jq -r '.details.docker_socket_gid' "$output_json")" != "999" ]] || \
        [[ "$(jq -r '.details.host_docker_internal_mapped' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.expected_auth_provider' "$output_json")" != "openai-codex" ]] || \
+       [[ "$(jq -r '.details.expected_auth_model' "$output_json")" != "gpt-5.4" ]] || \
+       [[ "$(jq -r '.details.auth_provider_model_preference' "$output_json")" != "gpt-5.4" ]] || \
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "status" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
@@ -320,6 +333,51 @@ EOF
         return
     fi
     test_pass
+
+    cat >"$runtime_config_dir/provider_keys.json" <<'EOF'
+{
+  "openai-codex": {
+    "models": ["gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex-spark"]
+  }
+}
+EOF
+
+    test_start "component_runtime_attestation_fails_when_provider_keys_model_preference_drifted"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" \
+            --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr-model-preference.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "AUTH_PROVIDER_MODEL_PREFERENCE_MISMATCH")' "$output_json" >/dev/null 2>&1 || \
+       [[ "$(jq -r '.details.expected_auth_model' "$output_json")" != "gpt-5.4" ]] || \
+       [[ "$(jq -r '.details.auth_provider_model_preference' "$output_json")" != "gpt-5.4-mini" ]]; then
+        test_fail "Runtime attestation should fail when runtime provider_keys.json prefers a different OpenAI Codex model than tracked config"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    cat >"$runtime_config_dir/provider_keys.json" <<'EOF'
+{
+  "openai-codex": {
+    "models": ["gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark"]
+  }
+}
+EOF
 
     test_start "component_runtime_attestation_fails_when_browser_sandbox_image_is_missing_on_host"
     set +e

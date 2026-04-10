@@ -12,6 +12,8 @@ export FALLBACK_COUNTER_FILE="$COUNTER_FILE"
 export CIRCUIT_BREAKER_FAILURE_THRESHOLD=2
 export CIRCUIT_BREAKER_RECOVERY_TIMEOUT=2
 export CIRCUIT_BREAKER_SUCCESS_THRESHOLD=1
+export PRIMARY_PROVIDER="openai-codex"
+export FALLBACK_PROVIDER="ollama"
 export GLM_API_KEY="fixture-glm"
 export OLLAMA_HOST="http://127.0.0.1:11434"
 
@@ -20,20 +22,20 @@ source "$PROJECT_ROOT/scripts/health-monitor.sh"
 
 send_alert() { :; }
 
-set_glm_health() {
-    export TEST_GLM_HEALTH="$1"
+set_primary_health() {
+    export TEST_PRIMARY_HEALTH="$1"
 }
 
-set_ollama_health() {
-    export TEST_OLLAMA_HEALTH="$1"
+set_fallback_health() {
+    export TEST_FALLBACK_HEALTH="$1"
 }
 
-check_glm_health() {
-    [[ "${TEST_GLM_HEALTH:-healthy}" == "healthy" ]]
+check_primary_provider_health() {
+    [[ "${TEST_PRIMARY_HEALTH:-healthy}" == "healthy" ]]
 }
 
-check_ollama_health() {
-    [[ "${TEST_OLLAMA_HEALTH:-healthy}" == "healthy" ]]
+check_fallback_provider_health() {
+    [[ "${TEST_FALLBACK_HEALTH:-healthy}" == "healthy" ]]
 }
 
 setup_component_llm_failover() {
@@ -43,7 +45,7 @@ setup_component_llm_failover() {
 
 reset_failover_fixture() {
     rm -f "$STATE_FILE" "$STATE_FILE.lock" "$COUNTER_FILE"
-    unset TEST_GLM_HEALTH TEST_OLLAMA_HEALTH
+    unset TEST_PRIMARY_HEALTH TEST_FALLBACK_HEALTH
     init_circuit_breaker
 }
 
@@ -86,16 +88,16 @@ run_component_llm_failover_tests() {
     reset_failover_fixture
     local status_json
     status_json=$(get_llm_provider_status)
-    if echo "$status_json" | jq -e '.glm and .ollama' >/dev/null 2>&1; then
+    if echo "$status_json" | jq -e '."openai-codex" and .ollama' >/dev/null 2>&1; then
         test_pass
     else
-        test_fail "Provider status should include glm and ollama keys"
+        test_fail "Provider status should include openai-codex and ollama keys"
     fi
 
     test_start "component_llm_evaluate_records_failure"
     reset_failover_fixture
-    set_glm_health unhealthy
-    set_ollama_health healthy
+    set_primary_health unhealthy
+    set_fallback_health healthy
     evaluate_llm_health >/dev/null 2>&1 || true
     assert_eq "1" "$(jq -r '.failure_count' "$STATE_FILE")" "Failure count should increment after unhealthy primary"
     test_pass
@@ -109,8 +111,8 @@ run_component_llm_failover_tests() {
     test_start "component_llm_recovery_path_returns_half_open_then_closed"
     reset_failover_fixture
     write_old_open_state
-    set_glm_health healthy
-    set_ollama_health healthy
+    set_primary_health healthy
+    set_fallback_health healthy
     evaluate_llm_health >/dev/null 2>&1 || true
     assert_eq "closed" "$(jq -r '.state' "$STATE_FILE")" "Healthy primary should close circuit after half-open success"
     test_pass

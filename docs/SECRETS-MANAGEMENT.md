@@ -215,6 +215,9 @@ bash /opt/moltinger-active/scripts/prepare-moltis-runtime-config.sh \
 ```
 
 This keeps `moltis.toml` under GitOps while preserving OAuth/provider state across deploys.
+If `provider_keys.json` already exists, the helper also reasserts the tracked
+`providers.openai-codex.model` as the first runtime preference so a stale
+`gpt-5.4-mini` choice does not survive into the next restart.
 
 ---
 

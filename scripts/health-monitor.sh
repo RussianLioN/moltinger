@@ -198,6 +198,11 @@ check_http_health() {
 # LLM PROVIDER HEALTH CHECKS (Circuit Breaker Support)
 # ========================================================================
 
+# Production chain defaults: OpenAI Codex OAuth -> Ollama -> Z.ai.
+PRIMARY_PROVIDER="${PRIMARY_PROVIDER:-openai-codex}"
+FALLBACK_PROVIDER="${FALLBACK_PROVIDER:-ollama}"
+MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
+
 # GLM API configuration
 GLM_API_HOST="${GLM_API_HOST:-https://api.z.ai}"
 GLM_API_KEY="${GLM_API_KEY:-}"
@@ -208,6 +213,30 @@ GLM_HEALTH_TIMEOUT="${GLM_HEALTH_TIMEOUT:-10}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-gemini-3-flash-preview:cloud}"
 OLLAMA_HEALTH_TIMEOUT="${OLLAMA_HEALTH_TIMEOUT:-10}"
+
+# OpenAI Codex OAuth configuration
+OPENAI_CODEX_HEALTH_TIMEOUT="${OPENAI_CODEX_HEALTH_TIMEOUT:-10}"
+
+check_openai_codex_health() {
+    local timeout="${1:-$OPENAI_CODEX_HEALTH_TIMEOUT}"
+    local auth_output provider_line
+
+    if ! command -v docker >/dev/null 2>&1; then
+        log_warn "docker is unavailable, cannot validate openai-codex auth state"
+        return 2
+    fi
+
+    auth_output="$(timeout "$timeout" docker exec "$MOLTIS_CONTAINER" moltis auth status 2>/dev/null || true)"
+    provider_line="$(printf '%s\n' "$auth_output" | grep -F 'openai-codex' | tail -1 || true)"
+
+    if [[ -n "$provider_line" ]] && grep -Fq '[valid' <<<"$provider_line"; then
+        log_info "OpenAI Codex auth is healthy"
+        return 0
+    fi
+
+    log_error "OpenAI Codex auth is not valid"
+    return 1
+}
 
 # Check GLM (Z.ai) API health
 check_glm_health() {
@@ -279,26 +308,63 @@ check_ollama_health() {
 
 # Get current LLM provider status for JSON output
 get_llm_provider_status() {
-    local glm_status="unknown"
-    local ollama_status="unknown"
+    local primary_status="unknown"
+    local fallback_status="unknown"
 
-    if [[ -n "$GLM_API_KEY" ]]; then
-        if check_glm_health > /dev/null 2>&1; then
-            glm_status="healthy"
-        else
-            glm_status="unhealthy"
-        fi
+    if check_primary_provider_health > /dev/null 2>&1; then
+        primary_status="healthy"
     else
-        glm_status="not_configured"
+        primary_status="unhealthy"
     fi
 
-    if check_ollama_health > /dev/null 2>&1; then
-        ollama_status="healthy"
+    if check_fallback_provider_health > /dev/null 2>&1; then
+        fallback_status="healthy"
     else
-        ollama_status="unhealthy"
+        fallback_status="unhealthy"
     fi
 
-    echo "{\"glm\":\"$glm_status\",\"ollama\":\"$ollama_status\"}"
+    jq -nc \
+        --arg primary_provider "$PRIMARY_PROVIDER" \
+        --arg primary_status "$primary_status" \
+        --arg fallback_provider "$FALLBACK_PROVIDER" \
+        --arg fallback_status "$fallback_status" \
+        '[{"key": $primary_provider, "value": $primary_status}, {"key": $fallback_provider, "value": $fallback_status}] | from_entries'
+}
+
+check_primary_provider_health() {
+    case "$PRIMARY_PROVIDER" in
+        openai-codex)
+            check_openai_codex_health "$@"
+            ;;
+        glm|zai)
+            check_glm_health "$@"
+            ;;
+        ollama)
+            check_ollama_health "$@"
+            ;;
+        *)
+            log_warn "Unknown primary provider health contract: $PRIMARY_PROVIDER"
+            return 2
+            ;;
+    esac
+}
+
+check_fallback_provider_health() {
+    case "$FALLBACK_PROVIDER" in
+        ollama)
+            check_ollama_health "$@"
+            ;;
+        glm|zai)
+            check_glm_health "$@"
+            ;;
+        openai-codex)
+            check_openai_codex_health "$@"
+            ;;
+        *)
+            log_warn "Unknown fallback provider health contract: $FALLBACK_PROVIDER"
+            return 2
+            ;;
+    esac
 }
 
 # ========================================================================
@@ -329,8 +395,8 @@ init_circuit_breaker() {
     "success_count": 0,
     "last_failure_time": null,
     "last_state_change": "$(get_timestamp)",
-    "active_provider": "glm",
-    "fallback_provider": "ollama"
+    "active_provider": "$PRIMARY_PROVIDER",
+    "fallback_provider": "$FALLBACK_PROVIDER"
 }
 EOF
 )
@@ -427,25 +493,25 @@ record_failure() {
         "$CB_STATE_CLOSED")
             if [[ $failure_count -ge $CIRCUIT_BREAKER_FAILURE_THRESHOLD ]]; then
                 log_error "Failure threshold reached, opening circuit"
-                update_circuit_breaker "$CB_STATE_OPEN" "ollama" "$failure_count" 0
+                update_circuit_breaker "$CB_STATE_OPEN" "$FALLBACK_PROVIDER" "$failure_count" 0
                 # Update last_failure_time
                 local updated_state
                 updated_state=$(cat "$CIRCUIT_BREAKER_STATE_FILE" | jq --arg ts "$(get_timestamp)" '.last_failure_time = $ts')
                 echo "$updated_state" > "$CIRCUIT_BREAKER_STATE_FILE"
             else
-                update_circuit_breaker "$CB_STATE_CLOSED" "glm" "$failure_count" 0
+                update_circuit_breaker "$CB_STATE_CLOSED" "$PRIMARY_PROVIDER" "$failure_count" 0
             fi
             ;;
         "$CB_STATE_HALF_OPEN")
             log_error "Failure in HALF-OPEN state, returning to OPEN"
-            update_circuit_breaker "$CB_STATE_OPEN" "ollama" "$failure_count" 0
+            update_circuit_breaker "$CB_STATE_OPEN" "$FALLBACK_PROVIDER" "$failure_count" 0
             local updated_state
             updated_state=$(cat "$CIRCUIT_BREAKER_STATE_FILE" | jq --arg ts "$(get_timestamp)" '.last_failure_time = $ts')
             echo "$updated_state" > "$CIRCUIT_BREAKER_STATE_FILE"
             ;;
         "$CB_STATE_OPEN")
             # Already open, just update failure count
-            update_circuit_breaker "$CB_STATE_OPEN" "ollama" "$failure_count" 0
+            update_circuit_breaker "$CB_STATE_OPEN" "$FALLBACK_PROVIDER" "$failure_count" 0
             ;;
     esac
 }
@@ -467,14 +533,14 @@ record_success() {
         "$CB_STATE_HALF_OPEN")
             if [[ $success_count -ge $CIRCUIT_BREAKER_SUCCESS_THRESHOLD ]]; then
                 log_info "Success threshold reached, closing circuit"
-                update_circuit_breaker "$CB_STATE_CLOSED" "glm" 0 "$success_count"
+                update_circuit_breaker "$CB_STATE_CLOSED" "$PRIMARY_PROVIDER" 0 "$success_count"
             else
-                update_circuit_breaker "$CB_STATE_HALF_OPEN" "glm" 0 "$success_count"
+                update_circuit_breaker "$CB_STATE_HALF_OPEN" "$PRIMARY_PROVIDER" 0 "$success_count"
             fi
             ;;
         "$CB_STATE_CLOSED")
             # Reset failure count on success
-            update_circuit_breaker "$CB_STATE_CLOSED" "glm" 0 "$success_count"
+            update_circuit_breaker "$CB_STATE_CLOSED" "$PRIMARY_PROVIDER" 0 "$success_count"
             ;;
         "$CB_STATE_OPEN")
             # Should not happen - successes in OPEN state are from fallback
@@ -507,7 +573,7 @@ check_recovery_timeout() {
 
     if [[ $elapsed -ge $CIRCUIT_BREAKER_RECOVERY_TIMEOUT ]]; then
         log_info "Recovery timeout reached ($elapsed >= $CIRCUIT_BREAKER_RECOVERY_TIMEOUT), transitioning to HALF-OPEN"
-        update_circuit_breaker "$CB_STATE_HALF_OPEN" "glm" 0 0
+        update_circuit_breaker "$CB_STATE_HALF_OPEN" "$PRIMARY_PROVIDER" 0 0
         return 0
     fi
 
@@ -529,7 +595,7 @@ evaluate_llm_health() {
 
     case "$state" in
         "$CB_STATE_CLOSED"|"$CB_STATE_HALF_OPEN")
-            if check_glm_health > /dev/null 2>&1; then
+            if check_primary_provider_health > /dev/null 2>&1; then
                 record_success
             else
                 record_failure
@@ -537,9 +603,9 @@ evaluate_llm_health() {
             ;;
         "$CB_STATE_OPEN")
             # In OPEN state, check if Ollama fallback is healthy
-            if ! check_ollama_health > /dev/null 2>&1; then
-                log_error "FALLBACK CRITICAL: Both GLM and Ollama are unavailable!"
-                send_alert "CRITICAL: No LLM Provider Available" "Both GLM and Ollama are down"
+            if ! check_fallback_provider_health > /dev/null 2>&1; then
+                log_error "FALLBACK CRITICAL: Both $PRIMARY_PROVIDER and $FALLBACK_PROVIDER are unavailable!"
+                send_alert "CRITICAL: No LLM Provider Available" "Both $PRIMARY_PROVIDER and $FALLBACK_PROVIDER are down"
             fi
             ;;
     esac
@@ -607,15 +673,15 @@ export_prometheus_metrics() {
     active_provider=$(echo "$cb_state" | jq -r '.active_provider')
 
     # Check current provider availability
-    local glm_available=0
-    local ollama_available=0
+    local primary_available=0
+    local fallback_available=0
 
-    if check_glm_health > /dev/null 2>&1; then
-        glm_available=1
+    if check_primary_provider_health > /dev/null 2>&1; then
+        primary_available=1
     fi
 
-    if check_ollama_health > /dev/null 2>&1; then
-        ollama_available=1
+    if check_fallback_provider_health > /dev/null 2>&1; then
+        fallback_available=1
     fi
 
     # Get fallback counter
@@ -635,8 +701,8 @@ export_prometheus_metrics() {
     cat > "$PROMETHEUS_METRICS_FILE.tmp" << EOF
 # HELP llm_provider_available Whether the LLM provider is available (1=available, 0=unavailable)
 # TYPE llm_provider_available gauge
-llm_provider_available{provider="glm"} $glm_available
-llm_provider_available{provider="ollama"} $ollama_available
+llm_provider_available{provider="$PRIMARY_PROVIDER"} $primary_available
+llm_provider_available{provider="$FALLBACK_PROVIDER"} $fallback_available
 
 # HELP llm_fallback_triggered_total Total number of times fallback was triggered
 # TYPE llm_fallback_triggered_total counter
@@ -654,7 +720,7 @@ moltis_circuit_failures $failure_count
 # TYPE moltis_circuit_successes gauge
 moltis_circuit_successes $success_count
 
-# HELP moltis_active_provider Currently active LLM provider (1=glm, 0=ollama)
+# HELP moltis_active_provider Currently active LLM provider
 # TYPE moltis_active_provider gauge
 moltis_active_provider{provider="$active_provider"} 1
 EOF
@@ -676,8 +742,8 @@ show_prometheus_metrics() {
     state=$(echo "$cb_state" | jq -r '.state')
 
     echo "# LLM Provider Metrics"
-    echo "llm_provider_available{provider=\"glm\"} $(check_glm_health > /dev/null 2>&1 && echo 1 || echo 0)"
-    echo "llm_provider_available{provider=\"ollama\"} $(check_ollama_health > /dev/null 2>&1 && echo 1 || echo 0)"
+    echo "llm_provider_available{provider=\"$PRIMARY_PROVIDER\"} $(check_primary_provider_health > /dev/null 2>&1 && echo 1 || echo 0)"
+    echo "llm_provider_available{provider=\"$FALLBACK_PROVIDER\"} $(check_fallback_provider_health > /dev/null 2>&1 && echo 1 || echo 0)"
     echo "llm_fallback_triggered_total $(get_fallback_counter)"
     echo "moltis_circuit_state $(state_to_numeric "$state")"
 }

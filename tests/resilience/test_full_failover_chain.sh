@@ -8,6 +8,7 @@ ALLOW_DESTRUCTIVE_TESTS="${ALLOW_DESTRUCTIVE_TESTS:-0}"
 GLM_API_KEY="${GLM_API_KEY:-}"
 OLLAMA_HOST="${OLLAMA_HOST:-}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-15}"
+MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
 
 run_resilience_failover_chain_tests() {
     start_timer
@@ -19,7 +20,7 @@ run_resilience_failover_chain_tests() {
         return
     fi
 
-    require_commands_or_skip curl jq || {
+    require_commands_or_skip curl jq docker || {
         test_start "resilience_failover_setup"
         test_skip "Dependencies unavailable"
         generate_report
@@ -34,7 +35,16 @@ run_resilience_failover_chain_tests() {
     fi
     test_pass
 
-    test_start "resilience_failover_glm_health"
+    test_start "resilience_failover_openai_codex_auth"
+    local auth_output
+    auth_output="$(docker exec "$MOLTIS_CONTAINER" moltis auth status 2>/dev/null || true)"
+    if printf '%s\n' "$auth_output" | grep -F 'openai-codex [valid' >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "OpenAI Codex auth should be valid before failover drill"
+    fi
+
+    test_start "resilience_failover_zai_health"
     require_secret_or_skip GLM_API_KEY "GLM_API_KEY" || {
         generate_report
         return
@@ -44,7 +54,7 @@ run_resilience_failover_chain_tests() {
     if [[ "$glm_code" =~ ^(200|201)$ ]]; then
         test_pass
     else
-        test_fail "GLM provider should be reachable before failover drill (got $glm_code)"
+        test_fail "Z.ai fallback provider should be reachable before failover drill (got $glm_code)"
     fi
 
     test_start "resilience_failover_ollama_health"

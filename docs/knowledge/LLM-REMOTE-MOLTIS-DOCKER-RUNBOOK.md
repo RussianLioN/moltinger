@@ -111,6 +111,14 @@ What this must preserve:
 - `provider_keys.json`
 - `credentials.json`
 
+Additional invariant:
+
+- if `provider_keys.json` already exists, `prepare-moltis-runtime-config.sh` must keep
+  the tracked `providers.openai-codex.model` first in
+  `provider_keys.json["openai-codex"].models`
+- this preserves OAuth/provider state while preventing runtime model preference drift
+  back to `gpt-5.4-mini`
+
 ## 5. Pull the exact image version explicitly
 
 Do not skip this.
@@ -408,6 +416,34 @@ Likely cause:
 Fix:
 
 - open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
+
+### Symptom: `auth status` is valid, but live chat still runs `openai-codex::gpt-5.4-mini`
+
+Likely cause:
+
+- runtime-managed `/opt/moltinger-state/config-runtime/provider_keys.json` still prefers
+  `gpt-5.4-mini` ahead of tracked `providers.openai-codex.model = "gpt-5.4"`
+
+Inspect:
+
+```bash
+jq -r '."openai-codex".models' /opt/moltinger-state/config-runtime/provider_keys.json
+docker logs --since 2m moltis 2>&1 | grep -E 'chat.send|openai-codex stream_with_tools request model='
+```
+
+Fix:
+
+```bash
+cd /opt/moltinger-active
+bash ./scripts/prepare-moltis-runtime-config.sh ./config /opt/moltinger-state/config-runtime
+docker restart moltis
+```
+
+Expected proof:
+
+- `jq -r '."openai-codex".models[0]' .../provider_keys.json` returns `gpt-5.4`
+- `docker exec moltis moltis auth status` still shows `openai-codex [valid ...]`
+- live canary reports `provider=openai-codex`, `model=openai-codex::gpt-5.4`
 
 ### Symptom: Traefik looks healthy, but chat still fails
 
