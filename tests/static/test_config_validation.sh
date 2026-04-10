@@ -42,6 +42,7 @@ TELEGRAM_REMOTE_UAT_SCRIPT="$PROJECT_ROOT/scripts/telegram-e2e-on-demand.sh"
 TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/run-tracked-moltis-deploy.sh"
 SSH_TRACKED_DEPLOY_SCRIPT="$PROJECT_ROOT/scripts/ssh-run-tracked-moltis-deploy.sh"
 RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/moltis-runtime-attestation.sh"
+CLAWDIY_RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/clawdiy-runtime-attestation.sh"
 CHECKOUT_ALIGN_SCRIPT="$PROJECT_ROOT/scripts/align-server-checkout.sh"
 SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
@@ -161,7 +162,7 @@ run_static_config_validation_tests() {
     fi
 
     test_start "static_compose_clawdiy_valid"
-    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
+    if env CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006" docker compose -f "$COMPOSE_CLAWDIY" config --quiet >/dev/null 2>&1; then
         test_pass
     else
         test_fail "docker-compose.clawdiy.yml does not render cleanly with a valid CLAWDIY_IMAGE"
@@ -1259,6 +1260,20 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Tracked deploy control-plane must attest live runtime provenance through the shared runtime attestation script"
+    fi
+
+    test_start "static_clawdiy_deploy_attests_live_runtime_image_and_oauth_state"
+    if [[ -f "$CLAWDIY_RUNTIME_ATTESTATION_SCRIPT" ]] && \
+       rg -Fq 'DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006"' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006"' "$PREFLIGHT_SCRIPT" && \
+       rg -Fq "default: ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006" "$CLAWDIY_WORKFLOW" && \
+       rg -Fq 'clawdiy-runtime-attestation.sh' "$DEPLOY_SCRIPT" && \
+       rg -Fq 'Clawdiy runtime attestation' "$CLAWDIY_WORKFLOW" && \
+       rg -Fq 'Expected Clawdiy OAuth provider is not ready' "$CLAWDIY_RUNTIME_ATTESTATION_SCRIPT" && \
+       rg -Fq 'Live Clawdiy image does not match the expected pinned digest' "$CLAWDIY_RUNTIME_ATTESTATION_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Clawdiy deploy must pin the live-verified digest baseline and attest the live image plus OAuth runtime store through the shared runtime attestation script"
     fi
 
     test_start "static_runtime_contract_enforces_tracked_runtime_config_parity"

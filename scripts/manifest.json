@@ -667,6 +667,31 @@
       ],
       "ci": true
     },
+    "clawdiy-runtime-attestation.sh": {
+      "version": "1.0.0",
+      "description": "Attest the live Clawdiy image, default model, and OAuth runtime store against the tracked baseline",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "curl",
+        "docker",
+        "jq"
+      ],
+      "provides": [
+        "clawdiy-runtime-attestation"
+      ],
+      "env_vars": [
+        "CONTAINER",
+        "BASE_URL",
+        "EXPECTED_IMAGE",
+        "EXPECTED_DEFAULT_MODEL",
+        "EXPECTED_VERSION",
+        "EXPECTED_PROVIDER",
+        "TRACKED_CONFIG_FILE",
+        "RUNTIME_CONFIG_FILE"
+      ],
+      "ci": true
+    },
     "clawdiy-smoke.sh": {
       "version": "1.0.0",
       "description": "Clawdiy rollout verification for same-host, handoff, restart isolation, and auth gates",

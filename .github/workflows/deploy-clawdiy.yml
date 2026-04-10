@@ -18,7 +18,7 @@ on:
       clawdiy_image:
         description: OpenClaw image reference for Clawdiy
         required: true
-        default: ghcr.io/openclaw/openclaw:2026.3.11
+        default: ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006
         type: string
       rollback:
         description: Roll back Clawdiy instead of deploying a new image
@@ -482,6 +482,19 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
             chmod +x scripts/clawdiy-smoke.sh
             ./scripts/clawdiy-smoke.sh --json --stage same-host | jq .
+          EOF
+          echo "::endgroup::"
+
+      - name: Clawdiy runtime attestation
+        run: |
+          echo "::group::Clawdiy runtime attestation"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x scripts/clawdiy-runtime-attestation.sh
+            ./scripts/clawdiy-runtime-attestation.sh \
+              --json \
+              --expected-image '${{ needs.preflight.outputs.clawdiy_image }}' | jq .
           EOF
           echo "::endgroup::"
 

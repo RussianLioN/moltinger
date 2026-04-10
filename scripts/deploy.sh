@@ -77,10 +77,11 @@ TARGET_HEALTH_TIMEOUT="$HEALTH_CHECK_TIMEOUT"
 CLAWDIY_CONFIG_FILE="$PROJECT_ROOT/config/clawdiy/openclaw.json"
 CLAWDIY_RENDERED_CONFIG_FILE="$PROJECT_ROOT/data/clawdiy/runtime/openclaw.json"
 CLAWDIY_RUNTIME_RENDER_SCRIPT="$PROJECT_ROOT/scripts/render-clawdiy-runtime-config.sh"
-DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw:2026.3.11"
+DEFAULT_CLAWDIY_IMAGE="ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006"
 BACKUP_SCRIPT="$PROJECT_ROOT/scripts/backup-moltis-enhanced.sh"
 MOLTIS_VERSION_HELPER="$PROJECT_ROOT/scripts/moltis-version.sh"
 STORAGE_MAINTENANCE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
+CLAWDIY_RUNTIME_ATTESTATION_SCRIPT="$PROJECT_ROOT/scripts/clawdiy-runtime-attestation.sh"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/moltis}"
 DEPLOY_EVIDENCE_FILE=""
 ROLLBACK_REASON="${ROLLBACK_REASON:-unspecified}"
@@ -1692,6 +1693,35 @@ verify_deployment() {
         http_code=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_METRICS_URL" 2>/dev/null || echo "000")
         if [[ "$http_code" != "200" ]]; then
             log_warn "Metrics endpoint returned HTTP $http_code for target $TARGET (non-critical)"
+        fi
+    fi
+
+    if [[ "$TARGET" == "clawdiy" ]]; then
+        local attestation_config_file expected_default_model expected_version expected_image attestation_output attestation_message
+        attestation_config_file="$CLAWDIY_CONFIG_FILE"
+        if [[ -f "$CLAWDIY_RENDERED_CONFIG_FILE" ]]; then
+            attestation_config_file="$CLAWDIY_RENDERED_CONFIG_FILE"
+        fi
+
+        if [[ ! -x "$CLAWDIY_RUNTIME_ATTESTATION_SCRIPT" ]]; then
+            record_verification_failure "Clawdiy runtime attestation script is missing or not executable: $CLAWDIY_RUNTIME_ATTESTATION_SCRIPT"
+        else
+            expected_default_model="$(jq -r '.agents.defaults.model.primary // empty' "$attestation_config_file" 2>/dev/null || true)"
+            expected_version="$(jq -r '.meta.lastTouchedVersion // empty' "$attestation_config_file" 2>/dev/null || true)"
+            expected_image="$(resolve_clawdiy_image_ref || true)"
+
+            if ! attestation_output="$("$CLAWDIY_RUNTIME_ATTESTATION_SCRIPT" \
+                --json \
+                --container "$TARGET_CONTAINER" \
+                --base-url "$TARGET_HEALTH_URL" \
+                --expected-image "$expected_image" \
+                --expected-default-model "$expected_default_model" \
+                --expected-version "$expected_version")"; then
+                attestation_message="$(printf '%s' "$attestation_output" | jq -r '.errors[0].message // empty' 2>/dev/null || true)"
+                record_verification_failure "${attestation_message:-Clawdiy runtime attestation failed}"
+            elif [[ "$OUTPUT_JSON" != "true" ]]; then
+                printf '%s\n' "$attestation_output" | jq . >&2 || true
+            fi
         fi
     fi
 
