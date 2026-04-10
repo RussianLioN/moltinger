@@ -12,13 +12,14 @@
 
 Recover or rotate Clawdiy auth material without changing Moltinger auth state.
 
-Current limitation:
-- This runbook documents the current metadata-gated `codex-oauth` flow.
-- The production-grade runtime auth store lifecycle is tracked as a follow-on implementation in [specs/017-clawdiy-remote-oauth-lifecycle/spec.md](/Users/rl/coding/moltinger-openclaw-control-plane/specs/017-clawdiy-remote-oauth-lifecycle/spec.md).
+Current baseline:
+- This runbook documents the live runtime-backed `codex-oauth` flow.
+- The authoritative runtime auth store for Clawdiy lives under `/home/node/.openclaw-data/state/agents/main/agent/auth-profiles.json` inside the container.
+- Provider metadata in `CLAWDIY_OPENAI_CODEX_AUTH_PROFILE` remains a rollout gate, but readiness is proven only after live runtime attestation.
 - Hosted browser bootstrap for Clawdiy starts from `Overview -> Gateway Access -> token -> pairing`, not from a dedicated welcome wizard or a guaranteed provider-auth settings screen.
 - Browser bootstrap and provider OAuth are separate lifecycles; do not assume that simply opening the live UI creates a runtime `auth-profiles.json`.
 - Official OpenClaw docs currently document `codex-oauth` through CLI/wizard flows, including the headless Docker paste-back callback path. This repository normalizes provider naming to `codex-oauth` even when upstream docs show a legacy provider label in command examples. Browser UI is not the canonical documented Codex OAuth path.
-- Official CLI/wizard flows need a writable OpenClaw runtime home under `data/clawdiy/runtime` because OpenClaw may write temporary config files and OAuth-related artifacts under `~/.openclaw` during onboarding.
+- Official CLI/wizard flows need a writable OpenClaw runtime home under `data/clawdiy/runtime` because OpenClaw may write temporary config files under `~/.openclaw` during onboarding, while the durable auth/runtime state persists under `~/.openclaw-data/state`.
 
 ## Auth Surfaces
 
@@ -47,6 +48,7 @@ Use the dedicated env file after every auth rotation:
 ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider telegram
 ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
 ./scripts/clawdiy-smoke.sh --stage auth --json
+ssh root@ainetic.tech "cd /opt/moltinger && ./scripts/clawdiy-runtime-attestation.sh --json"
 ```
 
 Interpretation:
@@ -94,7 +96,7 @@ This is a later rollout gate, not a first-deploy requirement.
 8. Verify:
    ```bash
    ./scripts/clawdiy-auth-check.sh --env-file /opt/moltinger/clawdiy/.env --provider codex-oauth
-   ssh root@ainetic.tech "docker exec clawdiy openclaw models status --json"
+   ssh root@ainetic.tech "cd /opt/moltinger && ./scripts/clawdiy-runtime-attestation.sh --json"
    ```
 9. If the wizard or `models set` changed the live default model, mirror that state back into tracked `config/clawdiy/openclaw.json` before the next redeploy; otherwise GitOps render will reset Clawdiy to the repo default on the next rollout.
 10. Promote Codex-backed capability only if post-auth verification passes.

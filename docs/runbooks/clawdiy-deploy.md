@@ -25,10 +25,10 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 1. Validate config and secret presence:
    ```bash
    ./scripts/preflight-check.sh --target clawdiy
-   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw:2026.3.11 docker compose -f docker-compose.clawdiy.yml config --quiet
+   env CLAWDIY_IMAGE=ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006 docker compose -f docker-compose.clawdiy.yml config --quiet
    ```
    Expected note: `network_bootstrap` may warn that `fleet-internal` will be created during the Clawdiy deploy flow.
-   Use an explicit `clawdiy_image` override only for a dedicated upgrade rollout; the tracked default stays pinned to the last verified Clawdiy image.
+   Use an explicit `clawdiy_image` override only for a dedicated upgrade rollout; the tracked default stays pinned to the last verified Clawdiy image, even if that means pinning by digest because the exact GHCR tag is unavailable.
    Official OpenClaw Docker upgrades can warm up slowly when channels are enabled; Clawdiy deploy now treats a temporary `starting/unhealthy` phase as startup warmup until the overall timeout expires.
 2. Render the deployable OpenClaw runtime config from the tracked template plus the dedicated Clawdiy env file:
    ```bash
@@ -47,6 +47,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
    ```bash
    ./scripts/clawdiy-smoke.sh --stage same-host
    ./scripts/clawdiy-smoke.sh --stage restart-isolation
+   ./scripts/clawdiy-runtime-attestation.sh --json | jq .
    ```
 
 ## Upgrade Canary Notes
@@ -56,6 +57,7 @@ Deploy Clawdiy as a separate long-lived OpenClaw runtime without regressing Molt
 - Deploy success still requires:
   - локальный `/health` на host loopback
   - green deploy workflow
+  - `./scripts/clawdiy-runtime-attestation.sh --json`
   - post-deploy live canary from `main`
 
 ## Success Criteria

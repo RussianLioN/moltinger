@@ -11,11 +11,14 @@
 ## Обязательный протокол
 
 1. Tracked default image для Clawdiy обязан оставаться pinned на последнем live-verified baseline.
+   - Если exact GHCR tag отсутствует, pinned baseline фиксируется digest-референсом.
+   - Текущий live-verified baseline: `ghcr.io/openclaw/openclaw@sha256:d7e8c5c206b107c2e65b610f57f97408e8c07fe9d0ee5cc9193939e48ffb3006` (`org.opencontainers.image.version=2026.3.13-1`).
 2. Новый OpenClaw образ для Clawdiy запускается только как явный upgrade rollout через `workflow_dispatch` input `clawdiy_image`.
 3. До перевода нового образа в tracked default upgrade candidate обязан пройти:
    - `Deploy Clawdiy` green
    - внешний `/health`
    - `docker inspect ... healthy`
+   - `./scripts/clawdiy-runtime-attestation.sh --json`
    - `openclaw models status --agent main --json`
    - реальный canary-ответ агента
 4. Если rollout провалился, tracked default не меняется; выполняется rollback на предыдущий pinned image.
