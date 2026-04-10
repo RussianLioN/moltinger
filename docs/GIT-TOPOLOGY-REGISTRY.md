@@ -12,6 +12,7 @@
 | Remote Branch | Current Intent |
 |---|---|
 | `origin/chore/topology-registry-publish` | Needs decision |
+| `origin/feat/moltinger-jb6-1-gpt54-oauth-persistence-fix` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
