@@ -123,7 +123,7 @@ route:
           receiver: 'llm-failover-alerts'
           group_wait: 30s
           repeat_interval: 1h
-        # GLM down - warning level
+        # Primary LLM down - warning level
         - matchers:
             - alertname="PrimaryLLMProviderDown"
           receiver: 'llm-failover-alerts'

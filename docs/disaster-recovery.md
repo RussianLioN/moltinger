@@ -111,7 +111,7 @@ An incident is not closed until all of the following are true:
 ### Failover Chain
 
 ```text
-GLM-5 (Z.ai) -> Ollama Gemini -> Google Gemini
+OpenAI Codex (`gpt-5.4`) -> Ollama Gemini -> GLM-5 (Z.ai)
 ```
 
 ### Circuit States
