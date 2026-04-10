@@ -7,6 +7,8 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 source "$SCRIPT_DIR/../lib/git_topology_fixture.sh"
 
 MONITOR_SCRIPT="$PROJECT_ROOT/scripts/codex-cli-update-monitor.sh"
+MONITOR_CONTEXT_HELPER="$PROJECT_ROOT/scripts/codex-cli-update-monitor-context.py"
+MONITOR_REPORT_HELPER="$PROJECT_ROOT/scripts/codex-cli-update-monitor-report.py"
 FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-update-monitor"
 UPSTREAM_WATCHER_FIXTURE_DIR="$PROJECT_ROOT/tests/fixtures/codex-upstream-watcher"
 FAKE_BD_BIN_DIR=""
@@ -79,12 +81,14 @@ seed_component_monitor_fixture_repo() {
 
     mkdir -p "$repo_dir/scripts"
     cp "$MONITOR_SCRIPT" "$repo_dir/scripts/codex-cli-update-monitor.sh"
+    cp "$MONITOR_CONTEXT_HELPER" "$repo_dir/scripts/codex-cli-update-monitor-context.py"
+    cp "$MONITOR_REPORT_HELPER" "$repo_dir/scripts/codex-cli-update-monitor-report.py"
     cp "$PROJECT_ROOT/scripts/beads-resolve-db.sh" "$repo_dir/scripts/beads-resolve-db.sh"
     chmod +x "$repo_dir/scripts/codex-cli-update-monitor.sh" "$repo_dir/scripts/beads-resolve-db.sh"
 
     (
         cd "$repo_dir"
-        git add scripts/codex-cli-update-monitor.sh scripts/beads-resolve-db.sh
+        git add scripts/codex-cli-update-monitor.sh scripts/codex-cli-update-monitor-context.py scripts/codex-cli-update-monitor-report.py scripts/beads-resolve-db.sh
         git commit -m "fixture: seed codex update monitor scripts" >/dev/null
     )
 

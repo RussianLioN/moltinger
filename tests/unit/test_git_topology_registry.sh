@@ -37,20 +37,20 @@ create_fake_gh_bin() {
     local fake_bin="$fixture_root/bin"
 
     mkdir -p "$fake_bin"
-    cat > "$fake_bin/gh" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-
-printf '%s\n' "$*" >> "${FAKE_GH_LOG}"
-
-if [[ "${1:-}" == "workflow" && "${2:-}" == "run" ]]; then
-    echo "workflow dispatched"
-    exit 0
-fi
-
-echo "unexpected gh invocation: $*" >&2
-exit 1
-EOF
+    {
+        printf '#!/bin/bash\n'
+        printf 'set -euo pipefail\n'
+        printf '\n'
+        printf "printf '%%s\\n' \"\$*\" >> \"\${FAKE_GH_LOG}\"\n"
+        printf '\n'
+        printf 'if [[ "${1:-}" == "workflow" && "${2:-}" == "run" ]]; then\n'
+        printf '    echo "workflow dispatched"\n'
+        printf '    exit 0\n'
+        printf 'fi\n'
+        printf '\n'
+        printf 'echo "unexpected gh invocation: $*" >&2\n'
+        printf 'exit 1\n'
+    } > "$fake_bin/gh"
     chmod +x "$fake_bin/gh"
 
     printf '%s\n' "$fake_bin"
@@ -58,32 +58,32 @@ EOF
 
 write_demo_intent() {
     local repo_dir="$1"
-    cat > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
-version: 1
-defaults:
-  missing_intent: needs-decision
-records:
-  - subject_type: branch
-    subject_key: main
-    intent: active
-    note: Canonical source of truth.
-  - subject_type: branch
-    subject_key: 007-demo-feature
-    intent: active
-    note: Demo feature branch.
-  - subject_type: remote
-    subject_key: origin/007-demo-feature
-    intent: active
-    note: Demo remote feature branch.
-  - subject_type: worktree
-    subject_key: parallel-feature-007
-    intent: active
-    note: Demo feature worktree.
-  - subject_type: worktree
-    subject_key: primary-root
-    intent: active
-    note: Canonical root worktree.
-EOF
+    {
+        printf 'version: 1\n'
+        printf 'defaults:\n'
+        printf '  missing_intent: needs-decision\n'
+        printf 'records:\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: main\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical source of truth.\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: 007-demo-feature\n'
+        printf '    intent: active\n'
+        printf '    note: Demo feature branch.\n'
+        printf '  - subject_type: remote\n'
+        printf '    subject_key: origin/007-demo-feature\n'
+        printf '    intent: active\n'
+        printf '    note: Demo remote feature branch.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: parallel-feature-007\n'
+        printf '    intent: active\n'
+        printf '    note: Demo feature worktree.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: primary-root\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical root worktree.\n'
+    } > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml"
 }
 
 assert_publish_refusal() {
@@ -210,6 +210,72 @@ test_registry_refresh_is_deterministic_and_sanitized() {
     test_pass
 }
 
+write_heavy_orphan_intent() {
+    local repo_dir="$1"
+    local index=""
+
+    {
+        printf 'version: 1\n'
+        printf 'defaults:\n'
+        printf '  missing_intent: needs-decision\n'
+        printf 'records:\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: main\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical source of truth.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: primary-root\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical root worktree.\n'
+        for index in $(seq 1 60); do
+            printf '  - subject_type: branch\n'
+            printf '    subject_key: orphan-branch-%03d\n' "$index"
+            printf '    intent: historical\n'
+            printf '    note: Fixture orphan branch %03d.\n' "$index"
+            printf '  - subject_type: remote\n'
+            printf '    subject_key: origin/orphan-branch-%03d\n' "$index"
+            printf '    intent: cleanup-candidate\n'
+            printf '    note: Fixture orphan remote %03d.\n' "$index"
+        done
+    } > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml"
+}
+
+test_registry_check_finishes_promptly_with_heavy_orphan_render() {
+    test_start "git_topology_registry_check_finishes_promptly_with_heavy_orphan_render"
+
+    local fixture_root repo_dir output rc
+    fixture_root="$(mktemp -d /tmp/git-topology-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_repo "$fixture_root")"
+    mkdir -p "$repo_dir/docs"
+    write_heavy_orphan_intent "$repo_dir"
+    git_topology_fixture_refresh_registry_from_publish_branch "$repo_dir" "$REGISTRY_SCRIPT"
+
+    output="$(
+        cd "$repo_dir" &&
+        REGISTRY_SCRIPT="$REGISTRY_SCRIPT" python3 -c '
+import os
+import subprocess
+import sys
+
+script = os.environ["REGISTRY_SCRIPT"]
+try:
+    result = subprocess.run([script, "check"], capture_output=True, text=True, timeout=5)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    print(f"__RC__={result.returncode}")
+except subprocess.TimeoutExpired:
+    print("__RC__=124")
+'
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Check should finish promptly even with many orphan records"
+    assert_contains "$output" 'status=ok' "Check should still report healthy status after deterministic render"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_registry_publish_dispatches_workflow() {
     test_start "git_topology_registry_publish_dispatches_workflow"
 
@@ -285,6 +351,7 @@ run_all_tests() {
     test_registry_refresh_rejects_ordinary_and_alias_branches
     test_registry_refresh_rejects_detached_head
     test_registry_refresh_is_deterministic_and_sanitized
+    test_registry_check_finishes_promptly_with_heavy_orphan_render
     test_registry_publish_dispatches_workflow
     test_registry_publish_requires_gh
     generate_report

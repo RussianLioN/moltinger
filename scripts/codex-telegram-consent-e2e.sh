@@ -31,23 +31,22 @@ TMP_DIR=""
 PERSISTED_TMP_DIR=""
 
 usage() {
-    cat <<'EOF'
-Usage: scripts/codex-telegram-consent-e2e.sh [options]
-
-Run a Codex-specific hermetic E2E scenario that proves the current safe
-repo-side baseline:
-  honest one-way alert even when legacy consent flags are forced on
-plus degraded fallback validation for router-disabled alerts.
-
-Options:
-  --mode MODE                hermetic (default: hermetic)
-  --output PATH              JSON report path
-  --release-file PATH        Fixture-backed release source
-  --issue-signals-file PATH  Fixture-backed issue signals source
-  --keep-temp                Keep temporary artifacts for operator inspection
-  --verbose                  Enable verbose logs
-  -h, --help                 Show help
-EOF
+    printf '%s\n' \
+        'Usage: scripts/codex-telegram-consent-e2e.sh [options]' \
+        '' \
+        'Run a Codex-specific hermetic E2E scenario that proves the current safe' \
+        'repo-side baseline:' \
+        '  honest one-way alert even when legacy consent flags are forced on' \
+        'plus degraded fallback validation for router-disabled alerts.' \
+        '' \
+        'Options:' \
+        '  --mode MODE                hermetic (default: hermetic)' \
+        '  --output PATH              JSON report path' \
+        '  --release-file PATH        Fixture-backed release source' \
+        '  --issue-signals-file PATH  Fixture-backed issue signals source' \
+        '  --keep-temp                Keep temporary artifacts for operator inspection' \
+        '  --verbose                  Enable verbose logs' \
+        '  -h, --help                 Show help'
 }
 
 log() {
@@ -212,73 +211,59 @@ create_fake_sender() {
     local state_dir="$1"
     local bin_dir="$2"
     mkdir -p "$state_dir" "$bin_dir"
-    cat > "${bin_dir}/telegram-bot-send.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-state_dir="${CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR:?}"
-count_file="${state_dir}/count.txt"
-count=0
-if [[ -f "$count_file" ]]; then
-    count="$(cat "$count_file")"
-fi
-count=$((count + 1))
-printf '%s\n' "$count" > "$count_file"
-
-chat_id=""
-text=""
-reply_to=""
-reply_markup_json=""
-disable_notification=false
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --chat-id)
-            chat_id="${2:-}"
-            shift 2
-            ;;
-        --text)
-            text="${2:-}"
-            shift 2
-            ;;
-        --reply-to)
-            reply_to="${2:-}"
-            shift 2
-            ;;
-        --reply-markup-json)
-            reply_markup_json="${2:-}"
-            shift 2
-            ;;
-        --disable-notification)
-            disable_notification=true
-            shift
-            ;;
-        --json)
-            shift
-            ;;
-        *)
-            shift
-            ;;
-    esac
-done
-
-jq -n \
-  --argjson call "$count" \
-  --arg chat_id "$chat_id" \
-  --arg text "$text" \
-  --arg reply_to "$reply_to" \
-  --arg reply_markup_json "$reply_markup_json" \
-  --argjson disable_notification "$disable_notification" \
-  '{
-    call: $call,
-    chat_id: $chat_id,
-    text: $text,
-    reply_to: (if $reply_to == "" then null else ($reply_to | tonumber) end),
-    reply_markup_json: (if $reply_markup_json == "" then null else ($reply_markup_json | fromjson?) end),
-    disable_notification: $disable_notification
-  }' > "${state_dir}/call-${count}.json"
-
-printf '{"ok":true,"result":{"message_id":%s}}\n' "$count"
-EOF
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -euo pipefail' \
+        '' \
+        'state_dir="${CODEX_CONSENT_E2E_FAKE_TELEGRAM_STATE_DIR:?}"' \
+        'count_file="${state_dir}/count.txt"' \
+        'count=0' \
+        'if [[ -f "$count_file" ]]; then' \
+        '    count="$(cat "$count_file")"' \
+        'fi' \
+        'count=$((count + 1))' \
+        'printf '"'"'%s\n'"'"' "$count" > "$count_file"' \
+        '' \
+        'chat_id=""' \
+        'text=""' \
+        'reply_to=""' \
+        'reply_markup_json=""' \
+        'disable_notification=false' \
+        'while [[ $# -gt 0 ]]; do' \
+        '    case "$1" in' \
+        '        --chat-id)' \
+        '            chat_id="${2:-}"' \
+        '            shift 2' \
+        '            ;;' \
+        '        --text)' \
+        '            text="${2:-}"' \
+        '            shift 2' \
+        '            ;;' \
+        '        --reply-to)' \
+        '            reply_to="${2:-}"' \
+        '            shift 2' \
+        '            ;;' \
+        '        --reply-markup-json)' \
+        '            reply_markup_json="${2:-}"' \
+        '            shift 2' \
+        '            ;;' \
+        '        --disable-notification)' \
+        '            disable_notification=true' \
+        '            shift' \
+        '            ;;' \
+        '        --json)' \
+        '            shift' \
+        '            ;;' \
+        '        *)' \
+        '            shift' \
+        '            ;;' \
+        '    esac' \
+        'done' \
+        '' \
+        "jq -n --argjson call \"\$count\" --arg chat_id \"\$chat_id\" --arg text \"\$text\" --arg reply_to \"\$reply_to\" --arg reply_markup_json \"\$reply_markup_json\" --argjson disable_notification \"\$disable_notification\" '{call:\$call,chat_id:\$chat_id,text:\$text,reply_to:(if \$reply_to == \"\" then null else (\$reply_to | tonumber) end),reply_markup_json:(if \$reply_markup_json == \"\" then null else (\$reply_markup_json | fromjson?) end),disable_notification:\$disable_notification}' > \"\${state_dir}/call-\${count}.json\"" \
+        '' \
+        "printf '{\"ok\":true,\"result\":{\"message_id\":%s}}\\n' \"\$count\"" \
+        > "${bin_dir}/telegram-bot-send.sh"
     chmod +x "${bin_dir}/telegram-bot-send.sh"
 }
 
@@ -296,7 +281,7 @@ assert_text_contains() {
     local text="$1"
     local needle="$2"
     local message="$3"
-    if ! grep -Fq "$needle" <<<"$text"; then
+    if ! printf '%s\n' "$text" | grep -Fq -- "$needle"; then
         CONTEXT_JSON="$(jq -cn --arg text "$text" --arg needle "$needle" --arg message "$message" '{assertion_failed:{needle:$needle, message:$message, text:$text}}')"
         upstream_fail "$message"
     fi
@@ -306,7 +291,7 @@ assert_text_not_contains() {
     local text="$1"
     local needle="$2"
     local message="$3"
-    if grep -Fq "$needle" <<<"$text"; then
+    if printf '%s\n' "$text" | grep -Fq -- "$needle"; then
         CONTEXT_JSON="$(jq -cn --arg text "$text" --arg needle "$needle" --arg message "$message" '{assertion_failed:{needle:$needle, message:$message, text:$text}}')"
         upstream_fail "$message"
     fi
@@ -369,7 +354,7 @@ run_hermetic() {
     assert_jq "$watcher_report" '.automation.alert.consent_requested == false' "Retired repo-side watcher flow must not advertise consent"
     assert_jq "$watcher_report" '.telegram_target.consent_enabled == false' "Legacy consent env flags must be ignored"
     assert_jq "$watcher_report" '.telegram_target.consent_router_enabled == false' "Legacy consent router env flags must be ignored"
-    assert_jq "$watcher_report" 'any(.notes[]; contains("Legacy Telegram consent UX retired"))' "Watcher should explain that the repo-side consent flow is retired"
+    assert_jq "$watcher_report" 'any(.notes[]; contains("Interactive Telegram consent UX retired in watcher"))' "Watcher should explain that the repo-side consent flow is retired"
     if compgen -G "${consent_store_dir}/*.json" >/dev/null; then
         CONTEXT_JSON="$(jq -n --arg consent_store_dir "$consent_store_dir" '{assertion_failed:{consent_store_dir:$consent_store_dir, message:"Retired watcher flow unexpectedly wrote consent store records"}}')"
         upstream_fail "Retired watcher flow must not persist a consent store record"

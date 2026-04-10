@@ -56,6 +56,8 @@ if [[ -z "${action}" ]]; then
   exit 2
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "${git_root}" ]]; then
   echo "[git-topology-registry] Not inside a git repository." >&2
@@ -81,6 +83,7 @@ topology_publish_branch="${GIT_TOPOLOGY_REGISTRY_PUBLISH_BRANCH:-chore/topology-
 topology_publish_workflow="${GIT_TOPOLOGY_REGISTRY_PUBLISH_WORKFLOW:-topology-registry-publish.yml}"
 topology_publish_ref="${GIT_TOPOLOGY_REGISTRY_PUBLISH_REF:-main}"
 tracked_scope="shared_remote_governance"
+registry_render_helper="${script_dir}/git-topology-registry-render.py"
 
 intent_records_file=""
 seen_subjects_file=""
@@ -256,16 +259,16 @@ write_lock_metadata() {
 
   host_name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
 
-  cat > "${lock_owner_file}" <<EOF
-pid=$$
-ppid=${PPID:-unknown}
-action=${action}
-branch=${current_branch:-detached}
-cwd=${PWD}
-git_root=${git_root}
-host=${host_name}
-started_at=$(now_utc)
-EOF
+  {
+    printf 'pid=%s\n' "$$"
+    printf 'ppid=%s\n' "${PPID:-unknown}"
+    printf 'action=%s\n' "${action}"
+    printf 'branch=%s\n' "${current_branch:-detached}"
+    printf 'cwd=%s\n' "${PWD}"
+    printf 'git_root=%s\n' "${git_root}"
+    printf 'host=%s\n' "${host_name}"
+    printf 'started_at=%s\n' "$(now_utc)"
+  } > "${lock_owner_file}"
 }
 
 lock_owner_value() {
@@ -975,90 +978,20 @@ collect_remote_branches() {
 
 render_registry_markdown() {
   local orphan_count="$1"
-  local note=""
-  local remote_ref=""
-  local remote_branch=""
-  local orphan_type=""
-  local orphan_key=""
-  local orphan_intent=""
-  local orphan_note=""
-  local orphan_pr=""
-  local policy_line=""
 
   ensure_tmp_dir
 
-  {
-    cat <<EOF
-# Git Topology Registry
+  if [[ ! -f "${registry_render_helper}" ]]; then
+    echo "[git-topology-registry] Missing renderer helper: ${registry_render_helper}" >&2
+    exit 1
+  fi
 
-**Status**: Generated artifact from shared remote-governance topology and reviewed intent sidecar
-**Scope**: Shared remote governance snapshot
-**Purpose**: Single reference for unmerged remote branches and reviewed topology intent that still require merge or cleanup decisions.
-**Publish**: Dispatch \`scripts/git-topology-registry.sh publish\`; the workflow updates dedicated branch \`${topology_publish_branch}\` and opens or updates a PR to \`main\`
-**Local Note**: Local worktrees and local-only branches remain live-only via \`scripts/git-topology-registry.sh status\` and \`check\`
-**Privacy Note**: This committed artifact is sanitized. Absolute local paths stay in live git state, not in tracked docs.
-EOF
-
-    cat <<'EOF'
-
-## Remote Branches Not Merged Into `origin/main`
-
-| Remote Branch | Current Intent |
-|---|---|
-EOF
-
-    while IFS=$'\t' read -r remote_ref remote_branch note intent pr || [[ -n "${remote_ref}" ]]; do
-      printf '| `%s` | %s |\n' \
-        "$(escape_md_cell "${remote_ref}")" \
-        "$(escape_md_cell "${note}")"
-    done < "${remote_branches_file}"
-
-    if [[ "${orphan_count}" -gt 0 ]]; then
-      cat <<'EOF'
-
-## Reviewed Intent Awaiting Reconciliation
-
-| Subject Type | Subject Key | Intent | Note | PR |
-|---|---|---|---|---|
-EOF
-
-      while IFS=$'\t' read -r orphan_type orphan_key orphan_intent orphan_note orphan_pr || [[ -n "${orphan_type}" ]]; do
-        orphan_note="$(note_or_default "${orphan_note}" "Reviewed intent retained until topology or sidecar is reconciled.")"
-        orphan_pr="$(note_or_default "${orphan_pr}" "-")"
-        printf '| `%s` | `%s` | `%s` | %s | %s |\n' \
-          "$(escape_md_cell "${orphan_type}")" \
-          "$(escape_md_cell "${orphan_key}")" \
-          "$(escape_md_cell "${orphan_intent}")" \
-          "$(escape_md_cell "${orphan_note}")" \
-          "$(escape_md_cell "${orphan_pr}")"
-      done < "${orphan_records_file}"
-
-      cat <<EOF
-
-## Registry Warnings
-
-- Reviewed intent contains ${orphan_count} orphan record(s); keep them until topology catches up or the sidecar is reviewed.
-EOF
-    fi
-
-    cat <<'EOF'
-
-## Operating Rules
-
-1. `main` remains the only operational source of truth.
-2. This tracked document covers shared remote-governance state only; local worktree and local-only branch topology stay live-only.
-3. Before deleting or merging branches, verify this registry and then verify live `git` state again.
-4. If remote topology or reviewed intent changes, dispatch the publish flow to refresh this snapshot.
-5. Live `git` state wins over this document if they diverge; refresh the registry instead of forcing git to match the doc.
-
-## Source Commands
-
-```bash
-git for-each-ref --format='%(refname:short)' refs/remotes/origin
-cat docs/GIT-TOPOLOGY-INTENT.yaml
-```
-EOF
-  } > "${expected_doc_file}"
+  python3 "${registry_render_helper}" \
+    --output "${expected_doc_file}" \
+    --remote-branches "${remote_branches_file}" \
+    --orphan-records "${orphan_records_file}" \
+    --publish-branch "${topology_publish_branch}" \
+    --orphan-count "${orphan_count}"
 }
 
 build_snapshot() {
@@ -1153,31 +1086,31 @@ write_health_state() {
   local message="$6"
 
   ensure_state_dir
-  cat > "${state_file}" <<EOF
-status=${health_status}
-current_hash=${current_hash}
-rendered_hash=${rendered_hash}
-document_hash=${document_hash}
-orphan_records_count=${orphan_count}
-last_success_at=$(now_utc)
-last_error=
-message=${message}
-EOF
+  {
+    printf 'status=%s\n' "${health_status}"
+    printf 'current_hash=%s\n' "${current_hash}"
+    printf 'rendered_hash=%s\n' "${rendered_hash}"
+    printf 'document_hash=%s\n' "${document_hash}"
+    printf 'orphan_records_count=%s\n' "${orphan_count}"
+    printf 'last_success_at=%s\n' "$(now_utc)"
+    printf 'last_error=\n'
+    printf 'message=%s\n' "${message}"
+  } > "${state_file}"
 }
 
 write_error_state() {
   local message="$1"
   ensure_state_dir
-  cat > "${state_file}" <<EOF
-status=error
-current_hash=
-rendered_hash=
-document_hash=
-orphan_records_count=
-last_success_at=
-last_error=${message}
-message=${message}
-EOF
+  {
+    printf 'status=error\n'
+    printf 'current_hash=\n'
+    printf 'rendered_hash=\n'
+    printf 'document_hash=\n'
+    printf 'orphan_records_count=\n'
+    printf 'last_success_at=\n'
+    printf 'last_error=%s\n' "${message}"
+    printf 'message=%s\n' "${message}"
+  } > "${state_file}"
 }
 
 prune_state_dir() {
@@ -1279,6 +1212,10 @@ refresh_flow() {
   local message=""
   local backup_file=""
 
+  if [[ "${write_doc}" == "true" ]]; then
+    require_publish_lane_for_write_doc
+  fi
+
   build_snapshot
   current_hash="$(compute_current_hash)"
   rendered_hash="$(hash_file "${expected_doc_file}")"
@@ -1300,7 +1237,6 @@ refresh_flow() {
     exit 0
   fi
 
-  require_publish_lane_for_write_doc
   acquire_lock
   build_snapshot
   current_hash="$(compute_current_hash)"

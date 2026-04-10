@@ -16,66 +16,66 @@ REGISTRY_SCRIPT="$PROJECT_ROOT/scripts/git-topology-registry.sh"
 write_workflow_intent() {
     local repo_dir="$1"
 
-    cat > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
-version: 1
-defaults:
-  missing_intent: needs-decision
-records:
-  - subject_type: branch
-    subject_key: main
-    intent: active
-    note: Canonical source of truth.
-  - subject_type: worktree
-    subject_key: primary-root
-    intent: active
-    note: Canonical root worktree.
-EOF
+    {
+        printf 'version: 1\n'
+        printf 'defaults:\n'
+        printf '  missing_intent: needs-decision\n'
+        printf 'records:\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: main\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical source of truth.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: primary-root\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical root worktree.\n'
+    } > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml"
 }
 
 append_out_of_band_reviewed_intent() {
   local repo_dir="$1"
 
-    cat >> "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
-  - subject_type: branch
-    subject_key: 008-out-of-band
-    intent: active
-    note: Reviewed branch note retained across doctor.
-  - subject_type: remote
-    subject_key: origin/008-out-of-band
-    intent: active
-    note: Reviewed remote note retained across doctor.
-  - subject_type: worktree
-    subject_key: parallel-feature-008
-    intent: protected
-    note: Reviewed worktree note retained across doctor.
-EOF
+    {
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: 008-out-of-band\n'
+        printf '    intent: active\n'
+        printf '    note: Reviewed branch note retained across doctor.\n'
+        printf '  - subject_type: remote\n'
+        printf '    subject_key: origin/008-out-of-band\n'
+        printf '    intent: active\n'
+        printf '    note: Reviewed remote note retained across doctor.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: parallel-feature-008\n'
+        printf '    intent: protected\n'
+        printf '    note: Reviewed worktree note retained across doctor.\n'
+    } >> "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml"
 }
 
 write_feature_authority_intent() {
     local repo_dir="$1"
 
-    cat > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
-version: 1
-defaults:
-  missing_intent: needs-decision
-records:
-  - subject_type: branch
-    subject_key: main
-    intent: active
-    note: Canonical source of truth.
-  - subject_type: branch
-    subject_key: 006-demo-feature
-    intent: active
-    note: Active demo feature branch.
-  - subject_type: worktree
-    subject_key: primary-feature-006
-    intent: active
-    note: Authoritative worktree for demo feature.
-  - subject_type: worktree
-    subject_key: primary-root
-    intent: active
-    note: Canonical root worktree.
-EOF
+    {
+        printf 'version: 1\n'
+        printf 'defaults:\n'
+        printf '  missing_intent: needs-decision\n'
+        printf 'records:\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: main\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical source of truth.\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: 006-demo-feature\n'
+        printf '    intent: active\n'
+        printf '    note: Active demo feature branch.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: primary-feature-006\n'
+        printf '    intent: active\n'
+        printf '    note: Authoritative worktree for demo feature.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: primary-root\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical root worktree.\n'
+    } > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml"
 }
 
 setup_workflow_repo() {
@@ -91,11 +91,11 @@ setup_workflow_repo() {
 
 seed_broken_registry_check_stub() {
     local repo_dir="$1"
-    cat > "$repo_dir/scripts/git-topology-registry.sh" <<'EOF'
-#!/bin/bash
-echo "[git-topology-registry] simulated internal error" >&2
-exit 2
-EOF
+    {
+        printf '#!/bin/bash\n'
+        printf 'echo "[git-topology-registry] simulated internal error" >&2\n'
+        printf 'exit 2\n'
+    } > "$repo_dir/scripts/git-topology-registry.sh"
     chmod +x "$repo_dir/scripts/git-topology-registry.sh"
 }
 

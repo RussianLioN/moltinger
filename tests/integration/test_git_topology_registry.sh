@@ -27,36 +27,36 @@ assert_not_contains_literal() {
 
 write_demo_intent() {
     local repo_dir="$1"
-    cat > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml" <<'EOF'
-version: 1
-defaults:
-  missing_intent: needs-decision
-records:
-  - subject_type: branch
-    subject_key: 099-retired-feature
-    intent: protected
-    note: Preserve this reviewed note until the sidecar is pruned.
-  - subject_type: branch
-    subject_key: main
-    intent: active
-    note: Canonical source of truth.
-  - subject_type: branch
-    subject_key: 007-demo-feature
-    intent: active
-    note: Demo feature branch.
-  - subject_type: remote
-    subject_key: origin/007-demo-feature
-    intent: active
-    note: Demo remote feature branch.
-  - subject_type: worktree
-    subject_key: parallel-feature-007
-    intent: active
-    note: Demo feature worktree.
-  - subject_type: worktree
-    subject_key: primary-root
-    intent: active
-    note: Canonical root worktree.
-EOF
+    {
+        printf 'version: 1\n'
+        printf 'defaults:\n'
+        printf '  missing_intent: needs-decision\n'
+        printf 'records:\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: 099-retired-feature\n'
+        printf '    intent: protected\n'
+        printf '    note: Preserve this reviewed note until the sidecar is pruned.\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: main\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical source of truth.\n'
+        printf '  - subject_type: branch\n'
+        printf '    subject_key: 007-demo-feature\n'
+        printf '    intent: active\n'
+        printf '    note: Demo feature branch.\n'
+        printf '  - subject_type: remote\n'
+        printf '    subject_key: origin/007-demo-feature\n'
+        printf '    intent: active\n'
+        printf '    note: Demo remote feature branch.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: parallel-feature-007\n'
+        printf '    intent: active\n'
+        printf '    note: Demo feature worktree.\n'
+        printf '  - subject_type: worktree\n'
+        printf '    subject_key: primary-root\n'
+        printf '    intent: active\n'
+        printf '    note: Canonical root worktree.\n'
+    } > "$repo_dir/docs/GIT-TOPOLOGY-INTENT.yaml"
 }
 
 setup_demo_repo() {
@@ -187,16 +187,16 @@ test_lock_timeout_reports_owner_diagnostics() {
     git_topology_fixture_switch_branch "$repo_dir" "$(git_topology_fixture_publish_branch_name)"
 
     mkdir -p "$repo_dir/.git/topology-registry/lock"
-    cat > "$repo_dir/.git/topology-registry/lock/owner.env" <<'EOF'
-pid=999999
-ppid=1
-action=refresh
-branch=uat/006-git-topology-registry
-cwd=/tmp/fake-lock-owner
-git_root=/tmp/fake-repo
-host=unknown
-started_at=2026-03-09T00:00:00Z
-EOF
+    {
+        printf 'pid=999999\n'
+        printf 'ppid=1\n'
+        printf 'action=refresh\n'
+        printf 'branch=uat/006-git-topology-registry\n'
+        printf 'cwd=/tmp/fake-lock-owner\n'
+        printf 'git_root=/tmp/fake-repo\n'
+        printf 'host=unknown\n'
+        printf 'started_at=2026-03-09T00:00:00Z\n'
+    } > "$repo_dir/.git/topology-registry/lock/owner.env"
 
     output="$(
         cd "$repo_dir" &&

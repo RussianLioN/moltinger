@@ -460,8 +460,8 @@
       "ci": true
     },
     "codex-cli-update-monitor.sh": {
-      "version": "1.0.0",
-      "description": "Assess local Codex CLI state against upstream releases and repo workflow relevance",
+      "version": "1.1.0",
+      "description": "Assess local Codex CLI state against upstream releases and repo workflow relevance via a deterministic file-backed report renderer",
       "entrypoint": true,
       "requires": [
         "curl",
@@ -474,9 +474,27 @@
       ],
       "ci": true
     },
+    "codex-cli-update-monitor-context.py": {
+      "version": "1.0.0",
+      "description": "Collect config-derived monitor traits in a file-backed helper to avoid non-deterministic inline-python hangs",
+      "entrypoint": false,
+      "type": "helper",
+      "requires": [
+        "python3"
+      ]
+    },
+    "codex-cli-update-monitor-report.py": {
+      "version": "1.0.0",
+      "description": "Render the Codex update monitor JSON report in a file-backed helper to avoid non-deterministic inline-python hangs",
+      "entrypoint": false,
+      "type": "helper",
+      "requires": [
+        "python3"
+      ]
+    },
     "codex-cli-upstream-watcher.sh": {
-      "version": "2.1.0",
-      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and authoritative consent-based project recommendations",
+      "version": "2.2.0",
+      "description": "Watch official Codex upstream sources with severity levels, digest delivery, and one-way Telegram advisory alerts",
       "entrypoint": true,
       "requires": [
         "curl",
@@ -518,6 +536,15 @@
         "MOLTIS_ENV_FILE"
       ],
       "ci": true
+    },
+    "codex-cli-upstream-watcher-report.py": {
+      "version": "1.0.0",
+      "description": "Render the upstream watcher JSON report in a file-backed helper to avoid non-deterministic inline-python hangs",
+      "entrypoint": false,
+      "type": "helper",
+      "requires": [
+        "python3"
+      ]
     },
     "codex-telegram-consent-e2e.sh": {
       "version": "1.0.0",
@@ -1602,12 +1629,25 @@
         "NETWORK"
       ]
     },
+    "git-topology-registry-render.py": {
+      "version": "1.0.0",
+      "description": "File-backed renderer for the tracked shared git topology registry markdown",
+      "entrypoint": false,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "git-topology-render"
+      ],
+      "gitops": true
+    },
     "git-topology-registry.sh": {
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Owner script for the sanitized git topology registry and reviewed intent sidecar",
       "entrypoint": true,
       "requires": [
-        "git"
+        "git",
+        "python3"
       ],
       "provides": [
         "git-topology-refresh",
@@ -1618,8 +1658,8 @@
       "gitops": true
     },
     "codex-cli-update-advisor.sh": {
-      "version": "1.0.0",
-      "description": "Wrap the Codex update monitor with low-noise notifications and repository change suggestions",
+      "version": "1.1.0",
+      "description": "Wrap the Codex update monitor with low-noise notifications and repository change suggestions via a deterministic file-backed report renderer",
       "entrypoint": true,
       "requires": [
         "jq",
@@ -1630,6 +1670,15 @@
         "codex-update-suggest"
       ],
       "ci": true
+    },
+    "codex-cli-update-advisor-report.py": {
+      "version": "1.0.0",
+      "description": "Render the Codex update advisor JSON report in a file-backed helper to avoid non-deterministic inline-python hangs",
+      "entrypoint": false,
+      "type": "helper",
+      "requires": [
+        "python3"
+      ]
     }
   }
 }
