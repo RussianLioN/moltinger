@@ -1618,10 +1618,36 @@ codex_update_result_label_ru() {
     esac
 }
 
+build_codex_update_scheduler_reply_text() {
+    local state_json="" state_run_at="" state_run_date="" reply_text=""
+
+    state_json="$(read_codex_update_state_json || true)"
+    if [[ -n "$state_json" ]]; then
+        state_run_at="$(extract_json_string_field_from_text "$state_json" "last_run_at" || true)"
+        state_run_date="$(format_iso_date_short "$state_run_at" || true)"
+    fi
+
+    reply_text='По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI.'
+    if [[ -n "$state_run_date" ]]; then
+        reply_text="${reply_text} В сохранённом состоянии последняя проверка была ${state_run_date}, но это само по себе не доказывает, что live cron сейчас включён."
+    else
+        reply_text="${reply_text} Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён."
+    fi
+    reply_text="${reply_text} Для точного статуса нужен операторский/runtime check, а не memory search."
+
+    printf '%s' "$reply_text"
+}
+
 build_codex_update_reply_text() {
+    local mode="${1:-release}"
     local release_json="" latest_version="" published_at="" published_date=""
     local state_json="" state_version="" state_run_at="" state_run_date="" state_result="" state_result_ru=""
     local reply_text=""
+
+    if [[ "$mode" == "scheduler" ]]; then
+        build_codex_update_scheduler_reply_text
+        return 0
+    fi
 
     release_json="$(fetch_codex_update_release_json || true)"
     if [[ -n "$release_json" ]]; then
@@ -3081,8 +3107,16 @@ fi
 looks_like_sparse_skill_create_request="$current_turn_sparse_skill_create_request"
 
 current_turn_codex_update_request=false
-if [[ "$looks_like_skill_turn" != true ]] && \
-   printf '%s' "$intent_text_flat" | grep -Eiq '((codex([[:space:]]+cli)?|codex-update).{0,80}(обновлен|update|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового))|(((обновлен|update|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового).{0,80}(codex([[:space:]]+cli)?|codex-update))))'; then
+current_turn_codex_update_scheduler_request=false
+codex_update_subject_request=false
+if [[ "$looks_like_skill_turn" != true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(codex([[:space:]]+cli)?|codex-update)'; then
+    codex_update_subject_request=true
+fi
+if [[ "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые)'; then
+    current_turn_codex_update_scheduler_request=true
+    current_turn_codex_update_request=true
+fi
+if [[ "$current_turn_codex_update_request" != true && "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(обновлен|обновлени|update|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового|новой|новая|новую)'; then
     current_turn_codex_update_request=true
 fi
 
@@ -3150,6 +3184,17 @@ persisted_skill_detail_name=""
 if [[ "$persisted_turn_intent" =~ ^skill_detail:([A-Za-z0-9._-]+)$ ]]; then
     persisted_skill_detail_name="${BASH_REMATCH[1]}"
 fi
+persisted_codex_update_request=false
+persisted_codex_update_scheduler_request=false
+case "${persisted_turn_intent:-}" in
+    codex_update)
+        persisted_codex_update_request=true
+        ;;
+    codex_update_scheduler)
+        persisted_codex_update_request=true
+        persisted_codex_update_scheduler_request=true
+        ;;
+esac
 if [[ -z "$resolved_skill_name" && -n "$persisted_skill_detail_name" ]]; then
     resolved_skill_name="$persisted_skill_detail_name"
 fi
@@ -3226,6 +3271,12 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         next_turn_intent="skill_visibility"
     elif [[ "$looks_like_skill_template_request" == true ]]; then
         next_turn_intent="skill_template"
+    elif [[ "$current_turn_codex_update_request" == true ]]; then
+        if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
+            next_turn_intent="codex_update_scheduler"
+        else
+            next_turn_intent="codex_update"
+        fi
     elif [[ "$current_turn_skill_detail_request" == true && -n "${resolved_skill_name:-}" ]]; then
         next_turn_intent="skill_detail:${resolved_skill_name}"
     elif [[ "$looks_like_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" ]]; then
@@ -3312,7 +3363,11 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             fi
         fi
         if [[ "$current_turn_codex_update_request" == true ]]; then
-            codex_update_reply_text="$(build_codex_update_reply_text || true)"
+            codex_update_reply_mode="release"
+            if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
+                codex_update_reply_mode="scheduler"
+            fi
+            codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
             if [[ -n "$codex_update_reply_text" ]] && direct_fastpath_send_with_suppression "codex_update" "$telegram_chat_id" "$codex_update_reply_text" "codex_update"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
@@ -3383,7 +3438,11 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             fi
         fi
         if [[ "$current_turn_codex_update_request" == true ]]; then
-            codex_update_reply_text="$(build_codex_update_reply_text || true)"
+            codex_update_reply_mode="release"
+            if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
+                codex_update_reply_mode="scheduler"
+            fi
+            codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
             if [[ -n "$codex_update_reply_text" ]]; then
                 codex_update_guard="$(build_codex_update_hard_override_message "$codex_update_reply_text")"
                 codex_update_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
@@ -3545,6 +3604,23 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             else
                 clear_turn_intent "${turn_session_key:-}"
                 emit_modified_payload "$skill_detail_reply_text" false
+            fi
+            exit 0
+        fi
+    fi
+    if [[ "$current_turn_codex_update_request" == true || "$persisted_codex_update_request" == true ]]; then
+        codex_update_reply_mode="release"
+        if [[ "$current_turn_codex_update_scheduler_request" == true || "$persisted_codex_update_scheduler_request" == true ]]; then
+            codex_update_reply_mode="scheduler"
+        fi
+        codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
+        if [[ -n "$codex_update_reply_text" ]]; then
+            write_audit_line "emit_modify event=$event reason=codex_update_reply_override mode=$codex_update_reply_mode"
+            if [[ "$event" == "AfterLLMCall" ]]; then
+                emit_modified_payload "$codex_update_reply_text" true
+            else
+                clear_turn_intent "${turn_session_key:-}"
+                emit_modified_payload "$codex_update_reply_text" false
             fi
             exit 0
         fi

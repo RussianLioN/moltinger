@@ -713,6 +713,70 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_scheduler_memory_false_negative_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Не вижу подтверждения, что такой крон у меня есть. Я бы хотел это проверить по памяти/расписанию, но инструмент поиска памяти сейчас тоже отвечает криво, так что честно: подтвердить наличие такого крона я сейчас не могу.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_scheduler_contract_safe_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "skill_visibility_false_negative_pass" ]]; then
   cat <<'JSON'
 {
@@ -1531,6 +1595,37 @@ run_component_telegram_remote_uat_contract_tests() {
         test_pass
     else
         test_fail "Authoritative wrapper must not fail a correct codex-update runtime-state reply only because it contrasts with chat memory"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_memory_false_negative_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_false_negative_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-memory.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update scheduler questions drift into memory/schedule speculation"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-memory.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must surface codex-update scheduler replies that substitute memory-search speculation for the remote-safe scheduler contract"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_codex_update_scheduler_contract_safe_reply"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_contract_safe_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-safe.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must allow the remote-safe codex-update scheduler contract reply"
     fi
 
     test_start "component_telegram_remote_uat_fails_skill_visibility_false_negative_against_live_api_skills"
