@@ -9,6 +9,7 @@ ACTIVE_ROOT=""
 DRY_RUN=false
 HOST_CRON_DIR="${MOLTIS_HOST_CRON_DIR:-/etc/cron.d}"
 HOST_SYSTEMD_DIR="${MOLTIS_HOST_SYSTEMD_DIR:-/etc/systemd/system}"
+CRON_SERVICE_NAME="${MOLTIS_CRON_SERVICE_NAME:-}"
 
 usage() {
     cat <<'EOF'
@@ -105,6 +106,72 @@ systemctl_available() {
     command -v systemctl >/dev/null 2>&1
 }
 
+cron_service_exists() {
+    local candidate="${1:-}"
+    local load_state=""
+
+    [[ -n "$candidate" ]] || return 1
+
+    load_state="$(systemctl show -p LoadState --value "${candidate}.service" 2>/dev/null || true)"
+    [[ -n "$load_state" && "$load_state" != "not-found" ]]
+}
+
+resolve_cron_service_name() {
+    local candidate=""
+
+    if [[ -n "$CRON_SERVICE_NAME" ]]; then
+        printf '%s' "$CRON_SERVICE_NAME"
+        return 0
+    fi
+
+    for candidate in cron crond; do
+        if cron_service_exists "$candidate"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+ensure_cron_service_active() {
+    local cron_service=""
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "resolve cron service via MOLTIS_CRON_SERVICE_NAME or detected cron/crond unit"
+        log_dry_run "systemctl reload \$CRON_SERVICE || systemctl restart \$CRON_SERVICE || true"
+        log_dry_run "if ! systemctl is-active --quiet \$CRON_SERVICE; then systemctl enable --now \$CRON_SERVICE || systemctl start \$CRON_SERVICE; fi"
+        log_dry_run "systemctl is-active --quiet \$CRON_SERVICE"
+        return 0
+    fi
+
+    if ! systemctl_available; then
+        log "systemctl not available; skipped cron service activation check"
+        return 0
+    fi
+
+    cron_service="$(resolve_cron_service_name || true)"
+    if [[ -z "$cron_service" ]]; then
+        echo "apply-moltis-host-automation.sh: unable to resolve a cron service unit (expected cron or crond)" >&2
+        return 1
+    fi
+
+    log "Ensuring cron service is active: ${cron_service}.service"
+    if ! systemctl reload "$cron_service" 2>/dev/null; then
+        systemctl restart "$cron_service" 2>/dev/null || true
+    fi
+
+    if ! systemctl is-active --quiet "$cron_service"; then
+        log "Cron service is inactive after reload/restart; attempting enable/start: ${cron_service}.service"
+        systemctl enable --now "$cron_service" 2>/dev/null || systemctl start "$cron_service" 2>/dev/null || true
+    fi
+
+    if ! systemctl is-active --quiet "$cron_service"; then
+        echo "apply-moltis-host-automation.sh: cron service '${cron_service}.service' is not active after host automation" >&2
+        return 1
+    fi
+}
+
 install_cron_jobs() {
     local cron_file cron_name host_entry host_name
     local -a cron_files=()
@@ -147,10 +214,8 @@ install_cron_jobs() {
     done
     shopt -u nullglob
 
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_dry_run "systemctl reload cron || systemctl restart cron || true"
-    elif systemctl_available; then
-        systemctl reload cron 2>/dev/null || systemctl restart cron 2>/dev/null || true
+    if [[ ${#desired_cron_names[@]} -gt 0 ]]; then
+        ensure_cron_service_active
     fi
 }
 
