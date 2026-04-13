@@ -106,6 +106,10 @@ systemctl_available() {
     command -v systemctl >/dev/null 2>&1
 }
 
+apt_get_available() {
+    command -v apt-get >/dev/null 2>&1
+}
+
 cron_service_exists() {
     local candidate="${1:-}"
     local load_state=""
@@ -134,11 +138,30 @@ resolve_cron_service_name() {
     return 1
 }
 
+bootstrap_cron_service_package() {
+    if ! apt_get_available; then
+        echo "apply-moltis-host-automation.sh: cron service unit is missing and no supported package bootstrap is available (expected apt-get for Debian/Ubuntu host)" >&2
+        return 1
+    fi
+
+    log "Cron service unit missing; bootstrapping cron package via apt-get"
+    if ! DEBIAN_FRONTEND=noninteractive apt-get update -yqq; then
+        echo "apply-moltis-host-automation.sh: apt-get update failed while bootstrapping cron package" >&2
+        return 1
+    fi
+
+    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq cron; then
+        echo "apply-moltis-host-automation.sh: apt-get install cron failed while bootstrapping cron package" >&2
+        return 1
+    fi
+}
+
 ensure_cron_service_active() {
     local cron_service=""
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_dry_run "resolve cron service via MOLTIS_CRON_SERVICE_NAME or detected cron/crond unit"
+        log_dry_run "if no cron/crond unit exists and apt-get is available: apt-get update -yqq && apt-get install -y -qq cron"
         log_dry_run "systemctl reload \$CRON_SERVICE || systemctl restart \$CRON_SERVICE || true"
         log_dry_run "if ! systemctl is-active --quiet \$CRON_SERVICE; then systemctl enable --now \$CRON_SERVICE || systemctl start \$CRON_SERVICE; fi"
         log_dry_run "systemctl is-active --quiet \$CRON_SERVICE"
@@ -152,7 +175,12 @@ ensure_cron_service_active() {
 
     cron_service="$(resolve_cron_service_name || true)"
     if [[ -z "$cron_service" ]]; then
-        echo "apply-moltis-host-automation.sh: unable to resolve a cron service unit (expected cron or crond)" >&2
+        bootstrap_cron_service_package || return 1
+        cron_service="$(resolve_cron_service_name || true)"
+    fi
+
+    if [[ -z "$cron_service" ]]; then
+        echo "apply-moltis-host-automation.sh: cron package bootstrap completed but no cron/crond systemd unit was found" >&2
         return 1
     fi
 

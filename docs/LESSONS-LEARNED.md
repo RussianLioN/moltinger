@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-04-10
-**Total Lessons**: 71
+**Generated**: 2026-04-14
+**Total Lessons**: 72
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (31 lessons)
+#### P1 (32 lessons)
+- [Deploy host automation missing cron package bootstrap](../docs/rca/2026-04-14-deploy-host-automation-missing-cron-package-bootstrap.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
 - [Runtime-only Beads repair still pointed at raw bootstrap after the CLI contract drifted](../docs/rca/2026-03-29-runtime-only-repair-contract-still-pointed-at-raw-bootstrap.md)
 - [Managed worktree creation mixed up the create executor and hook bootstrap-source contract](../docs/rca/2026-03-28-worktree-create-helper-and-hook-bootstrap-source-drift.md)
@@ -96,7 +97,8 @@
 ### By Category
 
 
-#### cicd (28 lessons)
+#### cicd (29 lessons)
+- [Deploy host automation missing cron package bootstrap](../docs/rca/2026-04-14-deploy-host-automation-missing-cron-package-bootstrap.md)
 - [Tracked deploy empty stdout broke GitHub Actions JSON contract](../docs/rca/2026-04-02-tracked-deploy-empty-stdout-broke-json-contract.md)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
 - [Tracked Moltis deploy failed because auto-rollback reused an unsafe recreate path while health-monitor mutated Docker state during the same incident](../docs/rca/2026-03-28-moltis-deploy-auto-rollback-recreate-and-health-monitor-interference.md)
@@ -184,7 +186,7 @@
 
 - `moltis` (26 lessons)
 - `rca` (20 lessons)
-- `deploy` (18 lessons)
+- `deploy` (19 lessons)
 - `github-actions` (17 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
@@ -200,10 +202,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 71 |
-| Critical (P0/P1) | 32 |
+| Total Lessons | 72 |
+| Critical (P0/P1) | 33 |
 | Categories | 6 |
-| Unique Tags | 147 |
+| Unique Tags | 150 |
 
 ---
 
