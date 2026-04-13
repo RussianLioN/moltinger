@@ -1229,6 +1229,8 @@ test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_ac
        ! grep -Fq "$host_systemd_dir/moltis-backup.service" "$output_file" || \
        ! grep -Fq "$host_systemd_dir/moltis-backup.timer" "$output_file" || \
        ! grep -Fq "$host_systemd_dir/moltis-health-monitor.service" "$output_file" || \
+       ! grep -Fq "resolve cron service via MOLTIS_CRON_SERVICE_NAME or detected cron/crond unit" "$output_file" || \
+       ! grep -Fq 'systemctl is-active --quiet $CRON_SERVICE' "$output_file" || \
        ! grep -Fq "systemctl disable --now moltis-telegram-web-user-monitor.timer" "$output_file" || \
        ! grep -Fq "systemctl daemon-reload" "$output_file"; then
         test_fail "Host-automation dry-run should describe managed cron/systemd convergence, stale cleanup, and disabled scheduler enforcement"
@@ -1238,6 +1240,195 @@ test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_ac
 
     if grep -Fq "$active_root/scripts/cron.d/moltis-telegram-web-user-monitor" "$output_file"; then
         test_fail "Host-automation script must not delete the tracked fallback scheduler from active root"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+write_fake_systemctl_for_host_automation_tests() {
+    local destination="${1:-}"
+
+    cat >"$destination" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+state_dir="${FAKE_SYSTEMCTL_STATE_DIR:?}"
+command="${1:-}"
+shift || true
+
+unit_key() {
+    local raw="${1:-}"
+    raw="${raw%.service}"
+    printf '%s.service' "$raw"
+}
+
+unit_exists() {
+    local unit
+    unit="$(unit_key "${1:-}")"
+    [[ -f "$state_dir/$unit.exists" ]]
+}
+
+unit_active() {
+    local unit
+    unit="$(unit_key "${1:-}")"
+    [[ -f "$state_dir/$unit.active" ]]
+}
+
+touch_active() {
+    local unit
+    unit="$(unit_key "${1:-}")"
+    : > "$state_dir/$unit.active"
+}
+
+case "$command" in
+    show)
+        if [[ "${1:-}" == "-p" && "${2:-}" == "LoadState" && "${3:-}" == "--value" ]]; then
+            if unit_exists "${4:-}"; then
+                printf 'loaded\n'
+            else
+                printf 'not-found\n'
+            fi
+            exit 0
+        fi
+        ;;
+    reload)
+        unit_exists "${1:-}" || exit 1
+        [[ -f "$state_dir/$(unit_key "${1:-}").reload_fail" ]] && exit 1
+        unit_active "${1:-}" || exit 1
+        exit 0
+        ;;
+    restart|start)
+        unit_exists "${1:-}" || exit 1
+        [[ -f "$state_dir/$(unit_key "${1:-}").start_fail" ]] && exit 1
+        touch_active "${1:-}"
+        exit 0
+        ;;
+    enable)
+        if [[ "${1:-}" == "--now" ]]; then
+            unit_exists "${2:-}" || exit 1
+            [[ -f "$state_dir/$(unit_key "${2:-}").enable_fail" ]] && exit 1
+            touch_active "${2:-}"
+            exit 0
+        fi
+        ;;
+    is-active)
+        if [[ "${1:-}" == "--quiet" ]]; then
+            unit_active "${2:-}" && exit 0
+            exit 3
+        fi
+        ;;
+    disable|stop|daemon-reload|reset-failed)
+        exit 0
+        ;;
+esac
+
+exit 1
+EOF
+    chmod +x "$destination"
+}
+
+write_noop_chown_for_host_automation_tests() {
+    local destination="${1:-}"
+
+    cat >"$destination" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$destination"
+}
+
+test_host_automation_script_activates_inactive_cron_service() {
+    test_start "Shared host-automation script should activate an inactive cron service when managed cron jobs exist"
+
+    if [[ ! -f "$HOST_AUTOMATION_SCRIPT" ]]; then
+        test_skip "Missing script file: $HOST_AUTOMATION_SCRIPT"
+        return
+    fi
+
+    local tmp_dir active_root host_cron_dir host_systemd_dir fakebin state_dir output_file
+    tmp_dir="$(mktemp -d)"
+    active_root="$tmp_dir/active-root"
+    host_cron_dir="$tmp_dir/etc-cron.d"
+    host_systemd_dir="$tmp_dir/etc-systemd"
+    fakebin="$tmp_dir/fakebin"
+    state_dir="$tmp_dir/systemctl-state"
+    output_file="$tmp_dir/output.log"
+
+    mkdir -p "$active_root/scripts/cron.d" "$active_root/systemd" "$host_cron_dir" "$host_systemd_dir" "$fakebin" "$state_dir"
+    printf 'watcher\n' > "$active_root/scripts/cron.d/moltis-codex-upstream-watcher"
+    printf '[Unit]\nDescription=health monitor\n' > "$active_root/systemd/moltis-health-monitor.service"
+    : > "$state_dir/cron.service.exists"
+    : > "$state_dir/cron.service.reload_fail"
+    : > "$state_dir/cron.service.start_fail"
+    : > "$state_dir/moltis-health-monitor.service.exists"
+
+    write_fake_systemctl_for_host_automation_tests "$fakebin/systemctl"
+    write_noop_chown_for_host_automation_tests "$fakebin/chown"
+
+    if ! PATH="$fakebin:$PATH" \
+        FAKE_SYSTEMCTL_STATE_DIR="$state_dir" \
+        MOLTIS_HOST_CRON_DIR="$host_cron_dir" \
+        MOLTIS_HOST_SYSTEMD_DIR="$host_systemd_dir" \
+        bash "$HOST_AUTOMATION_SCRIPT" --active-root "$active_root" >"$output_file" 2>&1; then
+        test_fail "apply-moltis-host-automation.sh should succeed when it can enable an inactive cron service"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ ! -f "$state_dir/cron.service.active" ]] || \
+       ! grep -Fq "Ensuring cron service is active: cron.service" "$output_file"; then
+        test_fail "Host automation should activate cron.service and log the activation contract"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_host_automation_script_fails_when_cron_service_remains_inactive() {
+    test_start "Shared host-automation script should fail fast when cron service stays inactive after automation"
+
+    if [[ ! -f "$HOST_AUTOMATION_SCRIPT" ]]; then
+        test_skip "Missing script file: $HOST_AUTOMATION_SCRIPT"
+        return
+    fi
+
+    local tmp_dir active_root host_cron_dir host_systemd_dir fakebin state_dir output_file
+    tmp_dir="$(mktemp -d)"
+    active_root="$tmp_dir/active-root"
+    host_cron_dir="$tmp_dir/etc-cron.d"
+    host_systemd_dir="$tmp_dir/etc-systemd"
+    fakebin="$tmp_dir/fakebin"
+    state_dir="$tmp_dir/systemctl-state"
+    output_file="$tmp_dir/output.log"
+
+    mkdir -p "$active_root/scripts/cron.d" "$active_root/systemd" "$host_cron_dir" "$host_systemd_dir" "$fakebin" "$state_dir"
+    printf 'watcher\n' > "$active_root/scripts/cron.d/moltis-codex-upstream-watcher"
+    printf '[Unit]\nDescription=health monitor\n' > "$active_root/systemd/moltis-health-monitor.service"
+    : > "$state_dir/cron.service.exists"
+    : > "$state_dir/cron.service.reload_fail"
+    : > "$state_dir/cron.service.start_fail"
+    : > "$state_dir/cron.service.enable_fail"
+
+    write_fake_systemctl_for_host_automation_tests "$fakebin/systemctl"
+    write_noop_chown_for_host_automation_tests "$fakebin/chown"
+
+    if PATH="$fakebin:$PATH" \
+        FAKE_SYSTEMCTL_STATE_DIR="$state_dir" \
+        MOLTIS_HOST_CRON_DIR="$host_cron_dir" \
+        MOLTIS_HOST_SYSTEMD_DIR="$host_systemd_dir" \
+        bash "$HOST_AUTOMATION_SCRIPT" --active-root "$active_root" >"$output_file" 2>&1; then
+        test_fail "apply-moltis-host-automation.sh must fail when cron.service cannot become active"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "cron service 'cron.service' is not active after host automation" "$output_file"; then
+        test_fail "Failure should explain that cron.service stayed inactive after host automation"
         rm -rf "$tmp_dir"
         return
     fi
@@ -1486,6 +1677,8 @@ run_all_tests() {
     test_tracked_deploy_script_requires_workflow_run_argument
     test_tracked_deploy_script_treats_env_file_as_data
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
+    test_host_automation_script_activates_inactive_cron_service
+    test_host_automation_script_fails_when_cron_service_remains_inactive
     test_active_root_script_migrates_legacy_directory
     test_active_root_script_requires_existing_target_directory
     test_prod_mutation_guard_denies_unapproved_production_replay
