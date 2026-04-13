@@ -1230,6 +1230,7 @@ test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_ac
        ! grep -Fq "$host_systemd_dir/moltis-backup.timer" "$output_file" || \
        ! grep -Fq "$host_systemd_dir/moltis-health-monitor.service" "$output_file" || \
        ! grep -Fq "resolve cron service via MOLTIS_CRON_SERVICE_NAME or detected cron/crond unit" "$output_file" || \
+       ! grep -Fq "if no cron/crond unit exists and apt-get is available: apt-get update -yqq && apt-get install -y -qq cron" "$output_file" || \
        ! grep -Fq 'systemctl is-active --quiet $CRON_SERVICE' "$output_file" || \
        ! grep -Fq "systemctl disable --now moltis-telegram-web-user-monitor.timer" "$output_file" || \
        ! grep -Fq "systemctl daemon-reload" "$output_file"; then
@@ -1330,6 +1331,38 @@ EOF
     chmod +x "$destination"
 }
 
+write_fake_apt_get_for_host_automation_tests() {
+    local destination="${1:-}"
+
+    cat >"$destination" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+state_dir="${FAKE_APT_GET_STATE_DIR:?}"
+command="${1:-}"
+shift || true
+
+case "$command" in
+    update)
+        : > "$state_dir/apt-get.update.called"
+        [[ -f "$state_dir/apt-get.update.fail" ]] && exit 1
+        exit 0
+        ;;
+    install)
+        : > "$state_dir/apt-get.install.called"
+        [[ -f "$state_dir/apt-get.install.fail" ]] && exit 1
+        if [[ " $* " == *" cron "* ]]; then
+            : > "$state_dir/cron.service.exists"
+        fi
+        exit 0
+        ;;
+esac
+
+exit 1
+EOF
+    chmod +x "$destination"
+}
+
 write_noop_chown_for_host_automation_tests() {
     local destination="${1:-}"
 
@@ -1389,6 +1422,56 @@ test_host_automation_script_activates_inactive_cron_service() {
     test_pass
 }
 
+test_host_automation_script_bootstraps_missing_cron_package() {
+    test_start "Shared host-automation script should install cron package when no cron unit exists on host"
+
+    if [[ ! -f "$HOST_AUTOMATION_SCRIPT" ]]; then
+        test_skip "Missing script file: $HOST_AUTOMATION_SCRIPT"
+        return
+    fi
+
+    local tmp_dir active_root host_cron_dir host_systemd_dir fakebin state_dir output_file
+    tmp_dir="$(mktemp -d)"
+    active_root="$tmp_dir/active-root"
+    host_cron_dir="$tmp_dir/etc-cron.d"
+    host_systemd_dir="$tmp_dir/etc-systemd"
+    fakebin="$tmp_dir/fakebin"
+    state_dir="$tmp_dir/systemctl-state"
+    output_file="$tmp_dir/output.log"
+
+    mkdir -p "$active_root/scripts/cron.d" "$active_root/systemd" "$host_cron_dir" "$host_systemd_dir" "$fakebin" "$state_dir"
+    printf 'watcher\n' > "$active_root/scripts/cron.d/moltis-codex-upstream-watcher"
+    printf '[Unit]\nDescription=health monitor\n' > "$active_root/systemd/moltis-health-monitor.service"
+    : > "$state_dir/moltis-health-monitor.service.exists"
+
+    write_fake_systemctl_for_host_automation_tests "$fakebin/systemctl"
+    write_fake_apt_get_for_host_automation_tests "$fakebin/apt-get"
+    write_noop_chown_for_host_automation_tests "$fakebin/chown"
+
+    if ! PATH="$fakebin:$PATH" \
+        FAKE_SYSTEMCTL_STATE_DIR="$state_dir" \
+        FAKE_APT_GET_STATE_DIR="$state_dir" \
+        MOLTIS_HOST_CRON_DIR="$host_cron_dir" \
+        MOLTIS_HOST_SYSTEMD_DIR="$host_systemd_dir" \
+        bash "$HOST_AUTOMATION_SCRIPT" --active-root "$active_root" >"$output_file" 2>&1; then
+        test_fail "apply-moltis-host-automation.sh should bootstrap cron package when no cron unit exists"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if [[ ! -f "$state_dir/apt-get.update.called" ]] || \
+       [[ ! -f "$state_dir/apt-get.install.called" ]] || \
+       [[ ! -f "$state_dir/cron.service.active" ]] || \
+       ! grep -Fq "Cron service unit missing; bootstrapping cron package via apt-get" "$output_file"; then
+        test_fail "Host automation should bootstrap cron via apt-get and activate cron.service"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
 test_host_automation_script_fails_when_cron_service_remains_inactive() {
     test_start "Shared host-automation script should fail fast when cron service stays inactive after automation"
 
@@ -1429,6 +1512,54 @@ test_host_automation_script_fails_when_cron_service_remains_inactive() {
 
     if ! grep -Fq "cron service 'cron.service' is not active after host automation" "$output_file"; then
         test_fail "Failure should explain that cron.service stayed inactive after host automation"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    rm -rf "$tmp_dir"
+    test_pass
+}
+
+test_host_automation_script_fails_when_cron_package_bootstrap_fails() {
+    test_start "Shared host-automation script should fail fast when cron package bootstrap fails"
+
+    if [[ ! -f "$HOST_AUTOMATION_SCRIPT" ]]; then
+        test_skip "Missing script file: $HOST_AUTOMATION_SCRIPT"
+        return
+    fi
+
+    local tmp_dir active_root host_cron_dir host_systemd_dir fakebin state_dir output_file
+    tmp_dir="$(mktemp -d)"
+    active_root="$tmp_dir/active-root"
+    host_cron_dir="$tmp_dir/etc-cron.d"
+    host_systemd_dir="$tmp_dir/etc-systemd"
+    fakebin="$tmp_dir/fakebin"
+    state_dir="$tmp_dir/systemctl-state"
+    output_file="$tmp_dir/output.log"
+
+    mkdir -p "$active_root/scripts/cron.d" "$active_root/systemd" "$host_cron_dir" "$host_systemd_dir" "$fakebin" "$state_dir"
+    printf 'watcher\n' > "$active_root/scripts/cron.d/moltis-codex-upstream-watcher"
+    printf '[Unit]\nDescription=health monitor\n' > "$active_root/systemd/moltis-health-monitor.service"
+    : > "$state_dir/moltis-health-monitor.service.exists"
+    : > "$state_dir/apt-get.install.fail"
+
+    write_fake_systemctl_for_host_automation_tests "$fakebin/systemctl"
+    write_fake_apt_get_for_host_automation_tests "$fakebin/apt-get"
+    write_noop_chown_for_host_automation_tests "$fakebin/chown"
+
+    if PATH="$fakebin:$PATH" \
+        FAKE_SYSTEMCTL_STATE_DIR="$state_dir" \
+        FAKE_APT_GET_STATE_DIR="$state_dir" \
+        MOLTIS_HOST_CRON_DIR="$host_cron_dir" \
+        MOLTIS_HOST_SYSTEMD_DIR="$host_systemd_dir" \
+        bash "$HOST_AUTOMATION_SCRIPT" --active-root "$active_root" >"$output_file" 2>&1; then
+        test_fail "apply-moltis-host-automation.sh must fail when cron package bootstrap fails"
+        rm -rf "$tmp_dir"
+        return
+    fi
+
+    if ! grep -Fq "apt-get install cron failed while bootstrapping cron package" "$output_file"; then
+        test_fail "Cron bootstrap failure should explain the apt-get install failure"
         rm -rf "$tmp_dir"
         return
     fi
@@ -1678,7 +1809,9 @@ run_all_tests() {
     test_tracked_deploy_script_treats_env_file_as_data
     test_host_automation_script_dry_run_keeps_scheduler_disabled_without_mutating_active_root
     test_host_automation_script_activates_inactive_cron_service
+    test_host_automation_script_bootstraps_missing_cron_package
     test_host_automation_script_fails_when_cron_service_remains_inactive
+    test_host_automation_script_fails_when_cron_package_bootstrap_fails
     test_active_root_script_migrates_legacy_directory
     test_active_root_script_requires_existing_target_directory
     test_prod_mutation_guard_denies_unapproved_production_replay
