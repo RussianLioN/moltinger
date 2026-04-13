@@ -1105,6 +1105,62 @@ EOF
         test_fail "MessageSending guard must rewrite the cleaned final reply through the normal modify path when direct-send is unavailable instead of leaking the raw Activity log suffix"
     fi
 
+    test_start "component_message_sending_guard_rewrites_clean_codex_update_scheduler_false_negative"
+    local clean_codex_update_scheduler_output
+    clean_codex_update_scheduler_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-update-scheduler-clean","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1295,"user_message":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?","text":"Навык есть, но автопроверка по крону не подтверждена."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
+       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
+       jq -e '.data.to == "262872984"' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
+       jq -e '.data.reply_to_message_id == 1295' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite a clean codex-update scheduler false negative before the generic MessageSending short-circuit"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_dirty_codex_update_scheduler_false_negative_before_clean_delivery_fastpath"
+    local dirty_codex_update_scheduler_tmp dirty_codex_update_scheduler_send_script dirty_codex_update_scheduler_log dirty_codex_update_scheduler_stdout dirty_codex_update_scheduler_stderr dirty_codex_update_scheduler_status
+    dirty_codex_update_scheduler_tmp="$(secure_temp_dir telegram-safe-codex-update-scheduler-dirty)"
+    dirty_codex_update_scheduler_send_script="$dirty_codex_update_scheduler_tmp/send.sh"
+    dirty_codex_update_scheduler_log="$dirty_codex_update_scheduler_tmp/send.log"
+    cat >"$dirty_codex_update_scheduler_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected_direct_send\n' >>"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$dirty_codex_update_scheduler_send_script"
+    dirty_codex_update_scheduler_stdout="$dirty_codex_update_scheduler_tmp/stdout.log"
+    dirty_codex_update_scheduler_stderr="$dirty_codex_update_scheduler_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$dirty_codex_update_scheduler_log" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$dirty_codex_update_scheduler_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$dirty_codex_update_scheduler_tmp/intent" \
+        bash "$HOOK_SCRIPT" >"$dirty_codex_update_scheduler_stdout" 2>"$dirty_codex_update_scheduler_stderr" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-update-scheduler-dirty","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1296,"user_message":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?","text":"Похоже, проверить не удалось. 📋 Activity log • 🔧 cron • ❌ missing 'action' parameter"}}
+EOF
+    dirty_codex_update_scheduler_status=$?
+    set -e
+    if [[ "$dirty_codex_update_scheduler_status" -eq 0 ]] && \
+       [[ ! -s "$dirty_codex_update_scheduler_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
+       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
+       jq -e '.data.reply_to_message_id == 1296' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
+       [[ ! -s "$dirty_codex_update_scheduler_log" ]]; then
+        test_pass
+    else
+        test_fail "MessageSending codex-update override must run before the clean-delivery fastpath so dirty scheduler false negatives are rewritten instead of direct-sent as stripped text"
+    fi
+
     test_start "component_message_sending_guard_direct_sends_clean_reply_when_final_delivery_has_activity_log_suffix"
     local direct_clean_delivery_tmp direct_clean_delivery_send_script direct_clean_delivery_log direct_clean_delivery_stdout direct_clean_delivery_stderr direct_clean_delivery_status
     direct_clean_delivery_tmp="$(secure_temp_dir telegram-safe-direct-clean-delivery)"
@@ -2123,6 +2179,23 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must suppress the exact live codex-update reading phrase captured by the runtime audit"
+    fi
+
+    test_start "component_after_llm_guard_rewrites_clean_codex_update_scheduler_false_negative"
+    local after_llm_codex_update_scheduler_output
+    after_llm_codex_update_scheduler_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:codex-update-scheduler-after","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","user_message":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?","text":"Навык есть, но автопроверка по крону не подтверждена.","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output" && \
+       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite a clean codex-update scheduler false negative into the canonical deterministic reply"
     fi
 
     test_start "component_after_llm_guard_blocks_exact_live_named_doc_search_plan_wording_from_runtime_audit"

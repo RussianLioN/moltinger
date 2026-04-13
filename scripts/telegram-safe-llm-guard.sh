@@ -3134,6 +3134,15 @@ if printf '%s' "$intent_text_flat" | grep -Eiq '((расскажи|опиши|о
     fi
 fi
 
+if [[ "$looks_like_skill_turn" == true ]]; then
+    current_turn_codex_update_request=false
+    current_turn_codex_update_scheduler_request=false
+fi
+
+if [[ "$looks_like_skill_turn" == true ]]; then
+    current_turn_codex_update_request=false
+fi
+
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_delivery_suppression" ]]; then
     if [[ "$before_llm_starts_new_user_turn" == true ]]; then
         write_audit_line "suppress_clear reason=new_user_turn scope=session token=$persisted_delivery_suppression iteration=${current_iteration:-missing}"
@@ -3529,6 +3538,26 @@ if [[ "$event" == "MessageSending" && -n "$effective_delivery_suppression" && "$
     write_audit_line "emit_modify event=$event reason=direct_fastpath_delivery_suppress token=$effective_delivery_suppression"
     emit_modified_payload "NO_REPLY" false
     exit 0
+fi
+
+if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
+    if [[ "$current_turn_codex_update_request" == true ]]; then
+        codex_update_reply_mode="release"
+        if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
+            codex_update_reply_mode="scheduler"
+        fi
+        codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
+        if [[ -n "$codex_update_reply_text" ]]; then
+            write_audit_line "emit_modify event=$event reason=codex_update_reply_override mode=$codex_update_reply_mode"
+            if [[ "$event" == "AfterLLMCall" ]]; then
+                emit_modified_payload "$codex_update_reply_text" true
+            else
+                clear_turn_intent "${turn_session_key:-}"
+                emit_modified_payload "$codex_update_reply_text" false
+            fi
+            exit 0
+        fi
+    fi
 fi
 
 if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && -z "$persisted_skill_create_state" && "$has_delivery_internal_telemetry" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED"; then
