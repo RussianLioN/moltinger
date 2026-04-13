@@ -2444,6 +2444,46 @@ EOF
         test_fail "MessageSending guard must rewrite codex-update skill-detail failures into a clean Telegram-safe summary instead of falling back to operator-heavy description text"
     fi
 
+    test_start "component_after_llm_guard_rewrites_codex_update_scheduler_question_into_remote_safe_contract_reply"
+    local codex_update_scheduler_after_output
+    codex_update_scheduler_after_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$(secure_temp_dir telegram-safe-codex-update-scheduler-after)" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:codex-update-scheduler-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872993 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"text":"Не вижу подтверждения, что такой крон у меня есть. Я бы хотел это проверить по памяти/расписанию, но инструмент поиска памяти сейчас тоже отвечает криво.","tool_calls":[{"name":"mcp__mempalace__search","arguments":{"query":"codex cli cron watcher"}}]}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
+       jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
+       jq -e '.data.text | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
+       jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
+       jq -e '.data.text | test("Activity log|Searching memory|missing '\''query'\'' parameter|памяти/расписанию|криво") | not' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite codex-update scheduler questions into the deterministic remote-safe contract instead of leaving memory/tool reasoning in place"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_codex_update_scheduler_memory_leak_into_remote_safe_contract_reply"
+    local codex_update_scheduler_message_output
+    codex_update_scheduler_message_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$(secure_temp_dir telegram-safe-codex-update-scheduler-message)" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-update-scheduler-message","data":{"account_id":"moltis-bot","to":"262872994","reply_to_message_id":964,"user_message":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?","text":"Не вижу подтверждения, что такой крон у меня есть.\n\nЯ бы хотел это проверить по памяти/расписанию, но инструмент поиска памяти сейчас тоже отвечает криво, так что честно: подтвердить наличие такого крона я сейчас не могу.\n\n📋 Activity log\n• 🧠 Searching memory...\n• ❌ missing 'query' parameter"}} 
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
+       jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
+       jq -e '.data.text | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
+       jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
+       jq -e '.data.reply_to_message_id == 964' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
+       jq -e '.data.text | test("Activity log|Searching memory|missing '\''query'\'' parameter|памяти/расписанию|криво") | not' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must replace codex-update scheduler memory leaks with the deterministic remote-safe contract reply"
+    fi
+
     test_start "component_message_sending_guard_rewrites_post_close_classifier_skill_detail_into_clean_runtime_summary"
     local classifier_skill_dir message_sending_classifier_skill_output classifier_skill_fakebin
     classifier_skill_dir="$(secure_temp_dir telegram-safe-post-close-classifier-detail-runtime)"

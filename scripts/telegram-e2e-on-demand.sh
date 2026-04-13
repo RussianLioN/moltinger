@@ -622,6 +622,24 @@ message_is_codex_update_query() {
   return 1
 }
 
+message_is_codex_update_scheduler_query() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if ! message_is_codex_update_query "$normalized"; then
+    return 1
+  fi
+
+  case "$normalized" in
+    *"крон"*|*"cron"*|*"scheduler"*|*"schedule"*|*"расписан"*|*"расписанию"*|*"регулярн"*|*"автопровер"*|*"автоматич"*|*"watcher"*|*"монитор"*|*"периодич"*|*"daemon"*|*"демон"*|*"каждые"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 reply_has_codex_update_false_negative() {
   local normalized
   normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -665,6 +683,20 @@ reply_has_codex_update_state_memory_false_negative() {
 
   case "$normalized" in
     *"в памяти не найдено"*|*"В памяти не найдено"*|*"не найдено в памяти"*|*"Не найдено в памяти"*|*"в памяти записи о последней известной версии не найдено"*|*"В памяти записи о последней известной версии не найдено"*|*"в памяти записи не найдено"*|*"В памяти записи не найдено"*|*"в памяти у меня не зафиксирована"*|*"В памяти у меня не зафиксирована"*|*"в базе у меня не зафиксирована"*|*"В базе у меня не зафиксирована"*|*"в базе не зафиксирована"*|*"В базе не зафиксирована"*|*"не вижу физически доступного содержимого skill"*|*"Не вижу физически доступного содержимого skill"*|*"не вижу физически доступного содержимого скил"*|*"Не вижу физически доступного содержимого скил"*|*"механизм отслеживания обновлений codex cli сейчас не в рабочем состоянии"*|*"Механизм отслеживания обновлений Codex CLI сейчас не в рабочем состоянии"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+reply_has_codex_update_scheduler_memory_false_negative() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}")"
+  [[ -n "$normalized" ]] || return 1
+
+  case "$normalized" in
+    *"проверить по памяти/расписанию"*|*"Проверить по памяти/расписанию"*|*"инструмент поиска памяти"*|*"Инструмент поиска памяти"*|*"не вижу подтверждения, что такой крон"*|*"Не вижу подтверждения, что такой крон"*|*"подтвердить наличие такого крона я сейчас не могу"*|*"Подтвердить наличие такого крона я сейчас не могу"*|*"Searching memory"*|*"missing 'query' parameter"*)
       return 0
       ;;
   esac
@@ -1043,6 +1075,19 @@ evaluate_authoritative_semantics() {
       --argjson base "$DIAGNOSTIC_JSON" \
       '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_state_memory_false_negative"}}')"
     RECOMMENDED_ACTION="Reconcile codex-update state queries so they read runtime state helper truth instead of memory-search fallbacks, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_scheduler_query "$normalized_message" && reply_has_codex_update_scheduler_memory_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_scheduler_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update scheduler reply treated chat memory or broken memory-search behavior as evidence about live cron/scheduler state" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_scheduler_memory_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update scheduler questions so Telegram answers from the remote-safe scheduler contract instead of drifting into memory/schedule speculation, then rerun authoritative UAT."
     return 0
   fi
 
