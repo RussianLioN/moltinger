@@ -2191,6 +2191,21 @@ extract_bd_worktree_record_from_payload() {
   return 1
 }
 
+extract_bd_probe_state_from_payload() {
+  local payload="$1"
+  local line=""
+
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    if [[ "${line}" == "__PROBE_STATE__"$'\t'* ]]; then
+      printf '%s\n' "${line#*$'\t'}"
+      return 0
+    fi
+  done <<< "${payload}"
+
+  return 1
+}
+
 discover_target_state() {
   local git_record=""
   local bd_payload=""
@@ -3265,6 +3280,7 @@ execute_cleanup_worktree_action() {
   local fallback_rc=0
   local fallback_merge_check=""
   local fallback_default_branch_name=""
+  local fallback_bd_probe_state=""
   local fallback_bd_record=""
   local fallback_bd_lookup_path=""
   local saved_merge_check=""
@@ -3376,8 +3392,15 @@ execute_cleanup_worktree_action() {
           add_warning "bd worktree remove reported unpushed commits for merged clean worktree ${cleanup_path}; git worktree remove fallback succeeded."
           fallback_bd_lookup_path="${report_worktree_path:-${discovered_worktree_path:-${cleanup_path}}}"
           fallback_bd_record="$(find_bd_worktree_by_path "${fallback_bd_lookup_path}" || true)"
+          fallback_bd_probe_state="$(extract_bd_probe_state_from_payload "${fallback_bd_record}" || true)"
           fallback_bd_record="$(extract_bd_worktree_record_from_payload "${fallback_bd_record}" || true)"
-          if [[ -n "${fallback_bd_record}" ]]; then
+          if [[ "${fallback_bd_probe_state}" != "ok" ]]; then
+            report_cleanup_reconcile_required="true"
+            report_repair_command="cd $(shell_quote "${resolved_repo_root}") && bd worktree remove $(shell_quote "${cleanup_path}")"
+            add_warning "Could not verify Beads worktree metadata after git-only fallback removal because the post-removal bd probe was unavailable."
+            add_next_step "cd $(shell_quote "${resolved_repo_root}")"
+            add_next_step "bd worktree remove $(shell_quote "${cleanup_path}")"
+          elif [[ -n "${fallback_bd_record}" ]]; then
             report_cleanup_reconcile_required="true"
             report_repair_command="cd $(shell_quote "${resolved_repo_root}") && bd worktree remove $(shell_quote "${cleanup_path}")"
             add_warning "Beads still reports ${cleanup_path} after git-only fallback removal; rerun bd cleanup to reconcile local worktree metadata."

@@ -203,6 +203,20 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+create_fake_broken_jq_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/jq-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/jq" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "${fake_bin}/jq"
+
+    printf '%s\n' "${fake_bin}"
+}
+
 run_worktree_plan() {
     local repo_dir="$1"
     local fake_bin="$2"
@@ -2215,6 +2229,60 @@ test_cleanup_blocks_when_git_fallback_leaves_beads_metadata_stale() {
     test_pass
 }
 
+test_cleanup_blocks_when_git_fallback_cannot_verify_beads_metadata() {
+    test_start "worktree_ready_cleanup_blocks_when_git_fallback_cannot_verify_beads_metadata"
+
+    local fixture_root repo_dir fake_bin fake_jq_bin existing_path output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_jq_bin="$(create_fake_broken_jq_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+        git merge --no-ff feat/remote-uat-hardening -m "fixture: merge feature branch" >/dev/null
+        git push origin main >/dev/null
+    )
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON='[]' \
+        BD_WORKTREE_REMOVE_NOOP=1 \
+        BD_WORKTREE_REMOVE_RC=23 \
+        BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
+        run_worktree_cleanup "$repo_dir" "${fake_jq_bin}:${fake_bin}" --branch feat/remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Cleanup should fail closed when post-removal Beads verification is unavailable"
+    assert_contains "$output" 'Status: cleanup_blocked' "Cleanup should stay blocked when Beads metadata could not be verified"
+    assert_contains "$output" 'post-removal bd probe was unavailable' "Cleanup should explain why reconciliation is still required"
+    assert_contains "$output" 'Repair Command: cd ' "Cleanup should expose a repair command when Beads verification is unavailable"
+    if [[ -d "$existing_path" ]]; then
+        test_fail "Cleanup should still remove the worktree directory before blocking on unavailable Beads verification"
+    fi
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the local branch while Beads verification remains unresolved"
+    fi
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the remote branch while Beads verification remains unresolved"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_cleanup_blocks_branch_delete_without_merge_proof() {
     test_start "worktree_ready_cleanup_blocks_branch_delete_without_merge_proof"
 
@@ -2361,6 +2429,7 @@ run_all_tests() {
     test_cleanup_refreshes_remote_refs_before_using_local_merge_proof
     test_cleanup_uses_local_stale_proof_for_worktree_fallback_when_refresh_fails
     test_cleanup_blocks_when_git_fallback_leaves_beads_metadata_stale
+    test_cleanup_blocks_when_git_fallback_cannot_verify_beads_metadata
     test_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous
     test_cleanup_delete_branch_uses_github_api_remote_delete_fallback
     test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists
