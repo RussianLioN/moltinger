@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-14
-**Total Lessons**: 76
+**Total Lessons**: 77
 
 ---
 
@@ -14,10 +14,11 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (36 lessons)
+#### P1 (37 lessons)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
 - [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
+- [Telegram codex-update classifier missed live BeforeLLMCall turns when messages content arrived as arrays](../docs/rca/2026-04-14-telegram-codex-update-array-content-bypassed-turn-classifier.md)
 - [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Deploy host automation missing cron package bootstrap](../docs/rca/2026-04-14-deploy-host-automation-missing-cron-package-bootstrap.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
@@ -175,10 +176,11 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (3 lessons)
+#### product (4 lessons)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
 - [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
+- [Telegram codex-update classifier missed live BeforeLLMCall turns when messages content arrived as arrays](../docs/rca/2026-04-14-telegram-codex-update-array-content-bypassed-turn-classifier.md)
 
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
@@ -195,8 +197,8 @@
 ### Popular Tags
 
 - `moltis` (26 lessons)
-- `rca` (24 lessons)
-- `telegram` (19 lessons)
+- `rca` (25 lessons)
+- `telegram` (20 lessons)
 - `deploy` (19 lessons)
 - `github-actions` (17 lessons)
 - `gitops` (16 lessons)
@@ -212,10 +214,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 76 |
-| Critical (P0/P1) | 37 |
+| Total Lessons | 77 |
+| Critical (P0/P1) | 38 |
 | Categories | 7 |
-| Unique Tags | 156 |
+| Unique Tags | 157 |
 
 ---
 
