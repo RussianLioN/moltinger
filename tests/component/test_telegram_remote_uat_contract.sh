@@ -745,6 +745,134 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_scheduler_memory_positive_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Да — есть. В памяти у меня явно записано: «Ежедневно проверяю стабильные обновления Codex CLI и присылаю краткое уведомление только если вышла новая стабильная версия.» cron list снова вернул missing 'action' parameter, memory_search — missing 'query' parameter, exec — missing 'command' parameter.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_scheduler_memory_action_unquoted_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Да — есть. В памяти у меня явно записано: «Ежедневно проверяю стабильные обновления Codex CLI и присылаю краткое уведомление только если вышла новая стабильная версия.» cron list снова вернул missing action parameter.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_scheduler_memory_query_unquoted_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Да — есть. В памяти у меня явно записано: «Ежедневно проверяю стабильные обновления Codex CLI и присылаю краткое уведомление только если вышла новая стабильная версия.» memory_search снова вернул missing query parameter.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_scheduler_memory_command_unquoted_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Да — есть. В памяти у меня явно записано: «Ежедневно проверяю стабильные обновления Codex CLI и присылаю краткое уведомление только если вышла новая стабильная версия.» exec снова вернул missing command parameter.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "codex_update_scheduler_contract_safe_pass" ]]; then
   cat <<'JSON'
 {
@@ -1612,6 +1740,78 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must surface codex-update scheduler replies that substitute memory-search speculation for the remote-safe scheduler contract"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_memory_positive_false_positive_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_positive_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-memory-positive.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update scheduler questions are answered from chat-memory assertions or leaked tool errors even if the helper claims success"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-memory-positive.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify memory-asserted codex-update scheduler claims as the same semantic scheduler-contract failure"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_action_unquoted_false_positive_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_action_unquoted_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-action-unquoted.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update scheduler replies leak an unquoted missing action parameter variant"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-action-unquoted.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify unquoted missing action parameter replies as the same semantic scheduler-contract failure"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_query_unquoted_false_positive_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_query_unquoted_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-query-unquoted.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update scheduler replies leak an unquoted missing query parameter variant"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-query-unquoted.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify unquoted missing query parameter replies as the same semantic scheduler-contract failure"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_command_unquoted_false_positive_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_command_unquoted_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-command-unquoted.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update scheduler replies leak an unquoted missing command parameter variant"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-command-unquoted.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify unquoted missing command parameter replies as the same semantic scheduler-contract failure"
         fi
     fi
 

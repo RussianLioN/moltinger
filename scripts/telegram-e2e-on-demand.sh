@@ -690,16 +690,32 @@ reply_has_codex_update_state_memory_false_negative() {
   return 1
 }
 
+reply_has_missing_parameter_family_leak() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}")"
+  [[ -n "$normalized" ]] || return 1
+
+  if [[ "$normalized" =~ [Mm]issing[[:space:]]+\'?(action|query|command)\'?[[:space:]]+parameter ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 reply_has_codex_update_scheduler_memory_false_negative() {
   local normalized
   normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   case "$normalized" in
-    *"проверить по памяти/расписанию"*|*"Проверить по памяти/расписанию"*|*"инструмент поиска памяти"*|*"Инструмент поиска памяти"*|*"не вижу подтверждения, что такой крон"*|*"Не вижу подтверждения, что такой крон"*|*"подтвердить наличие такого крона я сейчас не могу"*|*"Подтвердить наличие такого крона я сейчас не могу"*|*"Searching memory"*|*"missing 'query' parameter"*)
+    *"проверить по памяти/расписанию"*|*"Проверить по памяти/расписанию"*|*"инструмент поиска памяти"*|*"Инструмент поиска памяти"*|*"не вижу подтверждения, что такой крон"*|*"Не вижу подтверждения, что такой крон"*|*"подтвердить наличие такого крона я сейчас не могу"*|*"Подтвердить наличие такого крона я сейчас не могу"*|*"в памяти у меня явно записано"*|*"В памяти у меня явно записано"*|*"по сохранённой памяти ответ однозначный"*|*"По сохранённой памяти ответ однозначный"*|*"ежедневно проверяю стабильные обновления Codex CLI"*|*"Ежедневно проверяю стабильные обновления Codex CLI"*|*"Searching memory"*)
       return 0
       ;;
   esac
+
+  if reply_has_missing_parameter_family_leak "$normalized"; then
+    return 0
+  fi
 
   return 1
 }
@@ -778,6 +794,58 @@ evaluate_authoritative_semantics() {
   skill_query_skills_json=""
   requested_skill_name=""
   runtime_skill_names='[]'
+
+  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_false_negative" "$RUN_STAGE" "Authoritative Codex update reply treated sandbox-invisible host paths as proof that the live skill was missing" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile the Telegram prompt/skill contract so codex-update availability is not disproven via sandbox-invisible host paths, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_remote_contract_violation "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_remote_contract_violation" "$RUN_STAGE" "Authoritative Codex update reply promised operator-only runtime execution or local-machine update behavior on a remote user-facing surface" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_remote_contract_violation"}}')"
+    RECOMMENDED_ACTION="Reconcile the remote codex-update contract so Telegram stays advisory-only and does not promise operator-only runtime execution, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_state_memory_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_state_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update reply treated chat memory or generic unavailable text as proof that codex-update runtime state was absent" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_state_memory_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update state queries so they read runtime state helper truth instead of memory-search fallbacks, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_scheduler_query "$normalized_message" && reply_has_codex_update_scheduler_memory_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_scheduler_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update scheduler reply treated chat memory or broken memory-search behavior as evidence about live cron/scheduler state" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_scheduler_memory_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update scheduler questions so Telegram answers from the remote-safe scheduler contract instead of drifting into memory/schedule speculation, then rerun authoritative UAT."
+    return 0
+  fi
 
   if reply_has_internal_activity "$reply_text"; then
     VERDICT="failed"
@@ -1037,58 +1105,6 @@ evaluate_authoritative_semantics() {
       RECOMMENDED_ACTION="Require the next Telegram visibility turn after create to mention the newly created live skill before treating the flow as green."
       return 0
     fi
-  fi
-
-  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_false_negative "$reply_text"; then
-    VERDICT="failed"
-    RUN_STAGE="semantic_review"
-    FAILURE_JSON="$(build_failure_json "semantic_codex_update_false_negative" "$RUN_STAGE" "Authoritative Codex update reply treated sandbox-invisible host paths as proof that the live skill was missing" "operator" true)"
-    DIAGNOSTIC_JSON="$(jq -cn \
-      --arg reply_text "$reply_text" \
-      --arg message "$normalized_message" \
-      --argjson base "$DIAGNOSTIC_JSON" \
-      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_false_negative"}}')"
-    RECOMMENDED_ACTION="Reconcile the Telegram prompt/skill contract so codex-update availability is not disproven via sandbox-invisible host paths, then rerun authoritative UAT."
-    return 0
-  fi
-
-  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_remote_contract_violation "$reply_text"; then
-    VERDICT="failed"
-    RUN_STAGE="semantic_review"
-    FAILURE_JSON="$(build_failure_json "semantic_codex_update_remote_contract_violation" "$RUN_STAGE" "Authoritative Codex update reply promised operator-only runtime execution or local-machine update behavior on a remote user-facing surface" "operator" true)"
-    DIAGNOSTIC_JSON="$(jq -cn \
-      --arg reply_text "$reply_text" \
-      --arg message "$normalized_message" \
-      --argjson base "$DIAGNOSTIC_JSON" \
-      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_remote_contract_violation"}}')"
-    RECOMMENDED_ACTION="Reconcile the remote codex-update contract so Telegram stays advisory-only and does not promise operator-only runtime execution, then rerun authoritative UAT."
-    return 0
-  fi
-
-  if message_is_codex_update_query "$normalized_message" && reply_has_codex_update_state_memory_false_negative "$reply_text"; then
-    VERDICT="failed"
-    RUN_STAGE="semantic_review"
-    FAILURE_JSON="$(build_failure_json "semantic_codex_update_state_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update reply treated chat memory or generic unavailable text as proof that codex-update runtime state was absent" "operator" true)"
-    DIAGNOSTIC_JSON="$(jq -cn \
-      --arg reply_text "$reply_text" \
-      --arg message "$normalized_message" \
-      --argjson base "$DIAGNOSTIC_JSON" \
-      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_state_memory_false_negative"}}')"
-    RECOMMENDED_ACTION="Reconcile codex-update state queries so they read runtime state helper truth instead of memory-search fallbacks, then rerun authoritative UAT."
-    return 0
-  fi
-
-  if message_is_codex_update_scheduler_query "$normalized_message" && reply_has_codex_update_scheduler_memory_false_negative "$reply_text"; then
-    VERDICT="failed"
-    RUN_STAGE="semantic_review"
-    FAILURE_JSON="$(build_failure_json "semantic_codex_update_scheduler_memory_false_negative" "$RUN_STAGE" "Authoritative Codex update scheduler reply treated chat memory or broken memory-search behavior as evidence about live cron/scheduler state" "operator" true)"
-    DIAGNOSTIC_JSON="$(jq -cn \
-      --arg reply_text "$reply_text" \
-      --arg message "$normalized_message" \
-      --argjson base "$DIAGNOSTIC_JSON" \
-      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_scheduler_memory_false_negative"}}')"
-    RECOMMENDED_ACTION="Reconcile codex-update scheduler questions so Telegram answers from the remote-safe scheduler contract instead of drifting into memory/schedule speculation, then rerun authoritative UAT."
-    return 0
   fi
 
   if reply_has_host_path_leak "$reply_text"; then
