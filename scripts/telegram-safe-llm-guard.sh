@@ -10,6 +10,8 @@ AUDIT_FILE="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE:-}"
 INTENT_DIR="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR:-/tmp/moltis-telegram-safe-llm-guard-intent}"
 INTENT_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_TTL_SEC:-900}"
 SUPPRESS_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SUPPRESS_TTL_SEC:-300}"
+TERMINAL_TTL_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_TERMINAL_TTL_SEC:-3600}"
+TERMINAL_REPEAT_WINDOW_SEC="${MOLTIS_TELEGRAM_SAFE_LLM_GUARD_TERMINAL_REPEAT_WINDOW_SEC:-30}"
 DIRECT_FASTPATH_ENABLED="${MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH:-true}"
 DIRECT_SEND_SCRIPT="${MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT:-/server/scripts/telegram-bot-send.sh}"
 CODEX_UPDATE_STATE_SCRIPT="${MOLTIS_CODEX_UPDATE_STATE_SCRIPT:-/server/scripts/moltis-codex-update-state.sh}"
@@ -32,6 +34,13 @@ payload_flat="$(
         | tr '\r\n' '  ' \
         | sed 's/[[:space:]][[:space:]]*/ /g'
 )"
+
+compute_turn_fingerprint() {
+    local source_text="${1:-}"
+
+    [[ -n "$source_text" ]] || return 1
+    printf '%s' "$source_text" | cksum | awk '{print $1 "-" $2}'
+}
 
 extract_first_string() {
     local key="$1"
@@ -1129,12 +1138,39 @@ load_terminal_marker() {
 
     now_epoch="$(date +%s)"
     age_sec=$((now_epoch - stored_epoch))
-    if (( age_sec < 0 || age_sec > SUPPRESS_TTL_SEC )); then
+    if (( age_sec < 0 || age_sec > TERMINAL_TTL_SEC )); then
         rm -f "$terminal_file" 2>/dev/null || true
         return 1
     fi
 
     printf '%s' "$stored_token"
+}
+
+turn_intent_is_recent_for_repeat() {
+    local raw_key="${1:-}"
+    local max_age_sec="${2:-}"
+    local intent_file=""
+    local stored_epoch=""
+    local stored_intent=""
+    local stored_fingerprint=""
+    local now_epoch=0
+    local age_sec=0
+
+    [[ -n "$raw_key" && "$max_age_sec" =~ ^[0-9]+$ ]] || return 1
+
+    intent_file="$(intent_file_path "$raw_key" || true)"
+    [[ -n "$intent_file" && -f "$intent_file" ]] || return 1
+
+    IFS=$'\t' read -r stored_epoch stored_intent stored_fingerprint <"$intent_file" || return 1
+    [[ "$stored_epoch" =~ ^[0-9]+$ && -n "$stored_intent" ]] || return 1
+
+    now_epoch="$(date +%s)"
+    age_sec=$((now_epoch - stored_epoch))
+    if (( age_sec < 0 || age_sec > max_age_sec )); then
+        return 1
+    fi
+
+    return 0
 }
 
 clear_terminal_marker() {
@@ -1233,6 +1269,40 @@ rollback_direct_fastpath_delivery_suppression() {
     clear_delivery_suppression_for_chat "$chat_id"
 }
 
+arm_codex_update_terminal_delivery_suppression() {
+    local raw_key="${1:-}"
+    local chat_id="${2:-}"
+    local token="${3:-}"
+    local session_armed=false
+
+    [[ -n "$token" ]] || return 1
+    if [[ -z "$raw_key" && -z "$chat_id" ]]; then
+        return 1
+    fi
+
+    if [[ -n "$raw_key" ]]; then
+        if ! persist_delivery_suppression "$raw_key" "$token"; then
+            write_audit_line "codex_update_terminal_suppress_arm_failed scope=session token=$token key=${raw_key:-missing}"
+            return 1
+        fi
+        session_armed=true
+    fi
+
+    if [[ -z "$chat_id" ]]; then
+        return 0
+    fi
+
+    if persist_delivery_suppression_for_chat "$chat_id" "$token"; then
+        return 0
+    fi
+
+    if [[ "$session_armed" == true ]]; then
+        clear_delivery_suppression "$raw_key"
+    fi
+    write_audit_line "codex_update_terminal_suppress_arm_failed scope=chat token=$token chat_id=${chat_id:-missing}"
+    return 1
+}
+
 direct_fastpath_send_with_suppression() {
     local kind="${1:-}"
     local chat_id="${2:-}"
@@ -1261,6 +1331,7 @@ direct_fastpath_send_with_suppression() {
 persist_turn_intent() {
     local raw_key="${1:-}"
     local intent_name="${2:-}"
+    local turn_fingerprint="${3:-}"
     local intent_file=""
 
     [[ -n "$raw_key" && -n "$intent_name" ]] || return 0
@@ -1272,7 +1343,7 @@ persist_turn_intent() {
         write_audit_line "intent_set_failed key=$(basename "$intent_file") intent=$intent_name reason=mkdir"
         return 0
     fi
-    if ! printf '%s\t%s\n' "$(date +%s)" "$intent_name" >"$intent_file" 2>/dev/null; then
+    if ! printf '%s\t%s\t%s\n' "$(date +%s)" "$intent_name" "$turn_fingerprint" >"$intent_file" 2>/dev/null; then
         rm -f "$intent_file" 2>/dev/null || true
         write_audit_line "intent_set_failed key=$(basename "$intent_file") intent=$intent_name reason=write"
         return 0
@@ -1294,7 +1365,7 @@ load_turn_intent() {
     intent_file="$(intent_file_path "$raw_key" || true)"
     [[ -n "$intent_file" && -f "$intent_file" ]] || return 1
 
-    IFS=$'\t' read -r stored_epoch stored_intent <"$intent_file" || return 1
+    IFS=$'\t' read -r stored_epoch stored_intent _stored_fingerprint <"$intent_file" || return 1
     [[ "$stored_epoch" =~ ^[0-9]+$ && -n "$stored_intent" ]] || return 1
 
     now_epoch="$(date +%s)"
@@ -1305,6 +1376,34 @@ load_turn_intent() {
     fi
 
     printf '%s' "$stored_intent"
+}
+
+load_turn_intent_fingerprint() {
+    local raw_key="${1:-}"
+    local intent_file=""
+    local stored_epoch=""
+    local stored_intent=""
+    local stored_fingerprint=""
+    local now_epoch=0
+    local age_sec=0
+
+    [[ -n "$raw_key" ]] || return 1
+
+    intent_file="$(intent_file_path "$raw_key" || true)"
+    [[ -n "$intent_file" && -f "$intent_file" ]] || return 1
+
+    IFS=$'\t' read -r stored_epoch stored_intent stored_fingerprint <"$intent_file" || return 1
+    [[ "$stored_epoch" =~ ^[0-9]+$ && -n "$stored_intent" ]] || return 1
+
+    now_epoch="$(date +%s)"
+    age_sec=$((now_epoch - stored_epoch))
+    if (( age_sec < 0 || age_sec > INTENT_TTL_SEC )); then
+        rm -f "$intent_file" 2>/dev/null || true
+        return 1
+    fi
+
+    [[ -n "$stored_fingerprint" ]] || return 1
+    printf '%s' "$stored_fingerprint"
 }
 
 clear_turn_intent() {
@@ -3017,8 +3116,20 @@ intent_text_flat="${latest_user_message_flat:-$user_message_flat}"
 status_query_text_flat="${intent_text_flat:-$user_message_flat}"
 current_iteration="$(extract_first_number iteration || true)"
 persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
+persisted_turn_fingerprint="$(load_turn_intent_fingerprint "${turn_session_key:-}" || true)"
 persisted_delivery_suppression="$(load_delivery_suppression "${turn_session_key:-}" || true)"
 persisted_terminal_marker="$(load_terminal_marker "${turn_session_key:-}" || true)"
+loaded_persisted_codex_update_request=false
+loaded_persisted_codex_update_scheduler_request=false
+case "${persisted_turn_intent:-}" in
+    codex_update)
+        loaded_persisted_codex_update_request=true
+        ;;
+    codex_update_scheduler)
+        loaded_persisted_codex_update_request=true
+        loaded_persisted_codex_update_scheduler_request=true
+        ;;
+esac
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
 system_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
 delivery_chat_id="$(extract_first_string to || true)"
@@ -3032,6 +3143,7 @@ has_current_user_turn=false
 if [[ -n "$intent_text_flat" ]]; then
     has_current_user_turn=true
 fi
+current_turn_fingerprint="$(compute_turn_fingerprint "$intent_text_flat" || true)"
 
 before_llm_starts_new_user_turn=false
 if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true ]]; then
@@ -3247,14 +3359,36 @@ fi
 
 effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
 
-if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && -n "$persisted_terminal_marker" ]]; then
-    if [[ "$before_llm_starts_new_user_turn" == true ]]; then
-        write_audit_line "terminal_clear reason=new_user_turn token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
-        clear_terminal_marker "${turn_session_key:-}"
-        persisted_terminal_marker=""
+if [[ "$event" == "BeforeLLMCall" && -n "$persisted_terminal_marker" ]]; then
+    if [[ "$has_current_user_turn" == true ]]; then
+        if [[ "$current_turn_codex_update_request" == true && -n "$current_turn_fingerprint" && -n "$persisted_turn_fingerprint" && "$current_turn_fingerprint" == "$persisted_turn_fingerprint" ]] && turn_intent_is_recent_for_repeat "${turn_session_key:-}" "$TERMINAL_REPEAT_WINDOW_SEC"; then
+            write_audit_line "terminal_keep reason=matching_codex_repeat token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
+        else
+            write_audit_line "terminal_clear reason=new_user_turn token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
+            clear_terminal_marker "${turn_session_key:-}"
+            persisted_terminal_marker=""
+        fi
     else
         write_audit_line "terminal_keep reason=same_turn_before_llm token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
     fi
+fi
+
+codex_update_terminal_repeat_guard=false
+if [[ "$loaded_persisted_codex_update_request" == true ]]; then
+    if [[ -n "$persisted_terminal_marker" ]]; then
+        codex_update_terminal_repeat_guard=true
+    elif [[ "$has_current_user_turn" != true ]]; then
+        codex_update_terminal_repeat_guard=true
+    elif [[ -n "$current_turn_fingerprint" && -n "$persisted_turn_fingerprint" && "$current_turn_fingerprint" == "$persisted_turn_fingerprint" ]] && turn_intent_is_recent_for_repeat "${turn_session_key:-}" "$TERMINAL_REPEAT_WINDOW_SEC"; then
+        codex_update_terminal_repeat_guard=true
+    fi
+fi
+
+if [[ "$event" == "BeforeLLMCall" && "$has_current_user_turn" == true && "$current_turn_codex_update_request" != true && "$loaded_persisted_codex_update_request" == true ]]; then
+    if [[ -n "$persisted_terminal_marker" ]]; then
+        clear_terminal_marker "${turn_session_key:-}"
+    fi
+    persisted_terminal_marker=""
 fi
 
 resolved_skill_name=""
@@ -3405,10 +3539,33 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 
     if [[ -n "$next_turn_intent" ]]; then
-        persist_turn_intent "${turn_session_key:-}" "$next_turn_intent"
+        persist_turn_intent "${turn_session_key:-}" "$next_turn_intent" "$current_turn_fingerprint"
+    elif [[ "$has_current_user_turn" != true && "$loaded_persisted_codex_update_request" == true && -n "${persisted_turn_intent:-}" ]]; then
+        next_turn_intent="$persisted_turn_intent"
+        persist_turn_intent "${turn_session_key:-}" "$next_turn_intent" "$persisted_turn_fingerprint"
     else
         clear_turn_intent "${turn_session_key:-}"
     fi
+
+    persisted_turn_intent="${next_turn_intent:-}"
+    if [[ -n "$next_turn_intent" ]]; then
+        if [[ "$has_current_user_turn" == true ]]; then
+            persisted_turn_fingerprint="$current_turn_fingerprint"
+        fi
+    else
+        persisted_turn_fingerprint=""
+    fi
+    persisted_codex_update_request=false
+    persisted_codex_update_scheduler_request=false
+    case "${persisted_turn_intent:-}" in
+        codex_update)
+            persisted_codex_update_request=true
+            ;;
+        codex_update_scheduler)
+            persisted_codex_update_request=true
+            persisted_codex_update_scheduler_request=true
+            ;;
+    esac
 
     if [[ -n "$effective_delivery_suppression" && "$has_current_user_turn" == true && "$current_iteration" =~ ^[0-9]+$ ]] && (( current_iteration > 1 )); then
         same_turn_guard="$(build_same_turn_fastpath_guard_message)"
@@ -3419,7 +3576,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         exit 0
     fi
 
-    if [[ -n "$persisted_terminal_marker" && "$current_iteration" =~ ^[0-9]+$ ]] && (( current_iteration > 1 )); then
+    if [[ "$codex_update_terminal_repeat_guard" == true || ( -n "$persisted_terminal_marker" && ( "$persisted_codex_update_request" == true || "$current_turn_codex_update_request" == true || "$loaded_persisted_codex_update_request" == true ) ) ]]; then
         same_turn_guard="$(build_codex_update_terminal_guard_message)"
         same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
         messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
@@ -3586,7 +3743,9 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
         if [[ "$current_turn_codex_update_scheduler_request" == true || "$persisted_codex_update_scheduler_request" == true ]]; then
             codex_update_terminal_token="scheduler"
         fi
-        persist_terminal_marker "${turn_session_key:-}" "$codex_update_terminal_token" || true
+        if ! persist_terminal_marker "${turn_session_key:-}" "$codex_update_terminal_token"; then
+            write_audit_line "codex_update_terminal_marker_fallback token=$codex_update_terminal_token"
+        fi
         synthetic_command="$(build_exec_heredoc_command "Telegram-safe codex-update turn already resolved by the hard override. Skip this tool follow-up and continue to final text-only delivery.")"
         write_audit_line "emit_modify event=$event reason=codex_update_terminal_tool_suppress token=$codex_update_terminal_token tool=${tool_name:-missing}"
         emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
@@ -3639,7 +3798,7 @@ if [[ "$event" == "AfterLLMCall" && -n "$effective_delivery_suppression" && "$is
     exit 0
 fi
 
-if [[ "$event" == "AfterLLMCall" && -n "$persisted_terminal_marker" && "$is_telegram_safe_lane" == true ]]; then
+if [[ "$event" == "AfterLLMCall" && -n "$persisted_terminal_marker" && "$is_telegram_safe_lane" == true && ( "$persisted_codex_update_request" == true || "$loaded_persisted_codex_update_request" == true ) ]]; then
     write_audit_line "emit_modify event=$event reason=codex_update_terminal_after_llm_suppress token=$persisted_terminal_marker"
     emit_modified_payload "" true
     exit 0
@@ -3663,14 +3822,19 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             if [[ "$event" == "AfterLLMCall" ]]; then
                 emit_modified_payload "$codex_update_reply_text" true
             else
+                codex_update_terminal_suppression_armed=true
                 if [[ -n "$persisted_terminal_marker" ]]; then
-                    persist_delivery_suppression "${turn_session_key:-}" "codex_update_terminal:${persisted_terminal_marker}" || true
-                    if [[ -n "${current_chat_id:-}" ]]; then
-                        persist_delivery_suppression_for_chat "${current_chat_id:-}" "codex_update_terminal:${persisted_terminal_marker}" || true
+                    if arm_codex_update_terminal_delivery_suppression "${turn_session_key:-}" "${current_chat_id:-}" "codex_update_terminal:${persisted_terminal_marker}"; then
+                        clear_terminal_marker "${turn_session_key:-}"
+                    else
+                        codex_update_terminal_suppression_armed=false
                     fi
-                    clear_terminal_marker "${turn_session_key:-}"
                 fi
-                clear_turn_intent "${turn_session_key:-}"
+                if [[ "$codex_update_terminal_suppression_armed" == true ]]; then
+                    clear_turn_intent "${turn_session_key:-}"
+                else
+                    write_audit_line "codex_update_terminal_intent_preserved reason=suppress_arm_failed token=${persisted_terminal_marker:-none}"
+                fi
                 emit_modified_payload "$codex_update_reply_text" false
             fi
             exit 0

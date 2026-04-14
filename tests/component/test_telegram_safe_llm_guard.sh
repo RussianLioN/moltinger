@@ -349,9 +349,10 @@ EOF
     test_start "component_codex_update_terminalizes_blocked_followup_tool_turn_after_hard_override"
     local codex_terminal_tmp codex_terminal_intent_dir codex_terminal_marker codex_terminal_session_suppress codex_terminal_chat_suppress
     local codex_terminal_before_output codex_terminal_tool_output codex_terminal_repeat_before_output codex_terminal_after_output
-    local codex_terminal_send_output codex_terminal_repeat_send_output codex_terminal_reply_text
+    local codex_terminal_send_output codex_terminal_repeat_send_output codex_terminal_next_turn_output codex_terminal_reply_text
     local codex_terminal_marker_present_after_tool codex_terminal_suppress_absent_after_tool
     local codex_terminal_marker_cleared_after_send codex_terminal_session_suppress_present_after_send codex_terminal_chat_suppress_present_after_send
+    local codex_terminal_session_suppress_cleared_on_next_turn codex_terminal_chat_suppress_cleared_on_next_turn codex_terminal_marker_absent_on_next_turn
     codex_terminal_tmp="$(secure_temp_dir telegram-safe-codex-update-terminal)"
     codex_terminal_intent_dir="$codex_terminal_tmp/intent"
     codex_terminal_marker="$codex_terminal_intent_dir/session_codex-terminal.terminal"
@@ -389,7 +390,7 @@ EOF
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":2}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"}],"tool_count":37}}
 EOF
     )"
     codex_terminal_after_output="$(
@@ -431,6 +432,29 @@ EOF
 {"event":"MessageSending","session_id":"session:codex-terminal","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1402,"text":"Проверил — и да, тут инструмент расписания реально сломан: на list он снова ответил missing action parameter."}}
 EOF
     )"
+    codex_terminal_next_turn_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Привет"}],"tool_count":37}}
+EOF
+    )"
+    if [[ ! -e "$codex_terminal_session_suppress" ]]; then
+        codex_terminal_session_suppress_cleared_on_next_turn=true
+    else
+        codex_terminal_session_suppress_cleared_on_next_turn=false
+    fi
+    if [[ ! -e "$codex_terminal_chat_suppress" ]]; then
+        codex_terminal_chat_suppress_cleared_on_next_turn=true
+    else
+        codex_terminal_chat_suppress_cleared_on_next_turn=false
+    fi
+    if [[ ! -e "$codex_terminal_marker" ]]; then
+        codex_terminal_marker_absent_on_next_turn=true
+    else
+        codex_terminal_marker_absent_on_next_turn=false
+    fi
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_before_output" && \
        jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$codex_terminal_before_output" && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_tool_output" && \
@@ -453,10 +477,134 @@ EOF
        [[ "$codex_terminal_session_suppress_present_after_send" == true ]] && \
        [[ "$codex_terminal_chat_suppress_present_after_send" == true ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_send_output" && \
-       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_send_output"; then
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_send_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_next_turn_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard") | not' >/dev/null 2>&1 <<<"$codex_terminal_next_turn_output" && \
+       [[ "$codex_terminal_session_suppress_cleared_on_next_turn" == true ]] && \
+       [[ "$codex_terminal_chat_suppress_cleared_on_next_turn" == true ]] && \
+       [[ "$codex_terminal_marker_absent_on_next_turn" == true ]]; then
         test_pass
     else
         test_fail "Codex-update hard override must terminalize a blocked same-turn tool follow-up: suppress the repeated LLM/tool churn, deliver the deterministic scheduler reply once, and drop any later dirty tail"
+    fi
+
+    test_start "component_codex_update_keeps_terminal_state_when_suppression_arm_fails"
+    local codex_terminal_fail_tmp codex_terminal_fail_intent_dir codex_terminal_fail_marker codex_terminal_fail_intent_file
+    local codex_terminal_fail_session_suppress codex_terminal_fail_chat_suppress codex_terminal_fail_before_output codex_terminal_fail_tool_output
+    local codex_terminal_fail_send_output codex_terminal_fail_repeat_send_output
+    codex_terminal_fail_tmp="$(secure_temp_dir telegram-safe-codex-update-terminal-fail)"
+    codex_terminal_fail_intent_dir="$codex_terminal_fail_tmp/intent"
+    codex_terminal_fail_marker="$codex_terminal_fail_intent_dir/session_codex-terminal-fail.terminal"
+    codex_terminal_fail_intent_file="$codex_terminal_fail_intent_dir/session_codex-terminal-fail.intent"
+    codex_terminal_fail_session_suppress="$codex_terminal_fail_intent_dir/session_codex-terminal-fail.suppress"
+    codex_terminal_fail_chat_suppress="$codex_terminal_fail_intent_dir/chat-262872985.suppress"
+    codex_terminal_fail_before_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872985 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    codex_terminal_fail_tool_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:codex-terminal-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"cron","arguments":{"action":"list"}}
+EOF
+    )"
+    mkdir -p "$codex_terminal_fail_session_suppress" "$codex_terminal_fail_chat_suppress"
+    codex_terminal_fail_send_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-terminal-fail","data":{"account_id":"moltis-bot","to":"262872985","reply_to_message_id":1501,"text":""}}
+EOF
+    )"
+    codex_terminal_fail_repeat_send_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-terminal-fail","data":{"account_id":"moltis-bot","to":"262872985","reply_to_message_id":1502,"text":"Проверил — и да, тут инструмент расписания реально сломан: на list он снова ответил missing action parameter."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_fail_before_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_fail_tool_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_fail_send_output" && \
+       jq -e --arg reply "$codex_terminal_reply_text" '.data.text == $reply' >/dev/null 2>&1 <<<"$codex_terminal_fail_send_output" && \
+       [[ -f "$codex_terminal_fail_marker" ]] && \
+       [[ -f "$codex_terminal_fail_intent_file" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_fail_repeat_send_output" && \
+       jq -e --arg reply "$codex_terminal_reply_text" '.data.text == $reply' >/dev/null 2>&1 <<<"$codex_terminal_fail_repeat_send_output"; then
+        test_pass
+    else
+        test_fail "Codex-update terminalization must fail closed when suppression cannot be armed: keep the terminal marker and intent, then continue rewriting later dirty tails to the deterministic scheduler reply"
+    fi
+
+    test_start "component_codex_update_repeat_guard_survives_terminal_marker_write_failure"
+    local codex_terminal_marker_fail_tmp codex_terminal_marker_fail_intent_dir codex_terminal_marker_fail_marker
+    local codex_terminal_marker_fail_before_output codex_terminal_marker_fail_tool_output codex_terminal_marker_fail_repeat_before_output
+    codex_terminal_marker_fail_tmp="$(secure_temp_dir telegram-safe-codex-update-marker-fail)"
+    codex_terminal_marker_fail_intent_dir="$codex_terminal_marker_fail_tmp/intent"
+    codex_terminal_marker_fail_marker="$codex_terminal_marker_fail_intent_dir/session_codex-terminal-marker-fail.terminal"
+    codex_terminal_marker_fail_before_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_marker_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-marker-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872986 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    mkdir -p "$codex_terminal_marker_fail_marker"
+    codex_terminal_marker_fail_tool_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_marker_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:codex-terminal-marker-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"cron","arguments":{"action":"list"}}
+EOF
+    )"
+    codex_terminal_marker_fail_repeat_before_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_marker_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-marker-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872986 | data_dir=/home/moltis/.moltis"}],"tool_count":37}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_before_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_tool_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_tool_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output"; then
+        test_pass
+    else
+        test_fail "Codex-update repeat guard must still terminalize the blocked follow-up even when the .terminal marker itself cannot be written"
+    fi
+
+    test_start "component_codex_update_terminal_state_does_not_leak_into_fresh_same_subject_turn"
+    local codex_terminal_fail_stored_epoch codex_terminal_fail_stored_intent codex_terminal_fail_stored_fingerprint codex_terminal_fresh_turn_output
+    IFS=$'\t' read -r codex_terminal_fail_stored_epoch codex_terminal_fail_stored_intent codex_terminal_fail_stored_fingerprint <"$codex_terminal_fail_intent_file"
+    printf '%s\t%s\t%s\n' "$(( $(date +%s) - 120 ))" "$codex_terminal_fail_stored_intent" "$codex_terminal_fail_stored_fingerprint" >"$codex_terminal_fail_intent_file"
+    codex_terminal_fresh_turn_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_TERMINAL_REPEAT_WINDOW_SEC=30 \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872985 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_fresh_turn_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$codex_terminal_fresh_turn_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard") | not' >/dev/null 2>&1 <<<"$codex_terminal_fresh_turn_output" && \
+       [[ ! -e "$codex_terminal_fail_marker" ]]; then
+        test_pass
+    else
+        test_fail "Codex-update terminal state must not bleed into a fresh later codex-update user turn after fail-closed recovery preserved marker+intent"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_visibility_via_bot_send_when_enabled"
@@ -1484,7 +1632,7 @@ EOF
     stale_status_template_intent="$(cat "$stale_status_template_dir/session_template-followup.intent" 2>/dev/null || true)"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_status_template_output" && \
        jq -e '.data.messages[0].content | contains("Telegram-safe skill-template hard override")' >/dev/null 2>&1 <<<"$stale_status_template_output" && \
-       [[ "$stale_status_template_intent" == *$'\tskill_template' ]]; then
+       [[ "$stale_status_template_intent" == *$'\tskill_template\t'* ]]; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must not persist a stale /status intent when the latest user turn is a template follow-up"
@@ -1504,7 +1652,7 @@ EOF
     stale_visibility_template_intent="$(cat "$stale_visibility_template_dir/session_template-after-visibility.intent" 2>/dev/null || true)"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_visibility_template_output" && \
        jq -e '.data.messages[0].content | contains("Telegram-safe skill-template hard override")' >/dev/null 2>&1 <<<"$stale_visibility_template_output" && \
-       [[ "$stale_visibility_template_intent" == *$'\tskill_template' ]]; then
+       [[ "$stale_visibility_template_intent" == *$'\tskill_template\t'* ]]; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must let a template follow-up replace stale persisted skill-visibility intent instead of reusing the previous skills turn"
@@ -1528,7 +1676,7 @@ EOF
        jq -e '.data.messages[0].content | contains("Telegram-safe skill-create hard override")' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
        [[ -f "$stale_visibility_create_file" ]] && \
        grep -Fq 'name: codex-update-new-from-stale' "$stale_visibility_create_file" && \
-       [[ "$stale_visibility_create_intent" == *$'\tskill_create_created:codex-update-new-from-stale' ]]; then
+       [[ "$stale_visibility_create_intent" == *$'\tskill_create_created:codex-update-new-from-stale\t'* ]]; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must let a sparse create follow-up replace stale persisted skill-visibility intent instead of reusing the previous skills turn"

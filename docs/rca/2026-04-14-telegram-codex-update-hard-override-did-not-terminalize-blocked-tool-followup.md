@@ -4,7 +4,7 @@ date: 2026-04-14
 severity: P1
 category: product
 tags: [telegram, codex-update, hook, terminalization, cron, rca]
-root_cause: "The Telegram-safe codex-update hard override still allowed a blocked cron tool follow-up to create a second internal LLM pass, and the generic MessageSending short-circuit sat ahead of the persisted codex-update rewrite needed to finalize that recovered turn."
+root_cause: "The Telegram-safe codex-update hard override still allowed a blocked cron tool follow-up to create a second internal LLM pass; terminal recovery depended on brittle iteration/order assumptions, and the final MessageSending recovery path could fail open if suppression state was not armed successfully."
 ---
 
 # RCA: Telegram codex-update hard override did not terminalize blocked tool follow-up
@@ -42,7 +42,9 @@ Context: follow-up to `2026-04-14-telegram-codex-update-direct-fastpath-raced-un
 Что оставалось непокрытым:
 
 - deterministic `hard override` сам по себе не считался “terminal”, если runtime успел войти в blocked tool branch;
-- persisted `codex-update` reply override для recovered empty delivery всё ещё стоял после слишком раннего generic `MessageSending` short-circuit.
+- persisted `codex-update` reply override для recovered empty delivery всё ещё стоял после слишком раннего generic `MessageSending` short-circuit;
+- repeat-guard зависел от `iteration > 1`, хотя повторный same-turn hook мог прийти без `iteration`;
+- terminal marker жил на коротком suppression TTL и не был fail-closed, если финальная arm-фаза suppression state ломалась.
 
 ## Evidence
 
@@ -65,37 +67,45 @@ Production evidence из `/tmp/moltis-telegram-safe-llm-guard.audit.log` и `doc
 | 1 | Почему после `codex_update_hard_override` ещё появлялся второй internal reply? | Потому что runtime всё равно продолжал tool-follow-up branch и создавал второй LLM pass. |
 | 2 | Почему hard override не остановил этот branch? | Потому что hook переписывал prompt/text, но не держал отдельное same-turn terminal state после blocked tool follow-up. |
 | 3 | Почему blocked `cron` follow-up не считался терминальным событием? | Потому что логика guard различала direct-fastpath suppression, но не имела отдельного состояния для deterministic hard-override turn, который уже “решён”, но ещё не доставлен. |
-| 4 | Почему recovered empty final delivery не превращался гарантированно в канонический `codex-update` reply? | Потому что persisted `codex-update` rewrite стоял после generic `MessageSending` short-circuit, который мог просто пропустить пустой safe-looking payload. |
-| 5 | Почему это стало системной проблемой? | Потому что инварианта была неполной: мы зафиксировали “не использовать ранний direct fastpath”, но не оформили вторую половину контракта — blocked tool follow-up после hard override тоже должен переводить turn в terminal recovery path. |
+| 4 | Почему recovered empty final delivery не превращался гарантированно в канонический `codex-update` reply? | Потому что persisted `codex-update` rewrite стоял после generic `MessageSending` short-circuit, а arm suppression state в финальной доставке не проверялся fail-closed. |
+| 5 | Почему это стало системной проблемой? | Потому что инварианта была неполной: мы зафиксировали “не использовать ранний direct fastpath”, но не оформили вторую половину контракта — blocked tool follow-up после hard override должен переводить turn в terminal recovery path без зависимости от `iteration`, порядка хуков и удачного best-effort write suppression-файлов. |
 
 ## Root Cause
 
-Telegram-safe `codex-update` path после удаления раннего direct fastpath всё ещё не имел специальной terminalization-фазы для same-turn blocked tool follow-up.
+Telegram-safe `codex-update` path после удаления раннего direct fastpath всё ещё не имел достаточно жёсткой terminalization-фазы для same-turn blocked tool follow-up.
 
 В результате:
 
 1. `BeforeToolCall` на `cron` блокировался, но turn не помечался как terminal recovery turn;
-2. runtime входил во второй `BeforeLLMCall`/`AfterLLMCall`;
+2. runtime входил во второй `BeforeLLMCall`/`AfterLLMCall`, а repeat recovery зависел от наличия `iteration > 1`;
 3. поздний internal bad reply снова формировался;
-4. при попытке чинить это empty final delivery generic `MessageSending` short-circuit ещё и мог обойти persisted `codex-update` rewrite.
+4. terminal marker мог утечь через turn boundary или истечь слишком рано, потому что жил на suppression TTL и не был жёстко ограждён codex-update intent;
+5. при попытке чинить это empty final delivery generic `MessageSending` short-circuit ещё и мог обойти persisted `codex-update` rewrite, а сама arm-фаза suppression state была fail-open.
 
 ## Fixes Applied
 
 1. `scripts/telegram-safe-llm-guard.sh`
    - добавлен session-scoped `.terminal` marker для `codex-update` blocked tool follow-up;
    - `BeforeToolCall` на `codex-update` теперь переводит turn в terminal recovery mode;
-   - повторный `BeforeLLMCall` при активном terminal marker возвращает empty text-only override;
+   - terminal marker больше не зависит от `iteration > 1`: repeated `BeforeLLMCall` теперь может быть terminal-marker-driven даже без `iteration` и без reclassification из user text;
+   - terminal marker очищается на non-`codex-update` user turn, чтобы не течь в чужой следующий turn;
+   - terminal marker живёт на отдельном `TERMINAL_TTL_SEC`, а не на коротком suppression TTL;
    - повторный `AfterLLMCall` при активном terminal marker принудительно обнуляет text/tool calls;
-   - persisted `codex-update` MessageSending rewrite поднят перед generic short-circuit и по финальной доставке переводит turn в normal same-turn suppression (`.suppress`), чтобы хвосты падали в `NO_REPLY`.
+   - arm suppression state для финальной codex-update доставки переведён в fail-closed helper: если suppression не arm'ится, guard сохраняет terminal marker и intent, а поздние dirty tails продолжают переписываться в детерминированный safe reply вместо выхода в fail-open.
 2. `tests/component/test_telegram_safe_llm_guard.sh`
    - добавлен regression на полный live-like sequence:
-     `BeforeLLM hard override -> BeforeToolCall cron -> repeated BeforeLLM -> repeated AfterLLM -> final MessageSending -> repeated dirty tail`.
+     `BeforeLLM hard override -> BeforeToolCall cron -> repeated BeforeLLM -> repeated AfterLLM -> final MessageSending -> repeated dirty tail`;
+   - добавлен regression на marker-driven repeat без `iteration` и без user-text reclassification;
+   - добавлен regression на cleanup safety следующего user turn в том же chat;
+   - добавлен regression на fail-closed поведение, когда suppression arm ломается.
 
 ## Prevention
 
 1. Для Telegram-safe deterministic routes нужен не только prompt override, но и явный terminal recovery state на blocked tool follow-up.
-2. Generic `MessageSending` early-exit нельзя ставить раньше persisted reply rewrites для recovery turns.
-3. Если live audit показывает второй internal pass, bug не считается закрытым даже при внешне корректном пользовательском reply.
+2. Recovery path не должен зависеть от наличия `iteration`, если persisted turn state уже доказывает same-turn continuation.
+3. Любая финальная arm-фаза suppression state на границе user-visible delivery должна быть fail-closed, а не `|| true`.
+4. Generic `MessageSending` early-exit нельзя ставить раньше persisted reply rewrites для recovery turns.
+5. Если live audit показывает второй internal pass, bug не считается закрытым даже при внешне корректном пользовательском reply.
 
 ## Уроки
 
