@@ -105,8 +105,10 @@ safety check failed: worktree has unpushed commits. Use --force to skip safety c
    - добавлен controlled fallback:
      - сначала authoritative merge proof через `resolve_cleanup_merge_proof`
      - затем direct `git worktree remove <path>` только для clean merged worktree
-   - cleanup теперь fail-closed блокирует конфликтующие `--path` + `--branch`, если они указывают на разные worktree/branch targets
-   - `resolve_cleanup_merge_proof` теперь refreshes remote refs before git-proof, предпочитает live remote proof, использует local proof только когда live remote branch отсутствует и на GitHub-origin умеет спрашивать current branch head через `gh api`, если git refresh недоступен
+   - cleanup теперь сравнивает `--path` targets alias-safe и fail-closed блокирует конфликтующие `--path` + `--branch`, если они не доказываются как один и тот же worktree/branch target
+   - GitHub fallback теперь URL-encode'ит branch ref segments для `gh api`, чтобы ветки вида `feat/...` не ломали live branch-head proof и remote-delete fallback
+   - `resolve_cleanup_merge_proof` теперь refreshes remote refs before git-proof, предпочитает live remote proof, использует local proof только когда live remote branch отсутствует, а при failed refresh допускает только local-only proof для worktree removal fallback; branch deletion при этом остаётся blocked до восстановления remote proof
+   - git-only fallback теперь дополнительно проверяет, не осталась ли worktree запись в `bd worktree list`, и в таком случае явно отдаёт reconciliation step вместо молчаливого governance drift
 2. `tests/unit/test_worktree_ready.sh`
    - добавлен positive regression:
      - merged clean worktree
@@ -120,6 +122,9 @@ safety check failed: worktree has unpushed commits. Use --force to skip safety c
       - dirty worktree
       - конфликт `--path`/`--branch`
       - stale remote branch, ушедшую вперёд в другом clone
+      - failed remote refresh с local-only fallback для worktree removal
+      - failed remote refresh, который всё ещё блокирует branch delete
+      - encoded GitHub API routes для slash branch names
 
 ## Prevention
 
@@ -127,8 +132,9 @@ safety check failed: worktree has unpushed commits. Use --force to skip safety c
 2. Для destructive-ish hygiene actions fallback допустим только после двух условий:
    - worktree clean
    - merged proof установлен авторитетно
-3. Если user передал и `--path`, и `--branch`, helper должен доказывать, что они указывают на один и тот же target, иначе cleanup обязан fail-closed.
-4. Negative regression обязательна рядом с positive fallback regression, чтобы workaround не превратился в unsafe bypass.
+3. Если user передал и `--path`, и `--branch`, helper должен сравнивать не только синтаксический path string, но и physical path identity; иначе alias/symlink path будет либо ложным blocker, либо потенциальным cleanup ambiguity.
+4. Local-only merged proof допустим только для worktree removal, но не для branch deletion, если remote refresh недоступен.
+5. Negative regression обязательна рядом с positive fallback regression, чтобы workaround не превратился в unsafe bypass или скрытый governance drift.
 
 ## Уроки
 

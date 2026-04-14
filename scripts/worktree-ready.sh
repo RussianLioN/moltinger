@@ -333,6 +333,69 @@ normalize_path() {
   printf '\n'
 }
 
+canonicalize_existing_directory_path() {
+  local input_path="$1"
+  local normalized_path=""
+
+  normalized_path="$(normalize_path "${input_path}" "${resolved_repo_root}")"
+  if [[ ! -d "${normalized_path}" ]]; then
+    return 1
+  fi
+
+  (
+    cd "${normalized_path}" >/dev/null 2>&1 || exit 1
+    pwd -P
+  )
+}
+
+path_identity_key() {
+  local input_path="$1"
+  local base_path="${2:-$PWD}"
+  local normalized_path=""
+  local canonical_path=""
+
+  normalized_path="$(normalize_path "${input_path}" "${base_path}")"
+  canonical_path="$(canonicalize_existing_directory_path "${normalized_path}" || true)"
+  if [[ -n "${canonical_path}" ]]; then
+    printf '%s\n' "${canonical_path}"
+    return 0
+  fi
+
+  printf '%s\n' "${normalized_path}"
+}
+
+paths_refer_to_same_location() {
+  local left_path="$1"
+  local right_path="$2"
+  local left_key=""
+  local right_key=""
+
+  left_key="$(path_identity_key "${left_path}" "/")"
+  right_key="$(path_identity_key "${right_path}" "/")"
+  [[ -n "${left_key}" && -n "${right_key}" && "${left_key}" == "${right_key}" ]]
+}
+
+url_encode_path_segment() {
+  local raw_value="$1"
+  local encoded=""
+  local current_char=""
+  local index=0
+
+  for ((index = 0; index < ${#raw_value}; index++)); do
+    current_char="${raw_value:index:1}"
+    case "${current_char}" in
+      [a-zA-Z0-9.~_-])
+        encoded+="${current_char}"
+        ;;
+      *)
+        printf -v encoded '%s%%%02X' "${encoded}" "'${current_char}"
+        ;;
+    esac
+  done
+
+  printf '%s\n' "${encoded}"
+}
+
 sanitize_branch_name() {
   local raw_branch="$1"
   local sanitized=""
@@ -1039,31 +1102,36 @@ github_repo_name_with_owner() {
 github_delete_ref_command() {
   local cleanup_branch="$1"
   local repo_name_with_owner=""
+  local encoded_branch=""
 
   repo_name_with_owner="$(github_repo_name_with_owner || true)"
   if [[ -z "${repo_name_with_owner}" ]]; then
     return 1
   fi
 
-  printf 'gh api -X DELETE %s\n' "$(shell_quote "repos/${repo_name_with_owner}/git/refs/heads/${cleanup_branch}")"
+  encoded_branch="$(url_encode_path_segment "${cleanup_branch}")"
+  printf 'gh api -X DELETE %s\n' "$(shell_quote "repos/${repo_name_with_owner}/git/refs/heads/${encoded_branch}")"
 }
 
 delete_remote_branch_via_github_api() {
   local cleanup_branch="$1"
   local repo_name_with_owner=""
+  local encoded_branch=""
 
   repo_name_with_owner="$(github_repo_name_with_owner || true)"
   if [[ -z "${repo_name_with_owner}" ]]; then
     return 1
   fi
 
-  gh_run_in_repo api -X DELETE "repos/${repo_name_with_owner}/git/refs/heads/${cleanup_branch}"
+  encoded_branch="$(url_encode_path_segment "${cleanup_branch}")"
+  gh_run_in_repo api -X DELETE "repos/${repo_name_with_owner}/git/refs/heads/${encoded_branch}"
   git -C "${resolved_repo_root}" update-ref -d "refs/remotes/origin/${cleanup_branch}" >/dev/null 2>&1 || true
 }
 
 github_branch_head_sha() {
   local cleanup_branch="$1"
   local repo_name_with_owner=""
+  local encoded_branch=""
   local ref_json=""
   local ref_sha=""
 
@@ -1072,7 +1140,8 @@ github_branch_head_sha() {
     return 1
   fi
 
-  ref_json="$(gh_run_in_repo api "repos/${repo_name_with_owner}/git/ref/heads/${cleanup_branch}" 2>/dev/null || true)"
+  encoded_branch="$(url_encode_path_segment "${cleanup_branch}")"
+  ref_json="$(gh_run_in_repo api "repos/${repo_name_with_owner}/git/ref/heads/${encoded_branch}" 2>/dev/null || true)"
   ref_sha="$(printf '%s\n' "${ref_json}" | jq -r '.object.sha // empty' 2>/dev/null || true)"
   if [[ -z "${ref_sha}" ]]; then
     return 1
@@ -1114,19 +1183,21 @@ worktree_has_clean_status() {
 
 git_worktree_record_for_path() {
   local search_path="$1"
-  local normalized_search_path=""
+  local search_identity_key=""
   local line=""
   local current_path=""
   local current_branch=""
   local current_prunable=""
   local current_locked=""
+  local current_identity_key=""
 
-  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
+  search_identity_key="$(path_identity_key "${search_path}" "${resolved_repo_root}")"
 
   while IFS= read -r line || [[ -n "${line}" ]]; do
     case "${line}" in
       worktree\ *)
         current_path="$(normalize_path "${line#worktree }" "/")"
+        current_identity_key="$(path_identity_key "${current_path}" "/")"
         current_branch=""
         current_prunable=""
         current_locked=""
@@ -1143,11 +1214,12 @@ git_worktree_record_for_path() {
         [[ "${current_locked}" == "${line}" ]] && current_locked="true"
         ;;
       "")
-        if [[ -n "${current_path}" && "${current_path}" == "${normalized_search_path}" ]]; then
+        if [[ -n "${current_path}" && -n "${current_identity_key}" && "${current_identity_key}" == "${search_identity_key}" ]]; then
           printf '%s\t%s\t%s\t%s\n' "${current_path}" "${current_branch}" "${current_prunable}" "${current_locked}"
           return 0
         fi
         current_path=""
+        current_identity_key=""
         current_branch=""
         current_prunable=""
         current_locked=""
@@ -1155,7 +1227,7 @@ git_worktree_record_for_path() {
     esac
   done < <(git -C "${resolved_repo_root}" worktree list --porcelain)
 
-  if [[ -n "${current_path}" && "${current_path}" == "${normalized_search_path}" ]]; then
+  if [[ -n "${current_path}" && -n "${current_identity_key}" && "${current_identity_key}" == "${search_identity_key}" ]]; then
     printf '%s\t%s\t%s\t%s\n' "${current_path}" "${current_branch}" "${current_prunable}" "${current_locked}"
     return 0
   fi
@@ -1195,6 +1267,7 @@ wait_for_worktree_removal() {
 resolve_cleanup_merge_proof() {
   local cleanup_branch="$1"
   local default_branch_name="$2"
+  local allow_local_stale_proof="${3:-false}"
   local local_sha=""
   local remote_sha=""
   local expected_sha=""
@@ -1234,6 +1307,13 @@ resolve_cleanup_merge_proof() {
 
   if [[ -z "${local_sha}" ]] && local_branch_exists "${cleanup_branch}"; then
     local_sha="$(resolve_ref_sha "refs/heads/${cleanup_branch}")"
+  fi
+
+  if [[ "${remote_refresh_ok}" != "true" && "${allow_local_stale_proof}" == "true" && -n "${local_sha}" ]] \
+    && ref_is_ancestor_of_remote_default "refs/heads/${cleanup_branch}" "${default_branch_name}"; then
+    report_merge_check="git_ancestor_local_stale"
+    add_warning "Remote ref refresh failed; using local merged ancestry only to authorize worktree removal fallback for '${cleanup_branch}'. Branch deletion remains blocked until remote proof is restored."
+    return 0
   fi
 
   expected_sha="${remote_sha:-${local_sha}}"
@@ -1327,7 +1407,7 @@ cleanup_target_arguments_conflict() {
     return 1
   fi
 
-  if [[ -z "${discovered_worktree_path}" || "${discovered_worktree_path}" != "${target_path}" ]]; then
+  if [[ -z "${discovered_worktree_path}" ]] || ! paths_refer_to_same_location "${discovered_worktree_path}" "${target_path}"; then
     return 0
   fi
 
@@ -2058,24 +2138,25 @@ discover_similar_targets() {
 
 find_bd_worktree_by_path() {
   local search_path="$1"
-  local normalized_search_path=""
   local output=""
   local exit_code=0
   local bd_command=""
+  local line=""
+  local record_path=""
+  local search_identity_key=""
 
   if ! bd_command="$(resolve_bd_command)" || ! command -v jq >/dev/null 2>&1; then
     printf '__PROBE_STATE__\tprobe_unavailable\n'
     return 0
   fi
 
-  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
+  search_identity_key="$(path_identity_key "${search_path}" "${resolved_repo_root}")"
 
   set +e
   output="$(
     cd "${resolved_repo_root}" && "${bd_command}" worktree list --json 2>/dev/null \
-      | jq -r --arg path "${normalized_search_path}" '
+      | jq -r '
         .[]
-        | select(.path == $path)
         | [(.name // ""), (.path // ""), (.branch // ""), (.beads_state // ""), (.redirect_to // "")]
         | @tsv
       '
@@ -2085,7 +2166,14 @@ find_bd_worktree_by_path() {
 
   if [[ "${exit_code}" -eq 0 ]]; then
     printf '__PROBE_STATE__\tok\n'
-    printf '%s\n' "${output}"
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] || continue
+      record_path="$(printf '%s\n' "${line}" | cut -f2)"
+      if paths_refer_to_same_location "${record_path}" "${search_identity_key}"; then
+        printf '%s\n' "${line}"
+        break
+      fi
+    done <<< "${output}"
     return 0
   fi
 
@@ -3165,6 +3253,7 @@ execute_cleanup_worktree_action() {
   local fallback_rc=0
   local fallback_merge_check=""
   local fallback_default_branch_name=""
+  local fallback_bd_record=""
   local saved_merge_check=""
   local saved_default_branch_name=""
   local default_branch_name=""
@@ -3256,7 +3345,7 @@ execute_cleanup_worktree_action() {
       saved_merge_check="${report_merge_check}"
       saved_default_branch_name="${report_default_branch_name}"
       default_branch_name="$(resolve_default_branch_name)"
-      if resolve_cleanup_merge_proof "${fallback_branch}" "${default_branch_name}"; then
+      if resolve_cleanup_merge_proof "${fallback_branch}" "${default_branch_name}" "true"; then
         fallback_merge_check="${report_merge_check}"
         fallback_default_branch_name="${report_default_branch_name}"
         report_merge_check="${saved_merge_check}"
@@ -3272,6 +3361,12 @@ execute_cleanup_worktree_action() {
           report_merge_check="${fallback_merge_check}"
           report_default_branch_name="${fallback_default_branch_name}"
           add_warning "bd worktree remove reported unpushed commits for merged clean worktree ${cleanup_path}; git worktree remove fallback succeeded."
+          fallback_bd_record="$(find_bd_worktree_by_path "${cleanup_path}" || true)"
+          if [[ "${fallback_bd_record}" == *$'\t'* ]]; then
+            add_warning "Beads still reports ${cleanup_path} after git-only fallback removal; rerun bd cleanup to reconcile local worktree metadata."
+            add_next_step "cd $(shell_quote "${resolved_repo_root}")"
+            add_next_step "bd worktree remove $(shell_quote "${cleanup_path}")"
+          fi
           return 0
         fi
 
@@ -3326,16 +3421,18 @@ execute_cleanup_branch_actions() {
   local local_delete_flag="-d"
   local rc=0
 
+  if [[ "${delete_branch_requested}" != "true" ]]; then
+    report_local_branch_action="not_requested"
+    report_remote_branch_action="not_requested"
+    return 0
+  fi
+
   report_local_branch_action="not_requested"
   report_remote_branch_action="not_requested"
   report_merge_check="not_requested"
   report_default_branch_name=""
 
   cleanup_branch="$(resolve_cleanup_target_branch_name || true)"
-
-  if [[ "${delete_branch_requested}" != "true" ]]; then
-    return 0
-  fi
 
   if [[ -z "${cleanup_branch}" || "${cleanup_branch}" == "n/a" ]]; then
     report_local_branch_action="skipped"
