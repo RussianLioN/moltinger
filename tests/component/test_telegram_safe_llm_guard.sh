@@ -347,6 +347,67 @@ EOF
         test_fail "When direct fastpath is enabled, codex-update scheduler turns must use the same Bot API delivery contract as the other live-proven Telegram-safe routes and arm same-turn suppression markers"
     fi
 
+    test_start "component_before_llm_guard_keeps_status_precedence_over_codex_update_direct_fastpath_on_mixed_turn"
+    local mixed_status_codex_tmp mixed_status_codex_send_script mixed_status_codex_log mixed_status_codex_stdout mixed_status_codex_stderr mixed_status_codex_status mixed_status_codex_intent_dir mixed_status_codex_session_suppress mixed_status_codex_chat_suppress
+    mixed_status_codex_tmp="$(secure_temp_dir telegram-safe-mixed-status-codex)"
+    mixed_status_codex_send_script="$mixed_status_codex_tmp/send.sh"
+    mixed_status_codex_log="$mixed_status_codex_tmp/send.log"
+    mixed_status_codex_intent_dir="$mixed_status_codex_tmp/intent"
+    mixed_status_codex_session_suppress="$mixed_status_codex_intent_dir/session_mixedstatus.suppress"
+    mixed_status_codex_chat_suppress="$mixed_status_codex_intent_dir/chat-262872984.suppress"
+    cat >"$mixed_status_codex_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$mixed_status_codex_send_script"
+    mixed_status_codex_stdout="$mixed_status_codex_tmp/stdout.log"
+    mixed_status_codex_stderr="$mixed_status_codex_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$mixed_status_codex_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$mixed_status_codex_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$mixed_status_codex_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$mixed_status_codex_stdout" 2>"$mixed_status_codex_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:mixedstatus","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"/status и заодно какая latest версия Codex CLI?"}],"tool_count":37,"iteration":1}}
+EOF
+    mixed_status_codex_status=$?
+    set -e
+    if [[ "$mixed_status_codex_status" -eq 0 ]] && \
+       [[ ! -s "$mixed_status_codex_stdout" ]] && \
+       [[ ! -s "$mixed_status_codex_stderr" ]] && \
+       [[ -f "$mixed_status_codex_session_suppress" ]] && \
+       [[ -f "$mixed_status_codex_chat_suppress" ]] && \
+       grep -Fq $'\tstatus' "$mixed_status_codex_session_suppress" && \
+       grep -Fq $'\tstatus' "$mixed_status_codex_chat_suppress" && \
+       grep -Fq 'text=Статус: Online' "$mixed_status_codex_log" && \
+       ! grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$mixed_status_codex_log"; then
+        test_pass
+    else
+        test_fail "Explicit /status must keep precedence over codex-update direct fastpath on mixed turns so the canonical status contract does not drift"
+    fi
+
     test_start "component_codex_update_direct_fastpath_keeps_same_turn_runtime_tail_suppressed"
     local codex_direct_tail_tmp codex_direct_tail_send_script codex_direct_tail_log codex_direct_tail_stdout codex_direct_tail_stderr codex_direct_tail_status codex_direct_tail_intent_dir
     local codex_direct_tail_session_suppress codex_direct_tail_chat_suppress codex_direct_tail_repeat_before_output codex_direct_tail_tool_output codex_direct_tail_after_output codex_direct_tail_send_output
