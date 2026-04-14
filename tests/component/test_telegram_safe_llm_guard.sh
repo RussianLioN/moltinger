@@ -284,13 +284,14 @@ EOF
         test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, and leave only a delivery-suppression marker instead of triggering hook-block"
     fi
 
-    test_start "component_before_llm_guard_keeps_codex_update_on_hard_override_even_when_direct_fastpath_is_enabled"
-    local fastpath_codex_tmp fastpath_codex_send_script fastpath_codex_log fastpath_codex_stdout fastpath_codex_stderr fastpath_codex_status fastpath_codex_intent_dir fastpath_codex_suppress_file
+    test_start "component_before_llm_guard_direct_fastpaths_codex_update_when_enabled"
+    local fastpath_codex_tmp fastpath_codex_send_script fastpath_codex_log fastpath_codex_stdout fastpath_codex_stderr fastpath_codex_status fastpath_codex_intent_dir fastpath_codex_session_suppress_file fastpath_codex_chat_suppress_file
     fastpath_codex_tmp="$(secure_temp_dir telegram-safe-fastpath-codex-update)"
     fastpath_codex_send_script="$fastpath_codex_tmp/send.sh"
     fastpath_codex_log="$fastpath_codex_tmp/send.log"
     fastpath_codex_intent_dir="$fastpath_codex_tmp/intent"
-    fastpath_codex_suppress_file="$fastpath_codex_intent_dir/session_fastcodex.suppress"
+    fastpath_codex_session_suppress_file="$fastpath_codex_intent_dir/session_fastcodex.suppress"
+    fastpath_codex_chat_suppress_file="$fastpath_codex_intent_dir/chat-262872984.suppress"
     cat >"$fastpath_codex_send_script" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -332,18 +333,176 @@ EOF
     set -e
     if [[ "$fastpath_codex_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_codex_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       jq -e '.data.messages[0].content | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       jq -e '.data.messages[0].content | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
-       [[ ! -e "$fastpath_codex_suppress_file" ]] && \
-       [[ ! -s "$fastpath_codex_log" ]]; then
+       [[ ! -s "$fastpath_codex_stdout" ]] && \
+       [[ -f "$fastpath_codex_session_suppress_file" ]] && \
+       [[ -f "$fastpath_codex_chat_suppress_file" ]] && \
+       grep -Fq $'\tcodex_update:scheduler' "$fastpath_codex_session_suppress_file" && \
+       grep -Fq $'\tcodex_update:scheduler' "$fastpath_codex_chat_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_codex_log" && \
+       grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$fastpath_codex_log" && \
+       grep -Fq 'не подтверждаю по памяти' "$fastpath_codex_log" && \
+       grep -Fq 'операторский/runtime check' "$fastpath_codex_log"; then
         test_pass
     else
-        test_fail "Codex-update turns must stay on the deterministic hard-override path even when direct fastpath is enabled, because out-of-band send races with later bad replies on live Telegram"
+        test_fail "When direct fastpath is enabled, codex-update scheduler turns must use the same Bot API delivery contract as the other live-proven Telegram-safe routes and arm same-turn suppression markers"
+    fi
+
+    test_start "component_before_llm_guard_keeps_status_precedence_over_codex_update_direct_fastpath_on_mixed_turn"
+    local mixed_status_codex_tmp mixed_status_codex_send_script mixed_status_codex_log mixed_status_codex_stdout mixed_status_codex_stderr mixed_status_codex_status mixed_status_codex_intent_dir mixed_status_codex_session_suppress mixed_status_codex_chat_suppress
+    mixed_status_codex_tmp="$(secure_temp_dir telegram-safe-mixed-status-codex)"
+    mixed_status_codex_send_script="$mixed_status_codex_tmp/send.sh"
+    mixed_status_codex_log="$mixed_status_codex_tmp/send.log"
+    mixed_status_codex_intent_dir="$mixed_status_codex_tmp/intent"
+    mixed_status_codex_session_suppress="$mixed_status_codex_intent_dir/session_mixedstatus.suppress"
+    mixed_status_codex_chat_suppress="$mixed_status_codex_intent_dir/chat-262872984.suppress"
+    cat >"$mixed_status_codex_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$mixed_status_codex_send_script"
+    mixed_status_codex_stdout="$mixed_status_codex_tmp/stdout.log"
+    mixed_status_codex_stderr="$mixed_status_codex_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$mixed_status_codex_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$mixed_status_codex_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$mixed_status_codex_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$mixed_status_codex_stdout" 2>"$mixed_status_codex_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:mixedstatus","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"/status и заодно какая latest версия Codex CLI?"}],"tool_count":37,"iteration":1}}
+EOF
+    mixed_status_codex_status=$?
+    set -e
+    if [[ "$mixed_status_codex_status" -eq 0 ]] && \
+       [[ ! -s "$mixed_status_codex_stdout" ]] && \
+       [[ ! -s "$mixed_status_codex_stderr" ]] && \
+       [[ -f "$mixed_status_codex_session_suppress" ]] && \
+       [[ -f "$mixed_status_codex_chat_suppress" ]] && \
+       grep -Fq $'\tstatus' "$mixed_status_codex_session_suppress" && \
+       grep -Fq $'\tstatus' "$mixed_status_codex_chat_suppress" && \
+       grep -Fq 'text=Статус: Online' "$mixed_status_codex_log" && \
+       ! grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$mixed_status_codex_log"; then
+        test_pass
+    else
+        test_fail "Explicit /status must keep precedence over codex-update direct fastpath on mixed turns so the canonical status contract does not drift"
+    fi
+
+    test_start "component_codex_update_direct_fastpath_keeps_same_turn_runtime_tail_suppressed"
+    local codex_direct_tail_tmp codex_direct_tail_send_script codex_direct_tail_log codex_direct_tail_stdout codex_direct_tail_stderr codex_direct_tail_status codex_direct_tail_intent_dir
+    local codex_direct_tail_session_suppress codex_direct_tail_chat_suppress codex_direct_tail_repeat_before_output codex_direct_tail_tool_output codex_direct_tail_after_output codex_direct_tail_send_output
+    codex_direct_tail_tmp="$(secure_temp_dir telegram-safe-codex-update-direct-tail)"
+    codex_direct_tail_send_script="$codex_direct_tail_tmp/send.sh"
+    codex_direct_tail_log="$codex_direct_tail_tmp/send.log"
+    codex_direct_tail_intent_dir="$codex_direct_tail_tmp/intent"
+    codex_direct_tail_session_suppress="$codex_direct_tail_intent_dir/session_codex-direct.suppress"
+    codex_direct_tail_chat_suppress="$codex_direct_tail_intent_dir/chat-262872984.suppress"
+    cat >"$codex_direct_tail_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$codex_direct_tail_send_script"
+    codex_direct_tail_stdout="$codex_direct_tail_tmp/stdout.log"
+    codex_direct_tail_stderr="$codex_direct_tail_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$codex_direct_tail_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_direct_tail_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$codex_direct_tail_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$codex_direct_tail_stdout" 2>"$codex_direct_tail_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-direct","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
+EOF
+    codex_direct_tail_status=$?
+    set -e
+    codex_direct_tail_repeat_before_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_direct_tail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-direct","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":2}}
+EOF
+    )"
+    codex_direct_tail_tool_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_direct_tail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:codex-direct","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"memory_search","arguments":{"query":"cron status"}}
+EOF
+    )"
+    codex_direct_tail_after_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_direct_tail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:codex-direct","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Проверил — и да, тут инструмент расписания реально сломан: missing 'query' parameter.","tool_calls":[{"name":"memory_search","arguments":{"query":"cron status"}}]}
+EOF
+    )"
+    codex_direct_tail_send_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_direct_tail_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-direct","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1450,"text":"Проверил — и да, тут инструмент расписания реально сломан: missing 'query' parameter."}}
+EOF
+    )"
+    if [[ "$codex_direct_tail_status" -eq 0 ]] && \
+       [[ ! -s "$codex_direct_tail_stdout" ]] && \
+       [[ ! -s "$codex_direct_tail_stderr" ]] && \
+       [[ -f "$codex_direct_tail_session_suppress" ]] && \
+       [[ -f "$codex_direct_tail_chat_suppress" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_tool_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$codex_direct_tail_tool_output" && \
+       jq -e '.data.arguments.command | contains("direct fastpath already handled this reply")' >/dev/null 2>&1 <<<"$codex_direct_tail_tool_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_after_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$codex_direct_tail_after_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$codex_direct_tail_after_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_send_output" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$codex_direct_tail_send_output"; then
+        test_pass
+    else
+        test_fail "Codex-update direct fastpath must keep the same turn terminal: repeat BeforeLLMCall, follow-up tools, late AfterLLMCall text, and final runtime delivery all stay suppressed"
     fi
 
     test_start "component_codex_update_terminalizes_blocked_followup_tool_turn_after_hard_override"

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-14
-**Total Lessons**: 75
+**Total Lessons**: 76
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (35 lessons)
+#### P1 (36 lessons)
+- [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
 - [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
 - [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
@@ -174,7 +175,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (2 lessons)
+#### product (3 lessons)
+- [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
 - [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
 
@@ -193,9 +195,9 @@
 ### Popular Tags
 
 - `moltis` (26 lessons)
-- `rca` (23 lessons)
+- `rca` (24 lessons)
+- `telegram` (19 lessons)
 - `deploy` (19 lessons)
-- `telegram` (18 lessons)
 - `github-actions` (17 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
@@ -210,8 +212,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 75 |
-| Critical (P0/P1) | 36 |
+| Total Lessons | 76 |
+| Critical (P0/P1) | 37 |
 | Categories | 7 |
 | Unique Tags | 156 |
 

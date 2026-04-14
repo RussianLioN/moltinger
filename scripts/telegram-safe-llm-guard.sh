@@ -3586,11 +3586,23 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 
     if [[ "$is_telegram_safe_lane" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED" && [[ -n "${telegram_chat_id:-}" ]]; then
-        # codex-update turns stay on the deterministic hard-override path below.
-        # A direct send here does not actually terminate the underlying run and
-        # can race with a later bad LLM/tool reply on live Telegram.
+        # Live Telegram runtime still treats some user-facing turns as more
+        # reliable through the direct Bot API fastpath than through pure
+        # in-band hook modify delivery. Keep the hard-override path below as
+        # the fallback when direct send is disabled or unavailable.
         if [[ "$current_turn_status_request" == true ]]; then
             if direct_fastpath_send_with_suppression "status" "$telegram_chat_id" "$canonical_status" "status"; then
+                clear_turn_intent "${turn_session_key:-}"
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_codex_update_request" == true ]]; then
+            codex_update_reply_mode="release"
+            if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
+                codex_update_reply_mode="scheduler"
+            fi
+            codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
+            if [[ -n "$codex_update_reply_text" ]] && direct_fastpath_send_with_suppression "codex_update" "$telegram_chat_id" "$codex_update_reply_text" "codex_update:${codex_update_reply_mode}" "mode=$codex_update_reply_mode"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
