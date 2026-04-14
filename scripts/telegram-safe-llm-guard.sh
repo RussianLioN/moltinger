@@ -686,82 +686,54 @@ extract_last_message_content_by_role() {
 
     if command -v perl >/dev/null 2>&1; then
         perl_output="$(
-            printf '%s' "$messages_json" | perl -e '
+            printf '%s' "$messages_json" | perl -MJSON::PP=decode_json -e '
                 use strict;
                 use warnings;
                 use utf8;
                 binmode STDIN, ":encoding(UTF-8)";
                 binmode STDOUT, ":encoding(UTF-8)";
 
-                sub unescape_json_string {
+                sub flatten_message_content {
                     my ($value) = @_;
                     return q() unless defined $value;
-                    $value =~ s/\\\\/\0/g;
-                    $value =~ s/\\"/"/g;
-                    $value =~ s/\\n/\n/g;
-                    $value =~ s/\\r/\r/g;
-                    $value =~ s/\\t/\t/g;
-                    $value =~ s/\0/\\/g;
-                    return $value;
-                }
 
-                sub extract_string_value {
-                    my ($obj, $key) = @_;
-                    return undef unless defined $obj && defined $key;
-                    return undef unless $obj =~ /"$key"\s*:\s*"((?:\\\\.|[^"\\\\])*)"/s;
-                    return unescape_json_string($1);
+                    if (!ref $value) {
+                        return $value;
+                    }
+
+                    if (ref $value eq "ARRAY") {
+                        my @parts = grep { defined $_ && length $_ } map { flatten_message_content($_) } @$value;
+                        return join("\n", @parts);
+                    }
+
+                    if (ref $value eq "HASH") {
+                        for my $key (qw(text content input_text output_text value)) {
+                            next unless exists $value->{$key};
+                            my $flattened = flatten_message_content($value->{$key});
+                            return $flattened if defined $flattened && length $flattened;
+                        }
+
+                        my @parts = grep { defined $_ && length $_ } map { flatten_message_content($value->{$_}) } sort keys %$value;
+                        return join("\n", @parts);
+                    }
+
+                    return q();
                 }
 
                 my $target_role = shift @ARGV // "user";
                 local $/;
-                my $text = <STDIN>;
-                my $depth = 0;
-                my $in_string = 0;
-                my $escape = 0;
-                my $capturing = 0;
-                my $obj = q();
+                my $text = <STDIN> // q();
+                my $messages = eval { decode_json($text) };
+                exit 1 unless ref $messages eq "ARRAY";
                 my $last = q();
 
-                for my $char (split //, $text) {
-                    $obj .= $char if $capturing;
-
-                    if ($escape) {
-                        $escape = 0;
-                        next;
-                    }
-                    if ($char eq q(\\)) {
-                        $escape = 1 if $in_string;
-                        next;
-                    }
-                    if ($char eq q(")) {
-                        $in_string = !$in_string;
-                        next;
-                    }
-                    next if $in_string;
-
-                    if ($char eq q({)) {
-                        $depth++;
-                        if ($depth == 1) {
-                            $obj = q({);
-                            $capturing = 1;
-                        }
-                        next;
-                    }
-
-                    if ($char eq q(})) {
-                        if ($depth == 1 && $capturing) {
-                            my $role = extract_string_value($obj, "role");
-                            if (defined $role && $role eq $target_role) {
-                                my $content = extract_string_value($obj, "content");
-                                if (defined $content && length $content) {
-                                    $last = $content;
-                                }
-                            }
-                            $capturing = 0;
-                            $obj = q();
-                        }
-                        $depth-- if $depth > 0;
-                        next;
+                for my $message (@$messages) {
+                    next unless ref $message eq "HASH";
+                    my $role = $message->{role};
+                    next unless defined $role && $role eq $target_role;
+                    my $content = flatten_message_content($message->{content});
+                    if (defined $content && length $content) {
+                        $last = $content;
                     }
                 }
 
@@ -776,6 +748,53 @@ extract_last_message_content_by_role() {
     fi
 
     printf '%s' "$messages_json" | awk -v target_role="$target_role" '
+        function unescape_json_string(value,    output, i, c, next_char) {
+            output = ""
+            i = 1
+            while (i <= length(value)) {
+                c = substr(value, i, 1)
+                if (c == "\\") {
+                    i++
+                    next_char = substr(value, i, 1)
+                    if (next_char == "n") {
+                        output = output "\n"
+                    } else if (next_char == "r") {
+                        output = output "\r"
+                    } else if (next_char == "t") {
+                        output = output "\t"
+                    } else {
+                        output = output next_char
+                    }
+                } else {
+                    output = output c
+                }
+                i++
+            }
+            return output
+        }
+
+        function extract_json_string_at(text, start_idx,    value, escape, i, c) {
+            value = ""
+            escape = 0
+            for (i = start_idx + 1; i <= length(text); i++) {
+                c = substr(text, i, 1)
+                if (escape) {
+                    value = value "\\" c
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    return unescape_json_string(value)
+                }
+                value = value c
+            }
+            return ""
+        }
+
         function extract_string_value(obj, key,    needle, state, value, escape, n, i, j, c) {
             needle = "\"" key "\""
             state = "seek"
@@ -839,12 +858,91 @@ extract_last_message_content_by_role() {
             return ""
         }
 
+        function extract_flattened_content(obj,    needle, n, i, j, c, depth, in_string, escape, content_json, text, quote_index, nested) {
+            needle = "\"content\""
+            n = length(obj)
+
+            for (i = 1; i <= n; i++) {
+                if (substr(obj, i, length(needle)) != needle) {
+                    continue
+                }
+                j = i + length(needle)
+                while (j <= n && substr(obj, j, 1) ~ /[ \t\r\n]/) {
+                    j++
+                }
+                if (substr(obj, j, 1) != ":") {
+                    continue
+                }
+                j++
+                while (j <= n && substr(obj, j, 1) ~ /[ \t\r\n]/) {
+                    j++
+                }
+                c = substr(obj, j, 1)
+                if (c == "\"") {
+                    return extract_json_string_at(obj, j)
+                }
+                if (c != "[" && c != "{") {
+                    continue
+                }
+
+                depth = 0
+                in_string = 0
+                escape = 0
+                content_json = ""
+                for (; j <= n; j++) {
+                    c = substr(obj, j, 1)
+                    content_json = content_json c
+                    if (escape) {
+                        escape = 0
+                        continue
+                    }
+                    if (c == "\\") {
+                        escape = 1
+                        continue
+                    }
+                    if (c == "\"") {
+                        in_string = !in_string
+                        continue
+                    }
+                    if (in_string) {
+                        continue
+                    }
+                    if (c == "[" || c == "{") {
+                        depth++
+                        continue
+                    }
+                    if (c == "]" || c == "}") {
+                        depth--
+                        if (depth == 0) {
+                            break
+                        }
+                    }
+                }
+
+                text = ""
+                while (match(content_json, /"(text|content|input_text|output_text|value)"[[:space:]]*:[[:space:]]*"/)) {
+                    quote_index = RSTART + RLENGTH - 1
+                    nested = extract_json_string_at(content_json, quote_index)
+                    if (length(nested)) {
+                        text = text (length(text) ? "\n" : "") nested
+                    }
+                    content_json = substr(content_json, quote_index + length(nested) + 2)
+                }
+
+                if (length(text)) {
+                    return text
+                }
+            }
+
+            return ""
+        }
+
         function flush_object(obj,    role, content) {
             role = extract_string_value(obj, "role")
             if (role != target_role) {
                 return
             }
-            content = extract_string_value(obj, "content")
+            content = extract_flattened_content(obj)
             if (content != "") {
                 last_content = content
             }

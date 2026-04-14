@@ -777,6 +777,70 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_scheduler_memory_recorded_logic_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Да, есть. По сохранённой памяти у меня зафиксировано, что настроена такая логика: - ежедневно проверять стабильные обновления Codex CLI; - присылать краткое уведомление только если вышла новая стабильная версия. По сохранённому контексту наличие такого крона подтверждено.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_scheduler_safe_negative_runtime_check_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Нет. По сохранённому контексту наличие такого крона подтверждено не было и подтверждено быть не может без runtime check. Для такого вывода нужен отдельный операторский/runtime check.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "codex_update_scheduler_memory_action_unquoted_false_positive_pass" ]]; then
   cat <<'JSON'
 {
@@ -1759,6 +1823,42 @@ run_component_telegram_remote_uat_contract_tests() {
         else
             test_fail "Wrapper must classify memory-asserted codex-update scheduler claims as the same semantic scheduler-contract failure"
         fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_recorded_logic_false_positive_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_recorded_logic_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-recorded-logic.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when codex-update scheduler replies assert live cron from saved memory/context even without explicit tool-error leakage"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-recorded-logic.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify recorded-memory scheduler confirmations as the same semantic scheduler-contract failure"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_codex_update_scheduler_negative_runtime_check_reply"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_safe_negative_runtime_check_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-negative-runtime-check.json" \
+        >/dev/null 2>&1
+    then
+        if jq -e '.run.verdict == "passed" and .failure == null' "$TEST_TMPDIR/result-codex-update-scheduler-negative-runtime-check.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Authoritative wrapper should preserve a safe scheduler reply that explicitly refuses memory-based confirmation and requires runtime check"
+        fi
+    else
+        test_fail "Authoritative wrapper must not overfit on safe codex-update scheduler replies that contain contrastive confirmation wording"
     fi
 
     test_start "component_telegram_remote_uat_fails_codex_update_scheduler_action_unquoted_false_positive_even_if_helper_passes"

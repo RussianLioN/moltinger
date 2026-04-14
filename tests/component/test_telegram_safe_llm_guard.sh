@@ -347,6 +347,70 @@ EOF
         test_fail "When direct fastpath is enabled, codex-update scheduler turns must use the same Bot API delivery contract as the other live-proven Telegram-safe routes and arm same-turn suppression markers"
     fi
 
+    test_start "component_codex_update_direct_fastpath_handles_array_message_content_from_live_payload"
+    local array_codex_tmp array_codex_send_script array_codex_log array_codex_stdout array_codex_stderr
+    local array_codex_status array_codex_intent_dir array_codex_session_suppress_file array_codex_chat_suppress_file
+    array_codex_tmp="$(secure_temp_dir telegram-safe-array-codex)"
+    array_codex_send_script="$array_codex_tmp/send.sh"
+    array_codex_log="$array_codex_tmp/send.log"
+    array_codex_intent_dir="$array_codex_tmp/intent"
+    array_codex_session_suppress_file="$array_codex_intent_dir/session_arraycodex.suppress"
+    array_codex_chat_suppress_file="$array_codex_intent_dir/chat-262872984.suppress"
+    cat >"$array_codex_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$array_codex_send_script"
+    array_codex_stdout="$array_codex_tmp/stdout.log"
+    array_codex_stderr="$array_codex_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$array_codex_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$array_codex_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$array_codex_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$array_codex_stdout" 2>"$array_codex_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:arraycodex","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":[{"type":"input_text","text":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"}]},{"role":"user","content":[{"type":"input_text","text":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}]}],"tool_count":37,"iteration":1}}
+EOF
+    array_codex_status=$?
+    set -e
+    if [[ "$array_codex_status" -eq 0 ]] && \
+       [[ ! -s "$array_codex_stderr" ]] && \
+       [[ ! -s "$array_codex_stdout" ]] && \
+       [[ -f "$array_codex_session_suppress_file" ]] && \
+       [[ -f "$array_codex_chat_suppress_file" ]] && \
+       grep -Fq $'\tcodex_update:scheduler' "$array_codex_session_suppress_file" && \
+       grep -Fq $'\tcodex_update:scheduler' "$array_codex_chat_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$array_codex_log" && \
+       grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$array_codex_log" && \
+       grep -Fq 'не подтверждаю по памяти' "$array_codex_log" && \
+       grep -Fq 'операторский/runtime check' "$array_codex_log"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must recover codex-update scheduler intent even when live runtime supplies messages[].content as input_text arrays"
+    fi
+
     test_start "component_codex_update_direct_fastpath_preserves_terminal_fallback_state_if_suppression_is_lost"
     local fastpath_codex_recovery_tmp fastpath_codex_recovery_send_script fastpath_codex_recovery_log fastpath_codex_recovery_stdout fastpath_codex_recovery_stderr
     local fastpath_codex_recovery_status fastpath_codex_recovery_intent_dir fastpath_codex_recovery_session_suppress fastpath_codex_recovery_chat_suppress
