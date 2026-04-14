@@ -1477,6 +1477,30 @@
         "TELEGRAM_TIMEOUT_SECONDS"
       ]
     },
+    "telegram-chat-probe.sh": {
+      "version": "1.0.0",
+      "description": "Compatibility wrapper for skill-driven Telegram real_user probes",
+      "entrypoint": true,
+      "requires": [
+        "jq",
+        "python3"
+      ],
+      "provides": [
+        "telegram",
+        "mtproto",
+        "probe",
+        "skill-wrapper"
+      ],
+      "env_vars": [
+        "TELEGRAM_TEST_API_ID",
+        "TELEGRAM_TEST_API_HASH",
+        "TELEGRAM_TEST_SESSION",
+        "TELEGRAM_TEST_BOT_USERNAME",
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
     "telegram-user-send.py": {
       "version": "1.0.0",
       "description": "Send Telegram messages from CLI as user via MTProto (Telethon)",
