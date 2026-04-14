@@ -200,6 +200,45 @@ NODE
         test_fail "Probe must keep waiting after a short interim preface and settle on the later attributable final/error reply"
     fi
 
+    test_start "component_telegram_web_probe_keeps_observing_past_early_clean_reply_when_min_observation_is_set"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { waitForReplySettleWithCollector } = await import(process.env.NODE_SCRIPT);
+const snapshots = [
+  [{ mid: 81, direction: "out", text: "cron?" }],
+  [
+    { mid: 81, direction: "out", text: "cron?" },
+    { mid: 82, direction: "in", text: "По проектному контракту у codex-update есть отдельный scheduler path." }
+  ],
+  [
+    { mid: 81, direction: "out", text: "cron?" },
+    { mid: 82, direction: "in", text: "По проектному контракту у codex-update есть отдельный scheduler path." }
+  ],
+  [
+    { mid: 81, direction: "out", text: "cron?" },
+    { mid: 82, direction: "in", text: "По проектному контракту у codex-update есть отдельный scheduler path." },
+    { mid: 83, direction: "in", text: "Проверил — и да, тут инструмент расписания реально сломан: на `list` он снова ответил `missing 'action' parameter`." }
+  ]
+];
+let index = 0;
+const result = await waitForReplySettleWithCollector({
+  collectMessagesFn: async () => snapshots[Math.min(index++, snapshots.length - 1)],
+  sleepFn: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  settleMs: 100,
+  maxWaitMs: 1000,
+  sentMid: 81,
+  minObservationMs: 400,
+});
+if (!result.ok || !result.replyMessage || result.replyMessage.mid !== 83) {
+  throw new Error(`expected late second reply to win after observation window, got ${JSON.stringify(result)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must keep observing for delayed second replies instead of passing on the first clean-looking answer immediately"
+    fi
+
     test_start "component_telegram_web_probe_waits_for_quiet_window_before_send"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";

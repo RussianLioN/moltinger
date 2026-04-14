@@ -19,6 +19,7 @@ const DEFAULT_MIN_REPLY_LEN = Number(process.env.TELEGRAM_WEB_MIN_REPLY_LEN || 2
 const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIES || 2);
 const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
+const DEFAULT_MIN_REPLY_OBSERVATION_MS = Number(process.env.TELEGRAM_WEB_MIN_REPLY_OBSERVATION_MS || 15000);
 const INTERNAL_TELEMETRY_RE =
   /(?:^|[•\n])\s*(?:[\p{Extended_Pictographic}\uFE0F]+\s*)?(?:activity log(?:\s*[•:-]|\b)|running:\s*`?|searching memory(?:\.\.\.)?|memory[_ ]search(?:[_ ]started)?\b|thinking(?:\.\.\.)?|tool(?:[_ ]call)?(?:[_ ](?:started|progress))?\b|mcp__[\p{L}\p{N}_:.-]+|mcp tool error\b|validation errors for call\[|missing required argument\b|unexpected keyword argument\b|fetching (?:github\.com|https?:\/\/)|create_skill\b|update_skill\b|delete_skill\b|session_state\b|send_message\b|send_image\b)/iu;
 const INTERNAL_PLANNING_RE =
@@ -48,6 +49,7 @@ const minReplyLen = Number(getArg("--min-reply-len", String(DEFAULT_MIN_REPLY_LE
 const composerRetries = Math.max(0, Number(getArg("--composer-retries", String(DEFAULT_COMPOSER_RETRIES))) || 0);
 const quietWindowMs = Math.max(500, Number(getArg("--quiet-window-ms", String(DEFAULT_QUIET_WINDOW_MS))) || 0);
 const replySettleMs = Math.max(1000, Number(getArg("--reply-settle-ms", String(DEFAULT_REPLY_SETTLE_MS))) || 0);
+const minReplyObservationMs = Math.max(0, Number(getArg("--min-reply-observation-ms", String(DEFAULT_MIN_REPLY_OBSERVATION_MS))) || 0);
 const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
@@ -236,6 +238,7 @@ function buildCorrelationWindow(details) {
     quiet_window_wait_ms: details.quietWindowWaitMs,
     reply_settle_ms: details.replySettleMs || null,
     reply_settle_wait_ms: details.replySettleWaitMs || null,
+    min_reply_observation_ms: details.minReplyObservationMs || null,
     baseline_max_message_id: details.baselineMaxMid,
     sent_observed_at_ms: details.sentObservedAtMs || null,
     reply_observed_at_ms: details.replyObservedAtMs || null,
@@ -676,6 +679,7 @@ export async function waitForReplySettleWithCollector({
   settleMs,
   maxWaitMs,
   sentMid,
+  minObservationMs = 0,
 }) {
   const startedAt = Date.now();
   let firstReplyObservedAtMs = null;
@@ -701,7 +705,9 @@ export async function waitForReplySettleWithCollector({
         stableReply = latestIncoming;
         stableReplyIsInterim = isLikelyInterimReplyText(latestIncoming.text);
       }
-      if (!stableReplyIsInterim && lastChangeAt !== null && Date.now() - lastChangeAt >= settleMs) {
+      const observationSatisfied =
+        firstReplyObservedAtMs !== null && Date.now() - firstReplyObservedAtMs >= minObservationMs;
+      if (!stableReplyIsInterim && lastChangeAt !== null && Date.now() - lastChangeAt >= settleMs && observationSatisfied) {
         return {
           ok: true,
           settled: true,
@@ -733,6 +739,7 @@ async function waitForReplySettle(page, settleMs, maxWaitMs, sentMid) {
     settleMs,
     maxWaitMs,
     sentMid,
+    minObservationMs: minReplyObservationMs,
   });
 }
 
@@ -1227,6 +1234,7 @@ async function main() {
         quietWindowMs,
         quietWindowWaitMs,
         replySettleMs,
+        minReplyObservationMs,
         replySettleWaitMs: settledReply.settleWaitMs,
         baselineMaxMid: beforeMaxMid,
         sentObservedAtMs,
@@ -1273,6 +1281,7 @@ async function main() {
       quietWindowMs,
       quietWindowWaitMs,
       replySettleMs,
+      minReplyObservationMs,
       replySettleWaitMs: settledReply.settleWaitMs,
       baselineMaxMid: beforeMaxMid,
       sentObservedAtMs,

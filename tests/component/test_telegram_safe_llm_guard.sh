@@ -284,7 +284,7 @@ EOF
         test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, and leave only a delivery-suppression marker instead of triggering hook-block"
     fi
 
-    test_start "component_before_llm_guard_direct_fastpaths_codex_update_via_bot_send_when_enabled"
+    test_start "component_before_llm_guard_keeps_codex_update_on_hard_override_even_when_direct_fastpath_is_enabled"
     local fastpath_codex_tmp fastpath_codex_send_script fastpath_codex_log fastpath_codex_stdout fastpath_codex_stderr fastpath_codex_status fastpath_codex_intent_dir fastpath_codex_suppress_file
     fastpath_codex_tmp="$(secure_temp_dir telegram-safe-fastpath-codex-update)"
     fastpath_codex_send_script="$fastpath_codex_tmp/send.sh"
@@ -326,21 +326,24 @@ EOF
         MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_codex_stdout" 2>"$fastpath_codex_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:fastcodex","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Проверь последние релизы Codex и кратко скажи, есть ли новая стабильная версия"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastcodex","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_codex_status=$?
     set -e
     if [[ "$fastpath_codex_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_codex_stdout" ]] && \
        [[ ! -s "$fastpath_codex_stderr" ]] && \
-       [[ -f "$fastpath_codex_suppress_file" ]] && \
-       grep -Fq $'\tcodex_update' "$fastpath_codex_suppress_file" && \
-       grep -Fq 'chat_id=262872984' "$fastpath_codex_log" && \
-       grep -Fq 'версия 0.118.0' "$fastpath_codex_log" && \
-       grep -Fq 'Дата публикации: 2026-04-01.' "$fastpath_codex_log"; then
+       jq -e '.action == "modify"' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       jq -e '.data.messages[0].content | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       jq -e '.data.messages[0].content | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <"$fastpath_codex_stdout" && \
+       [[ ! -e "$fastpath_codex_suppress_file" ]] && \
+       [[ ! -s "$fastpath_codex_log" ]]; then
         test_pass
     else
-        test_fail "Direct Codex update fastpath must stay handler-safe: send the canonical release reply, return rc=0, and leave only a delivery-suppression marker"
+        test_fail "Codex-update turns must stay on the deterministic hard-override path even when direct fastpath is enabled, because out-of-band send races with later bad replies on live Telegram"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_visibility_via_bot_send_when_enabled"
