@@ -339,6 +339,7 @@ import process from "node:process";
 const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
 const badReplies = [
   "Activity log • nodes_list • sessions_list • cron • missing 'action' parameter",
+  "cron list снова вернул missing 'action' parameter, memory_search — missing 'query' parameter, exec — missing 'command' parameter",
   "Timed out: Agent run timed out after 90s"
 ];
 const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: custom-zai-telegram-safe::glm-5";

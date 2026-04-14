@@ -3603,7 +3603,10 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             fi
             codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
             if [[ -n "$codex_update_reply_text" ]] && direct_fastpath_send_with_suppression "codex_update" "$telegram_chat_id" "$codex_update_reply_text" "codex_update:${codex_update_reply_mode}" "mode=$codex_update_reply_mode"; then
-                clear_turn_intent "${turn_session_key:-}"
+                if ! persist_terminal_marker "${turn_session_key:-}" "$codex_update_reply_mode"; then
+                    write_audit_line "codex_update_direct_fastpath_terminal_marker_fallback token=$codex_update_reply_mode"
+                fi
+                write_audit_line "codex_update_direct_fastpath_fallback_state_preserved mode=$codex_update_reply_mode"
                 exit 0
             fi
         fi
