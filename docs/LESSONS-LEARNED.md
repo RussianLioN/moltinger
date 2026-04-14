@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-14
-**Total Lessons**: 73
+**Total Lessons**: 74
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (33 lessons)
+#### P1 (34 lessons)
+- [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
 - [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Deploy host automation missing cron package bootstrap](../docs/rca/2026-04-14-deploy-host-automation-missing-cron-package-bootstrap.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
@@ -172,6 +173,9 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
+#### product (1 lessons)
+- [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
+
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
@@ -187,10 +191,10 @@
 ### Popular Tags
 
 - `moltis` (26 lessons)
-- `rca` (21 lessons)
+- `rca` (22 lessons)
 - `deploy` (19 lessons)
+- `telegram` (17 lessons)
 - `github-actions` (17 lessons)
-- `telegram` (16 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
 - `skills` (11 lessons)
@@ -204,10 +208,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 73 |
-| Critical (P0/P1) | 34 |
-| Categories | 6 |
-| Unique Tags | 153 |
+| Total Lessons | 74 |
+| Critical (P0/P1) | 35 |
+| Categories | 7 |
+| Unique Tags | 155 |
 
 ---
 
