@@ -3705,6 +3705,11 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
                     write_audit_line "codex_update_direct_fastpath_terminal_marker_fallback token=$codex_update_reply_mode"
                 fi
                 write_audit_line "codex_update_direct_fastpath_fallback_state_preserved mode=$codex_update_reply_mode"
+                same_turn_guard="$(build_codex_update_terminal_guard_message)"
+                same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
+                messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
+                write_audit_line "before_modify reason=codex_update_direct_fastpath_terminalized token=$codex_update_reply_mode iteration=$current_iteration"
+                emit_before_llm_modified_payload "$messages_json" 0
                 exit 0
             fi
         fi

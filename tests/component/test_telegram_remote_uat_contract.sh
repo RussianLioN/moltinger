@@ -809,6 +809,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_scheduler_memory_live_recorded_context_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Да, есть. По сохранённой памяти зафиксировано такое поведение: ежедневно проверяется новая стабильная версия Codex CLI и уведомление отправляется только при её появлении. Но по сохранённому контексту крон есть.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "codex_update_scheduler_safe_negative_runtime_check_pass" ]]; then
   cat <<'JSON'
 {
@@ -1840,6 +1872,24 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must classify recorded-memory scheduler confirmations as the same semantic scheduler-contract failure"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_live_recorded_context_false_positive_even_if_helper_passes"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_memory_live_recorded_context_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-live-recorded-context.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the live wording family asserts cron from saved memory/context even without tool-error leakage"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_memory_false_negative" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-live-recorded-context.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify the exact live recorded-memory/context wording as the same semantic scheduler-contract failure"
         fi
     fi
 
