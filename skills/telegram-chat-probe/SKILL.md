@@ -34,6 +34,7 @@ scripts/telegram-chat-probe.sh \
 - Настроены `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, `TELEGRAM_TEST_SESSION`.
 - Доступны `python3` и `jq`.
 - Запуск идёт из tracked checkout репозитория.
+- Wrapper fail-closed: generic `TELEGRAM_API_*` / `TELEGRAM_SESSION` не считаются заменой для этого skill contract.
 
 ## Параметры
 

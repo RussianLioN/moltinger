@@ -128,9 +128,9 @@ if [[ ! -f "$PROBE_SCRIPT" ]]; then
     exit 1
 fi
 
-probe_api_id="${TELEGRAM_TEST_API_ID:-${TELEGRAM_API_ID:-}}"
-probe_api_hash="${TELEGRAM_TEST_API_HASH:-${TELEGRAM_API_HASH:-}}"
-probe_session="${TELEGRAM_TEST_SESSION:-${TELEGRAM_SESSION:-.telegram-user}}"
+probe_api_id="${TELEGRAM_TEST_API_ID:-}"
+probe_api_hash="${TELEGRAM_TEST_API_HASH:-}"
+probe_session="${TELEGRAM_TEST_SESSION:-}"
 
 if [[ -z "$probe_api_id" || -z "$probe_api_hash" || -z "$probe_session" ]]; then
     emit_result "precondition_failed" ""
@@ -163,16 +163,19 @@ log "probe exit code: $probe_rc"
 status="upstream_failed"
 observed_reply=""
 
-if [[ $probe_rc -ne 0 ]]; then
-    observed_reply="${probe_stderr:-$probe_output}"
-elif ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$probe_output"; then
+if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$probe_output"; then
     observed_reply="${probe_output:-$probe_stderr}"
+elif jq -e '.error == "Timeout waiting for reply"' >/dev/null 2>&1 <<<"$probe_output" || [[ $probe_rc -eq 3 ]]; then
+    status="timeout"
+    observed_reply="$(jq -r '.reply_text // ""' <<<"$probe_output")"
 elif jq -e '.status == "pass"' >/dev/null 2>&1 <<<"$probe_output"; then
     status="completed"
     observed_reply="$(jq -r '.reply_text // ""' <<<"$probe_output")"
-elif jq -e '.error == "Timeout waiting for reply"' >/dev/null 2>&1 <<<"$probe_output"; then
-    status="timeout"
-    observed_reply="$(jq -r '.reply_text // ""' <<<"$probe_output")"
+elif [[ $probe_rc -ne 0 ]]; then
+    observed_reply="$(jq -r '.error // .reply_text // ""' <<<"$probe_output")"
+    if [[ -z "$observed_reply" ]]; then
+        observed_reply="${probe_stderr:-$probe_output}"
+    fi
 else
     observed_reply="$(jq -r '.error // .reply_text // ""' <<<"$probe_output")"
 fi

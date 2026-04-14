@@ -385,7 +385,7 @@ run_static_config_validation_tests() {
        [[ -f "$TELEGRAM_CHAT_PROBE_SKILL" ]] && \
        [[ -f "$SCRIPTS_MANIFEST" ]] && \
        rg -Fq 'scripts/telegram-chat-probe.sh' "$TELEGRAM_CHAT_PROBE_SKILL" && \
-       rg -Fq '"telegram-chat-probe.sh"' "$SCRIPTS_MANIFEST" && \
+       jq -e '.scripts["telegram-chat-probe.sh"].entrypoint == true and (.scripts["telegram-chat-probe.sh"].requires | index("jq") != null) and (.scripts["telegram-chat-probe.sh"].requires | index("python3") != null)' "$SCRIPTS_MANIFEST" >/dev/null && \
        rg -Fq 'PROBE_SCRIPT="$SCRIPT_DIR/telegram-user-probe.py"' "$TELEGRAM_CHAT_PROBE_SCRIPT" && \
        rg -Fq 'TELEGRAM_TEST_API_ID' "$TELEGRAM_CHAT_PROBE_SCRIPT" && \
        rg -Fq 'emit_result "precondition_failed" ""' "$TELEGRAM_CHAT_PROBE_SCRIPT"; then
@@ -399,6 +399,7 @@ run_static_config_validation_tests() {
        [[ -f "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" ]] && \
        [[ -f "$CODEX_UPDATE_SKILL" ]] && \
        [[ -f "$POST_CLOSE_TASK_CLASSIFIER_SKILL" ]] && \
+       [[ -f "$TELEGRAM_CHAT_PROBE_SKILL" ]] && \
        rg -Fq 'telegram_summary:' "$TELEGRAM_LEARNER_SKILL" && \
        rg -Fq 'value_statement:' "$TELEGRAM_LEARNER_SKILL" && \
        rg -Fq 'source_priority:' "$TELEGRAM_LEARNER_SKILL" && \
@@ -414,7 +415,11 @@ run_static_config_validation_tests() {
        rg -Fq 'telegram_summary:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
        rg -Fq 'value_statement:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
        rg -Fq 'source_priority:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
-       rg -Fq 'telegram_safe_note:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL"; then
+       rg -Fq 'telegram_safe_note:' "$POST_CLOSE_TASK_CLASSIFIER_SKILL" && \
+       rg -Fq 'telegram_summary:' "$TELEGRAM_CHAT_PROBE_SKILL" && \
+       rg -Fq 'value_statement:' "$TELEGRAM_CHAT_PROBE_SKILL" && \
+       rg -Fq 'source_priority:' "$TELEGRAM_CHAT_PROBE_SKILL" && \
+       rg -Fq 'telegram_safe_note:' "$TELEGRAM_CHAT_PROBE_SKILL"; then
         test_pass
     else
         test_fail "Repo-managed user-facing skills must define a Telegram-safe skill-detail contract in frontmatter instead of relying on operator-heavy body text"

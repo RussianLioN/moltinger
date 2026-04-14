@@ -22,6 +22,16 @@ create_fake_python_bin() {
 set -euo pipefail
 
 mode="${TELEGRAM_CHAT_PROBE_TEST_MODE:-pass}"
+capture_file="${TELEGRAM_CHAT_PROBE_CAPTURE_FILE:-}"
+
+if [[ -n "$capture_file" ]]; then
+    {
+        printf 'argv=%s\n' "$*"
+        printf 'TELEGRAM_API_ID=%s\n' "${TELEGRAM_API_ID:-}"
+        printf 'TELEGRAM_API_HASH=%s\n' "${TELEGRAM_API_HASH:-}"
+        printf 'TELEGRAM_SESSION=%s\n' "${TELEGRAM_SESSION:-}"
+    } >"$capture_file"
+fi
 
 case "$mode" in
     pass)
@@ -29,6 +39,7 @@ case "$mode" in
         ;;
     timeout)
         printf '%s\n' '{"ok":false,"status":"fail","error":"Timeout waiting for reply"}'
+        exit 3
         ;;
     invalid_json)
         printf 'not-json\n'
@@ -61,10 +72,11 @@ run_unit_telegram_chat_probe_wrapper_tests() {
         return
     fi
 
-    local fixture_root fake_bin output json_out status observed
+    local fixture_root fake_bin output json_out status observed capture_file capture_text
     fixture_root="$(secure_temp_dir telegram-chat-probe-wrapper)"
     fake_bin="$(create_fake_python_bin "$fixture_root")"
     json_out="${fixture_root}/probe.json"
+    capture_file="${fixture_root}/capture.txt"
 
     test_start "unit_telegram_chat_probe_wrapper_maps_missing_env_to_precondition_failed"
 
@@ -91,9 +103,10 @@ run_unit_telegram_chat_probe_wrapper_tests() {
 
     test_start "unit_telegram_chat_probe_wrapper_maps_pass_json_to_completed"
 
-    output="$(TELEGRAM_TEST_API_ID=1 TELEGRAM_TEST_API_HASH=hash TELEGRAM_TEST_SESSION=session TELEGRAM_CHAT_PROBE_TEST_MODE=pass PATH="${fake_bin}:$PATH" bash "$TELEGRAM_CHAT_PROBE_SCRIPT" --message 'cron?' --target '@moltinger_bot' --timeout-sec 7)"
+    output="$(TELEGRAM_TEST_API_ID=1 TELEGRAM_TEST_API_HASH=hash TELEGRAM_TEST_SESSION=session TELEGRAM_CHAT_PROBE_TEST_MODE=pass TELEGRAM_CHAT_PROBE_CAPTURE_FILE="$capture_file" PATH="${fake_bin}:$PATH" bash "$TELEGRAM_CHAT_PROBE_SCRIPT" --message 'cron?' --target '@moltinger_bot' --timeout-sec 7)"
     status="$(jq -r '.status' <<<"$output")"
     observed="$(jq -r '.observed_reply' <<<"$output")"
+    capture_text="$(cat "$capture_file")"
 
     if [[ "$status" != "completed" ]]; then
         test_fail "Expected completed, got: $status"
@@ -109,6 +122,11 @@ run_unit_telegram_chat_probe_wrapper_tests() {
         return
     fi
 
+    assert_contains "$capture_text" "argv=${PROJECT_ROOT}/scripts/telegram-user-probe.py --to @moltinger_bot --text cron? --timeout-seconds 7" "Wrapper must forward canonical helper argv"
+    assert_contains "$capture_text" "TELEGRAM_API_ID=1" "Wrapper must pass TELEGRAM_TEST_API_ID as TELEGRAM_API_ID"
+    assert_contains "$capture_text" "TELEGRAM_API_HASH=hash" "Wrapper must pass TELEGRAM_TEST_API_HASH as TELEGRAM_API_HASH"
+    assert_contains "$capture_text" "TELEGRAM_SESSION=session" "Wrapper must pass TELEGRAM_TEST_SESSION as TELEGRAM_SESSION"
+
     test_pass
 
     test_start "unit_telegram_chat_probe_wrapper_maps_timeout_json_to_timeout"
@@ -118,6 +136,20 @@ run_unit_telegram_chat_probe_wrapper_tests() {
 
     if [[ "$status" != "timeout" ]]; then
         test_fail "Expected timeout, got: $status"
+        rm -rf "$fixture_root"
+        generate_report
+        return
+    fi
+
+    test_pass
+
+    test_start "unit_telegram_chat_probe_wrapper_rejects_generic_telegram_env_fallback"
+
+    output="$(env -u TELEGRAM_TEST_API_ID -u TELEGRAM_TEST_API_HASH -u TELEGRAM_TEST_SESSION TELEGRAM_API_ID=1 TELEGRAM_API_HASH=hash TELEGRAM_SESSION=session PATH="${fake_bin}:$PATH" bash "$TELEGRAM_CHAT_PROBE_SCRIPT" --message '/status')"
+    status="$(jq -r '.status' <<<"$output")"
+
+    if [[ "$status" != "precondition_failed" ]]; then
+        test_fail "Expected precondition_failed when only generic TELEGRAM_API_* env is set, got: $status"
         rm -rf "$fixture_root"
         generate_report
         return
