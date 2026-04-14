@@ -333,7 +333,10 @@ EOF
     set -e
     if [[ "$fastpath_codex_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_codex_stderr" ]] && \
-       [[ ! -s "$fastpath_codex_stdout" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
        [[ -f "$fastpath_codex_session_suppress_file" ]] && \
        [[ -f "$fastpath_codex_chat_suppress_file" ]] && \
        grep -Fq $'\tcodex_update:scheduler' "$fastpath_codex_session_suppress_file" && \
@@ -397,7 +400,10 @@ EOF
     set -e
     if [[ "$array_codex_status" -eq 0 ]] && \
        [[ ! -s "$array_codex_stderr" ]] && \
-       [[ ! -s "$array_codex_stdout" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$array_codex_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$array_codex_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$array_codex_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$array_codex_stdout" && \
        [[ -f "$array_codex_session_suppress_file" ]] && \
        [[ -f "$array_codex_chat_suppress_file" ]] && \
        grep -Fq $'\tcodex_update:scheduler' "$array_codex_session_suppress_file" && \
@@ -505,7 +511,10 @@ EOF
     )"
     if [[ "$fastpath_codex_recovery_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_codex_recovery_stderr" ]] && \
-       [[ ! -s "$fastpath_codex_recovery_stdout" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
        [[ "$fastpath_codex_recovery_intent_present_after_fastpath" == true ]] && \
        [[ "$fastpath_codex_recovery_terminal_present_after_fastpath" == true ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_after_output" && \
@@ -663,8 +672,11 @@ EOF
 EOF
     )"
     if [[ "$codex_direct_tail_status" -eq 0 ]] && \
-       [[ ! -s "$codex_direct_tail_stdout" ]] && \
        [[ ! -s "$codex_direct_tail_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
        [[ -f "$codex_direct_tail_session_suppress" ]] && \
        [[ -f "$codex_direct_tail_chat_suppress" ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
