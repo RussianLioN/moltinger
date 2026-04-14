@@ -350,8 +350,8 @@ EOF
     test_start "component_codex_update_direct_fastpath_preserves_terminal_fallback_state_if_suppression_is_lost"
     local fastpath_codex_recovery_tmp fastpath_codex_recovery_send_script fastpath_codex_recovery_log fastpath_codex_recovery_stdout fastpath_codex_recovery_stderr
     local fastpath_codex_recovery_status fastpath_codex_recovery_intent_dir fastpath_codex_recovery_session_suppress fastpath_codex_recovery_chat_suppress
-    local fastpath_codex_recovery_intent_file fastpath_codex_recovery_terminal_file fastpath_codex_recovery_tool_output fastpath_codex_recovery_send_output
-    local fastpath_codex_recovery_intent_present_after_fastpath fastpath_codex_recovery_terminal_present_after_fastpath
+    local fastpath_codex_recovery_intent_file fastpath_codex_recovery_terminal_file fastpath_codex_recovery_after_output fastpath_codex_recovery_tool_output fastpath_codex_recovery_send_output
+    local fastpath_codex_recovery_intent_present_after_fastpath fastpath_codex_recovery_terminal_present_after_fastpath fastpath_codex_recovery_terminal_present_after_after
     fastpath_codex_recovery_tmp="$(secure_temp_dir telegram-safe-fastpath-codex-recovery)"
     fastpath_codex_recovery_send_script="$fastpath_codex_recovery_tmp/send.sh"
     fastpath_codex_recovery_log="$fastpath_codex_recovery_tmp/send.log"
@@ -410,6 +410,19 @@ EOF
         fastpath_codex_recovery_terminal_present_after_fastpath=false
     fi
     rm -f "$fastpath_codex_recovery_session_suppress" "$fastpath_codex_recovery_chat_suppress"
+    fastpath_codex_recovery_after_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_codex_recovery_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:fastcodexrecovery","provider":"openai-codex","model":"gpt-5.4","text":"Проверил — и да, тут инструмент расписания реально сломан: на list он снова ответил missing action parameter.","tool_calls":[{"name":"cron","arguments":{"action":"list"}}]}
+EOF
+    )"
+    if [[ -f "$fastpath_codex_recovery_terminal_file" ]]; then
+        fastpath_codex_recovery_terminal_present_after_after=true
+    else
+        fastpath_codex_recovery_terminal_present_after_after=false
+    fi
     fastpath_codex_recovery_tool_output="$(
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
@@ -431,6 +444,10 @@ EOF
        [[ ! -s "$fastpath_codex_recovery_stdout" ]] && \
        [[ "$fastpath_codex_recovery_intent_present_after_fastpath" == true ]] && \
        [[ "$fastpath_codex_recovery_terminal_present_after_fastpath" == true ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_after_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_after_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_after_output" && \
+       [[ "$fastpath_codex_recovery_terminal_present_after_after" == true ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_tool_output" && \
        jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_tool_output" && \
        jq -e '.data.arguments.command | contains("codex-update turn already resolved")' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_tool_output" && \
@@ -438,10 +455,10 @@ EOF
        jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_send_output" && \
        jq -e '.data.text | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_send_output" && \
        jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_send_output" && \
-       jq -e '.data.text | test("Activity log|Searching memory|missing '\''action'\'' parameter|missing '\''query'\'' parameter|missing '\''command'\'' parameter|в памяти у меня явно записано|Ежедневно проверяю стабильные обновления Codex CLI") | not' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_send_output"; then
+       jq -e '.data.text | test("Activity log|Searching memory|missing '\''action'\'' parameter|missing '\''query'\'' parameter|missing '\''command'\'' parameter|missing action parameter|missing query parameter|missing command parameter|в памяти у меня явно записано|Ежедневно проверяю стабильные обновления Codex CLI") | not' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_send_output"; then
         test_pass
     else
-        test_fail "Codex-update direct fastpath must keep terminal fallback state so a lost suppression marker still blocks late tools and rewrites memory-based false positives into the deterministic scheduler contract"
+        test_fail "Codex-update direct fastpath must keep terminal fallback state so a lost suppression marker still blanks the first late AfterLLMCall, blocks late tools, and rewrites memory-based false positives into the deterministic scheduler contract"
     fi
 
     test_start "component_before_llm_guard_keeps_status_precedence_over_codex_update_direct_fastpath_on_mixed_turn"

@@ -4,7 +4,7 @@ date: 2026-04-14
 severity: P1
 category: product
 tags: [telegram, codex-update, direct-fastpath, suppression, semantic-review, rca]
-root_cause: "After a successful codex-update direct fastpath send, the guard immediately cleared persisted turn intent and relied only on suppression markers. If same-turn suppression lookup was later unavailable, late tool calls and final MessageSending tails no longer had codex-update fallback context, so memory-based false positives could escape. The authoritative UAT semantic layer also prioritized generic activity-leak classification ahead of codex-update scheduler semantics and underfit replies that claimed cron existence from chat memory."
+root_cause: "After a successful codex-update direct fastpath send, the guard immediately cleared persisted turn intent and relied only on suppression markers. If same-turn suppression lookup was later unavailable, late tool calls and final MessageSending tails no longer had codex-update fallback context, so memory-based false positives could escape. The authoritative UAT semantic layer also prioritized generic activity-leak classification ahead of codex-update scheduler semantics, and the leak taxonomy underfit both unquoted missing action/query/command parameter variants and the highest-risk late AfterLLMCall recovery path."
 ---
 
 # RCA: Telegram codex-update direct fastpath cleared fallback state too early
@@ -54,7 +54,8 @@ Context: beads `moltinger-ch8h`
 
 1. direct fastpath всё ещё считал suppression markers единственным источником истины и очищал `turn_intent` слишком рано;
 2. semantic review в authoritative UAT первым срабатывал на generic `semantic_activity_leak`, а не на codex-update scheduler contract violation;
-3. reply taxonomy в web probe была узкой и выделяла только `missing 'action' parameter`, но не `query/command`.
+3. reply taxonomy в web probe была узкой и выделяла только quoted `missing 'action' parameter`, но не unquoted `action/query/command` variants.
+4. regression coverage не доказывал самый рискованный late `AfterLLMCall` path после потери suppression-state.
 
 ## Evidence
 
@@ -67,6 +68,7 @@ Context: beads `moltinger-ch8h`
    - но очищал `turn_intent`
    - и не оставлял отдельный fallback path, если suppression files потом исчезали.
 3. После точечного source fix локальный repro с искусственно потерянными `.suppress` файлами показал:
+   - первый late `AfterLLMCall` обнуляет dirty text/tool_calls и сохраняет terminal marker до final delivery;
    - `BeforeToolCall` всё ещё terminalizes same-turn follow-up через preserved codex-update context
    - `MessageSending` переписывается обратно в deterministic scheduler reply вместо memory-based false positive.
 
@@ -78,14 +80,14 @@ Context: beads `moltinger-ch8h`
 | 2 | Почему late tail вообще смог пройти после успешного direct fastpath? | Потому что direct fastpath оставлял только suppression markers и сразу очищал persisted `turn_intent`. |
 | 3 | Почему этого оказалось недостаточно? | Потому что при потере или недоступности suppression lookup у поздних `BeforeToolCall`/`MessageSending` событий больше не оставалось codex-update fallback context. |
 | 4 | Почему authoritative UAT не формулировал это как codex-update scheduler contract breach? | Потому что semantic review сначала видел generic activity leak и только потом codex-update-specific semantics; positive memory-proof reply попадал под более грубую классификацию. |
-| 5 | Почему reply taxonomy дополнительно недооценивала такой ответ? | Потому что error signature and scheduler-memory heuristics были заточены под старый negative false-negative и не покрывали positive memory assertion плюс `missing 'query'/'command' parameter`. |
+| 5 | Почему reply taxonomy дополнительно недооценивала такой ответ? | Потому что error signature and scheduler-memory heuristics были заточены под старый negative false-negative и quoted leaks, не покрывали positive memory assertion плюс unquoted `missing action/query/command parameter`, а regression suite не доказывал первый late `AfterLLMCall` suppression-loss path. |
 
 ## Root Cause
 
 Корневой дефект состоял из двух связанных частей:
 
 1. `scripts/telegram-safe-llm-guard.sh` после успешного `codex-update` direct fastpath очищал persisted `turn_intent` слишком рано и полагался только на `.suppress` markers. При потере suppression-state поздний same-turn tail больше не знал, что это `codex-update` turn, и мог уйти в memory/tool leakage.
-2. `scripts/telegram-e2e-on-demand.sh` и `scripts/telegram-web-user-probe.mjs` были недоделаны для этой новой формы дефекта: semantic/UAT слой видел generic activity leak раньше domain-specific scheduler breach, а probe taxonomy недооценивала `missing 'query'/'command' parameter`.
+2. `scripts/telegram-e2e-on-demand.sh` и `scripts/telegram-web-user-probe.mjs` были недоделаны для этой новой формы дефекта: semantic/UAT слой видел generic activity leak раньше domain-specific scheduler breach, а probe taxonomy недооценивала quoted/unquoted `missing action/query/command parameter` leaks.
 
 ## Fixes Applied
 
@@ -95,16 +97,19 @@ Context: beads `moltinger-ch8h`
    - оставляет persisted codex-update intent до тех пор, пока terminal delivery действительно не завершит turn.
 2. `tests/component/test_telegram_safe_llm_guard.sh`
    - добавлен regression на искусственную потерю suppression-state после successful direct fastpath;
+   - отдельно проверяется, что первый late `AfterLLMCall` гасит dirty text/tool_calls, но сохраняет terminal marker;
    - проверяется, что поздний `BeforeToolCall` и `MessageSending` всё равно terminalize/rewrite dirty tail.
 3. `scripts/telegram-e2e-on-demand.sh`
-   - расширен matcher `reply_has_codex_update_scheduler_memory_false_negative()` под positive memory assertions и leaked `action/query/command` parameter variants;
+   - расширен matcher `reply_has_codex_update_scheduler_memory_false_negative()` под positive memory assertions и leaked quoted/unquoted `action/query/command` parameter variants;
    - codex-update semantic checks подняты выше generic activity leak classification.
 4. `tests/component/test_telegram_remote_uat_contract.sh`
-   - добавлен authoritative semantic regression на positive memory-based false positive reply.
+   - добавлены authoritative semantic regressions на positive memory-based false positive reply;
+   - отдельно покрыты unquoted `missing action/query/command parameter` variants.
 5. `scripts/telegram-web-user-probe.mjs`
-   - расширен error-signature regex для `missing 'query' parameter` и `missing 'command' parameter`.
+   - расширен error-signature regex для quoted/unquoted `missing 'action'/'query'/'command' parameter`.
 6. `tests/component/test_telegram_web_probe_correlation.sh`
-   - добавлен regression на mixed `action/query/command` parameter error signature.
+   - добавлен regression на mixed `action/query/command` parameter error signature;
+   - отдельно покрыты isolated unquoted `action/query/command` variants.
 
 ## Verification
 
@@ -121,10 +126,12 @@ Context: beads `moltinger-ch8h`
 
 1. Для high-risk Telegram-safe routes нельзя очищать domain-specific fallback state сразу после direct fastpath send; suppression markers сами по себе недостаточны.
 2. Если defect имеет явную domain семантику (`codex-update scheduler contract breach`), authoritative UAT должен классифицировать её раньше generic leak buckets.
-3. Reply taxonomy для Telegram UAT должна покрывать не только один observed error string, а всё семейство близких tool-parameter leaks.
+3. Reply taxonomy для Telegram UAT должна покрывать не только один observed error string, а всё семейство близких quoted/unquoted tool-parameter leaks.
+4. Для same-turn recovery нужны тесты не только на final delivery, но и на первый late `AfterLLMCall`, иначе suppression-loss regressions останутся невидимыми.
 
 ## Lessons
 
 1. `direct fastpath delivered` не означает `fallback state больше не нужен`; same-turn recovery нужно держать до фактического terminal completion.
 2. Generic leak detector не должен затмевать более полезную domain-specific классификацию, если prompt family уже распознан.
 3. Один новый production reply variant обычно означает не только runtime defect, но и пробел в semantic/UAT taxonomy; чинить надо оба слоя сразу.
+4. Изолированные quoted и unquoted leak-формы нужно тестировать отдельно, иначе смешанный пример создаёт ложную уверенность в покрытии.

@@ -690,16 +690,32 @@ reply_has_codex_update_state_memory_false_negative() {
   return 1
 }
 
+reply_has_missing_parameter_family_leak() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}")"
+  [[ -n "$normalized" ]] || return 1
+
+  if [[ "$normalized" =~ [Mm]issing[[:space:]]+\'?(action|query|command)\'?[[:space:]]+parameter ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 reply_has_codex_update_scheduler_memory_false_negative() {
   local normalized
   normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   case "$normalized" in
-    *"проверить по памяти/расписанию"*|*"Проверить по памяти/расписанию"*|*"инструмент поиска памяти"*|*"Инструмент поиска памяти"*|*"не вижу подтверждения, что такой крон"*|*"Не вижу подтверждения, что такой крон"*|*"подтвердить наличие такого крона я сейчас не могу"*|*"Подтвердить наличие такого крона я сейчас не могу"*|*"в памяти у меня явно записано"*|*"В памяти у меня явно записано"*|*"по сохранённой памяти ответ однозначный"*|*"По сохранённой памяти ответ однозначный"*|*"ежедневно проверяю стабильные обновления Codex CLI"*|*"Ежедневно проверяю стабильные обновления Codex CLI"*|*"Searching memory"*|*"missing 'query' parameter"*|*"missing 'action' parameter"*|*"missing 'command' parameter"*)
+    *"проверить по памяти/расписанию"*|*"Проверить по памяти/расписанию"*|*"инструмент поиска памяти"*|*"Инструмент поиска памяти"*|*"не вижу подтверждения, что такой крон"*|*"Не вижу подтверждения, что такой крон"*|*"подтвердить наличие такого крона я сейчас не могу"*|*"Подтвердить наличие такого крона я сейчас не могу"*|*"в памяти у меня явно записано"*|*"В памяти у меня явно записано"*|*"по сохранённой памяти ответ однозначный"*|*"По сохранённой памяти ответ однозначный"*|*"ежедневно проверяю стабильные обновления Codex CLI"*|*"Ежедневно проверяю стабильные обновления Codex CLI"*|*"Searching memory"*)
       return 0
       ;;
   esac
+
+  if reply_has_missing_parameter_family_leak "$normalized"; then
+    return 0
+  fi
 
   return 1
 }

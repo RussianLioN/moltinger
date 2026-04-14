@@ -358,6 +358,48 @@ NODE
         test_fail "Activity-log timeout summaries must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_marks_unquoted_missing_action_parameter_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+if (!isReplyErrorSignature("cron list снова вернул missing action parameter")) {
+  throw new Error("expected unquoted missing action parameter to be rejected");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Unquoted missing action parameter replies must be rejected by reply-quality checks"
+    fi
+
+    test_start "component_telegram_web_probe_marks_unquoted_missing_query_parameter_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+if (!isReplyErrorSignature("memory_search снова вернул missing query parameter")) {
+  throw new Error("expected unquoted missing query parameter to be rejected");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Unquoted missing query parameter replies must be rejected by reply-quality checks"
+    fi
+
+    test_start "component_telegram_web_probe_marks_unquoted_missing_command_parameter_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+if (!isReplyErrorSignature("exec снова вернул missing command parameter")) {
+  throw new Error("expected unquoted missing command parameter to be rejected");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Unquoted missing command parameter replies must be rejected by reply-quality checks"
+    fi
+
     test_start "component_telegram_web_probe_rejects_emoji_prefixed_internal_telemetry_replies"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
