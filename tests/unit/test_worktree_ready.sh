@@ -179,6 +179,30 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+create_fake_git_observer_bin() {
+    local fixture_root="$1"
+    local real_git_bin="$2"
+    local fake_bin="${fixture_root}/git-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/git" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "\${FAKE_GIT_CAPTURE_REMOTE_DELETE:-0}" == "1" ]] \
+  && [[ "\${1:-}" == "-C" && "\${3:-}" == "push" && "\${4:-}" == "origin" && "\${5:-}" == "--delete" ]]; then
+  if [[ -n "\${FAKE_GIT_REMOTE_DELETE_LOG:-}" ]]; then
+    printf '%s\n' "\${6:-}" >> "\${FAKE_GIT_REMOTE_DELETE_LOG}"
+  fi
+fi
+
+exec "${real_git_bin}" "\$@"
+EOF
+    chmod +x "${fake_bin}/git"
+
+    printf '%s\n' "${fake_bin}"
+}
+
 run_worktree_plan() {
     local repo_dir="$1"
     local fake_bin="$2"
@@ -1791,6 +1815,57 @@ test_cleanup_accepts_alias_path_when_branch_matches_same_worktree() {
     test_pass
 }
 
+test_cleanup_alias_path_still_blocks_on_stale_beads_metadata() {
+    test_start "worktree_ready_cleanup_alias_path_still_blocks_on_stale_beads_metadata"
+
+    local fixture_root repo_dir fake_bin path_worktree alias_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    path_worktree="${fixture_root}/moltinger-path-target"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$path_worktree" "feat/path-target" "main"
+    path_worktree="$(cd "$path_worktree" && pwd -P)"
+    alias_path="${fixture_root}/moltinger-path-target-alias"
+    ln -s "$path_worktree" "$alias_path"
+    (
+        cd "$path_worktree"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/path-target >/dev/null
+        git merge --no-ff feat/path-target -m "fixture: merge feature branch" >/dev/null
+        git push origin main >/dev/null
+    )
+    bd_json="$(printf '[{\"name\":\"path-target\",\"path\":\"%s\",\"branch\":\"feat/path-target\",\"beads_state\":\"local\"}]\n' "${path_worktree}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_WORKTREE_REMOVE_CANONICALIZE=1 \
+        BD_WORKTREE_REMOVE_NOOP=1 \
+        BD_WORKTREE_REMOVE_RC=23 \
+        BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --path "$alias_path" --branch feat/path-target 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Cleanup should fail closed when alias-path fallback leaves stale Beads metadata"
+    assert_contains "$output" 'Status: cleanup_blocked' "Alias-path cleanup should still block on stale Beads metadata"
+    assert_contains "$output" 'Beads still reports' "Alias-path cleanup should surface the Beads reconciliation warning"
+    assert_contains "$output" 'Repair Command: cd ' "Alias-path cleanup should expose the repair command when Beads metadata remains stale"
+    if [[ -d "$path_worktree" ]]; then
+        test_fail "Cleanup should remove the real worktree before blocking on stale Beads metadata"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_cleanup_refreshes_remote_refs_before_using_local_merge_proof() {
     test_start "worktree_ready_cleanup_refreshes_remote_refs_before_using_local_merge_proof"
 
@@ -2024,11 +2099,13 @@ test_cleanup_delete_branch_uses_github_api_remote_delete_fallback() {
 test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists() {
     test_start "worktree_ready_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists"
 
-    local fixture_root repo_dir fake_bin existing_path output rc
+    local fixture_root repo_dir fake_bin fake_git_bin existing_path output rc remote_delete_log
     fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     repo_dir="$(cd "$repo_dir" && pwd -P)"
     fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    fake_git_bin="$(create_fake_git_observer_bin "$fixture_root" "$(command -v git)")"
+    remote_delete_log="${fixture_root}/remote-delete.log"
     existing_path="${fixture_root}/moltinger-remote-uat-hardening"
     git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
     existing_path="$(cd "$existing_path" && pwd -P)"
@@ -2053,7 +2130,9 @@ test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists() {
         BD_WORKTREE_REMOVE_NOOP=1 \
         BD_WORKTREE_REMOVE_RC=23 \
         BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
-        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening --delete-branch 2>&1
+        FAKE_GIT_CAPTURE_REMOTE_DELETE=1 \
+        FAKE_GIT_REMOTE_DELETE_LOG="${remote_delete_log}" \
+        run_worktree_cleanup "$repo_dir" "${fake_git_bin}:${fake_bin}" --branch feat/remote-uat-hardening --delete-branch 2>&1
         printf '\n__RC__=%s\n' "$?"
     )"
     rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
@@ -2072,6 +2151,9 @@ test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists() {
     fi
     if ! git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
         test_fail "Cleanup must preserve the remote-tracking ref when authoritative branch-delete proof is unavailable"
+    fi
+    if [[ -f "${remote_delete_log}" ]] && grep -q 'feat/remote-uat-hardening' "${remote_delete_log}"; then
+        test_fail "Cleanup must not attempt remote deletion when only local stale proof is available"
     fi
 
     rm -rf "$fixture_root"
@@ -2275,6 +2357,7 @@ run_all_tests() {
     test_cleanup_does_not_bypass_false_unpushed_guard_for_dirty_worktree
     test_cleanup_blocks_conflicting_path_and_branch_arguments
     test_cleanup_accepts_alias_path_when_branch_matches_same_worktree
+    test_cleanup_alias_path_still_blocks_on_stale_beads_metadata
     test_cleanup_refreshes_remote_refs_before_using_local_merge_proof
     test_cleanup_uses_local_stale_proof_for_worktree_fallback_when_refresh_fails
     test_cleanup_blocks_when_git_fallback_leaves_beads_metadata_stale

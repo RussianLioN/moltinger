@@ -3266,6 +3266,7 @@ execute_cleanup_worktree_action() {
   local fallback_merge_check=""
   local fallback_default_branch_name=""
   local fallback_bd_record=""
+  local fallback_bd_lookup_path=""
   local saved_merge_check=""
   local saved_default_branch_name=""
   local default_branch_name=""
@@ -3373,7 +3374,8 @@ execute_cleanup_worktree_action() {
           report_merge_check="${fallback_merge_check}"
           report_default_branch_name="${fallback_default_branch_name}"
           add_warning "bd worktree remove reported unpushed commits for merged clean worktree ${cleanup_path}; git worktree remove fallback succeeded."
-          fallback_bd_record="$(find_bd_worktree_by_path "${cleanup_path}" || true)"
+          fallback_bd_lookup_path="${report_worktree_path:-${discovered_worktree_path:-${cleanup_path}}}"
+          fallback_bd_record="$(find_bd_worktree_by_path "${fallback_bd_lookup_path}" || true)"
           fallback_bd_record="$(extract_bd_worktree_record_from_payload "${fallback_bd_record}" || true)"
           if [[ -n "${fallback_bd_record}" ]]; then
             report_cleanup_reconcile_required="true"
@@ -3531,6 +3533,10 @@ execute_cleanup_branch_actions() {
     fi
   else
     report_local_branch_action="already_missing"
+  fi
+
+  if [[ "${local_only_branch_delete_allowed}" == "true" ]]; then
+    return 1
   fi
 
   if remote_branch_exists "${cleanup_branch}"; then
