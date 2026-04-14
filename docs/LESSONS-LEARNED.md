@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-04-14
-**Total Lessons**: 77
+**Generated**: 2026-04-15
+**Total Lessons**: 78
 
 ---
 
@@ -53,7 +53,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (23 lessons)
+#### P2 (24 lessons)
+- [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
 - [Telegram skill-detail remained non-terminal and repo skills lacked a shared Telegram-safe summary contract](../docs/rca/2026-04-05-telegram-skill-detail-general-hardening.md)
 - [Tracked deploy empty stdout broke GitHub Actions JSON contract](../docs/rca/2026-04-02-tracked-deploy-empty-stdout-broke-json-contract.md)
 - [Deploy stall watchdog self-failed on oversized GitHub Actions payloads](../docs/rca/2026-03-28-deploy-stall-watchdog-argjson-overflow.md)
@@ -193,11 +194,14 @@
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
+#### tooling (1 lessons)
+- [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
+
 
 ### Popular Tags
 
+- `rca` (26 lessons)
 - `moltis` (26 lessons)
-- `rca` (25 lessons)
 - `telegram` (20 lessons)
 - `deploy` (19 lessons)
 - `github-actions` (17 lessons)
@@ -214,10 +218,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 77 |
+| Total Lessons | 78 |
 | Critical (P0/P1) | 38 |
-| Categories | 7 |
-| Unique Tags | 157 |
+| Categories | 8 |
+| Unique Tags | 160 |
 
 ---
 

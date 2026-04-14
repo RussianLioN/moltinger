@@ -1061,6 +1061,26 @@ delete_remote_branch_via_github_api() {
   git -C "${resolved_repo_root}" update-ref -d "refs/remotes/origin/${cleanup_branch}" >/dev/null 2>&1 || true
 }
 
+github_branch_head_sha() {
+  local cleanup_branch="$1"
+  local repo_name_with_owner=""
+  local ref_json=""
+  local ref_sha=""
+
+  repo_name_with_owner="$(github_repo_name_with_owner || true)"
+  if [[ -z "${repo_name_with_owner}" ]]; then
+    return 1
+  fi
+
+  ref_json="$(gh_run_in_repo api "repos/${repo_name_with_owner}/git/ref/heads/${cleanup_branch}" 2>/dev/null || true)"
+  ref_sha="$(printf '%s\n' "${ref_json}" | jq -r '.object.sha // empty' 2>/dev/null || true)"
+  if [[ -z "${ref_sha}" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${ref_sha}"
+}
+
 resolve_ref_sha() {
   local ref_name="$1"
 
@@ -1072,6 +1092,24 @@ ref_is_ancestor_of_remote_default() {
   local default_branch_name="$2"
 
   git -C "${resolved_repo_root}" merge-base --is-ancestor "${candidate_ref}" "refs/remotes/origin/${default_branch_name}" 2>/dev/null
+}
+
+refresh_cleanup_remote_refs() {
+  git -C "${resolved_repo_root}" fetch --prune --no-tags origin >/dev/null 2>&1
+}
+
+cleanup_output_indicates_false_unpushed_guard() {
+  local output="$1"
+
+  [[ "${output}" == *"safety check failed"* && "${output}" == *"unpushed commit"* ]]
+}
+
+worktree_has_clean_status() {
+  local worktree_path="$1"
+  local status_output=""
+
+  status_output="$(git -C "${worktree_path}" status --short --untracked-files=normal 2>/dev/null || true)"
+  [[ -z "${status_output}" ]]
 }
 
 git_worktree_record_for_path() {
@@ -1160,6 +1198,7 @@ resolve_cleanup_merge_proof() {
   local local_sha=""
   local remote_sha=""
   local expected_sha=""
+  local remote_refresh_ok="true"
   local repo_json=""
   local pr_json=""
   local repo_delete_branch_on_merge=""
@@ -1169,20 +1208,32 @@ resolve_cleanup_merge_proof() {
   report_merge_check="not_requested"
   report_default_branch_name="${default_branch_name}"
 
-  if local_branch_exists "${cleanup_branch}"; then
-    local_sha="$(resolve_ref_sha "refs/heads/${cleanup_branch}")"
-    if [[ -n "${local_sha}" ]] && ref_is_ancestor_of_remote_default "refs/heads/${cleanup_branch}" "${default_branch_name}"; then
-      report_merge_check="git_ancestor_local"
-      return 0
-    fi
+  if ! refresh_cleanup_remote_refs; then
+    remote_refresh_ok="false"
   fi
 
-  if remote_branch_exists "${cleanup_branch}"; then
+  if [[ "${remote_refresh_ok}" == "true" ]] && remote_branch_exists "${cleanup_branch}"; then
     remote_sha="$(resolve_ref_sha "refs/remotes/origin/${cleanup_branch}")"
     if [[ -n "${remote_sha}" ]] && ref_is_ancestor_of_remote_default "refs/remotes/origin/${cleanup_branch}" "${default_branch_name}"; then
       report_merge_check="git_ancestor_remote"
       return 0
     fi
+  fi
+
+  if [[ "${remote_refresh_ok}" == "true" ]] && local_branch_exists "${cleanup_branch}"; then
+    local_sha="$(resolve_ref_sha "refs/heads/${cleanup_branch}")"
+    if [[ -n "${local_sha}" && -z "${remote_sha}" ]] && ref_is_ancestor_of_remote_default "refs/heads/${cleanup_branch}" "${default_branch_name}"; then
+      report_merge_check="git_ancestor_local"
+      return 0
+    fi
+  fi
+
+  if [[ "${remote_refresh_ok}" != "true" ]] && origin_uses_github && gh_available_and_authenticated && command -v jq >/dev/null 2>&1; then
+    remote_sha="$(github_branch_head_sha "${cleanup_branch}" || true)"
+  fi
+
+  if [[ -z "${local_sha}" ]] && local_branch_exists "${cleanup_branch}"; then
+    local_sha="$(resolve_ref_sha "refs/heads/${cleanup_branch}")"
   fi
 
   expected_sha="${remote_sha:-${local_sha}}"
@@ -1192,11 +1243,19 @@ resolve_cleanup_merge_proof() {
   fi
 
   if ! origin_uses_github; then
+    if [[ "${remote_refresh_ok}" != "true" ]]; then
+      report_merge_check="remote_refresh_failed"
+      return 1
+    fi
     report_merge_check="not_merged"
     return 1
   fi
 
   if ! gh_available_and_authenticated || ! command -v jq >/dev/null 2>&1; then
+    if [[ "${remote_refresh_ok}" != "true" ]]; then
+      report_merge_check="remote_refresh_failed"
+      return 1
+    fi
     report_merge_check="github_unavailable"
     return 1
   fi
@@ -1240,6 +1299,40 @@ resolve_cleanup_merge_proof() {
     report_merge_check="not_merged"
   fi
   return 1
+}
+
+resolve_cleanup_target_branch_name() {
+  if [[ -n "${report_worktree_path}" && -n "${discovered_worktree_path}" && "${report_worktree_path}" == "${discovered_worktree_path}" && -n "${discovered_branch_name}" ]]; then
+    printf '%s\n' "${discovered_branch_name}"
+    return 0
+  fi
+
+  if [[ -n "${report_branch_name}" && "${report_branch_name}" != "n/a" ]]; then
+    printf '%s\n' "${report_branch_name}"
+    return 0
+  fi
+
+  if [[ -n "${branch}" ]]; then
+    printf '%s\n' "${branch}"
+    return 0
+  fi
+
+  return 1
+}
+
+cleanup_target_arguments_conflict() {
+  local target_branch=""
+
+  if [[ -z "${branch}" || -z "${target_path}" ]]; then
+    return 1
+  fi
+
+  if [[ -z "${discovered_worktree_path}" || "${discovered_worktree_path}" != "${target_path}" ]]; then
+    return 0
+  fi
+
+  target_branch="$(resolve_cleanup_target_branch_name || true)"
+  [[ -z "${target_branch}" || "${target_branch}" != "${branch}" ]]
 }
 
 discover_issue_context() {
@@ -3062,10 +3155,19 @@ set_finish_next_steps() {
 execute_cleanup_worktree_action() {
   local cleanup_path="${report_worktree_path:-${target_path:-}}"
   local record=""
+  local record_branch=""
   local prunable_reason=""
   local locked_reason=""
   local bd_command=""
   local output=""
+  local fallback_branch=""
+  local fallback_output=""
+  local fallback_rc=0
+  local fallback_merge_check=""
+  local fallback_default_branch_name=""
+  local saved_merge_check=""
+  local saved_default_branch_name=""
+  local default_branch_name=""
   local rc=0
 
   if [[ -z "${cleanup_path}" || "${cleanup_path}" == "n/a" ]]; then
@@ -3094,7 +3196,7 @@ execute_cleanup_worktree_action() {
     return 0
   fi
 
-  IFS=$'\t' read -r _ _ prunable_reason locked_reason <<< "${record}"
+  IFS=$'\t' read -r _ record_branch prunable_reason locked_reason <<< "${record}"
   if [[ -n "${locked_reason}" ]]; then
     report_worktree_action="blocked"
     add_warning "Cleanup refuses to remove a locked worktree at ${cleanup_path}."
@@ -3144,6 +3246,43 @@ execute_cleanup_worktree_action() {
   set -e
 
   if [[ "${rc}" -ne 0 ]]; then
+    fallback_branch="$(resolve_cleanup_target_branch_name || true)"
+    if [[ -z "${fallback_branch}" ]]; then
+      fallback_branch="${record_branch}"
+    fi
+    if cleanup_output_indicates_false_unpushed_guard "${output}" \
+      && [[ -n "${fallback_branch}" ]] \
+      && worktree_has_clean_status "${cleanup_path}"; then
+      saved_merge_check="${report_merge_check}"
+      saved_default_branch_name="${report_default_branch_name}"
+      default_branch_name="$(resolve_default_branch_name)"
+      if resolve_cleanup_merge_proof "${fallback_branch}" "${default_branch_name}"; then
+        fallback_merge_check="${report_merge_check}"
+        fallback_default_branch_name="${report_default_branch_name}"
+        report_merge_check="${saved_merge_check}"
+        report_default_branch_name="${saved_default_branch_name}"
+
+        set +e
+        fallback_output="$(git -C "${resolved_repo_root}" worktree remove "${cleanup_path}" 2>&1)"
+        fallback_rc=$?
+        set -e
+
+        if [[ "${fallback_rc}" -eq 0 ]] && wait_for_worktree_removal "${cleanup_path}"; then
+          report_worktree_action="removed"
+          report_merge_check="${fallback_merge_check}"
+          report_default_branch_name="${fallback_default_branch_name}"
+          add_warning "bd worktree remove reported unpushed commits for merged clean worktree ${cleanup_path}; git worktree remove fallback succeeded."
+          return 0
+        fi
+
+        report_merge_check="${fallback_merge_check}"
+        report_default_branch_name="${fallback_default_branch_name}"
+        if [[ -n "${fallback_output}" ]]; then
+          add_warning "$(printf '%s' "${fallback_output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+        fi
+      fi
+    fi
+
     report_worktree_action="blocked"
     add_warning "bd worktree remove failed for ${cleanup_path}."
     if [[ -n "${output}" ]]; then
@@ -3181,7 +3320,7 @@ execute_cleanup_worktree_action() {
 }
 
 execute_cleanup_branch_actions() {
-  local cleanup_branch="${report_branch_name:-${branch:-}}"
+  local cleanup_branch=""
   local default_branch_name=""
   local output=""
   local local_delete_flag="-d"
@@ -3191,6 +3330,8 @@ execute_cleanup_branch_actions() {
   report_remote_branch_action="not_requested"
   report_merge_check="not_requested"
   report_default_branch_name=""
+
+  cleanup_branch="$(resolve_cleanup_target_branch_name || true)"
 
   if [[ "${delete_branch_requested}" != "true" ]]; then
     return 0
@@ -3225,6 +3366,9 @@ execute_cleanup_branch_actions() {
 
     add_warning "Cleanup could not establish merged proof for branch '${cleanup_branch}'."
     case "${report_merge_check}" in
+      remote_refresh_failed)
+        add_next_step "git -C $(shell_quote "${resolved_repo_root}") fetch --prune --no-tags origin"
+        ;;
       github_unavailable)
         add_next_step "gh auth status -h github.com"
         ;;
@@ -4088,6 +4232,22 @@ render_cleanup_contract_report() {
       add_next_step "scripts/worktree-ready.sh cleanup --branch $(shell_quote "${branch}")${delete_flag}"
     elif [[ -n "${target_path}" ]]; then
       add_next_step "scripts/worktree-ready.sh cleanup --path $(shell_quote "${target_path}")${delete_flag}"
+    fi
+    render_cleanup_report
+    set_command_exit_code_from_cleanup
+    return 0
+  fi
+
+  if cleanup_target_arguments_conflict; then
+    report_phase="cleanup"
+    report_boundary="none"
+    report_status="cleanup_blocked"
+    report_final_state="cleanup_blocked"
+    report_worktree_action="blocked"
+    add_warning "Cleanup arguments conflict: --path $(shell_quote "${target_path}") resolves to branch '${discovered_branch_name:-unknown}', not requested branch '${branch}'."
+    add_next_step "Retry cleanup with --path $(shell_quote "${target_path}") only"
+    if [[ -n "${discovered_branch_name}" ]]; then
+      add_next_step "Retry cleanup with --branch $(shell_quote "${discovered_branch_name}") only"
     fi
     render_cleanup_report
     set_command_exit_code_from_cleanup
