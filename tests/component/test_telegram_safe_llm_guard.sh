@@ -346,6 +346,119 @@ EOF
         test_fail "Codex-update turns must stay on the deterministic hard-override path even when direct fastpath is enabled, because out-of-band send races with later bad replies on live Telegram"
     fi
 
+    test_start "component_codex_update_terminalizes_blocked_followup_tool_turn_after_hard_override"
+    local codex_terminal_tmp codex_terminal_intent_dir codex_terminal_marker codex_terminal_session_suppress codex_terminal_chat_suppress
+    local codex_terminal_before_output codex_terminal_tool_output codex_terminal_repeat_before_output codex_terminal_after_output
+    local codex_terminal_send_output codex_terminal_repeat_send_output codex_terminal_reply_text
+    local codex_terminal_marker_present_after_tool codex_terminal_suppress_absent_after_tool
+    local codex_terminal_marker_cleared_after_send codex_terminal_session_suppress_present_after_send codex_terminal_chat_suppress_present_after_send
+    codex_terminal_tmp="$(secure_temp_dir telegram-safe-codex-update-terminal)"
+    codex_terminal_intent_dir="$codex_terminal_tmp/intent"
+    codex_terminal_marker="$codex_terminal_intent_dir/session_codex-terminal.terminal"
+    codex_terminal_session_suppress="$codex_terminal_intent_dir/session_codex-terminal.suppress"
+    codex_terminal_chat_suppress="$codex_terminal_intent_dir/chat-262872984.suppress"
+    codex_terminal_reply_text='По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search.'
+    codex_terminal_before_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    codex_terminal_tool_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"cron","arguments":{"action":"list"}}
+EOF
+    )"
+    if [[ -f "$codex_terminal_marker" ]]; then
+        codex_terminal_marker_present_after_tool=true
+    else
+        codex_terminal_marker_present_after_tool=false
+    fi
+    if [[ ! -e "$codex_terminal_session_suppress" ]]; then
+        codex_terminal_suppress_absent_after_tool=true
+    else
+        codex_terminal_suppress_absent_after_tool=false
+    fi
+    codex_terminal_repeat_before_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":2}}
+EOF
+    )"
+    codex_terminal_after_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:codex-terminal","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Проверил — и да, тут инструмент расписания реально сломан: на list он снова ответил missing action parameter.","tool_calls":[{"name":"cron","arguments":{"action":"list"}}]}
+EOF
+    )"
+    codex_terminal_send_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-terminal","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1401,"text":""}}
+EOF
+    )"
+    if [[ ! -e "$codex_terminal_marker" ]]; then
+        codex_terminal_marker_cleared_after_send=true
+    else
+        codex_terminal_marker_cleared_after_send=false
+    fi
+    if [[ -f "$codex_terminal_session_suppress" ]]; then
+        codex_terminal_session_suppress_present_after_send=true
+    else
+        codex_terminal_session_suppress_present_after_send=false
+    fi
+    if [[ -f "$codex_terminal_chat_suppress" ]]; then
+        codex_terminal_chat_suppress_present_after_send=true
+    else
+        codex_terminal_chat_suppress_present_after_send=false
+    fi
+    codex_terminal_repeat_send_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-terminal","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1402,"text":"Проверил — и да, тут инструмент расписания реально сломан: на list он снова ответил missing action parameter."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_before_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$codex_terminal_before_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_tool_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$codex_terminal_tool_output" && \
+       jq -e '.data.arguments.command | contains("codex-update turn already resolved by the hard override")' >/dev/null 2>&1 <<<"$codex_terminal_tool_output" && \
+       [[ "$codex_terminal_marker_present_after_tool" == true ]] && \
+       [[ "$codex_terminal_suppress_absent_after_tool" == true ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_after_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$codex_terminal_after_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$codex_terminal_after_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_send_output" && \
+       jq -e --arg reply "$codex_terminal_reply_text" '.data.text == $reply' >/dev/null 2>&1 <<<"$codex_terminal_send_output" && \
+       jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$codex_terminal_send_output" && \
+       jq -e '.data.to == "262872984"' >/dev/null 2>&1 <<<"$codex_terminal_send_output" && \
+       jq -e '.data.reply_to_message_id == 1401' >/dev/null 2>&1 <<<"$codex_terminal_send_output" && \
+       [[ "$codex_terminal_marker_cleared_after_send" == true ]] && \
+       [[ "$codex_terminal_session_suppress_present_after_send" == true ]] && \
+       [[ "$codex_terminal_chat_suppress_present_after_send" == true ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_send_output" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_send_output"; then
+        test_pass
+    else
+        test_fail "Codex-update hard override must terminalize a blocked same-turn tool follow-up: suppress the repeated LLM/tool churn, deliver the deterministic scheduler reply once, and drop any later dirty tail"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_skill_visibility_via_bot_send_when_enabled"
     local fastpath_visibility_tmp fastpath_visibility_send_script fastpath_visibility_log fastpath_visibility_stdout fastpath_visibility_stderr fastpath_visibility_status fastpath_visibility_intent_dir fastpath_visibility_suppress_file
     fastpath_visibility_tmp="$(secure_temp_dir telegram-safe-fastpath-visibility)"
