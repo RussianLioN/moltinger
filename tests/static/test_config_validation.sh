@@ -48,10 +48,13 @@ SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
 PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
+SCRIPTS_MANIFEST="$PROJECT_ROOT/scripts/manifest.json"
 TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
 TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
 TELEGRAM_SAFE_HOOK_HANDLER="$TELEGRAM_SAFE_HOOK_DIR/handler.sh"
 TELEGRAM_SAFE_HOOK_SCRIPT="$PROJECT_ROOT/scripts/telegram-safe-llm-guard.sh"
+TELEGRAM_CHAT_PROBE_SCRIPT="$PROJECT_ROOT/scripts/telegram-chat-probe.sh"
+TELEGRAM_CHAT_PROBE_SKILL="$PROJECT_ROOT/skills/telegram-chat-probe/SKILL.md"
 TELEGRAM_LEARNER_SKILL="$PROJECT_ROOT/skills/telegram-learner/SKILL.md"
 OPENCLAW_IMPROVEMENT_LEARNER_SKILL="$PROJECT_ROOT/skills/openclaw-improvement-learner/SKILL.md"
 CODEX_UPDATE_SKILL="$PROJECT_ROOT/skills/codex-update/SKILL.md"
@@ -375,6 +378,20 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Auto-loaded telegram-learner skill must reinforce a deterministic fail-closed reply for broad Telegram long-research requests"
+    fi
+
+    test_start "static_telegram_chat_probe_skill_uses_existing_wrapper_entrypoint"
+    if [[ -x "$TELEGRAM_CHAT_PROBE_SCRIPT" ]] && \
+       [[ -f "$TELEGRAM_CHAT_PROBE_SKILL" ]] && \
+       [[ -f "$SCRIPTS_MANIFEST" ]] && \
+       rg -Fq 'scripts/telegram-chat-probe.sh' "$TELEGRAM_CHAT_PROBE_SKILL" && \
+       rg -Fq '"telegram-chat-probe.sh"' "$SCRIPTS_MANIFEST" && \
+       rg -Fq 'PROBE_SCRIPT="$SCRIPT_DIR/telegram-user-probe.py"' "$TELEGRAM_CHAT_PROBE_SCRIPT" && \
+       rg -Fq 'TELEGRAM_TEST_API_ID' "$TELEGRAM_CHAT_PROBE_SCRIPT" && \
+       rg -Fq 'emit_result "precondition_failed" ""' "$TELEGRAM_CHAT_PROBE_SCRIPT"; then
+        test_pass
+    else
+        test_fail "telegram-chat-probe skill must point to an existing executable wrapper that is tracked in scripts/manifest.json, delegates to telegram-user-probe.py, and maps missing real-user env to precondition_failed"
     fi
 
     test_start "static_repo_managed_skills_define_telegram_safe_skill_detail_contract"

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-14
-**Total Lessons**: 72
+**Total Lessons**: 73
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (32 lessons)
+#### P1 (33 lessons)
+- [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Deploy host automation missing cron package bootstrap](../docs/rca/2026-04-14-deploy-host-automation-missing-cron-package-bootstrap.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
 - [Runtime-only Beads repair still pointed at raw bootstrap after the CLI contract drifted](../docs/rca/2026-03-29-runtime-only-repair-contract-still-pointed-at-raw-bootstrap.md)
@@ -144,7 +145,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (24 lessons)
+#### process (25 lessons)
+- [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
 - [Telegram skill-detail remained non-terminal and repo skills lacked a shared Telegram-safe summary contract](../docs/rca/2026-04-05-telegram-skill-detail-general-hardening.md)
 - [Runtime-only Beads repair still pointed at raw bootstrap after the CLI contract drifted](../docs/rca/2026-03-29-runtime-only-repair-contract-still-pointed-at-raw-bootstrap.md)
@@ -185,13 +187,13 @@
 ### Popular Tags
 
 - `moltis` (26 lessons)
-- `rca` (20 lessons)
+- `rca` (21 lessons)
 - `deploy` (19 lessons)
 - `github-actions` (17 lessons)
+- `telegram` (16 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `telegram` (15 lessons)
-- `skills` (10 lessons)
+- `skills` (11 lessons)
 - `process` (9 lessons)
 - `lessons` (9 lessons)
 
@@ -202,10 +204,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 72 |
-| Critical (P0/P1) | 33 |
+| Total Lessons | 73 |
+| Critical (P0/P1) | 34 |
 | Categories | 6 |
-| Unique Tags | 150 |
+| Unique Tags | 153 |
 
 ---
 
