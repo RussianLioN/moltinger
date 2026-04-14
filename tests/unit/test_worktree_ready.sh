@@ -20,12 +20,32 @@ create_fake_bd_bin() {
 set -euo pipefail
 
 if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
-  printf '%s\n' "${BD_WORKTREE_LIST_JSON:-[]}"
+  payload="${BD_WORKTREE_LIST_JSON:-[]}"
+  if [[ "${BD_WORKTREE_LIST_FILTER_MISSING:-0}" == "1" ]]; then
+    filtered_lines=()
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] || continue
+      line_path="$(printf '%s\n' "${line}" | jq -r '.path // empty')"
+      if [[ -z "${line_path}" || -e "${line_path}" ]]; then
+        filtered_lines+=("${line}")
+      fi
+    done < <(printf '%s\n' "${payload}" | jq -c '.[]')
+
+    if [[ "${#filtered_lines[@]}" -eq 0 ]]; then
+      payload='[]'
+    else
+      payload="$(printf '%s\n' "${filtered_lines[@]}" | jq -s '.')"
+    fi
+  fi
+  printf '%s\n' "${payload}"
   exit 0
 fi
 
 if [[ "${1:-}" == "worktree" && "${2:-}" == "remove" ]]; then
   target_path="${3:-}"
+  if [[ "${BD_WORKTREE_REMOVE_CANONICALIZE:-0}" == "1" && -d "${target_path}" ]]; then
+    target_path="$(cd "${target_path}" && pwd -P)"
+  fi
   if [[ -n "${BD_WORKTREE_REMOVE_STDOUT:-}" ]]; then
     printf '%s\n' "${BD_WORKTREE_REMOVE_STDOUT}"
   fi
@@ -1544,6 +1564,7 @@ test_cleanup_uses_git_remove_fallback_for_false_unpushed_guard() {
     output="$(
         set +e
         BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_WORKTREE_LIST_FILTER_MISSING=1 \
         BD_WORKTREE_REMOVE_NOOP=1 \
         BD_WORKTREE_REMOVE_RC=23 \
         BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
@@ -1557,7 +1578,6 @@ test_cleanup_uses_git_remove_fallback_for_false_unpushed_guard() {
     assert_contains "$output" 'Worktree Action: removed' "Cleanup should report the worktree as removed after the fallback"
     assert_contains "$output" 'Merge Check: git_ancestor_remote' "Cleanup should still require authoritative refreshed remote proof before using the fallback"
     assert_contains "$output" 'git worktree remove fallback succeeded' "Cleanup should explain that the direct git fallback was used"
-    assert_contains "$output" 'Beads still reports' "Cleanup should warn when git-only fallback may leave Beads worktree metadata stale"
     if [[ -d "$existing_path" ]]; then
         test_fail "Cleanup should remove the worktree directory after the fallback succeeds"
     fi
@@ -1738,6 +1758,39 @@ test_cleanup_blocks_conflicting_path_and_branch_arguments() {
     test_pass
 }
 
+test_cleanup_accepts_alias_path_when_branch_matches_same_worktree() {
+    test_start "worktree_ready_cleanup_accepts_alias_path_when_branch_matches_same_worktree"
+
+    local fixture_root repo_dir fake_bin path_worktree alias_path output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    path_worktree="${fixture_root}/moltinger-path-target"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$path_worktree" "feat/path-target" "main"
+    path_worktree="$(cd "$path_worktree" && pwd -P)"
+    alias_path="${fixture_root}/moltinger-path-target-alias"
+    ln -s "$path_worktree" "$alias_path"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON='[]' \
+        BD_WORKTREE_REMOVE_CANONICALIZE=1 \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --path "$alias_path" --branch feat/path-target 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should accept an alias path when it resolves to the same worktree as the requested branch"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should complete when alias path and branch identify the same worktree"
+    if [[ -d "$path_worktree" ]]; then
+        test_fail "Cleanup should remove the real worktree even when the request uses an alias path"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_cleanup_refreshes_remote_refs_before_using_local_merge_proof() {
     test_start "worktree_ready_cleanup_refreshes_remote_refs_before_using_local_merge_proof"
 
@@ -1829,6 +1882,7 @@ test_cleanup_uses_local_stale_proof_for_worktree_fallback_when_refresh_fails() {
     output="$(
         set +e
         BD_WORKTREE_LIST_JSON="$(printf '[{\"name\":\"remote-uat-hardening\",\"path\":\"%s\",\"branch\":\"feat/remote-uat-hardening\",\"beads_state\":\"local\"}]\n' "${existing_path}")" \
+        BD_WORKTREE_LIST_FILTER_MISSING=1 \
         BD_WORKTREE_REMOVE_NOOP=1 \
         BD_WORKTREE_REMOVE_RC=23 \
         BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
@@ -1841,7 +1895,6 @@ test_cleanup_uses_local_stale_proof_for_worktree_fallback_when_refresh_fails() {
     assert_contains "$output" 'Status: cleanup_complete' "Cleanup should still complete when no branch deletion was requested"
     assert_contains "$output" 'Merge Check: git_ancestor_local_stale' "Cleanup should record the degraded local-only merge proof for worktree fallback"
     assert_contains "$output" 'Remote ref refresh failed; using local merged ancestry only' "Cleanup should explain why it trusted local ancestry"
-    assert_contains "$output" 'Beads still reports' "Cleanup should surface Beads reconciliation guidance after git-only fallback"
     if [[ -d "$existing_path" ]]; then
         test_fail "Cleanup should remove the worktree directory when local stale proof authorizes the fallback"
     fi
@@ -1996,6 +2049,7 @@ test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists() {
     output="$(
         set +e
         BD_WORKTREE_LIST_JSON="$(printf '[{\"name\":\"remote-uat-hardening\",\"path\":\"%s\",\"branch\":\"feat/remote-uat-hardening\",\"beads_state\":\"local\"}]\n' "${existing_path}")" \
+        BD_WORKTREE_LIST_FILTER_MISSING=1 \
         BD_WORKTREE_REMOVE_NOOP=1 \
         BD_WORKTREE_REMOVE_RC=23 \
         BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
@@ -2007,17 +2061,72 @@ test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists() {
     assert_eq "23" "$rc" "Cleanup must not delete branches when only stale local proof is available"
     assert_contains "$output" 'Status: cleanup_blocked' "Cleanup should stay blocked when branch deletion still lacks authoritative remote proof"
     assert_contains "$output" 'Worktree Action: removed' "Cleanup may still remove the worktree through the local-only fallback"
-    assert_contains "$output" 'Local Branch Action: skipped' "Cleanup should skip local branch deletion without authoritative merge proof"
+    assert_contains "$output" 'Local Branch Action: deleted' "Cleanup should still delete the local branch when local merged ancestry proves that step is safe"
     assert_contains "$output" 'Remote Branch Action: blocked' "Cleanup should preserve the remote branch when refresh proof is unavailable"
     assert_contains "$output" 'Merge Check: remote_refresh_failed' "Cleanup should report the remote-refresh failure for the branch-delete phase"
     if [[ -d "$existing_path" ]]; then
         test_fail "Cleanup should still remove the worktree directory before branch deletion blocks"
     fi
-    if ! git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
-        test_fail "Cleanup must preserve the local branch when authoritative branch-delete proof is unavailable"
+    if git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup should remove the local branch when local merged ancestry proves that step is safe"
     fi
     if ! git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
         test_fail "Cleanup must preserve the remote-tracking ref when authoritative branch-delete proof is unavailable"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_blocks_when_git_fallback_leaves_beads_metadata_stale() {
+    test_start "worktree_ready_cleanup_blocks_when_git_fallback_leaves_beads_metadata_stale"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-remote-uat-hardening"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/remote-uat-hardening" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: feature branch commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/remote-uat-hardening >/dev/null
+        git merge --no-ff feat/remote-uat-hardening -m "fixture: merge feature branch" >/dev/null
+        git push origin main >/dev/null
+    )
+    bd_json="$(printf '[{\"name\":\"remote-uat-hardening\",\"path\":\"%s\",\"branch\":\"feat/remote-uat-hardening\",\"beads_state\":\"local\"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_WORKTREE_REMOVE_NOOP=1 \
+        BD_WORKTREE_REMOVE_RC=23 \
+        BD_WORKTREE_REMOVE_STDERR='safety check failed: worktree has unpushed commits. Use --force to skip safety checks.' \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/remote-uat-hardening 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Cleanup should fail closed when git fallback removed the worktree but Beads metadata still reports it"
+    assert_contains "$output" 'Status: cleanup_blocked' "Cleanup should stay blocked until Beads metadata is reconciled"
+    assert_contains "$output" 'Worktree Action: removed' "Cleanup should report the physical worktree removal even when metadata reconciliation is pending"
+    assert_contains "$output" 'Beads still reports' "Cleanup should explain the Beads reconciliation blocker"
+    assert_contains "$output" 'Repair Command: cd ' "Cleanup should expose a repair command for Beads reconciliation"
+    if [[ -d "$existing_path" ]]; then
+        test_fail "Cleanup should still remove the worktree directory before blocking on Beads reconciliation"
+    fi
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the local branch while Beads reconciliation remains blocked"
+    fi
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/remotes/origin/feat/remote-uat-hardening; then
+        test_fail "Cleanup must preserve the remote branch while Beads reconciliation remains blocked"
     fi
 
     rm -rf "$fixture_root"
@@ -2165,8 +2274,10 @@ run_all_tests() {
     test_cleanup_does_not_bypass_false_unpushed_guard_without_merge_proof
     test_cleanup_does_not_bypass_false_unpushed_guard_for_dirty_worktree
     test_cleanup_blocks_conflicting_path_and_branch_arguments
+    test_cleanup_accepts_alias_path_when_branch_matches_same_worktree
     test_cleanup_refreshes_remote_refs_before_using_local_merge_proof
     test_cleanup_uses_local_stale_proof_for_worktree_fallback_when_refresh_fails
+    test_cleanup_blocks_when_git_fallback_leaves_beads_metadata_stale
     test_cleanup_delete_branch_uses_github_fallback_when_git_is_ambiguous
     test_cleanup_delete_branch_uses_github_api_remote_delete_fallback
     test_cleanup_blocks_branch_delete_when_only_local_stale_proof_exists

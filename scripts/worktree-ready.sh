@@ -123,6 +123,7 @@ report_local_branch_action="not_requested"
 report_remote_branch_action="not_requested"
 report_merge_check="not_requested"
 report_default_branch_name=""
+report_cleanup_reconcile_required="false"
 
 declare -a report_next_steps=()
 declare -a report_warnings=()
@@ -1931,14 +1932,11 @@ find_git_worktree_by_branch() {
 
 find_git_worktree_by_path() {
   local search_path="$1"
-  local normalized_search_path=""
   local worktree_path=""
   local worktree_branch=""
 
-  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
-
   while IFS=$'\t' read -r worktree_path worktree_branch; do
-    if [[ "${worktree_path}" == "${normalized_search_path}" ]]; then
+    if paths_refer_to_same_location "${worktree_path}" "${search_path}"; then
       printf '%s\t%s\n' "${worktree_path}" "${worktree_branch}"
       return 0
     fi
@@ -2143,14 +2141,11 @@ find_bd_worktree_by_path() {
   local bd_command=""
   local line=""
   local record_path=""
-  local search_identity_key=""
 
   if ! bd_command="$(resolve_bd_command)" || ! command -v jq >/dev/null 2>&1; then
     printf '__PROBE_STATE__\tprobe_unavailable\n'
     return 0
   fi
-
-  search_identity_key="$(path_identity_key "${search_path}" "${resolved_repo_root}")"
 
   set +e
   output="$(
@@ -2169,7 +2164,7 @@ find_bd_worktree_by_path() {
     while IFS= read -r line; do
       [[ -n "${line}" ]] || continue
       record_path="$(printf '%s\n' "${line}" | cut -f2)"
-      if paths_refer_to_same_location "${record_path}" "${search_identity_key}"; then
+      if paths_refer_to_same_location "${record_path}" "${search_path}"; then
         printf '%s\n' "${line}"
         break
       fi
@@ -2178,6 +2173,22 @@ find_bd_worktree_by_path() {
   fi
 
   printf '__PROBE_STATE__\tprobe_unavailable\n'
+}
+
+extract_bd_worktree_record_from_payload() {
+  local payload="$1"
+  local line=""
+
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    if [[ "${line}" == "__PROBE_STATE__"$'\t'* ]]; then
+      continue
+    fi
+    printf '%s\n' "${line}"
+    return 0
+  done <<< "${payload}"
+
+  return 1
 }
 
 discover_target_state() {
@@ -2529,6 +2540,7 @@ reset_report() {
   report_remote_branch_action="not_requested"
   report_merge_check="not_requested"
   report_default_branch_name=""
+  report_cleanup_reconcile_required="false"
   report_next_steps=()
   report_warnings=()
   report_issue_artifacts=()
@@ -3362,7 +3374,10 @@ execute_cleanup_worktree_action() {
           report_default_branch_name="${fallback_default_branch_name}"
           add_warning "bd worktree remove reported unpushed commits for merged clean worktree ${cleanup_path}; git worktree remove fallback succeeded."
           fallback_bd_record="$(find_bd_worktree_by_path "${cleanup_path}" || true)"
-          if [[ "${fallback_bd_record}" == *$'\t'* ]]; then
+          fallback_bd_record="$(extract_bd_worktree_record_from_payload "${fallback_bd_record}" || true)"
+          if [[ -n "${fallback_bd_record}" ]]; then
+            report_cleanup_reconcile_required="true"
+            report_repair_command="cd $(shell_quote "${resolved_repo_root}") && bd worktree remove $(shell_quote "${cleanup_path}")"
             add_warning "Beads still reports ${cleanup_path} after git-only fallback removal; rerun bd cleanup to reconcile local worktree metadata."
             add_next_step "cd $(shell_quote "${resolved_repo_root}")"
             add_next_step "bd worktree remove $(shell_quote "${cleanup_path}")"
@@ -3419,6 +3434,7 @@ execute_cleanup_branch_actions() {
   local default_branch_name=""
   local output=""
   local local_delete_flag="-d"
+  local local_only_branch_delete_allowed="false"
   local rc=0
 
   if [[ "${delete_branch_requested}" != "true" ]]; then
@@ -3454,7 +3470,13 @@ execute_cleanup_branch_actions() {
   report_default_branch_name="${default_branch_name}"
 
   if ! resolve_cleanup_merge_proof "${cleanup_branch}" "${default_branch_name}"; then
-    report_local_branch_action="skipped"
+    if local_branch_exists "${cleanup_branch}" && ref_is_ancestor_of_remote_default "refs/heads/${cleanup_branch}" "${default_branch_name}"; then
+      local_only_branch_delete_allowed="true"
+      report_local_branch_action="not_requested"
+      add_warning "Cleanup could not establish authoritative remote proof for '${cleanup_branch}', but local merged ancestry still allows local branch deletion while remote deletion stays blocked."
+    else
+      report_local_branch_action="skipped"
+    fi
     if remote_branch_exists "${cleanup_branch}"; then
       report_remote_branch_action="blocked"
     else
@@ -3482,7 +3504,9 @@ execute_cleanup_branch_actions() {
     if origin_uses_github; then
       add_next_step "cd $(shell_quote "${resolved_repo_root}") && gh pr list --state merged --head $(shell_quote "${cleanup_branch}") --json number,state,mergedAt,headRefName,headRefOid,baseRefName,url"
     fi
-    return 1
+    if [[ "${local_only_branch_delete_allowed}" != "true" ]]; then
+      return 1
+    fi
   fi
 
   if local_branch_exists "${cleanup_branch}"; then
@@ -3563,9 +3587,8 @@ execute_cleanup_branch_actions() {
 set_cleanup_contract() {
   report_phase="cleanup"
   report_boundary="none"
-  report_repair_command=""
 
-  if [[ "${report_worktree_action}" == "blocked" || "${report_local_branch_action}" == "blocked" || "${report_remote_branch_action}" == "blocked" || "${report_local_branch_action}" == "skipped" || "${report_remote_branch_action}" == "skipped" ]]; then
+  if [[ "${report_cleanup_reconcile_required}" == "true" || "${report_worktree_action}" == "blocked" || "${report_local_branch_action}" == "blocked" || "${report_remote_branch_action}" == "blocked" || "${report_local_branch_action}" == "skipped" || "${report_remote_branch_action}" == "skipped" ]]; then
     report_status="cleanup_blocked"
     report_final_state="cleanup_blocked"
     return 0
@@ -4352,7 +4375,7 @@ render_cleanup_contract_report() {
   fi
 
   execute_cleanup_worktree_action || true
-  if [[ "${report_worktree_action}" != "blocked" ]]; then
+  if [[ "${report_worktree_action}" != "blocked" && "${report_cleanup_reconcile_required}" != "true" ]]; then
     execute_cleanup_branch_actions || true
   fi
   set_cleanup_contract
