@@ -1321,49 +1321,13 @@ jobs:
 
             # Test 7: Runtime Moltis TOML syntax
             echo "Test 7: Runtime Moltis TOML syntax..."
-            python3 - "$RUNTIME_CONFIG_DIR/moltis.toml" <<'PY'
-            import pathlib
-            import sys
-            import tomllib
-
-            config_path = pathlib.Path(sys.argv[1])
-            with config_path.open("rb") as handle:
-                tomllib.load(handle)
-
-            print(f"Runtime TOML OK: {config_path}")
-            PY
+            python3 -c 'import pathlib, sys, tomllib; config_path = pathlib.Path(sys.argv[1]); tomllib.load(config_path.open("rb")); print(f"Runtime TOML OK: {config_path}")' \
+              "$RUNTIME_CONFIG_DIR/moltis.toml"
 
             # Test 8: Runtime Ollama and failover contract
             echo "Test 8: Runtime Ollama and failover contract..."
-            python3 - "$RUNTIME_CONFIG_DIR/moltis.toml" <<'PY'
-            import pathlib
-            import sys
-            import tomllib
-
-            config_path = pathlib.Path(sys.argv[1])
-            with config_path.open("rb") as handle:
-                config = tomllib.load(handle)
-
-            providers = config.get("providers", {})
-            ollama = providers.get("ollama")
-            if not isinstance(ollama, dict):
-                raise SystemExit("Missing [providers.ollama] in runtime config")
-            if not ollama.get("enabled", False):
-                raise SystemExit("Runtime config has [providers.ollama] but it is not enabled")
-            if not ollama.get("base_url"):
-                raise SystemExit("Runtime config is missing providers.ollama.base_url")
-
-            failover = config.get("failover")
-            if not isinstance(failover, dict):
-                raise SystemExit("Missing [failover] in runtime config")
-            if not failover.get("enabled", False):
-                raise SystemExit("Runtime config has failover disabled")
-            fallback_models = failover.get("fallback_models", [])
-            if not any(str(model).startswith("ollama::") for model in fallback_models):
-                raise SystemExit("Failover contract must include an ollama:: fallback model")
-
-            print("Runtime failover contract OK")
-            PY
+            python3 -c 'import pathlib, sys, tomllib; config = tomllib.load(pathlib.Path(sys.argv[1]).open("rb")); providers = config.get("providers", {}); ollama = providers.get("ollama"); failover = config.get("failover"); fallback_models = failover.get("fallback_models", []) if isinstance(failover, dict) else []; checks = [(isinstance(ollama, dict), "Missing [providers.ollama] in runtime config"), (isinstance(ollama, dict) and ollama.get("enabled", False), "Runtime config has [providers.ollama] but it is not enabled"), (isinstance(ollama, dict) and bool(ollama.get("base_url")), "Runtime config is missing providers.ollama.base_url"), (isinstance(failover, dict), "Missing [failover] in runtime config"), (isinstance(failover, dict) and failover.get("enabled", False), "Runtime config has failover disabled"), (any(str(model).startswith("ollama::") for model in fallback_models), "Failover contract must include an ollama:: fallback model")]; failed = next((message for ok, message in checks if not ok), None); print("Runtime failover contract OK") if failed is None else sys.exit(failed)' \
+              "$RUNTIME_CONFIG_DIR/moltis.toml"
 
             # Test 9: Ollama fallback container status
             echo "Test 9: Ollama fallback container status..."
