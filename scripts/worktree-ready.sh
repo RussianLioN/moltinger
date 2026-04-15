@@ -1408,7 +1408,11 @@ cleanup_target_arguments_conflict() {
     return 1
   fi
 
-  if [[ -z "${discovered_worktree_path}" ]] || ! paths_refer_to_same_location "${discovered_worktree_path}" "${target_path}"; then
+  if [[ -z "${discovered_worktree_path}" ]]; then
+    return 1
+  fi
+
+  if ! paths_refer_to_same_location "${discovered_worktree_path}" "${target_path}"; then
     return 0
   fi
 

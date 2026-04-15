@@ -1818,6 +1818,91 @@ test_cleanup_delete_branch_uses_git_ancestor_proof() {
     test_pass
 }
 
+test_cleanup_delete_branch_without_existing_worktree_does_not_false_conflict() {
+    test_start "worktree_ready_cleanup_delete_branch_without_existing_worktree_does_not_false_conflict"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+
+    (
+        cd "$repo_dir"
+        git checkout -b feat/cleanup-branch-only >/dev/null
+        printf 'branch-only\n' > cleanup.txt
+        git add cleanup.txt
+        git commit -m "fixture: branch-only cleanup commit" >/dev/null
+        git checkout main >/dev/null
+        git merge --no-ff feat/cleanup-branch-only -m "fixture: merge branch-only cleanup" >/dev/null
+        git push origin main >/dev/null
+    )
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON='[]' \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/cleanup-branch-only --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should allow branch-only delete when the managed worktree is already missing"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should complete once branch-only deletion succeeds"
+    assert_contains "$output" 'Worktree Action: already_missing' "Cleanup should report that the managed worktree is already gone"
+    assert_contains "$output" 'Merge Check: git_ancestor_local' "Cleanup should use local merged ancestry against the remote default branch when no remote feature branch exists"
+    assert_contains "$output" 'Local Branch Action: deleted' "Cleanup should delete the local branch after merged-proof branch-only cleanup"
+    if printf '%s' "$output" | grep -Fq 'Cleanup arguments conflict'; then
+        test_fail "Branch-only cleanup should not report a false path/branch conflict when no worktree exists"
+    fi
+    if git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/cleanup-branch-only; then
+        test_fail "Cleanup should remove the local branch even when no worktree exists anymore"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_branch_only_without_existing_worktree_preserves_branch_without_delete_flag() {
+    test_start "worktree_ready_cleanup_branch_only_without_existing_worktree_preserves_branch_without_delete_flag"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+
+    (
+        cd "$repo_dir"
+        git checkout -b feat/cleanup-branch-only >/dev/null
+        printf 'branch-only\n' > cleanup.txt
+        git add cleanup.txt
+        git commit -m "fixture: branch-only cleanup commit" >/dev/null
+        git checkout main >/dev/null
+        git merge --no-ff feat/cleanup-branch-only -m "fixture: merge branch-only cleanup" >/dev/null
+        git push origin main >/dev/null
+    )
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON='[]' \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/cleanup-branch-only 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should still complete for branch-only targets when no delete flag is requested"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should complete for branch-only targets without delete flag"
+    assert_contains "$output" 'Worktree Action: already_missing' "Cleanup should report the missing worktree even without branch deletion"
+    assert_contains "$output" 'Local Branch Action: not_requested' "Cleanup should preserve the local branch without --delete-branch"
+    if printf '%s' "$output" | grep -Fq 'Cleanup arguments conflict'; then
+        test_fail "Branch-only cleanup without delete flag should not trip the conflict guard"
+    fi
+    if ! git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/cleanup-branch-only; then
+        test_fail "Cleanup should preserve the local branch when --delete-branch is not requested"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_cleanup_uses_git_remove_fallback_for_false_unpushed_guard() {
     test_start "worktree_ready_cleanup_uses_git_remove_fallback_for_false_unpushed_guard"
 
@@ -2667,6 +2752,8 @@ run_all_tests() {
     test_cleanup_removes_linked_worktree_without_branch_delete
     test_cleanup_prunes_stale_missing_worktree_entry
     test_cleanup_delete_branch_uses_git_ancestor_proof
+    test_cleanup_delete_branch_without_existing_worktree_does_not_false_conflict
+    test_cleanup_branch_only_without_existing_worktree_preserves_branch_without_delete_flag
     test_cleanup_uses_git_remove_fallback_for_false_unpushed_guard
     test_cleanup_does_not_bypass_false_unpushed_guard_without_merge_proof
     test_cleanup_does_not_bypass_false_unpushed_guard_for_dirty_worktree

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-15
-**Total Lessons**: 79
+**Total Lessons**: 80
 
 ---
 
@@ -54,7 +54,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (24 lessons)
+#### P2 (25 lessons)
+- [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
 - [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
 - [Telegram skill-detail remained non-terminal and repo skills lacked a shared Telegram-safe summary contract](../docs/rca/2026-04-05-telegram-skill-detail-general-hardening.md)
 - [Tracked deploy empty stdout broke GitHub Actions JSON contract](../docs/rca/2026-04-02-tracked-deploy-empty-stdout-broke-json-contract.md)
@@ -196,13 +197,14 @@
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
-#### tooling (1 lessons)
+#### tooling (2 lessons)
+- [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
 - [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
 
 
 ### Popular Tags
 
-- `rca` (27 lessons)
+- `rca` (28 lessons)
 - `moltis` (26 lessons)
 - `telegram` (20 lessons)
 - `deploy` (19 lessons)
@@ -210,8 +212,8 @@
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
 - `skills` (11 lessons)
+- `beads` (10 lessons)
 - `process` (9 lessons)
-- `lessons` (9 lessons)
 
 
 ---
@@ -220,10 +222,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 79 |
+| Total Lessons | 80 |
 | Critical (P0/P1) | 39 |
 | Categories | 8 |
-| Unique Tags | 160 |
+| Unique Tags | 161 |
 
 ---
 
