@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-15
-**Total Lessons**: 81
+**Total Lessons**: 82
 
 ---
 
@@ -55,7 +55,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (25 lessons)
+#### P2 (26 lessons)
+- [Worktree governance left raw create and cleanup reconciliation gaps](../docs/rca/2026-04-15-worktree-governance-left-raw-create-and-cleanup-reconciliation-gaps.md)
 - [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
 - [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
 - [Telegram skill-detail remained non-terminal and repo skills lacked a shared Telegram-safe summary contract](../docs/rca/2026-04-05-telegram-skill-detail-general-hardening.md)
@@ -153,8 +154,9 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (27 lessons)
+#### process (28 lessons)
 - [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
+- [Worktree governance left raw create and cleanup reconciliation gaps](../docs/rca/2026-04-15-worktree-governance-left-raw-create-and-cleanup-reconciliation-gaps.md)
 - [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
@@ -206,15 +208,15 @@
 
 ### Popular Tags
 
-- `rca` (29 lessons)
+- `rca` (30 lessons)
 - `moltis` (26 lessons)
 - `telegram` (20 lessons)
 - `deploy` (19 lessons)
 - `github-actions` (17 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
+- `beads` (12 lessons)
 - `skills` (11 lessons)
-- `beads` (11 lessons)
 - `process` (9 lessons)
 
 
@@ -224,7 +226,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 81 |
+| Total Lessons | 82 |
 | Critical (P0/P1) | 40 |
 | Categories | 8 |
 | Unique Tags | 161 |

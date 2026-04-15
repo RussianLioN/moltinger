@@ -500,6 +500,17 @@ beads_resolve_is_worktree_list_command() {
   [[ "${command}" == "worktree" && "${subcommand}" == "list" ]]
 }
 
+beads_resolve_is_worktree_create_command() {
+  local command=""
+  local subcommand=""
+
+  beads_resolve_extract_command "$@"
+  command="${BEADS_RESOLVE_COMMAND}"
+  subcommand="${BEADS_RESOLVE_SUBCOMMAND}"
+
+  [[ "${command}" == "worktree" && "${subcommand}" == "create" ]]
+}
+
 beads_resolve_extract_worktree_remove_target() {
   local -a args=("$@")
   local index=0
@@ -670,6 +681,16 @@ beads_resolve_dispatch() {
       28 \
       "bd: 'sync' is retired in this repository's Beads workflow." \
       "Use bd status for local inspection, and use bd dolt push / bd dolt pull only when this worktree is configured with a Dolt remote."
+    return 0
+  fi
+
+  if beads_resolve_is_worktree_create_command "$@"; then
+    beads_resolve_set_decision \
+      "block_repo_worktree_create" \
+      "repo_local" \
+      29 \
+      "bd: raw 'bd worktree create' is disabled in this repository because it creates redirect-based shared Beads ownership." \
+      "Use scripts/worktree-ready.sh plan/create or scripts/worktree-phase-a.sh create-from-base from the canonical root instead."
     return 0
   fi
 

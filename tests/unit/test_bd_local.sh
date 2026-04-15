@@ -193,6 +193,79 @@ test_bd_local_blocks_deprecated_sync_with_modern_guidance() {
     test_pass
 }
 
+test_bd_local_blocks_raw_worktree_create_with_managed_guidance() {
+    test_start "bd_local_blocks_raw_worktree_create_with_managed_guidance"
+
+    local fixture_root repo_dir worktree_path output rc
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-runtime-only-create"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/runtime-only-create" "main"
+
+    install_fake_bd "${worktree_path}"
+    seed_post_migration_runtime_state "${worktree_path}"
+
+    output="$(
+        set +e
+        run_wrapper "${worktree_path}" worktree create nested-lane 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "29" "${rc}" "bd-local must fail closed on raw worktree create in this repository"
+    assert_contains "${output}" "raw 'bd worktree create' is disabled" "bd-local must surface the managed-worktree restriction"
+    assert_contains "${output}" "scripts/worktree-ready.sh plan/create" "bd-local must redirect operators to the repo-owned worktree entrypoint"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_bd_local_passes_through_canonical_root_worktree_list() {
+    test_start "bd_local_passes_through_canonical_root_worktree_list"
+
+    local fixture_root repo_dir output
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+
+    install_fake_bd "${repo_dir}"
+
+    output="$(
+        run_wrapper "${repo_dir}" worktree list
+    )"
+
+    assert_contains "${output}" "ARGS=worktree list" "bd-local must pass canonical-root worktree list through unchanged"
+    if [[ "${output}" == *"BEADS_DB=${repo_dir}/.beads/beads.db"* ]]; then
+        test_fail "bd-local must not pin BEADS_DB for canonical-root readonly worktree list"
+    fi
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_bd_local_allows_canonical_root_cleanup_admin_worktree_remove() {
+    test_start "bd_local_allows_canonical_root_cleanup_admin_worktree_remove"
+
+    local fixture_root repo_dir worktree_path output
+    fixture_root="$(mktemp -d /tmp/bd-local-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    worktree_path="${fixture_root}/moltinger-cleanup-target"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/cleanup-target" "main"
+
+    install_fake_bd "${repo_dir}"
+
+    output="$(
+        run_wrapper "${repo_dir}" worktree remove "${worktree_path}"
+    )"
+
+    assert_contains "${output}" "ARGS=worktree remove ${worktree_path}" "bd-local must allow canonical-root cleanup-admin worktree remove"
+    if [[ "${output}" == *"BEADS_DB=${repo_dir}/.beads/beads.db"* ]]; then
+        test_fail "bd-local must not pin BEADS_DB for canonical-root cleanup-admin remove"
+    fi
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance() {
     test_start "bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance"
 
@@ -244,6 +317,9 @@ run_all_tests() {
     test_bd_local_blocks_missing_foundation_files
     test_bd_local_allows_readonly_post_migration_runtime_without_issues_jsonl
     test_bd_local_blocks_deprecated_sync_with_modern_guidance
+    test_bd_local_blocks_raw_worktree_create_with_managed_guidance
+    test_bd_local_passes_through_canonical_root_worktree_list
+    test_bd_local_allows_canonical_root_cleanup_admin_worktree_remove
     test_bd_local_blocks_broken_runtime_only_state_with_bootstrap_guidance
     generate_report
 }

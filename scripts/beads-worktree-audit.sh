@@ -44,6 +44,7 @@ report_action_count=0
 
 declare -a REPORT_LINES=()
 declare -a NEXT_STEPS=()
+declare -a LINKED_BRANCHES=()
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -91,6 +92,19 @@ add_report_line() {
 
 add_next_step() {
   NEXT_STEPS+=("$1")
+}
+
+default_branch_name() {
+  local default_branch=""
+
+  default_branch="$(git -C "${report_repo_root}" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  default_branch="${default_branch#origin/}"
+  if [[ -n "${default_branch}" ]]; then
+    printf '%s\n' "${default_branch}"
+    return 0
+  fi
+
+  printf 'main\n'
 }
 
 classify_worktree_state() {
@@ -171,6 +185,23 @@ collect_worktrees() {
   '
 }
 
+collect_worktree_branches() {
+  local repo_root="$1"
+  local line=""
+  local current_branch=""
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      branch\ refs/heads/*)
+        current_branch="${line#branch refs/heads/}"
+        if [[ -n "${current_branch}" ]]; then
+          printf '%s\n' "${current_branch}"
+        fi
+        ;;
+    esac
+  done < <(git -C "${repo_root}" worktree list --porcelain)
+}
+
 audit_worktree() {
   local worktree_path="$1"
   local issues_path="${worktree_path}/.beads/issues.jsonl"
@@ -247,7 +278,46 @@ audit_worktree() {
       ;;
   esac
 
-  add_report_line "${severity}|${state}|${action}|${worktree_path}"
+  add_report_line "worktree|${severity}|${state}|${action}|${worktree_path}"
+}
+
+branch_has_linked_worktree() {
+  local branch_name="$1"
+  local linked_branch=""
+
+  for linked_branch in "${LINKED_BRANCHES[@]+"${LINKED_BRANCHES[@]}"}"; do
+    if [[ "${linked_branch}" == "${branch_name}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+audit_branch_only_local() {
+  local branch_name="$1"
+  local default_branch="$2"
+  local state="branch_only_active"
+  local action="review_branch_owner"
+
+  if [[ -z "${branch_name}" || "${branch_name}" == "${default_branch}" || "${branch_name}" == "chore/topology-registry-publish" ]]; then
+    return 0
+  fi
+
+  if branch_has_linked_worktree "${branch_name}"; then
+    return 0
+  fi
+
+  if git -C "${report_repo_root}" merge-base --is-ancestor "refs/heads/${branch_name}" "refs/heads/${default_branch}" >/dev/null 2>&1; then
+    state="branch_only_merged"
+    action="delete_local_branch_if_stale"
+    add_next_step "git -C $(printf '%q' "${report_repo_root}") branch -d $(printf '%q' "${branch_name}")"
+  else
+    add_next_step "git -C $(printf '%q' "${report_repo_root}") log --oneline --decorate -n 20 $(printf '%q' "${branch_name}") --"
+  fi
+
+  ((report_warning_count += 1))
+  add_report_line "branch|warn|${state}|${action}|${branch_name}"
 }
 
 render_human() {
@@ -260,8 +330,12 @@ render_human() {
     printf 'Actions: %s\n' "${report_action_count}"
     printf '\n'
     for line in "${REPORT_LINES[@]}"; do
-      IFS='|' read -r severity state action path <<< "${line}"
-      printf '[%s] state=%s action=%s path=%s\n' "${severity}" "${state}" "${action}" "${path}"
+      IFS='|' read -r scope severity state action subject <<< "${line}"
+      if [[ "${scope}" == "branch" ]]; then
+        printf '[%s] scope=branch state=%s action=%s branch=%s\n' "${severity}" "${state}" "${action}" "${subject}"
+      else
+        printf '[%s] state=%s action=%s path=%s\n' "${severity}" "${state}" "${action}" "${subject}"
+      fi
     done
     if [[ "${#NEXT_STEPS[@]}" -gt 0 ]]; then
       printf '\nNext Steps:\n'
@@ -316,6 +390,11 @@ main() {
   fi
 
   report_mode="canonical_root"
+  LINKED_BRANCHES=()
+  while IFS= read -r linked_branch; do
+    [[ -n "${linked_branch}" ]] || continue
+    LINKED_BRANCHES+=("${linked_branch}")
+  done < <(collect_worktree_branches "${repo_root}")
 
   while IFS= read -r worktree_path; do
     [[ -n "${worktree_path}" ]] || continue
@@ -324,6 +403,11 @@ main() {
     fi
     audit_worktree "${worktree_path}"
   done < <(collect_worktrees "${repo_root}")
+
+  while IFS= read -r branch_name; do
+    [[ -n "${branch_name}" ]] || continue
+    audit_branch_only_local "${branch_name}" "$(default_branch_name)"
+  done < <(git -C "${repo_root}" for-each-ref --format='%(refname:short)' refs/heads)
 
   if [[ "${output_format}" == "env" ]]; then
     render_env
