@@ -84,6 +84,13 @@ if [[ "${args[0]:-}" == "status" ]]; then
   exit 0
 fi
 
+if [[ "${args[0]:-}" == "worktree" && "${args[1]:-}" == "list" ]]; then
+  printf 'CWD=%s\n' "$(pwd -P)"
+  printf 'DB=%s\n' "${db_path}"
+  printf 'ARGS=%s\n' "${args[*]}"
+  exit 0
+fi
+
 if [[ -n "${db_path}" ]]; then
   mkdir -p "$(dirname "${db_path}")"
   if [[ -d "${db_path}" ]]; then
@@ -447,6 +454,31 @@ test_canonical_root_plain_bd_allows_worktree_remove_for_linked_worktree() {
     output="$(run_plain_bd "${repo_dir}" "${fake_bin}" worktree remove "${worktree_path}")"
 
     assert_contains "${output}" "ARGS=worktree remove ${worktree_path}" "Canonical-root cleanup admin path should pass through plain bd for linked worktree removal"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_dedicated_worktree_plain_bd_canonicalizes_worktree_list_to_root() {
+    test_start "dedicated_worktree_plain_bd_canonicalizes_worktree_list_to_root"
+
+    local fixture_root repo_dir worktree_path fake_bin output
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(canonicalize_path "${repo_dir}")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-safe-worktree"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/safe-local" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_local_beads_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_plain_bd "${worktree_path}" "${fake_bin}" worktree list)"
+
+    assert_contains "${output}" "CWD=${repo_dir}" "Dedicated-worktree bd worktree list should execute from the canonical root"
+    assert_contains "${output}" "DB=" "Dedicated-worktree bd worktree list should not pin a local worktree DB"
+    assert_contains "${output}" "ARGS=worktree list" "Dedicated-worktree bd worktree list should preserve the original arguments"
 
     rm -rf "${fixture_root}"
     test_pass
@@ -1070,6 +1102,7 @@ run_all_tests() {
     test_canonical_root_plain_bd_blocks_mutation_by_default
     test_canonical_root_plain_bd_allows_explicit_root_db_override
     test_canonical_root_plain_bd_allows_worktree_remove_for_linked_worktree
+    test_dedicated_worktree_plain_bd_canonicalizes_worktree_list_to_root
     test_canonical_root_plain_bd_blocks_worktree_remove_for_non_linked_target
     test_plain_bd_blocks_legacy_redirect
     test_plain_bd_blocks_root_fallback_when_local_foundation_is_missing

@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-15
-**Total Lessons**: 80
+**Total Lessons**: 81
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (38 lessons)
+#### P1 (39 lessons)
+- [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
 - [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
@@ -152,7 +153,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (26 lessons)
+#### process (27 lessons)
+- [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
 - [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
@@ -204,7 +206,7 @@
 
 ### Popular Tags
 
-- `rca` (28 lessons)
+- `rca` (29 lessons)
 - `moltis` (26 lessons)
 - `telegram` (20 lessons)
 - `deploy` (19 lessons)
@@ -212,7 +214,7 @@
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
 - `skills` (11 lessons)
-- `beads` (10 lessons)
+- `beads` (11 lessons)
 - `process` (9 lessons)
 
 
@@ -222,8 +224,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 80 |
-| Critical (P0/P1) | 39 |
+| Total Lessons | 81 |
+| Critical (P0/P1) | 40 |
 | Categories | 8 |
 | Unique Tags | 161 |
 

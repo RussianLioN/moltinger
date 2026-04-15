@@ -256,6 +256,38 @@ phase_a_import_canonical_backlog() {
     "Run /usr/local/bin/bd doctor --json and ./scripts/beads-worktree-localize.sh --path . inside the target worktree before retrying."
 }
 
+phase_a_wait_for_runtime_status() {
+  local attempts="${WORKTREE_PHASE_A_STATUS_RETRY_COUNT:-5}"
+  local delay_seconds="${WORKTREE_PHASE_A_STATUS_RETRY_DELAY_SECONDS:-1}"
+  local attempt=1
+  local output=""
+
+  while [[ "${attempt}" -le "${attempts}" ]]; do
+    if ! beads_resolve_run_system_bd_probe "${target_path}" true status; then
+      phase_a_fail_runtime "system_bd_missing" "Phase A could not locate the system bd binary for final runtime readiness checks."
+    fi
+    output="${BEADS_RESOLVE_LAST_BD_OUTPUT}"
+
+    if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
+      return 0
+    fi
+
+    if [[ "${attempt}" -lt "${attempts}" ]]; then
+      sleep "${delay_seconds}"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  output="${output//$'\n'/ }"
+  if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" == "true" ]]; then
+    output="status probe timed out after ${BEADS_RESOLVE_BD_TIMEOUT_SECONDS:-8}s; ${output}"
+  fi
+  phase_a_fail_runtime \
+    "runtime_not_ready" \
+    "Phase A created the git worktree, but plain bd status never became ready in the new local runtime." \
+    "Last status error: ${output}. Run /usr/local/bin/bd doctor --json and ./scripts/beads-worktree-localize.sh --path . inside the target worktree before retrying."
+}
+
 create_from_base() {
   local base_sha=""
   local branch_exists=0
@@ -283,6 +315,7 @@ create_from_base() {
   git -C "${canonical_root}" worktree add "${target_path}" "${branch}" >/dev/null
   phase_a_prepare_beads_runtime
   phase_a_import_canonical_backlog
+  phase_a_wait_for_runtime_status
 
   head_sha="$(git -C "${target_path}" rev-parse HEAD)"
   if [[ "${head_sha}" != "${base_sha}" ]]; then

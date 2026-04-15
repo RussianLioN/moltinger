@@ -23,6 +23,10 @@ case "${BEADS_RESOLVE_DECISION}" in
   execute_local)
     exec "${SYSTEM_BD}" --db "${BEADS_RESOLVE_DB_PATH}" "$@"
     ;;
+  pass_through_canonical_root_readonly)
+    cd "${BEADS_RESOLVE_CANONICAL_ROOT}"
+    exec "${SYSTEM_BD}" "$@"
+    ;;
   pass_through_non_repo|pass_through_root_readonly|pass_through_root_cleanup_admin|pass_through_global|allow_explicit_troubleshooting)
     exec "${SYSTEM_BD}" "$@"
     ;;

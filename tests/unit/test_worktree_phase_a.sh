@@ -99,6 +99,18 @@ if [[ "${1:-}" == "export" ]]; then
 fi
 
 if [[ "${1:-}" == "status" ]]; then
+  status_call_count=0
+  if [[ -n "${FAKE_BD_STATUS_COUNTER_FILE:-}" && -f "${FAKE_BD_STATUS_COUNTER_FILE}" ]]; then
+    status_call_count="$(<"${FAKE_BD_STATUS_COUNTER_FILE}")"
+  fi
+  status_call_count=$((status_call_count + 1))
+  if [[ -n "${FAKE_BD_STATUS_COUNTER_FILE:-}" ]]; then
+    printf '%s\n' "${status_call_count}" > "${FAKE_BD_STATUS_COUNTER_FILE}"
+  fi
+  if [[ -n "${FAKE_BD_STATUS_FAIL_COUNT:-}" && "${status_call_count}" -le "${FAKE_BD_STATUS_FAIL_COUNT}" ]]; then
+    printf 'failed to get statistics: dial tcp 127.0.0.1:12345: connect: connection refused\n' >&2
+    exit 1
+  fi
   if [[ -n "${FAKE_BD_STATUS_SLEEP_SECONDS:-}" ]]; then
     sleep "${FAKE_BD_STATUS_SLEEP_SECONDS}"
   fi
@@ -438,14 +450,16 @@ test_phase_a_create_rebuilds_unhealthy_named_runtime() {
     test_pass
 }
 
-test_phase_a_create_accepts_info_probe_when_status_probe_is_noisy() {
-    test_start "worktree_phase_a_create_accepts_info_probe_when_status_probe_is_noisy"
+test_phase_a_create_waits_for_runtime_status_after_bootstrap() {
+    test_start "worktree_phase_a_create_waits_for_runtime_status_after_bootstrap"
 
-    local fixture_root repo_dir fake_bin target_path output
+    local fixture_root repo_dir fake_bin target_path output call_log status_counter status_attempts
     fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
     repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
     fake_bin="$(create_fake_bd_bin "$fixture_root")"
     target_path="${fixture_root}/moltinger-noisy-status"
+    call_log="${fixture_root}/phase-a-ready-status.calls"
+    status_counter="${fixture_root}/phase-a-ready-status.count"
 
     mkdir -p "${repo_dir}/.beads"
     printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
@@ -453,11 +467,14 @@ test_phase_a_create_accepts_info_probe_when_status_probe_is_noisy() {
     (
         cd "${repo_dir}"
         git add .beads/config.yaml .beads/issues.jsonl
-        git commit -m "fixture: tracked local foundation for noisy status probe" >/dev/null
+        git commit -m "fixture: tracked local foundation for status readiness wait" >/dev/null
     )
 
-    output="$(FAKE_BD_STATUS_RC="1" \
-        FAKE_BD_STATUS_STDERR='failed to get statistics: dial tcp 127.0.0.1:12345: connect: connection refused' \
+    output="$(WORKTREE_PHASE_A_STATUS_RETRY_COUNT="5" \
+        WORKTREE_PHASE_A_STATUS_RETRY_DELAY_SECONDS="0" \
+        FAKE_BD_CALL_LOG="${call_log}" \
+        FAKE_BD_STATUS_COUNTER_FILE="${status_counter}" \
+        FAKE_BD_STATUS_FAIL_COUNT="2" \
         FAKE_BD_INFO_STDOUT='Beads Database Information' \
         run_phase_a_create "$fake_bin" \
         --canonical-root "$repo_dir" \
@@ -466,9 +483,70 @@ test_phase_a_create_accepts_info_probe_when_status_probe_is_noisy() {
         --path "$target_path" \
         --format env)"
 
-    assert_contains "$output" 'result=created_from_base' "Phase A should trust a successful info probe even when status is noisy"
+    assert_contains "$output" 'result=created_from_base' "Phase A should wait until plain bd status becomes ready before returning success"
     if [[ ! -f "${target_path}/.beads/last-import.jsonl" && ! -f "${target_path}/.beads/last-touched" ]]; then
         test_fail "Phase A should still finish the canonical import path when status probing is noisy"
+    fi
+    status_attempts="$(<"${status_counter}")"
+    if (( status_attempts < 3 )); then
+        test_fail "Phase A should retry plain bd status until the transient connection-refused window clears"
+    fi
+    if [[ "$(grep -c '^status$' "${call_log}")" -lt 3 ]]; then
+        test_fail "Phase A should log multiple status attempts while waiting for runtime readiness"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_phase_a_create_fails_closed_when_runtime_status_probe_hangs() {
+    test_start "worktree_phase_a_create_fails_closed_when_runtime_status_probe_hangs"
+
+    local fixture_root repo_dir fake_bin target_path output rc call_log status_counter
+    fixture_root="$(mktemp -d /tmp/worktree-phase-a-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    target_path="${fixture_root}/moltinger-hung-status"
+    call_log="${fixture_root}/phase-a-hung-status.calls"
+    status_counter="${fixture_root}/phase-a-hung-status.count"
+
+    mkdir -p "${repo_dir}/.beads"
+    printf 'issue-prefix: "molt"\n' > "${repo_dir}/.beads/config.yaml"
+    printf '{"id":"molt-1","title":"fixture"}\n' > "${repo_dir}/.beads/issues.jsonl"
+    (
+        cd "${repo_dir}"
+        git add .beads/config.yaml .beads/issues.jsonl
+        git commit -m "fixture: tracked local foundation for hung status wait" >/dev/null
+    )
+
+    output="$(
+        set +e
+        BEADS_RESOLVE_BD_TIMEOUT_SECONDS="1" \
+        WORKTREE_PHASE_A_STATUS_RETRY_COUNT="2" \
+        WORKTREE_PHASE_A_STATUS_RETRY_DELAY_SECONDS="0" \
+        FAKE_BD_CALL_LOG="${call_log}" \
+        FAKE_BD_STATUS_COUNTER_FILE="${status_counter}" \
+        FAKE_BD_STATUS_SLEEP_SECONDS="2" \
+        run_phase_a_create "$fake_bin" \
+            --canonical-root "$repo_dir" \
+            --base-ref main \
+            --branch feat/hung-status \
+            --path "$target_path" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Phase A must fail closed when the final plain bd status probe keeps timing out"
+    assert_contains "$output" "plain bd status never became ready" "Phase A should explain the final readiness blocker"
+    assert_contains "$output" "status probe timed out after 1s" "Phase A should surface the bounded watchdog timeout in its error message"
+    if [[ ! -f "${target_path}/.beads/last-import.jsonl" && ! -f "${target_path}/.beads/last-touched" ]]; then
+        test_fail "Phase A should still complete canonical import before the hung-status readiness gate fails closed"
+    fi
+    if [[ "$(<"${status_counter}")" != "2" ]]; then
+        test_fail "Phase A should honor the configured retry budget when status probes keep timing out"
+    fi
+    if [[ "$(grep -c '^status$' "${call_log}")" -ne 2 ]]; then
+        test_fail "Phase A should issue exactly the configured number of timed-out status probes"
     fi
 
     rm -rf "$fixture_root"
@@ -618,7 +696,8 @@ run_all_tests() {
     test_phase_a_create_imports_live_canonical_export
     test_phase_a_create_repairs_runtime_only_state_without_tracked_issues
     test_phase_a_create_rebuilds_unhealthy_named_runtime
-    test_phase_a_create_accepts_info_probe_when_status_probe_is_noisy
+    test_phase_a_create_waits_for_runtime_status_after_bootstrap
+    test_phase_a_create_fails_closed_when_runtime_status_probe_hangs
     test_phase_a_create_falls_back_to_status_when_info_probe_times_out
     test_phase_a_create_blocks_when_runtime_bootstrap_does_not_repair
     test_phase_a_create_blocks_when_canonical_export_fails
