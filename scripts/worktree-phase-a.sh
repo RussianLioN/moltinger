@@ -257,26 +257,18 @@ phase_a_import_canonical_backlog() {
 }
 
 phase_a_wait_for_runtime_status() {
-  local system_bd=""
   local attempts="${WORKTREE_PHASE_A_STATUS_RETRY_COUNT:-5}"
   local delay_seconds="${WORKTREE_PHASE_A_STATUS_RETRY_DELAY_SECONDS:-1}"
   local attempt=1
-  local rc=0
   local output=""
 
-  system_bd="$(beads_resolve_find_system_bd "${SCRIPT_DIR}/../bin/bd")" \
-    || phase_a_fail_runtime "system_bd_missing" "Phase A could not locate the system bd binary for final runtime readiness checks."
-
   while [[ "${attempt}" -le "${attempts}" ]]; do
-    set +e
-    output="$(
-      cd "${target_path}"
-      "${system_bd}" status 2>&1
-    )"
-    rc=$?
-    set -e
+    if ! beads_resolve_run_system_bd_probe "${target_path}" true status; then
+      phase_a_fail_runtime "system_bd_missing" "Phase A could not locate the system bd binary for final runtime readiness checks."
+    fi
+    output="${BEADS_RESOLVE_LAST_BD_OUTPUT}"
 
-    if [[ "${rc}" -eq 0 ]]; then
+    if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
       return 0
     fi
 
@@ -287,6 +279,9 @@ phase_a_wait_for_runtime_status() {
   done
 
   output="${output//$'\n'/ }"
+  if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" == "true" ]]; then
+    output="status probe timed out after ${BEADS_RESOLVE_BD_TIMEOUT_SECONDS:-8}s; ${output}"
+  fi
   phase_a_fail_runtime \
     "runtime_not_ready" \
     "Phase A created the git worktree, but plain bd status never became ready in the new local runtime." \
