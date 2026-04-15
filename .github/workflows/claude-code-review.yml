@@ -1,4 +1,4 @@
-name: AI IDE Review Handoff
+name: Claude Code Review
 
 # Deterministic PR review handoff workflow.
 # GitHub Actions prepares context and operators complete the review in AI IDE.
@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   review-handoff:
-    name: Review Handoff
+    name: AI Code Review
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -97,7 +97,7 @@ jobs:
           additions="0"
           deletions="0"
           files_summary="- File list unavailable"
-          checks_summary="- CI checks unavailable"
+          checks_summary="- Check the PR Checks tab for the latest CI state."
 
           pr_json="$(gh pr view "$pr_number" --json title,body,url,changedFiles,additions,deletions 2>/dev/null || true)"
           if [[ -z "$pr_json" || "$pr_json" == "null" ]]; then
@@ -120,13 +120,6 @@ jobs:
               files_summary="$api_files"
             fi
 
-            api_checks="$(
-              gh pr checks "$pr_number" --json name,state --jq '.[] | "- \(.name): \(.state)"' 2>/dev/null \
-                | sed -n '1,40p' || true
-            )"
-            if [[ -n "$api_checks" ]]; then
-              checks_summary="$api_checks"
-            fi
           fi
 
           focus_hint="General quality, correctness, maintainability, and risks."
@@ -234,13 +227,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! scripts/ci/upsert_sticky_comment.sh \
+          scripts/ci/upsert_sticky_comment.sh \
             --repo "${GITHUB_REPOSITORY}" \
             --issue-number "${{ steps.review.outputs.pr_number }}" \
             --marker "${{ steps.review.outputs.marker }}" \
-            --body-file "${{ steps.review.outputs.comment_path }}"; then
-            echo "::warning::Unable to publish/update sticky review comment."
-          fi
+            --body-file "${{ steps.review.outputs.comment_path }}"
 
       - name: Upload review artifact
         if: always()

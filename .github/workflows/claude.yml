@@ -38,7 +38,6 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
-  actions: read
 
 jobs:
   ai-ide-assistant:
@@ -87,6 +86,9 @@ jobs:
         id: handoff
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_MESSAGE: ${{ inputs.message }}
+          INPUT_TARGET_KIND: ${{ inputs.target_kind }}
+          INPUT_TARGET_NUMBER: ${{ inputs.target_number }}
         run: |
           set -euo pipefail
 
@@ -107,10 +109,10 @@ jobs:
 
           case "$event_name" in
             workflow_dispatch)
-              issue_number="${{ inputs.target_number }}"
-              request_text="${{ inputs.message }}"
+              issue_number="${INPUT_TARGET_NUMBER}"
+              request_text="$(printf '%s' "${INPUT_MESSAGE}")"
               request_author="${GITHUB_ACTOR}"
-              target_kind="${{ inputs.target_kind }}"
+              target_kind="${INPUT_TARGET_KIND}"
               ;;
             issue_comment)
               issue_number="$(jq -r '.issue.number // empty' "$event_path")"
@@ -136,7 +138,7 @@ jobs:
               issue_number="$(jq -r '.issue.number // empty' "$event_path")"
               request_title="$(jq -r '.issue.title // ""' "$event_path")"
               request_body="$(jq -r '.issue.body // ""' "$event_path")"
-              request_text="${request_title}\n\n${request_body}"
+              request_text="$(printf '%s\n\n%s' "$request_title" "$request_body")"
               request_author="$(jq -r '.issue.user.login // "unknown"' "$event_path")"
               target_kind="issue"
               ;;
@@ -155,7 +157,7 @@ jobs:
           body="(unavailable)"
           url=""
           files_summary="- File list unavailable"
-          checks_summary="- CI checks unavailable"
+          checks_summary="- Check the PR Checks tab for the latest CI state."
 
           if [[ -z "$issue_number" ]]; then
             status="degraded"
@@ -180,13 +182,6 @@ jobs:
                 files_summary="$api_files"
               fi
 
-              api_checks="$(
-                gh pr checks "$issue_number" --json name,state --jq '.[] | "- \(.name): \(.state)"' 2>/dev/null \
-                  | sed -n '1,40p' || true
-              )"
-              if [[ -n "$api_checks" ]]; then
-                checks_summary="$api_checks"
-              fi
             fi
           elif [[ "$status" == "ready" ]]; then
             issue_json="$(gh issue view "$issue_number" --json title,body,url 2>/dev/null || true)"
@@ -255,7 +250,7 @@ jobs:
             echo "GitHub Actions no longer runs any LLM for assistant replies."
             echo "Continue the request manually in AI IDE."
             echo ""
-            echo "Legacy `@claude` / `@zai` mentions now produce handoff context only."
+            echo "Legacy @claude / @zai mentions now produce handoff context only."
             echo ""
             echo "[View workflow run](${run_url})"
           } > "$comment_path"
@@ -283,13 +278,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! scripts/ci/upsert_sticky_comment.sh \
+          scripts/ci/upsert_sticky_comment.sh \
             --repo "${GITHUB_REPOSITORY}" \
             --issue-number "${{ steps.handoff.outputs.issue_number }}" \
             --marker "${{ steps.handoff.outputs.marker }}" \
-            --body-file "${{ steps.handoff.outputs.comment_path }}"; then
-            echo "::warning::Unable to publish/update sticky assistant handoff comment."
-          fi
+            --body-file "${{ steps.handoff.outputs.comment_path }}"
 
       - name: Upload handoff artifact
         if: always()
