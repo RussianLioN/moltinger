@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-15
-**Total Lessons**: 82
+**Total Lessons**: 83
 
 ---
 
@@ -55,7 +55,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (26 lessons)
+#### P2 (27 lessons)
+- [Worktree plan helper treated the default branch as a similar slug candidate](../docs/rca/2026-04-15-worktree-plan-helper-treated-default-branch-as-similar-slug-candidate.md)
 - [Worktree governance left raw create and cleanup reconciliation gaps](../docs/rca/2026-04-15-worktree-governance-left-raw-create-and-cleanup-reconciliation-gaps.md)
 - [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
 - [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
@@ -201,14 +202,15 @@
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
-#### tooling (2 lessons)
+#### tooling (3 lessons)
+- [Worktree plan helper treated the default branch as a similar slug candidate](../docs/rca/2026-04-15-worktree-plan-helper-treated-default-branch-as-similar-slug-candidate.md)
 - [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
 - [Worktree cleanup helper blocked merged behind-only branch on stale upstream unpushed-guard](../docs/rca/2026-04-15-worktree-cleanup-helper-blocked-merged-behind-only-branch-on-stale-upstream-guard.md)
 
 
 ### Popular Tags
 
-- `rca` (30 lessons)
+- `rca` (31 lessons)
 - `moltis` (26 lessons)
 - `telegram` (20 lessons)
 - `deploy` (19 lessons)
@@ -226,10 +228,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 82 |
+| Total Lessons | 83 |
 | Critical (P0/P1) | 40 |
 | Categories | 8 |
-| Unique Tags | 161 |
+| Unique Tags | 164 |
 
 ---
 

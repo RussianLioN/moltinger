@@ -2035,6 +2035,14 @@ candidate_similarity_key() {
   printf '%s\n' "${key}"
 }
 
+is_default_branch_similarity_key() {
+  local candidate_key="$1"
+  local default_key=""
+
+  default_key="$(sanitize_branch_name "${default_branch_name:-}")"
+  [[ -n "${candidate_key}" && -n "${default_key}" && "${candidate_key}" == "${default_key}" ]]
+}
+
 candidate_matches_slug() {
   local candidate_name="$1"
   local slug_key="$2"
@@ -2044,6 +2052,10 @@ candidate_matches_slug() {
   candidate_key="$(candidate_similarity_key "${candidate_name}")"
 
   if [[ -z "${candidate_key}" || -z "${slug_key}" ]]; then
+    return 1
+  fi
+
+  if is_default_branch_similarity_key "${candidate_key}"; then
     return 1
   fi
 
@@ -4731,6 +4743,7 @@ prepare_plan_context() {
   require_git_repo
   reset_plan_state
   branch_resolution_state="not_required"
+  default_branch_name="$(resolve_default_branch_name)"
 
   if [[ -z "${request_slug}" && -n "${branch}" ]]; then
     request_slug="$(strip_common_branch_prefix "${branch}")"

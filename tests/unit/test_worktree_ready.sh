@@ -788,6 +788,31 @@ test_plan_asks_once_when_similar_branch_exists() {
     test_pass
 }
 
+test_plan_ignores_default_branch_similarity_for_main_slug_tokens() {
+    test_start "worktree_ready_plan_ignores_default_branch_similarity_for_main_slug_tokens"
+
+    local fixture_root repo_dir fake_bin output
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+
+    output="$(run_worktree_plan "$repo_dir" "$fake_bin" --slug canonical-main-tail-reconciliation)"
+
+    assert_contains "$output" 'Decision: create_clean' "Default branch names should not trigger clarification when a slug contains the generic token main"
+    if [[ "$output" == *'Decision: needs_clarification'* ]]; then
+        test_fail "Default branch similarity should not force a clarification for canonical-main-tail-reconciliation"
+    fi
+    if [[ "$output" == *'name=main'* || "$output" == *'name=origin/main'* ]]; then
+        test_fail "Default branch candidates should not appear in clarification output for canonical-main-tail-reconciliation"
+    fi
+    if [[ "$output" == *'Branch name is required for path formatting'* ]]; then
+        test_fail "Default branch filtering should not emit path-formatting warnings while planning canonical-main-tail-reconciliation"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_create_treats_direnv_permission_denied_as_needs_env_approval() {
     test_start "worktree_ready_create_treats_direnv_permission_denied_as_needs_env_approval"
 
@@ -2972,6 +2997,7 @@ run_all_tests() {
     test_attach_reports_clean_preview_for_existing_feature_branch
     test_plan_attaches_existing_local_branch
     test_plan_asks_once_when_similar_branch_exists
+    test_plan_ignores_default_branch_similarity_for_main_slug_tokens
     test_create_treats_direnv_permission_denied_as_needs_env_approval
     test_create_env_format_emits_handoff_boundary_contract
     test_attach_env_format_emits_handoff_boundary_contract
