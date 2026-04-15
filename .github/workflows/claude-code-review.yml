@@ -1,4 +1,4 @@
-name: Claude Code Review
+name: AI IDE Review Handoff
 
 # Deterministic PR review handoff workflow.
 # GitHub Actions prepares context and operators complete the review in AI IDE.
@@ -30,8 +30,8 @@ permissions:
   issues: write
 
 jobs:
-  claude-review:
-    name: AI Code Review
+  review-handoff:
+    name: Review Handoff
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -85,7 +85,7 @@ jobs:
 
           report_path="reports/pr-${pr_number}-review.md"
           comment_path=".tmp/pr-${pr_number}-review-comment.md"
-          marker="zai-review:pr-${pr_number}"
+          marker="ai-ide-review:pr-${pr_number}"
           run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
           status="ready"
@@ -246,7 +246,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zai-review-pr-${{ steps.pr-context.outputs.number }}
+          name: ai-ide-review-pr-${{ steps.pr-context.outputs.number }}
           path: ${{ steps.review.outputs.report_path }}
           retention-days: 90
           if-no-files-found: warn
