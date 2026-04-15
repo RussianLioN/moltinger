@@ -272,7 +272,7 @@ test_deploy_workflow_runs_non_llm_runtime_validation() {
     if ! grep -Fq 'Test 7: Runtime Moltis TOML syntax' "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'Test 8: Runtime Ollama and failover contract' "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'Test 9: Ollama fallback container status' "$DEPLOY_WORKFLOW" || \
-       ! grep -Fq 'tomllib.load(handle)' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq "python3 -c 'import pathlib, sys, tomllib;" "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'ollama-fallback container is not running' "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'Direct provider and LLM validation is disabled in GitHub Actions.' "$DEPLOY_WORKFLOW" || \
        grep -Fq 'scripts/test-moltis-api.sh' "$DEPLOY_WORKFLOW" || \
