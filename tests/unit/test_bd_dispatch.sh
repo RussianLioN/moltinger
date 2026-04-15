@@ -56,6 +56,25 @@ if [[ "${args[0]:-}" == "import" ]]; then
   exit 0
 fi
 
+if [[ "${args[0]:-}" == "info" ]]; then
+  if [[ -e ".beads/dolt/beads/.fake-broken" ]]; then
+    printf 'Error: failed to open database: simulated broken named db\n' >&2
+    exit 1
+  fi
+  if [[ -n "${db_path}" ]]; then
+    mkdir -p "$(dirname "${db_path}")"
+    if [[ -d "${db_path}" ]]; then
+      : > "${db_path}/.fake-db-touch"
+    else
+      : > "${db_path}"
+    fi
+  fi
+  printf 'INFO_OK\n'
+  printf 'DB=%s\n' "${db_path}"
+  printf 'ARGS=%s\n' "${args[*]}"
+  exit 0
+fi
+
 if [[ "${args[0]:-}" == "status" ]]; then
   if [[ -e ".beads/dolt/beads/.fake-broken" ]]; then
     printf 'Error: failed to open database: failed to initialize schema: failed to run dolt migrations: dolt migration "uuid_primary_keys" failed: migrate events to UUID PK: check column type: Error 1105 (HY000): no root value found in session\n' >&2
@@ -875,6 +894,36 @@ test_localize_materializes_local_db_and_removes_redirect() {
     test_pass
 }
 
+test_localize_prefers_explicit_import_source_over_tracked_foundation() {
+    test_start "localize_prefers_explicit_import_source_over_tracked_foundation"
+
+    local fixture_root repo_dir worktree_path fake_bin output import_source
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-localize-explicit-import"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/localize-explicit-import" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_local_beads_foundation "${worktree_path}"
+    printf '%s\n' "${repo_dir}/.beads" > "${worktree_path}/.beads/redirect"
+    mkdir -p "${fixture_root}/exports"
+    import_source="$(cd "${fixture_root}/exports" && pwd -P)/live-canonical.jsonl"
+    cat > "${import_source}" <<'EOF'
+{"id":"demo-live","title":"live canonical export","status":"open","type":"task","priority":1}
+EOF
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(run_localize "${worktree_path}" "${fake_bin}" --path "${worktree_path}" --import-source "${import_source}")"
+
+    assert_contains "${output}" "State: current" "Localization should still converge when an explicit import source is provided"
+    assert_contains "${output}" "Import Source: ${import_source}" "Localization should report the truthful import source it consumed"
+    assert_imported_source_equals "${worktree_path}" "${import_source}" "Localization must materialize the local runtime from the explicit import source"
+    assert_named_beads_runtime_present "${worktree_path}" "Localization should materialize the named local Beads runtime from the explicit import source"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_localize_bootstraps_missing_foundation_from_source_ref() {
     test_start "localize_bootstraps_missing_foundation_from_source_ref"
 
@@ -1038,6 +1087,7 @@ run_all_tests() {
     test_plain_bd_blocks_broken_runtime_shell_with_localize_guidance
     test_localize_reports_runtime_bootstrap_required_for_broken_runtime_shell
     test_localize_materializes_local_db_and_removes_redirect
+    test_localize_prefers_explicit_import_source_over_tracked_foundation
     test_localize_bootstraps_missing_foundation_from_source_ref
     test_localize_repairs_stale_dolt_shell_by_rebuilding_local_runtime
     test_plain_bd_blocks_unhealthy_named_runtime_with_localize_guidance

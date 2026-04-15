@@ -20,13 +20,14 @@ beads_resolve_usage() {
   cat <<'EOF'
 Usage:
   scripts/beads-resolve-db.sh [--repo <path>] [--format <human|env>] [--] [bd args...]
-  scripts/beads-resolve-db.sh localize [--repo <path>] [--format <human|env>]
+  scripts/beads-resolve-db.sh localize [--repo <path>] [--format <human|env>] [--import-source <issues.jsonl>]
 
 Description:
   Resolve whether plain `bd` can safely use the current worktree-local tracker,
   should pass through unchanged, or must fail closed before a root fallback.
   The `localize` subcommand materializes a local beads.db from the current
-  worktree's tracked `.beads/issues.jsonl`.
+  worktree's tracked `.beads/issues.jsonl` unless an explicit `--import-source`
+  JSONL path is provided.
 
   When `.beads/pilot-mode.json` or `.beads/cutover-mode.json` exists in a
   dedicated worktree, legacy-only operator paths such as `bd sync` fail
@@ -947,6 +948,16 @@ beads_resolve_probe_local_runtime_health() {
   BEADS_RESOLVE_LAST_BD_RC=0
   BEADS_RESOLVE_LAST_BD_TIMED_OUT="false"
 
+  if ! beads_resolve_run_system_bd_probe "${repo_root}" true info; then
+    BEADS_RESOLVE_RUNTIME_PROBE_STATE="unavailable"
+    return 1
+  fi
+
+  if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
+    BEADS_RESOLVE_RUNTIME_PROBE_STATE="healthy"
+    return 0
+  fi
+
   if ! beads_resolve_run_system_bd_probe "${repo_root}" true status; then
     BEADS_RESOLVE_RUNTIME_PROBE_STATE="unavailable"
     return 1
@@ -1005,6 +1016,7 @@ beads_resolve_render_human() {
 beads_localize_worktree() {
   local repo_root="$1"
   local output_format="$2"
+  local explicit_import_source="${3:-}"
   local current_db=""
   local current_dolt=""
   local current_redirect=""
@@ -1029,6 +1041,10 @@ beads_localize_worktree() {
   BEADS_LOCALIZE_FORMAT="${output_format}"
 
   repo_root="$(beads_resolve_normalize_path "${repo_root}")"
+  if [[ -n "${explicit_import_source}" ]]; then
+    explicit_import_source="$(beads_resolve_normalize_path "${explicit_import_source}")"
+    [[ -f "${explicit_import_source}" ]] || beads_resolve_die "--import-source must point to an existing file: ${explicit_import_source}"
+  fi
   current_config="${repo_root}/.beads/config.yaml"
   current_issues="${repo_root}/.beads/issues.jsonl"
   current_db="${repo_root}/.beads/beads.db"
@@ -1107,7 +1123,7 @@ beads_localize_worktree() {
   (
     cd "${repo_root}"
     "${system_bd}" bootstrap >/dev/null 2>&1
-    "${system_bd}" --db "${current_db}" import "${current_issues}" >/dev/null 2>&1
+    "${system_bd}" --db "${current_db}" import "${explicit_import_source:-${current_issues}}" >/dev/null 2>&1
   )
   rm -f "${current_redirect}"
 
@@ -1130,6 +1146,7 @@ beads_localize_worktree() {
 beads_resolve_main() {
   local repo_override=""
   local output_format="human"
+  local import_source=""
   local -a bd_args=()
   local localize_mode="false"
 
@@ -1148,6 +1165,11 @@ beads_resolve_main() {
       --format)
         output_format="${2:-}"
         [[ -n "${output_format}" ]] || beads_resolve_die "--format requires a value"
+        shift 2
+        ;;
+      --import-source)
+        import_source="${2:-}"
+        [[ -n "${import_source}" ]] || beads_resolve_die "--import-source requires a value"
         shift 2
         ;;
       --)
@@ -1176,9 +1198,12 @@ beads_resolve_main() {
   if [[ -n "${repo_override}" ]]; then
     repo_override="$(beads_resolve_normalize_path "${repo_override}")"
   fi
+  if [[ -n "${import_source}" ]]; then
+    import_source="$(beads_resolve_normalize_path "${import_source}")"
+  fi
 
   if [[ "${localize_mode}" == "true" ]]; then
-    beads_localize_worktree "${repo_override:-$PWD}" "${output_format}"
+    beads_localize_worktree "${repo_override:-$PWD}" "${output_format}" "${import_source}"
     return 0
   fi
 

@@ -613,7 +613,7 @@ add_bootstrap_path() {
     return 0
   fi
 
-  for existing_path in "${report_bootstrap_paths[@]}"; do
+  for existing_path in "${report_bootstrap_paths[@]+"${report_bootstrap_paths[@]}"}"; do
     if [[ "${existing_path}" == "${artifact_path}" ]]; then
       return 0
     fi
@@ -646,7 +646,7 @@ build_bootstrap_import_command() {
   fi
 
   command_text="git checkout $(shell_quote "${source_ref}") --"
-  for artifact_path in "${report_bootstrap_paths[@]}"; do
+  for artifact_path in "${report_bootstrap_paths[@]+"${report_bootstrap_paths[@]}"}"; do
     command_text+=" $(shell_quote "${artifact_path}")"
   done
 
@@ -1969,25 +1969,23 @@ remote_branch_exists() {
 count_shared_tokens() {
   local left="$1"
   local right="$2"
-  local token=""
+  local left_token=""
+  local right_token=""
   local count=0
   local -a left_tokens=()
   local -a right_tokens=()
-  declare -A seen_right=()
 
   IFS='-' read -r -a left_tokens <<< "${left}"
   IFS='-' read -r -a right_tokens <<< "${right}"
 
-  for token in "${right_tokens[@]}"; do
-    if [[ ${#token} -ge 3 ]]; then
-      seen_right["${token}"]=1
-    fi
-  done
-
-  for token in "${left_tokens[@]}"; do
-    if [[ ${#token} -ge 3 && -n "${seen_right[${token}]:-}" ]]; then
-      count=$((count + 1))
-    fi
+  for left_token in "${left_tokens[@]}"; do
+    [[ ${#left_token} -ge 3 ]] || continue
+    for right_token in "${right_tokens[@]}"; do
+      if [[ "${left_token}" == "${right_token}" && ${#right_token} -ge 3 ]]; then
+        count=$((count + 1))
+        break
+      fi
+    done
   done
 
   printf '%s\n' "${count}"
@@ -2141,16 +2139,21 @@ find_bd_worktree_by_path() {
   local bd_command=""
   local line=""
   local record_path=""
+  local bd_probe_root=""
+  local normalized_search_path=""
 
   if ! bd_command="$(resolve_bd_command)" || ! command -v jq >/dev/null 2>&1; then
     printf '__PROBE_STATE__\tprobe_unavailable\n'
     return 0
   fi
 
+  normalized_search_path="$(normalize_path "${search_path}" "${resolved_repo_root}")"
+  bd_probe_root="${resolved_canonical_root:-${resolved_repo_root}}"
+
   set +e
   output="$(
-    cd "${resolved_repo_root}" && "${bd_command}" worktree list --json 2>/dev/null \
-      | jq -r '
+    cd "${bd_probe_root}" && "${bd_command}" worktree list --json 2>/dev/null \
+      | jq -r --arg path "${normalized_search_path}" '
         .[]
         | [(.name // ""), (.path // ""), (.branch // ""), (.beads_state // ""), (.redirect_to // "")]
         | @tsv
@@ -2276,6 +2279,8 @@ discover_beads_runtime_state() {
   local has_local_runtime="false"
   local has_runtime_shell="false"
   local doctor_output=""
+  local saw_probe_timeout="false"
+  local saw_probe_execution_failure="false"
 
   discovered_beads_runtime_state=""
   discovered_beads_runtime_probe_state="not_run"
@@ -2308,25 +2313,56 @@ discover_beads_runtime_state() {
   fi
 
   if [[ "${has_local_runtime}" == "true" ]]; then
-    if run_bd_probe_for_path "${worktree_path}" true status; then
+    if run_bd_probe_for_path "${worktree_path}" true info; then
       if [[ "${WORKTREE_READY_LAST_BD_TIMED_OUT}" == "true" ]]; then
-        discovered_beads_runtime_state="probe_unavailable"
-        discovered_beads_runtime_probe_state="timed_out"
-        discovered_beads_runtime_reason="The local plain bd status probe timed out before the target worktree proved runtime health."
-        return 0
-      fi
-
-      if [[ "${WORKTREE_READY_LAST_BD_RC}" -eq 0 ]]; then
+        saw_probe_timeout="true"
+      elif [[ "${WORKTREE_READY_LAST_BD_RC}" -eq 0 ]]; then
         discovered_beads_runtime_state="healthy"
         discovered_beads_runtime_probe_state="ok"
-        discovered_beads_runtime_reason="The local plain bd status probe opened the target runtime successfully."
+        discovered_beads_runtime_reason="The local plain bd info probe opened the target runtime successfully."
         return 0
       fi
     else
-      discovered_beads_runtime_state="probe_unavailable"
-      discovered_beads_runtime_probe_state="probe_unavailable"
-      discovered_beads_runtime_reason="The local plain bd status probe could not be executed from this session."
-      return 0
+      saw_probe_execution_failure="true"
+    fi
+
+    if run_bd_probe_for_path "${worktree_path}" true status; then
+      if [[ "${WORKTREE_READY_LAST_BD_TIMED_OUT}" == "true" ]]; then
+        saw_probe_timeout="true"
+      elif [[ "${WORKTREE_READY_LAST_BD_RC}" -eq 0 ]]; then
+        discovered_beads_runtime_state="healthy"
+        discovered_beads_runtime_probe_state="ok"
+        discovered_beads_runtime_reason="The local plain bd fallback status probe opened the target runtime successfully."
+        return 0
+      fi
+    else
+      saw_probe_execution_failure="true"
+    fi
+
+    if run_system_bd_probe_for_path "${worktree_path}" true info; then
+      if [[ "${WORKTREE_READY_LAST_BD_TIMED_OUT}" == "true" ]]; then
+        saw_probe_timeout="true"
+      elif [[ "${WORKTREE_READY_LAST_BD_RC}" -eq 0 ]]; then
+        discovered_beads_runtime_state="healthy"
+        discovered_beads_runtime_probe_state="ok"
+        discovered_beads_runtime_reason="The fallback system bd info probe opened the target runtime successfully."
+        return 0
+      fi
+    else
+      saw_probe_execution_failure="true"
+    fi
+
+    if run_system_bd_probe_for_path "${worktree_path}" true status; then
+      if [[ "${WORKTREE_READY_LAST_BD_TIMED_OUT}" == "true" ]]; then
+        saw_probe_timeout="true"
+      elif [[ "${WORKTREE_READY_LAST_BD_RC}" -eq 0 ]]; then
+        discovered_beads_runtime_state="healthy"
+        discovered_beads_runtime_probe_state="ok"
+        discovered_beads_runtime_reason="The fallback system bd status probe opened the target runtime successfully."
+        return 0
+      fi
+    else
+      saw_probe_execution_failure="true"
     fi
 
     if run_system_bd_probe_for_path "${worktree_path}" true doctor --json; then
@@ -2344,11 +2380,25 @@ discover_beads_runtime_state() {
         discovered_beads_runtime_reason="The local runtime exists only as a partial Dolt shell; the named 'beads' DB is not materialized yet."
         return 0
       fi
+    else
+      saw_probe_execution_failure="true"
+    fi
+
+    if [[ "${saw_probe_timeout}" == "true" ]]; then
+      discovered_beads_runtime_state="probe_unavailable"
+      discovered_beads_runtime_probe_state="timed_out"
+      discovered_beads_runtime_reason="Wrapper and system bd health probes timed out before the target worktree proved runtime health."
+      return 0
     fi
 
     discovered_beads_runtime_state="probe_unavailable"
-    discovered_beads_runtime_probe_state="status_failed"
-    discovered_beads_runtime_reason="The local runtime exists, but the current session could not prove that plain bd can read it safely."
+    if [[ "${saw_probe_execution_failure}" == "true" ]]; then
+      discovered_beads_runtime_probe_state="probe_unavailable"
+      discovered_beads_runtime_reason="Wrapper and system bd health probes could not be executed from this session."
+    else
+      discovered_beads_runtime_probe_state="status_failed"
+      discovered_beads_runtime_reason="The local runtime exists, but neither wrapper nor system bd probes could prove that plain bd can read it safely."
+    fi
     return 0
   fi
 
@@ -3102,7 +3152,7 @@ set_doctor_next_steps() {
       ;;
   esac
 
-  if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
+  if [[ -n "${report_next_steps[*]-}" ]]; then
     return 0
   fi
 
@@ -3742,7 +3792,7 @@ render_plan_candidates() {
     return 0
   fi
 
-  for candidate in "${planning_candidates[@]}"; do
+  for candidate in "${planning_candidates[@]+"${planning_candidates[@]}"}"; do
     IFS=$'\t' read -r candidate_type candidate_name candidate_path candidate_reason <<< "${candidate}"
     printf '  %d. type=%s name=%s' "${index}" "${candidate_type}" "${candidate_name}"
     if [[ -n "${candidate_path}" && "${candidate_path}" != "-" ]]; then
@@ -3775,9 +3825,9 @@ render_plan_report() {
     if [[ -n "${planning_question}" ]]; then
       render_env_kv "question" "${planning_question}"
     fi
-    render_env_array "next" "${planning_next_steps[@]}"
-    render_env_array "warning" "${planning_warnings[@]}"
-    render_env_array "candidate" "${planning_candidates[@]}"
+    render_env_array "next" "${planning_next_steps[@]+"${planning_next_steps[@]}"}"
+    render_env_array "warning" "${planning_warnings[@]+"${planning_warnings[@]}"}"
+    render_env_array "candidate" "${planning_candidates[@]+"${planning_candidates[@]}"}"
     return 0
   fi
 
@@ -3798,9 +3848,9 @@ render_plan_report() {
     printf 'Question: %s\n' "${planning_question}"
   fi
   printf 'Next:\n'
-  render_numbered_list "${planning_next_steps[@]}"
+  render_numbered_list "${planning_next_steps[@]+"${planning_next_steps[@]}"}"
   render_plan_candidates
-  render_warning_list "${planning_warnings[@]}"
+  render_warning_list "${planning_warnings[@]+"${planning_warnings[@]}"}"
 }
 
 render_readiness_report() {
@@ -3842,16 +3892,16 @@ render_readiness_report() {
       render_env_kv "phase_b_seed_payload" "${report_phase_b_seed_payload}"
     fi
     if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
-      render_env_array "issue_artifact" "${report_issue_artifacts[@]}"
+      render_env_array "issue_artifact" "${report_issue_artifacts[@]+"${report_issue_artifacts[@]}"}"
     fi
     if [[ -n "${report_bootstrap_source_ref}" ]]; then
       render_env_kv "bootstrap_source" "${report_bootstrap_source_ref}"
     fi
     if [[ "${#report_bootstrap_paths[@]}" -gt 0 ]]; then
-      render_env_array "bootstrap_file" "${report_bootstrap_paths[@]}"
+      render_env_array "bootstrap_file" "${report_bootstrap_paths[@]+"${report_bootstrap_paths[@]}"}"
     fi
-    render_env_array "next" "${report_next_steps[@]}"
-    render_env_array "warning" "${report_warnings[@]}"
+    render_env_array "next" "${report_next_steps[@]+"${report_next_steps[@]}"}"
+    render_env_array "warning" "${report_warnings[@]+"${report_warnings[@]}"}"
     return 0
   fi
 
@@ -3864,12 +3914,12 @@ render_readiness_report() {
   fi
   if [[ "${#report_issue_artifacts[@]}" -gt 0 ]]; then
     printf 'Issue Artifacts:\n'
-    render_numbered_list "${report_issue_artifacts[@]}"
+    render_numbered_list "${report_issue_artifacts[@]+"${report_issue_artifacts[@]}"}"
   fi
   if [[ -n "${report_bootstrap_source_ref}" && "${#report_bootstrap_paths[@]}" -gt 0 ]]; then
     printf 'Bootstrap Source: %s\n' "${report_bootstrap_source_ref}"
     printf 'Bootstrap Files:\n'
-    render_numbered_list "${report_bootstrap_paths[@]}"
+    render_numbered_list "${report_bootstrap_paths[@]+"${report_bootstrap_paths[@]}"}"
   fi
   printf 'Status: %s\n' "${report_status}"
   printf 'Phase: %s\n' "${report_phase}"
@@ -3898,10 +3948,10 @@ render_readiness_report() {
     printf 'Pending: %s\n' "${report_pending_work}"
   fi
   printf 'Next:\n'
-  render_numbered_list "${report_next_steps[@]}"
-  render_warning_list "${report_warnings[@]}"
+  render_numbered_list "${report_next_steps[@]+"${report_next_steps[@]}"}"
+  render_warning_list "${report_warnings[@]+"${report_warnings[@]}"}"
   if [[ "${report_handoff_mode}" == "manual" ]]; then
-    render_fenced_bash_block "${report_next_steps[@]}"
+    render_fenced_bash_block "${report_next_steps[@]+"${report_next_steps[@]}"}"
     render_phase_b_seed_prompt
     render_phase_b_seed_payload
   fi
@@ -3936,8 +3986,8 @@ render_finish_report() {
     if [[ -n "${report_repair_command}" ]]; then
       render_env_kv "repair_command" "${report_repair_command}"
     fi
-    render_env_array "next" "${report_next_steps[@]}"
-    render_env_array "warning" "${report_warnings[@]}"
+    render_env_array "next" "${report_next_steps[@]+"${report_next_steps[@]}"}"
+    render_env_array "warning" "${report_warnings[@]+"${report_warnings[@]}"}"
     return 0
   fi
 
@@ -3964,9 +4014,9 @@ render_finish_report() {
     printf 'Repair Command: %s\n' "${report_repair_command}"
   fi
   printf 'Next:\n'
-  render_numbered_list "${report_next_steps[@]}"
-  render_warning_list "${report_warnings[@]}"
-  render_fenced_bash_block "${report_next_steps[@]}"
+  render_numbered_list "${report_next_steps[@]+"${report_next_steps[@]}"}"
+  render_warning_list "${report_warnings[@]+"${report_warnings[@]}"}"
+  render_fenced_bash_block "${report_next_steps[@]+"${report_next_steps[@]}"}"
 }
 
 render_cleanup_report() {
@@ -3990,8 +4040,8 @@ render_cleanup_report() {
     if [[ -n "${report_repair_command}" ]]; then
       render_env_kv "repair_command" "${report_repair_command}"
     fi
-    render_env_array "next" "${report_next_steps[@]}"
-    render_env_array "warning" "${report_warnings[@]}"
+    render_env_array "next" "${report_next_steps[@]+"${report_next_steps[@]}"}"
+    render_env_array "warning" "${report_warnings[@]+"${report_warnings[@]}"}"
     return 0
   fi
 
@@ -4015,11 +4065,11 @@ render_cleanup_report() {
   fi
   if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
     printf 'Next:\n'
-    render_numbered_list "${report_next_steps[@]}"
+    render_numbered_list "${report_next_steps[@]+"${report_next_steps[@]}"}"
   fi
-  render_warning_list "${report_warnings[@]}"
+  render_warning_list "${report_warnings[@]+"${report_warnings[@]}"}"
   if [[ "${#report_next_steps[@]}" -gt 0 ]]; then
-    render_fenced_bash_block "${report_next_steps[@]}"
+    render_fenced_bash_block "${report_next_steps[@]+"${report_next_steps[@]}"}"
   fi
 }
 
@@ -4098,7 +4148,7 @@ set_planning_decision() {
   planning_question=""
   planning_next_steps=()
 
-  for candidate in "${planning_candidates[@]}"; do
+  for candidate in "${planning_candidates[@]+"${planning_candidates[@]}"}"; do
     IFS=$'\t' read -r candidate_type candidate_name candidate_path candidate_reason <<< "${candidate}"
     case "${candidate_reason}" in
       exact-attached-branch)

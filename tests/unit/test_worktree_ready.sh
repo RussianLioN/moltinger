@@ -41,6 +41,10 @@ if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; t
   exit 0
 fi
 
+if [[ -n "${BD_CALL_LOG:-}" ]]; then
+  printf '%s\n' "${1:-}" >> "${BD_CALL_LOG}"
+fi
+
 if [[ "${1:-}" == "worktree" && "${2:-}" == "remove" ]]; then
   target_path="${3:-}"
   if [[ "${BD_WORKTREE_REMOVE_CANONICALIZE:-0}" == "1" && -d "${target_path}" ]]; then
@@ -85,10 +89,96 @@ if [[ "${1:-}" == "status" ]]; then
   exit "${BD_STATUS_RC:-0}"
 fi
 
+if [[ "${1:-}" == "info" ]]; then
+  if [[ -n "${BD_INFO_SLEEP_SECONDS:-}" ]]; then
+    sleep "${BD_INFO_SLEEP_SECONDS}"
+  fi
+  if [[ -n "${BD_INFO_STDOUT:-}" ]]; then
+    printf '%s\n' "${BD_INFO_STDOUT}"
+  fi
+  if [[ -n "${BD_INFO_STDERR:-}" ]]; then
+    printf '%s\n' "${BD_INFO_STDERR}" >&2
+  fi
+  exit "${BD_INFO_RC:-0}"
+fi
+
 if [[ "${1:-}" == "doctor" && "${2:-}" == "--json" ]]; then
   if [[ -n "${BD_DOCTOR_SLEEP_SECONDS:-}" ]]; then
     sleep "${BD_DOCTOR_SLEEP_SECONDS}"
   fi
+  printf '%s\n' "${BD_DOCTOR_STDOUT:-{\"checks\":[],\"overall_ok\":true}}"
+  exit "${BD_DOCTOR_RC:-0}"
+fi
+
+printf 'unsupported fake bd invocation\n' >&2
+exit 1
+EOF
+    chmod +x "${fake_bin}/bd"
+
+    printf '%s\n' "${fake_bin}"
+}
+
+create_cwd_sensitive_bd_bin() {
+    local fixture_root="$1"
+    local fake_bin="${fixture_root}/cwd-sensitive-bd-bin"
+
+    mkdir -p "${fake_bin}"
+    cat > "${fake_bin}/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
+  if [[ -n "${BD_WORKTREE_LIST_SHARED_CWD:-}" && "${PWD}" == "${BD_WORKTREE_LIST_SHARED_CWD}" ]]; then
+    printf '%s\n' "${BD_WORKTREE_LIST_JSON_SHARED:-[]}"
+    exit 0
+  fi
+  if [[ -n "${BD_WORKTREE_LIST_CANONICAL_CWD:-}" && "${PWD}" == "${BD_WORKTREE_LIST_CANONICAL_CWD}" ]]; then
+    printf '%s\n' "${BD_WORKTREE_LIST_JSON_CANONICAL:-[]}"
+    exit 0
+  fi
+  printf '%s\n' "${BD_WORKTREE_LIST_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "worktree" && "${2:-}" == "remove" ]]; then
+  target_path="${3:-}"
+  if [[ "${BD_WORKTREE_REMOVE_NOOP:-0}" != "1" && -n "${target_path}" ]]; then
+    git worktree remove "${target_path}" >/dev/null 2>&1 || true
+  fi
+  exit "${BD_WORKTREE_REMOVE_RC:-0}"
+fi
+
+if [[ "${1:-}" == "list" && "${2:-}" == "--all" && "${3:-}" == "--json" ]]; then
+  printf '%s\n' "${BD_LIST_ALL_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "show" && "${3:-}" == "--json" ]]; then
+  printf '%s\n' "${BD_SHOW_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "status" ]]; then
+  if [[ -n "${BD_STATUS_STDOUT:-}" ]]; then
+    printf '%s\n' "${BD_STATUS_STDOUT}"
+  fi
+  if [[ -n "${BD_STATUS_STDERR:-}" ]]; then
+    printf '%s\n' "${BD_STATUS_STDERR}" >&2
+  fi
+  exit "${BD_STATUS_RC:-0}"
+fi
+
+if [[ "${1:-}" == "info" ]]; then
+  if [[ -n "${BD_INFO_STDOUT:-}" ]]; then
+    printf '%s\n' "${BD_INFO_STDOUT}"
+  fi
+  if [[ -n "${BD_INFO_STDERR:-}" ]]; then
+    printf '%s\n' "${BD_INFO_STDERR}" >&2
+  fi
+  exit "${BD_INFO_RC:-0}"
+fi
+
+if [[ "${1:-}" == "doctor" && "${2:-}" == "--json" ]]; then
   printf '%s\n' "${BD_DOCTOR_STDOUT:-{\"checks\":[],\"overall_ok\":true}}"
   exit "${BD_DOCTOR_RC:-0}"
 fi
@@ -340,6 +430,27 @@ EOF
     printf '%s\n' "${fake_bin}"
 }
 
+seed_timeouting_worktree_bd_wrapper() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/bin"
+    cat > "${worktree_dir}/bin/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "info" || "${1:-}" == "status" ]]; then
+  if [[ -n "${WORKTREE_WRAPPER_CALL_LOG:-}" ]]; then
+    printf '%s\n' "${1:-}" >> "${WORKTREE_WRAPPER_CALL_LOG}"
+  fi
+  sleep "${WORKTREE_WRAPPER_PROBE_SLEEP_SECONDS:-2}"
+  exit 0
+fi
+
+exec bd "$@"
+EOF
+    chmod +x "${worktree_dir}/bin/bd"
+}
+
 create_fake_osascript_failure_bin() {
     local fixture_root="$1"
     local fake_bin="${fixture_root}/osascript-failure-bin"
@@ -473,6 +584,11 @@ test_plan_creates_clean_slug_without_issue() {
     assert_contains "$output" 'Branch: feat/remote-uat-hardening' "Slug-only plan should derive a clean feature branch"
     assert_contains "$output" 'Preview: ../moltinger-remote-uat-hardening' "Slug-only plan should derive a clean sibling worktree path"
     assert_contains "$output" 'Decision: create_clean' "Slug-only plan should choose clean creation when there are no collisions"
+
+    output="$(run_worktree_plan "$repo_dir" "$fake_bin" --slug remote-uat-hardening --format env)"
+
+    assert_contains "$output" 'warning_count=0' "Env planning output should serialize empty warnings arrays safely"
+    assert_contains "$output" 'candidate_count=0' "Env planning output should serialize empty candidate arrays safely"
 
     rm -rf "$fixture_root"
     test_pass
@@ -981,6 +1097,45 @@ test_doctor_accepts_local_beads_state() {
     test_pass
 }
 
+test_doctor_uses_canonical_root_for_bd_worktree_listing() {
+    test_start "worktree_ready_doctor_uses_canonical_root_for_bd_worktree_listing"
+
+    local fixture_root canonical_repo_dir fake_bin existing_path output rc shared_json canonical_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    canonical_repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    canonical_repo_dir="$(cd "$canonical_repo_dir" && pwd -P)"
+    fake_bin="$(create_cwd_sensitive_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-current-cwd-local"
+    git_topology_fixture_add_worktree_branch_from "$canonical_repo_dir" "$existing_path" "feat/current-cwd-local" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    seed_fake_local_beads_runtime "${existing_path}"
+    shared_json="$(printf '[{"name":"current-cwd-local","path":"%s","branch":"feat/current-cwd-local","beads_state":"shared"}]\n' "${existing_path}")"
+    canonical_json="$(printf '[{"name":"current-cwd-local","path":"%s","branch":"feat/current-cwd-local","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        cd "$existing_path"
+        BD_WORKTREE_LIST_SHARED_CWD="$existing_path" \
+        BD_WORKTREE_LIST_JSON_SHARED="${shared_json}" \
+        BD_WORKTREE_LIST_CANONICAL_CWD="${canonical_repo_dir}" \
+        BD_WORKTREE_LIST_JSON_CANONICAL="${canonical_json}" \
+        PATH="${fake_bin}:$PATH" "$WORKTREE_READY_SCRIPT" doctor --repo "$existing_path" --branch feat/current-cwd-local 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Doctor should accept a local worktree even when bd mislabels the current cwd as shared"
+    assert_contains "$output" 'Beads: local' "Doctor should source bd worktree discovery from the canonical root"
+    if [[ "$output" == *'Beads: shared'* ]]; then
+        test_fail "Doctor should not inherit the current cwd shared false-positive"
+        return
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_doctor_blocks_runtime_bootstrap_required_when_external_state_says_local() {
     test_start "worktree_ready_doctor_blocks_runtime_bootstrap_required_when_external_state_says_local"
 
@@ -1006,6 +1161,7 @@ EOF
     output="$(
         set +e
         BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_INFO_RC="1" \
         BD_STATUS_RC="1" \
         BD_STATUS_STDERR='database "beads" not found' \
         BD_DOCTOR_STDOUT="${doctor_json}" \
@@ -1021,6 +1177,92 @@ EOF
     assert_contains "$output" './scripts/beads-worktree-localize.sh --path .' "Doctor must route broken local runtimes through the managed runtime repair helper"
     if [[ "$output" == *"./scripts/git-session-guard.sh --refresh"* ]]; then
         test_fail "Doctor should not prioritize guard refresh ahead of a broken local runtime"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_doctor_accepts_info_probe_when_status_probe_is_noisy() {
+    test_start "worktree_ready_doctor_accepts_info_probe_when_status_probe_is_noisy"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-noisy-status-doctor"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/noisy-status-doctor" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    seed_fake_local_beads_runtime "${existing_path}"
+    bd_json="$(printf '[{"name":"noisy-status-doctor","path":"%s","branch":"feat/noisy-status-doctor","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_INFO_STDOUT='Beads Database Information' \
+        BD_STATUS_RC="1" \
+        BD_STATUS_STDERR='failed to get statistics: dial tcp 127.0.0.1:12345: connect: connection refused' \
+        run_worktree_doctor "$repo_dir" "$fake_bin" --branch feat/noisy-status-doctor 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Doctor should accept a successful info probe even when status is noisy"
+    assert_contains "$output" 'Status: ready_for_codex' "Doctor should keep the worktree ready when info proves runtime health"
+    assert_contains "$output" 'Beads Runtime: healthy' "Doctor should mark the runtime healthy when info succeeds"
+    if [[ "$output" == *'/usr/local/bin/bd doctor --json'* ]]; then
+        test_fail "Doctor should not drop into runtime repair when info already proved health"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_doctor_uses_system_info_fallback_when_wrapper_probes_time_out() {
+    test_start "worktree_ready_doctor_uses_system_info_fallback_when_wrapper_probes_time_out"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json wrapper_call_log system_call_log
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-wrapper-timeout-doctor"
+    wrapper_call_log="${fixture_root}/wrapper-probe.calls"
+    system_call_log="${fixture_root}/system-probe.calls"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/wrapper-timeout-doctor" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    seed_fake_guard_script "${existing_path}" "ok"
+    seed_fake_local_beads_runtime "${existing_path}"
+    seed_timeouting_worktree_bd_wrapper "${existing_path}"
+    bd_json="$(printf '[{"name":"wrapper-timeout-doctor","path":"%s","branch":"feat/wrapper-timeout-doctor","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        WORKTREE_READY_BD_TIMEOUT_SECONDS="1" \
+        WORKTREE_WRAPPER_PROBE_SLEEP_SECONDS="2" \
+        WORKTREE_WRAPPER_CALL_LOG="${wrapper_call_log}" \
+        BD_CALL_LOG="${system_call_log}" \
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_INFO_STDOUT='Beads Database Information' \
+        run_worktree_doctor "$repo_dir" "$fake_bin" --branch feat/wrapper-timeout-doctor 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Doctor should fall back to the system bd probe when wrapper probes time out"
+    assert_contains "$output" 'Status: ready_for_codex' "Doctor should keep the worktree ready when system info proves runtime health"
+    assert_contains "$output" 'Beads Runtime: healthy' "Doctor should mark runtime healthy after system probe fallback"
+    assert_contains "$output" 'The fallback system bd info probe opened the target runtime successfully.' "Doctor should report the exact system-info fallback reason"
+    if [[ "$output" == *'timed out before the target worktree proved runtime health'* ]]; then
+        test_fail "Doctor should not surface wrapper probe timeout once system fallback proves runtime health"
+    fi
+    if ! grep -q '^info$' "${wrapper_call_log}" || ! grep -q '^status$' "${wrapper_call_log}"; then
+        test_fail "Doctor should try wrapper info and wrapper status before falling back"
+        return
+    fi
+    if ! grep -q '^info$' "${system_call_log}"; then
+        test_fail "Doctor should eventually try the system info probe after wrapper timeouts"
+        return
     fi
 
     rm -rf "$fixture_root"
@@ -1252,6 +1494,7 @@ EOF
     output="$(
         set +e
         BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_INFO_RC="1" \
         BD_STATUS_RC="1" \
         BD_STATUS_STDERR='database "beads" not found' \
         BD_DOCTOR_STDOUT="${doctor_json}" \
@@ -1493,6 +1736,7 @@ test_cleanup_removes_linked_worktree_without_branch_delete() {
     assert_contains "$output" 'worktree_action=removed' "Cleanup should mark the linked worktree as removed"
     assert_contains "$output" 'local_branch_action=not_requested' "Cleanup without --delete-branch should not touch local branches"
     assert_contains "$output" 'remote_branch_action=not_requested' "Cleanup without --delete-branch should not touch remote branches"
+    assert_contains "$output" 'warning_count=0' "Cleanup env output should serialize empty warnings arrays safely"
     if [[ -d "${existing_path}" ]]; then
         test_fail "Cleanup should remove the linked worktree directory"
     fi
@@ -2408,7 +2652,10 @@ run_all_tests() {
     test_create_without_existing_worktree_points_to_phase_a_executor
     test_doctor_branch_only_suppresses_already_attached_warning
     test_doctor_accepts_local_beads_state
+    test_doctor_uses_canonical_root_for_bd_worktree_listing
     test_doctor_blocks_runtime_bootstrap_required_when_external_state_says_local
+    test_doctor_accepts_info_probe_when_status_probe_is_noisy
+    test_doctor_uses_system_info_fallback_when_wrapper_probes_time_out
     test_doctor_does_not_block_on_beads_probe_unavailable
     test_doctor_missing_guard_script_does_not_suggest_refresh
     test_doctor_missing_worktree_routes_back_to_managed_attach
