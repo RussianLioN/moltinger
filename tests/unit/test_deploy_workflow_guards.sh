@@ -269,12 +269,16 @@ test_deploy_workflow_runs_non_llm_runtime_validation() {
         return
     fi
 
-    if ! grep -Fq 'Test 7: Runtime Moltis TOML syntax' "$DEPLOY_WORKFLOW" || \
+    if ! grep -Fq 'Test 7: Runtime Moltis config parse evidence' "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'Test 8: Runtime Ollama and failover contract' "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'Test 9: Ollama fallback container status' "$DEPLOY_WORKFLOW" || \
-       ! grep -Fq "python3 -c 'import pathlib, sys, tomllib;" "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'AUTH_STATUS=$(docker exec moltis moltis auth status 2>&1)' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'read_runtime_toml_key() {' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq "grep -Fq '[providers.ollama]'" "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq "grep -Fq 'ollama::'" "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'ollama-fallback container is not running' "$DEPLOY_WORKFLOW" || \
        ! grep -Fq 'Direct provider and LLM validation is disabled in GitHub Actions.' "$DEPLOY_WORKFLOW" || \
+       grep -Fq 'tomllib' "$DEPLOY_WORKFLOW" || \
        grep -Fq 'scripts/test-moltis-api.sh' "$DEPLOY_WORKFLOW" || \
        grep -Fq 'EXPECTED_PROVIDER="openai-codex"' "$DEPLOY_WORKFLOW" || \
        grep -Fq 'EXPECTED_MODEL="openai-codex::gpt-5.4"' "$DEPLOY_WORKFLOW"; then

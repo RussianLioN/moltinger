@@ -1319,15 +1319,71 @@ jobs:
             test -f "$RUNTIME_CONFIG_DIR/moltis.toml"
             echo "Runtime config OK: $RUNTIME_CONFIG_DIR"
 
-            # Test 7: Runtime Moltis TOML syntax
-            echo "Test 7: Runtime Moltis TOML syntax..."
-            python3 -c 'import pathlib, sys, tomllib; config_path = pathlib.Path(sys.argv[1]); tomllib.load(config_path.open("rb")); print(f"Runtime TOML OK: {config_path}")' \
-              "$RUNTIME_CONFIG_DIR/moltis.toml"
+            read_runtime_toml_key() {
+              local toml_file="$1"
+              local section="$2"
+              local key="$3"
+
+              awk -v section="$section" -v key="$key" '
+                BEGIN { in_section = 0 }
+                /^[[:space:]]*\[/ {
+                  in_section = ($0 == section)
+                  next
+                }
+                in_section && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") {
+                  line = $0
+                  sub(/^[[:space:]]*/, "", line)
+                  sub(/[[:space:]]*#.*$/, "", line)
+                  sub("^[^=]+=[[:space:]]*", "", line)
+                  gsub(/^"/, "", line)
+                  gsub(/"$/, "", line)
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+                  print line
+                  exit
+                }
+              ' "$toml_file"
+            }
+
+            # Test 7: Runtime Moltis config parse evidence
+            echo "Test 7: Runtime Moltis config parse evidence..."
+            set +e
+            AUTH_STATUS=$(docker exec moltis moltis auth status 2>&1)
+            AUTH_STATUS_RC=$?
+            set -e
+            echo "$AUTH_STATUS"
+            if [ "$AUTH_STATUS_RC" -ne 0 ]; then
+              echo "::error::moltis auth status failed; runtime config may not be loadable"
+              exit 1
+            fi
+            echo "Runtime config parse evidence OK"
 
             # Test 8: Runtime Ollama and failover contract
             echo "Test 8: Runtime Ollama and failover contract..."
-            python3 -c 'import pathlib, sys, tomllib; config = tomllib.load(pathlib.Path(sys.argv[1]).open("rb")); providers = config.get("providers", {}); ollama = providers.get("ollama"); failover = config.get("failover"); fallback_models = failover.get("fallback_models", []) if isinstance(failover, dict) else []; checks = [(isinstance(ollama, dict), "Missing [providers.ollama] in runtime config"), (isinstance(ollama, dict) and ollama.get("enabled", False), "Runtime config has [providers.ollama] but it is not enabled"), (isinstance(ollama, dict) and bool(ollama.get("base_url")), "Runtime config is missing providers.ollama.base_url"), (isinstance(failover, dict), "Missing [failover] in runtime config"), (isinstance(failover, dict) and failover.get("enabled", False), "Runtime config has failover disabled"), (any(str(model).startswith("ollama::") for model in fallback_models), "Failover contract must include an ollama:: fallback model")]; failed = next((message for ok, message in checks if not ok), None); print("Runtime failover contract OK") if failed is None else sys.exit(failed)' \
-              "$RUNTIME_CONFIG_DIR/moltis.toml"
+            if ! grep -Fq '[providers.ollama]' "$RUNTIME_CONFIG_DIR/moltis.toml"; then
+              echo "::error::Missing [providers.ollama] in runtime config"
+              exit 1
+            fi
+            if [ "$(read_runtime_toml_key "$RUNTIME_CONFIG_DIR/moltis.toml" '[providers.ollama]' 'enabled')" != "true" ]; then
+              echo "::error::Runtime config has [providers.ollama] but it is not enabled"
+              exit 1
+            fi
+            if [ -z "$(read_runtime_toml_key "$RUNTIME_CONFIG_DIR/moltis.toml" '[providers.ollama]' 'base_url')" ]; then
+              echo "::error::Runtime config is missing providers.ollama.base_url"
+              exit 1
+            fi
+            if ! grep -Fq '[failover]' "$RUNTIME_CONFIG_DIR/moltis.toml"; then
+              echo "::error::Missing [failover] in runtime config"
+              exit 1
+            fi
+            if [ "$(read_runtime_toml_key "$RUNTIME_CONFIG_DIR/moltis.toml" '[failover]' 'enabled')" != "true" ]; then
+              echo "::error::Runtime config has failover disabled"
+              exit 1
+            fi
+            if ! grep -Fq 'ollama::' "$RUNTIME_CONFIG_DIR/moltis.toml"; then
+              echo "::error::Failover contract must include an ollama:: fallback model"
+              exit 1
+            fi
+            echo "Runtime failover contract OK"
 
             # Test 9: Ollama fallback container status
             echo "Test 9: Ollama fallback container status..."
@@ -1340,8 +1396,6 @@ jobs:
 
             # Test 10: Provider auth status evidence
             echo "Test 10: Provider auth status..."
-            AUTH_STATUS=$(docker exec moltis moltis auth status 2>&1 || true)
-            echo "$AUTH_STATUS"
             if printf '%s' "$AUTH_STATUS" | grep -q 'No authenticated providers.'; then
               echo "::warning::No authenticated providers are currently loaded in live Moltis"
             fi
