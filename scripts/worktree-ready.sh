@@ -29,6 +29,7 @@ Common Options:
   --repo <path>              Repository root override
   --handoff <profile>        Handoff profile (manual|terminal|codex)
   --delete-branch            Delete local + remote branch after cleanup when merged proof exists
+  --close-issue              Close the resolved Beads issue after successful cleanup
   --pending-summary <text>   Concrete deferred Phase B summary for handoff output
   --phase-b-seed-payload <text>
                             Structured deferred Phase B payload for rich handoff output
@@ -44,6 +45,7 @@ Examples:
   scripts/worktree-ready.sh doctor --path ../moltinger-0308-005-worktree-ready-flow
   scripts/worktree-ready.sh finish --branch feat/remote-uat-hardening
   scripts/worktree-ready.sh cleanup --branch feat/remote-uat-hardening --delete-branch
+  scripts/worktree-ready.sh cleanup --branch feat/remote-uat-hardening --delete-branch --close-issue
   scripts/worktree-ready.sh handoff --handoff codex --path ../moltinger-0308-005-worktree-ready-flow
 EOF
 }
@@ -82,6 +84,7 @@ target_path=""
 repo_root=""
 handoff_profile="manual"
 delete_branch_requested="false"
+close_issue_requested="false"
 existing_branch=""
 output_format="human"
 pending_summary=""
@@ -230,6 +233,10 @@ parse_args() {
         ;;
       --delete-branch)
         delete_branch_requested="true"
+        shift
+        ;;
+      --close-issue)
+        close_issue_requested="true"
         shift
         ;;
       --pending-summary)
@@ -1013,6 +1020,22 @@ build_finish_close_command() {
   printf 'bd close %s --reason %s || bd close --no-db %s --reason %s\n' "${quoted_issue}" "${quoted_reason}" "${quoted_issue}" "${quoted_reason}"
 }
 
+build_cleanup_close_command() {
+  local resolved_issue="${report_issue_id:-}"
+  local quoted_db=""
+  local quoted_issue=""
+  local quoted_reason=""
+
+  if [[ -z "${resolved_issue}" || "${resolved_issue}" == "n/a" ]]; then
+    return 1
+  fi
+
+  quoted_db="$(shell_quote "${resolved_repo_root}/.beads/beads.db")"
+  quoted_issue="$(shell_quote "${resolved_issue}")"
+  quoted_reason="$(shell_quote "Done")"
+  printf 'bd --db %s close %s --reason %s\n' "${quoted_db}" "${quoted_issue}" "${quoted_reason}"
+}
+
 build_finish_review_command() {
   local worktree_path="${1:-}"
 
@@ -1405,6 +1428,13 @@ cleanup_target_arguments_conflict() {
   local target_branch=""
 
   if [[ -z "${branch}" || -z "${target_path}" ]]; then
+    return 1
+  fi
+
+  # Only explicit --path + --branch requests can conflict. When cleanup
+  # derives a preview path from --branch, the discovered attached worktree is
+  # authoritative and the synthetic sibling preview must not block cleanup.
+  if [[ -z "${path_preview:-}" || "${path_preview}" != "${target_path}" ]]; then
     return 1
   fi
 
@@ -3671,14 +3701,63 @@ set_cleanup_contract() {
   report_phase="cleanup"
   report_boundary="none"
 
-  if [[ "${report_cleanup_reconcile_required}" == "true" || "${report_worktree_action}" == "blocked" || "${report_local_branch_action}" == "blocked" || "${report_remote_branch_action}" == "blocked" || "${report_local_branch_action}" == "skipped" || "${report_remote_branch_action}" == "skipped" ]]; then
+  if [[ "${report_cleanup_reconcile_required}" == "true" || "${report_worktree_action}" == "blocked" || "${report_local_branch_action}" == "blocked" || "${report_remote_branch_action}" == "blocked" || "${report_local_branch_action}" == "skipped" || "${report_remote_branch_action}" == "skipped" || "${report_close_action}" == "blocked" ]]; then
     report_status="cleanup_blocked"
     report_final_state="cleanup_blocked"
+    if [[ "${close_issue_requested}" == "true" && "${report_close_action}" == "skip" ]]; then
+      report_close_action="blocked"
+    fi
     return 0
   fi
 
   report_status="cleanup_complete"
   report_final_state="cleanup_complete"
+}
+
+execute_cleanup_close_action() {
+  local resolved_issue="${report_issue_id:-}"
+  local close_output=""
+  local compact_output=""
+  local rc=0
+  local bd_command=""
+
+  if [[ "${close_issue_requested}" != "true" ]]; then
+    return 0
+  fi
+
+  if ! report_close_command="$(build_cleanup_close_command)"; then
+    report_close_action="skip"
+    add_warning "Issue: n/a; skip bd close for cleanup."
+    return 0
+  fi
+
+  bd_command="$(resolve_system_bd_command_for_path "${resolved_repo_root}" 2>/dev/null || true)"
+  if [[ -z "${bd_command}" ]]; then
+    report_close_action="blocked"
+    add_warning "Could not resolve a system bd command for cleanup close."
+    add_next_step "${report_close_command}"
+    return 1
+  fi
+
+  set +e
+  close_output="$("${bd_command}" --db "${resolved_repo_root}/.beads/beads.db" close "${resolved_issue}" --reason "Done" 2>&1)"
+  rc=$?
+  set -e
+
+  if [[ "${rc}" -eq 0 ]]; then
+    report_close_action="closed"
+    report_close_command=""
+    return 0
+  fi
+
+  compact_output="$(printf '%s' "${close_output}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  report_close_action="blocked"
+  add_warning "bd close failed for ${resolved_issue} after successful cleanup."
+  if [[ -n "${compact_output}" ]]; then
+    add_warning "${compact_output}"
+  fi
+  add_next_step "${report_close_command}"
+  return 1
 }
 
 add_warning() {
@@ -4032,12 +4111,17 @@ render_cleanup_report() {
     render_env_kv "worktree" "${report_worktree_path:-n/a}"
     render_env_kv "preview" "${report_path_preview:-n/a}"
     render_env_kv "branch" "${report_branch_name:-n/a}"
+    render_env_kv "issue" "${report_issue_id:-n/a}"
     render_env_kv "status" "${report_status}"
     render_env_kv "topology_state" "${report_topology_state}"
     render_env_kv "worktree_action" "${report_worktree_action}"
     render_env_kv "local_branch_action" "${report_local_branch_action}"
     render_env_kv "remote_branch_action" "${report_remote_branch_action}"
     render_env_kv "merge_check" "${report_merge_check}"
+    render_env_kv "close_action" "${report_close_action}"
+    if [[ -n "${report_close_command}" ]]; then
+      render_env_kv "close_command" "${report_close_command}"
+    fi
     if [[ -n "${report_default_branch_name}" ]]; then
       render_env_kv "default_branch" "${report_default_branch_name}"
     fi
@@ -4052,6 +4136,7 @@ render_cleanup_report() {
   printf 'Worktree: %s\n' "${report_worktree_path:-n/a}"
   printf 'Preview: %s\n' "${report_path_preview:-n/a}"
   printf 'Branch: %s\n' "${report_branch_name:-n/a}"
+  printf 'Issue: %s\n' "${report_issue_id:-n/a}"
   printf 'Status: %s\n' "${report_status}"
   printf 'Phase: %s\n' "${report_phase}"
   printf 'Boundary: %s\n' "${report_boundary}"
@@ -4061,6 +4146,7 @@ render_cleanup_report() {
   printf 'Local Branch Action: %s\n' "${report_local_branch_action}"
   printf 'Remote Branch Action: %s\n' "${report_remote_branch_action}"
   printf 'Merge Check: %s\n' "${report_merge_check}"
+  printf 'Close: %s\n' "${report_close_command:-${report_close_action}}"
   if [[ -n "${report_default_branch_name}" ]]; then
     printf 'Default Branch: %s\n' "${report_default_branch_name}"
   fi
@@ -4412,10 +4498,14 @@ render_cleanup_contract_report() {
   prepare_report_target
   if [[ "${resolved_repo_root}" != "${resolved_canonical_root}" ]]; then
     local delete_flag=""
+    local close_flag=""
     local cleanup_args="--branch <branch>"
 
     if [[ "${delete_branch_requested}" == "true" ]]; then
       delete_flag=" --delete-branch"
+    fi
+    if [[ "${close_issue_requested}" == "true" ]]; then
+      close_flag=" --close-issue"
     fi
     if [[ -n "${branch}" ]]; then
       cleanup_args="--branch $(shell_quote "${branch}")"
@@ -4428,13 +4518,16 @@ render_cleanup_contract_report() {
     report_status="cleanup_blocked"
     report_final_state="cleanup_blocked"
     report_worktree_action="blocked"
-    report_repair_command="cd $(shell_quote "${resolved_canonical_root}") && scripts/worktree-ready.sh cleanup ${cleanup_args}${delete_flag}"
+    if [[ "${close_issue_requested}" == "true" ]]; then
+      report_close_action="blocked"
+    fi
+    report_repair_command="cd $(shell_quote "${resolved_canonical_root}") && scripts/worktree-ready.sh cleanup ${cleanup_args}${delete_flag}${close_flag}"
     add_warning "Cleanup must run from the canonical root worktree."
     add_next_step "cd $(shell_quote "${resolved_canonical_root}")"
     if [[ -n "${branch}" ]]; then
-      add_next_step "scripts/worktree-ready.sh cleanup --branch $(shell_quote "${branch}")${delete_flag}"
+      add_next_step "scripts/worktree-ready.sh cleanup --branch $(shell_quote "${branch}")${delete_flag}${close_flag}"
     elif [[ -n "${target_path}" ]]; then
-      add_next_step "scripts/worktree-ready.sh cleanup --path $(shell_quote "${target_path}")${delete_flag}"
+      add_next_step "scripts/worktree-ready.sh cleanup --path $(shell_quote "${target_path}")${delete_flag}${close_flag}"
     fi
     render_cleanup_report
     set_command_exit_code_from_cleanup
@@ -4447,6 +4540,9 @@ render_cleanup_contract_report() {
     report_status="cleanup_blocked"
     report_final_state="cleanup_blocked"
     report_worktree_action="blocked"
+    if [[ "${close_issue_requested}" == "true" ]]; then
+      report_close_action="blocked"
+    fi
     add_warning "Cleanup arguments conflict: --path $(shell_quote "${target_path}") resolves to branch '${discovered_branch_name:-unknown}', not requested branch '${branch}'."
     add_next_step "Retry cleanup with --path $(shell_quote "${target_path}") only"
     if [[ -n "${discovered_branch_name}" ]]; then
@@ -4462,6 +4558,12 @@ render_cleanup_contract_report() {
     execute_cleanup_branch_actions || true
   fi
   set_cleanup_contract
+  if [[ "${report_status}" == "cleanup_complete" ]]; then
+    execute_cleanup_close_action || true
+    set_cleanup_contract
+  elif [[ "${close_issue_requested}" == "true" ]]; then
+    report_close_action="blocked"
+  fi
   render_cleanup_report
   set_command_exit_code_from_cleanup
 }

@@ -306,6 +306,109 @@ test_audit_warns_for_runtime_bootstrap_required_runtime_only_sibling() {
     test_pass
 }
 
+test_audit_warns_for_branch_only_merged_local_branch() {
+    test_start "audit_warns_for_branch_only_merged_local_branch"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/beads-worktree-audit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_beads_audit_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    (
+        cd "${repo_dir}"
+        git checkout -b feat/branch-only-cleanup >/dev/null
+        printf 'branch-only\n' > cleanup.txt
+        git add cleanup.txt
+        git commit -m "fixture: branch-only cleanup commit" >/dev/null
+        git checkout main >/dev/null
+        git merge --no-ff feat/branch-only-cleanup -m "fixture: merge branch-only cleanup" >/dev/null
+    )
+
+    output="$(
+        set +e
+        run_audit "${repo_dir}" "${fake_bin}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Branch-only drift should surface as a warning, not fail closed canonical audit"
+    assert_contains "${output}" "Warnings: 1" "Audit should count branch-only drift as a warning"
+    assert_contains "${output}" "scope=branch state=branch_only_merged" "Audit should classify merged branch-only drift explicitly"
+    assert_contains "${output}" "branch=feat/branch-only-cleanup" "Audit should identify the stale local branch by name"
+    assert_contains "${output}" "git -C " "Audit should emit a concrete local branch deletion next step"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_audit_warns_for_branch_only_active_local_branch() {
+    test_start "audit_warns_for_branch_only_active_local_branch"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/beads-worktree-audit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_beads_audit_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    (
+        cd "${repo_dir}"
+        git checkout -b feat/branch-only-active >/dev/null
+        printf 'branch-only-active\n' > cleanup.txt
+        git add cleanup.txt
+        git commit -m "fixture: branch-only active commit" >/dev/null
+        git checkout main >/dev/null
+    )
+
+    output="$(
+        set +e
+        run_audit "${repo_dir}" "${fake_bin}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Active branch-only drift should remain a warning, not fail closed canonical audit"
+    assert_contains "${output}" "Warnings: 1" "Audit should count active branch-only drift as a warning"
+    assert_contains "${output}" "scope=branch state=branch_only_active" "Audit should classify unmerged branch-only drift explicitly"
+    assert_contains "${output}" "action=review_branch_owner" "Audit should ask for review instead of deletion on unmerged branch-only drift"
+    assert_contains "${output}" "branch=feat/branch-only-active" "Audit should identify the active local branch by name"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_audit_skips_branch_only_warning_for_linked_branch() {
+    test_start "audit_skips_branch_only_warning_for_linked_branch"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/beads-worktree-audit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_beads_audit_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-linked-branch"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/linked-branch" "main"
+    seed_post_migration_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_audit "${repo_dir}" "${fake_bin}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "${rc}" "Canonical audit should stay clean for a branch that already has a linked worktree"
+    assert_contains "${output}" "Warnings: 0" "Audit should not create synthetic branch-only warnings for linked branches"
+    if printf '%s' "${output}" | grep -Fq 'scope=branch state='; then
+        test_fail "Audit must not emit branch-only warnings for branches that already have linked worktrees"
+    fi
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_test_beads_worktree_audit() {
     start_timer
     test_audit_blocks_canonical_root_when_legacy_redirect_exists
@@ -314,6 +417,9 @@ run_test_beads_worktree_audit() {
     test_audit_skips_enforcement_in_non_canonical_worktree
     test_audit_treats_post_migration_runtime_only_sibling_as_ok
     test_audit_warns_for_runtime_bootstrap_required_runtime_only_sibling
+    test_audit_warns_for_branch_only_merged_local_branch
+    test_audit_warns_for_branch_only_active_local_branch
+    test_audit_skips_branch_only_warning_for_linked_branch
     generate_report
 }
 

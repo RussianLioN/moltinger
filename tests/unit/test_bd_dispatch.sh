@@ -459,6 +459,31 @@ test_canonical_root_plain_bd_allows_worktree_remove_for_linked_worktree() {
     test_pass
 }
 
+test_plain_bd_blocks_raw_worktree_create_in_repo() {
+    test_start "plain_bd_blocks_raw_worktree_create_in_repo"
+
+    local fixture_root repo_dir fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    seed_local_beads_foundation "${repo_dir}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${repo_dir}" "${fake_bin}" worktree create nested-lane 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "29" "${rc}" "Repo-local plain bd must fail closed on raw worktree create"
+    assert_contains "${output}" "raw 'bd worktree create' is disabled" "Blocked raw create should explain the redirect-based ownership problem"
+    assert_contains "${output}" "scripts/worktree-phase-a.sh create-from-base" "Blocked raw create should point to the managed Phase A helper"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 test_dedicated_worktree_plain_bd_canonicalizes_worktree_list_to_root() {
     test_start "dedicated_worktree_plain_bd_canonicalizes_worktree_list_to_root"
 
@@ -1102,6 +1127,7 @@ run_all_tests() {
     test_canonical_root_plain_bd_blocks_mutation_by_default
     test_canonical_root_plain_bd_allows_explicit_root_db_override
     test_canonical_root_plain_bd_allows_worktree_remove_for_linked_worktree
+    test_plain_bd_blocks_raw_worktree_create_in_repo
     test_dedicated_worktree_plain_bd_canonicalizes_worktree_list_to_root
     test_canonical_root_plain_bd_blocks_worktree_remove_for_non_linked_target
     test_plain_bd_blocks_legacy_redirect

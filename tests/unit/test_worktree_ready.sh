@@ -19,7 +19,51 @@ create_fake_bd_bin() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
+db_path=""
+args=()
+seen_command=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --db)
+      if [[ "${seen_command}" == "1" ]]; then
+        args+=("$1")
+        shift
+        continue
+      fi
+      db_path="${2:-}"
+      shift 2
+      ;;
+    --db=*)
+      if [[ "${seen_command}" == "1" ]]; then
+        args+=("$1")
+        shift
+        continue
+      fi
+      db_path="${1#--db=}"
+      shift
+      ;;
+    --no-db|--quiet|--verbose)
+      if [[ "${seen_command}" == "1" ]]; then
+        args+=("$1")
+      fi
+      shift
+      ;;
+    --json)
+      if [[ "${seen_command}" == "1" ]]; then
+        args+=("$1")
+      fi
+      shift
+      ;;
+    *)
+      args+=("$1")
+      seen_command=1
+      shift
+      ;;
+  esac
+done
+
+if [[ "${args[0]:-}" == "worktree" && "${args[1]:-}" == "list" && "${args[2]:-}" == "--json" ]]; then
   payload="${BD_WORKTREE_LIST_JSON:-[]}"
   if [[ "${BD_WORKTREE_LIST_FILTER_MISSING:-0}" == "1" ]]; then
     filtered_lines=()
@@ -42,11 +86,11 @@ if [[ "${1:-}" == "worktree" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; t
 fi
 
 if [[ -n "${BD_CALL_LOG:-}" ]]; then
-  printf '%s\n' "${1:-}" >> "${BD_CALL_LOG}"
+  printf '%s\n' "${args[0]:-}" >> "${BD_CALL_LOG}"
 fi
 
-if [[ "${1:-}" == "worktree" && "${2:-}" == "remove" ]]; then
-  target_path="${3:-}"
+if [[ "${args[0]:-}" == "worktree" && "${args[1]:-}" == "remove" ]]; then
+  target_path="${args[2]:-}"
   if [[ "${BD_WORKTREE_REMOVE_CANONICALIZE:-0}" == "1" && -d "${target_path}" ]]; then
     target_path="$(cd "${target_path}" && pwd -P)"
   fi
@@ -62,21 +106,21 @@ if [[ "${1:-}" == "worktree" && "${2:-}" == "remove" ]]; then
   exit "${BD_WORKTREE_REMOVE_RC:-0}"
 fi
 
-if [[ "${1:-}" == "list" && "${2:-}" == "--all" && "${3:-}" == "--json" ]]; then
+if [[ "${args[0]:-}" == "list" && "${args[1]:-}" == "--all" && "${args[2]:-}" == "--json" ]]; then
   printf '%s\n' "${BD_LIST_ALL_JSON:-[]}"
   exit 0
 fi
 
-if [[ "${1:-}" == "show" && "${3:-}" == "--json" ]]; then
+if [[ "${args[0]:-}" == "show" && "${args[2]:-}" == "--json" ]]; then
   if [[ -n "${BD_SHOW_JSON_MAP:-}" ]]; then
-    printf '%s\n' "${BD_SHOW_JSON_MAP}" | jq -c --arg issue "${2:-}" '.[$issue] // empty'
+    printf '%s\n' "${BD_SHOW_JSON_MAP}" | jq -c --arg issue "${args[1]:-}" '.[$issue] // empty'
     exit 0
   fi
   printf '%s\n' "${BD_SHOW_JSON:-[]}"
   exit 0
 fi
 
-if [[ "${1:-}" == "status" ]]; then
+if [[ "${args[0]:-}" == "status" ]]; then
   if [[ -n "${BD_STATUS_SLEEP_SECONDS:-}" ]]; then
     sleep "${BD_STATUS_SLEEP_SECONDS}"
   fi
@@ -89,7 +133,7 @@ if [[ "${1:-}" == "status" ]]; then
   exit "${BD_STATUS_RC:-0}"
 fi
 
-if [[ "${1:-}" == "info" ]]; then
+if [[ "${args[0]:-}" == "info" ]]; then
   if [[ -n "${BD_INFO_SLEEP_SECONDS:-}" ]]; then
     sleep "${BD_INFO_SLEEP_SECONDS}"
   fi
@@ -102,12 +146,25 @@ if [[ "${1:-}" == "info" ]]; then
   exit "${BD_INFO_RC:-0}"
 fi
 
-if [[ "${1:-}" == "doctor" && "${2:-}" == "--json" ]]; then
+if [[ "${args[0]:-}" == "doctor" && "${args[1]:-}" == "--json" ]]; then
   if [[ -n "${BD_DOCTOR_SLEEP_SECONDS:-}" ]]; then
     sleep "${BD_DOCTOR_SLEEP_SECONDS}"
   fi
   printf '%s\n' "${BD_DOCTOR_STDOUT:-{\"checks\":[],\"overall_ok\":true}}"
   exit "${BD_DOCTOR_RC:-0}"
+fi
+
+if [[ "${args[0]:-}" == "close" ]]; then
+  if [[ -n "${BD_CLOSE_LOG:-}" ]]; then
+    printf 'DB=%s ARGS=%s\n' "${db_path}" "${args[*]}" >> "${BD_CLOSE_LOG}"
+  fi
+  if [[ -n "${BD_CLOSE_STDOUT:-}" ]]; then
+    printf '%s\n' "${BD_CLOSE_STDOUT}"
+  fi
+  if [[ -n "${BD_CLOSE_STDERR:-}" ]]; then
+    printf '%s\n' "${BD_CLOSE_STDERR}" >&2
+  fi
+  exit "${BD_CLOSE_RC:-0}"
 fi
 
 printf 'unsupported fake bd invocation\n' >&2
@@ -1818,6 +1875,145 @@ test_cleanup_delete_branch_uses_git_ancestor_proof() {
     test_pass
 }
 
+test_cleanup_close_issue_closes_resolved_issue_after_success() {
+    test_start "worktree_ready_cleanup_close_issue_closes_resolved_issue_after_success"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json close_log
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-crq6-cleanup"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/moltinger-crq6-cleanup" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    close_log="${fixture_root}/bd-close.log"
+    mkdir -p "${repo_dir}/.beads"
+    : > "${repo_dir}/.beads/beads.db"
+    cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"moltinger-crq6","title":"cleanup governance drift","status":"in_progress","issue_type":"bug","priority":1}
+EOF
+    (
+        cd "$repo_dir"
+        git push -u origin feat/moltinger-crq6-cleanup >/dev/null
+        git merge --no-ff feat/moltinger-crq6-cleanup -m "fixture: merge crq6 cleanup branch" >/dev/null
+        git push origin main >/dev/null
+    )
+    bd_json="$(printf '[{"name":"crq6-cleanup","path":"%s","branch":"feat/moltinger-crq6-cleanup","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_CLOSE_LOG="${close_log}" \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/moltinger-crq6-cleanup --delete-branch --close-issue 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should be able to close the resolved issue after successful branch/worktree cleanup"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should remain complete when issue close succeeds"
+    assert_contains "$output" 'Close: closed' "Cleanup should report the issue as closed after a successful close step"
+    if [[ ! -f "${close_log}" ]]; then
+        test_fail "Cleanup close flow should record a bd close invocation"
+    fi
+    assert_file_contains "${close_log}" 'DB='"${repo_dir}/.beads/beads.db"' ARGS=close moltinger-crq6 --reason Done' "Cleanup close should use an explicit canonical-root DB override"
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_without_close_issue_does_not_invoke_bd_close() {
+    test_start "worktree_ready_cleanup_without_close_issue_does_not_invoke_bd_close"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json close_log
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-cleanup-no-close"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/moltinger-cleanup-no-close" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    close_log="${fixture_root}/bd-close.log"
+    mkdir -p "${repo_dir}/.beads"
+    : > "${repo_dir}/.beads/beads.db"
+    cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"moltinger-cleanup","title":"cleanup governance drift","status":"in_progress","issue_type":"bug","priority":1}
+EOF
+    (
+        cd "$repo_dir"
+        git push -u origin feat/moltinger-cleanup-no-close >/dev/null
+        git merge --no-ff feat/moltinger-cleanup-no-close -m "fixture: merge cleanup without close flag" >/dev/null
+        git push origin main >/dev/null
+    )
+    bd_json="$(printf '[{"name":"cleanup-no-close","path":"%s","branch":"feat/moltinger-cleanup-no-close","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_CLOSE_LOG="${close_log}" \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/moltinger-cleanup-no-close --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Cleanup should still succeed when --close-issue is not requested"
+    assert_contains "$output" 'Close: skip' "Cleanup report should keep close action skipped when the flag is absent"
+    if [[ -f "${close_log}" ]]; then
+        test_fail "Cleanup must not invoke bd close when --close-issue was not requested"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_close_issue_does_not_run_when_cleanup_is_blocked() {
+    test_start "worktree_ready_cleanup_close_issue_does_not_run_when_cleanup_is_blocked"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json close_log
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-cleanup-blocked"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/moltinger-cleanup-blocked" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    close_log="${fixture_root}/bd-close.log"
+    mkdir -p "${repo_dir}/.beads"
+    : > "${repo_dir}/.beads/beads.db"
+    cat > "${repo_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"moltinger-cleanup-blocked","title":"cleanup governance drift","status":"in_progress","issue_type":"bug","priority":1}
+EOF
+    (
+        cd "$existing_path"
+        printf 'unmerged\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: unmerged cleanup branch" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/moltinger-cleanup-blocked >/dev/null
+    )
+    bd_json="$(printf '[{"name":"cleanup-blocked","path":"%s","branch":"feat/moltinger-cleanup-blocked","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        BD_CLOSE_LOG="${close_log}" \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/moltinger-cleanup-blocked --delete-branch --close-issue 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "$rc" "Cleanup must stay blocked when merge proof is missing even if --close-issue was requested"
+    assert_contains "$output" 'Status: cleanup_blocked' "Cleanup should report the blocked state before any close step"
+    assert_contains "$output" 'Close: blocked' "Cleanup report should show that issue close stayed blocked with the overall cleanup"
+    if [[ -f "${close_log}" ]]; then
+        test_fail "Cleanup must not invoke bd close before the cleanup contract succeeds"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
 test_cleanup_delete_branch_without_existing_worktree_does_not_false_conflict() {
     test_start "worktree_ready_cleanup_delete_branch_without_existing_worktree_does_not_false_conflict"
 
@@ -1897,6 +2093,56 @@ test_cleanup_branch_only_without_existing_worktree_preserves_branch_without_dele
     fi
     if ! git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/cleanup-branch-only; then
         test_fail "Cleanup should preserve the local branch when --delete-branch is not requested"
+    fi
+
+    rm -rf "$fixture_root"
+    test_pass
+}
+
+test_cleanup_branch_only_with_existing_worktree_does_not_false_conflict() {
+    test_start "worktree_ready_cleanup_branch_only_with_existing_worktree_does_not_false_conflict"
+
+    local fixture_root repo_dir fake_bin existing_path output rc bd_json
+    fixture_root="$(mktemp -d /tmp/worktree-ready-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "$fixture_root" "moltinger")"
+    repo_dir="$(cd "$repo_dir" && pwd -P)"
+    fake_bin="$(create_fake_bd_bin "$fixture_root")"
+    existing_path="${fixture_root}/moltinger-attached-cleanup-target"
+    git_topology_fixture_add_worktree_branch_from "$repo_dir" "$existing_path" "feat/attached-cleanup-target" "main"
+    existing_path="$(cd "$existing_path" && pwd -P)"
+    (
+        cd "$existing_path"
+        printf 'feature\n' > feature.txt
+        git add feature.txt
+        git commit -m "fixture: attached cleanup target commit" >/dev/null
+    )
+    (
+        cd "$repo_dir"
+        git push -u origin feat/attached-cleanup-target >/dev/null
+        git merge --no-ff feat/attached-cleanup-target -m "fixture: merge attached cleanup target" >/dev/null
+        git push origin main >/dev/null
+    )
+    bd_json="$(printf '[{"name":"attached-cleanup-target","path":"%s","branch":"feat/attached-cleanup-target","beads_state":"local"}]\n' "${existing_path}")"
+
+    output="$(
+        set +e
+        BD_WORKTREE_LIST_JSON="${bd_json}" \
+        run_worktree_cleanup "$repo_dir" "$fake_bin" --branch feat/attached-cleanup-target --delete-branch 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "$output" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "0" "$rc" "Branch-only cleanup should accept the discovered attached worktree instead of tripping a synthetic path conflict"
+    assert_contains "$output" 'Status: cleanup_complete' "Cleanup should complete when the requested branch already has an attached managed worktree"
+    assert_contains "$output" 'Worktree Action: removed' "Cleanup should remove the attached worktree for the requested branch"
+    if printf '%s' "$output" | grep -Fq 'Cleanup arguments conflict'; then
+        test_fail "Branch-only cleanup with an attached worktree must not report a false path/branch conflict"
+    fi
+    if [[ -d "$existing_path" ]]; then
+        test_fail "Cleanup should remove the discovered attached worktree for branch-only cleanup"
+    fi
+    if git -C "$repo_dir" show-ref --verify --quiet refs/heads/feat/attached-cleanup-target; then
+        test_fail "Cleanup should remove the local branch after attached branch-only cleanup"
     fi
 
     rm -rf "$fixture_root"
@@ -2752,8 +2998,12 @@ run_all_tests() {
     test_cleanup_removes_linked_worktree_without_branch_delete
     test_cleanup_prunes_stale_missing_worktree_entry
     test_cleanup_delete_branch_uses_git_ancestor_proof
+    test_cleanup_close_issue_closes_resolved_issue_after_success
+    test_cleanup_without_close_issue_does_not_invoke_bd_close
+    test_cleanup_close_issue_does_not_run_when_cleanup_is_blocked
     test_cleanup_delete_branch_without_existing_worktree_does_not_false_conflict
     test_cleanup_branch_only_without_existing_worktree_preserves_branch_without_delete_flag
+    test_cleanup_branch_only_with_existing_worktree_does_not_false_conflict
     test_cleanup_uses_git_remove_fallback_for_false_unpushed_guard
     test_cleanup_does_not_bypass_false_unpushed_guard_without_merge_proof
     test_cleanup_does_not_bypass_false_unpushed_guard_for_dirty_worktree

@@ -30,7 +30,7 @@ case "${BEADS_RESOLVE_DECISION}" in
   pass_through_non_repo|pass_through_root_readonly|pass_through_root_cleanup_admin|pass_through_global|allow_explicit_troubleshooting)
     exec "${SYSTEM_BD}" "$@"
     ;;
-  block_deprecated_sync|block_legacy_redirect|block_missing_foundation|block_pilot_legacy_command|block_root_fallback|block_root_mutation|block_unresolved_ownership)
+  block_deprecated_sync|block_legacy_redirect|block_missing_foundation|block_pilot_legacy_command|block_repo_worktree_create|block_root_fallback|block_root_mutation|block_unresolved_ownership)
     printf '%s\n' "${BEADS_RESOLVE_MESSAGE}" >&2
     if [[ -n "${BEADS_RESOLVE_RECOVERY_HINT}" ]]; then
       printf 'Recovery: %s\n' "${BEADS_RESOLVE_RECOVERY_HINT}" >&2
