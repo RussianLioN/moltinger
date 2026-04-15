@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-15
-**Total Lessons**: 78
+**Total Lessons**: 79
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (37 lessons)
+#### P1 (38 lessons)
+- [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
 - [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
@@ -150,7 +151,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (25 lessons)
+#### process (26 lessons)
+- [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram chat probe skill pointed to a missing wrapper entrypoint](../docs/rca/2026-04-14-telegram-chat-probe-skill-pointed-to-missing-wrapper-entrypoint.md)
 - [Skill execution drifted into workaround behavior and task reports lacked a shared simple contract](../docs/rca/2026-04-09-skill-execution-and-reporting-contract-drift.md)
 - [Telegram skill-detail remained non-terminal and repo skills lacked a shared Telegram-safe summary contract](../docs/rca/2026-04-05-telegram-skill-detail-general-hardening.md)
@@ -200,7 +202,7 @@
 
 ### Popular Tags
 
-- `rca` (26 lessons)
+- `rca` (27 lessons)
 - `moltis` (26 lessons)
 - `telegram` (20 lessons)
 - `deploy` (19 lessons)
@@ -218,8 +220,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 78 |
-| Critical (P0/P1) | 38 |
+| Total Lessons | 79 |
+| Critical (P0/P1) | 39 |
 | Categories | 8 |
 | Unique Tags | 160 |
 

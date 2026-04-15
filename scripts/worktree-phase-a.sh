@@ -38,6 +38,8 @@ base_ref="main"
 branch=""
 target_path=""
 output_format="human"
+phase_a_export_path=""
+phase_a_localize_seeded_from_export="false"
 
 parse_args() {
   if [[ $# -eq 0 ]]; then
@@ -167,11 +169,38 @@ phase_a_fail_runtime() {
   exit 23
 }
 
+phase_a_cleanup_export_artifact() {
+  if [[ -n "${phase_a_export_path}" && -f "${phase_a_export_path}" ]]; then
+    rm -f "${phase_a_export_path}"
+  fi
+}
+
+phase_a_export_canonical_backlog() {
+  local export_dir="${canonical_root}/.tmp/worktree-phase-a"
+
+  mkdir -p "${export_dir}"
+  phase_a_export_path="$(mktemp "${export_dir}/canonical-backlog.XXXXXX.jsonl")"
+
+  if ! (
+    cd "${canonical_root}"
+    bd export -o "${phase_a_export_path}" >/dev/null 2>&1
+  ); then
+    phase_a_fail_runtime \
+      "canonical_export_failed" \
+      "Phase A could not export the live canonical Beads backlog before creating the new worktree." \
+      "Run bd export from the canonical root and inspect canonical Beads runtime health there before retrying."
+  fi
+}
+
 phase_a_prepare_beads_runtime() {
   local loop_count=0
   local bootstrap_attempted="false"
+  local -a localize_args=("--path" "${target_path}")
 
   [[ -x "${SCRIPT_DIR}/beads-worktree-localize.sh" ]] || die "Missing beads-worktree-localize.sh; cannot verify worktree-local Beads ownership"
+  if [[ -n "${phase_a_export_path}" ]]; then
+    localize_args+=("--import-source" "${phase_a_export_path}")
+  fi
 
   while [[ "${loop_count}" -lt 4 ]]; do
     loop_count=$((loop_count + 1))
@@ -182,15 +211,21 @@ phase_a_prepare_beads_runtime() {
         return 0
         ;;
       migratable_legacy|bootstrap_required|partial_foundation)
-        "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null \
+        "${SCRIPT_DIR}/beads-worktree-localize.sh" "${localize_args[@]}" >/dev/null \
           || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        if [[ -n "${phase_a_export_path}" ]]; then
+          phase_a_localize_seeded_from_export="true"
+        fi
         ;;
       runtime_bootstrap_required)
         if [[ "${bootstrap_attempted}" == "true" ]]; then
           phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
         fi
-        "${SCRIPT_DIR}/beads-worktree-localize.sh" --path "${target_path}" >/dev/null \
+        "${SCRIPT_DIR}/beads-worktree-localize.sh" "${localize_args[@]}" >/dev/null \
           || phase_a_fail_runtime "${phase_a_localize_state}" "${phase_a_localize_message}" "${phase_a_localize_notice}"
+        if [[ -n "${phase_a_export_path}" ]]; then
+          phase_a_localize_seeded_from_export="true"
+        fi
         bootstrap_attempted="true"
         ;;
       *)
@@ -200,6 +235,25 @@ phase_a_prepare_beads_runtime() {
   done
 
   phase_a_fail_runtime "${phase_a_localize_state:-unknown}" "Beads runtime did not converge to a healthy localized state during Phase A." "${phase_a_localize_notice}"
+}
+
+phase_a_import_canonical_backlog() {
+  if [[ "${phase_a_localize_seeded_from_export}" == "true" ]]; then
+    return 0
+  fi
+
+  [[ -n "${phase_a_export_path}" && -f "${phase_a_export_path}" ]] || phase_a_fail_runtime \
+    "canonical_export_missing" \
+    "Phase A lost the exported canonical Beads backlog before importing it into the new worktree." \
+    "Retry the worktree create flow; the canonical backlog export artifact is required for a truthful handoff."
+
+  (
+    cd "${target_path}"
+    bd import "${phase_a_export_path}" >/dev/null 2>&1
+  ) || phase_a_fail_runtime \
+    "canonical_import_failed" \
+    "Phase A created the git worktree but could not import the live canonical Beads backlog into the new local runtime." \
+    "Run /usr/local/bin/bd doctor --json and ./scripts/beads-worktree-localize.sh --path . inside the target worktree before retrying."
 }
 
 create_from_base() {
@@ -220,12 +274,15 @@ create_from_base() {
     fi
   fi
 
+  phase_a_export_canonical_backlog
+
   if [[ "${branch_exists}" -eq 0 ]]; then
     git -C "${canonical_root}" branch "${branch}" "${base_sha}" >/dev/null
   fi
 
   git -C "${canonical_root}" worktree add "${target_path}" "${branch}" >/dev/null
   phase_a_prepare_beads_runtime
+  phase_a_import_canonical_backlog
 
   head_sha="$(git -C "${target_path}" rev-parse HEAD)"
   if [[ "${head_sha}" != "${base_sha}" ]]; then
@@ -240,6 +297,7 @@ create_from_base() {
 }
 
 main() {
+  trap phase_a_cleanup_export_artifact EXIT
   parse_args "$@"
   ensure_prerequisites
 

@@ -10,7 +10,7 @@ source "${REPO_ROOT}/scripts/beads-resolve-db.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/beads-worktree-localize.sh [--path <worktree>] [--format <human|env>] [--check] [--bootstrap-source <ref>]
+  scripts/beads-worktree-localize.sh [--path <worktree>] [--format <human|env>] [--check] [--bootstrap-source <ref>] [--import-source <issues.jsonl>]
 
 Description:
   Localize Beads ownership for an existing git worktree by removing legacy
@@ -33,6 +33,7 @@ target_path=""
 output_format="human"
 check_only="false"
 bootstrap_source=""
+import_source=""
 
 report_state=""
 report_action=""
@@ -42,6 +43,7 @@ report_message=""
 report_notice=""
 report_bootstrap_source=""
 report_runtime_repair_mode=""
+report_import_source=""
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -63,6 +65,11 @@ parse_args() {
       --bootstrap-source)
         bootstrap_source="${2:-}"
         [[ -n "${bootstrap_source}" ]] || die "--bootstrap-source requires a value"
+        shift 2
+        ;;
+      --import-source)
+        import_source="${2:-}"
+        [[ -n "${import_source}" ]] || die "--import-source requires a value"
         shift 2
         ;;
       -h|--help)
@@ -93,6 +100,11 @@ ensure_worktree_context() {
   [[ -n "${target_path}" ]] || die "Unable to resolve target worktree path"
   git -C "${target_path}" rev-parse --show-toplevel >/dev/null 2>&1 || die "Not a git worktree: ${target_path}"
   report_worktree="${target_path}"
+
+  if [[ -n "${import_source}" ]]; then
+    import_source="$(beads_resolve_normalize_path "${import_source}")"
+    [[ -f "${import_source}" ]] || die "--import-source must point to an existing file: ${import_source}"
+  fi
 }
 
 detect_active_migration_mode() {
@@ -128,6 +140,7 @@ classify_state() {
   report_notice=""
   report_bootstrap_source=""
   report_runtime_repair_mode=""
+  report_import_source=""
 
   if beads_resolve_has_local_runtime "${beads_dir}"; then
     has_local_runtime="true"
@@ -351,6 +364,11 @@ materialize_local_db() {
 localize_state() {
   local redirect_path="${target_path}/.beads/redirect"
   local bootstrap_source_used=""
+  local effective_import_source=""
+  local explicit_import_source_used=""
+
+  explicit_import_source_used="${import_source}"
+  report_import_source="${explicit_import_source_used}"
 
   case "${report_state}" in
     current)
@@ -362,10 +380,12 @@ localize_state() {
     runtime_bootstrap_required)
       case "${report_runtime_repair_mode}" in
         rebuild_local_foundation)
-          materialize_local_db "${target_path}/.beads/issues.jsonl"
+          effective_import_source="${import_source:-${target_path}/.beads/issues.jsonl}"
+          materialize_local_db "${effective_import_source}"
           ;;
         repair_runtime_only)
-          materialize_local_db "$(find_runtime_import_source "${target_path}/.beads" 2>/dev/null || true)"
+          effective_import_source="${import_source:-$(find_runtime_import_source "${target_path}/.beads" 2>/dev/null || true)}"
+          materialize_local_db "${effective_import_source}"
           ;;
         *)
           return 1
@@ -374,16 +394,19 @@ localize_state() {
       ;;
     migratable_legacy)
       rm -f "${redirect_path}"
-      materialize_local_db "${target_path}/.beads/issues.jsonl"
+      effective_import_source="${import_source:-${target_path}/.beads/issues.jsonl}"
+      materialize_local_db "${effective_import_source}"
       ;;
     bootstrap_required)
       bootstrap_source_used="${report_bootstrap_source}"
       bootstrap_foundation
       rm -f "${redirect_path}"
-      materialize_local_db "${target_path}/.beads/issues.jsonl"
+      effective_import_source="${import_source:-${target_path}/.beads/issues.jsonl}"
+      materialize_local_db "${effective_import_source}"
       ;;
     partial_foundation)
-      materialize_local_db "${target_path}/.beads/issues.jsonl"
+      effective_import_source="${import_source:-${target_path}/.beads/issues.jsonl}"
+      materialize_local_db "${effective_import_source}"
       ;;
     damaged_blocked)
       return 1
@@ -397,6 +420,9 @@ localize_state() {
   if [[ -n "${bootstrap_source_used}" ]]; then
     report_bootstrap_source="${bootstrap_source_used}"
   fi
+  if [[ -n "${explicit_import_source_used}" ]]; then
+    report_import_source="${explicit_import_source_used}"
+  fi
 }
 
 render_env() {
@@ -409,6 +435,7 @@ render_env() {
   printf 'notice=%q\n' "${report_notice}"
   printf 'bootstrap_source=%q\n' "${report_bootstrap_source}"
   printf 'runtime_repair_mode=%q\n' "${report_runtime_repair_mode}"
+  printf 'import_source=%q\n' "${report_import_source}"
 }
 
 render_human() {
@@ -422,6 +449,9 @@ render_human() {
   fi
   if [[ -n "${report_runtime_repair_mode}" ]]; then
     printf 'Runtime Repair Mode: %s\n' "${report_runtime_repair_mode}"
+  fi
+  if [[ -n "${report_import_source}" ]]; then
+    printf 'Import Source: %s\n' "${report_import_source}"
   fi
   if [[ -n "${report_notice}" ]]; then
     printf 'Notice: %s\n' "${report_notice}"
