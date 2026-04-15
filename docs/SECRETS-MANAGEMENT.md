@@ -126,7 +126,7 @@ gh workflow run deploy.yml
 
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
-| `GLM_API_KEY` | GLM/Zhipu AI LLM (Last fallback) | Moltis config + AI workflows |
+| `GLM_API_KEY` | GLM/Zhipu AI LLM (Last fallback) | Moltis config + interactive assistant workflow |
 | `OLLAMA_API_KEY` | Ollama Cloud first fallback | Docker secrets |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook endpoint URL (optional) | Controlled webhook rollout |
@@ -158,11 +158,12 @@ Rules:
 - Static `config/` must never contain `oauth_tokens.json`, `provider_keys.json`, or `credentials.json`.
 - Re-auth is required only on expiry, revocation, corruption, or explicit rotation.
 
-### AI Workflow Secrets (Code Review + Interactive Assistant)
+### AI Workflow Secrets
 
-- `.github/workflows/claude-code-review.yml` and `.github/workflows/claude.yml` use `GLM_API_KEY` for Z.ai Coding Plan requests.
+- `.github/workflows/claude.yml` uses `GLM_API_KEY` for Z.ai Coding Plan requests in the interactive assistant path.
+- `.github/workflows/claude-code-review.yml` no longer invokes an AI provider in GitHub Actions; it prepares a deterministic handoff for manual review in AI IDE.
 - `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` are not required for current CI workflows.
-- Optional kill-switch: repository variable `AI_REVIEW_PROVIDER=off` disables active AI calls while keeping fallback reports/comments non-blocking.
+- Optional kill-switch: repository variable `AI_REVIEW_PROVIDER=off` disables the interactive assistant AI calls while keeping fallback behavior non-blocking.
 - Rollback artifacts for legacy Anthropic workflows are stored in:
   - `.github/workflows/claude.legacy.yml.disabled`
   - `.github/workflows/claude-code-review.legacy.yml.disabled`

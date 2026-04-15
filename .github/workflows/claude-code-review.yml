@@ -1,7 +1,7 @@
 name: Claude Code Review
 
-# Unified AI review workflow powered by Z.ai Coding Plan.
-# Non-blocking by design: if API/credentials are unavailable, it publishes fallback report.
+# Deterministic PR review handoff workflow.
+# GitHub Actions prepares context and operators complete the review in AI IDE.
 
 on:
   pull_request:
@@ -28,18 +28,12 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
-  actions: read
 
 jobs:
   claude-review:
     name: AI Code Review
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      GLM_API_BASE: https://api.z.ai/api/coding/paas/v4
-      GLM_MODEL: glm-5
-      AI_REVIEW_MAX_DIFF_CHARS: "80000"
-      AI_REVIEW_PROVIDER: ${{ vars.AI_REVIEW_PROVIDER }}
 
     steps:
       - name: Checkout repository
@@ -51,7 +45,6 @@ jobs:
         run: |
           command -v gh >/dev/null 2>&1 || (echo "::error::gh CLI is required" && exit 1)
           command -v jq >/dev/null 2>&1 || (echo "::error::jq is required" && exit 1)
-          command -v curl >/dev/null 2>&1 || (echo "::error::curl is required" && exit 1)
 
       - name: Determine PR context
         id: pr-context
@@ -59,24 +52,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-            echo "focus=all" >> "$GITHUB_OUTPUT"
-            echo "author=${{ github.event.pull_request.user.login }}" >> "$GITHUB_OUTPUT"
-            echo "association=${{ github.event.pull_request.author_association }}" >> "$GITHUB_OUTPUT"
+            {
+              echo "number=${{ github.event.pull_request.number }}"
+              echo "focus=all"
+              echo "author=${{ github.event.pull_request.user.login }}"
+              echo "association=${{ github.event.pull_request.author_association }}"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
-            echo "focus=${{ inputs.focus_area }}" >> "$GITHUB_OUTPUT"
             pr_data="$(gh pr view ${{ inputs.pr_number }} --json author 2>/dev/null || true)"
             author="$(echo "$pr_data" | jq -r '.author.login // "unknown"')"
-            echo "author=${author}" >> "$GITHUB_OUTPUT"
-            echo "association=MANUAL" >> "$GITHUB_OUTPUT"
+            {
+              echo "number=${{ inputs.pr_number }}"
+              echo "focus=${{ inputs.focus_area }}"
+              echo "author=${author}"
+              echo "association=MANUAL"
+            } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build review report (Z.ai)
+      - name: Build review handoff report
         id: review
         env:
           GH_TOKEN: ${{ github.token }}
-          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -86,176 +82,151 @@ jobs:
           focus_area="${{ steps.pr-context.outputs.focus }}"
           pr_author="${{ steps.pr-context.outputs.author }}"
           pr_association="${{ steps.pr-context.outputs.association }}"
-          provider="${AI_REVIEW_PROVIDER:-zai}"
 
           report_path="reports/pr-${pr_number}-review.md"
-          prompt_path=".tmp/pr-${pr_number}-review-prompt.md"
-          model_output_path=".tmp/pr-${pr_number}-review-output.md"
-          raw_response_path=".tmp/pr-${pr_number}-raw-response.json"
           comment_path=".tmp/pr-${pr_number}-review-comment.md"
-          diff_path=".tmp/pr-${pr_number}.diff"
           marker="zai-review:pr-${pr_number}"
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
-          status="fallback"
-          reason=""
+          status="ready"
+          reason="Deterministic handoff prepared."
+          pr_title="(unavailable)"
+          pr_body="(unavailable)"
+          pr_url=""
+          changed_files="0"
+          additions="0"
+          deletions="0"
+          files_summary="- File list unavailable"
+          checks_summary="- CI checks unavailable"
 
-          if [[ "$provider" == "off" ]]; then
-            reason="AI provider disabled by AI_REVIEW_PROVIDER=off."
-          elif [[ -z "${GLM_API_KEY:-}" ]]; then
-            reason="Missing GLM_API_KEY secret."
+          pr_json="$(gh pr view "$pr_number" --json title,body,url,changedFiles,additions,deletions 2>/dev/null || true)"
+          if [[ -z "$pr_json" || "$pr_json" == "null" ]]; then
+            status="degraded"
+            reason="Failed to fetch PR metadata via gh pr view."
           else
-            pr_json="$(gh pr view "$pr_number" --json title,body,url,changedFiles,additions,deletions 2>/dev/null || true)"
-            if [[ -z "$pr_json" || "$pr_json" == "null" ]]; then
-              reason="Failed to fetch PR metadata via gh pr view."
-            else
-              pr_title="$(echo "$pr_json" | jq -r '.title // "(no title)"')"
-              pr_body="$(echo "$pr_json" | jq -r '.body // "(no description)"')"
-              pr_url="$(echo "$pr_json" | jq -r '.url // ""')"
-              changed_files="$(echo "$pr_json" | jq -r '.changedFiles // 0')"
-              additions="$(echo "$pr_json" | jq -r '.additions // 0')"
-              deletions="$(echo "$pr_json" | jq -r '.deletions // 0')"
+            pr_title="$(echo "$pr_json" | jq -r '.title // "(no title)"')"
+            pr_body="$(echo "$pr_json" | jq -r '.body // "(no description)"')"
+            pr_url="$(echo "$pr_json" | jq -r '.url // ""')"
+            changed_files="$(echo "$pr_json" | jq -r '.changedFiles // 0')"
+            additions="$(echo "$pr_json" | jq -r '.additions // 0')"
+            deletions="$(echo "$pr_json" | jq -r '.deletions // 0')"
 
-              if gh pr diff "$pr_number" > "$diff_path" 2>/dev/null; then
-                max_chars="${AI_REVIEW_MAX_DIFF_CHARS:-80000}"
-                diff_size="$(wc -c < "$diff_path" | tr -d ' ')"
-                if [[ "$diff_size" -gt "$max_chars" ]]; then
-                  head -c "$max_chars" "$diff_path" > "${diff_path}.trimmed"
-                  printf '\n\n[diff truncated to %s chars]\n' "$max_chars" >> "${diff_path}.trimmed"
-                  mv "${diff_path}.trimmed" "$diff_path"
-                fi
+            api_files="$(
+              gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files?per_page=100" --paginate \
+                --jq '.[] | "- \(.filename) (+\(.additions // 0)/-\(.deletions // 0))"' 2>/dev/null \
+                | sed -n '1,40p' || true
+            )"
+            if [[ -n "$api_files" ]]; then
+              files_summary="$api_files"
+            fi
 
-                checks_summary="$(gh pr checks "$pr_number" --json name,state --jq '.[] | "- \(.name): \(.state)"' 2>/dev/null || true)"
-                if [[ -z "$checks_summary" ]]; then
-                  checks_summary="- CI checks unavailable"
-                fi
-
-                focus_hint="General quality, correctness, maintainability, and risks."
-                case "$focus_area" in
-                  security)
-                    focus_hint="Prioritize security vulnerabilities, auth flows, secrets handling, and input validation."
-                    ;;
-                  performance)
-                    focus_hint="Prioritize performance bottlenecks, expensive operations, and scalability issues."
-                    ;;
-                  quality)
-                    focus_hint="Prioritize readability, maintainability, testability, and code quality issues."
-                    ;;
-                esac
-
-                {
-                  echo "Repository: ${GITHUB_REPOSITORY}"
-                  echo "PR Number: ${pr_number}"
-                  echo "PR URL: ${pr_url}"
-                  echo "Author: ${pr_author} (${pr_association})"
-                  echo "Focus: ${focus_area}"
-                  echo ""
-                  echo "PR Title: ${pr_title}"
-                  echo ""
-                  echo "PR Description:"
-                  echo "${pr_body}"
-                  echo ""
-                  echo "Diff Stats: changed_files=${changed_files}, additions=${additions}, deletions=${deletions}"
-                  echo ""
-                  echo "Current CI checks:"
-                  echo "${checks_summary}"
-                  echo ""
-                  echo "Review priority: ${focus_hint}"
-                  echo ""
-                  echo "Instructions:"
-                  echo "1) Return Markdown only."
-                  echo "2) Include sections: Executive Summary, Strengths, Risks & Issues, Security Review, Performance Considerations, Test Coverage, Code Quality, Suggested Improvements, Conclusion."
-                  echo "3) Include specific file:line references when possible."
-                  echo "4) Classify issues by severity: CRITICAL, MEDIUM, LOW."
-                  echo "5) Keep recommendations actionable and concise."
-                  echo ""
-                  echo "PR Diff (possibly truncated):"
-                  cat "$diff_path"
-                } > "$prompt_path"
-
-                if ZAI_RAW_RESPONSE_FILE="$raw_response_path" scripts/ci/zai_chat_completion.sh \
-                  --prompt-file "$prompt_path" \
-                  --output-file "$model_output_path" \
-                  --system-prompt "You are a senior code reviewer. Return high-signal Markdown only, no preamble." \
-                  --model "${GLM_MODEL:-glm-5}" \
-                  --api-base "${GLM_API_BASE:-https://api.z.ai/api/coding/paas/v4}" \
-                  --max-tokens 2200 \
-                  --temperature 0.2 \
-                  --timeout-seconds 120 \
-                  --retry-count 1; then
-                  status="success"
-                  reason="OK"
-                else
-                  rc="$?"
-                  reason="z.ai request failed (exit code ${rc})."
-                fi
-              else
-                reason="Failed to fetch PR diff via gh pr diff."
-              fi
+            api_checks="$(
+              gh pr checks "$pr_number" --json name,state --jq '.[] | "- \(.name): \(.state)"' 2>/dev/null \
+                | sed -n '1,40p' || true
+            )"
+            if [[ -n "$api_checks" ]]; then
+              checks_summary="$api_checks"
             fi
           fi
 
-          if [[ "$status" == "success" ]]; then
-            {
-              echo "# Code Review Report - PR #${pr_number}"
-              echo ""
-              echo "**Provider**: Z.ai Coding Plan (${GLM_MODEL:-glm-5})"
-              echo "**Author**: ${pr_author} (${pr_association})"
-              echo "**Focus**: ${focus_area}"
-              echo "**Reviewed**: $(date -u +'%Y-%m-%d %H:%M UTC')"
-              echo ""
-              cat "$model_output_path"
-            } > "$report_path"
-          else
-            {
-              echo "# Code Review Report - PR #${pr_number}"
-              echo ""
-              echo "**Status**: Fallback"
-              echo "**Checked**: $(date -u +'%Y-%m-%d %H:%M UTC')"
-              echo ""
-              echo "## Why fallback mode was used"
-              echo "${reason}"
-              echo ""
-              echo "## What this means"
-              echo "AI review did not run. Workflow stayed non-blocking to keep CI green."
-              echo ""
-              echo "## Recovery"
-              echo "1. Ensure repository secret \`GLM_API_KEY\` is configured and valid."
-              echo "2. Re-run this workflow (or push a new commit to PR)."
-            } > "$report_path"
-          fi
+          focus_hint="General quality, correctness, maintainability, and risks."
+          case "$focus_area" in
+            security)
+              focus_hint="Prioritize security vulnerabilities, auth flows, secrets handling, and input validation."
+              ;;
+            performance)
+              focus_hint="Prioritize performance bottlenecks, expensive operations, and scalability issues."
+              ;;
+            quality)
+              focus_hint="Prioritize readability, maintainability, testability, and code quality issues."
+              ;;
+          esac
 
-          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          if [[ "$status" == "success" ]]; then
-            status_line="✅ Completed (z.ai)"
+          if [[ "$status" == "ready" ]]; then
+            status_line="✅ Ready for AI IDE review"
           else
-            status_line="⚠️ Fallback (${reason})"
+            status_line="⚠️ Degraded context (${reason})"
           fi
 
           {
+            echo "# Code Review Handoff - PR #${pr_number}"
+            echo ""
+            echo "**Status**: ${status_line}"
+            echo "**Reviewed**: $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo "**Review execution**: Manual in AI IDE"
+            echo "**Focus**: ${focus_area}"
+            echo "**Author**: ${pr_author} (${pr_association})"
+            echo ""
+            echo "## What this workflow does"
+            echo "- Collects deterministic PR context and current CI signals."
+            echo "- Publishes a sticky handoff comment and artifact."
+            echo "- Does not invoke any AI provider in GitHub Actions."
+            echo ""
+            echo "## AI IDE handoff"
+            echo "1. Open PR #${pr_number} in your AI IDE."
+            echo "2. Use this artifact and current CI state as the review baseline."
+            echo "3. Return the final review from the IDE as a human-authored PR comment."
+            echo ""
+            if [[ -n "$pr_url" ]]; then
+              echo "## PR"
+              echo "- URL: ${pr_url}"
+              echo "- Title: ${pr_title}"
+              echo ""
+            fi
+            if [[ "$status" != "ready" ]]; then
+              echo "## Context issue"
+              echo "${reason}"
+              echo ""
+            fi
+            echo "## PR description"
+            echo "${pr_body}"
+            echo ""
+            echo "## Diff stats"
+            echo "- Changed files: ${changed_files}"
+            echo "- Additions: ${additions}"
+            echo "- Deletions: ${deletions}"
+            echo ""
+            echo "## Focus guidance"
+            echo "${focus_hint}"
+            echo ""
+            echo "## Changed files"
+            echo "${files_summary}"
+            echo ""
+            echo "## Current CI checks"
+            echo "${checks_summary}"
+          } > "$report_path"
+
+          {
             echo "<!-- ${marker} -->"
-            echo "### Z.ai Code Review"
+            echo "### PR Review Handoff"
             echo ""
             echo "**Status**: ${status_line}"
             echo "**Focus**: ${focus_area}"
-            echo "**Artifact**: \`zai-review-pr-${pr_number}\`"
+            echo "**Review execution**: Manual in AI IDE"
+            echo "**Workflow mode**: Deterministic preflight only"
+            echo ""
+            echo "No AI provider is invoked in GitHub Actions for this workflow."
             echo ""
             echo "[View workflow run](${run_url})"
           } > "$comment_path"
 
           {
-            echo "## AI Code Review"
+            echo "## PR Review Handoff"
             echo "- PR: #${pr_number}"
             echo "- Status: ${status_line}"
             echo "- Focus: ${focus_area}"
-            echo "- Provider: ${provider:-zai}"
+            echo "- Review execution: Manual in AI IDE"
+            echo "- Workflow mode: Deterministic preflight only"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
-          echo "marker=${marker}" >> "$GITHUB_OUTPUT"
-          echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"
-          echo "comment_path=${comment_path}" >> "$GITHUB_OUTPUT"
+          {
+            echo "pr_number=${pr_number}"
+            echo "status=${status}"
+            echo "reason=${reason}"
+            echo "marker=${marker}"
+            echo "report_path=${report_path}"
+            echo "comment_path=${comment_path}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upsert sticky PR comment
         if: always()

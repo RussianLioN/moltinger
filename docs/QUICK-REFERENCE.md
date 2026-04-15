@@ -139,7 +139,7 @@ make logs LOGS_OPTS=-f
 | TELEGRAM_BOT_TOKEN | ✅ | Bot token |
 | TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
 | OLLAMA_API_KEY | ✅/optional | Ollama Cloud first fallback |
-| GLM_API_KEY | ✅ | GLM-5 last fallback + AI workflows |
+| GLM_API_KEY | ✅ | GLM-5 last fallback + interactive assistant workflow |
 | SSH_PRIVATE_KEY | ✅ | Deploy |
 
 Runtime-only auth state:
@@ -150,7 +150,8 @@ Runtime-only auth state:
 - re-auth only on expiry, revocation, corruption, or explicit rotation
 
 Workflow variable:
-- `AI_REVIEW_PROVIDER` (`zai` by default, `off` for emergency fallback-only mode)
+- `AI_REVIEW_PROVIDER` (`zai` by default, `off` to disable the interactive assistant AI path)
+- PR review in GitHub Actions is deterministic-only; final review is completed manually in AI IDE
 
 ---
 
